@@ -102,6 +102,8 @@ enum class HostFailureKind(
 sealed interface VmOutcome {
     data object SliceExhausted : VmOutcome
 
+    data object WaitingForLine : VmOutcome
+
     data class HostRequest(
         val request: VmHostRequest,
     ) : VmOutcome

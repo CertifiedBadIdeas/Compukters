@@ -39,4 +39,30 @@ internal interface LowLevelVmBridge {
     )
 
     fun close(handle: Long)
+
+    fun terminalCommit(handle: Long): Unit = error("terminal commit is unavailable")
+
+    fun terminalFullState(handle: Long): ByteArray = error("terminal state is unavailable")
+
+    fun terminalChangesSince(
+        handle: Long,
+        revision: Long,
+    ): ByteArray = error("terminal changes are unavailable")
+
+    fun terminalKey(
+        handle: Long,
+        key: Int,
+        action: Int,
+        modifiers: Int,
+    ): Unit = error("terminal key input is unavailable")
+
+    fun terminalText(
+        handle: Long,
+        codePoints: IntArray,
+    ): Unit = error("terminal text input is unavailable")
+
+    fun terminalCompatibilityLine(
+        handle: Long,
+        value: CharArray,
+    ): Unit = error("terminal compatibility input is unavailable")
 }

@@ -1,4 +1,7 @@
-use compukter_vm::{AdmissionError, HostFailureKind, QuotaKind, RunError};
+use compukter_vm::{
+    AdmissionError, HostFailureKind, QuotaKind, RunError, TerminalCell, TerminalChange,
+    TerminalSnapshot, TerminalUpdate,
+};
 
 use crate::bridge::{CreateError, OwnedOutcome, OwnedRequest, OwnedValue};
 use crate::handle_table::HandleError;
@@ -81,8 +84,46 @@ pub(crate) fn encode_outcome(outcome: OwnedOutcome) -> Vec<u8> {
             encoder.u32(value.code());
             encoder
         }
+        OwnedOutcome::WaitingForLine => Encoder::new(8),
     };
     encoder.finish()
+}
+
+pub(crate) fn encode_terminal_full(snapshot: TerminalSnapshot) -> Vec<u8> {
+    let mut encoder = Encoder::new(2);
+    encoder.u64(snapshot.revision());
+    encoder.u16(compukter_vm::TERMINAL_WIDTH);
+    encoder.u16(compukter_vm::TERMINAL_HEIGHT);
+    encoder.u32(u32::try_from(snapshot.cells().len()).expect("terminal cell count fits u32"));
+    for cell in snapshot.cells() {
+        encoder.cell(*cell);
+    }
+    encoder.u16(snapshot.cursor_position().x());
+    encoder.u16(snapshot.cursor_position().y());
+    encoder.u8(u8::from(snapshot.cursor_visible()));
+    encoder.finish()
+}
+
+pub(crate) fn encode_terminal_update(update: TerminalUpdate) -> Vec<u8> {
+    match update {
+        TerminalUpdate::Unchanged { revision } => {
+            let mut encoder = Encoder::new(0);
+            encoder.u64(revision);
+            encoder.finish()
+        }
+        TerminalUpdate::Delta(delta) => {
+            let mut encoder = Encoder::new(1);
+            encoder.u64(delta.base_revision());
+            encoder.u64(delta.target_revision());
+            encoder
+                .u32(u32::try_from(delta.changes().len()).expect("terminal change count fits u32"));
+            for change in delta.changes() {
+                encoder.change(change);
+            }
+            encoder.finish()
+        }
+        TerminalUpdate::Full(snapshot) => encode_terminal_full(snapshot),
+    }
 }
 
 struct Encoder {
@@ -167,6 +208,51 @@ impl Encoder {
                     self.u16(*unit);
                 }
             }
+        }
+    }
+
+    fn cell(&mut self, cell: TerminalCell) {
+        self.u32(cell.code_point());
+        self.u8(cell.foreground());
+        self.u8(cell.background());
+    }
+
+    fn change(&mut self, change: &TerminalChange) {
+        match change {
+            TerminalChange::Patch { start, cells } => {
+                self.u8(0);
+                self.u16(*start);
+                self.u16(u16::try_from(cells.len()).expect("terminal patch length fits u16"));
+                for cell in cells {
+                    self.cell(*cell);
+                }
+            }
+            TerminalChange::Fill {
+                x,
+                y,
+                width,
+                height,
+                cell,
+            } => {
+                self.u8(1);
+                self.u16(*x);
+                self.u16(*y);
+                self.u16(*width);
+                self.u16(*height);
+                self.cell(*cell);
+            }
+            TerminalChange::Scroll { rows, fill } => {
+                self.u8(2);
+                self.u16(*rows);
+                self.cell(*fill);
+            }
+            TerminalChange::Cursor { position, visible } => {
+                self.u8(3);
+                self.u16(position.x());
+                self.u16(position.y());
+                self.u8(u8::from(*visible));
+            }
+            TerminalChange::Reset => self.u8(4),
         }
     }
 }

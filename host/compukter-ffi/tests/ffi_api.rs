@@ -11,8 +11,9 @@
 
 use compukter_ffi::{
     compukter_abi_version, compukter_advance, compukter_close, compukter_create,
-    compukter_max_create_bytes, compukter_max_outcome_bytes, compukter_resume_failure,
-    compukter_resume_string, compukter_resume_unit, FfiStatus,
+    compukter_max_create_bytes, compukter_max_outcome_bytes, compukter_terminal_changes_since,
+    compukter_terminal_commit, compukter_terminal_compatibility_line,
+    compukter_terminal_full_state, compukter_terminal_key, compukter_terminal_text, FfiStatus,
 };
 
 #[test]
@@ -110,40 +111,43 @@ fn advance_rejects_a_short_buffer_before_advancing_the_machine() {
 }
 
 #[test]
-fn c_abi_resumes_unit_and_utf16_host_requests() {
+fn computer_terminal_state_and_inputs_cross_the_bounded_c_abi() {
     let artifact = terminal_artifact();
     let handle = create_machine(&artifact);
+    for _ in 0..1_024 {
+        let outcome = next_outcome(handle);
+        if outcome == [8] {
+            break;
+        }
+    }
+    assert_eq!(vec![8], next_outcome(handle));
+    assert_eq!(FfiStatus::Ok, compukter_terminal_commit(handle));
 
-    let first = next_request_id(handle);
-    assert_eq!(FfiStatus::Ok, compukter_resume_unit(handle, first));
-    let second = next_request_id(handle);
-    assert_eq!(FfiStatus::Ok, compukter_resume_unit(handle, second));
-    let third = next_request_id(handle);
-    let input = [0x0041_u16, 0xd83d, 0xde00];
-    assert_eq!(FfiStatus::Ok, unsafe {
-        compukter_resume_string(handle, third, input.as_ptr(), input.len())
-    },);
-    assert_eq!(FfiStatus::Ok, compukter_close(handle));
-}
-
-#[test]
-fn c_abi_resumes_a_typed_host_failure() {
-    let artifact = terminal_artifact();
-    let handle = create_machine(&artifact);
-    let request = next_request_id(handle);
-
+    let state = terminal_full_state(handle);
+    assert_eq!(2, state[0]);
+    assert_eq!(1, u64::from_le_bytes(state[1..9].try_into().unwrap()));
+    assert_eq!(51, u16::from_le_bytes(state[9..11].try_into().unwrap()));
+    assert_eq!(19, u16::from_le_bytes(state[11..13].try_into().unwrap()));
+    assert_eq!(969, u32::from_le_bytes(state[13..17].try_into().unwrap()));
     assert_eq!(
-        FfiStatus::Ok,
-        compukter_resume_failure(handle, request, 0, 17),
+        '>' as u32,
+        u32::from_le_bytes(state[17..21].try_into().unwrap())
     );
-    assert_eq!(vec![7, 0, 17, 0, 0, 0], next_non_slice_outcome(handle));
-    assert_eq!(FfiStatus::Ok, compukter_close(handle));
-}
+    let delta = terminal_changes_since(handle, 0);
+    assert_eq!(1, delta[0]);
+    assert_eq!(0, u64::from_le_bytes(delta[1..9].try_into().unwrap()));
+    assert_eq!(1, u64::from_le_bytes(delta[9..17].try_into().unwrap()));
 
-fn next_request_id(handle: u64) -> u64 {
-    let output = next_non_slice_outcome(handle);
-    assert_eq!(1, output[0], "fixture must publish a host request");
-    u64::from_le_bytes(output[1..9].try_into().unwrap())
+    assert_eq!(FfiStatus::Ok, compukter_terminal_key(handle, 13, 0, 1),);
+    let text = ['λ' as u32, 0x1f600];
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_terminal_text(handle, text.as_ptr(), text.len())
+    });
+    let line: Vec<u16> = "answer".encode_utf16().collect();
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_terminal_compatibility_line(handle, line.as_ptr(), line.len())
+    });
+    assert_eq!(FfiStatus::Ok, compukter_close(handle));
 }
 
 fn create_machine(artifact: &[u8]) -> u64 {
@@ -163,26 +167,47 @@ fn create_machine(artifact: &[u8]) -> u64 {
     u64::from_le_bytes(output[1..9].try_into().unwrap())
 }
 
-fn next_non_slice_outcome(handle: u64) -> Vec<u8> {
+fn next_outcome(handle: u64) -> Vec<u8> {
     let mut output = vec![0_u8; compukter_max_outcome_bytes()];
-    for _ in 0..1_024 {
-        let mut written = 0_usize;
-        assert_eq!(FfiStatus::Ok, unsafe {
-            compukter_advance(
-                handle,
-                64,
-                64,
-                output.as_mut_ptr(),
-                output.len(),
-                &mut written,
-            )
-        },);
-        if output[0] != 0 {
-            output.truncate(written);
-            return output;
-        }
-    }
-    panic!("fixture did not publish a non-slice outcome");
+    let mut written = 0_usize;
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_advance(
+            handle,
+            64,
+            64,
+            output.as_mut_ptr(),
+            output.len(),
+            &mut written,
+        )
+    });
+    output.truncate(written);
+    output
+}
+
+fn terminal_full_state(handle: u64) -> Vec<u8> {
+    let mut output = vec![0_u8; compukter_max_outcome_bytes()];
+    let mut written = 0_usize;
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_terminal_full_state(handle, output.as_mut_ptr(), output.len(), &mut written)
+    });
+    output.truncate(written);
+    output
+}
+
+fn terminal_changes_since(handle: u64, revision: u64) -> Vec<u8> {
+    let mut output = vec![0_u8; compukter_max_outcome_bytes()];
+    let mut written = 0_usize;
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_terminal_changes_since(
+            handle,
+            revision,
+            output.as_mut_ptr(),
+            output.len(),
+            &mut written,
+        )
+    });
+    output.truncate(written);
+    output
 }
 
 fn terminal_artifact() -> Vec<u8> {

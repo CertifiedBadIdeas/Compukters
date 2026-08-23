@@ -163,14 +163,14 @@ the `compukter:terminal/1.0` binding out of FFI, consume its three fixture
 operations in Rust, expose unrelated addon host requests, and retain a halted
 machine until reboot/close.
 
-- [ ] **Step 3: Extend FFM with bounded terminal data**
+- [x] **Step 3: Extend FFM with bounded terminal data**
 
 Add full-state and changes-since output functions plus commit, key, text, and
 compatibility-line inputs. Decode immutable Kotlin `TerminalCell`, full state,
 delta/change, stable key, action, and modifier models; reject trailing bytes
 and invalid count products.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run both Rust crate suites and `:native-runtime:verifyNativeRuntime`.
 
