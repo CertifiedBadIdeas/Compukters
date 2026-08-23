@@ -21,6 +21,7 @@ import net.minecraft.resources.Identifier
 
 class TerminalFontProfile private constructor(
     val id: String,
+    val displayName: String,
     val fontDescription: FontDescription.Resource,
     val cellWidth: Int,
     val cellHeight: Int,
@@ -54,21 +55,70 @@ class TerminalFontProfile private constructor(
 
     fun renderCodePoint(codePoint: Int): Int = if (supports(codePoint)) codePoint else replacementCodePoint
 
+    fun next(): TerminalFontProfile {
+        val index = ALL.indexOfFirst { it === this }
+        require(index >= 0) { "terminal font profile is not registered: $id" }
+        return ALL[(index + 1) % ALL.size]
+    }
+
     companion object {
         private const val MINECRAFT_TEXT_BASELINE = 7
 
-        val DEFAULT =
-            TerminalFontProfile(
+        val COZETTE =
+            terminalProfile(
                 id = "cozette",
-                fontDescription =
-                    FontDescription.Resource(
-                        Identifier.fromNamespaceAndPath("compukters", "terminal/cozette"),
-                    ),
+                displayName = "Cozette",
                 cellWidth = 6,
                 cellHeight = 13,
                 ascent = 10,
                 supportedCodePoints = COZETTE_SUPPORTED_CODE_POINTS,
                 replacementCodePoint = 0xFFFD,
             )
+        val DINA =
+            terminalProfile(
+                id = "dina",
+                displayName = "Dina",
+                cellWidth = 6,
+                cellHeight = 10,
+                ascent = 8,
+                supportedCodePoints = DINA_SUPPORTED_CODE_POINTS,
+                replacementCodePoint = '?'.code,
+            )
+        val PROGGY_TINY =
+            terminalProfile(
+                id = "proggy_tiny",
+                displayName = "ProggyTiny",
+                cellWidth = 6,
+                cellHeight = 10,
+                ascent = 8,
+                supportedCodePoints = PROGGY_TINY_SUPPORTED_CODE_POINTS,
+                replacementCodePoint = '?'.code,
+            )
+        val ALL = listOf(COZETTE, DINA, PROGGY_TINY)
+        val DEFAULT = COZETTE
+
+        fun fromId(id: String?): TerminalFontProfile = ALL.firstOrNull { it.id == id } ?: DEFAULT
+
+        private fun terminalProfile(
+            id: String,
+            displayName: String,
+            cellWidth: Int,
+            cellHeight: Int,
+            ascent: Int,
+            supportedCodePoints: IntArray,
+            replacementCodePoint: Int,
+        ) = TerminalFontProfile(
+            id = id,
+            displayName = displayName,
+            fontDescription =
+                FontDescription.Resource(
+                    Identifier.fromNamespaceAndPath("compukters", "terminal/$id"),
+                ),
+            cellWidth = cellWidth,
+            cellHeight = cellHeight,
+            ascent = ascent,
+            supportedCodePoints = supportedCodePoints,
+            replacementCodePoint = replacementCodePoint,
+        )
     }
 }
