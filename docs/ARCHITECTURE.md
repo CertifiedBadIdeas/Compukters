@@ -38,8 +38,8 @@ The Rust VM owns verification, the Tier 0 interpreter, managed memory and collec
 | `native-runtime` | Kotlin-facing JNI VM session and trusted host capabilities |
 | `core` | Loader-independent server behavior and `ProgramRuntimeHost` |
 | `playground` | Standalone compile-and-run entry point with stdin/stdout |
-| `v1_21_1-common` | Reserved for loader-independent Minecraft adapters |
-| `v1_21_1-neoforge` | Minimal NeoForge bootstrap and future loader adapters |
+| `v26_1-common` | Loader-independent Minecraft 26.1 adapters and computer carrier |
+| `v26_1-neoforge` | NeoForge 26.1 registration, resources, GameTest, and production archive |
 | `host/compukter-vm` | Artifact verification and managed Rust execution runtime |
 
 Ownership rules:

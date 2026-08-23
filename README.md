@@ -12,11 +12,24 @@ shell and programs executing on a computer inside Minecraft.
 ## Status
 
 The compiler, canonical artifact, JNI session, managed Rust VM, standalone
-playground, and loader-independent `ProgramRuntimeHost` form an executable
-vertical slice. The loadable NeoForge mod is temporarily a minimal bootstrap
-while the server computer carrier and Minecraft integration are added.
+playground, loader-independent `ProgramRuntimeHost`, and server computer block
+form an executable vertical slice. A real NeoForge GameTest covers registration,
+automatic boot, ticking, removal, and VM shutdown.
 
-Currently targets **NeoForge 1.21.1**.
+The active game baseline is **Minecraft 26.1.2**, **NeoForge 26.1.2.97**, and
+**JDK 25**. The production archive uses Minecraft's official names directly;
+there is no remap stage or Architectury runtime dependency.
+
+## Minecraft development
+
+Run Gradle with JDK 25 selected through `JAVA_HOME` or a Gradle-discoverable
+installation:
+
+```bash
+./gradlew-sandbox-dev-parallel :v26_1-neoforge:runClient
+./gradlew-sandbox-dev-parallel :v26_1-neoforge:runGameTestServer
+./gradlew-sandbox-dev-parallel :v26_1-neoforge:buildProductionUniversalJar
+```
 
 ## Runtime boundary
 
