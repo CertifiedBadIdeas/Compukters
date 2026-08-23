@@ -80,6 +80,27 @@ object ComputerBlockGameTest {
 
             helper.succeedWhen {
                 helper.assertTrue(entity.runtimeState != neverStarted(), "computer did not auto-boot on the server ticker")
+                val populated = entity.terminalFullState()
+                helper.assertTrue(populated != null, "running computer did not expose its Rust terminal")
+                helper.assertTrue(populated!!.revision > 0, "terminal output was not committed")
+                helper.assertTrue(
+                    populated.cells.any { cell -> cell.codePoint != ' '.code },
+                    "terminal fixture did not draw any cells",
+                )
+
+                val previousMachineId = entity.terminalMachineId
+                entity.installArtifact(loadTerminalFixture())
+                val rebooted = entity.terminalFullState()
+                helper.assertTrue(entity.terminalMachineId != previousMachineId, "reboot reused the previous terminal identity")
+                helper.assertTrue(rebooted != null, "rebooted computer did not expose its Rust terminal")
+                helper.assertTrue(rebooted!!.revision == 0L, "rebooted terminal did not reset its revision")
+                helper.assertTrue(
+                    rebooted.cells.all { cell ->
+                        cell.codePoint == ' '.code && cell.foreground == 15 && cell.background == 0
+                    },
+                    "rebooted terminal retained cells from the previous machine",
+                )
+
                 helper.setBlock(position, Blocks.AIR)
                 helper.assertTrue(entity.isRemoved, "removing the block did not remove its computer block entity")
                 helper.assertTrue(entity.runtimeState == ProgramComputerState.Closed, "removing the block did not close its VM")

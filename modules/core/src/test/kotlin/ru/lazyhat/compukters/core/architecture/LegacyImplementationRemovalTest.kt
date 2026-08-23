@@ -56,8 +56,13 @@ class LegacyImplementationRemovalTest {
                 "modules/native-runtime/src/main/kotlin/ru/lazyhat/compukters/lang/runtime/IdeStubs.kt",
                 "modules/native-runtime/src/main/kotlin/ru/lazyhat/compukters/lang/runtime/ScreenBuffer.kt",
                 "modules/v26_1/v26_1-common/src/main/kotlin/ru/lazyhat/compukters/common",
+                "modules/v26_1/v26_1-common/src/main/kotlin/ru/lazyhat/compukters/minecraft/computer/TerminalTranscript.kt",
                 "modules/v26_1/v26_1-common/src/test/kotlin/ru/lazyhat/compukters/common",
                 "modules/v26_1/v26_1-neoforge/src/main/kotlin/ru/lazyhat/compukters/impl/platform",
+                "modules/v26_1/v26_1-neoforge/src/main/kotlin/ru/lazyhat/compukters/impl/terminal/TerminalDrawList.kt",
+                "modules/v26_1/v26_1-neoforge/src/main/kotlin/ru/lazyhat/compukters/impl/terminal/TerminalFramebuffer.kt",
+                "modules/v26_1/v26_1-neoforge/src/main/kotlin/ru/lazyhat/compukters/impl/terminal/TerminalInputLease.kt",
+                "modules/v26_1/v26_1-neoforge/src/main/kotlin/ru/lazyhat/compukters/impl/terminal/TerminalTranscriptPayloads.kt",
                 "modules/v26_1/v26_1-neoforge/src/main/resources/META-INF/licenses/Spleen-LICENSE.txt",
                 "modules/v26_1/v26_1-neoforge/src/main/resources/META-INF/services",
                 "modules/v26_1/v26_1-neoforge/src/main/resources/assets/compukters/blockstates/workbench.json",
@@ -72,6 +77,7 @@ class LegacyImplementationRemovalTest {
                 "modules/v26_1/v26_1-neoforge/src/main/resources/assets/compukters/textures/item/terminal_side.png",
                 "modules/v26_1/v26_1-neoforge/src/main/resources/" + "compukter" + "craft.mixins.json",
                 "vendor/ui-dsl",
+                "host/compukter-jni",
             )
 
         val present = forbiddenPaths.filter { hasMaterialContent(repoRoot.resolve(it)) }
@@ -123,6 +129,50 @@ class LegacyImplementationRemovalTest {
             }
 
         assertTrue(offenders.isEmpty(), "Files with obsolete project names remain: ${offenders.joinToString()}")
+    }
+
+    @Test
+    fun activeRuntimeExcludesRemovedTerminalImplementations() {
+        val repoRoot = findRepoRoot()
+        val sourceRoots =
+            listOf(
+                "host/compukter-ffi/src",
+                "host/compukter-vm/src",
+                "modules/core/src/main",
+                "modules/native-runtime/src/main",
+                "modules/v26_1/v26_1-common/src/main",
+                "modules/v26_1/v26_1-neoforge/src/main",
+            ).map(repoRoot::resolve)
+        val forbiddenFragments =
+            listOf(
+                "Terminal" + "Transcript",
+                "Terminal" + "SnapshotPayload",
+                "Terminal" + "RefreshPayload",
+                "Terminal" + "InputPayload",
+                "Program" + "TerminalSink",
+                "Terminal" + "InputLease",
+                "Terminal" + "Framebuffer",
+                "Terminal" + "DrawList",
+                "jni" + "::",
+                "JNI" + "Env",
+                "Java_" + "ru_lazyhat_compukters",
+            )
+
+        val offenders =
+            sourceRoots
+                .filter(Files::isDirectory)
+                .flatMap { sourceRoot ->
+                    Files.walk(sourceRoot).use { paths ->
+                        paths
+                            .filter(Files::isRegularFile)
+                            .filter { path -> path.fileName.toString().substringAfterLast('.', "") in setOf("kt", "rs") }
+                            .filter { path -> forbiddenFragments.any(Files.readString(path)::contains) }
+                            .map { path -> repoRoot.relativize(path).invariantSeparatorsPathString }
+                            .toList()
+                    }
+                }.sorted()
+
+        assertTrue(offenders.isEmpty(), "Removed terminal implementations returned: ${offenders.joinToString()}")
     }
 
     private fun findRepoRoot(): Path {

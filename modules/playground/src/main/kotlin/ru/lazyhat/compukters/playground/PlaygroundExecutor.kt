@@ -13,18 +13,22 @@ package ru.lazyhat.compukters.playground
 
 import kotlinx.coroutines.CancellationException
 import ru.lazyhat.compukters.lang.runtime.capability.CapabilityRegistry
+import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.capability.TerminalCapability
 import ru.lazyhat.compukters.lang.runtime.capability.TerminalLimits
 import ru.lazyhat.compukters.lang.runtime.vm.GuestTrap
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.QuotaKind
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.VmAdmissionException
 import ru.lazyhat.compukters.lang.runtime.vm.VmFault
+import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
 import ru.lazyhat.compukters.lang.runtime.vm.VmStartException
 import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
+import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.file.Path
@@ -81,7 +85,8 @@ class NativePlaygroundExecutor(
     terminalLimits: TerminalLimits = TerminalLimits(),
     private val maximumAdvances: Int = 1024,
 ) : PlaygroundExecutor {
-    private val capabilities = CapabilityRegistry(listOf(TerminalCapability(input, output, terminalLimits)))
+    private val terminal = TerminalCapability(input, output, terminalLimits)
+    private val capabilities = CapabilityRegistry(listOf(terminal))
     private var loaded = false
 
     init {
@@ -92,6 +97,7 @@ class NativePlaygroundExecutor(
         try {
             loadLibrary()
             VmSession.open(artifact).use { session ->
+                var publishedTerminalText = ""
                 repeat(maximumAdvances) {
                     when (val outcome = session.advance(GUEST_BUDGET, MAINTENANCE_BUDGET)) {
                         is VmOutcome.HostRequest -> {
@@ -99,7 +105,20 @@ class NativePlaygroundExecutor(
                         }
 
                         is VmOutcome.Halted -> {
+                            publishTerminal(session, publishedTerminalText)?.let { return it }
                             return PlaygroundExecution.Success
+                        }
+
+                        VmOutcome.WaitingForLine -> {
+                            publishTerminal(session, publishedTerminalText)?.let { return it }
+                            publishedTerminalText = terminalText(session.terminalFullState())
+                            when (val response = terminal.invoke(compatibilityRequest(READ_OPERATION))) {
+                                is HostResponse.StringSuccess -> session.provideCompatibilityLine(response.value)
+                                is HostResponse.Failure -> return PlaygroundExecution.HostFailure(response.kind, response.code)
+                                HostResponse.UnitSuccess -> {
+                                    return PlaygroundExecution.PlatformFailure("terminal input returned no line")
+                                }
+                            }
                         }
 
                         VmOutcome.SliceExhausted -> {
@@ -148,7 +167,51 @@ class NativePlaygroundExecutor(
         loaded = true
     }
 
+    private suspend fun publishTerminal(
+        session: VmSession,
+        published: String,
+    ): PlaygroundExecution? {
+        session.commitTerminal()
+        val current = terminalText(session.terminalFullState())
+        if (!current.startsWith(published)) {
+            return PlaygroundExecution.PlatformFailure("standalone terminal output rewrote published cells")
+        }
+        val appended = current.substring(published.length)
+        if (appended.isEmpty()) return null
+        return when (val response = terminal.invoke(compatibilityRequest(WRITE_OPERATION, appended))) {
+            HostResponse.UnitSuccess -> null
+            is HostResponse.Failure -> PlaygroundExecution.HostFailure(response.kind, response.code)
+            is HostResponse.StringSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned an input line")
+        }
+    }
+
+    private fun compatibilityRequest(
+        operation: Int,
+        value: String? = null,
+    ): VmHostRequest =
+        VmHostRequest(
+            id = 0,
+            capability = terminal.identity,
+            operation = operation,
+            arguments = value?.let { listOf(VmValue.StringValue(it)) }.orEmpty(),
+        )
+
+    private fun terminalText(state: TerminalState): String =
+        buildString {
+            repeat(state.cursor.y) { y ->
+                val rowStart = y * state.width
+                val row = StringBuilder(state.width)
+                repeat(state.width) { x -> row.appendCodePoint(state.cells[rowStart + x].codePoint) }
+                append(row.toString().trimEnd(' '))
+                append('\n')
+            }
+            val rowStart = state.cursor.y * state.width
+            repeat(state.cursor.x) { x -> appendCodePoint(state.cells[rowStart + x].codePoint) }
+        }
+
     private companion object {
+        const val WRITE_OPERATION = 0
+        const val READ_OPERATION = 2
         const val GUEST_BUDGET = 4096
         const val MAINTENANCE_BUDGET = 4096
     }
