@@ -93,6 +93,8 @@ class ComputerBlockTest {
             return state
         }
 
+        override fun submitLine(line: String): Boolean = false
+
         override fun reboot(): ProgramComputerState = turnOn()
 
         override fun shutdown() = Unit

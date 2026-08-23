@@ -24,6 +24,8 @@ internal interface ComputerCarrier : AutoCloseable {
 
     fun serverTick(): ProgramComputerState
 
+    fun submitLine(line: String): Boolean
+
     fun reboot(): ProgramComputerState
 
     fun shutdown()
@@ -64,6 +66,8 @@ private class ProgramComputerCarrier(
     override fun turnOn(): ProgramComputerState = delegate.turnOn()
 
     override fun serverTick(): ProgramComputerState = delegate.serverTick()
+
+    override fun submitLine(line: String): Boolean = delegate.submitLine(line)
 
     override fun reboot(): ProgramComputerState = delegate.reboot()
 

@@ -105,6 +105,20 @@ class ComputerBlockEntityTest {
     }
 
     @Test
+    fun `accepted terminal input is echoed and forwarded to the waiting computer`() {
+        val fixture = fixture()
+        fixture.entity.installArtifact(byteArrayOf(1))
+        fixture.entity.serverTick()
+        val carrier = fixture.carriers.single()
+        carrier.publishState(ProgramComputerState.WaitingForInput)
+
+        assertTrue(fixture.entity.submitTerminalLine("Ada"))
+
+        assertEquals(listOf("Ada"), carrier.submittedLines)
+        assertEquals("Ada\n", fixture.entity.terminalSnapshot().text)
+    }
+
+    @Test
     fun `new install clears prior visible transcript once`() {
         val fixture = fixture()
         fixture.entity.installArtifact(byteArrayOf(1))
@@ -233,6 +247,7 @@ class ComputerBlockEntityTest {
         var shutdownCalls = 0
         var closeCalls = 0
         var loadedArtifact: ByteArray? = null
+        val submittedLines = mutableListOf<String>()
 
         override fun turnOn(): ProgramComputerState {
             turnOnCalls++
@@ -254,6 +269,11 @@ class ComputerBlockEntityTest {
         override fun shutdown() {
             shutdownCalls++
             publishState(ProgramComputerState.PoweredOff(ProgramComputerStopReason.Shutdown))
+        }
+
+        override fun submitLine(line: String): Boolean {
+            submittedLines += line
+            return true
         }
 
         override fun close() {
