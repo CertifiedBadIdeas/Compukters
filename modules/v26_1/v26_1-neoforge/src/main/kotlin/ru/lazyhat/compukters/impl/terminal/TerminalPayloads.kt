@@ -181,35 +181,6 @@ data class TerminalTextPayload(
     }
 }
 
-data class TerminalCompatibilityLinePayload(
-    val position: BlockPos,
-    val machineId: Long,
-    val line: String,
-) : CustomPacketPayload {
-    override fun type(): CustomPacketPayload.Type<TerminalCompatibilityLinePayload> = TYPE
-
-    companion object {
-        const val MAXIMUM_INPUT_CODE_UNITS = 4_096
-        val TYPE = type<TerminalCompatibilityLinePayload>("terminal_compatibility_line")
-        val STREAM_CODEC: StreamCodec<RegistryFriendlyByteBuf, TerminalCompatibilityLinePayload> =
-            codec(
-                { buffer, payload ->
-                    TerminalProtocol.writeIdentity(buffer, payload.position, payload.machineId)
-                    require(payload.line.length <= MAXIMUM_INPUT_CODE_UNITS) { "terminal line is too long" }
-                    buffer.writeUtf(payload.line, MAXIMUM_INPUT_CODE_UNITS)
-                },
-                { buffer ->
-                    val identity = TerminalProtocol.readIdentity(buffer)
-                    TerminalCompatibilityLinePayload(
-                        identity.position,
-                        identity.machineId,
-                        buffer.readUtf(MAXIMUM_INPUT_CODE_UNITS),
-                    )
-                },
-            )
-    }
-}
-
 internal object TerminalProtocol {
     const val WIDTH = 51
     const val HEIGHT = 19
@@ -235,9 +206,11 @@ internal object TerminalProtocol {
             delta.changes.sumOf { change ->
                 when (change) {
                     is TerminalChange.Patch -> change.cells.size
+
                     is TerminalChange.Fill,
                     is TerminalChange.Scroll,
                     -> 1
+
                     is TerminalChange.Cursor,
                     TerminalChange.Reset,
                     -> 0
@@ -343,6 +316,7 @@ internal object TerminalProtocol {
                 buffer.writeVarInt(change.cells.size)
                 change.cells.forEach { writeCell(buffer, it) }
             }
+
             is TerminalChange.Fill -> {
                 buffer.writeByte(1)
                 buffer.writeByte(change.x)
@@ -351,17 +325,22 @@ internal object TerminalProtocol {
                 buffer.writeByte(change.height)
                 writeCell(buffer, change.cell)
             }
+
             is TerminalChange.Scroll -> {
                 buffer.writeByte(2)
                 buffer.writeByte(change.rows)
                 writeCell(buffer, change.fill)
             }
+
             is TerminalChange.Cursor -> {
                 buffer.writeByte(3)
                 writePosition(buffer, change.position)
                 buffer.writeBoolean(change.visible)
             }
-            TerminalChange.Reset -> buffer.writeByte(4)
+
+            TerminalChange.Reset -> {
+                buffer.writeByte(4)
+            }
         }
     }
 
@@ -379,23 +358,35 @@ internal object TerminalProtocol {
                 budget.consume(count)
                 TerminalChange.Patch(start, List(count) { readCell(buffer) })
             }
+
             1 -> {
                 budget.consume(1)
-                TerminalChange.Fill(
-                    buffer.readU8(),
-                    buffer.readU8(),
-                    buffer.readU8(),
-                    buffer.readU8(),
-                    readCell(buffer),
-                ).also(::validateChange)
+                TerminalChange
+                    .Fill(
+                        buffer.readU8(),
+                        buffer.readU8(),
+                        buffer.readU8(),
+                        buffer.readU8(),
+                        readCell(buffer),
+                    ).also(::validateChange)
             }
+
             2 -> {
                 budget.consume(1)
                 TerminalChange.Scroll(buffer.readU8(), readCell(buffer)).also(::validateChange)
             }
-            3 -> TerminalChange.Cursor(readPosition(buffer), buffer.readBoolean())
-            4 -> TerminalChange.Reset
-            else -> invalid("unknown terminal change")
+
+            3 -> {
+                TerminalChange.Cursor(readPosition(buffer), buffer.readBoolean())
+            }
+
+            4 -> {
+                TerminalChange.Reset
+            }
+
+            else -> {
+                invalid("unknown terminal change")
+            }
         }
 
     private fun validateChange(change: TerminalChange) {
@@ -405,18 +396,24 @@ internal object TerminalProtocol {
                 require(change.cells.size <= CELL_COUNT - change.start) { "invalid terminal patch" }
                 change.cells.forEach(::validateCell)
             }
+
             is TerminalChange.Fill -> {
                 require(change.width > 0 && change.height > 0) { "invalid terminal fill" }
                 require(change.x in 0 until WIDTH && change.y in 0 until HEIGHT) { "invalid terminal fill" }
                 require(change.width <= WIDTH - change.x && change.height <= HEIGHT - change.y) { "invalid terminal fill" }
                 validateCell(change.cell)
             }
+
             is TerminalChange.Scroll -> {
                 require(change.rows in 1..HEIGHT) { "invalid terminal scroll" }
                 validateCell(change.fill)
             }
-            is TerminalChange.Cursor -> validatePosition(change.position)
-            TerminalChange.Reset -> Unit
+
+            is TerminalChange.Cursor -> {
+                validatePosition(change.position)
+            }
+
+            TerminalChange.Reset -> {}
         }
     }
 

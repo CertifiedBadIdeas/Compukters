@@ -64,6 +64,7 @@ class ComputerBlockTest {
                 carrier.attach(imageSource, stateSink)
             },
             InstalledProgramStorage(maximumArtifactBytes = 16),
+            { byteArrayOf(1) },
         )
 
     private class CountingCarrier : ComputerCarrier {
@@ -93,8 +94,6 @@ class ComputerBlockTest {
             serverTickCalls++
             return state
         }
-
-        override fun submitLine(line: String): Boolean = false
 
         override fun terminalFullState(): TerminalState? = null
 

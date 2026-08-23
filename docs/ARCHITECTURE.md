@@ -18,17 +18,17 @@ Kotlin .kt project
 
 The trusted JVM side owns source snapshots, compiler isolation, diagnostics, Kotlin IR lowering, and artifact production. Kotlin compiler internals do not cross the bounded FFM boundary. The Rust side receives immutable artifact bytes, verifies the complete container, admits it under explicit limits, and owns execution state. Native buffers remain caller-owned and no Rust pointer enters Kotlin.
 
-The raw terminal is a synchronous Rust device: cell writes, cursor changes, and input polling never cross into Minecraft. Waiting for absent input is the only suspending terminal operation. The compatibility `print`/`println` path writes into the same device, while `readln` suspends the guest until a complete compatibility line arrives. The server host never blocks the Minecraft thread.
+The raw terminal is a synchronous Rust device: cell writes, cursor changes, and input polling never cross into Minecraft. Waiting for an absent input event is the only suspending terminal operation. Kotlin guests consume ordered raw Text and Key events; there is no compatibility line buffer or second input protocol. The server host never blocks the Minecraft thread.
 
 ## Runtime ownership
 
 `ProgramRuntimeHost` owns one current Rust `ComputerMachine`, advances it with bounded guest and maintenance budgets, commits terminal changes once per active server tick, and exposes typed full/delta states and failures through JDK 25 FFM. It does not own a second grid or output transcript. It is loader-independent and server-thread confined.
 
-The Minecraft carrier owns exactly one host, loads one installed artifact, and advances it once per server tick. The Rust machine retains its 51x19 Unicode cell grid after an ordinary program halt; reboot replaces the machine and clears the terminal. Minecraft sends full state to a new viewer and ordered deltas thereafter. All viewers may submit bounded key and text events, which merge in server-arrival order without a client-side echo or an input lease.
+The Minecraft carrier owns exactly one host and advances it once per server tick. It currently boots the packaged artifact compiled from `system/programs/shell.kt`; installed user-artifact storage is separate and is not used as the boot image. The Rust machine retains its 51x19 Unicode cell grid after an ordinary program halt; reboot replaces the machine and clears the terminal. Minecraft sends full state to a new viewer and ordered deltas thereafter. All viewers may submit bounded key and text events, which merge in server-arrival order without a client-side echo or an input lease.
 
 The Rust VM owns verification, the Tier 0 interpreter, managed memory and collection, quotas, traps/faults, capability suspension, and host-neutral sessions. Future JIT/AOT tiers must remain behind the same verified artifact and session contract.
 
-The future boot shell is a no-std Kotlin program over the raw terminal ABI. It remains responsible for the command line and for exporting the fixed stdin/stdout primitives used by the first std sysroot. Ordinary Kotlin programs use `print`, `println`, and `readln` above that boundary; general stream handles, pipes, and process redirection are later extensions rather than terminal responsibilities.
+The current shell is an ordinary no-std Kotlin program over the raw terminal ABI. It owns line editing, authoritative echo, prompts, and built-ins. Direct shell boot is temporary: issue #518 adds a sibling `boot.kt` artifact and generic foreground `process.run`, after which the VM starts boot and boot launches shell. That boundary will also establish the fixed stdin/stdout primitives used by the first std sysroot; general stream handles, pipes, and process redirection remain later extensions rather than terminal responsibilities.
 
 ## Module ownership
 

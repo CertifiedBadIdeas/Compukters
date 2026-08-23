@@ -35,8 +35,6 @@ internal interface ProgramHost : AutoCloseable {
 
     fun serverTick(): ProgramRuntimeState
 
-    fun submitLine(line: String): Boolean
-
     fun terminalFullState(): TerminalState?
 
     fun terminalChangesSince(revision: Long): TerminalUpdate?
@@ -61,8 +59,6 @@ internal class RuntimeProgramHost(
     override fun start(artifact: ByteArray): ProgramStartResult = delegate.start(artifact)
 
     override fun serverTick(): ProgramRuntimeState = delegate.serverTick()
-
-    override fun submitLine(line: String): Boolean = delegate.submitLine(line)
 
     override fun terminalFullState(): TerminalState? = delegate.terminalFullState()
 

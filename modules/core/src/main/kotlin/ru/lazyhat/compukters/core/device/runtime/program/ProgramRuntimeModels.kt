@@ -37,14 +37,6 @@ data class ProgramTickBudget(
     }
 }
 
-data class ProgramTerminalLimits(
-    val maximumInputLineCodeUnits: Int = 4_096,
-) {
-    init {
-        require(maximumInputLineCodeUnits > 0) { "maximum input line code units must be positive" }
-    }
-}
-
 sealed interface ProgramRuntimeState {
     data object Idle : ProgramRuntimeState
 

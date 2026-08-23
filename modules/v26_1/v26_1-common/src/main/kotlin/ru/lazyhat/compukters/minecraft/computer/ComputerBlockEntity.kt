@@ -31,6 +31,7 @@ open class ComputerBlockEntity internal constructor(
     blockState: BlockState,
     private val carrierFactory: ComputerCarrierFactory,
     private val storage: InstalledProgramStorage,
+    private val bootImageSource: () -> ByteArray,
 ) : BlockEntity(type, position, blockState) {
     constructor(
         type: BlockEntityType<*>,
@@ -42,6 +43,7 @@ open class ComputerBlockEntity internal constructor(
         blockState,
         RuntimeComputerCarrierFactory,
         InstalledProgramStorage(),
+        SystemProgramImage::shell,
     )
 
     private var carrier: ComputerCarrier? = null
@@ -56,18 +58,10 @@ open class ComputerBlockEntity internal constructor(
     fun installArtifact(artifact: ByteArray) {
         storage.install(artifact)
         setChanged()
-        carrier?.let { current ->
-            terminalMachineId = nextMachineId()
-            runtimeState = current.reboot()
-        }
     }
 
     fun removeArtifact() {
         if (!storage.clear()) return
-        carrier?.let { current ->
-            current.shutdown()
-            runtimeState = current.state
-        }
         setChanged()
     }
 
@@ -76,7 +70,6 @@ open class ComputerBlockEntity internal constructor(
     fun terminalFullState(): TerminalState? = carrier?.terminalFullState()
 
     fun prepareTerminal(): TerminalState? {
-        if (!storage.hasArtifact()) return null
         val current = carrier ?: createCarrier().also { carrier = it }
         if (current.state == neverStarted()) runtimeState = current.turnOn()
         return current.terminalFullState()
@@ -92,10 +85,7 @@ open class ComputerBlockEntity internal constructor(
 
     fun submitTerminalText(value: String): Boolean = carrier?.sendTerminalText(value) == true
 
-    fun submitTerminalLine(line: String): Boolean = carrier?.submitLine(line) == true
-
     internal fun serverTick() {
-        if (!storage.hasArtifact()) return
         val current = carrier ?: createCarrier().also { carrier = it }
         if (current.state == neverStarted()) {
             runtimeState = current.turnOn()
@@ -127,7 +117,7 @@ open class ComputerBlockEntity internal constructor(
         terminalMachineId = nextMachineId()
         return carrierFactory.create(
             deviceId = deviceId,
-            imageSource = { storage.artifact() },
+            imageSource = { bootImageSource() },
             stateSink = { _, state -> runtimeState = state },
         )
     }

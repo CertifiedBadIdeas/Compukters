@@ -30,8 +30,6 @@ import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
-import java.nio.file.Path
-import kotlin.io.path.readText
 
 @EventBusSubscriber(modid = MOD_ID)
 object ComputerBlockGameTest {
@@ -76,8 +74,6 @@ object ComputerBlockGameTest {
                 entity.type === CompuktersRegistry.COMPUTER_BLOCK_ENTITY.get(),
                 "computer block created the wrong block entity type",
             )
-            entity.installArtifact(loadTerminalFixture())
-
             helper.succeedWhen {
                 helper.assertTrue(entity.runtimeState != neverStarted(), "computer did not auto-boot on the server ticker")
                 val populated = entity.terminalFullState()
@@ -86,19 +82,6 @@ object ComputerBlockGameTest {
                 helper.assertTrue(
                     populated.cells.any { cell -> cell.codePoint != ' '.code },
                     "terminal fixture did not draw any cells",
-                )
-
-                val previousMachineId = entity.terminalMachineId
-                entity.installArtifact(loadTerminalFixture())
-                val rebooted = entity.terminalFullState()
-                helper.assertTrue(entity.terminalMachineId != previousMachineId, "reboot reused the previous terminal identity")
-                helper.assertTrue(rebooted != null, "rebooted computer did not expose its Rust terminal")
-                helper.assertTrue(rebooted!!.revision == 0L, "rebooted terminal did not reset its revision")
-                helper.assertTrue(
-                    rebooted.cells.all { cell ->
-                        cell.codePoint == ' '.code && cell.foreground == 15 && cell.background == 0
-                    },
-                    "rebooted terminal retained cells from the previous machine",
                 )
 
                 helper.setBlock(position, Blocks.AIR)
@@ -111,17 +94,6 @@ object ComputerBlockGameTest {
 
         override fun typeDescription(): MutableComponent = Component.literal("Compukters computer lifecycle")
     }
-
-    private fun loadTerminalFixture(): ByteArray {
-        val encoded = Path.of(requiredProperty("compukter.vm.terminalFixture")).readText().trim()
-        require(encoded.length % 2 == 0) { "fixture contains incomplete hexadecimal byte" }
-        return ByteArray(encoded.length / 2) { index ->
-            encoded.substring(index * 2, index * 2 + 2).toInt(16).toByte()
-        }
-    }
-
-    private fun requiredProperty(name: String): String =
-        requireNotNull(System.getProperty(name)) { "missing game-test system property $name" }
 
     private fun neverStarted(): ProgramComputerState = ProgramComputerState.PoweredOff(ProgramComputerStopReason.NeverStarted)
 }

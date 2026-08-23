@@ -60,9 +60,4 @@ internal interface LowLevelVmBridge {
         handle: Long,
         codePoints: IntArray,
     ): Unit = error("terminal text input is unavailable")
-
-    fun terminalCompatibilityLine(
-        handle: Long,
-        value: CharArray,
-    ): Unit = error("terminal compatibility input is unavailable")
 }

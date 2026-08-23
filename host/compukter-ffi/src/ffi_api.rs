@@ -347,32 +347,6 @@ pub unsafe extern "C" fn compukter_terminal_text(
     })
 }
 
-#[unsafe(no_mangle)]
-/// Resumes the compatibility `readln` request with exact UTF-16 code units.
-///
-/// # Safety
-///
-/// When `line_len` is non-zero, `line` must point to at least that many
-/// readable `u16` values.
-pub unsafe extern "C" fn compukter_terminal_compatibility_line(
-    handle: u64,
-    line: *const u16,
-    line_len: usize,
-) -> FfiStatus {
-    ffi_status(|| {
-        if line_len > MAXIMUM_INBOUND_UTF16_CODE_UNITS || (line_len != 0 && line.is_null()) {
-            return FfiStatus::InvalidArgument;
-        }
-        let units = if line_len == 0 {
-            &[][..]
-        } else {
-            // SAFETY: The validated ABI contract provides readable UTF-16 input.
-            unsafe { core::slice::from_raw_parts(line, line_len) }
-        };
-        bridge_status(bridge::terminal_compatibility_line(handle, units))
-    })
-}
-
 fn ffi_status(operation: impl FnOnce() -> FfiStatus) -> FfiStatus {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(operation)).unwrap_or(FfiStatus::Internal)
 }

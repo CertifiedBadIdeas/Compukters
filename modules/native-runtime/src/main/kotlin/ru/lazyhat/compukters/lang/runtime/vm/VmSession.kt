@@ -84,8 +84,6 @@ class VmSession private constructor(
 
     fun sendTerminalText(value: String): Unit = bridge.terminalText(requireHandle(), value.codePoints().toArray())
 
-    fun provideCompatibilityLine(value: String): Unit = bridge.terminalCompatibilityLine(requireHandle(), value.toCharArray())
-
     override fun close() {
         val closing = handle.getAndSet(CLOSED)
         if (closing != CLOSED) bridge.close(closing)
@@ -148,7 +146,6 @@ private class WireDecoder(
             5 -> VmOutcome.Crashed(guestTrap(u8()))
             6 -> VmOutcome.Faulted(vmFault(u8()))
             7 -> VmOutcome.HostFailed(hostFailureKind(u8()), u32())
-            8 -> VmOutcome.WaitingForLine
             9 -> VmOutcome.WaitingForTerminalEvent
             else -> invalid()
         }.also { end() }

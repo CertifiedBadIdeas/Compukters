@@ -28,8 +28,6 @@ internal interface ComputerCarrier : AutoCloseable {
 
     fun serverTick(): ProgramComputerState
 
-    fun submitLine(line: String): Boolean
-
     fun terminalFullState(): TerminalState?
 
     fun terminalChangesSince(revision: Long): TerminalUpdate?
@@ -79,8 +77,6 @@ private class ProgramComputerCarrier(
     override fun turnOn(): ProgramComputerState = delegate.turnOn()
 
     override fun serverTick(): ProgramComputerState = delegate.serverTick()
-
-    override fun submitLine(line: String): Boolean = delegate.submitLine(line)
 
     override fun terminalFullState(): TerminalState? = delegate.terminalFullState()
 

@@ -25,3 +25,13 @@ plugins {
 architectury {
     common("neoforge")
 }
+
+val shellArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/shell.cpkt")
+
+tasks.processResources {
+    dependsOn(":compiler-k2:generateShellArtifact")
+    from(shellArtifact) {
+        into("system/programs")
+        rename { "shell.cpkt" }
+    }
+}

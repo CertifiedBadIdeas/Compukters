@@ -52,8 +52,6 @@ internal interface ProgramVmSession : AutoCloseable {
     )
 
     fun sendTerminalText(value: String)
-
-    fun provideCompatibilityLine(value: String)
 }
 
 internal fun interface ProgramVmSessionFactory {
@@ -90,8 +88,6 @@ private class NativeProgramVmSession(
     ) = session.sendTerminalKey(key, action, modifiers)
 
     override fun sendTerminalText(value: String) = session.sendTerminalText(value)
-
-    override fun provideCompatibilityLine(value: String) = session.provideCompatibilityLine(value)
 
     override fun close() = session.close()
 }

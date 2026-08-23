@@ -32,7 +32,6 @@ class TerminalScreen(
 
     private val replica = TerminalReplica(initial)
     private val pressedKeys = mutableSetOf<Int>()
-    private val compatibilityLine = StringBuilder()
 
     fun update(payload: TerminalFullPayload): Boolean = replica.replace(payload)
 
@@ -53,7 +52,6 @@ class TerminalScreen(
             val pasted = boundedText(minecraft.keyboardHandler.clipboard)
             if (pasted.isNotEmpty()) {
                 sendText(pasted)
-                appendCompatibilityText(pasted)
             }
             return true
         }
@@ -62,16 +60,6 @@ class TerminalScreen(
         ClientPacketDistributor.sendToServer(
             TerminalKeyPayload(position, replica.machineId, key, action, modifiers(event.modifiers())),
         )
-        when (key) {
-            TerminalKey.BACKSPACE -> removeCompatibilityCodePoint()
-            TerminalKey.ENTER -> {
-                ClientPacketDistributor.sendToServer(
-                    TerminalCompatibilityLinePayload(position, replica.machineId, compatibilityLine.toString()),
-                )
-                compatibilityLine.clear()
-            }
-            else -> Unit
-        }
         return if (key == TerminalKey.ESCAPE) super.keyPressed(event) else true
     }
 
@@ -84,7 +72,6 @@ class TerminalScreen(
     override fun charTyped(event: CharacterEvent): Boolean {
         val text = event.codepointAsString()
         sendText(text)
-        appendCompatibilityText(text)
         return true
     }
 
@@ -169,20 +156,6 @@ class TerminalScreen(
 
     private fun sendText(text: String) {
         ClientPacketDistributor.sendToServer(TerminalTextPayload(position, replica.machineId, text))
-    }
-
-    private fun appendCompatibilityText(text: String) {
-        val lineText = text.filterNot { it == '\r' || it == '\n' }
-        val available = TerminalCompatibilityLinePayload.MAXIMUM_INPUT_CODE_UNITS - compatibilityLine.length
-        if (available <= 0) return
-        compatibilityLine.append(boundedText(lineText, available))
-    }
-
-    private fun removeCompatibilityCodePoint() {
-        if (compatibilityLine.isEmpty()) return
-        val end = compatibilityLine.length
-        val start = compatibilityLine.offsetByCodePoints(end, -1)
-        compatibilityLine.delete(start, end)
     }
 
     private fun boundedText(

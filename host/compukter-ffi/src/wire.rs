@@ -84,7 +84,6 @@ pub(crate) fn encode_outcome(outcome: OwnedOutcome) -> Vec<u8> {
             encoder.u32(value.code());
             encoder
         }
-        OwnedOutcome::WaitingForLine => Encoder::new(8),
         OwnedOutcome::WaitingForTerminalEvent => Encoder::new(9),
     };
     encoder.finish()

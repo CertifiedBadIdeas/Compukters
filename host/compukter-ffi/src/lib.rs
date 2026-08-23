@@ -18,6 +18,6 @@ pub use ffi_api::{
     compukter_abi_version, compukter_advance, compukter_close, compukter_create,
     compukter_max_create_bytes, compukter_max_outcome_bytes, compukter_resume_failure,
     compukter_resume_string, compukter_resume_unit, compukter_terminal_changes_since,
-    compukter_terminal_commit, compukter_terminal_compatibility_line,
-    compukter_terminal_full_state, compukter_terminal_key, compukter_terminal_text, FfiStatus,
+    compukter_terminal_commit, compukter_terminal_full_state, compukter_terminal_key,
+    compukter_terminal_text, FfiStatus,
 };
