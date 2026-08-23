@@ -14,8 +14,8 @@ package ru.lazyhat.compukters.impl.computer
 import com.mojang.serialization.MapCodec
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Holder
-import net.minecraft.gametest.framework.GameTestInstance
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.gametest.framework.GameTestInstance
 import net.minecraft.gametest.framework.TestData
 import net.minecraft.gametest.framework.TestEnvironmentDefinition
 import net.minecraft.network.chat.Component

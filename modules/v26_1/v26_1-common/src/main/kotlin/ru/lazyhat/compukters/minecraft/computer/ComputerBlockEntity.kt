@@ -84,9 +84,7 @@ open class ComputerBlockEntity internal constructor(
         super.setRemoved()
     }
 
-    override fun loadAdditional(
-        input: ValueInput,
-    ) {
+    override fun loadAdditional(input: ValueInput) {
         super.loadAdditional(input)
         closeCarrier()
         storage.load(input)
@@ -94,9 +92,7 @@ open class ComputerBlockEntity internal constructor(
         runtimeState = neverStarted()
     }
 
-    override fun saveAdditional(
-        output: ValueOutput,
-    ) {
+    override fun saveAdditional(output: ValueOutput) {
         super.saveAdditional(output)
         storage.save(output)
     }
