@@ -26,6 +26,8 @@ The raw terminal is a synchronous Rust device: cell writes, cursor changes, and 
 
 The Minecraft carrier owns exactly one host and advances it once per server tick. It currently boots the packaged artifact compiled from `system/programs/shell.kt`; installed user-artifact storage is separate and is not used as the boot image. The Rust machine retains its 51x19 Unicode cell grid after an ordinary program halt; reboot replaces the machine and clears the terminal. Minecraft sends full state to a new viewer and ordered deltas thereafter. All viewers may submit bounded key and text events, which merge in server-arrival order without a client-side echo or an input lease.
 
+The client renders the fixed 51x19 grid in a centered compact panel using one 6x9 `minecraft:uniform` cell scale; the world remains visible through a translucent dim layer. Presentation never changes terminal coordinates or owns a second grid.
+
 The Rust VM owns verification, the Tier 0 interpreter, managed memory and collection, quotas, traps/faults, capability suspension, and host-neutral sessions. Future JIT/AOT tiers must remain behind the same verified artifact and session contract.
 
 The current shell is an ordinary no-std Kotlin program over the raw terminal ABI. It owns line editing, authoritative echo, prompts, and built-ins. Direct shell boot is temporary: issue #518 adds a sibling `boot.kt` artifact and generic foreground `process.run`, after which the VM starts boot and boot launches shell. That boundary will also establish the fixed stdin/stdout primitives used by the first std sysroot; general stream handles, pipes, and process redirection remain later extensions rather than terminal responsibilities.
