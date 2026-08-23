@@ -115,25 +115,52 @@ val nativeResourcePath = "META-INF/natives/$nativeOs/$nativeArch/$nativeFilename
 val productionJar = tasks.named<ShadowJar>("shadowJar")
 val verifyPackagedCompukterJni =
     tasks.register("verifyPackagedCompukterJni") {
-        description = "Checks that the production NeoForge jar contains exactly one current-host JNI resource."
+        description = "Checks the contents of the production NeoForge jar."
         group = "verification"
         dependsOn(productionJar)
         inputs.file(productionJar.flatMap { it.archiveFile })
         inputs.property("nativeResourcePath", nativeResourcePath)
         doLast {
             val archive = productionJar.get().archiveFile.get().asFile
-            val nativeEntries =
+            val entries =
                 ZipFile(archive).use { zip ->
                     zip
                         .entries()
                         .asSequence()
                         .filterNot { it.isDirectory }
                         .map { it.name }
-                        .filter { it.startsWith("META-INF/natives/") }
                         .toList()
                 }
+            val nativeEntries = entries.filter { it.startsWith("META-INF/natives/") }
             check(nativeEntries == listOf(nativeResourcePath)) {
                 "expected only $nativeResourcePath in ${archive.name}, found $nativeEntries"
+            }
+            check(entries.count { it == "META-INF/neoforge.mods.toml" } == 1) {
+                "expected exactly one META-INF/neoforge.mods.toml in ${archive.name}"
+            }
+            check(entries.none { it.startsWith("dev/architectury/") }) {
+                "Architectury runtime classes leaked into ${archive.name}"
+            }
+            check(entries.none { it.contains("kotlin/compiler") }) {
+                "Kotlin compiler implementation leaked into ${archive.name}"
+            }
+            check(entries.none { it.contains("ComputerBlockGameTest") }) {
+                "GameTest classes leaked into ${archive.name}"
+            }
+            check("ru/lazyhat/compukters/minecraft/computer/ComputerBlock.class" in entries) {
+                "common computer classes are missing from ${archive.name}"
+            }
+            check("ru/lazyhat/compukters/impl/computer/NeoForgeComputerBlockEntity.class" in entries) {
+                "NeoForge computer classes are missing from ${archive.name}"
+            }
+            check("assets/compukters/items/compukter.json" in entries) {
+                "26.1 item model is missing from ${archive.name}"
+            }
+            check("assets/compukters/models/item/compukter.json" !in entries) {
+                "legacy item model leaked into ${archive.name}"
+            }
+            check("pack.mcmeta" !in entries) {
+                "legacy pack.mcmeta leaked into ${archive.name}"
             }
         }
     }
