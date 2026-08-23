@@ -216,8 +216,7 @@ class ComputerBlockEntityTest {
             return output.buildResult()
         }
 
-        fun loadForTest(tag: CompoundTag) =
-            loadAdditional(TagValueInput.create(ProblemReporter.DISCARDING, EMPTY_PROVIDER, tag))
+        fun loadForTest(tag: CompoundTag) = loadAdditional(TagValueInput.create(ProblemReporter.DISCARDING, EMPTY_PROVIDER, tag))
     }
 
     private class FakeCarrier(
