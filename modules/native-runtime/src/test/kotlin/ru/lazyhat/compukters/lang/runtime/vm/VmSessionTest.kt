@@ -93,6 +93,46 @@ class VmSessionTest {
     }
 
     @Test
+    fun `terminal state and inputs use immutable bounded bridge values`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(11)))
+        val session = VmSession.open(byteArrayOf(1), bridge)
+        val cells =
+            buildList {
+                add(cell('>'.code, 15, 0))
+                repeat(968) { add(cell(' '.code, 15, 0)) }
+            }.fold(ByteArray(0), ByteArray::plus)
+        bridge.terminalState =
+            bytes(2, long(3), short(51), short(19), int(969), cells, short(50), short(18), 1)
+        bridge.terminalUpdate = bytes(0, long(3))
+
+        val state = session.terminalFullState()
+        assertEquals(3, state.revision)
+        assertEquals(TerminalCell('>'.code, 15, 0), state.cells.first())
+        assertEquals(TerminalPosition(50, 18), state.cursor)
+        assertEquals(TerminalUpdate.Unchanged(3), session.terminalChangesSince(3))
+
+        session.commitTerminal()
+        session.sendTerminalKey(TerminalKey.ENTER, TerminalKeyAction.REPEAT, setOf(TerminalModifier.CONTROL))
+        session.sendTerminalText("λ😀")
+        session.provideCompatibilityLine("answer")
+        assertEquals(1, bridge.terminalCommits)
+        assertEquals(listOf(TerminalKeyInput(13, 1, 2)), bridge.terminalKeys)
+        assertEquals(listOf(listOf('λ'.code, 0x1f600)), bridge.terminalTexts.map(IntArray::toList))
+        assertEquals(listOf("answer"), bridge.terminalLines.map(::String))
+    }
+
+    @Test
+    fun `malformed terminal counts and trailing bytes are bridge failures`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(11)))
+        val session = VmSession.open(byteArrayOf(1), bridge)
+        bridge.terminalState = bytes(2, long(0), short(51), short(19), int(Int.MAX_VALUE))
+        assertFailsWith<VmBridgeException> { session.terminalFullState() }
+
+        bridge.terminalUpdate = bytes(0, long(0), 99)
+        assertFailsWith<VmBridgeException> { session.terminalChangesSince(0) }
+    }
+
+    @Test
     fun `create failures retain their typed Kotlin surface`() {
         assertFailsWith<VmVerificationException> { VmSession.open(byteArrayOf(1), FakeBridge(bytes(1))) }
         assertEquals(
@@ -137,6 +177,12 @@ class VmSessionTest {
         val unitResponses = mutableListOf<Pair<Long, Long>>()
         val stringResponses = mutableListOf<Triple<Long, Long, List<Char>>>()
         val failures = mutableListOf<FailureResponse>()
+        var terminalState = ByteArray(0)
+        var terminalUpdate = ByteArray(0)
+        var terminalCommits = 0
+        val terminalKeys = mutableListOf<TerminalKeyInput>()
+        val terminalTexts = mutableListOf<IntArray>()
+        val terminalLines = mutableListOf<CharArray>()
 
         override fun create(artifact: ByteArray): ByteArray = createResult
 
@@ -173,6 +219,40 @@ class VmSessionTest {
         override fun close(handle: Long) {
             closed += handle
         }
+
+        override fun terminalCommit(handle: Long) {
+            terminalCommits++
+        }
+
+        override fun terminalFullState(handle: Long): ByteArray = terminalState
+
+        override fun terminalChangesSince(
+            handle: Long,
+            revision: Long,
+        ): ByteArray = terminalUpdate
+
+        override fun terminalKey(
+            handle: Long,
+            key: Int,
+            action: Int,
+            modifiers: Int,
+        ) {
+            terminalKeys += TerminalKeyInput(key, action, modifiers)
+        }
+
+        override fun terminalText(
+            handle: Long,
+            codePoints: IntArray,
+        ) {
+            terminalTexts += codePoints
+        }
+
+        override fun terminalCompatibilityLine(
+            handle: Long,
+            value: CharArray,
+        ) {
+            terminalLines += value
+        }
     }
 
     private data class FailureResponse(
@@ -181,7 +261,19 @@ class VmSessionTest {
         val kind: Int,
         val code: Long,
     )
+
+    private data class TerminalKeyInput(
+        val key: Int,
+        val action: Int,
+        val modifiers: Int,
+    )
 }
+
+private fun cell(
+    codePoint: Int,
+    foreground: Int,
+    background: Int,
+): ByteArray = bytes(int(codePoint), foreground, background)
 
 private fun bytes(vararg parts: Any): ByteArray =
     parts

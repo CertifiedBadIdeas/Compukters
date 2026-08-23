@@ -31,6 +31,12 @@ internal class FfmBridge private constructor(
     private val resumeStringHandle: MethodHandle,
     private val resumeFailureHandle: MethodHandle,
     private val closeHandle: MethodHandle,
+    private val terminalCommitHandle: MethodHandle,
+    private val terminalFullStateHandle: MethodHandle,
+    private val terminalChangesSinceHandle: MethodHandle,
+    private val terminalKeyHandle: MethodHandle,
+    private val terminalTextHandle: MethodHandle,
+    private val terminalCompatibilityLineHandle: MethodHandle,
 ) : LowLevelVmBridge,
     AutoCloseable {
     fun abiVersion(): Int = abiVersionHandle.invokeExact() as Int
@@ -110,6 +116,65 @@ internal class FfmBridge private constructor(
 
     override fun close(handle: Long) = requireSuccess("close", closeHandle.invokeExact(handle) as Int)
 
+    override fun terminalCommit(handle: Long) =
+        requireSuccess("terminal commit", terminalCommitHandle.invokeExact(handle) as Int)
+
+    override fun terminalFullState(handle: Long): ByteArray =
+        terminalOutput("terminal full state") { output, maximum, written ->
+            terminalFullStateHandle.invokeExact(handle, output, maximum, written) as Int
+        }
+
+    override fun terminalChangesSince(
+        handle: Long,
+        revision: Long,
+    ): ByteArray =
+        terminalOutput("terminal changes") { output, maximum, written ->
+            terminalChangesSinceHandle.invokeExact(handle, revision, output, maximum, written) as Int
+        }
+
+    override fun terminalKey(
+        handle: Long,
+        key: Int,
+        action: Int,
+        modifiers: Int,
+    ) =
+        requireSuccess(
+            "terminal key",
+            terminalKeyHandle.invokeExact(handle, key.toShort(), action, modifiers) as Int,
+        )
+
+    override fun terminalText(
+        handle: Long,
+        codePoints: IntArray,
+    ) {
+        Arena.ofConfined().use { callArena ->
+            requireSuccess(
+                "terminal text",
+                terminalTextHandle.invokeExact(
+                    handle,
+                    callArena.nativeInts(codePoints),
+                    codePoints.size.toLong(),
+                ) as Int,
+            )
+        }
+    }
+
+    override fun terminalCompatibilityLine(
+        handle: Long,
+        value: CharArray,
+    ) {
+        Arena.ofConfined().use { callArena ->
+            requireSuccess(
+                "terminal compatibility line",
+                terminalCompatibilityLineHandle.invokeExact(
+                    handle,
+                    callArena.nativeChars(value),
+                    value.size.toLong(),
+                ) as Int,
+            )
+        }
+    }
+
     override fun close() = arena.close()
 
     private fun maximumOutcomeBytes(): Int {
@@ -135,6 +200,18 @@ internal class FfmBridge private constructor(
         return output.asSlice(0, length).toArray(ValueLayout.JAVA_BYTE)
     }
 
+    private inline fun terminalOutput(
+        operation: String,
+        call: (MemorySegment, Long, MemorySegment) -> Int,
+    ): ByteArray =
+        Arena.ofConfined().use { callArena ->
+            val maximum = maximumOutcomeBytes()
+            val output = callArena.allocate(maximum.toLong())
+            val written = callArena.allocate(ValueLayout.JAVA_LONG)
+            requireSuccess(operation, call(output, maximum.toLong(), written))
+            copyResult(operation, output, written, maximum)
+        }
+
     private fun requireSuccess(
         operation: String,
         status: Int,
@@ -158,6 +235,13 @@ internal class FfmBridge private constructor(
         if (value.isEmpty()) return MemorySegment.NULL
         return allocate(ValueLayout.JAVA_CHAR, value.size.toLong()).also { destination ->
             MemorySegment.copy(value, 0, destination, ValueLayout.JAVA_CHAR, 0, value.size)
+        }
+    }
+
+    private fun Arena.nativeInts(value: IntArray): MemorySegment {
+        if (value.isEmpty()) return MemorySegment.NULL
+        return allocate(ValueLayout.JAVA_INT, value.size.toLong()).also { destination ->
+            MemorySegment.copy(value, 0, destination, ValueLayout.JAVA_INT, 0, value.size)
         }
     }
 
@@ -237,6 +321,65 @@ internal class FfmBridge private constructor(
                         ),
                     closeHandle =
                         downcall("compukter_close", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG)),
+                    terminalCommitHandle =
+                        downcall(
+                            "compukter_terminal_commit",
+                            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG),
+                        ),
+                    terminalFullStateHandle =
+                        downcall(
+                            "compukter_terminal_full_state",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    terminalChangesSinceHandle =
+                        downcall(
+                            "compukter_terminal_changes_since",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    terminalKeyHandle =
+                        downcall(
+                            "compukter_terminal_key",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_SHORT,
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_INT,
+                            ),
+                        ),
+                    terminalTextHandle =
+                        downcall(
+                            "compukter_terminal_text",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                            ),
+                        ),
+                    terminalCompatibilityLineHandle =
+                        downcall(
+                            "compukter_terminal_compatibility_line",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                            ),
+                        ),
                 ).also { bridge ->
                     if (bridge.abiVersion() != 1) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }

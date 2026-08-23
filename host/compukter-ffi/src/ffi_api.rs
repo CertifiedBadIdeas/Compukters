@@ -140,6 +140,7 @@ pub unsafe extern "C" fn compukter_advance(
             Err(BridgeError::Resume(_) | BridgeError::InvalidRequestId) => {
                 return FfiStatus::Resume
             }
+            Err(BridgeError::InvalidOperation) => return FfiStatus::InvalidArgument,
         };
         if encoded.len() > output_capacity {
             return FfiStatus::Internal;
@@ -219,6 +220,159 @@ pub extern "C" fn compukter_resume_failure(
     })
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn compukter_terminal_commit(handle: u64) -> FfiStatus {
+    ffi_status(|| bridge_status(bridge::terminal_commit(handle)))
+}
+
+#[unsafe(no_mangle)]
+/// Writes the complete retained terminal state in logical row order.
+///
+/// # Safety
+///
+/// `output` must name `output_capacity` writable bytes when capacity is non-zero,
+/// and `written_out` must always point to a writable `usize`.
+pub unsafe extern "C" fn compukter_terminal_full_state(
+    handle: u64,
+    output: *mut u8,
+    output_capacity: usize,
+    written_out: *mut usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if written_out.is_null() || (output_capacity != 0 && output.is_null()) {
+            return FfiStatus::InvalidArgument;
+        }
+        if output_capacity < MAXIMUM_OUTCOME_BYTES {
+            // SAFETY: The validated ABI contract provides writable output.
+            unsafe { written_out.write(MAXIMUM_OUTCOME_BYTES) };
+            return FfiStatus::BufferTooSmall;
+        }
+        let encoded = match bridge::terminal_full_state(handle) {
+            Ok(snapshot) => crate::wire::encode_terminal_full(snapshot),
+            Err(BridgeError::Handle(error)) => return handle_status(error),
+            Err(_) => return FfiStatus::Internal,
+        };
+        if encoded.len() > output_capacity {
+            return FfiStatus::Internal;
+        }
+        // SAFETY: The validated ABI contract provides enough writable output.
+        unsafe { core::ptr::copy_nonoverlapping(encoded.as_ptr(), output, encoded.len()) };
+        // SAFETY: The validated ABI contract provides writable length output.
+        unsafe { written_out.write(encoded.len()) };
+        FfiStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Writes unchanged, delta, or full terminal state since `revision`.
+///
+/// # Safety
+///
+/// `output` must name `output_capacity` writable bytes when capacity is non-zero,
+/// and `written_out` must always point to a writable `usize`.
+pub unsafe extern "C" fn compukter_terminal_changes_since(
+    handle: u64,
+    revision: u64,
+    output: *mut u8,
+    output_capacity: usize,
+    written_out: *mut usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if written_out.is_null() || (output_capacity != 0 && output.is_null()) {
+            return FfiStatus::InvalidArgument;
+        }
+        if output_capacity < MAXIMUM_OUTCOME_BYTES {
+            // SAFETY: The validated ABI contract provides writable output.
+            unsafe { written_out.write(MAXIMUM_OUTCOME_BYTES) };
+            return FfiStatus::BufferTooSmall;
+        }
+        let encoded = match bridge::terminal_changes_since(handle, revision) {
+            Ok(update) => crate::wire::encode_terminal_update(update),
+            Err(BridgeError::Handle(error)) => return handle_status(error),
+            Err(_) => return FfiStatus::Internal,
+        };
+        if encoded.len() > output_capacity {
+            return FfiStatus::Internal;
+        }
+        // SAFETY: The validated ABI contract provides enough writable output.
+        unsafe { core::ptr::copy_nonoverlapping(encoded.as_ptr(), output, encoded.len()) };
+        // SAFETY: The validated ABI contract provides writable length output.
+        unsafe { written_out.write(encoded.len()) };
+        FfiStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn compukter_terminal_key(
+    handle: u64,
+    key: u16,
+    action: u32,
+    modifiers: u32,
+) -> FfiStatus {
+    ffi_status(|| bridge_status(bridge::terminal_key(handle, key, action, modifiers)))
+}
+
+#[unsafe(no_mangle)]
+/// Appends one atomic Unicode text event.
+///
+/// # Safety
+///
+/// When `text_len` is non-zero, `text` must point to at least that many
+/// readable `u32` Unicode scalar values.
+pub unsafe extern "C" fn compukter_terminal_text(
+    handle: u64,
+    text: *const u32,
+    text_len: usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if text_len > MAXIMUM_INBOUND_UTF16_CODE_UNITS || (text_len != 0 && text.is_null()) {
+            return FfiStatus::InvalidArgument;
+        }
+        let scalars = if text_len == 0 {
+            &[][..]
+        } else {
+            // SAFETY: The validated ABI contract provides readable scalar input.
+            unsafe { core::slice::from_raw_parts(text, text_len) }
+        };
+        let value = match scalars
+            .iter()
+            .copied()
+            .map(char::from_u32)
+            .collect::<Option<String>>()
+        {
+            Some(value) => value,
+            None => return FfiStatus::InvalidArgument,
+        };
+        bridge_status(bridge::terminal_text(handle, &value))
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Resumes the compatibility `readln` request with exact UTF-16 code units.
+///
+/// # Safety
+///
+/// When `line_len` is non-zero, `line` must point to at least that many
+/// readable `u16` values.
+pub unsafe extern "C" fn compukter_terminal_compatibility_line(
+    handle: u64,
+    line: *const u16,
+    line_len: usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if line_len > MAXIMUM_INBOUND_UTF16_CODE_UNITS || (line_len != 0 && line.is_null()) {
+            return FfiStatus::InvalidArgument;
+        }
+        let units = if line_len == 0 {
+            &[][..]
+        } else {
+            // SAFETY: The validated ABI contract provides readable UTF-16 input.
+            unsafe { core::slice::from_raw_parts(line, line_len) }
+        };
+        bridge_status(bridge::terminal_compatibility_line(handle, units))
+    })
+}
+
 fn ffi_status(operation: impl FnOnce() -> FfiStatus) -> FfiStatus {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(operation)).unwrap_or(FfiStatus::Internal)
 }
@@ -230,6 +384,7 @@ fn bridge_status(outcome: Result<(), BridgeError>) -> FfiStatus {
         Err(BridgeError::Run(_)) => FfiStatus::Run,
         Err(BridgeError::Resume(_)) => FfiStatus::Resume,
         Err(BridgeError::InvalidRequestId) => FfiStatus::InvalidArgument,
+        Err(BridgeError::InvalidOperation) => FfiStatus::InvalidArgument,
     }
 }
 

@@ -1,15 +1,16 @@
 use std::sync::{Arc, OnceLock};
 
 use compukter_vm::{
-    verify_artifact, AdmissionError, AdvanceOutcome, ArtifactLimits, CapabilityBinding,
-    ExecutionProfile, GuestTrap, HostFailure, HostResponse, HostValueInput, HostValueType,
-    HostValueView, ManagedAllocationFailure, OperationSchema, QuotaExhaustion, RequestId,
-    ResumeError, RunError, Session, VmFault,
+    verify_artifact, AdmissionError, ArtifactLimits, ComputerAdvanceOutcome, ComputerError,
+    ComputerMachine, ComputerStartError, ComputerValue, ExecutionProfile, GuestTrap, HostFailure,
+    HostResponse, HostValueInput, ManagedAllocationFailure, QuotaExhaustion, ResumeError, RunError,
+    TerminalInputError, TerminalKey, TerminalKeyAction, TerminalKeyEvent, TerminalModifiers,
+    TerminalSnapshot, TerminalUpdate, VmFault,
 };
 
 use crate::handle_table::{HandleError, HandleTable};
 
-static SESSIONS: OnceLock<HandleTable<Session>> = OnceLock::new();
+static SESSIONS: OnceLock<HandleTable<ComputerMachine>> = OnceLock::new();
 
 #[derive(Debug)]
 pub(crate) enum CreateError {
@@ -51,6 +52,7 @@ pub(crate) enum OwnedOutcome {
     Crashed(GuestTrap),
     Faulted(VmFault),
     HostFailed(HostFailure),
+    WaitingForLine,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -66,22 +68,18 @@ pub(crate) enum BridgeError {
     Run(RunError),
     Resume(ResumeError),
     InvalidRequestId,
+    InvalidOperation,
 }
 
 pub(crate) fn create(artifact_bytes: Vec<u8>) -> Result<u64, CreateError> {
     let artifact = verify_artifact(Arc::from(artifact_bytes), ArtifactLimits::default())
         .map_err(|_| CreateError::Verification)?;
-    let string_argument = [HostValueType::String];
-    let operations = [
-        OperationSchema::asynchronous(&string_argument, HostValueType::Unit),
-        OperationSchema::asynchronous(&string_argument, HostValueType::Unit),
-        OperationSchema::asynchronous(&[], HostValueType::String),
-    ];
-    let terminal = CapabilityBinding::new("compukter", "terminal", 1, 0, &operations);
-    let mut session =
-        Session::admit(artifact, profile(), &[terminal]).map_err(CreateError::Admission)?;
-    session.start(&[]).map_err(CreateError::Run)?;
-    sessions().insert(session).map_err(CreateError::Handle)
+    let computer =
+        ComputerMachine::start(artifact, profile(), &[], &[]).map_err(|error| match error {
+            ComputerStartError::Admission(error) => CreateError::Admission(error),
+            ComputerStartError::Start(error) => CreateError::Run(error),
+        })?;
+    sessions().insert(computer).map_err(CreateError::Handle)
 }
 
 pub(crate) fn advance(
@@ -90,11 +88,11 @@ pub(crate) fn advance(
     maintenance_budget: u32,
 ) -> Result<OwnedOutcome, BridgeError> {
     sessions()
-        .with(handle, |session| {
-            session
+        .with(handle, |computer| {
+            computer
                 .advance(guest_budget, maintenance_budget)
                 .map(copy_outcome)
-                .map_err(BridgeError::Run)
+                .map_err(copy_error)
         })
         .map_err(BridgeError::Handle)?
 }
@@ -104,9 +102,8 @@ pub(crate) fn resume(
     request_id: u64,
     response: &OwnedResponse,
 ) -> Result<(), BridgeError> {
-    let request_id = RequestId::new(request_id).ok_or(BridgeError::InvalidRequestId)?;
     sessions()
-        .with(handle, |session| {
+        .with(handle, |computer| {
             let borrowed = match response {
                 OwnedResponse::SuccessUnit => HostResponse::Success(HostValueInput::Unit),
                 OwnedResponse::SuccessString(units) => {
@@ -114,9 +111,82 @@ pub(crate) fn resume(
                 }
                 OwnedResponse::Failure(failure) => HostResponse::Failure(*failure),
             };
-            session
-                .resume(request_id, borrowed)
-                .map_err(BridgeError::Resume)
+            computer
+                .resume_host_request(request_id, borrowed)
+                .map_err(copy_error)
+        })
+        .map_err(BridgeError::Handle)?
+}
+
+pub(crate) fn terminal_commit(handle: u64) -> Result<(), BridgeError> {
+    sessions()
+        .with(handle, |computer| {
+            computer.terminal_mut().commit();
+        })
+        .map_err(BridgeError::Handle)
+}
+
+pub(crate) fn terminal_full_state(handle: u64) -> Result<TerminalSnapshot, BridgeError> {
+    sessions()
+        .with(handle, |computer| {
+            match computer.terminal().changes_since(u64::MAX) {
+                TerminalUpdate::Full(snapshot) => snapshot,
+                _ => unreachable!("future revision always requests a full terminal state"),
+            }
+        })
+        .map_err(BridgeError::Handle)
+}
+
+pub(crate) fn terminal_changes_since(
+    handle: u64,
+    revision: u64,
+) -> Result<TerminalUpdate, BridgeError> {
+    sessions()
+        .with(handle, |computer| {
+            computer.terminal().changes_since(revision)
+        })
+        .map_err(BridgeError::Handle)
+}
+
+pub(crate) fn terminal_key(
+    handle: u64,
+    key: u16,
+    action: u32,
+    modifiers: u32,
+) -> Result<(), BridgeError> {
+    let key = TerminalKey::try_from(key).map_err(|_| BridgeError::InvalidOperation)?;
+    let action = match action {
+        0 => TerminalKeyAction::Press,
+        1 => TerminalKeyAction::Repeat,
+        _ => return Err(BridgeError::InvalidOperation),
+    };
+    let modifiers = u8::try_from(modifiers)
+        .ok()
+        .and_then(|value| TerminalModifiers::new(value).ok())
+        .ok_or(BridgeError::InvalidOperation)?;
+    sessions()
+        .with(handle, |computer| {
+            computer
+                .terminal_mut()
+                .push_key(TerminalKeyEvent::new(key, action, modifiers))
+        })
+        .map_err(BridgeError::Handle)?
+        .map_err(copy_input_error)
+}
+
+pub(crate) fn terminal_text(handle: u64, text: &str) -> Result<(), BridgeError> {
+    sessions()
+        .with(handle, |computer| computer.terminal_mut().push_text(text))
+        .map_err(BridgeError::Handle)?
+        .map_err(copy_input_error)
+}
+
+pub(crate) fn terminal_compatibility_line(handle: u64, units: &[u16]) -> Result<(), BridgeError> {
+    sessions()
+        .with(handle, |computer| {
+            computer
+                .provide_compatibility_line(units)
+                .map_err(copy_error)
         })
         .map_err(BridgeError::Handle)?
 }
@@ -125,46 +195,64 @@ pub(crate) fn close(handle: u64) -> Result<(), BridgeError> {
     sessions().close(handle).map_err(BridgeError::Handle)
 }
 
-fn sessions() -> &'static HandleTable<Session> {
+fn sessions() -> &'static HandleTable<ComputerMachine> {
     SESSIONS.get_or_init(HandleTable::default)
 }
 
-fn copy_outcome(outcome: AdvanceOutcome<'_>) -> OwnedOutcome {
+fn copy_outcome(outcome: ComputerAdvanceOutcome) -> OwnedOutcome {
     match outcome {
-        AdvanceOutcome::SliceExhausted => OwnedOutcome::SliceExhausted,
-        AdvanceOutcome::HostRequest(request) => {
-            let arguments = (0..request.arguments().len())
-                .filter_map(|index| request.arguments().get(index).map(copy_value))
-                .collect();
-            OwnedOutcome::HostRequest(OwnedRequest {
-                id: request.id().get(),
-                namespace: request.namespace().to_owned(),
-                name: request.name().to_owned(),
-                abi_major: request.abi_major(),
-                abi_minor: request.abi_minor(),
-                operation: request.operation(),
-                arguments,
-            })
+        ComputerAdvanceOutcome::SliceExhausted => OwnedOutcome::SliceExhausted,
+        ComputerAdvanceOutcome::WaitingForLine => OwnedOutcome::WaitingForLine,
+        ComputerAdvanceOutcome::HostRequest(request) => OwnedOutcome::HostRequest(OwnedRequest {
+            id: request.id,
+            namespace: request.namespace.into(),
+            name: request.name.into(),
+            abi_major: request.abi_major,
+            abi_minor: request.abi_minor,
+            operation: request.operation,
+            arguments: request
+                .arguments
+                .into_vec()
+                .into_iter()
+                .map(copy_value)
+                .collect(),
+        }),
+        ComputerAdvanceOutcome::AllocationExhausted(value) => {
+            OwnedOutcome::AllocationExhausted(value)
         }
-        AdvanceOutcome::AllocationExhausted(value) => OwnedOutcome::AllocationExhausted(value),
-        AdvanceOutcome::QuotaExhausted(value) => OwnedOutcome::QuotaExhausted(value),
-        AdvanceOutcome::Halted(value) => OwnedOutcome::Halted(value.map(copy_value)),
-        AdvanceOutcome::Crashed(value) => OwnedOutcome::Crashed(value),
-        AdvanceOutcome::Faulted(value) => OwnedOutcome::Faulted(value),
-        AdvanceOutcome::HostFailed(value) => OwnedOutcome::HostFailed(value),
+        ComputerAdvanceOutcome::QuotaExhausted(value) => OwnedOutcome::QuotaExhausted(value),
+        ComputerAdvanceOutcome::Halted(value) => OwnedOutcome::Halted(value.map(copy_value)),
+        ComputerAdvanceOutcome::Crashed(value) => OwnedOutcome::Crashed(value),
+        ComputerAdvanceOutcome::Faulted(value) => OwnedOutcome::Faulted(value),
+        ComputerAdvanceOutcome::HostFailed(value) => OwnedOutcome::HostFailed(value),
     }
 }
 
-fn copy_value(value: HostValueView<'_>) -> OwnedValue {
+fn copy_value(value: ComputerValue) -> OwnedValue {
     match value {
-        HostValueView::I32(value) => OwnedValue::I32(value),
-        HostValueView::I64(value) => OwnedValue::I64(value),
-        HostValueView::F32(value) => OwnedValue::F32(value),
-        HostValueView::F64(value) => OwnedValue::F64(value),
-        HostValueView::Bool(value) => OwnedValue::Bool(value),
-        HostValueView::Char(value) => OwnedValue::Char(value),
-        HostValueView::String(value) => OwnedValue::String(value.to_vec()),
+        ComputerValue::I32(value) => OwnedValue::I32(value),
+        ComputerValue::I64(value) => OwnedValue::I64(value),
+        ComputerValue::F32(value) => OwnedValue::F32(value),
+        ComputerValue::F64(value) => OwnedValue::F64(value),
+        ComputerValue::Bool(value) => OwnedValue::Bool(value),
+        ComputerValue::Char(value) => OwnedValue::Char(value),
+        ComputerValue::String(value) => OwnedValue::String(value.into_vec()),
     }
+}
+
+fn copy_error(error: ComputerError) -> BridgeError {
+    match error {
+        ComputerError::Run(error) => BridgeError::Run(error),
+        ComputerError::Resume(error) => BridgeError::Resume(error),
+        ComputerError::InvalidRequestId => BridgeError::InvalidRequestId,
+        ComputerError::InvalidTerminalRequest | ComputerError::NoPendingCompatibilityLine => {
+            BridgeError::InvalidOperation
+        }
+    }
+}
+
+fn copy_input_error(_error: TerminalInputError) -> BridgeError {
+    BridgeError::InvalidOperation
 }
 
 fn profile() -> ExecutionProfile {
@@ -206,63 +294,29 @@ mod tests {
             .collect()
     }
 
-    fn next_request(handle: u64) -> OwnedRequest {
+    fn advance_until_waiting(handle: u64) {
         loop {
             match advance(handle, 64, 64).unwrap() {
                 OwnedOutcome::SliceExhausted => {}
-                OwnedOutcome::HostRequest(request) => return request,
+                OwnedOutcome::WaitingForLine => return,
                 other => panic!("unexpected outcome: {other:?}"),
             }
         }
     }
 
     #[test]
-    fn session_requests_are_copied_and_utf16_responses_resume() {
+    fn computer_consumes_terminal_requests_and_retains_state() {
         let handle = create(terminal_artifact()).unwrap();
-        let output = vec![0x003e, 0x0020, 0xd83d, 0xde00];
-        for operation in [0, 1] {
-            let request = next_request(handle);
-            assert_eq!(operation, request.operation);
-            assert_eq!(vec![OwnedValue::String(output.clone())], request.arguments);
-            resume(handle, request.id, &OwnedResponse::SuccessUnit).unwrap();
-        }
-        let request = next_request(handle);
-        assert_eq!(2, request.operation);
+        advance_until_waiting(handle);
+        terminal_commit(handle).unwrap();
+        let state = terminal_full_state(handle).unwrap();
+        assert_eq!('>' as u32, state.cells()[0].code_point());
         let input = vec![0x0041, 0xd800, 0x0100, 0xdc00, 0x0042];
-        resume(handle, request.id, &OwnedResponse::SuccessString(input)).unwrap();
+        terminal_compatibility_line(handle, &input).unwrap();
         close(handle).unwrap();
         assert!(matches!(
             advance(handle, 64, 64),
             Err(BridgeError::Handle(HandleError::Stale))
         ));
-    }
-
-    #[test]
-    fn resume_rejects_zero_and_wrong_request_ids() {
-        let handle = create(terminal_artifact()).unwrap();
-        let request = next_request(handle);
-        assert_eq!(
-            Err(BridgeError::InvalidRequestId),
-            resume(handle, 0, &OwnedResponse::SuccessUnit)
-        );
-        assert_eq!(
-            Err(BridgeError::Resume(ResumeError::WrongRequestId)),
-            resume(handle, request.id + 1, &OwnedResponse::SuccessUnit),
-        );
-        close(handle).unwrap();
-    }
-
-    #[test]
-    fn copied_host_failure_is_a_typed_terminal_outcome() {
-        let handle = create(terminal_artifact()).unwrap();
-        let request = next_request(handle);
-        let failure = HostFailure::new(compukter_vm::HostFailureKind::EndOfFile, 17);
-        resume(handle, request.id, &OwnedResponse::Failure(failure)).unwrap();
-
-        assert_eq!(
-            OwnedOutcome::HostFailed(failure),
-            advance(handle, 64, 64).unwrap()
-        );
-        close(handle).unwrap();
     }
 }

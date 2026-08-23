@@ -59,6 +59,36 @@ class VmSession private constructor(
         bridge.resumeFailure(requireHandle(), requestId, kind.wireCode, code)
     }
 
+    fun commitTerminal(): Unit = bridge.terminalCommit(requireHandle())
+
+    fun terminalFullState(): TerminalState =
+        decodeNative { TerminalWireDecoder(bridge.terminalFullState(requireHandle())).fullState() }
+
+    fun terminalChangesSince(revision: Long): TerminalUpdate {
+        require(revision >= 0) { "terminal revision must not be negative" }
+        return decodeNative {
+            TerminalWireDecoder(bridge.terminalChangesSince(requireHandle(), revision)).update()
+        }
+    }
+
+    fun sendTerminalKey(
+        key: TerminalKey,
+        action: TerminalKeyAction,
+        modifiers: Set<TerminalModifier> = emptySet(),
+    ): Unit =
+        bridge.terminalKey(
+            requireHandle(),
+            key.wireCode,
+            action.wireCode,
+            modifiers.fold(0) { bits, modifier -> bits or modifier.mask },
+        )
+
+    fun sendTerminalText(value: String): Unit =
+        bridge.terminalText(requireHandle(), value.codePoints().toArray())
+
+    fun provideCompatibilityLine(value: String): Unit =
+        bridge.terminalCompatibilityLine(requireHandle(), value.toCharArray())
+
     override fun close() {
         val closing = handle.getAndSet(CLOSED)
         if (closing != CLOSED) bridge.close(closing)
@@ -121,6 +151,7 @@ private class WireDecoder(
             5 -> VmOutcome.Crashed(guestTrap(u8()))
             6 -> VmOutcome.Faulted(vmFault(u8()))
             7 -> VmOutcome.HostFailed(hostFailureKind(u8()), u32())
+            8 -> VmOutcome.WaitingForLine
             else -> invalid()
         }.also { end() }
 
@@ -192,4 +223,113 @@ private class WireDecoder(
     private fun end() = require(!buffer.hasRemaining()) { "native VM result contains trailing bytes" }
 
     private fun invalid(): Nothing = throw IllegalArgumentException("invalid native VM result")
+}
+
+private class TerminalWireDecoder(
+    bytes: ByteArray,
+) {
+    private val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+
+    fun fullState(): TerminalState {
+        require(u8() == 2) { "native terminal result is not a full state" }
+        return state().also { end() }
+    }
+
+    fun update(): TerminalUpdate =
+        when (u8()) {
+            0 -> TerminalUpdate.Unchanged(revision())
+            1 -> {
+                val base = revision()
+                val target = revision()
+                require(target > base) { "invalid terminal delta revisions" }
+                TerminalUpdate.Delta(base, target, List(count(MAX_CHANGES)) { change() })
+            }
+            2 -> TerminalUpdate.Full(state())
+            else -> invalid()
+        }.also { end() }
+
+    private fun state(): TerminalState {
+        val revision = revision()
+        val width = u16()
+        val height = u16()
+        require(width == WIDTH && height == HEIGHT) { "unsupported terminal dimensions" }
+        val cells = List(count(CELL_COUNT)) { cell() }
+        require(cells.size == CELL_COUNT) { "invalid terminal cell count" }
+        return TerminalState(revision, width, height, cells, position(), boolean())
+    }
+
+    private fun change(): TerminalChange =
+        when (u8()) {
+            0 -> {
+                val start = u16()
+                val cells = List(u16()) { cell() }
+                require(cells.isNotEmpty() && start + cells.size <= CELL_COUNT) { "invalid terminal patch" }
+                TerminalChange.Patch(start, cells)
+            }
+            1 -> {
+                val x = u16()
+                val y = u16()
+                val width = u16()
+                val height = u16()
+                require(width > 0 && height > 0 && x + width <= WIDTH && y + height <= HEIGHT) {
+                    "invalid terminal fill"
+                }
+                TerminalChange.Fill(x, y, width, height, cell())
+            }
+            2 -> {
+                val rows = u16()
+                require(rows in 1..HEIGHT) { "invalid terminal scroll" }
+                TerminalChange.Scroll(rows, cell())
+            }
+            3 -> TerminalChange.Cursor(position(), boolean())
+            4 -> TerminalChange.Reset
+            else -> invalid()
+        }
+
+    private fun cell(): TerminalCell {
+        val codePoint = buffer.int
+        val foreground = u8()
+        val background = u8()
+        require(
+            Character.isValidCodePoint(codePoint) && codePoint !in Character.MIN_SURROGATE.code..Character.MAX_SURROGATE.code,
+        ) { "invalid terminal Unicode scalar" }
+        require(foreground in 0 until PALETTE_SIZE && background in 0 until PALETTE_SIZE) {
+            "invalid terminal palette index"
+        }
+        return TerminalCell(codePoint, foreground, background)
+    }
+
+    private fun position(): TerminalPosition {
+        val x = u16()
+        val y = u16()
+        require(x in 0 until WIDTH && y in 0 until HEIGHT) { "invalid terminal cursor" }
+        return TerminalPosition(x, y)
+    }
+
+    private fun revision(): Long = buffer.long.also { require(it >= 0) { "terminal revision exceeds JVM range" } }
+
+    private fun count(maximum: Int): Int = buffer.int.also { require(it in 0..maximum) { "invalid terminal count" } }
+
+    private fun u8(): Int = buffer.get().toInt() and 0xff
+
+    private fun u16(): Int = buffer.short.toInt() and 0xffff
+
+    private fun boolean(): Boolean =
+        when (u8()) {
+            0 -> false
+            1 -> true
+            else -> invalid()
+        }
+
+    private fun end() = require(!buffer.hasRemaining()) { "trailing terminal wire bytes" }
+
+    private fun invalid(): Nothing = throw IllegalArgumentException("invalid terminal wire result")
+
+    private companion object {
+        const val WIDTH = 51
+        const val HEIGHT = 19
+        const val CELL_COUNT = WIDTH * HEIGHT
+        const val PALETTE_SIZE = 16
+        const val MAX_CHANGES = 4_096
+    }
 }
