@@ -1,0 +1,293 @@
+/*
+ * The Compukters Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package ru.lazyhat.compukters.lang.runtime.vm
+
+import org.junit.jupiter.api.io.TempDir
+import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.io.path.createDirectory
+import kotlin.io.path.createFile
+import kotlin.io.path.exists
+import kotlin.io.path.isDirectory
+import kotlin.io.path.readBytes
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
+
+class NativeRuntimeLoaderTest {
+    @TempDir
+    lateinit var temporaryDirectory: Path
+
+    @Test
+    fun `explicit path is normalized and loaded without resource extraction`() {
+        val library =
+            temporaryDirectory
+                .resolve("nested")
+                .createDirectory()
+                .resolve("..")
+                .resolve("compukter.so")
+                .createFile()
+        val loadedPaths = mutableListOf<Path>()
+        var resourceCalls = 0
+        var temporaryCalls = 0
+        val loader =
+            loader(
+                resource = {
+                    resourceCalls++
+                    null
+                },
+                createTempDirectory = {
+                    temporaryCalls++
+                    temporaryDirectory.resolve("unused")
+                },
+                nativeLoad = loadedPaths::add,
+            )
+
+        val result = assertIs<VmRuntimeLoadResult.Loaded>(loader.ensureExplicitLoaded(library))
+
+        val expected = library.toAbsolutePath().normalize()
+        assertEquals(VmRuntimeLoadSource.ExplicitPath(expected), result.source)
+        assertEquals(listOf(expected), loadedPaths)
+        assertEquals(0, resourceCalls)
+        assertEquals(0, temporaryCalls)
+    }
+
+    @Test
+    fun `invalid explicit path fails before native loading`() {
+        val nativeCalls = AtomicInteger()
+        val cases = listOf(temporaryDirectory.resolve("missing"), temporaryDirectory.resolve("directory").createDirectory())
+
+        cases.forEach { path ->
+            val result = loader(nativeLoad = { nativeCalls.incrementAndGet() }).ensureExplicitLoaded(path)
+
+            assertIs<VmRuntimeLoadFailure.InvalidExplicitPath>(assertIs<VmRuntimeLoadResult.Failed>(result).failure)
+        }
+        assertEquals(0, nativeCalls.get())
+    }
+
+    @Test
+    fun `packaged resource uses trusted filename and exact bytes`() {
+        val nativeBytes = byteArrayOf(0, 1, 2, 3, -1)
+        val extractionDirectory = temporaryDirectory.resolve("private")
+        var loadedPath: Path? = null
+        val loader =
+            loader(
+                resource = { ByteArrayInputStream(nativeBytes) },
+                createTempDirectory = { extractionDirectory.createDirectory() },
+                nativeLoad = { loadedPath = it },
+            )
+
+        val result = assertIs<VmRuntimeLoadResult.Loaded>(loader.ensurePackagedLoaded())
+
+        assertEquals(
+            VmRuntimeLoadSource.PackagedResource("/META-INF/natives/linux/x86_64/libcompukter_jni.so"),
+            result.source,
+        )
+        val extracted = requireNotNull(loadedPath)
+        assertEquals("libcompukter_jni.so", extracted.fileName.toString())
+        assertEquals(extractionDirectory.toAbsolutePath().normalize(), extracted.parent)
+        assertContentEquals(nativeBytes, extracted.readBytes())
+    }
+
+    @Test
+    fun `unsupported platform does not access resources or temporary storage`() {
+        var resourceCalls = 0
+        var temporaryCalls = 0
+        val loader =
+            loader(
+                osArch = { "riscv64" },
+                resource = {
+                    resourceCalls++
+                    null
+                },
+                createTempDirectory = {
+                    temporaryCalls++
+                    temporaryDirectory
+                },
+            )
+
+        val failure = assertIs<VmRuntimeLoadResult.Failed>(loader.ensurePackagedLoaded()).failure
+
+        assertIs<VmRuntimeLoadFailure.UnsupportedPlatform>(failure)
+        assertEquals(0, resourceCalls)
+        assertEquals(0, temporaryCalls)
+    }
+
+    @Test
+    fun `missing resource fails before temporary storage`() {
+        var temporaryCalls = 0
+        val loader =
+            loader(
+                resource = { null },
+                createTempDirectory = {
+                    temporaryCalls++
+                    temporaryDirectory
+                },
+            )
+
+        val failure = assertIs<VmRuntimeLoadResult.Failed>(loader.ensurePackagedLoaded()).failure
+
+        assertIs<VmRuntimeLoadFailure.MissingResource>(failure)
+        assertEquals(0, temporaryCalls)
+    }
+
+    @Test
+    fun `oversized resource fails before native load and removes extraction directory`() {
+        val extractionDirectory = temporaryDirectory.resolve("oversized")
+        val nativeCalls = AtomicInteger()
+        val loader =
+            loader(
+                resource = { ByteArrayInputStream(ByteArray(5)) },
+                createTempDirectory = { extractionDirectory.createDirectory() },
+                nativeLoad = { nativeCalls.incrementAndGet() },
+                maximumPackagedNativeBytes = 4,
+            )
+
+        val failure = assertIs<VmRuntimeLoadResult.Failed>(loader.ensurePackagedLoaded()).failure
+
+        assertIs<VmRuntimeLoadFailure.ResourceExtraction>(failure)
+        assertEquals(0, nativeCalls.get())
+        assertFalse(extractionDirectory.exists())
+    }
+
+    @Test
+    fun `link failure is typed bounded and removes extracted files`() {
+        val extractionDirectory = temporaryDirectory.resolve("link-failure")
+        val loader =
+            loader(
+                resource = { ByteArrayInputStream(byteArrayOf(1)) },
+                createTempDirectory = { extractionDirectory.createDirectory() },
+                nativeLoad = { throw UnsatisfiedLinkError("x".repeat(300) + "\nignored") },
+            )
+
+        val failure = assertIs<VmRuntimeLoadResult.Failed>(loader.ensurePackagedLoaded()).failure
+
+        val link = assertIs<VmRuntimeLoadFailure.NativeLink>(failure)
+        assertEquals("x".repeat(256), link.detail)
+        assertFalse(extractionDirectory.exists())
+    }
+
+    @Test
+    fun `resource access and temporary directory failures are typed`() {
+        val resourceFailure =
+            loader(resource = { throw SecurityException("resource denied") }).ensurePackagedLoaded()
+        assertIs<VmRuntimeLoadFailure.ResourceExtraction>(assertIs<VmRuntimeLoadResult.Failed>(resourceFailure).failure)
+
+        val directoryFailure =
+            loader(
+                resource = { ByteArrayInputStream(byteArrayOf(1)) },
+                createTempDirectory = { throw IOException("disk unavailable") },
+            ).ensurePackagedLoaded()
+        assertIs<VmRuntimeLoadFailure.ResourceExtraction>(assertIs<VmRuntimeLoadResult.Failed>(directoryFailure).failure)
+    }
+
+    @Test
+    fun `success and failure are cached by identity`() {
+        val successCalls = AtomicInteger()
+        val successLoader = loader(nativeLoad = { successCalls.incrementAndGet() })
+        val explicit = temporaryDirectory.resolve("later.so").createFile()
+
+        val firstSuccess = successLoader.ensurePackagedLoaded()
+        val secondSuccess = successLoader.ensureExplicitLoaded(explicit)
+
+        assertSame(firstSuccess, secondSuccess)
+        assertEquals(1, successCalls.get())
+        assertIs<VmRuntimeLoadSource.PackagedResource>(assertIs<VmRuntimeLoadResult.Loaded>(secondSuccess).source)
+
+        val failureLoader = loader(resource = { null })
+        val firstFailure = failureLoader.ensurePackagedLoaded()
+        val secondFailure = failureLoader.ensureExplicitLoaded(explicit)
+        assertSame(firstFailure, secondFailure)
+    }
+
+    @Test
+    fun `concurrent requests execute one native load and share one result`() {
+        val calls = AtomicInteger()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val loader =
+            loader(
+                nativeLoad = {
+                    calls.incrementAndGet()
+                    entered.countDown()
+                    assertTrue(release.await(5, TimeUnit.SECONDS))
+                },
+            )
+        val executor = Executors.newFixedThreadPool(8)
+        try {
+            val futures = List(8) { executor.submit<VmRuntimeLoadResult> { loader.ensurePackagedLoaded() } }
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            release.countDown()
+            val results = futures.map { it.get(5, TimeUnit.SECONDS) }
+
+            assertEquals(1, calls.get())
+            assertTrue(results.all { it === results.first() })
+        } finally {
+            release.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `unexpected fatal error propagates and is not cached`() {
+        val calls = AtomicInteger()
+        val loader =
+            loader(
+                nativeLoad = {
+                    calls.incrementAndGet()
+                    throw AssertionError("fatal")
+                },
+            )
+
+        assertFailsWith<AssertionError> { loader.ensurePackagedLoaded() }
+        assertFailsWith<AssertionError> { loader.ensurePackagedLoaded() }
+        assertEquals(2, calls.get())
+    }
+
+    private fun loader(
+        osName: () -> String = { "Linux" },
+        osArch: () -> String = { "amd64" },
+        resource: (String) -> ByteArrayInputStream? = { ByteArrayInputStream(byteArrayOf(1)) },
+        createTempDirectory: () -> Path = {
+            Files.createTempDirectory(temporaryDirectory, "compukters-native-")
+        },
+        nativeLoad: (Path) -> Unit = {},
+        maximumPackagedNativeBytes: Long = 64L * 1024 * 1024,
+    ): NativeRuntimeLoader =
+        NativeRuntimeLoader(
+            osName = osName,
+            osArch = osArch,
+            resource = resource,
+            createTempDirectory = createTempDirectory,
+            nativeLoad = nativeLoad,
+            maximumPackagedNativeBytes = maximumPackagedNativeBytes,
+        )
+}
