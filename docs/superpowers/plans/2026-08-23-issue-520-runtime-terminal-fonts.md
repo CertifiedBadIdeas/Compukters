@@ -30,11 +30,11 @@ private val SPEC =
         coveragePropertyName = "FIXTURE_SUPPORTED_CODE_POINTS",
         sourceDescription = "fixture BDF",
         cellWidth = 6,
-        cellHeight = 10,
-        ascent = 8,
-        descent = 2,
-        replacementCodePoint = '?'.code,
-        selectedCodePoints = listOf(0x20..0x7E),
+        cellHeight = 13,
+        ascent = 10,
+        descent = 3,
+        replacementCodePoint = 0xFFFD,
+        selectedCodePoints = listOf(0x20..0x7E, 0x0400..0x04FF, 0x2500..0x25FF, 0xFFFD..0xFFFD),
     )
 
 @Test
@@ -42,11 +42,11 @@ fun `spec controls metrics resource names coverage and replacement`() {
     val generated = TerminalBitmapFontAtlas.generate(SPEC, FIXTURE.byteInputStream())
 
     assertEquals(6, generated.cellWidth)
-    assertEquals(10, generated.cellHeight)
-    assertEquals(8, generated.ascent)
+    assertEquals(13, generated.cellHeight)
+    assertEquals(10, generated.ascent)
     assertTrue(generated.fontJson.contains("compukters:font/terminal/fixture.png"))
     assertTrue(generated.coverageKotlin.contains("FIXTURE_SUPPORTED_CODE_POINTS"))
-    assertTrue(generated.codePoints.binarySearch('?'.code) >= 0)
+    assertTrue(generated.codePoints.binarySearch(0xFFFD) >= 0)
 }
 ```
 

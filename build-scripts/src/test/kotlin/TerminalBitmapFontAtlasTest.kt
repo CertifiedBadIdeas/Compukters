@@ -24,10 +24,10 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
-class CozetteFontAtlasTest {
+class TerminalBitmapFontAtlasTest {
     @Test
     fun projectsSelectedGlyphsIntoFixedSixByThirteenCells() {
-        val generated = CozetteFontAtlas.generate(FIXTURE.byteInputStream())
+        val generated = TerminalBitmapFontAtlas.generate(SPEC, FIXTURE.byteInputStream())
 
         assertEquals(6, generated.cellWidth)
         assertEquals(13, generated.cellHeight)
@@ -46,15 +46,16 @@ class CozetteFontAtlasTest {
 
     @Test
     fun emitsByteStableRuntimeAndCoverageOutputs() {
-        val first = CozetteFontAtlas.generate(FIXTURE.byteInputStream())
-        val second = CozetteFontAtlas.generate(FIXTURE.byteInputStream())
+        val first = TerminalBitmapFontAtlas.generate(SPEC, FIXTURE.byteInputStream())
+        val second = TerminalBitmapFontAtlas.generate(SPEC, FIXTURE.byteInputStream())
 
         assertArrayEquals(first.png, second.png)
         assertEquals(first.fontJson, second.fontJson)
         assertEquals(first.manifest, second.manifest)
         assertEquals(first.coverageKotlin, second.coverageKotlin)
         assertFalse(first.fontJson.contains("minecraft:"))
-        assertTrue(first.fontJson.contains("compukters:font/terminal/cozette.png"))
+        assertTrue(first.fontJson.contains("compukters:font/terminal/fixture.png"))
+        assertTrue(first.coverageKotlin.contains("FIXTURE_SUPPORTED_CODE_POINTS"))
     }
 
     @Test
@@ -62,7 +63,7 @@ class CozetteFontAtlasTest {
         val malformed = FIXTURE.replace("DWIDTH 6 0\nBBX 6 2 0 8", "DWIDTH 5 0\nBBX 6 2 0 8")
 
         val error = assertThrows(IllegalArgumentException::class.java) {
-            CozetteFontAtlas.generate(malformed.byteInputStream())
+            TerminalBitmapFontAtlas.generate(SPEC, malformed.byteInputStream())
         }
 
         assertTrue(error.message.orEmpty().contains("U+0041"))
@@ -70,6 +71,26 @@ class CozetteFontAtlasTest {
     }
 
     private companion object {
+        val SPEC =
+            TerminalBitmapFontSpec(
+                displayName = "Fixture",
+                resourceName = "fixture",
+                coveragePropertyName = "FIXTURE_SUPPORTED_CODE_POINTS",
+                sourceDescription = "fixture BDF",
+                cellWidth = 6,
+                cellHeight = 13,
+                ascent = 10,
+                descent = 3,
+                replacementCodePoint = 0xFFFD,
+                selectedCodePoints =
+                    listOf(
+                        0x20..0x7E,
+                        0x0400..0x04FF,
+                        0x2500..0x25FF,
+                        0xFFFD..0xFFFD,
+                    ),
+            )
+
         val FIXTURE =
             """
             STARTFONT 2.1

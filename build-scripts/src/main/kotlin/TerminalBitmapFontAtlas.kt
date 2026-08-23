@@ -23,62 +23,115 @@ import java.io.InputStream
 import javax.imageio.ImageIO
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 
-/** Converts the pinned Cozette BDF into the fixed terminal-cell representation used at runtime. */
-object CozetteFontAtlas {
-    private const val CELL_WIDTH = 6
-    private const val CELL_HEIGHT = 13
-    private const val ASCENT = 10
-    private const val DESCENT = 3
-    private const val COLUMNS = 16
-    private const val REPLACEMENT_CODE_POINT = 0xFFFD
-
-    fun generate(source: InputStream): GeneratedCozetteFont {
-        val parsed = parse(source)
-        require(parsed.ascent == ASCENT) {
-            "Expected FONT_ASCENT $ASCENT, got ${parsed.ascent}"
+data class TerminalBitmapFontSpec(
+    val displayName: String,
+    val resourceName: String,
+    val coveragePropertyName: String,
+    val sourceDescription: String,
+    val cellWidth: Int,
+    val cellHeight: Int,
+    val ascent: Int,
+    val descent: Int,
+    val replacementCodePoint: Int,
+    val selectedCodePoints: List<IntRange>,
+) {
+    init {
+        require(displayName.isNotBlank()) { "terminal font display name must not be blank" }
+        require(resourceName.matches(Regex("[a-z0-9_-]+"))) { "invalid terminal font resource name: $resourceName" }
+        require(coveragePropertyName.matches(Regex("[A-Z0-9_]+"))) {
+            "invalid terminal font coverage property: $coveragePropertyName"
         }
-        require(parsed.descent == DESCENT) {
-            "Expected FONT_DESCENT $DESCENT, got ${parsed.descent}"
+        require(sourceDescription.isNotBlank()) { "terminal font source description must not be blank" }
+        require(cellWidth > 0 && cellHeight > 0) { "terminal font cell must be positive" }
+        require(ascent > 0 && descent >= 0 && cellHeight == ascent + descent) {
+            "terminal font height must equal ascent plus descent"
+        }
+        require(selectedCodePoints.isNotEmpty()) { "terminal font selection must not be empty" }
+    }
+
+    fun selects(codePoint: Int): Boolean = selectedCodePoints.any { codePoint in it }
+}
+
+private val COZETTE_FONT_SPEC =
+    TerminalBitmapFontSpec(
+        displayName = "Cozette",
+        resourceName = "cozette",
+        coveragePropertyName = "COZETTE_SUPPORTED_CODE_POINTS",
+        sourceDescription = "pinned Cozette v.1.30.0",
+        cellWidth = 6,
+        cellHeight = 13,
+        ascent = 10,
+        descent = 3,
+        replacementCodePoint = 0xFFFD,
+        selectedCodePoints =
+            listOf(
+                0x20..0x7E,
+                0xA0..0xFF,
+                0x0400..0x04FF,
+                0x2190..0x21FF,
+                0x2500..0x257F,
+                0x2580..0x259F,
+                0xFFFD..0xFFFD,
+            ),
+    )
+
+/** Converts a pinned BDF into the fixed terminal-cell representation used at runtime. */
+object TerminalBitmapFontAtlas {
+    private const val COLUMNS = 16
+
+    fun generate(
+        spec: TerminalBitmapFontSpec,
+        source: InputStream,
+    ): GeneratedTerminalBitmapFont {
+        val parsed = parse(source)
+        require(parsed.ascent == spec.ascent) {
+            "Expected FONT_ASCENT ${spec.ascent}, got ${parsed.ascent}"
+        }
+        require(parsed.descent == spec.descent) {
+            "Expected FONT_DESCENT ${spec.descent}, got ${parsed.descent}"
         }
 
         val selected =
             parsed.glyphs
-                .filter { isSelected(it.encoding) }
+                .filter { spec.selects(it.encoding) }
                 .sortedBy(BdfGlyph::encoding)
-        require(selected.any { it.encoding == REPLACEMENT_CODE_POINT }) {
-            "Cozette must provide replacement glyph U+FFFD"
+        require(selected.any { it.encoding == spec.replacementCodePoint }) {
+            "${spec.displayName} must provide replacement glyph U+${spec.replacementCodePoint.toHex(4)}"
         }
         selected.forEach { glyph ->
-            require(glyph.advanceX == CELL_WIDTH && glyph.advanceY == 0) {
+            require(glyph.advanceX == spec.cellWidth && glyph.advanceY == 0) {
                 "U+${glyph.encoding.toHex(4)} (${glyph.name}) has DWIDTH " +
-                    "${glyph.advanceX} ${glyph.advanceY}; expected $CELL_WIDTH 0"
+                    "${glyph.advanceX} ${glyph.advanceY}; expected ${spec.cellWidth} 0"
             }
         }
 
         val rows = (selected.size + COLUMNS - 1) / COLUMNS
-        val atlas = BufferedImage(COLUMNS * CELL_WIDTH, rows * CELL_HEIGHT, BufferedImage.TYPE_INT_ARGB)
-        selected.forEachIndexed { index, glyph -> project(glyph, index, atlas) }
+        val atlas = BufferedImage(COLUMNS * spec.cellWidth, rows * spec.cellHeight, BufferedImage.TYPE_INT_ARGB)
+        selected.forEachIndexed { index, glyph -> project(spec, glyph, index, atlas) }
         val codePoints = selected.map(BdfGlyph::encoding).toIntArray()
 
-        require(glyphHasVisiblePixel(REPLACEMENT_CODE_POINT, codePoints, atlas)) {
-            "Replacement glyph U+FFFD must contain at least one visible pixel"
+        require(glyphHasVisiblePixel(spec, spec.replacementCodePoint, codePoints, atlas)) {
+            "Replacement glyph U+${spec.replacementCodePoint.toHex(4)} must contain at least one visible pixel"
         }
 
-        return GeneratedCozetteFont(
-            cellWidth = CELL_WIDTH,
-            cellHeight = CELL_HEIGHT,
-            ascent = ASCENT,
+        return GeneratedTerminalBitmapFont(
+            cellWidth = spec.cellWidth,
+            cellHeight = spec.cellHeight,
+            ascent = spec.ascent,
             codePoints = codePoints,
             png = atlas.toPng(),
-            fontJson = fontJson(codePoints),
+            fontJson = fontJson(spec, codePoints),
             manifest = codePoints.joinToString(separator = "\n", postfix = "\n") { "U+${it.toHex(4)}" },
-            coverageKotlin = coverageKotlin(codePoints),
+            coverageKotlin = coverageKotlin(spec, codePoints),
             atlas = atlas,
         )
     }
@@ -142,9 +195,14 @@ object CozetteFontAtlas {
         )
     }
 
-    private fun project(glyph: BdfGlyph, index: Int, atlas: BufferedImage) {
-        val cellLeft = (index % COLUMNS) * CELL_WIDTH
-        val cellTop = (index / COLUMNS) * CELL_HEIGHT
+    private fun project(
+        spec: TerminalBitmapFontSpec,
+        glyph: BdfGlyph,
+        index: Int,
+        atlas: BufferedImage,
+    ) {
+        val cellLeft = (index % COLUMNS) * spec.cellWidth
+        val cellTop = (index / COLUMNS) * spec.cellHeight
         glyph.bitmapRows.forEachIndexed { bitmapRow, hex ->
             val bytes = decodeHexRow(hex, glyph.width)
             repeat(glyph.width) { sourceX ->
@@ -153,8 +211,8 @@ object CozetteFontAtlas {
 
                 val sourceY = glyph.yOffset + glyph.height - 1 - bitmapRow
                 val targetX = glyph.xOffset + sourceX
-                val targetY = ASCENT - 1 - sourceY
-                if (targetX in 0 until CELL_WIDTH && targetY in 0 until CELL_HEIGHT) {
+                val targetY = spec.ascent - 1 - sourceY
+                if (targetX in 0 until spec.cellWidth && targetY in 0 until spec.cellHeight) {
                     atlas.setRGB(cellLeft + targetX, cellTop + targetY, 0xFFFFFFFF.toInt())
                 }
             }
@@ -170,16 +228,10 @@ object CozetteFontAtlas {
         }
     }
 
-    private fun isSelected(codePoint: Int): Boolean =
-        codePoint in 0x20..0x7E ||
-            codePoint in 0xA0..0xFF ||
-            codePoint in 0x0400..0x04FF ||
-            codePoint in 0x2190..0x21FF ||
-            codePoint in 0x2500..0x257F ||
-            codePoint in 0x2580..0x259F ||
-            codePoint == REPLACEMENT_CODE_POINT
-
-    private fun fontJson(codePoints: IntArray): String {
+    private fun fontJson(
+        spec: TerminalBitmapFontSpec,
+        codePoints: IntArray,
+    ): String {
         val characterRows =
             codePoints
                 .toList()
@@ -190,9 +242,9 @@ object CozetteFontAtlas {
             appendLine("  \"providers\": [")
             appendLine("    {")
             appendLine("      \"type\": \"bitmap\",")
-            appendLine("      \"file\": \"compukters:font/terminal/cozette.png\",")
-            appendLine("      \"height\": 13,")
-            appendLine("      \"ascent\": 10,")
+            appendLine("      \"file\": \"compukters:font/terminal/${spec.resourceName}.png\",")
+            appendLine("      \"height\": ${spec.cellHeight},")
+            appendLine("      \"ascent\": ${spec.ascent},")
             appendLine("      \"chars\": [")
             characterRows.forEachIndexed { index, row ->
                 val characters = row.joinToString(separator = "") { "\\u${it.toHex(4)}" }
@@ -207,28 +259,36 @@ object CozetteFontAtlas {
         }
     }
 
-    private fun coverageKotlin(codePoints: IntArray): String {
+    private fun coverageKotlin(
+        spec: TerminalBitmapFontSpec,
+        codePoints: IntArray,
+    ): String {
         return buildString {
             appendLine("/*")
-            appendLine(" * Generated from pinned Cozette v.1.30.0. Do not edit manually.")
+            appendLine(" * Generated from ${spec.sourceDescription}. Do not edit manually.")
             appendLine(" */")
             appendLine()
             appendLine("package ru.lazyhat.compukters.impl.terminal")
             appendLine()
-            appendLine("internal val COZETTE_SUPPORTED_CODE_POINTS =")
+            appendLine("internal val ${spec.coveragePropertyName} =")
             appendLine("    intArrayOf(")
             codePoints.forEach { appendLine("        0x${it.toHex(4)},") }
             appendLine("    )")
         }
     }
 
-    private fun glyphHasVisiblePixel(codePoint: Int, codePoints: IntArray, atlas: BufferedImage): Boolean {
+    private fun glyphHasVisiblePixel(
+        spec: TerminalBitmapFontSpec,
+        codePoint: Int,
+        codePoints: IntArray,
+        atlas: BufferedImage,
+    ): Boolean {
         val index = codePoints.binarySearch(codePoint)
         if (index < 0) return false
-        val left = index % COLUMNS * CELL_WIDTH
-        val top = index / COLUMNS * CELL_HEIGHT
-        return (0 until CELL_HEIGHT).any { y ->
-            (0 until CELL_WIDTH).any { x -> atlas.getRGB(left + x, top + y).ushr(24) != 0 }
+        val left = index % COLUMNS * spec.cellWidth
+        val top = index / COLUMNS * spec.cellHeight
+        return (0 until spec.cellHeight).any { y ->
+            (0 until spec.cellWidth).any { x -> atlas.getRGB(left + x, top + y).ushr(24) != 0 }
         }
     }
 
@@ -292,7 +352,7 @@ object CozetteFontAtlas {
     }
 }
 
-class GeneratedCozetteFont internal constructor(
+class GeneratedTerminalBitmapFont internal constructor(
     val cellWidth: Int,
     val cellHeight: Int,
     val ascent: Int,
@@ -314,10 +374,70 @@ class GeneratedCozetteFont internal constructor(
     }
 }
 
-abstract class GenerateCozetteTerminalFont : DefaultTask() {
+private fun taskSpec(
+    displayName: Property<String>,
+    resourceName: Property<String>,
+    coveragePropertyName: Property<String>,
+    sourceDescription: Property<String>,
+    cellWidth: Property<Int>,
+    cellHeight: Property<Int>,
+    ascent: Property<Int>,
+    descent: Property<Int>,
+    replacementCodePoint: Property<Int>,
+    selectedRanges: ListProperty<String>,
+): TerminalBitmapFontSpec =
+    TerminalBitmapFontSpec(
+        displayName = displayName.get(),
+        resourceName = resourceName.get(),
+        coveragePropertyName = coveragePropertyName.get(),
+        sourceDescription = sourceDescription.get(),
+        cellWidth = cellWidth.get(),
+        cellHeight = cellHeight.get(),
+        ascent = ascent.get(),
+        descent = descent.get(),
+        replacementCodePoint = replacementCodePoint.get(),
+        selectedCodePoints =
+            selectedRanges.get().map { encoded ->
+                val endpoints = encoded.split("..")
+                require(endpoints.size == 2) { "invalid terminal font range: $encoded" }
+                endpoints[0].toInt()..endpoints[1].toInt()
+            },
+    )
+
+abstract class GenerateTerminalBitmapFont : DefaultTask() {
     @get:InputFile
     @get:PathSensitive(PathSensitivity.NONE)
     abstract val bdfFile: RegularFileProperty
+
+    @get:Input
+    abstract val displayName: Property<String>
+
+    @get:Input
+    abstract val resourceName: Property<String>
+
+    @get:Input
+    abstract val coveragePropertyName: Property<String>
+
+    @get:Input
+    abstract val sourceDescription: Property<String>
+
+    @get:Input
+    abstract val cellWidth: Property<Int>
+
+    @get:Input
+    abstract val cellHeight: Property<Int>
+
+    @get:Input
+    abstract val ascent: Property<Int>
+
+    @get:Input
+    abstract val descent: Property<Int>
+
+    @get:Input
+    abstract val replacementCodePoint: Property<Int>
+
+    @get:Input
+    abstract val selectedRanges: ListProperty<String>
 
     @get:OutputFile
     abstract val fontJsonFile: RegularFileProperty
@@ -333,7 +453,23 @@ abstract class GenerateCozetteTerminalFont : DefaultTask() {
 
     @TaskAction
     fun generate() {
-        val generated = bdfFile.get().asFile.inputStream().use(CozetteFontAtlas::generate)
+        val spec =
+            taskSpec(
+                displayName,
+                resourceName,
+                coveragePropertyName,
+                sourceDescription,
+                cellWidth,
+                cellHeight,
+                ascent,
+                descent,
+                replacementCodePoint,
+                selectedRanges,
+            )
+        val generated =
+            bdfFile.get().asFile.inputStream().use { source ->
+                TerminalBitmapFontAtlas.generate(spec, source)
+            }
         write(fontJsonFile, generated.fontJson.toByteArray(Charsets.UTF_8))
         write(atlasPngFile, generated.png)
         write(manifestFile, generated.manifest.toByteArray(Charsets.UTF_8))
@@ -351,10 +487,43 @@ abstract class GenerateCozetteTerminalFont : DefaultTask() {
     }
 }
 
-abstract class VerifyCozetteTerminalFont : DefaultTask() {
+abstract class VerifyTerminalBitmapFont : DefaultTask() {
     @get:InputFile
     @get:PathSensitive(PathSensitivity.NONE)
     abstract val bdfFile: RegularFileProperty
+
+    @get:Input
+    abstract val displayName: Property<String>
+
+    @get:Input
+    abstract val resourceName: Property<String>
+
+    @get:Input
+    abstract val coveragePropertyName: Property<String>
+
+    @get:Input
+    abstract val sourceDescription: Property<String>
+
+    @get:Input
+    abstract val cellWidth: Property<Int>
+
+    @get:Input
+    abstract val cellHeight: Property<Int>
+
+    @get:Input
+    abstract val ascent: Property<Int>
+
+    @get:Input
+    abstract val descent: Property<Int>
+
+    @get:Input
+    abstract val replacementCodePoint: Property<Int>
+
+    @get:Input
+    abstract val selectedRanges: ListProperty<String>
+
+    @get:Input
+    abstract val regenerationTaskName: Property<String>
 
     @get:InputFile
     @get:PathSensitive(PathSensitivity.NONE)
@@ -374,7 +543,23 @@ abstract class VerifyCozetteTerminalFont : DefaultTask() {
 
     @TaskAction
     fun verify() {
-        val generated = bdfFile.get().asFile.inputStream().use(CozetteFontAtlas::generate)
+        val spec =
+            taskSpec(
+                displayName,
+                resourceName,
+                coveragePropertyName,
+                sourceDescription,
+                cellWidth,
+                cellHeight,
+                ascent,
+                descent,
+                replacementCodePoint,
+                selectedRanges,
+            )
+        val generated =
+            bdfFile.get().asFile.inputStream().use { source ->
+                TerminalBitmapFontAtlas.generate(spec, source)
+            }
         val stale =
             listOf(
                 fontJsonFile to generated.fontJson.toByteArray(Charsets.UTF_8),
@@ -385,8 +570,44 @@ abstract class VerifyCozetteTerminalFont : DefaultTask() {
                 property.get().asFile.takeUnless { file -> file.readBytes().contentEquals(expected) }
             }
         check(stale.isEmpty()) {
-            "Generated Cozette resources are stale: ${stale.joinToString { it.relativeTo(project.rootDir).path }}. " +
-                "Run :v26_1-neoforge:generateCozetteTerminalFont."
+            "Generated ${spec.displayName} resources are stale: " +
+                "${stale.joinToString { it.relativeTo(project.rootDir).path }}. " +
+                "Run ${regenerationTaskName.get()}."
         }
+    }
+}
+
+abstract class GenerateCozetteTerminalFont : GenerateTerminalBitmapFont() {
+    init {
+        convention(COZETTE_FONT_SPEC)
+    }
+
+    private fun convention(spec: TerminalBitmapFontSpec) {
+        displayName.convention(spec.displayName)
+        resourceName.convention(spec.resourceName)
+        coveragePropertyName.convention(spec.coveragePropertyName)
+        sourceDescription.convention(spec.sourceDescription)
+        cellWidth.convention(spec.cellWidth)
+        cellHeight.convention(spec.cellHeight)
+        ascent.convention(spec.ascent)
+        descent.convention(spec.descent)
+        replacementCodePoint.convention(spec.replacementCodePoint)
+        selectedRanges.convention(spec.selectedCodePoints.map { "${it.first}..${it.last}" })
+    }
+}
+
+abstract class VerifyCozetteTerminalFont : VerifyTerminalBitmapFont() {
+    init {
+        displayName.convention(COZETTE_FONT_SPEC.displayName)
+        resourceName.convention(COZETTE_FONT_SPEC.resourceName)
+        coveragePropertyName.convention(COZETTE_FONT_SPEC.coveragePropertyName)
+        sourceDescription.convention(COZETTE_FONT_SPEC.sourceDescription)
+        cellWidth.convention(COZETTE_FONT_SPEC.cellWidth)
+        cellHeight.convention(COZETTE_FONT_SPEC.cellHeight)
+        ascent.convention(COZETTE_FONT_SPEC.ascent)
+        descent.convention(COZETTE_FONT_SPEC.descent)
+        replacementCodePoint.convention(COZETTE_FONT_SPEC.replacementCodePoint)
+        selectedRanges.convention(COZETTE_FONT_SPEC.selectedCodePoints.map { "${it.first}..${it.last}" })
+        regenerationTaskName.convention(":v26_1-neoforge:generateCozetteTerminalFont")
     }
 }
