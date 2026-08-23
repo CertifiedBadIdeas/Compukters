@@ -61,8 +61,7 @@ class VmSession private constructor(
 
     fun commitTerminal(): Unit = bridge.terminalCommit(requireHandle())
 
-    fun terminalFullState(): TerminalState =
-        decodeNative { TerminalWireDecoder(bridge.terminalFullState(requireHandle())).fullState() }
+    fun terminalFullState(): TerminalState = decodeNative { TerminalWireDecoder(bridge.terminalFullState(requireHandle())).fullState() }
 
     fun terminalChangesSince(revision: Long): TerminalUpdate {
         require(revision >= 0) { "terminal revision must not be negative" }
@@ -83,11 +82,9 @@ class VmSession private constructor(
             modifiers.fold(0) { bits, modifier -> bits or modifier.mask },
         )
 
-    fun sendTerminalText(value: String): Unit =
-        bridge.terminalText(requireHandle(), value.codePoints().toArray())
+    fun sendTerminalText(value: String): Unit = bridge.terminalText(requireHandle(), value.codePoints().toArray())
 
-    fun provideCompatibilityLine(value: String): Unit =
-        bridge.terminalCompatibilityLine(requireHandle(), value.toCharArray())
+    fun provideCompatibilityLine(value: String): Unit = bridge.terminalCompatibilityLine(requireHandle(), value.toCharArray())
 
     override fun close() {
         val closing = handle.getAndSet(CLOSED)
@@ -152,6 +149,7 @@ private class WireDecoder(
             6 -> VmOutcome.Faulted(vmFault(u8()))
             7 -> VmOutcome.HostFailed(hostFailureKind(u8()), u32())
             8 -> VmOutcome.WaitingForLine
+            9 -> VmOutcome.WaitingForTerminalEvent
             else -> invalid()
         }.also { end() }
 
@@ -237,15 +235,24 @@ private class TerminalWireDecoder(
 
     fun update(): TerminalUpdate =
         when (u8()) {
-            0 -> TerminalUpdate.Unchanged(revision())
+            0 -> {
+                TerminalUpdate.Unchanged(revision())
+            }
+
             1 -> {
                 val base = revision()
                 val target = revision()
                 require(target > base) { "invalid terminal delta revisions" }
                 TerminalUpdate.Delta(base, target, List(count(MAX_CHANGES)) { change() })
             }
-            2 -> TerminalUpdate.Full(state())
-            else -> invalid()
+
+            2 -> {
+                TerminalUpdate.Full(state())
+            }
+
+            else -> {
+                invalid()
+            }
         }.also { end() }
 
     private fun state(): TerminalState {
@@ -266,6 +273,7 @@ private class TerminalWireDecoder(
                 require(cells.isNotEmpty() && start + cells.size <= CELL_COUNT) { "invalid terminal patch" }
                 TerminalChange.Patch(start, cells)
             }
+
             1 -> {
                 val x = u16()
                 val y = u16()
@@ -276,14 +284,24 @@ private class TerminalWireDecoder(
                 }
                 TerminalChange.Fill(x, y, width, height, cell())
             }
+
             2 -> {
                 val rows = u16()
                 require(rows in 1..HEIGHT) { "invalid terminal scroll" }
                 TerminalChange.Scroll(rows, cell())
             }
-            3 -> TerminalChange.Cursor(position(), boolean())
-            4 -> TerminalChange.Reset
-            else -> invalid()
+
+            3 -> {
+                TerminalChange.Cursor(position(), boolean())
+            }
+
+            4 -> {
+                TerminalChange.Reset
+            }
+
+            else -> {
+                invalid()
+            }
         }
 
     private fun cell(): TerminalCell {

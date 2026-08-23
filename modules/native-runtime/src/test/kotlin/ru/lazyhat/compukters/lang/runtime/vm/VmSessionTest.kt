@@ -32,7 +32,7 @@ class VmSessionTest {
     }
 
     @Test
-    fun `advance maps copied slice request trap fault quota and host failure outcomes`() {
+    fun `advance maps copied slice request waits trap fault quota and host failure outcomes`() {
         val bridge = FakeBridge(createResult = bytes(0, long(11)))
         val session = VmSession.open(byteArrayOf(1), bridge)
         bridge.outcomes += bytes(0)
@@ -43,6 +43,8 @@ class VmSessionTest {
         bridge.outcomes += bytes(6, 7)
         bridge.outcomes += bytes(3, 1, long(4), long(3))
         bridge.outcomes += bytes(7, 0, int(17))
+        bridge.outcomes += bytes(8)
+        bridge.outcomes += bytes(9)
 
         assertEquals(VmOutcome.SliceExhausted, session.advance(64, 64))
         assertEquals(
@@ -62,6 +64,8 @@ class VmSessionTest {
         assertEquals(VmOutcome.Faulted(VmFault.HANDLE_EXHAUSTED), session.advance(64, 64))
         assertEquals(VmOutcome.QuotaExhausted(QuotaKind.HOST_REQUESTS, 4, 3), session.advance(64, 64))
         assertEquals(VmOutcome.HostFailed(HostFailureKind.END_OF_FILE, 17), session.advance(64, 64))
+        assertEquals(VmOutcome.WaitingForLine, session.advance(64, 64))
+        assertEquals(VmOutcome.WaitingForTerminalEvent, session.advance(64, 64))
     }
 
     @Test

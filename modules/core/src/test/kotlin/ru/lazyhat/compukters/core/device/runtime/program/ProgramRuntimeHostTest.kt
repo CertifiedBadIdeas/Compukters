@@ -277,6 +277,33 @@ class ProgramRuntimeHostTest {
     }
 
     @Test
+    fun `raw terminal wait wakes after accepted input and executes only on the next tick`() {
+        val session =
+            ScriptedSession(
+                outcomes =
+                    listOf(
+                        VmOutcome.WaitingForTerminalEvent,
+                        VmOutcome.Halted(VmValue.StringValue("done")),
+                    ),
+            )
+        val host = host(session)
+        host.start(byteArrayOf(1))
+
+        assertEquals(ProgramRuntimeState.WaitingForInput, host.serverTick())
+        assertEquals(1, session.advances.size)
+        assertEquals(1, session.terminalCommits)
+        assertFalse(host.submitLine("legacy"))
+        assertTrue(host.sendTerminalText("λ😀"))
+        assertEquals(listOf("λ😀"), session.terminalTexts)
+        assertEquals(ProgramRuntimeState.Running, host.state)
+        assertEquals(1, session.advances.size)
+        assertEquals(1, session.terminalCommits)
+
+        assertEquals(ProgramRuntimeState.Halted(VmValue.StringValue("done")), host.serverTick())
+        assertEquals(2, session.terminalCommits)
+    }
+
+    @Test
     fun `input is rejected outside a pending read and when over its UTF16 limit`() {
         val session = ScriptedSession(outcomes = listOf(VmOutcome.WaitingForLine))
         val host =
