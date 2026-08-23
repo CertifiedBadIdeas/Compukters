@@ -399,6 +399,38 @@ canonical node records in parent-first path order
 sha256[32] over every preceding byte
 ```
 
+Journal payloads are canonical typed mutations:
+
+```text
+operation u8  (1 createDirectory, 2 putFile, 3 remove, 4 rename)
+flags u8      (putFile bit 0 executable; rename bit 0 replace)
+reserved u16  (zero)
+operation-specific path records and metadata
+```
+
+Every path record is `pathUtf8Length u32` followed by exact UTF-8 bytes.
+`createDirectory` adds node generation; `putFile` adds node generation, logical
+size, and a SHA-256 object identity; `remove` adds no metadata; `rename` contains
+source and destination paths. Object bytes remain in the object store.
+
+Canonical checkpoint node records use:
+
+```text
+pathUtf8Length u32
+pathUtf8 bytes
+kind u8       (1 directory, 2 file)
+flags u8      (file bit 0 executable; zero for directory)
+reserved u16  (zero)
+nodeGeneration u64
+logicalSize u64       (zero for directory)
+objectId[32]          (zero for directory)
+```
+
+Recovery receives fixed-format claimed generations/sequences plus an external
+`confirmedGeneration` marker. Invalid history at or below the marker is
+`ConfirmedCorruption`; an invalid suffix above it is discarded as unconfirmed.
+The marker is advanced only after synchronization by Task 6.
+
 Decode through a cursor that uses checked addition and refuses an allocation until its count and byte length are within the independent recovery limits. Recovery chooses the newest complete valid checkpoint, applies only a contiguous matching journal suffix, discards only an unconfirmed tail, and returns `ConfirmedCorruption` for any invalid confirmed history.
 
 - [ ] **Step 4: Run recovery tests twice for determinism**

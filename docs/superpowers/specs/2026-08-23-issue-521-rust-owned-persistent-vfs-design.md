@@ -247,6 +247,20 @@ renamed, and followed by directory synchronization where supported. Journal
 records include format version, computer identity, sequence, previous committed
 sequence, payload length, and checksum.
 
+The journal payload is a typed canonical mutation: `CreateDirectory`, `PutFile`,
+`Remove`, or `Rename`. File mutations contain metadata and a SHA-256 content
+object identity, never duplicate object bytes. Checkpoint node records contain
+the exact virtual path, node kind, executable flag, node generation, logical
+size, and content object identity for files.
+
+Each computer has a separate confirmed-generation marker. The worker advances
+it only after the corresponding journal prefix is synchronized. Recovery treats
+invalid data at or below that marker as confirmed corruption; a malformed,
+incomplete, mismatched, or discontinuous suffix above it is an unconfirmed tail
+and is discarded. Recovery receives the marker and fixed-format generation or
+sequence names from the admitted store rather than inferring confirmation from
+file ordering.
+
 Recovery admits the newest complete checkpoint and then a contiguous checksummed
 journal suffix. An incomplete or corrupt uncommitted tail is discarded. A gap,
 identity mismatch, invalid confirmed record, or corrupt confirmed checkpoint
