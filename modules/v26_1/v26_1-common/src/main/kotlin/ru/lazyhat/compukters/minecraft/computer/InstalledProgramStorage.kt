@@ -11,8 +11,10 @@
 
 package ru.lazyhat.compukters.minecraft.computer
 
-import net.minecraft.nbt.CompoundTag
-import net.minecraft.nbt.Tag
+import com.mojang.serialization.Codec
+import net.minecraft.world.level.storage.ValueInput
+import net.minecraft.world.level.storage.ValueOutput
+import java.nio.ByteBuffer
 
 class InstalledProgramStorage(
     private val maximumArtifactBytes: Int = MAXIMUM_ARTIFACT_BYTES,
@@ -41,27 +43,26 @@ class InstalledProgramStorage(
         return true
     }
 
-    fun save(root: CompoundTag) {
+    fun save(root: ValueOutput) {
         val artifact = installedArtifact
         if (artifact == null) {
-            root.remove(ROOT_KEY)
+            root.discard(ROOT_KEY)
             return
         }
-        val payload = CompoundTag()
+        val payload = root.child(ROOT_KEY)
         payload.putInt(SCHEMA_KEY, CURRENT_SCHEMA)
-        payload.putByteArray(ARTIFACT_KEY, artifact)
-        root.put(ROOT_KEY, payload)
+        payload.store(ARTIFACT_KEY, Codec.BYTE_BUFFER, ByteBuffer.wrap(artifact.copyOf()))
     }
 
-    fun load(root: CompoundTag) {
+    fun load(root: ValueInput) {
         installedArtifact = null
-        if (!root.contains(ROOT_KEY, Tag.TAG_COMPOUND.toInt())) return
-        val payload = root.getCompound(ROOT_KEY)
-        if (!payload.contains(SCHEMA_KEY, Tag.TAG_INT.toInt()) || payload.getInt(SCHEMA_KEY) != CURRENT_SCHEMA) return
-        if (!payload.contains(ARTIFACT_KEY, Tag.TAG_BYTE_ARRAY.toInt())) return
-        val artifact = payload.getByteArray(ARTIFACT_KEY)
+        val payload = root.child(ROOT_KEY).orElse(null) ?: return
+        if (payload.getIntOr(SCHEMA_KEY, 0) != CURRENT_SCHEMA) return
+        val buffer = payload.read(ARTIFACT_KEY, Codec.BYTE_BUFFER).orElse(null) ?: return
+        val artifact = ByteArray(buffer.remaining())
+        buffer.slice().get(artifact)
         if (artifact.isEmpty() || artifact.size > maximumArtifactBytes) return
-        installedArtifact = artifact.copyOf()
+        installedArtifact = artifact
     }
 
     companion object {
