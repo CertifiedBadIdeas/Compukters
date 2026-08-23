@@ -14,7 +14,6 @@ package ru.lazyhat.compukters.impl.registry
 import net.minecraft.core.registries.Registries
 import net.minecraft.world.item.BlockItem
 import net.minecraft.world.level.block.entity.BlockEntityType
-import net.minecraft.world.level.block.state.BlockBehaviour
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.neoforge.registries.DeferredBlock
 import net.neoforged.neoforge.registries.DeferredHolder
@@ -24,6 +23,7 @@ import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.impl.computer.NeoForgeComputerBlockEntity
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
 import java.util.function.Supplier
+import java.util.function.UnaryOperator
 
 object CompuktersRegistry {
     private val blocks = DeferredRegister.createBlocks(MOD_ID)
@@ -31,15 +31,16 @@ object CompuktersRegistry {
     private val blockEntities = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MOD_ID)
 
     val COMPUTER: DeferredBlock<ComputerBlock> =
-        blocks.register(
+        blocks.registerBlock(
             "compukter",
-            Supplier {
+            { properties ->
                 ComputerBlock(
-                    BlockBehaviour.Properties.of().strength(2.0f),
+                    properties,
                     ::NeoForgeComputerBlockEntity,
                     Supplier { COMPUTER_BLOCK_ENTITY.get() },
                 )
             },
+            UnaryOperator { properties -> properties.strength(2.0f) },
         )
 
     val COMPUTER_ITEM: DeferredItem<BlockItem> = items.registerSimpleBlockItem(COMPUTER)
@@ -48,9 +49,7 @@ object CompuktersRegistry {
         blockEntities.register(
             "compukter",
             Supplier {
-                BlockEntityType.Builder
-                    .of(::NeoForgeComputerBlockEntity, COMPUTER.get())
-                    .build(null)
+                BlockEntityType(::NeoForgeComputerBlockEntity, false, COMPUTER.get())
             },
         )
 
