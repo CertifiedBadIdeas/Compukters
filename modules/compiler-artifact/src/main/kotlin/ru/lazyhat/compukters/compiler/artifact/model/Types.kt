@@ -40,6 +40,31 @@ sealed interface ValueType {
     ) : ValueType
 }
 
+/** Scalar kinds accepted by Artifact v1 comparison forms. */
+enum class ScalarValueType(
+    internal val artifactForm: UInt,
+    internal val valueType: ValueType,
+) {
+    I32(1u, ValueType.I32),
+    I64(2u, ValueType.I64),
+    F32(3u, ValueType.F32),
+    F64(4u, ValueType.F64),
+    BOOL(5u, ValueType.Bool),
+    CHAR(6u, ValueType.Char),
+}
+
+/** Scalar kinds accepted by Artifact v1 ordered-comparison forms. */
+enum class OrderedScalarValueType(
+    internal val artifactForm: UInt,
+    internal val valueType: ValueType,
+) {
+    I32(1u, ValueType.I32),
+    I64(2u, ValueType.I64),
+    F32(3u, ValueType.F32),
+    F64(4u, ValueType.F64),
+    CHAR(6u, ValueType.Char),
+}
+
 sealed interface NominalType {
     val name: StringId
 

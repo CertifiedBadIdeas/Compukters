@@ -36,7 +36,9 @@ import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
+import ru.lazyhat.compukters.compiler.artifact.model.OrderedScalarValueType
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
+import ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
@@ -96,6 +98,8 @@ private fun executableInstructionsArtifact(): Artifact {
             constants =
                 listOf(
                     Constant.I32(7),
+                    Constant.Bool(true),
+                    Constant.Char('x'.code.toUShort()),
                     Constant.StringLiteral(
                         ru.lazyhat.compukters.compiler.artifact.model.Utf16LiteralId
                             .of(0u),
@@ -118,10 +122,18 @@ private fun executableInstructionsArtifact(): Artifact {
                         StringId.of(2u),
                         TypeRef.Local(TypeId.of(0u)),
                         setOf(FunctionFlag.STATIC, FunctionFlag.SUSPENDING),
-                        listOf(ValueType.I32, stringType, stringType, stringType),
+                        listOf(
+                            ValueType.I32,
+                            stringType,
+                            stringType,
+                            stringType,
+                            ValueType.I32,
+                            ValueType.Bool,
+                            ValueType.Char,
+                        ),
                         0u,
                         BlockId.of(0u),
-                        5u,
+                        6u,
                         0u,
                         0u,
                     ),
@@ -132,7 +144,7 @@ private fun executableInstructionsArtifact(): Artifact {
                         setOf(FunctionFlag.STATIC),
                         listOf(ValueType.I32, stringType),
                         2u,
-                        BlockId.of(5u),
+                        BlockId.of(6u),
                         1u,
                         0u,
                         0u,
@@ -144,7 +156,7 @@ private fun executableInstructionsArtifact(): Artifact {
                         setOf(FunctionFlag.STATIC, FunctionFlag.SUSPENDING),
                         emptyList(),
                         0u,
-                        BlockId.of(6u),
+                        BlockId.of(7u),
                         1u,
                         0u,
                         0u,
@@ -157,8 +169,52 @@ private fun executableInstructionsArtifact(): Artifact {
                         false,
                         listOf(
                             Instruction.Const(RegisterId.of(0u), ConstantId.of(0u)),
-                            Instruction.Const(RegisterId.of(1u), ConstantId.of(1u)),
-                            Instruction.Const(RegisterId.of(2u), ConstantId.of(1u)),
+                            Instruction.Const(RegisterId.of(1u), ConstantId.of(3u)),
+                            Instruction.Const(RegisterId.of(2u), ConstantId.of(3u)),
+                            Instruction.Const(RegisterId.of(5u), ConstantId.of(1u)),
+                            Instruction.Const(RegisterId.of(6u), ConstantId.of(2u)),
+                            Instruction.Move(RegisterId.of(3u), RegisterId.of(1u)),
+                            Instruction.AddI32(RegisterId.of(4u), RegisterId.of(0u), RegisterId.of(0u)),
+                            Instruction.SubtractI32(RegisterId.of(4u), RegisterId.of(4u), RegisterId.of(0u)),
+                            Instruction.Equal(
+                                ScalarValueType.I32,
+                                RegisterId.of(5u),
+                                RegisterId.of(0u),
+                                RegisterId.of(4u),
+                            ),
+                            Instruction.Less(
+                                OrderedScalarValueType.CHAR,
+                                RegisterId.of(5u),
+                                RegisterId.of(6u),
+                                RegisterId.of(6u),
+                            ),
+                            Instruction.LessOrEqual(
+                                OrderedScalarValueType.I32,
+                                RegisterId.of(5u),
+                                RegisterId.of(0u),
+                                RegisterId.of(4u),
+                            ),
+                            Instruction.Greater(
+                                OrderedScalarValueType.I32,
+                                RegisterId.of(5u),
+                                RegisterId.of(0u),
+                                RegisterId.of(4u),
+                            ),
+                            Instruction.GreaterOrEqual(
+                                OrderedScalarValueType.I32,
+                                RegisterId.of(5u),
+                                RegisterId.of(0u),
+                                RegisterId.of(4u),
+                            ),
+                            Instruction.StringLength(RegisterId.of(4u), RegisterId.of(1u)),
+                            Instruction.StringGet(RegisterId.of(6u), RegisterId.of(1u), RegisterId.of(0u)),
+                            Instruction.StringEquals(RegisterId.of(5u), RegisterId.of(1u), RegisterId.of(2u)),
+                            Instruction.CapabilityCallSync(
+                                Destination.Unit,
+                                CapabilityId.of(0u),
+                                0u,
+                                listOf(RegisterId.of(3u)),
+                            ),
                             Instruction.Jump(BlockId.of(1u)),
                         ),
                     ),
@@ -174,12 +230,25 @@ private fun executableInstructionsArtifact(): Artifact {
                         FunctionId.of(0u),
                         false,
                         listOf(
+                            Instruction.StringSubstring(
+                                RegisterId.of(3u),
+                                RegisterId.of(1u),
+                                RegisterId.of(0u),
+                                RegisterId.of(4u),
+                            ),
+                            Instruction.Jump(BlockId.of(3u)),
+                        ),
+                    ),
+                    Block(
+                        FunctionId.of(0u),
+                        false,
+                        listOf(
                             Instruction.Call(
                                 Destination.Register(RegisterId.of(0u)),
                                 FunctionRef.Local(FunctionId.of(1u)),
                                 listOf(RegisterId.of(0u), RegisterId.of(3u)),
                             ),
-                            Instruction.CallSuspend(Destination.Unit, FunctionRef.Local(FunctionId.of(2u)), emptyList(), BlockId.of(3u)),
+                            Instruction.CallSuspend(Destination.Unit, FunctionRef.Local(FunctionId.of(2u)), emptyList(), BlockId.of(4u)),
                         ),
                     ),
                     Block(
@@ -191,7 +260,7 @@ private fun executableInstructionsArtifact(): Artifact {
                                 CapabilityId.of(0u),
                                 0u,
                                 listOf(RegisterId.of(3u)),
-                                BlockId.of(4u),
+                                BlockId.of(5u),
                             ),
                         ),
                     ),
@@ -210,8 +279,8 @@ private fun executableInstructionsArtifact(): Artifact {
                 maximumCallDepth = 2u,
                 maximumHostRequests = 1u,
                 maximumEvents = 0u,
-                maximumBlockCost = 11u,
-                minimumSliceCost = 11u,
+                maximumBlockCost = 32u,
+                minimumSliceCost = 32u,
                 compilerAbi = ByteArray(32),
                 standardLibraryAbi = ByteArray(32),
             ),

@@ -36,9 +36,16 @@ internal fun encodeInstruction(
 ): EncodedInstruction {
     val operands = BinarySink(maximumBytes)
     val opcode: UInt
+    var form = 0u
     val cost = instructionFixedCost(instruction)
 
     when (instruction) {
+        is Instruction.Move -> {
+            opcode = 0x01u
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.source)
+        }
+
         is Instruction.Const -> {
             opcode = 0x02u
             operands.writeRegister(instruction.destination)
@@ -48,6 +55,48 @@ internal fun encodeInstruction(
         is Instruction.Null -> {
             opcode = 0x03u
             operands.writeRegister(instruction.destination)
+        }
+
+        is Instruction.AddI32 -> {
+            opcode = 0x10u
+            form = 1u
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
+        }
+
+        is Instruction.SubtractI32 -> {
+            opcode = 0x11u
+            form = 1u
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
+        }
+
+        is Instruction.Equal -> {
+            opcode = 0x20u
+            form = instruction.type.artifactForm
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
+        }
+
+        is Instruction.Less -> {
+            opcode = 0x22u
+            form = instruction.type.artifactForm
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
+        }
+
+        is Instruction.LessOrEqual -> {
+            opcode = 0x23u
+            form = instruction.type.artifactForm
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
+        }
+
+        is Instruction.Greater -> {
+            opcode = 0x24u
+            form = instruction.type.artifactForm
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
+        }
+
+        is Instruction.GreaterOrEqual -> {
+            opcode = 0x25u
+            form = instruction.type.artifactForm
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
         }
 
         is Instruction.NewObject -> {
@@ -106,6 +155,38 @@ internal fun encodeInstruction(
             operands.writeRegister(instruction.right)
         }
 
+        is Instruction.StringLength -> {
+            opcode = 0x60u
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.string)
+        }
+
+        is Instruction.StringGet -> {
+            opcode = 0x61u
+            operands.writeBinaryRegisters(instruction.destination, instruction.string, instruction.index)
+        }
+
+        is Instruction.StringEquals -> {
+            opcode = 0x62u
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
+        }
+
+        is Instruction.StringSubstring -> {
+            opcode = 0x66u
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.string)
+            operands.writeRegister(instruction.start)
+            operands.writeRegister(instruction.end)
+        }
+
+        is Instruction.CapabilityCallSync -> {
+            opcode = 0x51u
+            operands.writeDestination(instruction.destination)
+            operands.writeUleb128(instruction.capability.value)
+            operands.writeUleb128(instruction.operation)
+            operands.writeArguments(instruction.arguments)
+        }
+
         is Instruction.CapabilityCallAsync -> {
             opcode = 0xe9u
             operands.writeDestination(instruction.destination)
@@ -145,7 +226,7 @@ internal fun encodeInstruction(
     }
     val frame = BinarySink(maximumBytes)
     frame.writeU8(opcode)
-    frame.writeU8(0u)
+    frame.writeU8(form)
     frame.writeU16(length.toUInt())
     frame.writeBytes(operandBytes)
     return EncodedInstruction(frame.toByteArray(), cost)
@@ -160,6 +241,16 @@ private fun BinarySink.writeDestination(destination: Destination) {
         is Destination.Register -> writeRegister(destination.id)
         Destination.Unit -> writeU16(UShort.MAX_VALUE.toUInt())
     }
+}
+
+private fun BinarySink.writeBinaryRegisters(
+    destination: RegisterId,
+    left: RegisterId,
+    right: RegisterId,
+) {
+    writeRegister(destination)
+    writeRegister(left)
+    writeRegister(right)
 }
 
 private fun BinarySink.writeArguments(arguments: List<RegisterId>) {
@@ -180,8 +271,20 @@ private fun variableCost(
 
 internal fun instructionFixedCost(instruction: Instruction): UInt =
     when (instruction) {
+        is Instruction.Move,
         is Instruction.Const,
         is Instruction.Null,
+        is Instruction.AddI32,
+        is Instruction.SubtractI32,
+        is Instruction.Equal,
+        is Instruction.Less,
+        is Instruction.LessOrEqual,
+        is Instruction.Greater,
+        is Instruction.GreaterOrEqual,
+        is Instruction.StringLength,
+        is Instruction.StringGet,
+        is Instruction.StringEquals,
+        is Instruction.StringSubstring,
         is Instruction.StringConcat,
         is Instruction.Jump,
         is Instruction.Branch,
@@ -201,6 +304,8 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
         is Instruction.Call -> variableCost(4u, instruction.arguments.size)
 
         is Instruction.CallSuspend -> variableCost(5u, instruction.arguments.size)
+
+        is Instruction.CapabilityCallSync -> variableCost(5u, instruction.arguments.size)
 
         is Instruction.CapabilityCallAsync -> variableCost(6u, instruction.arguments.size)
     }
