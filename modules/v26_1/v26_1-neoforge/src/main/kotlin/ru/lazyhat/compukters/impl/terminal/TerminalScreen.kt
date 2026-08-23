@@ -81,7 +81,7 @@ class TerminalScreen(
         mouseY: Int,
         partialTick: Float,
     ) {
-        graphics.fill(0, 0, width, height, TerminalRenderGeometry.paletteColor(0))
+        graphics.fill(0, 0, width, height, DIM_COLOR)
     }
 
     override fun extractRenderState(
@@ -91,6 +91,28 @@ class TerminalScreen(
         partialTick: Float,
     ) {
         val geometry = TerminalRenderGeometry(width, height)
+        graphics.fill(
+            geometry.panel.left - 1,
+            geometry.panel.top - 1,
+            geometry.panel.right + 1,
+            geometry.panel.bottom + 1,
+            PANEL_BORDER_COLOR,
+        )
+        graphics.fill(
+            geometry.panel.left,
+            geometry.panel.top,
+            geometry.panel.right,
+            geometry.panel.bottom,
+            PANEL_COLOR,
+        )
+        graphics.text(font, title, geometry.titleX, geometry.titleY, TITLE_COLOR, false)
+        graphics.fill(
+            geometry.grid.left,
+            geometry.grid.top - 1,
+            geometry.grid.right,
+            geometry.grid.bottom,
+            GRID_COLOR,
+        )
         drawBackgroundRuns(graphics, geometry)
         drawGlyphs(graphics, geometry)
         if (TerminalRenderGeometry.drawCursor(replica.state.cursorVisible, System.nanoTime() / 1_000_000L)) {
@@ -195,6 +217,11 @@ class TerminalScreen(
 
     private companion object {
         val UNIFORM_FONT = FontDescription.Resource(Identifier.withDefaultNamespace("uniform"))
+        val DIM_COLOR = 0x99000000.toInt()
+        val PANEL_COLOR = 0xFF101418.toInt()
+        val PANEL_BORDER_COLOR = 0xFF27323A.toInt()
+        val TITLE_COLOR = 0xFFF2F4F8.toInt()
+        val GRID_COLOR = TerminalRenderGeometry.paletteColor(0)
         val CURSOR_COLOR = 0xFFFFFFFF.toInt()
         val KEY_MAP =
             mapOf(
