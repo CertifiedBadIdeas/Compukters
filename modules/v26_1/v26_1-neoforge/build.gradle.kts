@@ -296,6 +296,16 @@ val verifyPackagedCompukterFfi =
                 "assets/compukters/textures/font/terminal/cozette.png",
                 "META-INF/licenses/Cozette-MIT.txt",
                 "META-INF/licenses/Cozette-PROVENANCE.txt",
+                "assets/compukters/font/terminal/dina.json",
+                "assets/compukters/font/terminal/dina-codepoints.txt",
+                "assets/compukters/textures/font/terminal/dina.png",
+                "META-INF/licenses/Dina-LICENSE.txt",
+                "META-INF/licenses/Dina-PROVENANCE.txt",
+                "assets/compukters/font/terminal/proggy_tiny.json",
+                "assets/compukters/font/terminal/proggy_tiny-codepoints.txt",
+                "assets/compukters/textures/font/terminal/proggy_tiny.png",
+                "META-INF/licenses/Proggy-MIT.txt",
+                "META-INF/licenses/Proggy-PROVENANCE.txt",
             ).forEach { required ->
                 check(required in entries) { "$required is missing from ${archive.name}" }
             }
