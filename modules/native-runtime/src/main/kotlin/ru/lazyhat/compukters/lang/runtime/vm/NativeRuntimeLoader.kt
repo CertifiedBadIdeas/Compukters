@@ -215,10 +215,19 @@ internal class NativeRuntimeLoader(
         limit: Long,
     ) : IOException("native resource exceeds $limit bytes")
 
-    private companion object {
-        const val COPY_BUFFER_BYTES = 8 * 1024
-        const val DEFAULT_MAXIMUM_PACKAGED_NATIVE_BYTES = 64L * 1024 * 1024
-        val OWNER_ONLY_PERMISSIONS =
+    companion object {
+        fun production(resourceAnchor: Class<*>): NativeRuntimeLoader =
+            NativeRuntimeLoader(
+                osName = { System.getProperty("os.name").orEmpty() },
+                osArch = { System.getProperty("os.arch").orEmpty() },
+                resource = resourceAnchor::getResourceAsStream,
+                createTempDirectory = { Files.createTempDirectory("compukters-native-") },
+                nativeLoad = { library -> System.load(library.toString()) },
+            )
+
+        private const val COPY_BUFFER_BYTES = 8 * 1024
+        private const val DEFAULT_MAXIMUM_PACKAGED_NATIVE_BYTES = 64L * 1024 * 1024
+        private val OWNER_ONLY_PERMISSIONS =
             setOf(
                 PosixFilePermission.OWNER_READ,
                 PosixFilePermission.OWNER_WRITE,
