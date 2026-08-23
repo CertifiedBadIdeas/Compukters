@@ -16,13 +16,19 @@ import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.IrVariable
+import org.jetbrains.kotlin.ir.expressions.IrBlock
 import org.jetbrains.kotlin.ir.expressions.IrBlockBody
 import org.jetbrains.kotlin.ir.expressions.IrCall
+import org.jetbrains.kotlin.ir.expressions.IrComposite
 import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrGetValue
 import org.jetbrains.kotlin.ir.expressions.IrReturn
+import org.jetbrains.kotlin.ir.expressions.IrSetValue
 import org.jetbrains.kotlin.ir.expressions.IrStringConcatenation
+import org.jetbrains.kotlin.ir.expressions.IrTypeOperatorCall
+import org.jetbrains.kotlin.ir.expressions.IrWhen
+import org.jetbrains.kotlin.ir.expressions.IrWhileLoop
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.types.IrType
@@ -54,7 +60,9 @@ import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
+import ru.lazyhat.compukters.compiler.artifact.model.OrderedScalarValueType
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
+import ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
@@ -63,6 +71,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.Utf16Literal
 import ru.lazyhat.compukters.compiler.artifact.model.Utf16LiteralId
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
+import ru.lazyhat.compukters.compiler.artifact.pool.ConstantPoolBuilder
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 
 internal class UnsupportedKotlinIr(
@@ -97,17 +106,22 @@ internal object KotlinProjectLowering {
                 .map(MetadataText::of)
                 .sorted()
         val metadataIds = metadataValues.withIndex().associate { (index, value) -> value.toString() to StringId.of(index.toUInt()) }
-        val literals =
-            StringLiteralCollector()
+        val literalCollector =
+            LiteralCollector()
                 .also { userFunctions.forEach { function -> function.accept(it, null) } }
-                .values
+        val literals =
+            literalCollector.strings
                 .distinct()
                 .map {
                     Utf16Literal.fromString(it)
                 }.sorted()
         val literalIds = literals.withIndex().associate { (index, value) -> value to Utf16LiteralId.of(index.toUInt()) }
-        val constants = literals.map { Constant.StringLiteral(requireNotNull(literalIds[it])) }
-        val constantIds = literals.withIndex().associate { (index, value) -> value to ConstantId.of(index.toUInt()) }
+        val constantPool = ConstantPoolBuilder()
+        literalCollector.values
+            .map { value -> value.toArtifactConstant(literalIds) }
+            .forEach(constantPool::intern)
+        val constants = constantPool.freeze().records
+        val constantIds = constants.withIndex().associate { (index, value) -> value to ConstantId.of(index.toUInt()) }
 
         val library = stringLibrary()
         val libraryHash = ArtifactWriter.moduleSemanticHash(library)
@@ -128,8 +142,12 @@ internal object KotlinProjectLowering {
                     stringType = stringType,
                     unitType = pluginContext.irBuiltIns.unitType,
                     kotlinStringType = pluginContext.irBuiltIns.stringType,
+                    intType = pluginContext.irBuiltIns.intType,
+                    booleanType = pluginContext.irBuiltIns.booleanType,
+                    charType = pluginContext.irBuiltIns.charType,
                     functionIds = functionIds,
                     constantIds = constantIds,
+                    literalIds = literalIds,
                     session = session,
                 )
             val compiled = compiler.compile()
@@ -204,9 +222,9 @@ internal object KotlinProjectLowering {
                     Capability(
                         namespace = requireNotNull(metadataIds["compukter"]),
                         name = requireNotNull(metadataIds["terminal"]),
-                        abi = AbiVersion(1u, 0u),
+                        abi = AbiVersion(2u, 0u),
                         required = true,
-                        operationCount = 3u,
+                        operationCount = 9u,
                     ),
                 ),
         )
@@ -217,8 +235,16 @@ internal object KotlinProjectLowering {
         pluginContext: IrPluginContext,
         entry: IrSimpleFunction,
     ) {
-        if (function.parameters.any { it.type != pluginContext.irBuiltIns.stringType } ||
-            (function.returnType != pluginContext.irBuiltIns.unitType && function.returnType != pluginContext.irBuiltIns.stringType) ||
+        val supported =
+            setOf(
+                pluginContext.irBuiltIns.unitType,
+                pluginContext.irBuiltIns.stringType,
+                pluginContext.irBuiltIns.intType,
+                pluginContext.irBuiltIns.booleanType,
+                pluginContext.irBuiltIns.charType,
+            )
+        if (function.parameters.any { it.type !in supported } ||
+            function.returnType !in supported ||
             (function !== entry && function.isSuspend)
         ) {
             throw UnsupportedKotlinIr(function, "unsupported function signature")
@@ -234,6 +260,9 @@ internal object KotlinProjectLowering {
         when (type) {
             pluginContext.irBuiltIns.unitType -> ValueType.Unit
             pluginContext.irBuiltIns.stringType -> stringType
+            pluginContext.irBuiltIns.intType -> ValueType.I32
+            pluginContext.irBuiltIns.booleanType -> ValueType.Bool
+            pluginContext.irBuiltIns.charType -> ValueType.Char
             else -> throw UnsupportedKotlinIr(element, "unsupported value type")
         }
 
@@ -268,56 +297,91 @@ private class FunctionCompiler(
     private val stringType: ValueType,
     private val unitType: IrType,
     private val kotlinStringType: IrType,
+    private val intType: IrType,
+    private val booleanType: IrType,
+    private val charType: IrType,
     private val functionIds: Map<org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol, FunctionId>,
-    private val constantIds: Map<Utf16Literal, ConstantId>,
+    private val constantIds: Map<Constant, ConstantId>,
+    private val literalIds: Map<Utf16Literal, Utf16LiteralId>,
     private val session: CompilationSession,
 ) {
     private val localTypes = mutableListOf<ValueType>()
     private val values = mutableMapOf<IrValueSymbol, RegisterId>()
-    private val blocks = mutableListOf(mutableListOf<Instruction>())
+    private val blocks = mutableListOf(MutableBlock())
     private var currentBlock = 0
 
     fun compile(): CompiledFunction {
         function.parameters.forEachIndexed { index, parameter -> values[parameter.symbol] = RegisterId.of(index.toUInt()) }
         val body = function.body as? IrBlockBody ?: throw UnsupportedKotlinIr(function, "function body is not a block")
-        body.statements.forEach { statement ->
-            when (statement) {
-                is IrVariable -> {
-                    if (statement.isVar) throw UnsupportedKotlinIr(statement, "mutable local")
-                    val initializer = statement.initializer ?: throw UnsupportedKotlinIr(statement, "local without initializer")
-                    values[statement.symbol] = compileString(initializer)
-                }
-
-                is IrCall -> {
-                    compileCall(statement)
-                }
-
-                is IrReturn -> {
-                    if (function.returnType == unitType) {
-                        emit(Instruction.Return(Destination.Unit))
-                    } else {
-                        emit(Instruction.Return(Destination.Register(compileString(statement.value))))
-                    }
-                }
-
-                else -> {
-                    throw UnsupportedKotlinIr(statement, "unsupported statement ${statement::class.simpleName}")
-                }
-            }
-        }
-        if (blocks[currentBlock].lastOrNull()?.isTerminator() != true) emit(Instruction.Return(Destination.Unit))
-        return CompiledFunction(localTypes.toList(), blocks.map { Block(functionId, false, it.toList()) })
+        body.statements.forEach(::compileStatement)
+        if (blocks[currentBlock].instructions.lastOrNull()?.isTerminator() != true) emit(Instruction.Return(Destination.Unit))
+        return CompiledFunction(
+            localTypes.toList(),
+            blocks.map { Block(functionId, it.loopHeaderSafepoint, it.instructions.toList()) },
+        )
     }
 
-    private fun compileString(expression: IrExpression): RegisterId =
+    private fun compileStatement(statement: IrElement) {
+        when (statement) {
+            is IrVariable -> {
+                val initializer = statement.initializer ?: throw UnsupportedKotlinIr(statement, "local without initializer")
+                val source = compileExpression(initializer)
+                val destination = allocate(valueType(statement.type, statement))
+                emit(Instruction.Move(destination, source))
+                values[statement.symbol] = destination
+            }
+
+            is IrSetValue -> {
+                val destination = values[statement.symbol] ?: throw UnsupportedKotlinIr(statement, "unknown mutable local")
+                emit(Instruction.Move(destination, compileExpression(statement.value)))
+            }
+
+            is IrCall -> {
+                compileCall(statement)
+            }
+
+            is IrReturn -> {
+                val destination =
+                    if (function.returnType == unitType) Destination.Unit else Destination.Register(compileExpression(statement.value))
+                emit(Instruction.Return(destination))
+            }
+
+            is IrWhen -> {
+                compileWhenStatement(statement)
+            }
+
+            is IrWhileLoop -> {
+                compileWhile(statement)
+            }
+
+            is IrBlock -> {
+                statement.statements.forEach(::compileStatement)
+            }
+
+            is IrComposite -> {
+                statement.statements.forEach(::compileStatement)
+            }
+
+            is IrTypeOperatorCall -> {
+                compileStatement(statement.argument)
+            }
+
+            is IrExpression -> {
+                compileExpression(statement)
+            }
+
+            else -> {
+                throw UnsupportedKotlinIr(statement, "unsupported statement ${statement::class.simpleName}")
+            }
+        }
+    }
+
+    private fun compileExpression(expression: IrExpression): RegisterId =
         when (expression) {
             is IrConst -> {
-                val value = expression.value as? String ?: throw UnsupportedKotlinIr(expression, "non-string constant")
-                val literal = Utf16Literal.fromString(value)
-                val constantId =
-                    constantIds[literal]
-                        ?: throw UnsupportedKotlinIr(expression, "literal is absent from canonical pool")
-                allocate(stringType).also { emit(Instruction.Const(it, constantId)) }
+                val constant = expression.toArtifactConstant(literalIds)
+                val constantId = constantIds[constant] ?: throw UnsupportedKotlinIr(expression, "constant is absent from canonical pool")
+                allocate(valueType(expression.type, expression)).also { emit(Instruction.Const(it, constantId)) }
             }
 
             is IrGetValue -> {
@@ -333,6 +397,14 @@ private class FunctionCompiler(
                     ?: throw UnsupportedKotlinIr(expression, "Unit call used as a value")
             }
 
+            is IrWhen -> {
+                compileWhenValue(expression)
+            }
+
+            is IrTypeOperatorCall -> {
+                compileExpression(expression.argument)
+            }
+
             else -> {
                 throw UnsupportedKotlinIr(expression, "unsupported expression ${expression::class.simpleName}")
             }
@@ -341,10 +413,10 @@ private class FunctionCompiler(
     private fun compileConcat(expression: IrStringConcatenation): RegisterId {
         val arguments = expression.arguments
         if (arguments.isEmpty()) throw UnsupportedKotlinIr(expression, "empty string concatenation")
-        var result = compileString(arguments.first())
+        var result = compileExpression(arguments.first())
         arguments.drop(1).forEach { argument ->
-            val right = compileString(argument)
-            startBlock()
+            val right = compileExpression(argument)
+            prepareAllocationBlock()
             val destination = allocate(stringType)
             emit(Instruction.StringConcat(destination, result, right))
             result = destination
@@ -355,49 +427,207 @@ private class FunctionCompiler(
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun compileCall(call: IrCall): RegisterId? {
         val target = call.symbol.owner
-        val arguments = call.arguments.filterNotNull().map(::compileString)
+        compileCompareToPredicate(call, target.name.asString())?.let { return it }
+        val argumentExpressions = call.arguments.filterNotNull()
+        val arguments = argumentExpressions.map(::compileExpression)
         terminalOperation(target)?.let { intrinsic ->
-            val destination = if (intrinsic.operation == 2u) Destination.Register(allocate(stringType)) else Destination.Unit
-            val resume = nextBlockId()
-            emit(
-                Instruction.CapabilityCallAsync(
-                    destination,
-                    CapabilityId.of(intrinsic.capability),
-                    intrinsic.operation,
-                    arguments,
-                    resume,
-                ),
-            )
-            startBlock(withJump = false)
+            val destination = destinationFor(call.type, call)
+            if (intrinsic.asynchronous) {
+                val resume = createBlock()
+                emit(
+                    Instruction.CapabilityCallAsync(
+                        destination,
+                        CapabilityId.of(intrinsic.capability),
+                        intrinsic.operation,
+                        arguments,
+                        blockId(resume),
+                    ),
+                )
+                currentBlock = resume
+            } else {
+                emit(Instruction.CapabilityCallSync(destination, CapabilityId.of(intrinsic.capability), intrinsic.operation, arguments))
+            }
             return (destination as? Destination.Register)?.id
         }
         val targetId = functionIds[target.symbol]
         if (targetId == null) {
-            if (target.fqNameWhenAvailable?.asString() == "kotlin.String.plus" &&
-                target.returnType == kotlinStringType &&
-                call.arguments.filterNotNull().size == 2 &&
-                call.arguments.filterNotNull().all { argument -> argument.type == kotlinStringType }
-            ) {
-                startBlock()
-                return allocate(stringType).also { destination ->
-                    emit(Instruction.StringConcat(destination, arguments[0], arguments[1]))
-                }
-            }
-            throw UnsupportedKotlinIr(
-                call,
-                "call target ${target.fqNameWhenAvailable?.asString() ?: target.name.asString()} is outside the project subset",
-            )
+            return compileBuiltinCall(call, target, argumentExpressions, arguments)
         }
-        val returnsString = target.returnType == kotlinStringType
-        val destination = if (returnsString) Destination.Register(allocate(stringType)) else Destination.Unit
+        val destination = destinationFor(target.returnType, call)
         if (target.isSuspend) {
-            val resume = nextBlockId()
-            emit(Instruction.CallSuspend(destination, FunctionRef.Local(targetId), arguments, resume))
-            startBlock(withJump = false)
+            val resume = createBlock()
+            emit(Instruction.CallSuspend(destination, FunctionRef.Local(targetId), arguments, blockId(resume)))
+            currentBlock = resume
         } else {
             emit(Instruction.Call(destination, FunctionRef.Local(targetId), arguments))
         }
         return (destination as? Destination.Register)?.id
+    }
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    private fun compileCompareToPredicate(
+        call: IrCall,
+        predicateName: String,
+    ): RegisterId? {
+        if (predicateName !in setOf("less", "lessOrEqual", "greater", "greaterOrEqual")) return null
+        val outerArguments = call.arguments.filterNotNull()
+        val compareCall = outerArguments.firstOrNull() as? IrCall ?: return null
+        if (compareCall.symbol.owner.name
+                .asString() != "compareTo"
+        ) {
+            return null
+        }
+        val zero = outerArguments.getOrNull(1) as? IrConst ?: return null
+        if (zero.value != 0) return null
+        val operands = compareCall.arguments.filterNotNull()
+        if (operands.size != 2) return null
+        val left = compileExpression(operands[0])
+        val right = compileExpression(operands[1])
+        val type = orderedType(operands[0].type, call)
+        return allocate(ValueType.Bool).also { destination ->
+            emit(
+                when (predicateName) {
+                    "less" -> Instruction.Less(type, destination, left, right)
+                    "lessOrEqual" -> Instruction.LessOrEqual(type, destination, left, right)
+                    "greater" -> Instruction.Greater(type, destination, left, right)
+                    else -> Instruction.GreaterOrEqual(type, destination, left, right)
+                },
+            )
+        }
+    }
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    private fun compileBuiltinCall(
+        call: IrCall,
+        target: IrSimpleFunction,
+        argumentExpressions: List<IrExpression>,
+        arguments: List<RegisterId>,
+    ): RegisterId? {
+        val fqName = target.fqNameWhenAvailable?.asString().orEmpty()
+        val name = target.name.asString()
+
+        fun result(
+            type: ValueType,
+            instruction: (RegisterId) -> Instruction,
+        ): RegisterId = allocate(type).also { emit(instruction(it)) }
+        if (arguments.size == 2 && call.type == kotlinStringType && fqName == "kotlin.String.plus") {
+            prepareAllocationBlock()
+            return result(stringType) { Instruction.StringConcat(it, arguments[0], arguments[1]) }
+        }
+        if (arguments.size == 2 && argumentExpressions.all { it.type == intType }) {
+            when (name) {
+                "plus" -> return result(ValueType.I32) { Instruction.AddI32(it, arguments[0], arguments[1]) }
+                "minus" -> return result(ValueType.I32) { Instruction.SubtractI32(it, arguments[0], arguments[1]) }
+            }
+        }
+        if (arguments.size == 1 && argumentExpressions[0].type == booleanType && name == "not") {
+            val falseRegister = allocate(ValueType.Bool)
+            emit(Instruction.Const(falseRegister, requireNotNull(constantIds[Constant.Bool(false)])))
+            return result(ValueType.Bool) { Instruction.Equal(ScalarValueType.BOOL, it, arguments[0], falseRegister) }
+        }
+        comparison(call, name, argumentExpressions, arguments)?.let { return it }
+        if (arguments.size == 1 && argumentExpressions[0].type == kotlinStringType && name == "<get-length>") {
+            return result(ValueType.I32) { Instruction.StringLength(it, arguments[0]) }
+        }
+        if (arguments.size == 2 && argumentExpressions[0].type == kotlinStringType && name == "get") {
+            return result(ValueType.Char) { Instruction.StringGet(it, arguments[0], arguments[1]) }
+        }
+        if (arguments.size == 3 && argumentExpressions[0].type == kotlinStringType && name == "substring") {
+            prepareAllocationBlock()
+            return result(stringType) { Instruction.StringSubstring(it, arguments[0], arguments[1], arguments[2]) }
+        }
+        throw UnsupportedKotlinIr(call, "call target ${fqName.ifEmpty { name }} is outside the project subset")
+    }
+
+    private fun comparison(
+        call: IrCall,
+        name: String,
+        expressions: List<IrExpression>,
+        arguments: List<RegisterId>,
+    ): RegisterId? {
+        if (arguments.size != 2) return null
+        val leftType = expressions[0].type
+        val rightType = expressions[1].type
+        if (name in setOf("EQEQ", "equals", "eqeq")) {
+            return allocate(ValueType.Bool).also { destination ->
+                if (leftType == kotlinStringType && rightType == kotlinStringType) {
+                    emit(Instruction.StringEquals(destination, arguments[0], arguments[1]))
+                } else {
+                    emit(Instruction.Equal(scalarType(leftType, call), destination, arguments[0], arguments[1]))
+                }
+            }
+        }
+        val instructionFactory: (OrderedScalarValueType, RegisterId) -> Instruction =
+            when (name) {
+                "less" -> { type, destination -> Instruction.Less(type, destination, arguments[0], arguments[1]) }
+                "lessOrEqual" -> { type, destination -> Instruction.LessOrEqual(type, destination, arguments[0], arguments[1]) }
+                "greater" -> { type, destination -> Instruction.Greater(type, destination, arguments[0], arguments[1]) }
+                "greaterOrEqual" -> { type, destination -> Instruction.GreaterOrEqual(type, destination, arguments[0], arguments[1]) }
+                else -> return null
+            }
+        val orderedType = orderedType(leftType, call)
+        return allocate(ValueType.Bool).also { destination ->
+            val instruction = instructionFactory(orderedType, destination)
+            emit(instruction)
+        }
+    }
+
+    private fun compileWhile(loop: IrWhileLoop) {
+        val header = createBlock(loopHeader = true)
+        jumpTo(header)
+        currentBlock = header
+        val condition = compileExpression(loop.condition)
+        val body = createBlock()
+        val exit = createBlock()
+        emit(Instruction.Branch(condition, blockId(body), blockId(exit)))
+        currentBlock = body
+        loop.body?.let(::compileStatement)
+        if (!isTerminated()) jumpTo(header)
+        currentBlock = exit
+    }
+
+    private fun compileWhenStatement(expression: IrWhen) {
+        val join = createBlock(loopHeader = true)
+        expression.branches.forEachIndexed { index, branch ->
+            val isElse = index == expression.branches.lastIndex && branch.condition.isTrueConstant()
+            if (isElse) {
+                compileStatement(branch.result)
+            } else {
+                val condition = compileExpression(branch.condition)
+                val body = createBlock()
+                val otherwise = createBlock()
+                emit(Instruction.Branch(condition, blockId(body), blockId(otherwise)))
+                currentBlock = body
+                compileStatement(branch.result)
+                if (!isTerminated()) jumpTo(join)
+                currentBlock = otherwise
+            }
+        }
+        if (!isTerminated()) jumpTo(join)
+        currentBlock = join
+    }
+
+    private fun compileWhenValue(expression: IrWhen): RegisterId {
+        val destination = allocate(valueType(expression.type, expression))
+        val join = createBlock(loopHeader = true)
+        expression.branches.forEachIndexed { index, branch ->
+            val isElse = index == expression.branches.lastIndex && branch.condition.isTrueConstant()
+            if (isElse) {
+                emit(Instruction.Move(destination, compileExpression(branch.result)))
+            } else {
+                val condition = compileExpression(branch.condition)
+                val body = createBlock()
+                val otherwise = createBlock()
+                emit(Instruction.Branch(condition, blockId(body), blockId(otherwise)))
+                currentBlock = body
+                emit(Instruction.Move(destination, compileExpression(branch.result)))
+                jumpTo(join)
+                currentBlock = otherwise
+            }
+        }
+        if (!isTerminated()) jumpTo(join)
+        currentBlock = join
+        return destination
     }
 
     private fun terminalOperation(function: IrSimpleFunction): TrustedIntrinsic.CapabilityOperation? {
@@ -417,24 +647,75 @@ private class FunctionCompiler(
         when (this) {
             unitType -> TrustedValueType.UNIT
             kotlinStringType -> TrustedValueType.STRING
+            intType -> TrustedValueType.INT
             else -> TrustedValueType.OTHER
+        }
+
+    private fun valueType(
+        type: IrType,
+        element: IrElement,
+    ): ValueType =
+        when (type) {
+            unitType -> ValueType.Unit
+            kotlinStringType -> stringType
+            intType -> ValueType.I32
+            booleanType -> ValueType.Bool
+            charType -> ValueType.Char
+            else -> throw UnsupportedKotlinIr(element, "unsupported value type")
+        }
+
+    private fun destinationFor(
+        type: IrType,
+        element: IrElement,
+    ): Destination = if (type == unitType) Destination.Unit else Destination.Register(allocate(valueType(type, element)))
+
+    private fun scalarType(
+        type: IrType,
+        element: IrElement,
+    ): ScalarValueType =
+        when (type) {
+            intType -> ScalarValueType.I32
+            booleanType -> ScalarValueType.BOOL
+            charType -> ScalarValueType.CHAR
+            else -> throw UnsupportedKotlinIr(element, "unsupported equality operand")
+        }
+
+    private fun orderedType(
+        type: IrType,
+        element: IrElement,
+    ): OrderedScalarValueType =
+        when (type) {
+            intType -> OrderedScalarValueType.I32
+            charType -> OrderedScalarValueType.CHAR
+            else -> throw UnsupportedKotlinIr(element, "unsupported ordered-comparison operand")
         }
 
     private fun allocate(type: ValueType): RegisterId =
         RegisterId.of((function.parameters.size + localTypes.size).toUInt()).also { localTypes += type }
 
     private fun emit(instruction: Instruction) {
-        blocks[currentBlock] += instruction
+        blocks[currentBlock].instructions += instruction
     }
 
-    private fun startBlock(withJump: Boolean = true) {
-        val target = BlockId.of((blockBase + blocks.size).toUInt())
-        if (withJump) emit(Instruction.Jump(target))
-        blocks.add(mutableListOf())
-        currentBlock++
+    private fun createBlock(loopHeader: Boolean = false): Int {
+        blocks += MutableBlock(loopHeader)
+        return blocks.lastIndex
     }
 
-    private fun nextBlockId(): BlockId = BlockId.of((blockBase + blocks.size).toUInt())
+    private fun blockId(local: Int): BlockId = BlockId.of((blockBase + local).toUInt())
+
+    private fun jumpTo(local: Int) = emit(Instruction.Jump(blockId(local)))
+
+    private fun prepareAllocationBlock() {
+        val instructions = blocks[currentBlock].instructions
+        if (instructions.isNotEmpty()) {
+            val allocationBlock = createBlock()
+            jumpTo(allocationBlock)
+            currentBlock = allocationBlock
+        }
+    }
+
+    private fun isTerminated(): Boolean = blocks[currentBlock].instructions.lastOrNull()?.isTerminator() == true
 
     private fun Instruction.isTerminator(): Boolean =
         this is Instruction.Jump ||
@@ -443,17 +724,44 @@ private class FunctionCompiler(
             this is Instruction.Throw ||
             this is Instruction.CallSuspend ||
             this is Instruction.CapabilityCallAsync
+
+    private data class MutableBlock(
+        var loopHeaderSafepoint: Boolean = false,
+        val instructions: MutableList<Instruction> = mutableListOf(),
+    )
 }
 
-private class StringLiteralCollector : IrVisitorVoid() {
-    val values = mutableListOf<String>()
+private class LiteralCollector : IrVisitorVoid() {
+    val values = mutableListOf<Any>()
+    val strings: List<String>
+        get() = values.filterIsInstance<String>()
 
     override fun visitElement(element: IrElement) {
         element.acceptChildren(this, null)
     }
 
     override fun visitConst(expression: IrConst) {
-        (expression.value as? String)?.let(values::add)
+        expression.value?.takeIf { it is String || it is Int || it is Boolean || it is Char }?.let(values::add)
         super.visitConst(expression)
     }
 }
+
+private fun Any.toArtifactConstant(literalIds: Map<Utf16Literal, Utf16LiteralId>): Constant =
+    when (this) {
+        is String -> Constant.StringLiteral(requireNotNull(literalIds[Utf16Literal.fromString(this)]))
+        is Int -> Constant.I32(this)
+        is Boolean -> Constant.Bool(this)
+        is Char -> Constant.Char(code.toUShort())
+        else -> error("unsupported literal $this")
+    }
+
+private fun IrConst.toArtifactConstant(literalIds: Map<Utf16Literal, Utf16LiteralId>): Constant =
+    when (val literal = value) {
+        is String -> Constant.StringLiteral(requireNotNull(literalIds[Utf16Literal.fromString(literal)]))
+        is Int -> Constant.I32(literal)
+        is Boolean -> Constant.Bool(literal)
+        is Char -> Constant.Char(literal.code.toUShort())
+        else -> throw UnsupportedKotlinIr(this, "unsupported constant")
+    }
+
+private fun IrExpression.isTrueConstant(): Boolean = this is IrConst && value == true
