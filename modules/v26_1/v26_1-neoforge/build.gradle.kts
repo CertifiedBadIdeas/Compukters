@@ -56,10 +56,9 @@ loom {
     runs {
         register("gameTestServer") {
             server()
+            forgeTemplate("gameTestServer")
             runDir("run/gameTestServer")
-            property("neoforge.enableGameTest", "true")
-            property("neoforge.enabledGameTestNamespaces", "compukters,minecraft")
-            property("neoforge.gameTestServer", "true")
+            property("neoforge.enabledGameTestNamespaces", "compukters")
             property("compukter.vm.terminalFixture", terminalFixture.absolutePath)
             ideConfigGenerated(true)
         }
@@ -68,20 +67,18 @@ loom {
     mods {
         maybeCreate("main").apply {
             sourceSet("main", project(projects.v261Common.path))
-            sourceSet("main", project(projects.core.path))
-            sourceSet("main", project(":native-runtime"))
             sourceSet(gameTest.name)
         }
     }
 }
 
 dependencies {
-    common(project(path = projects.v261Common.path, configuration = "apiElements")) { isTransitive = false }
+    common(project(path = projects.v261Common.path)) { isTransitive = false }
     shadowBundle(project(path = projects.v261Common.path, configuration = "transformProductionNeoForge"))
-    testImplementation(project(path = projects.v261Common.path, configuration = "apiElements"))
+    testImplementation(project(path = projects.v261Common.path))
 
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
-    add(gameTest.implementationConfigurationName, project(path = projects.v261Common.path, configuration = "apiElements"))
+    add(gameTest.implementationConfigurationName, project(path = projects.v261Common.path))
 }
 
 tasks.test {

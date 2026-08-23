@@ -11,12 +11,21 @@
 
 package ru.lazyhat.compukters.impl.computer
 
+import com.mojang.serialization.MapCodec
 import net.minecraft.core.BlockPos
-import net.minecraft.gametest.framework.GameTest
+import net.minecraft.core.Holder
+import net.minecraft.gametest.framework.GameTestInstance
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.gametest.framework.TestData
+import net.minecraft.gametest.framework.TestEnvironmentDefinition
+import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.MutableComponent
+import net.minecraft.resources.Identifier
 import net.minecraft.world.level.block.Blocks
-import net.neoforged.neoforge.gametest.GameTestHolder
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate
+import net.minecraft.world.level.block.Rotation
+import net.neoforged.bus.api.SubscribeEvent
+import net.neoforged.fml.common.EventBusSubscriber
+import net.neoforged.neoforge.event.RegisterGameTestsEvent
 import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
@@ -24,29 +33,62 @@ import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import java.nio.file.Path
 import kotlin.io.path.readText
 
-@GameTestHolder(MOD_ID)
-@PrefixGameTestTemplate(false)
+@EventBusSubscriber(modid = MOD_ID)
 object ComputerBlockGameTest {
     @JvmStatic
-    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 200)
-    fun registeredComputerAutoBootsAndClosesWhenRemoved(helper: GameTestHelper) {
-        val position = BlockPos.ZERO
-        val block = CompuktersRegistry.COMPUTER.get()
-        helper.setBlock(position, block)
-        helper.assertBlockPresent(block, position)
-        val entity = helper.getBlockEntity<NeoForgeComputerBlockEntity>(position)
-        helper.assertTrue(
-            entity.type === CompuktersRegistry.COMPUTER_BLOCK_ENTITY.get(),
-            "computer block created the wrong block entity type",
+    @SubscribeEvent
+    fun registerTests(event: RegisterGameTestsEvent) {
+        val environment =
+            event.registerEnvironment(
+                Identifier.fromNamespaceAndPath(MOD_ID, "empty"),
+                TestEnvironmentDefinition.AllOf(),
+            )
+        val testData =
+            TestData(
+                environment,
+                Identifier.withDefaultNamespace("bastion/mobs/empty"),
+                200,
+                0,
+                true,
+                Rotation.NONE,
+                false,
+                1,
+                1,
+                false,
+                0,
+            )
+        event.registerTest(
+            Identifier.fromNamespaceAndPath(MOD_ID, "computer_lifecycle"),
+            ComputerLifecycleGameTest(testData),
         )
-        entity.installArtifact(loadTerminalFixture())
+    }
 
-        helper.succeedWhen {
-            helper.assertTrue(entity.runtimeState != neverStarted(), "computer did not auto-boot on the server ticker")
-            helper.setBlock(position, Blocks.AIR)
-            helper.assertTrue(entity.isRemoved, "removing the block did not remove its computer block entity")
-            helper.assertTrue(entity.runtimeState == ProgramComputerState.Closed, "removing the block did not close its VM")
+    private class ComputerLifecycleGameTest(
+        testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
+    ) : GameTestInstance(testData) {
+        override fun run(helper: GameTestHelper) {
+            val position = BlockPos.ZERO
+            val block = CompuktersRegistry.COMPUTER.get()
+            helper.setBlock(position, block)
+            helper.assertBlockPresent(block, position)
+            val entity = helper.getBlockEntity(position, NeoForgeComputerBlockEntity::class.java)
+            helper.assertTrue(
+                entity.type === CompuktersRegistry.COMPUTER_BLOCK_ENTITY.get(),
+                "computer block created the wrong block entity type",
+            )
+            entity.installArtifact(loadTerminalFixture())
+
+            helper.succeedWhen {
+                helper.assertTrue(entity.runtimeState != neverStarted(), "computer did not auto-boot on the server ticker")
+                helper.setBlock(position, Blocks.AIR)
+                helper.assertTrue(entity.isRemoved, "removing the block did not remove its computer block entity")
+                helper.assertTrue(entity.runtimeState == ProgramComputerState.Closed, "removing the block did not close its VM")
+            }
         }
+
+        override fun codec(): MapCodec<out GameTestInstance> = MapCodec.unit(this)
+
+        override fun typeDescription(): MutableComponent = Component.literal("Compukters computer lifecycle")
     }
 
     private fun loadTerminalFixture(): ByteArray {
