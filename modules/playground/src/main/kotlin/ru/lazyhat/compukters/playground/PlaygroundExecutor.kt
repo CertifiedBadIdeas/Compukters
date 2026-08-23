@@ -19,6 +19,8 @@ import ru.lazyhat.compukters.lang.runtime.capability.TerminalLimits
 import ru.lazyhat.compukters.lang.runtime.vm.GuestTrap
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.QuotaKind
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.VmAdmissionException
 import ru.lazyhat.compukters.lang.runtime.vm.VmFault
@@ -27,8 +29,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
 import ru.lazyhat.compukters.lang.runtime.vm.VmStartException
-import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
+import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.file.Path
@@ -109,12 +111,19 @@ class NativePlaygroundExecutor(
                             return PlaygroundExecution.Success
                         }
 
-                        VmOutcome.WaitingForLine -> {
+                        VmOutcome.WaitingForTerminalEvent -> {
                             publishTerminal(session, publishedTerminalText)?.let { return it }
                             publishedTerminalText = terminalText(session.terminalFullState())
                             when (val response = terminal.invoke(compatibilityRequest(READ_OPERATION))) {
-                                is HostResponse.StringSuccess -> session.provideCompatibilityLine(response.value)
-                                is HostResponse.Failure -> return PlaygroundExecution.HostFailure(response.kind, response.code)
+                                is HostResponse.StringSuccess -> {
+                                    session.sendTerminalText(response.value)
+                                    session.sendTerminalKey(TerminalKey.ENTER, TerminalKeyAction.PRESS)
+                                }
+
+                                is HostResponse.Failure -> {
+                                    return PlaygroundExecution.HostFailure(response.kind, response.code)
+                                }
+
                                 HostResponse.UnitSuccess -> {
                                     return PlaygroundExecution.PlatformFailure("terminal input returned no line")
                                 }

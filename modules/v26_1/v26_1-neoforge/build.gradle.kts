@@ -38,8 +38,6 @@ configurations[gameTest.runtimeOnlyConfigurationName].extendsFrom(configurations
 gameTest.compileClasspath += sourceSets.main.get().compileClasspath + sourceSets.main.get().output
 gameTest.runtimeClasspath += sourceSets.main.get().runtimeClasspath + sourceSets.main.get().output
 
-val terminalFixture = rootProject.file("host/compukter-vm/tests/fixtures/terminal-session.hex")
-
 tasks.named("check") {
     dependsOn(gameTest.classesTaskName)
 }
@@ -82,16 +80,11 @@ loom {
     // `loom-runs-convention` precompiled script plugin (build-scripts).
     // Only neoforge-specific runs live here.
     runs {
-        matching { it.name.startsWith("client") }.configureEach {
-            property("compukter.vm.devTerminalFixture", terminalFixture.absolutePath)
-        }
-
         register("gameTestServer") {
             server()
             forgeTemplate("gameTestServer")
             runDir("run/gameTestServer")
             property("neoforge.enabledGameTestNamespaces", "compukters")
-            property("compukter.vm.terminalFixture", terminalFixture.absolutePath)
             ideConfigGenerated(true)
             vmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
             mods {
@@ -118,13 +111,6 @@ dependencies {
 
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
     add(gameTest.implementationConfigurationName, project(path = projects.v261Common.path))
-}
-
-tasks.test {
-    inputs.file(terminalFixture)
-    doFirst {
-        systemProperty("compukter.vm.terminalFixture", terminalFixture.absolutePath)
-    }
 }
 
 val nativeOs =
@@ -188,6 +174,9 @@ val verifyPackagedCompukterFfi =
             }
             check("ru/lazyhat/compukters/impl/computer/NeoForgeComputerBlockEntity.class" in entries) {
                 "NeoForge computer classes are missing from ${archive.name}"
+            }
+            check("system/programs/shell.cpkt" in entries) {
+                "packaged system shell is missing from ${archive.name}"
             }
             check("assets/compukters/items/compukter.json" in entries) {
                 "26.1 item model is missing from ${archive.name}"

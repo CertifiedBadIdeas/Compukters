@@ -52,7 +52,6 @@ pub(crate) enum OwnedOutcome {
     Crashed(GuestTrap),
     Faulted(VmFault),
     HostFailed(HostFailure),
-    WaitingForLine,
     WaitingForTerminalEvent,
 }
 
@@ -182,16 +181,6 @@ pub(crate) fn terminal_text(handle: u64, text: &str) -> Result<(), BridgeError> 
         .map_err(copy_input_error)
 }
 
-pub(crate) fn terminal_compatibility_line(handle: u64, units: &[u16]) -> Result<(), BridgeError> {
-    sessions()
-        .with(handle, |computer| {
-            computer
-                .provide_compatibility_line(units)
-                .map_err(copy_error)
-        })
-        .map_err(BridgeError::Handle)?
-}
-
 pub(crate) fn close(handle: u64) -> Result<(), BridgeError> {
     sessions().close(handle).map_err(BridgeError::Handle)
 }
@@ -203,7 +192,6 @@ fn sessions() -> &'static HandleTable<ComputerMachine> {
 fn copy_outcome(outcome: ComputerAdvanceOutcome) -> OwnedOutcome {
     match outcome {
         ComputerAdvanceOutcome::SliceExhausted => OwnedOutcome::SliceExhausted,
-        ComputerAdvanceOutcome::WaitingForLine => OwnedOutcome::WaitingForLine,
         ComputerAdvanceOutcome::WaitingForTerminalEvent => OwnedOutcome::WaitingForTerminalEvent,
         ComputerAdvanceOutcome::HostRequest(request) => OwnedOutcome::HostRequest(OwnedRequest {
             id: request.id,
@@ -248,7 +236,6 @@ fn copy_error(error: ComputerError) -> BridgeError {
         ComputerError::Resume(error) => BridgeError::Resume(error),
         ComputerError::InvalidRequestId => BridgeError::InvalidRequestId,
         ComputerError::InvalidTerminalRequest
-        | ComputerError::NoPendingCompatibilityLine
         | ComputerError::ActiveTerminalEvent
         | ComputerError::NoActiveTerminalEvent
         | ComputerError::WrongTerminalEventKind => BridgeError::InvalidOperation,
@@ -274,53 +261,5 @@ fn profile() -> ExecutionProfile {
         maximum_outbound_utf16_code_units: 4096,
         maximum_inbound_utf16_code_units: 4096,
         maximum_accepted_responses: 64,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn terminal_artifact() -> Vec<u8> {
-        let encoded = include_str!("../../compukter-vm/tests/fixtures/terminal-session.hex")
-            .trim()
-            .as_bytes();
-        encoded
-            .chunks_exact(2)
-            .map(|pair| {
-                let digit = |value| match value {
-                    b'0'..=b'9' => value - b'0',
-                    b'a'..=b'f' => value - b'a' + 10,
-                    _ => panic!("invalid fixture hex"),
-                };
-                (digit(pair[0]) << 4) | digit(pair[1])
-            })
-            .collect()
-    }
-
-    fn advance_until_waiting(handle: u64) {
-        loop {
-            match advance(handle, 64, 64).unwrap() {
-                OwnedOutcome::SliceExhausted => {}
-                OwnedOutcome::WaitingForLine => return,
-                other => panic!("unexpected outcome: {other:?}"),
-            }
-        }
-    }
-
-    #[test]
-    fn computer_consumes_terminal_requests_and_retains_state() {
-        let handle = create(terminal_artifact()).unwrap();
-        advance_until_waiting(handle);
-        terminal_commit(handle).unwrap();
-        let state = terminal_full_state(handle).unwrap();
-        assert_eq!('>' as u32, state.cells()[0].code_point());
-        let input = vec![0x0041, 0xd800, 0x0100, 0xdc00, 0x0042];
-        terminal_compatibility_line(handle, &input).unwrap();
-        close(handle).unwrap();
-        assert!(matches!(
-            advance(handle, 64, 64),
-            Err(BridgeError::Handle(HandleError::Stale))
-        ));
     }
 }

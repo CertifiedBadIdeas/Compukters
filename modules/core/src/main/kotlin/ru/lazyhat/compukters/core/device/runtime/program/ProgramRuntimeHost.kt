@@ -36,16 +36,10 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
 class ProgramRuntimeHost internal constructor(
     private val sessionFactory: ProgramVmSessionFactory,
     private val tickBudget: ProgramTickBudget = ProgramTickBudget(),
-    private val terminalLimits: ProgramTerminalLimits = ProgramTerminalLimits(),
 ) : AutoCloseable {
-    constructor(
-        tickBudget: ProgramTickBudget = ProgramTickBudget(),
-        terminalLimits: ProgramTerminalLimits = ProgramTerminalLimits(),
-    ) : this(NativeProgramVmSessionFactory, tickBudget, terminalLimits)
+    constructor(tickBudget: ProgramTickBudget = ProgramTickBudget()) : this(NativeProgramVmSessionFactory, tickBudget)
 
     private var session: ProgramVmSession? = null
-    private var waitingForTerminalEvent = false
-
     var state: ProgramRuntimeState = ProgramRuntimeState.Idle
         private set
 
@@ -53,7 +47,6 @@ class ProgramRuntimeHost internal constructor(
         if (state == ProgramRuntimeState.Closed) return ProgramStartResult.Closed
         releaseSession()
         state = ProgramRuntimeState.Idle
-        waitingForTerminalEvent = false
         return try {
             session = sessionFactory.open(artifact)
             state = ProgramRuntimeState.Running
@@ -99,14 +92,7 @@ class ProgramRuntimeHost internal constructor(
                     return@repeat
                 }
 
-                VmOutcome.WaitingForLine -> {
-                    waitingForTerminalEvent = false
-                    state = ProgramRuntimeState.WaitingForInput
-                    return
-                }
-
                 VmOutcome.WaitingForTerminalEvent -> {
-                    waitingForTerminalEvent = true
                     state = ProgramRuntimeState.WaitingForInput
                     return
                 }
@@ -153,20 +139,6 @@ class ProgramRuntimeHost internal constructor(
                     if (!resume(outcome.request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))) return
                 }
             }
-        }
-    }
-
-    fun submitLine(line: String): Boolean {
-        if (state != ProgramRuntimeState.WaitingForInput || waitingForTerminalEvent) return false
-        if (line.length > terminalLimits.maximumInputLineCodeUnits) return false
-        return try {
-            requireNotNull(session).provideCompatibilityLine(line)
-            waitingForTerminalEvent = false
-            state = ProgramRuntimeState.Running
-            true
-        } catch (error: VmBridgeException) {
-            finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))
-            false
         }
     }
 
@@ -221,10 +193,7 @@ class ProgramRuntimeHost internal constructor(
         val activeSession = session ?: return false
         return try {
             activeSession.input()
-            if (state == ProgramRuntimeState.WaitingForInput && waitingForTerminalEvent) {
-                waitingForTerminalEvent = false
-                state = ProgramRuntimeState.Running
-            }
+            if (state == ProgramRuntimeState.WaitingForInput) state = ProgramRuntimeState.Running
             true
         } catch (error: VmBridgeException) {
             finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))
@@ -246,7 +215,6 @@ class ProgramRuntimeHost internal constructor(
     private fun releaseSession() {
         session?.close()
         session = null
-        waitingForTerminalEvent = false
     }
 
     private fun VmBridgeException.bridgeDetail(): String = message ?: "native VM bridge failure"

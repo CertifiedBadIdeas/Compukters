@@ -17,7 +17,9 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalChange
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 
-class TerminalReplica(initial: TerminalFullPayload) {
+class TerminalReplica(
+    initial: TerminalFullPayload,
+) {
     init {
         require(initial.machineId > 0) { "terminal machine id must be positive" }
     }
@@ -56,7 +58,10 @@ class TerminalReplica(initial: TerminalFullPayload) {
         var cursorVisible = current.cursorVisible
         payload.delta.changes.forEach { change ->
             when (change) {
-                is TerminalChange.Patch -> change.cells.forEachIndexed { offset, cell -> cells[change.start + offset] = cell }
+                is TerminalChange.Patch -> {
+                    change.cells.forEachIndexed { offset, cell -> cells[change.start + offset] = cell }
+                }
+
                 is TerminalChange.Fill -> {
                     repeat(change.height) { y ->
                         repeat(change.width) { x ->
@@ -64,6 +69,7 @@ class TerminalReplica(initial: TerminalFullPayload) {
                         }
                     }
                 }
+
                 is TerminalChange.Scroll -> {
                     val shift = change.rows * TerminalProtocol.WIDTH
                     repeat(TerminalProtocol.CELL_COUNT - shift) { index -> cells[index] = cells[index + shift] }
@@ -71,10 +77,12 @@ class TerminalReplica(initial: TerminalFullPayload) {
                         cells[index] = change.fill
                     }
                 }
+
                 is TerminalChange.Cursor -> {
                     cursor = change.position
                     cursorVisible = change.visible
                 }
+
                 TerminalChange.Reset -> {
                     cells.fill(DEFAULT_CELL)
                     cursor = TerminalPosition(0, 0)

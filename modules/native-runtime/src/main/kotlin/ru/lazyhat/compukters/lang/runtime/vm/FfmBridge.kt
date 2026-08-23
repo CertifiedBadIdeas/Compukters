@@ -36,7 +36,6 @@ internal class FfmBridge private constructor(
     private val terminalChangesSinceHandle: MethodHandle,
     private val terminalKeyHandle: MethodHandle,
     private val terminalTextHandle: MethodHandle,
-    private val terminalCompatibilityLineHandle: MethodHandle,
 ) : LowLevelVmBridge,
     AutoCloseable {
     fun abiVersion(): Int = abiVersionHandle.invokeExact() as Int
@@ -151,22 +150,6 @@ internal class FfmBridge private constructor(
                     handle,
                     callArena.nativeInts(codePoints),
                     codePoints.size.toLong(),
-                ) as Int,
-            )
-        }
-    }
-
-    override fun terminalCompatibilityLine(
-        handle: Long,
-        value: CharArray,
-    ) {
-        Arena.ofConfined().use { callArena ->
-            requireSuccess(
-                "terminal compatibility line",
-                terminalCompatibilityLineHandle.invokeExact(
-                    handle,
-                    callArena.nativeChars(value),
-                    value.size.toLong(),
                 ) as Int,
             )
         }
@@ -361,16 +344,6 @@ internal class FfmBridge private constructor(
                     terminalTextHandle =
                         downcall(
                             "compukter_terminal_text",
-                            FunctionDescriptor.of(
-                                ValueLayout.JAVA_INT,
-                                ValueLayout.JAVA_LONG,
-                                ValueLayout.ADDRESS,
-                                ValueLayout.JAVA_LONG,
-                            ),
-                        ),
-                    terminalCompatibilityLineHandle =
-                        downcall(
-                            "compukter_terminal_compatibility_line",
                             FunctionDescriptor.of(
                                 ValueLayout.JAVA_INT,
                                 ValueLayout.JAVA_LONG,

@@ -21,7 +21,7 @@ class FfmRuntimeIntegrationTest {
     fun `terminal artifact runs through Kotlin FFM and Rust VM`() =
         runBlocking {
             VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukter.ffi.library")))
-            TerminalFixtureProgram.run(Path.of(requiredProperty("compukter.vm.terminalFixture")))
+            ShellProgram.run(Path.of(requiredProperty("compukters.shell.artifact")))
         }
 
     private fun requiredProperty(name: String): String = requireNotNull(System.getProperty(name)) { "missing test system property $name" }

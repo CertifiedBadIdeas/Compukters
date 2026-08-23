@@ -63,12 +63,12 @@ val nativeFilename =
 val nativeResourcePath = "META-INF/natives/$nativeOs/$nativeArch/$nativeFilename"
 val compukterFfiLibrary = rootProject.file(".toolchain/build/cargo/compukter-ffi/release/$nativeFilename")
 val generatedNativeResources = layout.buildDirectory.dir("generated/native-resources")
-val terminalFixture = rootProject.file("host/compukter-vm/tests/fixtures/terminal-session.hex")
+val shellArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/shell.cpkt")
 
 val preparePackagedCompukterFfi =
     tasks.register<Sync>("preparePackagedCompukterFfi") {
         description = "Copies the current-host Compukter FFM library into its stable classpath resource."
-        dependsOn(rootProject.tasks.named("cargoBuildCompukterFfi"))
+        dependsOn(rootProject.tasks.named("cargoBuildCompukterFfi"), ":compiler-k2:generateShellArtifact")
         inputs.property("nativeOs", nativeOs)
         inputs.property("nativeArch", nativeArch)
         inputs.file(compukterFfiLibrary)
@@ -96,11 +96,11 @@ val nativeIntegrationTest =
         classpath = sourceSets.test.get().runtimeClasspath
         filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.*")
         inputs.file(compukterFfiLibrary)
-        inputs.file(terminalFixture)
+        inputs.file(shellArtifact)
         jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
         doFirst {
             systemProperty("compukter.ffi.library", compukterFfiLibrary.absolutePath)
-            systemProperty("compukter.vm.terminalFixture", terminalFixture.absolutePath)
+            systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
         }
     }
 
@@ -108,15 +108,15 @@ val packagedNativeIntegrationTest =
     tasks.register<Test>("packagedNativeIntegrationTest") {
         description = "Extracts the packaged current-host FFM library and runs the terminal fixture in a fresh JVM."
         group = "verification"
-        dependsOn(rootProject.tasks.named("cargoBuildCompukterFfi"))
+        dependsOn(rootProject.tasks.named("cargoBuildCompukterFfi"), ":compiler-k2:generateShellArtifact")
         useJUnitPlatform()
         testClassesDirs = sourceSets.test.get().output.classesDirs
         classpath = sourceSets.test.get().runtimeClasspath
         filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.PackagedFfmRuntimeIntegrationTest")
-        inputs.file(terminalFixture)
+        inputs.file(shellArtifact)
         jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
         doFirst {
-            systemProperty("compukter.vm.terminalFixture", terminalFixture.absolutePath)
+            systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
         }
     }
 

@@ -22,7 +22,6 @@ package ru.lazyhat.compukters.core.device.computer
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramTerminalLimits
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
@@ -41,12 +40,11 @@ class ProgramComputer internal constructor(
         imageSource: ProgramImageSource,
         stateSink: ProgramComputerStateSink,
         tickBudget: ProgramTickBudget = ProgramTickBudget(),
-        terminalLimits: ProgramTerminalLimits = ProgramTerminalLimits(),
     ) : this(
         deviceId,
         imageSource,
         stateSink,
-        RuntimeProgramHost(ProgramRuntimeHost(tickBudget, terminalLimits)),
+        RuntimeProgramHost(ProgramRuntimeHost(tickBudget)),
     )
 
     var state: ProgramComputerState = ProgramComputerState.PoweredOff(ProgramComputerStopReason.NeverStarted)
@@ -89,24 +87,6 @@ class ProgramComputer internal constructor(
     ): Boolean = state.isPoweredOn() && host.sendTerminalKey(key, action, modifiers)
 
     fun sendTerminalText(value: String): Boolean = state.isPoweredOn() && host.sendTerminalText(value)
-
-    fun submitLine(line: String): Boolean {
-        if (state != ProgramComputerState.WaitingForInput) return false
-        val accepted = host.submitLine(line)
-        if (accepted) {
-            transitionTo(ProgramComputerState.Running)
-            return true
-        }
-        val runtimeState = host.state
-        if (runtimeState != ProgramRuntimeState.WaitingForInput) {
-            if (runtimeState == ProgramRuntimeState.Running) {
-                transitionTo(failure(ProgramComputerFailure.RuntimeContract(ProgramRuntimeState.Running)))
-            } else {
-                transitionFrom(runtimeState)
-            }
-        }
-        return false
-    }
 
     fun shutdown() {
         if (state == ProgramComputerState.Closed || state == SHUTDOWN_STATE) return

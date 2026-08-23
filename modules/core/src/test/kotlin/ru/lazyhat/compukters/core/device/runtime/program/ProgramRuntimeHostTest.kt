@@ -72,20 +72,10 @@ class ProgramRuntimeHostTest {
     }
 
     @Test
-    fun `terminal limits must be positive`() {
-        assertFailsWith<IllegalArgumentException> {
-            ProgramTerminalLimits(
-                maximumInputLineCodeUnits = 0,
-            )
-        }
-    }
-
-    @Test
     fun `defaults expose a bounded idle runtime model`() {
         assertEquals(4_096, ProgramTickBudget().guestBudgetPerAdvance)
         assertEquals(256, ProgramTickBudget().maintenanceBudgetPerAdvance)
         assertEquals(32, ProgramTickBudget().maximumAdvancesPerTick)
-        assertEquals(4_096, ProgramTerminalLimits().maximumInputLineCodeUnits)
         assertEquals(ProgramRuntimeState.Idle, ProgramRuntimeState.Idle)
     }
 
@@ -115,7 +105,7 @@ class ProgramRuntimeHostTest {
         val terminal = terminalState(revision = 7)
         val session =
             ScriptedSession(
-                outcomes = listOf(VmOutcome.WaitingForLine, VmOutcome.Halted(VmValue.I32(0))),
+                outcomes = listOf(VmOutcome.WaitingForTerminalEvent, VmOutcome.Halted(VmValue.I32(0))),
                 terminalState = terminal,
                 terminalUpdate = TerminalUpdate.Unchanged(7),
             )
@@ -128,9 +118,6 @@ class ProgramRuntimeHostTest {
         assertEquals(TerminalUpdate.Unchanged(7), host.terminalChangesSince(7))
         host.sendTerminalKey(TerminalKey.ENTER, TerminalKeyAction.PRESS, setOf(TerminalModifier.SHIFT))
         host.sendTerminalText("λ😀")
-        assertTrue(host.submitLine("answer"))
-        assertEquals(listOf("answer"), session.compatibilityLines)
-
         assertEquals(ProgramRuntimeState.Halted(VmValue.I32(0)), host.serverTick())
         assertEquals(2, session.terminalCommits)
         assertEquals(0, session.closeCalls)
@@ -254,29 +241,6 @@ class ProgramRuntimeHostTest {
     }
 
     @Test
-    fun `read waits without blocking and valid input resumes only on the next tick`() {
-        val session =
-            ScriptedSession(
-                outcomes =
-                    listOf(
-                        VmOutcome.WaitingForLine,
-                        VmOutcome.Halted(VmValue.StringValue("done")),
-                    ),
-            )
-        val host = host(session)
-        host.start(byteArrayOf(1))
-
-        assertEquals(ProgramRuntimeState.WaitingForInput, host.serverTick())
-        assertEquals(1, session.advances.size)
-        assertTrue(host.submitLine("Ada"))
-        assertEquals(listOf("Ada"), session.compatibilityLines)
-        assertEquals(ProgramRuntimeState.Running, host.state)
-        assertEquals(1, session.advances.size)
-
-        assertEquals(ProgramRuntimeState.Halted(VmValue.StringValue("done")), host.serverTick())
-    }
-
-    @Test
     fun `raw terminal wait wakes after accepted input and executes only on the next tick`() {
         val session =
             ScriptedSession(
@@ -292,7 +256,6 @@ class ProgramRuntimeHostTest {
         assertEquals(ProgramRuntimeState.WaitingForInput, host.serverTick())
         assertEquals(1, session.advances.size)
         assertEquals(1, session.terminalCommits)
-        assertFalse(host.submitLine("legacy"))
         assertTrue(host.sendTerminalText("λ😀"))
         assertEquals(listOf("λ😀"), session.terminalTexts)
         assertEquals(ProgramRuntimeState.Running, host.state)
@@ -304,30 +267,10 @@ class ProgramRuntimeHostTest {
     }
 
     @Test
-    fun `input is rejected outside a pending read and when over its UTF16 limit`() {
-        val session = ScriptedSession(outcomes = listOf(VmOutcome.WaitingForLine))
-        val host =
-            ProgramRuntimeHost(
-                sessionFactory = ProgramVmSessionFactory { session },
-                terminalLimits = ProgramTerminalLimits(3),
-            )
-
-        assertFalse(host.submitLine("no session"))
-        host.start(byteArrayOf(1))
-        assertFalse(host.submitLine("not waiting"))
-        assertEquals(ProgramRuntimeState.WaitingForInput, host.serverTick())
-        assertFalse(host.submitLine("four"))
-        assertEquals(ProgramRuntimeState.WaitingForInput, host.state)
-        assertEquals(emptyList(), session.compatibilityLines)
-        assertTrue(host.submitLine("\ud83d\ude00x"))
-        assertEquals(listOf("\ud83d\ude00x"), session.compatibilityLines)
-    }
-
-    @Test
     fun `replacement and shutdown close the previous retained terminal`() {
         val first =
             ScriptedSession(
-                outcomes = listOf(VmOutcome.WaitingForLine),
+                outcomes = listOf(VmOutcome.WaitingForTerminalEvent),
             )
         val second = ScriptedSession(defaultOutcome = VmOutcome.SliceExhausted)
         val sessions = ArrayDeque(listOf(first, second))
@@ -342,29 +285,9 @@ class ProgramRuntimeHostTest {
         host.start(byteArrayOf(2))
 
         assertEquals(1, first.closeCalls)
-        assertFalse(host.submitLine("stale"))
         host.shutdown()
         assertEquals(ProgramRuntimeState.Idle, host.state)
         assertEquals(1, second.closeCalls)
-    }
-
-    @Test
-    fun `bridge failure while resuming input terminates and releases the session`() {
-        val session =
-            ScriptedSession(
-                outcomes = listOf(VmOutcome.WaitingForLine),
-                resumeError = VmBridgeException("resume failed"),
-            )
-        val host = host(session)
-        host.start(byteArrayOf(1))
-        host.serverTick()
-
-        assertFalse(host.submitLine("Ada"))
-        assertEquals(
-            ProgramRuntimeState.Failed(ProgramFailure.Bridge("resume failed")),
-            host.state,
-        )
-        assertEquals(1, session.closeCalls)
     }
 
     private fun host(
@@ -390,7 +313,6 @@ class ProgramRuntimeHostTest {
         var terminalCommits = 0
         val terminalKeys = mutableListOf<Triple<TerminalKey, TerminalKeyAction, Set<TerminalModifier>>>()
         val terminalTexts = mutableListOf<String>()
-        val compatibilityLines = mutableListOf<String>()
 
         override fun advance(
             guestBudget: Int,
@@ -430,11 +352,6 @@ class ProgramRuntimeHostTest {
 
         override fun sendTerminalText(value: String) {
             terminalTexts += value
-        }
-
-        override fun provideCompatibilityLine(value: String) {
-            resumeError?.let { throw it }
-            compatibilityLines += value
         }
     }
 

@@ -10,6 +10,9 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 compukter-vm = { path = "../compukter-vm" }
 
+[dev-dependencies]
+sha2 = "0.10"
+
 [profile.release]
 codegen-units = 1
 lto = "thin"

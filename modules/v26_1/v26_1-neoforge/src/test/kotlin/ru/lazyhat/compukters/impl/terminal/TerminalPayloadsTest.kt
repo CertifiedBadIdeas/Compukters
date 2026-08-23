@@ -24,12 +24,12 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import java.util.UUID
 
 class TerminalPayloadsTest {
     @Test

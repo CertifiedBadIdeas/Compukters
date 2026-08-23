@@ -23,7 +23,7 @@ class PackagedFfmRuntimeIntegrationTest {
     fun `packaged FFM resource loads and executes terminal fixture`() =
         runBlocking {
             assertIs<VmRuntimeLoadResult.Loaded>(VmRuntime.ensureLoaded())
-            TerminalFixtureProgram.run(Path.of(requiredProperty("compukter.vm.terminalFixture")))
+            ShellProgram.run(Path.of(requiredProperty("compukters.shell.artifact")))
         }
 
     private fun requiredProperty(name: String): String = requireNotNull(System.getProperty(name)) { "missing test system property $name" }

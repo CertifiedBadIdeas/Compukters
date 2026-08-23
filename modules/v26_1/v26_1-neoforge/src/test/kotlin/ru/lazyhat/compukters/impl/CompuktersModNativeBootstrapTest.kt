@@ -12,23 +12,16 @@
 package ru.lazyhat.compukters.impl
 
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
-import java.nio.file.Path
-import kotlin.io.path.readText
 import kotlin.test.Test
 
 class CompuktersModNativeBootstrapTest {
     @Test
     fun `mod construction loads packaged native runtime before a VM session opens`() {
         CompuktersMod.requireNativeRuntime()
-        val encoded = Path.of(requiredProperty("compukter.vm.terminalFixture")).readText().trim()
-        require(encoded.length % 2 == 0) { "fixture contains incomplete hexadecimal byte" }
         val artifact =
-            ByteArray(encoded.length / 2) { index ->
-                encoded.substring(index * 2, index * 2 + 2).toInt(16).toByte()
-            }
+            checkNotNull(CompuktersModNativeBootstrapTest::class.java.getResourceAsStream("/system/programs/shell.cpkt"))
+                .use { it.readAllBytes() }
 
         VmSession.open(artifact).use { }
     }
-
-    private fun requiredProperty(name: String): String = requireNotNull(System.getProperty(name)) { "missing test system property $name" }
 }

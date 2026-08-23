@@ -43,7 +43,6 @@ class VmSessionTest {
         bridge.outcomes += bytes(6, 7)
         bridge.outcomes += bytes(3, 1, long(4), long(3))
         bridge.outcomes += bytes(7, 0, int(17))
-        bridge.outcomes += bytes(8)
         bridge.outcomes += bytes(9)
 
         assertEquals(VmOutcome.SliceExhausted, session.advance(64, 64))
@@ -64,7 +63,6 @@ class VmSessionTest {
         assertEquals(VmOutcome.Faulted(VmFault.HANDLE_EXHAUSTED), session.advance(64, 64))
         assertEquals(VmOutcome.QuotaExhausted(QuotaKind.HOST_REQUESTS, 4, 3), session.advance(64, 64))
         assertEquals(VmOutcome.HostFailed(HostFailureKind.END_OF_FILE, 17), session.advance(64, 64))
-        assertEquals(VmOutcome.WaitingForLine, session.advance(64, 64))
         assertEquals(VmOutcome.WaitingForTerminalEvent, session.advance(64, 64))
     }
 
@@ -118,11 +116,9 @@ class VmSessionTest {
         session.commitTerminal()
         session.sendTerminalKey(TerminalKey.ENTER, TerminalKeyAction.REPEAT, setOf(TerminalModifier.CONTROL))
         session.sendTerminalText("λ😀")
-        session.provideCompatibilityLine("answer")
         assertEquals(1, bridge.terminalCommits)
         assertEquals(listOf(TerminalKeyInput(13, 1, 2)), bridge.terminalKeys)
         assertEquals(listOf(listOf('λ'.code, 0x1f600)), bridge.terminalTexts.map(IntArray::toList))
-        assertEquals(listOf("answer"), bridge.terminalLines.map(::String))
     }
 
     @Test
@@ -186,7 +182,6 @@ class VmSessionTest {
         var terminalCommits = 0
         val terminalKeys = mutableListOf<TerminalKeyInput>()
         val terminalTexts = mutableListOf<IntArray>()
-        val terminalLines = mutableListOf<CharArray>()
 
         override fun create(artifact: ByteArray): ByteArray = createResult
 
@@ -249,13 +244,6 @@ class VmSessionTest {
             codePoints: IntArray,
         ) {
             terminalTexts += codePoints
-        }
-
-        override fun terminalCompatibilityLine(
-            handle: Long,
-            value: CharArray,
-        ) {
-            terminalLines += value
         }
     }
 

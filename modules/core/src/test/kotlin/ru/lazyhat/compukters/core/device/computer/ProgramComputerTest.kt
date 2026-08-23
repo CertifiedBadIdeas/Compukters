@@ -140,8 +140,6 @@ class ProgramComputerTest {
                 tickStates = listOf(ProgramRuntimeState.WaitingForInput),
                 terminalState = terminal,
                 terminalUpdate = TerminalUpdate.Unchanged(4),
-                submitResult = true,
-                submitState = ProgramRuntimeState.Running,
             )
         val fixture = fixture(image = byteArrayOf(1), host = host)
         fixture.computer.turnOn()
@@ -158,103 +156,13 @@ class ProgramComputerTest {
             ),
         )
         assertTrue(fixture.computer.sendTerminalText("λ😀"))
-        assertTrue(fixture.computer.submitLine("answer"))
-        assertEquals(listOf("answer"), host.submittedLines)
         assertEquals(Triple(TerminalKey.ENTER, TerminalKeyAction.PRESS, setOf(TerminalModifier.SHIFT)), host.keys.single())
         assertEquals(listOf("λ😀"), host.texts)
         assertEquals(
             listOf<ObservedEvent>(
                 ObservedEvent.State(ProgramComputerState.WaitingForInput),
-                ObservedEvent.State(ProgramComputerState.Running),
             ),
             fixture.events,
-        )
-    }
-
-    @Test
-    fun `accepted line publishes running without recursively ticking`() {
-        val host =
-            FakeProgramHost(
-                tickStates = listOf(ProgramRuntimeState.WaitingForInput),
-                submitResult = true,
-                submitState = ProgramRuntimeState.Running,
-            )
-        val fixture = fixture(image = byteArrayOf(1), host = host)
-        fixture.computer.turnOn()
-        fixture.computer.serverTick()
-        fixture.events.clear()
-
-        assertTrue(fixture.computer.submitLine("Ada"))
-
-        assertEquals(listOf("Ada"), host.submittedLines)
-        assertEquals(1, host.tickCalls)
-        assertEquals(listOf<ObservedEvent>(ObservedEvent.State(ProgramComputerState.Running)), fixture.events)
-    }
-
-    @Test
-    fun `input is gated and rejection preserves waiting state`() {
-        val host =
-            FakeProgramHost(
-                tickStates = listOf(ProgramRuntimeState.WaitingForInput),
-                submitResult = false,
-                submitState = ProgramRuntimeState.WaitingForInput,
-            )
-        val fixture = fixture(image = byteArrayOf(1), host = host)
-
-        assertFalse(fixture.computer.submitLine("before start"))
-        fixture.computer.turnOn()
-        assertFalse(fixture.computer.submitLine("before wait"))
-        fixture.computer.serverTick()
-        fixture.events.clear()
-
-        assertFalse(fixture.computer.submitLine("too long"))
-        assertEquals(ProgramComputerState.WaitingForInput, fixture.computer.state)
-        assertEquals(listOf("too long"), host.submittedLines)
-        assertEquals(emptyList(), fixture.events)
-    }
-
-    @Test
-    fun `resume failure becomes powered off runtime failure`() {
-        val failure = ProgramFailure.Trap(GuestTrap.NULL_REFERENCE)
-        val host =
-            FakeProgramHost(
-                tickStates = listOf(ProgramRuntimeState.WaitingForInput),
-                submitResult = false,
-                submitState = ProgramRuntimeState.Failed(failure),
-            )
-        val fixture = fixture(image = byteArrayOf(1), host = host)
-        fixture.computer.turnOn()
-        fixture.computer.serverTick()
-
-        assertFalse(fixture.computer.submitLine("Ada"))
-        assertEquals(
-            ProgramComputerState.PoweredOff(
-                ProgramComputerStopReason.Failure(ProgramComputerFailure.Runtime(failure)),
-            ),
-            fixture.computer.state,
-        )
-    }
-
-    @Test
-    fun `rejected line with running host becomes contract failure`() {
-        val host =
-            FakeProgramHost(
-                tickStates = listOf(ProgramRuntimeState.WaitingForInput),
-                submitResult = false,
-                submitState = ProgramRuntimeState.Running,
-            )
-        val fixture = fixture(image = byteArrayOf(1), host = host)
-        fixture.computer.turnOn()
-        fixture.computer.serverTick()
-
-        assertFalse(fixture.computer.submitLine("Ada"))
-        assertEquals(
-            ProgramComputerState.PoweredOff(
-                ProgramComputerStopReason.Failure(
-                    ProgramComputerFailure.RuntimeContract(ProgramRuntimeState.Running),
-                ),
-            ),
-            fixture.computer.state,
         )
     }
 
@@ -320,7 +228,6 @@ class ProgramComputerTest {
         )
         assertEquals(ProgramComputerState.Closed, closeFixture.computer.turnOn())
         assertEquals(ProgramComputerState.Closed, closeFixture.computer.reboot())
-        assertFalse(closeFixture.computer.submitLine("ignored"))
         assertEquals(1, closeFixture.imageLoads)
     }
 
@@ -418,14 +325,11 @@ class ProgramComputerTest {
         tickStates: List<ProgramRuntimeState> = emptyList(),
         val terminalState: TerminalState = terminalState(0),
         val terminalUpdate: TerminalUpdate = TerminalUpdate.Unchanged(0),
-        private val submitResult: Boolean = false,
-        private val submitState: ProgramRuntimeState = ProgramRuntimeState.WaitingForInput,
         private val startResult: ProgramStartResult = ProgramStartResult.Started,
     ) : ProgramHost {
         private val tickStates = ArrayDeque(tickStates)
         override var state: ProgramRuntimeState = ProgramRuntimeState.Idle
         val startCalls = mutableListOf<ByteArray>()
-        val submittedLines = mutableListOf<String>()
         var tickCalls = 0
         var shutdownCalls = 0
         var closeCalls = 0
@@ -447,12 +351,6 @@ class ProgramComputerTest {
             tickCalls++
             state = tickStates.removeFirstOrNull() ?: state
             return state
-        }
-
-        override fun submitLine(line: String): Boolean {
-            submittedLines += line
-            state = submitState
-            return submitResult
         }
 
         override fun terminalFullState(): TerminalState = terminalState

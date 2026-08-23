@@ -13,8 +13,11 @@ shell and programs executing on a computer inside Minecraft.
 
 The compiler, canonical artifact, JDK 25 FFM session, managed Rust VM, standalone
 playground, loader-independent `ProgramRuntimeHost`, and server computer block
-form an executable vertical slice. A real NeoForge GameTest covers registration,
-automatic boot, ticking, removal, and VM shutdown.
+form an executable vertical slice. Computers temporarily boot the packaged
+artifact compiled from the source-visible no-std `system/programs/shell.kt`;
+`boot.kt` and generic `process.run` are the next lifecycle layer. A real
+NeoForge GameTest covers registration, automatic boot, ticking, removal, and
+VM shutdown.
 
 The active game baseline is **Minecraft 26.1.2**, **NeoForge 26.1.2.97**, and
 **JDK 25**. The production archive uses Minecraft's official names directly;

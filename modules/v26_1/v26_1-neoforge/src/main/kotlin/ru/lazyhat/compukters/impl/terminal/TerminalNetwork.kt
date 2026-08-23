@@ -18,19 +18,15 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.level.Level
 import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
-import net.neoforged.fml.loading.FMLEnvironment
 import net.neoforged.neoforge.event.tick.ServerTickEvent
 import net.neoforged.neoforge.network.PacketDistributor
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent
 import net.neoforged.neoforge.network.handling.IPayloadContext
-import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity
-import java.nio.file.Path
 import java.util.UUID
 import java.util.WeakHashMap
-import kotlin.io.path.readText
 
 @EventBusSubscriber(modid = MOD_ID)
 object TerminalNetwork {
@@ -45,18 +41,12 @@ object TerminalNetwork {
         registrar.playToServer(TerminalClosePayload.TYPE, TerminalClosePayload.STREAM_CODEC, ::handleClose)
         registrar.playToServer(TerminalKeyPayload.TYPE, TerminalKeyPayload.STREAM_CODEC, ::handleKey)
         registrar.playToServer(TerminalTextPayload.TYPE, TerminalTextPayload.STREAM_CODEC, ::handleText)
-        registrar.playToServer(
-            TerminalCompatibilityLinePayload.TYPE,
-            TerminalCompatibilityLinePayload.STREAM_CODEC,
-            ::handleCompatibilityLine,
-        )
     }
 
     fun open(
         player: ServerPlayer,
         entity: ComputerBlockEntity,
     ) {
-        installDevFixtureIfAvailable(entity)
         val state = entity.prepareTerminal() ?: return
         val machineId = entity.terminalMachineId ?: return
         viewers[player.uuid] = Viewer(player.level().dimension(), entity.blockPos, machineId, state.revision)
@@ -105,6 +95,7 @@ object TerminalNetwork {
                     PacketDistributor.sendToPlayer(player, payload)
                 }
             }
+
             is TerminalUpdate.Full -> {
                 val payload = TerminalFullPayload(entity.blockPos, machineId, update.state, false)
                 players.forEach { player ->
@@ -112,9 +103,10 @@ object TerminalNetwork {
                     PacketDistributor.sendToPlayer(player, payload)
                 }
             }
+
             is TerminalUpdate.Unchanged,
             null,
-            -> Unit
+            -> {}
         }
     }
 
@@ -131,14 +123,17 @@ object TerminalNetwork {
                 viewers[player.uuid] = Viewer(player.level().dimension(), entity.blockPos, machineId, update.targetRevision)
                 context.reply(TerminalDeltaPayload(entity.blockPos, machineId, update))
             }
+
             is TerminalUpdate.Unchanged -> {
                 viewers[player.uuid] = Viewer(player.level().dimension(), entity.blockPos, machineId, update.revision)
             }
+
             is TerminalUpdate.Full -> {
                 val state = update.state
                 viewers[player.uuid] = Viewer(player.level().dimension(), entity.blockPos, machineId, state.revision)
                 context.reply(TerminalFullPayload(entity.blockPos, machineId, state, false))
             }
+
             null -> {
                 val state = entity.terminalFullState() ?: return
                 viewers[player.uuid] = Viewer(player.level().dimension(), entity.blockPos, machineId, state.revision)
@@ -174,15 +169,6 @@ object TerminalNetwork {
         }
     }
 
-    private fun handleCompatibilityLine(
-        payload: TerminalCompatibilityLinePayload,
-        context: IPayloadContext,
-    ) {
-        withInputTarget(payload.position, payload.machineId, context) { entity ->
-            entity.submitTerminalLine(payload.line)
-        }
-    }
-
     private fun withInputTarget(
         position: BlockPos,
         machineId: Long,
@@ -211,19 +197,6 @@ object TerminalNetwork {
             distanceToSqr(position.x + 0.5, position.y + 0.5, position.z + 0.5) <= MAXIMUM_DISTANCE_SQUARED &&
             level.getBlockEntity(position) is ComputerBlockEntity
 
-    private fun installDevFixtureIfAvailable(entity: ComputerBlockEntity) {
-        if (FMLEnvironment.isProduction() || entity.installedArtifact() != null) return
-        val fixturePath = System.getProperty(DEV_FIXTURE_PROPERTY) ?: return
-        runCatching {
-            val encoded = Path.of(fixturePath).readText().trim()
-            require(encoded.length % 2 == 0) { "fixture contains incomplete hexadecimal byte" }
-            ByteArray(encoded.length / 2) { index ->
-                encoded.substring(index * 2, index * 2 + 2).toInt(16).toByte()
-            }
-        }.onSuccess(entity::installArtifact)
-            .onFailure { error -> LOGGER.error(error) { "Could not install the terminal dev fixture" } }
-    }
-
     private data class Viewer(
         val dimension: ResourceKey<Level>,
         val position: BlockPos,
@@ -231,7 +204,6 @@ object TerminalNetwork {
         val revision: Long,
     )
 
-    private const val DEV_FIXTURE_PROPERTY = "compukter.vm.devTerminalFixture"
     private const val MAXIMUM_DISTANCE_SQUARED = 64.0
     private const val MAXIMUM_INPUT_EVENTS_PER_TICK = 64
 }
