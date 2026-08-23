@@ -23,6 +23,8 @@ class InstalledProgramStorage(
 
     private var installedArtifact: ByteArray? = null
 
+    fun hasArtifact(): Boolean = installedArtifact != null
+
     fun artifact(): ByteArray? = installedArtifact?.copyOf()
 
     fun install(artifact: ByteArray) {
