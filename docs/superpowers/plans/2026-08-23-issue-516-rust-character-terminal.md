@@ -150,13 +150,13 @@ git commit -m "feat(terminal): add retained Rust character device (#516)"
 - Modify: `modules/native-runtime/src/main/kotlin/ru/lazyhat/compukters/lang/runtime/vm/VmSession.kt`
 - Test: `modules/native-runtime/src/test/kotlin/ru/lazyhat/compukters/lang/runtime/vm/VmSessionTest.kt`
 
-- [ ] **Step 1: Write failing ownership tests**
+- [x] **Step 1: Write failing ownership tests**
 
 Run the existing artifact through `ComputerMachine`; prove print/println mutate
 Rust cells, readln yields `WaitingForLine`, compatibility input resumes it,
 halt preserves cells, and constructing a replacement machine starts blank.
 
-- [ ] **Step 2: Implement computer-level ownership**
+- [x] **Step 2: Implement computer-level ownership**
 
 Own `Session`, `TerminalDevice`, and pending compatibility read together. Move
 the `compukter:terminal/1.0` binding out of FFI, consume its three fixture
