@@ -53,6 +53,7 @@ pub(crate) enum OwnedOutcome {
     Faulted(VmFault),
     HostFailed(HostFailure),
     WaitingForLine,
+    WaitingForTerminalEvent,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -203,6 +204,7 @@ fn copy_outcome(outcome: ComputerAdvanceOutcome) -> OwnedOutcome {
     match outcome {
         ComputerAdvanceOutcome::SliceExhausted => OwnedOutcome::SliceExhausted,
         ComputerAdvanceOutcome::WaitingForLine => OwnedOutcome::WaitingForLine,
+        ComputerAdvanceOutcome::WaitingForTerminalEvent => OwnedOutcome::WaitingForTerminalEvent,
         ComputerAdvanceOutcome::HostRequest(request) => OwnedOutcome::HostRequest(OwnedRequest {
             id: request.id,
             namespace: request.namespace.into(),
@@ -245,9 +247,11 @@ fn copy_error(error: ComputerError) -> BridgeError {
         ComputerError::Run(error) => BridgeError::Run(error),
         ComputerError::Resume(error) => BridgeError::Resume(error),
         ComputerError::InvalidRequestId => BridgeError::InvalidRequestId,
-        ComputerError::InvalidTerminalRequest | ComputerError::NoPendingCompatibilityLine => {
-            BridgeError::InvalidOperation
-        }
+        ComputerError::InvalidTerminalRequest
+        | ComputerError::NoPendingCompatibilityLine
+        | ComputerError::ActiveTerminalEvent
+        | ComputerError::NoActiveTerminalEvent
+        | ComputerError::WrongTerminalEventKind => BridgeError::InvalidOperation,
     }
 }
 

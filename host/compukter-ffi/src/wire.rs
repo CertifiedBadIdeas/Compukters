@@ -85,6 +85,7 @@ pub(crate) fn encode_outcome(outcome: OwnedOutcome) -> Vec<u8> {
             encoder
         }
         OwnedOutcome::WaitingForLine => Encoder::new(8),
+        OwnedOutcome::WaitingForTerminalEvent => Encoder::new(9),
     };
     encoder.finish()
 }
@@ -365,6 +366,14 @@ mod tests {
                 limit: 4,
                 consumed: 3,
             })),
+        );
+    }
+
+    #[test]
+    fn terminal_event_wait_has_a_distinct_stable_wire_tag() {
+        assert_eq!(
+            vec![9],
+            encode_outcome(OwnedOutcome::WaitingForTerminalEvent)
         );
     }
 }
