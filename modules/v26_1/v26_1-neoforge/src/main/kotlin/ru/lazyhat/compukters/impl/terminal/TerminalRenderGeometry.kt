@@ -29,6 +29,7 @@ data class TerminalRect(
 class TerminalRenderGeometry(
     viewportWidth: Int,
     viewportHeight: Int,
+    private val fontProfile: TerminalFontProfile = TerminalFontProfile.DEFAULT,
 ) {
     init {
         require(viewportWidth >= 0 && viewportHeight >= 0) { "terminal viewport must not be negative" }
@@ -36,14 +37,16 @@ class TerminalRenderGeometry(
 
     val columns: Int = COLUMNS
     val rows: Int = ROWS
-    val gridWidth: Int = columns * CELL_WIDTH
-    val gridHeight: Int = rows * CELL_HEIGHT
+    val gridWidth: Int = columns * fontProfile.cellWidth
+    val gridHeight: Int = rows * fontProfile.cellHeight
+    val panelWidth: Int = gridWidth + PANEL_PADDING * 2
+    val panelHeight: Int = TITLE_HEIGHT + gridHeight + PANEL_PADDING
     val panel: TerminalRect =
         TerminalRect(
-            (viewportWidth - PANEL_WIDTH) / 2,
-            (viewportHeight - PANEL_HEIGHT) / 2,
-            (viewportWidth - PANEL_WIDTH) / 2 + PANEL_WIDTH,
-            (viewportHeight - PANEL_HEIGHT) / 2 + PANEL_HEIGHT,
+            (viewportWidth - panelWidth) / 2,
+            (viewportHeight - panelHeight) / 2,
+            (viewportWidth - panelWidth) / 2 + panelWidth,
+            (viewportHeight - panelHeight) / 2 + panelHeight,
         )
     val grid: TerminalRect =
         TerminalRect(
@@ -62,9 +65,9 @@ class TerminalRenderGeometry(
         y: Int,
     ): TerminalRect {
         require(x in 0 until columns && y in 0 until rows) { "terminal cell is outside the grid" }
-        val left = originX + x * CELL_WIDTH
-        val top = originY + y * CELL_HEIGHT
-        return TerminalRect(left, top, left + CELL_WIDTH, top + CELL_HEIGHT)
+        val left = originX + x * fontProfile.cellWidth
+        val top = originY + y * fontProfile.cellHeight
+        return TerminalRect(left, top, left + fontProfile.cellWidth, top + fontProfile.cellHeight)
     }
 
     fun glyphClip(
@@ -78,15 +81,11 @@ class TerminalRenderGeometry(
     }
 
     companion object {
-        const val CELL_WIDTH = 6
-        const val CELL_HEIGHT = 9
         const val COLUMNS = 51
         const val ROWS = 19
         const val PANEL_PADDING = 8
         const val TITLE_HEIGHT = 18
         const val TITLE_TOP = 5
-        const val PANEL_WIDTH = COLUMNS * CELL_WIDTH + PANEL_PADDING * 2
-        const val PANEL_HEIGHT = TITLE_HEIGHT + ROWS * CELL_HEIGHT + PANEL_PADDING
         private const val CURSOR_HEIGHT = 1
         private const val CURSOR_HALF_PERIOD_MILLISECONDS = 500L
         private val PALETTE =

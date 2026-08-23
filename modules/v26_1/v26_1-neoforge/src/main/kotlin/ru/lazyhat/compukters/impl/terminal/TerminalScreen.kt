@@ -16,8 +16,6 @@ import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.input.CharacterEvent
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.network.chat.Component
-import net.minecraft.network.chat.FontDescription
-import net.minecraft.resources.Identifier
 import net.neoforged.neoforge.client.network.ClientPacketDistributor
 import org.lwjgl.glfw.GLFW
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
@@ -27,6 +25,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 
 class TerminalScreen(
     initial: TerminalFullPayload,
+    private val fontProfile: TerminalFontProfile = TerminalFontProfile.DEFAULT,
 ) : Screen(Component.literal("Compukters terminal")) {
     val position = initial.position
 
@@ -90,7 +89,7 @@ class TerminalScreen(
         mouseY: Int,
         partialTick: Float,
     ) {
-        val geometry = TerminalRenderGeometry(width, height)
+        val geometry = TerminalRenderGeometry(width, height, fontProfile)
         graphics.fill(
             geometry.panel.left - 1,
             geometry.panel.top - 1,
@@ -152,18 +151,19 @@ class TerminalScreen(
             repeat(replica.state.width) cellLoop@{ x ->
                 val cell = cell(x, y)
                 if (cell.codePoint == ' '.code) return@cellLoop
+                val renderedCodePoint = fontProfile.renderCodePoint(cell.codePoint)
                 val glyph =
                     Component
-                        .literal(String(Character.toChars(cell.codePoint)))
+                        .literal(String(Character.toChars(renderedCodePoint)))
                         .withStyle { style ->
                             style
-                                .withFont(UNIFORM_FONT)
+                                .withFont(fontProfile.fontDescription)
                                 .withColor(TerminalRenderGeometry.paletteColor(cell.foreground))
                         }
                 val bounds = geometry.cell(x, y)
                 val clip = geometry.glyphClip(x, y)
-                val glyphX = bounds.left + (bounds.width - font.width(glyph)) / 2
-                val glyphY = bounds.top + (bounds.height - font.lineHeight) / 2
+                val glyphX = bounds.left
+                val glyphY = bounds.top + fontProfile.glyphDrawOffsetY
                 graphics.enableScissor(clip.left, clip.top, clip.right, clip.bottom)
                 graphics.text(font, glyph, glyphX, glyphY, TerminalRenderGeometry.paletteColor(cell.foreground), false)
                 graphics.disableScissor()
@@ -216,7 +216,6 @@ class TerminalScreen(
         }
 
     private companion object {
-        val UNIFORM_FONT = FontDescription.Resource(Identifier.withDefaultNamespace("uniform"))
         val DIM_COLOR = 0x99000000.toInt()
         val PANEL_COLOR = 0xFF101418.toInt()
         val PANEL_BORDER_COLOR = 0xFF27323A.toInt()
