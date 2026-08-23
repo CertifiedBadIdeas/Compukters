@@ -57,6 +57,7 @@ import java.nio.file.Path
 import java.security.MessageDigest
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.readText
 import kotlin.io.path.writeBytes
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -172,6 +173,21 @@ class MinimalScriptLoweringTest {
 
             assertNotNull(result.artifact, result.diagnostics.joinToString())
             assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+        }
+
+    @Test
+    fun `checked in shell compiles deterministically`() =
+        withAdapter { adapter ->
+            val source = Path.of("../..", "system/programs/shell.kt").readText()
+            val first = adapter.compile(request("system/programs/shell.kt" to source))
+            val second = adapter.compile(request("system/programs/shell.kt" to source))
+
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukters.shell.artifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
         }
 
     @Test
