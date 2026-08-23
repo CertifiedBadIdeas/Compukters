@@ -12,12 +12,14 @@
 package ru.lazyhat.compukters.impl.terminal
 
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.input.CharacterEvent
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.network.chat.Component
 import net.neoforged.neoforge.client.network.ClientPacketDistributor
 import org.lwjgl.glfw.GLFW
+import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
@@ -25,12 +27,25 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 
 class TerminalScreen(
     initial: TerminalFullPayload,
-    private val fontProfile: TerminalFontProfile = TerminalFontProfile.DEFAULT,
 ) : Screen(Component.literal("Compukters terminal")) {
     val position = initial.position
 
     private val replica = TerminalReplica(initial)
     private val pressedKeys = mutableSetOf<Int>()
+    private var fontProfile = CompuktersClientConfig.selectedFont()
+    private lateinit var fontButton: Button
+
+    override fun init() {
+        super.init()
+        val bounds = TerminalRenderGeometry(width, height, fontProfile).fontButton
+        fontButton =
+            addRenderableWidget(
+                Button
+                    .builder(fontButtonLabel()) { cycleFont() }
+                    .bounds(bounds.left, bounds.top, bounds.width, bounds.height)
+                    .build(),
+            )
+    }
 
     fun update(payload: TerminalFullPayload): Boolean = replica.replace(payload)
 
@@ -122,6 +137,21 @@ class TerminalScreen(
     }
 
     override fun isPauseScreen(): Boolean = false
+
+    private fun cycleFont() {
+        fontProfile = fontProfile.next()
+        CompuktersClientConfig.selectFont(fontProfile)
+        fontButton.message = fontButtonLabel()
+        positionFontButton()
+    }
+
+    private fun positionFontButton() {
+        val bounds = TerminalRenderGeometry(width, height, fontProfile).fontButton
+        fontButton.x = bounds.left
+        fontButton.y = bounds.top
+    }
+
+    private fun fontButtonLabel(): Component = Component.literal("Font: ${fontProfile.displayName}")
 
     private fun drawBackgroundRuns(
         graphics: GuiGraphicsExtractor,
