@@ -22,10 +22,12 @@ package ru.lazyhat.compukters.impl
 import net.neoforged.fml.common.Mod
 import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.MOD_ID
+import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 
 @Mod(MOD_ID)
 class CompuktersMod {
     init {
-        LOGGER.debug { "$MOD_ID has started!" }
+        val native = VmRuntime.requireLoaded()
+        LOGGER.debug { "$MOD_ID loaded native VM from ${native.source}" }
     }
 }
