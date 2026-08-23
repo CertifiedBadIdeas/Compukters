@@ -19,6 +19,10 @@
 
 @file:Suppress("PropertyName")
 
+import net.fabricmc.loom.task.RemapJarTask
+import java.util.Locale
+import java.util.zip.ZipFile
+
 plugins {
     idea
     alias(libs.plugins.v1211)
@@ -75,4 +79,68 @@ dependencies {
 
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
     add(gameTest.implementationConfigurationName, project(path = projects.v1211Common.path, configuration = "namedElements"))
+}
+
+val terminalFixture = rootProject.file("host/compukter-vm/tests/fixtures/terminal-session.hex")
+
+tasks.test {
+    inputs.file(terminalFixture)
+    doFirst {
+        systemProperty("compukter.vm.terminalFixture", terminalFixture.absolutePath)
+    }
+}
+
+val nativeOs =
+    when {
+        System.getProperty("os.name").trim().lowercase(Locale.ROOT).startsWith("linux") -> "linux"
+        System.getProperty("os.name").trim().lowercase(Locale.ROOT).startsWith("windows") -> "windows"
+        System.getProperty("os.name").trim().lowercase(Locale.ROOT).startsWith("mac") -> "macos"
+        else -> error("unsupported native build operating system: ${System.getProperty("os.name")}")
+    }
+val nativeArch =
+    when (System.getProperty("os.arch").trim().lowercase(Locale.ROOT)) {
+        "amd64", "x86_64" -> "x86_64"
+        "arm64", "aarch64" -> "aarch64"
+        else -> error("unsupported native build architecture: ${System.getProperty("os.arch")}")
+    }
+val nativeFilename =
+    when (nativeOs) {
+        "linux" -> "libcompukter_jni.so"
+        "windows" -> "compukter_jni.dll"
+        "macos" -> "libcompukter_jni.dylib"
+        else -> error("unreachable native build operating system: $nativeOs")
+    }
+val nativeResourcePath = "META-INF/natives/$nativeOs/$nativeArch/$nativeFilename"
+val productionJar = tasks.named<RemapJarTask>("remapJar")
+val verifyPackagedCompukterJni =
+    tasks.register("verifyPackagedCompukterJni") {
+        description = "Checks that the production NeoForge jar contains exactly one current-host JNI resource."
+        group = "verification"
+        dependsOn(productionJar)
+        inputs.file(productionJar.flatMap { it.archiveFile })
+        inputs.property("nativeResourcePath", nativeResourcePath)
+        doLast {
+            val archive = productionJar.get().archiveFile.get().asFile
+            val nativeEntries =
+                ZipFile(archive).use { zip ->
+                    zip
+                        .entries()
+                        .asSequence()
+                        .filterNot { it.isDirectory }
+                        .map { it.name }
+                        .filter { it.startsWith("META-INF/natives/") }
+                        .toList()
+                }
+            check(nativeEntries == listOf(nativeResourcePath)) {
+                "expected only $nativeResourcePath in ${archive.name}, found $nativeEntries"
+            }
+        }
+    }
+
+tasks.named("check") {
+    dependsOn(verifyPackagedCompukterJni)
+}
+
+tasks.named("buildProductionUniversalJar") {
+    dependsOn(verifyPackagedCompukterJni)
 }
