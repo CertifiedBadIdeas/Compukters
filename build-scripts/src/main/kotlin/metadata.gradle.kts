@@ -84,11 +84,7 @@ val generateModMetadata =
         outputs.dir(intoDir)
 
         from(from) {
-            exclude("rom/rom.index", "firmware/firmware.index")
-            exclude { element ->
-                element.name.contains(".png") ||
-                    element.name.endsWith(".ck")
-            }
+            include("META-INF/neoforge.mods.toml", "fabric.mod.json")
             expand(replaceProperties)
         }
         from(from) {

@@ -38,9 +38,11 @@ class TerminalFontProfile private constructor(
         require(this.supportedCodePoints.contentEquals(this.supportedCodePoints.sortedArray())) {
             "terminal font coverage must be sorted"
         }
-        require((1 until this.supportedCodePoints.size).none { index ->
-            this.supportedCodePoints[index - 1] == this.supportedCodePoints[index]
-        }) {
+        require(
+            (1 until this.supportedCodePoints.size).none { index ->
+                this.supportedCodePoints[index - 1] == this.supportedCodePoints[index]
+            },
+        ) {
             "terminal font coverage must not contain duplicates"
         }
         require(this.supportedCodePoints.binarySearch(replacementCodePoint) >= 0) {
