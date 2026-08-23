@@ -59,6 +59,10 @@ dependencies {
     neoForgeImplementation(libs.findLibrary("kotlinx-coroutines-core").get())
 }
 
+tasks.named<Jar>("jar") {
+    archiveClassifier.set("dev")
+}
+
 val productionJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
     configurations = listOf(shadowBundle)
     archiveClassifier.set("")
