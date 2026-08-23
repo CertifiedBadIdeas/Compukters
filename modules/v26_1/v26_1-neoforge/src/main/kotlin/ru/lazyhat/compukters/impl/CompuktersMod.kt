@@ -24,6 +24,7 @@ import net.neoforged.fml.common.Mod
 import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
+import ru.lazyhat.compukters.impl.terminal.TerminalNetwork
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 
 @Mod(MOD_ID)
@@ -33,6 +34,7 @@ class CompuktersMod(
     init {
         val native = requireNativeRuntime()
         CompuktersRegistry.register(eventBus)
+        eventBus.addListener(TerminalNetwork::register)
         LOGGER.debug { "$MOD_ID loaded native VM from ${native.source}" }
     }
 

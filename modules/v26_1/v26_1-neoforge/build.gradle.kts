@@ -55,6 +55,10 @@ loom {
     // `loom-runs-convention` precompiled script plugin (build-scripts).
     // Only neoforge-specific runs live here.
     runs {
+        matching { it.name.startsWith("client") }.configureEach {
+            property("compukter.vm.devTerminalFixture", terminalFixture.absolutePath)
+        }
+
         register("gameTestServer") {
             server()
             forgeTemplate("gameTestServer")

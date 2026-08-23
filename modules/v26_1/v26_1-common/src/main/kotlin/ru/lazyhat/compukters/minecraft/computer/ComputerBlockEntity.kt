@@ -68,6 +68,12 @@ open class ComputerBlockEntity internal constructor(
 
     fun terminalSnapshot(): TerminalTranscript.Snapshot = transcript.snapshot()
 
+    fun submitTerminalLine(line: String): Boolean {
+        val accepted = carrier?.submitLine(line) == true
+        if (accepted) transcript.append("$line\n")
+        return accepted
+    }
+
     internal fun serverTick() {
         if (!storage.hasArtifact()) return
         val current = carrier ?: createCarrier().also { carrier = it }

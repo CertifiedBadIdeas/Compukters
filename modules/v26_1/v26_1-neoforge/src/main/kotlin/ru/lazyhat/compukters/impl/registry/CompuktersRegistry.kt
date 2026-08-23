@@ -21,6 +21,7 @@ import net.neoforged.neoforge.registries.DeferredItem
 import net.neoforged.neoforge.registries.DeferredRegister
 import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.impl.computer.NeoForgeComputerBlockEntity
+import ru.lazyhat.compukters.impl.terminal.TerminalNetwork
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
 import java.util.function.Supplier
 import java.util.function.UnaryOperator
@@ -38,6 +39,7 @@ object CompuktersRegistry {
                     properties,
                     ::NeoForgeComputerBlockEntity,
                     Supplier { COMPUTER_BLOCK_ENTITY.get() },
+                    TerminalNetwork::open,
                 )
             },
             UnaryOperator { properties -> properties.strength(2.0f) },

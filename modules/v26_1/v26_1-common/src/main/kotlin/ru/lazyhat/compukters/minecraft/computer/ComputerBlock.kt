@@ -12,6 +12,9 @@
 package ru.lazyhat.compukters.minecraft.computer
 
 import net.minecraft.core.BlockPos
+import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.InteractionResult
+import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.EntityBlock
@@ -20,12 +23,14 @@ import net.minecraft.world.level.block.entity.BlockEntityTicker
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockBehaviour
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.phys.BlockHitResult
 import java.util.function.Supplier
 
 class ComputerBlock(
     properties: BlockBehaviour.Properties,
     private val factory: (BlockPos, BlockState) -> ComputerBlockEntity,
     private val blockEntityType: Supplier<out BlockEntityType<out ComputerBlockEntity>>,
+    private val terminalOpener: (ServerPlayer, ComputerBlockEntity) -> Unit,
 ) : Block(properties),
     EntityBlock {
     override fun newBlockEntity(
@@ -38,6 +43,20 @@ class ComputerBlock(
         blockState: BlockState,
         actualType: BlockEntityType<T>,
     ): BlockEntityTicker<T>? = computerTickerFor(level.isClientSide, actualType, blockEntityType.get())
+
+    override fun useWithoutItem(
+        blockState: BlockState,
+        level: Level,
+        position: BlockPos,
+        player: Player,
+        hitResult: BlockHitResult,
+    ): InteractionResult {
+        if (level.isClientSide) return InteractionResult.SUCCESS
+        val serverPlayer = player as? ServerPlayer ?: return InteractionResult.PASS
+        val entity = level.getBlockEntity(position) as? ComputerBlockEntity ?: return InteractionResult.PASS
+        terminalOpener(serverPlayer, entity)
+        return InteractionResult.SUCCESS_SERVER
+    }
 }
 
 internal fun <T : BlockEntity> computerTickerFor(
