@@ -24,6 +24,13 @@ import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.GuestTrap
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.QuotaKind
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmAdmissionException
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmFault
@@ -69,13 +76,6 @@ class ProgramRuntimeHostTest {
         assertFailsWith<IllegalArgumentException> {
             ProgramTerminalLimits(
                 maximumInputLineCodeUnits = 0,
-                maximumPendingOutputCodeUnits = 1,
-            )
-        }
-        assertFailsWith<IllegalArgumentException> {
-            ProgramTerminalLimits(
-                maximumInputLineCodeUnits = 1,
-                maximumPendingOutputCodeUnits = 0,
             )
         }
     }
@@ -86,7 +86,6 @@ class ProgramRuntimeHostTest {
         assertEquals(256, ProgramTickBudget().maintenanceBudgetPerAdvance)
         assertEquals(32, ProgramTickBudget().maximumAdvancesPerTick)
         assertEquals(4_096, ProgramTerminalLimits().maximumInputLineCodeUnits)
-        assertEquals(65_536, ProgramTerminalLimits().maximumPendingOutputCodeUnits)
         assertEquals(ProgramRuntimeState.Idle, ProgramRuntimeState.Idle)
     }
 
@@ -109,6 +108,35 @@ class ProgramRuntimeHostTest {
         assertEquals(ProgramRuntimeState.Running, host.serverTick())
 
         assertEquals(listOf(7 to 3, 7 to 3, 7 to 3, 7 to 3), session.advances)
+    }
+
+    @Test
+    fun `Rust terminal is committed once per active tick and remains available after halt`() {
+        val terminal = terminalState(revision = 7)
+        val session =
+            ScriptedSession(
+                outcomes = listOf(VmOutcome.WaitingForLine, VmOutcome.Halted(VmValue.I32(0))),
+                terminalState = terminal,
+                terminalUpdate = TerminalUpdate.Unchanged(7),
+            )
+        val host = host(session, ProgramTickBudget(8, 4, 1))
+        host.start(byteArrayOf(1))
+
+        assertEquals(ProgramRuntimeState.WaitingForInput, host.serverTick())
+        assertEquals(1, session.terminalCommits)
+        assertEquals(terminal, host.terminalFullState())
+        assertEquals(TerminalUpdate.Unchanged(7), host.terminalChangesSince(7))
+        host.sendTerminalKey(TerminalKey.ENTER, TerminalKeyAction.PRESS, setOf(TerminalModifier.SHIFT))
+        host.sendTerminalText("λ😀")
+        assertTrue(host.submitLine("answer"))
+        assertEquals(listOf("answer"), session.compatibilityLines)
+
+        assertEquals(ProgramRuntimeState.Halted(VmValue.I32(0)), host.serverTick())
+        assertEquals(2, session.terminalCommits)
+        assertEquals(0, session.closeCalls)
+        assertEquals(terminal, host.terminalFullState())
+        host.shutdown()
+        assertEquals(1, session.closeCalls)
     }
 
     @Test
@@ -148,30 +176,45 @@ class ProgramRuntimeHostTest {
     }
 
     @Test
-    fun `halt and VM failure outcomes close their session and remain terminal`() {
+    fun `halt retains its session while VM failures release theirs`() {
         val cases =
             listOf(
-                VmOutcome.Halted(VmValue.I32(42)) to ProgramRuntimeState.Halted(VmValue.I32(42)),
-                VmOutcome.AllocationExhausted(true) to
+                Triple(VmOutcome.Halted(VmValue.I32(42)), ProgramRuntimeState.Halted(VmValue.I32(42)), 0),
+                Triple(
+                    VmOutcome.AllocationExhausted(true),
                     ProgramRuntimeState.Failed(ProgramFailure.Allocation(collectionAttempted = true)),
-                VmOutcome.QuotaExhausted(QuotaKind.HOST_REQUESTS, 10, 11) to
+                    1,
+                ),
+                Triple(
+                    VmOutcome.QuotaExhausted(QuotaKind.HOST_REQUESTS, 10, 11),
                     ProgramRuntimeState.Failed(ProgramFailure.Quota(QuotaKind.HOST_REQUESTS, 10, 11)),
-                VmOutcome.Crashed(GuestTrap.DIVISION_BY_ZERO) to
+                    1,
+                ),
+                Triple(
+                    VmOutcome.Crashed(GuestTrap.DIVISION_BY_ZERO),
                     ProgramRuntimeState.Failed(ProgramFailure.Trap(GuestTrap.DIVISION_BY_ZERO)),
-                VmOutcome.Faulted(VmFault.CORRUPT_LIFECYCLE) to
+                    1,
+                ),
+                Triple(
+                    VmOutcome.Faulted(VmFault.CORRUPT_LIFECYCLE),
                     ProgramRuntimeState.Failed(ProgramFailure.Fault(VmFault.CORRUPT_LIFECYCLE)),
-                VmOutcome.HostFailed(HostFailureKind.INPUT_OUTPUT, 9) to
+                    1,
+                ),
+                Triple(
+                    VmOutcome.HostFailed(HostFailureKind.INPUT_OUTPUT, 9),
                     ProgramRuntimeState.Failed(ProgramFailure.Host(HostFailureKind.INPUT_OUTPUT, 9)),
+                    1,
+                ),
             )
 
-        cases.forEach { (outcome, expected) ->
+        cases.forEach { (outcome, expected, closeCalls) ->
             val session = ScriptedSession(outcomes = listOf(outcome))
             val host = host(session)
             host.start(byteArrayOf(1))
 
             assertEquals(expected, host.serverTick())
             assertEquals(expected, host.serverTick())
-            assertEquals(1, session.closeCalls)
+            assertEquals(closeCalls, session.closeCalls)
             assertEquals(1, session.advances.size)
         }
     }
@@ -199,74 +242,15 @@ class ProgramRuntimeHostTest {
     }
 
     @Test
-    fun `terminal writes preserve UTF16 resume and drain exact output`() {
-        val session =
-            ScriptedSession(
-                outcomes =
-                    listOf(
-                        terminalRequest(1, operation = 0, VmValue.StringValue("A\ud800")),
-                        terminalRequest(2, operation = 1, VmValue.StringValue("B")),
-                        VmOutcome.SliceExhausted,
-                    ),
-            )
-        val host = host(session, ProgramTickBudget(8, 4, 3))
-        host.start(byteArrayOf(1))
-
-        assertEquals(ProgramRuntimeState.Running, host.serverTick())
-
-        assertEquals(
-            listOf(response(1, HostResponse.UnitSuccess), response(2, HostResponse.UnitSuccess)),
-            session.responses,
-        )
-        assertEquals("A\ud800B\n", host.drainOutput())
-        assertEquals("", host.drainOutput())
-    }
-
-    @Test
-    fun `output overflow fails the host request without partial output`() {
-        val session =
-            ScriptedSession(
-                outcomes =
-                    listOf(
-                        terminalRequest(7, operation = 0, VmValue.StringValue("four")),
-                        VmOutcome.HostFailed(HostFailureKind.OTHER, 3),
-                    ),
-            )
-        val host =
-            ProgramRuntimeHost(
-                sessionFactory = ProgramVmSessionFactory { session },
-                tickBudget = ProgramTickBudget(8, 4, 2),
-                terminalLimits = ProgramTerminalLimits(32, 3),
-            )
-        host.start(byteArrayOf(1))
-
-        assertEquals(
-            ProgramRuntimeState.Failed(ProgramFailure.Host(HostFailureKind.OTHER, 3)),
-            host.serverTick(),
-        )
-        assertEquals(listOf(response(7, HostResponse.Failure(HostFailureKind.OTHER, 3))), session.responses)
-        assertEquals("", host.drainOutput())
-    }
-
-    @Test
-    fun `unknown capability and invalid terminal shapes receive stable failures`() {
+    fun `addon host requests remain host owned and receive stable unavailable failures`() {
         val unknown = CapabilityIdentity("addon", "terminal", 1, 0)
-        val requests: List<Pair<VmOutcome.HostRequest, HostResponse>> =
-            listOf(
-                VmOutcome.HostRequest(VmHostRequest(1, unknown, 0, listOf(VmValue.StringValue("x")))) to
-                    HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0),
-                terminalRequest(2, operation = 99) to HostResponse.Failure(HostFailureKind.OTHER, 1),
-                terminalRequest(3, operation = 0) to HostResponse.Failure(HostFailureKind.OTHER, 1),
-                terminalRequest(4, operation = 2, VmValue.I32(1)) to HostResponse.Failure(HostFailureKind.OTHER, 1),
-            )
-        val session = ScriptedSession(outcomes = requests.map { it.first }, defaultOutcome = VmOutcome.SliceExhausted)
-        val host = host(session, ProgramTickBudget(8, 4, requests.size))
+        val request = VmOutcome.HostRequest(VmHostRequest(1, unknown, 0, listOf(VmValue.StringValue("x"))))
+        val session = ScriptedSession(outcomes = listOf(request), defaultOutcome = VmOutcome.SliceExhausted)
+        val host = host(session, ProgramTickBudget(8, 4, 1))
         host.start(byteArrayOf(1))
 
         assertEquals(ProgramRuntimeState.Running, host.serverTick())
-
-        assertEquals(requests.mapIndexed { index, entry -> (index + 1).toLong() to entry.second }, session.responses)
-        assertEquals("", host.drainOutput())
+        assertEquals(listOf(response(1, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))), session.responses)
     }
 
     @Test
@@ -275,7 +259,7 @@ class ProgramRuntimeHostTest {
             ScriptedSession(
                 outcomes =
                     listOf(
-                        terminalRequest(41, operation = 2),
+                        VmOutcome.WaitingForLine,
                         VmOutcome.Halted(VmValue.StringValue("done")),
                     ),
             )
@@ -285,7 +269,7 @@ class ProgramRuntimeHostTest {
         assertEquals(ProgramRuntimeState.WaitingForInput, host.serverTick())
         assertEquals(1, session.advances.size)
         assertTrue(host.submitLine("Ada"))
-        assertEquals(listOf(response(41, HostResponse.StringSuccess("Ada"))), session.responses)
+        assertEquals(listOf("Ada"), session.compatibilityLines)
         assertEquals(ProgramRuntimeState.Running, host.state)
         assertEquals(1, session.advances.size)
 
@@ -294,11 +278,11 @@ class ProgramRuntimeHostTest {
 
     @Test
     fun `input is rejected outside a pending read and when over its UTF16 limit`() {
-        val session = ScriptedSession(outcomes = listOf(terminalRequest(9, operation = 2)))
+        val session = ScriptedSession(outcomes = listOf(VmOutcome.WaitingForLine))
         val host =
             ProgramRuntimeHost(
                 sessionFactory = ProgramVmSessionFactory { session },
-                terminalLimits = ProgramTerminalLimits(3, 32),
+                terminalLimits = ProgramTerminalLimits(3),
             )
 
         assertFalse(host.submitLine("no session"))
@@ -307,20 +291,16 @@ class ProgramRuntimeHostTest {
         assertEquals(ProgramRuntimeState.WaitingForInput, host.serverTick())
         assertFalse(host.submitLine("four"))
         assertEquals(ProgramRuntimeState.WaitingForInput, host.state)
-        assertEquals(emptyList<Pair<Long, HostResponse>>(), session.responses)
+        assertEquals(emptyList(), session.compatibilityLines)
         assertTrue(host.submitLine("\ud83d\ude00x"))
-        assertEquals(listOf(response(9, HostResponse.StringSuccess("\ud83d\ude00x"))), session.responses)
+        assertEquals(listOf("\ud83d\ude00x"), session.compatibilityLines)
     }
 
     @Test
-    fun `replacement clears output and shutdown clears a pending read`() {
+    fun `replacement and shutdown close the previous retained terminal`() {
         val first =
             ScriptedSession(
-                outcomes =
-                    listOf(
-                        terminalRequest(1, operation = 0, VmValue.StringValue("old")),
-                        terminalRequest(2, operation = 2),
-                    ),
+                outcomes = listOf(VmOutcome.WaitingForLine),
             )
         val second = ScriptedSession(defaultOutcome = VmOutcome.SliceExhausted)
         val sessions = ArrayDeque(listOf(first, second))
@@ -334,7 +314,6 @@ class ProgramRuntimeHostTest {
 
         host.start(byteArrayOf(2))
 
-        assertEquals("", host.drainOutput())
         assertEquals(1, first.closeCalls)
         assertFalse(host.submitLine("stale"))
         host.shutdown()
@@ -346,7 +325,7 @@ class ProgramRuntimeHostTest {
     fun `bridge failure while resuming input terminates and releases the session`() {
         val session =
             ScriptedSession(
-                outcomes = listOf(terminalRequest(5, operation = 2)),
+                outcomes = listOf(VmOutcome.WaitingForLine),
                 resumeError = VmBridgeException("resume failed"),
             )
         val host = host(session)
@@ -374,11 +353,17 @@ class ProgramRuntimeHostTest {
         outcomes: List<VmOutcome> = emptyList(),
         private val defaultOutcome: VmOutcome? = null,
         private val resumeError: VmBridgeException? = null,
+        val terminalState: TerminalState = terminalState(0),
+        val terminalUpdate: TerminalUpdate = TerminalUpdate.Unchanged(0),
     ) : ProgramVmSession {
         private val outcomes = ArrayDeque(outcomes)
         val advances = mutableListOf<Pair<Int, Int>>()
         val responses = mutableListOf<Pair<Long, HostResponse>>()
         var closeCalls = 0
+        var terminalCommits = 0
+        val terminalKeys = mutableListOf<Triple<TerminalKey, TerminalKeyAction, Set<TerminalModifier>>>()
+        val terminalTexts = mutableListOf<String>()
+        val compatibilityLines = mutableListOf<String>()
 
         override fun advance(
             guestBudget: Int,
@@ -399,24 +384,47 @@ class ProgramRuntimeHostTest {
         override fun close() {
             closeCalls++
         }
-    }
 
-    private fun terminalRequest(
-        id: Long,
-        operation: Int,
-        vararg arguments: VmValue,
-    ): VmOutcome.HostRequest =
-        VmOutcome.HostRequest(
-            VmHostRequest(
-                id = id,
-                capability = CapabilityIdentity("compukter", "terminal", 1, 0),
-                operation = operation,
-                arguments = arguments.toList(),
-            ),
-        )
+        override fun commitTerminal() {
+            terminalCommits++
+        }
+
+        override fun terminalFullState(): TerminalState = terminalState
+
+        override fun terminalChangesSince(revision: Long): TerminalUpdate = terminalUpdate
+
+        override fun sendTerminalKey(
+            key: TerminalKey,
+            action: TerminalKeyAction,
+            modifiers: Set<TerminalModifier>,
+        ) {
+            terminalKeys += Triple(key, action, modifiers)
+        }
+
+        override fun sendTerminalText(value: String) {
+            terminalTexts += value
+        }
+
+        override fun provideCompatibilityLine(value: String) {
+            resumeError?.let { throw it }
+            compatibilityLines += value
+        }
+    }
 
     private fun response(
         requestId: Long,
         response: HostResponse,
     ): Pair<Long, HostResponse> = requestId to response
+
+    private companion object {
+        fun terminalState(revision: Long): TerminalState =
+            TerminalState(
+                revision = revision,
+                width = 51,
+                height = 19,
+                cells = List(51 * 19) { TerminalCell(' '.code, 15, 0) },
+                cursor = TerminalPosition(0, 0),
+                cursorVisible = true,
+            )
+    }
 }

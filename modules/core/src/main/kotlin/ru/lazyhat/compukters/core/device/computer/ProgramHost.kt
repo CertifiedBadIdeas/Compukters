@@ -22,6 +22,11 @@ package ru.lazyhat.compukters.core.device.computer
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 
 internal interface ProgramHost : AutoCloseable {
     val state: ProgramRuntimeState
@@ -32,7 +37,17 @@ internal interface ProgramHost : AutoCloseable {
 
     fun submitLine(line: String): Boolean
 
-    fun drainOutput(): String
+    fun terminalFullState(): TerminalState?
+
+    fun terminalChangesSince(revision: Long): TerminalUpdate?
+
+    fun sendTerminalKey(
+        key: TerminalKey,
+        action: TerminalKeyAction,
+        modifiers: Set<TerminalModifier>,
+    ): Boolean
+
+    fun sendTerminalText(value: String): Boolean
 
     fun shutdown()
 }
@@ -49,7 +64,17 @@ internal class RuntimeProgramHost(
 
     override fun submitLine(line: String): Boolean = delegate.submitLine(line)
 
-    override fun drainOutput(): String = delegate.drainOutput()
+    override fun terminalFullState(): TerminalState? = delegate.terminalFullState()
+
+    override fun terminalChangesSince(revision: Long): TerminalUpdate? = delegate.terminalChangesSince(revision)
+
+    override fun sendTerminalKey(
+        key: TerminalKey,
+        action: TerminalKeyAction,
+        modifiers: Set<TerminalModifier>,
+    ): Boolean = delegate.sendTerminalKey(key, action, modifiers)
+
+    override fun sendTerminalText(value: String): Boolean = delegate.sendTerminalText(value)
 
     override fun shutdown() = delegate.shutdown()
 

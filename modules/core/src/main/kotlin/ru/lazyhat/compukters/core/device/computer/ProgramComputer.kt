@@ -24,25 +24,27 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTerminalLimits
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 
 class ProgramComputer internal constructor(
     private val deviceId: Int,
     private val imageSource: ProgramImageSource,
-    private val terminalSink: ProgramTerminalSink,
     private val stateSink: ProgramComputerStateSink,
     private val host: ProgramHost,
 ) : AutoCloseable {
     constructor(
         deviceId: Int,
         imageSource: ProgramImageSource,
-        terminalSink: ProgramTerminalSink,
         stateSink: ProgramComputerStateSink,
         tickBudget: ProgramTickBudget = ProgramTickBudget(),
         terminalLimits: ProgramTerminalLimits = ProgramTerminalLimits(),
     ) : this(
         deviceId,
         imageSource,
-        terminalSink,
         stateSink,
         RuntimeProgramHost(ProgramRuntimeHost(tickBudget, terminalLimits)),
     )
@@ -73,19 +75,20 @@ class ProgramComputer internal constructor(
     fun serverTick(): ProgramComputerState {
         if (!state.isPoweredOn()) return state
         val runtimeState = host.serverTick()
-        val output = host.drainOutput()
-        if (output.isNotEmpty()) {
-            try {
-                terminalSink.publishOutput(deviceId, output)
-            } catch (error: Exception) {
-                host.shutdown()
-                return transitionTo(
-                    failure(ProgramComputerFailure.TerminalPublication(error.diagnostic("terminal publication failure"))),
-                )
-            }
-        }
         return transitionFrom(runtimeState)
     }
+
+    fun terminalFullState(): TerminalState? = host.terminalFullState()
+
+    fun terminalChangesSince(revision: Long): TerminalUpdate? = host.terminalChangesSince(revision)
+
+    fun sendTerminalKey(
+        key: TerminalKey,
+        action: TerminalKeyAction,
+        modifiers: Set<TerminalModifier> = emptySet(),
+    ): Boolean = state.isPoweredOn() && host.sendTerminalKey(key, action, modifiers)
+
+    fun sendTerminalText(value: String): Boolean = state.isPoweredOn() && host.sendTerminalText(value)
 
     fun submitLine(line: String): Boolean {
         if (state != ProgramComputerState.WaitingForInput) return false

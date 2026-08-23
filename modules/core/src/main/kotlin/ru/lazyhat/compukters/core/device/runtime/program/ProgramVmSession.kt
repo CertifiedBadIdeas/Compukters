@@ -20,6 +20,11 @@
 package ru.lazyhat.compukters.core.device.runtime.program
 
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
 
@@ -33,6 +38,22 @@ internal interface ProgramVmSession : AutoCloseable {
         requestId: Long,
         response: HostResponse,
     )
+
+    fun commitTerminal()
+
+    fun terminalFullState(): TerminalState
+
+    fun terminalChangesSince(revision: Long): TerminalUpdate
+
+    fun sendTerminalKey(
+        key: TerminalKey,
+        action: TerminalKeyAction,
+        modifiers: Set<TerminalModifier>,
+    )
+
+    fun sendTerminalText(value: String)
+
+    fun provideCompatibilityLine(value: String)
 }
 
 internal fun interface ProgramVmSessionFactory {
@@ -55,6 +76,22 @@ private class NativeProgramVmSession(
         requestId: Long,
         response: HostResponse,
     ) = session.resume(requestId, response)
+
+    override fun commitTerminal() = session.commitTerminal()
+
+    override fun terminalFullState(): TerminalState = session.terminalFullState()
+
+    override fun terminalChangesSince(revision: Long): TerminalUpdate = session.terminalChangesSince(revision)
+
+    override fun sendTerminalKey(
+        key: TerminalKey,
+        action: TerminalKeyAction,
+        modifiers: Set<TerminalModifier>,
+    ) = session.sendTerminalKey(key, action, modifiers)
+
+    override fun sendTerminalText(value: String) = session.sendTerminalText(value)
+
+    override fun provideCompatibilityLine(value: String) = session.provideCompatibilityLine(value)
 
     override fun close() = session.close()
 }

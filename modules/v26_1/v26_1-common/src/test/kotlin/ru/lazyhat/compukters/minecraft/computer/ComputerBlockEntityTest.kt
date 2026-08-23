@@ -26,7 +26,13 @@ import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStateSink
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
 import ru.lazyhat.compukters.core.device.computer.ProgramImageSource
-import ru.lazyhat.compukters.core.device.computer.ProgramTerminalSink
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import java.util.stream.Stream
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -91,45 +97,46 @@ class ComputerBlockEntityTest {
     }
 
     @Test
-    fun `terminal and state adapters expose bounded transient observations`() {
-        val fixture = fixture(transcriptCodeUnits = 4)
-        fixture.entity.installArtifact(byteArrayOf(1))
-        fixture.entity.serverTick()
-        val carrier = fixture.carriers.single()
-
-        carrier.publish("abcdef")
-        carrier.publishState(ProgramComputerState.WaitingForInput)
-
-        assertEquals(TerminalTranscript.Snapshot("cdef", 1), fixture.entity.terminalSnapshot())
-        assertEquals(ProgramComputerState.WaitingForInput, fixture.entity.runtimeState)
-    }
-
-    @Test
-    fun `accepted terminal input is echoed and forwarded to the waiting computer`() {
+    fun `terminal and state adapters expose Rust full and delta observations`() {
         val fixture = fixture()
         fixture.entity.installArtifact(byteArrayOf(1))
         fixture.entity.serverTick()
         val carrier = fixture.carriers.single()
+
+        carrier.terminal = terminalState("abcdef", 1)
+        carrier.update = TerminalUpdate.Unchanged(1)
+        carrier.publishState(ProgramComputerState.WaitingForInput)
+
+        assertEquals(carrier.terminal, fixture.entity.terminalFullState())
+        assertEquals(TerminalUpdate.Unchanged(1), fixture.entity.terminalChangesSince(1))
+        assertEquals(ProgramComputerState.WaitingForInput, fixture.entity.runtimeState)
+    }
+
+    @Test
+    fun `accepted terminal input is forwarded without Kotlin echo`() {
+        val fixture = fixture()
+        fixture.entity.installArtifact(byteArrayOf(1))
+        fixture.entity.serverTick()
+        val carrier = fixture.carriers.single()
+        carrier.terminal = terminalState("prompt", 1)
         carrier.publishState(ProgramComputerState.WaitingForInput)
 
         assertTrue(fixture.entity.submitTerminalLine("Ada"))
 
         assertEquals(listOf("Ada"), carrier.submittedLines)
-        assertEquals("Ada\n", fixture.entity.terminalSnapshot().text)
+        assertEquals(terminalState("prompt", 1), fixture.entity.terminalFullState())
     }
 
     @Test
-    fun `new install clears prior visible transcript once`() {
+    fun `new install replaces the Rust machine with a blank terminal`() {
         val fixture = fixture()
         fixture.entity.installArtifact(byteArrayOf(1))
         fixture.entity.serverTick()
-        fixture.carriers.single().publish("old")
-        val before = fixture.entity.terminalSnapshot().revision
+        fixture.carriers.single().terminal = terminalState("old", 4)
 
         fixture.entity.installArtifact(byteArrayOf(2))
 
-        assertEquals("", fixture.entity.terminalSnapshot().text)
-        assertEquals(before + 1, fixture.entity.terminalSnapshot().revision)
+        assertEquals(terminalState("", 0), fixture.entity.terminalFullState())
     }
 
     @Test
@@ -153,14 +160,14 @@ class ComputerBlockEntityTest {
         val source = fixture()
         source.entity.installArtifact(byteArrayOf(1, 2, 3))
         source.entity.serverTick()
-        source.carriers.single().publish("transient")
+        source.carriers.single().terminal = terminalState("transient", 1)
         val tag = source.entity.saveForTest()
 
         val restored = fixture()
         restored.entity.loadForTest(tag)
 
         assertContentEquals(byteArrayOf(1, 2, 3), restored.entity.installedArtifact())
-        assertEquals(TerminalTranscript.Snapshot("", 0), restored.entity.terminalSnapshot())
+        assertNull(restored.entity.terminalFullState())
         assertEquals(neverStarted(), restored.entity.runtimeState)
         assertTrue(restored.carriers.isEmpty())
         assertEquals(setOf("compukters"), tag.keySet())
@@ -195,19 +202,15 @@ class ComputerBlockEntityTest {
         assertEquals(1, carrier.closeCalls)
     }
 
-    private fun fixture(
-        maximumArtifactBytes: Int = 16,
-        transcriptCodeUnits: Int = 16,
-    ): Fixture {
+    private fun fixture(maximumArtifactBytes: Int = 16): Fixture {
         val carriers = mutableListOf<FakeCarrier>()
         val entity =
             TestComputerBlockEntity(
                 carrierFactory =
-                    ComputerCarrierFactory { deviceId, imageSource, terminalSink, stateSink ->
-                        FakeCarrier(deviceId, imageSource, terminalSink, stateSink).also(carriers::add)
+                    ComputerCarrierFactory { deviceId, imageSource, stateSink ->
+                        FakeCarrier(deviceId, imageSource, stateSink).also(carriers::add)
                     },
                 maximumArtifactBytes = maximumArtifactBytes,
-                transcriptCodeUnits = transcriptCodeUnits,
             )
         return Fixture(entity, carriers)
     }
@@ -215,14 +218,12 @@ class ComputerBlockEntityTest {
     private class TestComputerBlockEntity(
         carrierFactory: ComputerCarrierFactory,
         maximumArtifactBytes: Int,
-        transcriptCodeUnits: Int,
     ) : ComputerBlockEntity(
             TEST_TYPE,
             BlockPos(2, 3, 4),
             Blocks.FURNACE.defaultBlockState(),
             carrierFactory,
             InstalledProgramStorage(maximumArtifactBytes),
-            TerminalTranscript(transcriptCodeUnits),
         ) {
         fun saveForTest(): CompoundTag {
             val output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, EMPTY_PROVIDER)
@@ -236,7 +237,6 @@ class ComputerBlockEntityTest {
     private class FakeCarrier(
         private val deviceId: Int,
         private val imageSource: ProgramImageSource,
-        private val terminalSink: ProgramTerminalSink,
         private val stateSink: ProgramComputerStateSink,
     ) : ComputerCarrier {
         override var state: ProgramComputerState = neverStarted()
@@ -248,6 +248,10 @@ class ComputerBlockEntityTest {
         var closeCalls = 0
         var loadedArtifact: ByteArray? = null
         val submittedLines = mutableListOf<String>()
+        var terminal: TerminalState = terminalState("", 0)
+        var update: TerminalUpdate = TerminalUpdate.Unchanged(0)
+        val keys = mutableListOf<Triple<TerminalKey, TerminalKeyAction, Set<TerminalModifier>>>()
+        val texts = mutableListOf<String>()
 
         override fun turnOn(): ProgramComputerState {
             turnOnCalls++
@@ -263,6 +267,8 @@ class ComputerBlockEntityTest {
         override fun reboot(): ProgramComputerState {
             rebootCalls++
             loadedArtifact = imageSource.loadInstalledArtifact(deviceId)
+            terminal = terminalState("", 0)
+            update = TerminalUpdate.Unchanged(0)
             return publishState(ProgramComputerState.Running)
         }
 
@@ -276,12 +282,28 @@ class ComputerBlockEntityTest {
             return true
         }
 
+        override fun terminalFullState(): TerminalState = terminal
+
+        override fun terminalChangesSince(revision: Long): TerminalUpdate = update
+
+        override fun sendTerminalKey(
+            key: TerminalKey,
+            action: TerminalKeyAction,
+            modifiers: Set<TerminalModifier>,
+        ): Boolean {
+            keys += Triple(key, action, modifiers)
+            return true
+        }
+
+        override fun sendTerminalText(value: String): Boolean {
+            texts += value
+            return true
+        }
+
         override fun close() {
             closeCalls++
             publishState(ProgramComputerState.Closed)
         }
-
-        fun publish(text: String) = terminalSink.publishOutput(deviceId, text)
 
         fun publishState(next: ProgramComputerState): ProgramComputerState {
             state = next
@@ -309,5 +331,20 @@ class ComputerBlockEntityTest {
         private val TEST_TYPE = BlockEntityType.FURNACE as BlockEntityType<ComputerBlockEntity>
 
         private fun neverStarted(): ProgramComputerState = ProgramComputerState.PoweredOff(ProgramComputerStopReason.NeverStarted)
+
+        private fun terminalState(
+            text: String,
+            revision: Long,
+        ): TerminalState {
+            val codePoints = text.codePoints().toArray()
+            return TerminalState(
+                revision,
+                51,
+                19,
+                List(51 * 19) { index -> TerminalCell(codePoints.getOrElse(index) { ' '.code }, 15, 0) },
+                TerminalPosition(codePoints.size.coerceAtMost(50), 0),
+                true,
+            )
+        }
     }
 }

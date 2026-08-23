@@ -19,6 +19,11 @@ import net.minecraft.world.level.storage.ValueInput
 import net.minecraft.world.level.storage.ValueOutput
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 
 open class ComputerBlockEntity internal constructor(
     type: BlockEntityType<*>,
@@ -26,7 +31,6 @@ open class ComputerBlockEntity internal constructor(
     blockState: BlockState,
     private val carrierFactory: ComputerCarrierFactory,
     private val storage: InstalledProgramStorage,
-    private val transcript: TerminalTranscript,
 ) : BlockEntity(type, position, blockState) {
     constructor(
         type: BlockEntityType<*>,
@@ -38,7 +42,6 @@ open class ComputerBlockEntity internal constructor(
         blockState,
         RuntimeComputerCarrierFactory,
         InstalledProgramStorage(),
-        TerminalTranscript(),
     )
 
     private var carrier: ComputerCarrier? = null
@@ -48,7 +51,6 @@ open class ComputerBlockEntity internal constructor(
 
     fun installArtifact(artifact: ByteArray) {
         storage.install(artifact)
-        transcript.clear()
         setChanged()
         carrier?.let { current ->
             runtimeState = current.reboot()
@@ -66,13 +68,19 @@ open class ComputerBlockEntity internal constructor(
 
     fun installedArtifact(): ByteArray? = storage.artifact()
 
-    fun terminalSnapshot(): TerminalTranscript.Snapshot = transcript.snapshot()
+    fun terminalFullState(): TerminalState? = carrier?.terminalFullState()
 
-    fun submitTerminalLine(line: String): Boolean {
-        val accepted = carrier?.submitLine(line) == true
-        if (accepted) transcript.append("$line\n")
-        return accepted
-    }
+    fun terminalChangesSince(revision: Long): TerminalUpdate? = carrier?.terminalChangesSince(revision)
+
+    fun submitTerminalKey(
+        key: TerminalKey,
+        action: TerminalKeyAction,
+        modifiers: Set<TerminalModifier> = emptySet(),
+    ): Boolean = carrier?.sendTerminalKey(key, action, modifiers) == true
+
+    fun submitTerminalText(value: String): Boolean = carrier?.sendTerminalText(value) == true
+
+    fun submitTerminalLine(line: String): Boolean = carrier?.submitLine(line) == true
 
     internal fun serverTick() {
         if (!storage.hasArtifact()) return
@@ -94,7 +102,6 @@ open class ComputerBlockEntity internal constructor(
         super.loadAdditional(input)
         closeCarrier()
         storage.load(input)
-        transcript.clear()
         runtimeState = neverStarted()
     }
 
@@ -108,7 +115,6 @@ open class ComputerBlockEntity internal constructor(
         return carrierFactory.create(
             deviceId = deviceId,
             imageSource = { storage.artifact() },
-            terminalSink = { _, text -> transcript.append(text) },
             stateSink = { _, state -> runtimeState = state },
         )
     }

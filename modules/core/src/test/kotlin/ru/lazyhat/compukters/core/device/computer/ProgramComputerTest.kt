@@ -23,6 +23,13 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramFailure
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.lang.runtime.vm.GuestTrap
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -75,11 +82,10 @@ class ProgramComputerTest {
     }
 
     @Test
-    fun `powered on tick advances and drains once with output before wait state`() {
+    fun `powered on tick advances before publishing wait state`() {
         val host =
             FakeProgramHost(
                 tickStates = listOf(ProgramRuntimeState.WaitingForInput),
-                drainedOutputs = listOf("Your name: "),
             )
         val fixture = fixture(image = byteArrayOf(1), host = host)
         fixture.computer.turnOn()
@@ -88,12 +94,8 @@ class ProgramComputerTest {
         assertEquals(ProgramComputerState.WaitingForInput, fixture.computer.serverTick())
 
         assertEquals(1, host.tickCalls)
-        assertEquals(1, host.drainCalls)
         assertEquals(
-            listOf(
-                ObservedEvent.Output("Your name: "),
-                ObservedEvent.State(ProgramComputerState.WaitingForInput),
-            ),
+            listOf<ObservedEvent>(ObservedEvent.State(ProgramComputerState.WaitingForInput)),
             fixture.events,
         )
     }
@@ -104,11 +106,10 @@ class ProgramComputerTest {
 
         assertEquals(fixture.computer.state, fixture.computer.serverTick())
         assertEquals(0, fixture.host.tickCalls)
-        assertEquals(0, fixture.host.drainCalls)
     }
 
     @Test
-    fun `halt and runtime failure power off after final output`() {
+    fun `halt and runtime failure power off`() {
         val cases =
             listOf(
                 ProgramRuntimeState.Halted(VmValue.I32(42)) to
@@ -120,18 +121,54 @@ class ProgramComputerTest {
             )
 
         cases.forEach { (runtimeState, stopReason) ->
-            val host = FakeProgramHost(tickStates = listOf(runtimeState), drainedOutputs = listOf("last"))
+            val host = FakeProgramHost(tickStates = listOf(runtimeState))
             val fixture = fixture(image = byteArrayOf(1), host = host)
             fixture.computer.turnOn()
             fixture.events.clear()
 
             val expected = ProgramComputerState.PoweredOff(stopReason)
             assertEquals(expected, fixture.computer.serverTick())
-            assertEquals(
-                listOf(ObservedEvent.Output("last"), ObservedEvent.State(expected)),
-                fixture.events,
-            )
+            assertEquals(listOf<ObservedEvent>(ObservedEvent.State(expected)), fixture.events)
         }
+    }
+
+    @Test
+    fun `terminal facade delegates state deltas and merged input without Kotlin echo`() {
+        val terminal = terminalState(4)
+        val host =
+            FakeProgramHost(
+                tickStates = listOf(ProgramRuntimeState.WaitingForInput),
+                terminalState = terminal,
+                terminalUpdate = TerminalUpdate.Unchanged(4),
+                submitResult = true,
+                submitState = ProgramRuntimeState.Running,
+            )
+        val fixture = fixture(image = byteArrayOf(1), host = host)
+        fixture.computer.turnOn()
+        fixture.events.clear()
+        fixture.computer.serverTick()
+
+        assertEquals(terminal, fixture.computer.terminalFullState())
+        assertEquals(TerminalUpdate.Unchanged(4), fixture.computer.terminalChangesSince(4))
+        assertTrue(
+            fixture.computer.sendTerminalKey(
+                TerminalKey.ENTER,
+                TerminalKeyAction.PRESS,
+                setOf(TerminalModifier.SHIFT),
+            ),
+        )
+        assertTrue(fixture.computer.sendTerminalText("λ😀"))
+        assertTrue(fixture.computer.submitLine("answer"))
+        assertEquals(listOf("answer"), host.submittedLines)
+        assertEquals(Triple(TerminalKey.ENTER, TerminalKeyAction.PRESS, setOf(TerminalModifier.SHIFT)), host.keys.single())
+        assertEquals(listOf("λ😀"), host.texts)
+        assertEquals(
+            listOf<ObservedEvent>(
+                ObservedEvent.State(ProgramComputerState.WaitingForInput),
+                ObservedEvent.State(ProgramComputerState.Running),
+            ),
+            fixture.events,
+        )
     }
 
     @Test
@@ -323,38 +360,6 @@ class ProgramComputerTest {
     }
 
     @Test
-    fun `terminal exception drains once shuts down and publishes failure`() {
-        val host =
-            FakeProgramHost(
-                tickStates = listOf(ProgramRuntimeState.Halted(null)),
-                drainedOutputs = listOf("last"),
-            )
-        val fixture =
-            fixture(
-                image = byteArrayOf(1),
-                host = host,
-                terminalPublisher = { throw IllegalStateException("terminal down\nignored") },
-            )
-        fixture.computer.turnOn()
-        fixture.events.clear()
-
-        val expected =
-            ProgramComputerState.PoweredOff(
-                ProgramComputerStopReason.Failure(
-                    ProgramComputerFailure.TerminalPublication("terminal down"),
-                ),
-            )
-        assertEquals(expected, fixture.computer.serverTick())
-        assertEquals(1, host.tickCalls)
-        assertEquals(1, host.drainCalls)
-        assertEquals(1, host.shutdownCalls)
-        assertEquals(
-            listOf(ObservedEvent.Output("last"), ObservedEvent.State(expected)),
-            fixture.events,
-        )
-    }
-
-    @Test
     fun `state sink exception propagates after authoritative state changes`() {
         val fixture =
             fixture(
@@ -374,7 +379,6 @@ class ProgramComputerTest {
         image: ByteArray?,
         host: FakeProgramHost = FakeProgramHost(),
         imageLoader: () -> ByteArray? = { image },
-        terminalPublisher: (String) -> Unit = {},
         statePublisher: (ProgramComputerState) -> Unit = {},
     ): Fixture {
         val states = mutableListOf<ProgramComputerState>()
@@ -387,11 +391,6 @@ class ProgramComputerTest {
                     ProgramImageSource {
                         imageLoads++
                         imageLoader()
-                    },
-                terminalSink =
-                    ProgramTerminalSink { _, text ->
-                        events += ObservedEvent.Output(text)
-                        terminalPublisher(text)
                     },
                 stateSink =
                     ProgramComputerStateSink { _, state ->
@@ -417,20 +416,21 @@ class ProgramComputerTest {
 
     private class FakeProgramHost(
         tickStates: List<ProgramRuntimeState> = emptyList(),
-        drainedOutputs: List<String> = emptyList(),
+        val terminalState: TerminalState = terminalState(0),
+        val terminalUpdate: TerminalUpdate = TerminalUpdate.Unchanged(0),
         private val submitResult: Boolean = false,
         private val submitState: ProgramRuntimeState = ProgramRuntimeState.WaitingForInput,
         private val startResult: ProgramStartResult = ProgramStartResult.Started,
     ) : ProgramHost {
         private val tickStates = ArrayDeque(tickStates)
-        private val drainedOutputs = ArrayDeque(drainedOutputs)
         override var state: ProgramRuntimeState = ProgramRuntimeState.Idle
         val startCalls = mutableListOf<ByteArray>()
         val submittedLines = mutableListOf<String>()
         var tickCalls = 0
-        var drainCalls = 0
         var shutdownCalls = 0
         var closeCalls = 0
+        val keys = mutableListOf<Triple<TerminalKey, TerminalKeyAction, Set<TerminalModifier>>>()
+        val texts = mutableListOf<String>()
 
         override fun start(artifact: ByteArray): ProgramStartResult {
             startCalls += artifact.copyOf()
@@ -455,9 +455,22 @@ class ProgramComputerTest {
             return submitResult
         }
 
-        override fun drainOutput(): String {
-            drainCalls++
-            return drainedOutputs.removeFirstOrNull() ?: ""
+        override fun terminalFullState(): TerminalState = terminalState
+
+        override fun terminalChangesSince(revision: Long): TerminalUpdate = terminalUpdate
+
+        override fun sendTerminalKey(
+            key: TerminalKey,
+            action: TerminalKeyAction,
+            modifiers: Set<TerminalModifier>,
+        ): Boolean {
+            keys += Triple(key, action, modifiers)
+            return true
+        }
+
+        override fun sendTerminalText(value: String): Boolean {
+            texts += value
+            return true
         }
 
         override fun shutdown() {
@@ -472,12 +485,20 @@ class ProgramComputerTest {
     }
 
     private sealed interface ObservedEvent {
-        data class Output(
-            val text: String,
-        ) : ObservedEvent
-
         data class State(
             val state: ProgramComputerState,
         ) : ObservedEvent
+    }
+
+    private companion object {
+        fun terminalState(revision: Long): TerminalState =
+            TerminalState(
+                revision,
+                51,
+                19,
+                List(51 * 19) { TerminalCell(' '.code, 15, 0) },
+                TerminalPosition(0, 0),
+                true,
+            )
     }
 }
