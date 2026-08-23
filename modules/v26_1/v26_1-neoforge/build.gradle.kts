@@ -20,6 +20,7 @@
 @file:Suppress("PropertyName")
 
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import java.util.Locale
 import java.util.zip.ZipFile
 
@@ -168,4 +169,34 @@ tasks.named("check") {
 
 tasks.named("buildProductionUniversalJar") {
     dependsOn(verifyPackagedCompukterJni)
+}
+
+val verifyNeoForgeRuntimeDependencies =
+    tasks.register("verifyNeoForgeRuntimeDependencies") {
+        description = "Rejects Architectury mod runtime and embedded Kotlin compiler dependencies."
+        group = "verification"
+        val runtimeClasspath = configurations.named("runtimeClasspath")
+        inputs.files(runtimeClasspath)
+        doLast {
+            val forbidden =
+                runtimeClasspath
+                    .get()
+                    .incoming
+                    .resolutionResult
+                    .allComponents
+                    .mapNotNull { it.id as? ModuleComponentIdentifier }
+                    .filter { component ->
+                        (component.group.startsWith("dev.architectury") &&
+                            component.module != "architectury-transformer") ||
+                            component.module.contains("kotlin-compiler")
+                    }.map(ModuleComponentIdentifier::getDisplayName)
+                    .sorted()
+            check(forbidden.isEmpty()) {
+                "forbidden NeoForge runtime dependencies: ${forbidden.joinToString()}"
+            }
+        }
+    }
+
+tasks.named("check") {
+    dependsOn(verifyNeoForgeRuntimeDependencies)
 }

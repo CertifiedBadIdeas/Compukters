@@ -215,8 +215,11 @@ val verifyActiveMinecraftBaseline =
         val activeFiles =
             fileTree(rootDir) {
                 include(
+                    "README.md",
+                    "AGENTS.md",
                     "*.gradle.kts",
                     "*.properties",
+                    "docs/**/*.md",
                     "gradle/*.toml",
                     "build-scripts/**/*.gradle.kts",
                     "build-scripts/**/*.kt",
@@ -246,10 +249,18 @@ val verifyActiveMinecraftBaseline =
                 "JDK " + "21",
                 "JVM " + "17",
                 "JVM " + "21",
+                "architectury-" + "neoforge",
+                "Remap" + "JarTask",
             )
 
         inputs.files(activeFiles)
         doLast {
+            check(rootProject.file("modules/v26_1/v26_1-common").isDirectory) {
+                "active common module modules/v26_1/v26_1-common is missing"
+            }
+            check(rootProject.file("modules/v26_1/v26_1-neoforge").isDirectory) {
+                "active NeoForge module modules/v26_1/v26_1-neoforge is missing"
+            }
             val matches =
                 activeFiles.files
                     .asSequence()
@@ -268,6 +279,7 @@ tasks.register("verifyLocalFast") {
     description = "Runs the standard local JVM and build-script verification slice."
     group = "verification"
     dependsOn(buildScriptsTest)
+    dependsOn(verifyActiveMinecraftBaseline)
     dependsOn(":core:test")
     dependsOn(":native-runtime:test")
     dependsOn(":playground:test")
@@ -290,4 +302,6 @@ tasks.register("verifyLocalFull") {
     dependsOn(":playground:endToEndTest")
     dependsOn(testCompilerArtifactVmConformance)
     dependsOn(testKotlinSubsetVmConformance)
+    dependsOn(":v26_1-neoforge:runGameTestServer")
+    dependsOn(":v26_1-neoforge:verifyPackagedCompukterJni")
 }
