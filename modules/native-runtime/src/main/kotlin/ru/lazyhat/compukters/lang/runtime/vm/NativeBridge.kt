@@ -11,8 +11,6 @@
 
 package ru.lazyhat.compukters.lang.runtime.vm
 
-import java.nio.file.Path
-
 internal interface LowLevelVmBridge {
     fun create(artifact: ByteArray): ByteArray
 
@@ -44,10 +42,6 @@ internal interface LowLevelVmBridge {
 }
 
 internal object NativeBridge : LowLevelVmBridge {
-    fun load(library: Path) {
-        System.load(library.toAbsolutePath().normalize().toString())
-    }
-
     override fun create(artifact: ByteArray): ByteArray = nativeCreate(artifact)
 
     override fun advance(

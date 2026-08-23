@@ -14,7 +14,19 @@ package ru.lazyhat.compukters.lang.runtime.vm
 import java.nio.file.Path
 
 object VmRuntime {
+    private val loader = NativeRuntimeLoader.production(VmRuntime::class.java)
+
+    fun ensureLoaded(): VmRuntimeLoadResult = loader.ensurePackagedLoaded()
+
+    fun requireLoaded(): VmRuntimeLoadResult.Loaded = requireSuccess(ensureLoaded())
+
     fun loadNativeLibrary(library: Path) {
-        NativeBridge.load(library)
+        requireSuccess(loader.ensureExplicitLoaded(library))
     }
+
+    private fun requireSuccess(result: VmRuntimeLoadResult): VmRuntimeLoadResult.Loaded =
+        when (result) {
+            is VmRuntimeLoadResult.Loaded -> result
+            is VmRuntimeLoadResult.Failed -> throw VmRuntimeLoadException(result.failure)
+        }
 }

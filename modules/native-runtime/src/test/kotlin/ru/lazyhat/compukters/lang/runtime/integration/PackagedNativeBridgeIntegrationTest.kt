@@ -13,14 +13,16 @@ package ru.lazyhat.compukters.lang.runtime.integration
 
 import kotlinx.coroutines.runBlocking
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
+import ru.lazyhat.compukters.lang.runtime.vm.VmRuntimeLoadResult
 import java.nio.file.Path
 import kotlin.test.Test
+import kotlin.test.assertIs
 
-class NativeBridgeIntegrationTest {
+class PackagedNativeBridgeIntegrationTest {
     @Test
-    fun `terminal artifact runs through Kotlin JNI and Rust VM`() =
+    fun `packaged JNI resource loads and executes terminal fixture`() =
         runBlocking {
-            VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukter.jni.library")))
+            assertIs<VmRuntimeLoadResult.Loaded>(VmRuntime.ensureLoaded())
             TerminalFixtureProgram.run(Path.of(requiredProperty("compukter.vm.terminalFixture")))
         }
 
