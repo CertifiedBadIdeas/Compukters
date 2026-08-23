@@ -45,6 +45,10 @@ open class ComputerBlockEntity internal constructor(
     )
 
     private var carrier: ComputerCarrier? = null
+    private var lastMachineId = 0L
+
+    var terminalMachineId: Long? = null
+        private set
 
     var runtimeState: ProgramComputerState = neverStarted()
         private set
@@ -53,6 +57,7 @@ open class ComputerBlockEntity internal constructor(
         storage.install(artifact)
         setChanged()
         carrier?.let { current ->
+            terminalMachineId = nextMachineId()
             runtimeState = current.reboot()
         }
     }
@@ -69,6 +74,13 @@ open class ComputerBlockEntity internal constructor(
     fun installedArtifact(): ByteArray? = storage.artifact()
 
     fun terminalFullState(): TerminalState? = carrier?.terminalFullState()
+
+    fun prepareTerminal(): TerminalState? {
+        if (!storage.hasArtifact()) return null
+        val current = carrier ?: createCarrier().also { carrier = it }
+        if (current.state == neverStarted()) runtimeState = current.turnOn()
+        return current.terminalFullState()
+    }
 
     fun terminalChangesSince(revision: Long): TerminalUpdate? = carrier?.terminalChangesSince(revision)
 
@@ -112,6 +124,7 @@ open class ComputerBlockEntity internal constructor(
 
     private fun createCarrier(): ComputerCarrier {
         val deviceId = blockPos.hashCode()
+        terminalMachineId = nextMachineId()
         return carrierFactory.create(
             deviceId = deviceId,
             imageSource = { storage.artifact() },
@@ -122,6 +135,12 @@ open class ComputerBlockEntity internal constructor(
     private fun closeCarrier() {
         carrier?.close()
         carrier = null
+        terminalMachineId = null
+    }
+
+    private fun nextMachineId(): Long {
+        lastMachineId = Math.incrementExact(lastMachineId)
+        return lastMachineId
     }
 
     private fun ProgramComputerState.isPoweredOn(): Boolean =

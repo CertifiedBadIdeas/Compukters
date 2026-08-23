@@ -23,13 +23,19 @@ object TerminalClientNetwork {
     @JvmStatic
     @SubscribeEvent
     fun register(event: RegisterClientPayloadHandlersEvent) {
-        event.register(TerminalSnapshotPayload.TYPE) { payload, _ ->
+        event.register(TerminalFullPayload.TYPE) { payload, _ ->
             val minecraft = Minecraft.getInstance()
             val current = minecraft.screen
             if (current is TerminalScreen && current.position == payload.position) {
                 current.update(payload)
             } else if (payload.openScreen) {
                 minecraft.setScreen(TerminalScreen(payload))
+            }
+        }
+        event.register(TerminalDeltaPayload.TYPE) deltaHandler@{ payload, _ ->
+            val current = Minecraft.getInstance().screen as? TerminalScreen ?: return@deltaHandler
+            if (current.position != payload.position || !current.update(payload)) {
+                current.requestResync()
             }
         }
     }

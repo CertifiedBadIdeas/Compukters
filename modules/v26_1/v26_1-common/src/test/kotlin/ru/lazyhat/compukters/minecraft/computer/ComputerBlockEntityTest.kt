@@ -70,15 +70,28 @@ class ComputerBlockEntityTest {
         fixture.entity.installArtifact(initial)
         fixture.entity.serverTick()
         val carrier = fixture.carriers.single()
+        val initialMachineId = requireNotNull(fixture.entity.terminalMachineId)
 
         val replacement = byteArrayOf(2, 3)
         fixture.entity.installArtifact(replacement)
         replacement[0] = 9
 
         assertEquals(1, carrier.rebootCalls)
+        assertTrue(requireNotNull(fixture.entity.terminalMachineId) > initialMachineId)
         assertEquals(1, fixture.carriers.size)
         assertContentEquals(byteArrayOf(2, 3), fixture.entity.installedArtifact())
         assertContentEquals(byteArrayOf(2, 3), carrier.loadedArtifact)
+    }
+
+    @Test
+    fun `terminal open starts a blank machine without advancing an extra tick`() {
+        val fixture = fixture()
+        fixture.entity.installArtifact(byteArrayOf(1))
+
+        assertEquals(terminalState("", 0), fixture.entity.prepareTerminal())
+        assertEquals(1, fixture.carriers.single().turnOnCalls)
+        assertEquals(0, fixture.carriers.single().serverTickCalls)
+        assertTrue(requireNotNull(fixture.entity.terminalMachineId) > 0)
     }
 
     @Test

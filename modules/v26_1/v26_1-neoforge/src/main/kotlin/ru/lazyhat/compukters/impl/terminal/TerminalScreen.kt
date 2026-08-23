@@ -20,14 +20,11 @@ import net.neoforged.neoforge.client.network.ClientPacketDistributor
 import org.lwjgl.glfw.GLFW
 
 class TerminalScreen(
-    initial: TerminalSnapshotPayload,
+    initial: TerminalFullPayload,
 ) : Screen(Component.literal("Compukters terminal")) {
     val position = initial.position
 
-    private var text = initial.text
-    private var status = initial.status
-    private var waitingForInput = initial.waitingForInput
-    private var refreshCountdown = 0
+    private val replica = TerminalReplica(initial)
     private lateinit var input: EditBox
 
     override fun init() {
@@ -42,27 +39,28 @@ class TerminalScreen(
                     Component.literal("Program input"),
                 ),
             )
-        input.setMaxLength(TerminalInputPayload.MAXIMUM_INPUT_CODE_UNITS)
-        updateInputState()
+        input.setMaxLength(TerminalCompatibilityLinePayload.MAXIMUM_INPUT_CODE_UNITS)
+        setInitialFocus(input)
     }
 
-    fun update(payload: TerminalSnapshotPayload) {
-        text = payload.text
-        status = payload.status
-        waitingForInput = payload.waitingForInput
-        if (::input.isInitialized) updateInputState()
+    fun update(payload: TerminalFullPayload): Boolean = replica.replace(payload)
+
+    fun update(payload: TerminalDeltaPayload): Boolean = replica.apply(payload)
+
+    fun requestResync() {
+        ClientPacketDistributor.sendToServer(TerminalResyncPayload(position, replica.machineId, replica.state.revision))
     }
 
-    override fun tick() {
-        if (refreshCountdown-- <= 0) {
-            ClientPacketDistributor.sendToServer(TerminalRefreshPayload(position))
-            refreshCountdown = REFRESH_INTERVAL_TICKS
-        }
+    override fun removed() {
+        ClientPacketDistributor.sendToServer(TerminalClosePayload(position, replica.machineId))
+        super.removed()
     }
 
     override fun keyPressed(event: KeyEvent): Boolean {
-        if (waitingForInput && event.key() == GLFW.GLFW_KEY_ENTER) {
-            ClientPacketDistributor.sendToServer(TerminalInputPayload(position, input.value))
+        if (event.key() == GLFW.GLFW_KEY_ENTER) {
+            ClientPacketDistributor.sendToServer(
+                TerminalCompatibilityLinePayload(position, replica.machineId, input.value),
+            )
             input.value = ""
             return true
         }
@@ -85,12 +83,20 @@ class TerminalScreen(
         partialTick: Float,
     ) {
         graphics.text(font, title, PADDING, PADDING, TITLE_COLOR, true)
-        graphics.text(font, status, PADDING, PADDING + font.lineHeight + 3, STATUS_COLOR, false)
+        graphics.text(
+            font,
+            "revision ${replica.state.revision}",
+            PADDING,
+            PADDING + font.lineHeight + 3,
+            STATUS_COLOR,
+            false,
+        )
 
         val outputTop = PADDING + font.lineHeight * 2 + 8
-        val outputBottom = if (waitingForInput) height - PADDING - INPUT_HEIGHT - 6 else height - PADDING
+        val outputBottom = height - PADDING - INPUT_HEIGHT - 6
         graphics.fill(PADDING, outputTop, width - PADDING, outputBottom, OUTPUT_BACKGROUND_COLOR)
         graphics.enableScissor(PADDING + 4, outputTop + 4, width - PADDING - 4, outputBottom - 4)
+        val text = replicaText()
         val lines = font.split(Component.literal(text.ifEmpty { "(no output yet)" }), width - PADDING * 2 - 8)
         val visibleLineCount = ((outputBottom - outputTop - 8) / font.lineHeight).coerceAtLeast(0)
         lines.takeLast(visibleLineCount).forEachIndexed { index, line ->
@@ -102,16 +108,19 @@ class TerminalScreen(
 
     override fun isPauseScreen(): Boolean = false
 
-    private fun updateInputState() {
-        input.visible = waitingForInput
-        input.setEditable(waitingForInput)
-        if (waitingForInput) setInitialFocus(input)
+    private fun replicaText(): String {
+        val text = StringBuilder()
+        repeat(replica.state.height) { y ->
+            val row = StringBuilder()
+            repeat(replica.state.width) { x -> row.appendCodePoint(replica.state.cells[y * replica.state.width + x].codePoint) }
+            text.append(row.toString().trimEnd()).append('\n')
+        }
+        return text.toString().trimEnd()
     }
 
     private companion object {
         const val PADDING = 16
         const val INPUT_HEIGHT = 20
-        const val REFRESH_INTERVAL_TICKS = 4
         val BACKGROUND_COLOR = 0xFF101418.toInt()
         val OUTPUT_BACKGROUND_COLOR = 0xFF080B0D.toInt()
         val TITLE_COLOR = 0xFFF2F4F8.toInt()

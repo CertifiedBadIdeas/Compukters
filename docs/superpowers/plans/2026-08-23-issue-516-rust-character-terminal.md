@@ -224,25 +224,25 @@ git commit -m "refactor(core): source terminal state from Rust (#516)"
 - Create: `modules/v26_1/v26_1-neoforge/src/test/kotlin/ru/lazyhat/compukters/impl/terminal/TerminalPayloadsTest.kt`
 - Create: `modules/v26_1/v26_1-neoforge/src/test/kotlin/ru/lazyhat/compukters/impl/terminal/TerminalReplicaTest.kt`
 
-- [ ] **Step 1: Write failing codec/replica tests**
+- [x] **Step 1: Write failing codec/replica tests**
 
 Cover bounded full/delta round trips, revision mismatch, atomic application,
 scroll-before-patch order, invalid scalar/palette/rectangle/count rejection,
 stable key mapping, and atomic text packets.
 
-- [ ] **Step 2: Implement versioned payloads**
+- [x] **Step 2: Implement versioned payloads**
 
 Replace transcript payloads with full state, delta, resync, key, and text
 payloads. Include block/machine identity and validate all products before
 allocation.
 
-- [ ] **Step 3: Implement server ordering**
+- [x] **Step 3: Implement server ordering**
 
 Send full state on open, deltas for matching revisions, nothing when unchanged,
 and full resync on mismatch. Accept bounded/rate-limited input from every valid
 in-range viewer on the server thread; remove leases and optimistic echo.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run: `./gradlew-sandbox-dev-parallel :v26_1-neoforge:test --rerun-tasks`
 
