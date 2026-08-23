@@ -19,15 +19,24 @@
 
 package ru.lazyhat.compukters.impl
 
+import net.neoforged.bus.api.IEventBus
 import net.neoforged.fml.common.Mod
 import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.MOD_ID
+import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 
 @Mod(MOD_ID)
-class CompuktersMod {
+class CompuktersMod(
+    eventBus: IEventBus,
+) {
     init {
-        val native = VmRuntime.requireLoaded()
+        val native = requireNativeRuntime()
+        CompuktersRegistry.register(eventBus)
         LOGGER.debug { "$MOD_ID loaded native VM from ${native.source}" }
+    }
+
+    companion object {
+        internal fun requireNativeRuntime() = VmRuntime.requireLoaded()
     }
 }
