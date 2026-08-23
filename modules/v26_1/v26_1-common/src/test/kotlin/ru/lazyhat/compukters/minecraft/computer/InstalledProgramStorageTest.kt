@@ -11,7 +11,12 @@
 
 package ru.lazyhat.compukters.minecraft.computer
 
+import net.minecraft.core.HolderLookup
 import net.minecraft.nbt.CompoundTag
+import net.minecraft.util.ProblemReporter
+import net.minecraft.world.level.storage.TagValueInput
+import net.minecraft.world.level.storage.TagValueOutput
+import java.util.stream.Stream
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -50,27 +55,23 @@ class InstalledProgramStorageTest {
     fun `versioned NBT round trip uses one namespaced compound`() {
         val storage = InstalledProgramStorage(maximumArtifactBytes = 3)
         storage.install(byteArrayOf(1, 2, 3))
-        val root = CompoundTag()
+        val root = storage.saveTag()
 
-        storage.save(root)
-
-        assertEquals(setOf("compukters"), root.allKeys)
-        val payload = root.getCompound("compukters")
-        assertEquals(setOf("schema", "artifact"), payload.allKeys)
-        assertEquals(1, payload.getInt("schema"))
-        assertContentEquals(byteArrayOf(1, 2, 3), payload.getByteArray("artifact"))
+        assertEquals(setOf("compukters"), root.keySet())
+        val payload = root.getCompoundOrEmpty("compukters")
+        assertEquals(setOf("schema", "artifact"), payload.keySet())
+        assertEquals(1, payload.getIntOr("schema", 0))
+        assertContentEquals(byteArrayOf(1, 2, 3), payload.getByteArray("artifact").orElseThrow())
 
         val restored = InstalledProgramStorage(maximumArtifactBytes = 3)
-        restored.load(root)
+        restored.loadTag(root)
         assertContentEquals(byteArrayOf(1, 2, 3), restored.artifact())
     }
 
     @Test
     fun `missing artifact saves nothing and clear reports actual changes`() {
         val storage = InstalledProgramStorage(maximumArtifactBytes = 3)
-        val root = CompoundTag()
-
-        storage.save(root)
+        val root = storage.saveTag()
         assertTrue(root.isEmpty)
         assertFalse(storage.clear())
         storage.install(byteArrayOf(1))
@@ -95,7 +96,7 @@ class InstalledProgramStorageTest {
 
         invalidRoots.forEach { root ->
             storage.install(byteArrayOf(9))
-            storage.load(root)
+            storage.loadTag(root)
             assertNull(storage.artifact())
         }
     }
@@ -113,4 +114,18 @@ class InstalledProgramStorageTest {
                 },
             )
         }
+
+    private fun InstalledProgramStorage.saveTag(): CompoundTag {
+        val output = TagValueOutput.createWithoutContext(ProblemReporter.DISCARDING)
+        save(output)
+        return output.buildResult()
+    }
+
+    private fun InstalledProgramStorage.loadTag(tag: CompoundTag) {
+        load(TagValueInput.create(ProblemReporter.DISCARDING, EMPTY_PROVIDER, tag))
+    }
+
+    private companion object {
+        val EMPTY_PROVIDER: HolderLookup.Provider = HolderLookup.Provider.create(Stream.empty())
+    }
 }

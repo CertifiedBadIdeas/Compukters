@@ -16,9 +16,12 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.HolderLookup
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.server.Bootstrap
+import net.minecraft.util.ProblemReporter
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.storage.TagValueInput
+import net.minecraft.world.level.storage.TagValueOutput
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStateSink
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
@@ -146,7 +149,7 @@ class ComputerBlockEntityTest {
         assertEquals(TerminalTranscript.Snapshot("", 0), restored.entity.terminalSnapshot())
         assertEquals(neverStarted(), restored.entity.runtimeState)
         assertTrue(restored.carriers.isEmpty())
-        assertEquals(setOf("compukters"), tag.allKeys)
+        assertEquals(setOf("compukters"), tag.keySet())
     }
 
     @Test
@@ -207,9 +210,14 @@ class ComputerBlockEntityTest {
             InstalledProgramStorage(maximumArtifactBytes),
             TerminalTranscript(transcriptCodeUnits),
         ) {
-        fun saveForTest(): CompoundTag = CompoundTag().also { saveAdditional(it, EMPTY_PROVIDER) }
+        fun saveForTest(): CompoundTag {
+            val output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, EMPTY_PROVIDER)
+            saveAdditional(output)
+            return output.buildResult()
+        }
 
-        fun loadForTest(tag: CompoundTag) = loadAdditional(tag, EMPTY_PROVIDER)
+        fun loadForTest(tag: CompoundTag) =
+            loadAdditional(TagValueInput.create(ProblemReporter.DISCARDING, EMPTY_PROVIDER, tag))
     }
 
     private class FakeCarrier(

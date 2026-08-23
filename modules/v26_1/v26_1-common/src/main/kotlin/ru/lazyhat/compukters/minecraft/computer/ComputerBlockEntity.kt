@@ -12,11 +12,11 @@
 package ru.lazyhat.compukters.minecraft.computer
 
 import net.minecraft.core.BlockPos
-import net.minecraft.core.HolderLookup
-import net.minecraft.nbt.CompoundTag
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.storage.ValueInput
+import net.minecraft.world.level.storage.ValueOutput
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
 
@@ -85,22 +85,20 @@ open class ComputerBlockEntity internal constructor(
     }
 
     override fun loadAdditional(
-        tag: CompoundTag,
-        registries: HolderLookup.Provider,
+        input: ValueInput,
     ) {
-        super.loadAdditional(tag, registries)
+        super.loadAdditional(input)
         closeCarrier()
-        storage.load(tag)
+        storage.load(input)
         transcript.clear()
         runtimeState = neverStarted()
     }
 
     override fun saveAdditional(
-        tag: CompoundTag,
-        registries: HolderLookup.Provider,
+        output: ValueOutput,
     ) {
-        super.saveAdditional(tag, registries)
-        storage.save(tag)
+        super.saveAdditional(output)
+        storage.save(output)
     }
 
     private fun createCarrier(): ComputerCarrier {
