@@ -152,6 +152,7 @@ git commit -m "refactor(font): generalize bitmap atlas generation"
 - Create: `tools/fonts/dina/v2.92/Dina_r400-6.bdf`
 - Create: `tools/fonts/dina/v2.92/LICENSE`
 - Create: `tools/fonts/dina/v2.92/PROVENANCE.md`
+- Create: `tools/fonts/proggy/139ec08a/ProggyTiny.pcf.gz`
 - Create: `tools/fonts/proggy/139ec08a/ProggyTiny.bdf`
 - Create: `tools/fonts/proggy/139ec08a/LICENSE`
 - Create: `tools/fonts/proggy/139ec08a/PROVENANCE.md`
@@ -174,11 +175,10 @@ git commit -m "refactor(font): generalize bitmap atlas generation"
 
 Copy `BDF/Dina_r400-6.bdf` and `LICENSE` from the official Dina v2.92 archive. Record archive SHA-256 `1f51bba53f75a64d2d8bd037e8e0f84b6f8064e50a72ee954033bede173508cf` and BDF SHA-256 `0efe660581b38b8025a46401d2c919c7e654fc21c81979e8d31e714c414deba1`.
 
-Pin `ProggyOriginal/ProggyTiny.pcf.gz` from commit `139ec08a38096161291792313ef5803fc4f0e37b`; record upstream SHA-256 `a8beed341cfa79272b80c48d3237c417ff7b155468b95a634a70ba918d6d503a`. Decompress it and convert the strike once with FontForge 20230101 without scaling:
+Pin `ProggyOriginal/ProggyTiny.pcf.gz` from commit `139ec08a38096161291792313ef5803fc4f0e37b`; record upstream SHA-256 `a8beed341cfa79272b80c48d3237c417ff7b155468b95a634a70ba918d6d503a`. Convert the strike once with pcf2bdf 1.07 at commit `4e80d7fa069b4be08ec4e23e4d5086ef046e86aa` without scaling:
 
 ```bash
-gzip -dc ProggyTiny.pcf.gz > ProggyTiny.pcf
-fontforge -lang=ff -c 'Open($1); Generate($2)' ProggyTiny.pcf ProggyTiny.bdf
+pcf2bdf -o ProggyTiny.bdf ProggyTiny.pcf.gz
 ```
 
 Verify that the result retains `6x10`, ascent `8`, descent `2`, and a six-pixel advance, then record the source hash, converter version, and command in `PROVENANCE.md`. Normal Gradle builds consume only the committed BDF.

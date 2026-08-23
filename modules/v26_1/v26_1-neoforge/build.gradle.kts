@@ -113,40 +113,114 @@ dependencies {
     add(gameTest.implementationConfigurationName, project(path = projects.v261Common.path))
 }
 
-val cozetteBdf = rootProject.layout.projectDirectory.file("tools/fonts/cozette/v.1.30.0/cozette.bdf")
-val cozetteFontJson = layout.projectDirectory.file("src/main/resources/assets/compukters/font/terminal/cozette.json")
-val cozetteAtlasPng = layout.projectDirectory.file("src/main/resources/assets/compukters/textures/font/terminal/cozette.png")
-val cozetteManifest =
-    layout.projectDirectory.file("src/main/resources/assets/compukters/font/terminal/cozette-codepoints.txt")
-val cozetteCoverageKotlin =
-    layout.projectDirectory.file("src/main/kotlin/ru/lazyhat/compukters/impl/terminal/CozetteFontCoverage.kt")
+data class TerminalFontBuildSpec(
+    val id: String,
+    val taskStem: String,
+    val displayName: String,
+    val sourceDescription: String,
+    val bdfPath: String,
+    val cellHeight: Int,
+    val ascent: Int,
+    val replacementCodePoint: Int,
+    val selectedRanges: List<String>,
+)
 
-val generateCozetteTerminalFont =
-    tasks.register<GenerateCozetteTerminalFont>("generateCozetteTerminalFont") {
-        description = "Regenerates committed Cozette terminal font resources from the pinned BDF."
-        group = "build setup"
-        bdfFile.set(cozetteBdf)
-        fontJsonFile.set(cozetteFontJson)
-        atlasPngFile.set(cozetteAtlasPng)
-        manifestFile.set(cozetteManifest)
-        coverageKotlinFile.set(cozetteCoverageKotlin)
-    }
-
-val verifyCozetteTerminalFont =
-    tasks.register<VerifyCozetteTerminalFont>("verifyCozetteTerminalFont") {
-        description = "Rejects committed Cozette terminal font resources that have drifted from the pinned BDF."
-        group = "verification"
-        bdfFile.set(cozetteBdf)
-        fontJsonFile.set(cozetteFontJson)
-        atlasPngFile.set(cozetteAtlasPng)
-        manifestFile.set(cozetteManifest)
-        coverageKotlinFile.set(cozetteCoverageKotlin)
-        mustRunAfter(generateCozetteTerminalFont)
-    }
-
-tasks.named("check") {
-    dependsOn(verifyCozetteTerminalFont)
+fun registerTerminalFont(spec: TerminalFontBuildSpec) {
+    val bdf = rootProject.layout.projectDirectory.file(spec.bdfPath)
+    val fontJson = layout.projectDirectory.file("src/main/resources/assets/compukters/font/terminal/${spec.id}.json")
+    val atlas = layout.projectDirectory.file("src/main/resources/assets/compukters/textures/font/terminal/${spec.id}.png")
+    val manifest =
+        layout.projectDirectory.file("src/main/resources/assets/compukters/font/terminal/${spec.id}-codepoints.txt")
+    val coverage =
+        layout.projectDirectory.file(
+            "src/main/kotlin/ru/lazyhat/compukters/impl/terminal/${spec.taskStem}FontCoverage.kt",
+        )
+    val coverageName = "${spec.id.uppercase()}_SUPPORTED_CODE_POINTS"
+    val generate =
+        tasks.register<GenerateTerminalBitmapFont>("generate${spec.taskStem}TerminalFont") {
+            description = "Regenerates committed ${spec.displayName} terminal font resources from the pinned BDF."
+            group = "build setup"
+            bdfFile.set(bdf)
+            displayName.set(spec.displayName)
+            resourceName.set(spec.id)
+            coveragePropertyName.set(coverageName)
+            sourceDescription.set(spec.sourceDescription)
+            cellWidth.set(6)
+            cellHeight.set(spec.cellHeight)
+            ascent.set(spec.ascent)
+            descent.set(spec.cellHeight - spec.ascent)
+            replacementCodePoint.set(spec.replacementCodePoint)
+            selectedRanges.set(spec.selectedRanges)
+            fontJsonFile.set(fontJson)
+            atlasPngFile.set(atlas)
+            manifestFile.set(manifest)
+            coverageKotlinFile.set(coverage)
+        }
+    val verify =
+        tasks.register<VerifyTerminalBitmapFont>("verify${spec.taskStem}TerminalFont") {
+            description = "Rejects committed ${spec.displayName} terminal font resources that drifted from its BDF."
+            group = "verification"
+            regenerationTaskName.set(generate.name)
+            bdfFile.set(bdf)
+            displayName.set(spec.displayName)
+            resourceName.set(spec.id)
+            coveragePropertyName.set(coverageName)
+            sourceDescription.set(spec.sourceDescription)
+            cellWidth.set(6)
+            cellHeight.set(spec.cellHeight)
+            ascent.set(spec.ascent)
+            descent.set(spec.cellHeight - spec.ascent)
+            replacementCodePoint.set(spec.replacementCodePoint)
+            selectedRanges.set(spec.selectedRanges)
+            fontJsonFile.set(fontJson)
+            atlasPngFile.set(atlas)
+            manifestFile.set(manifest)
+            coverageKotlinFile.set(coverage)
+            mustRunAfter(generate)
+        }
+    tasks.named("check") { dependsOn(verify) }
 }
+
+registerTerminalFont(
+    TerminalFontBuildSpec(
+        id = "cozette",
+        taskStem = "Cozette",
+        displayName = "Cozette",
+        sourceDescription = "pinned Cozette v.1.30.0",
+        bdfPath = "tools/fonts/cozette/v.1.30.0/cozette.bdf",
+        cellHeight = 13,
+        ascent = 10,
+        replacementCodePoint = 0xFFFD,
+        selectedRanges =
+            listOf("32..126", "160..255", "1024..1279", "8592..8703", "9472..9599", "9600..9631", "65533..65533"),
+    ),
+)
+registerTerminalFont(
+    TerminalFontBuildSpec(
+        id = "dina",
+        taskStem = "Dina",
+        displayName = "Dina",
+        sourceDescription = "pinned Dina v2.92 Regular 6pt",
+        bdfPath = "tools/fonts/dina/v2.92/Dina_r400-6.bdf",
+        cellHeight = 10,
+        ascent = 8,
+        replacementCodePoint = '?'.code,
+        selectedRanges = listOf("32..126", "160..255"),
+    ),
+)
+registerTerminalFont(
+    TerminalFontBuildSpec(
+        id = "proggy_tiny",
+        taskStem = "ProggyTiny",
+        displayName = "ProggyTiny",
+        sourceDescription = "pinned ProggyTiny commit 139ec08a",
+        bdfPath = "tools/fonts/proggy/139ec08a/ProggyTiny.bdf",
+        cellHeight = 10,
+        ascent = 8,
+        replacementCodePoint = '?'.code,
+        selectedRanges = listOf("32..126", "160..255"),
+    ),
+)
 
 val nativeOs =
     when {
