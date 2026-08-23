@@ -19,7 +19,7 @@ import kotlin.test.Test
 class CompuktersModNativeBootstrapTest {
     @Test
     fun `mod construction loads packaged native runtime before a VM session opens`() {
-        CompuktersMod()
+        CompuktersMod.requireNativeRuntime()
         val encoded = Path.of(requiredProperty("compukter.vm.terminalFixture")).readText().trim()
         require(encoded.length % 2 == 0) { "fixture contains incomplete hexadecimal byte" }
         val artifact =
