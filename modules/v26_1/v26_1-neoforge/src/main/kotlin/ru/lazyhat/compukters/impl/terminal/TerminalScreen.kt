@@ -12,12 +12,18 @@
 package ru.lazyhat.compukters.impl.terminal
 
 import net.minecraft.client.gui.GuiGraphicsExtractor
-import net.minecraft.client.gui.components.EditBox
 import net.minecraft.client.gui.screens.Screen
+import net.minecraft.client.input.CharacterEvent
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.FontDescription
+import net.minecraft.resources.Identifier
 import net.neoforged.neoforge.client.network.ClientPacketDistributor
 import org.lwjgl.glfw.GLFW
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 
 class TerminalScreen(
     initial: TerminalFullPayload,
@@ -25,23 +31,8 @@ class TerminalScreen(
     val position = initial.position
 
     private val replica = TerminalReplica(initial)
-    private lateinit var input: EditBox
-
-    override fun init() {
-        input =
-            addRenderableWidget(
-                EditBox(
-                    font,
-                    PADDING,
-                    height - PADDING - INPUT_HEIGHT,
-                    width - PADDING * 2,
-                    INPUT_HEIGHT,
-                    Component.literal("Program input"),
-                ),
-            )
-        input.setMaxLength(TerminalCompatibilityLinePayload.MAXIMUM_INPUT_CODE_UNITS)
-        setInitialFocus(input)
-    }
+    private val pressedKeys = mutableSetOf<Int>()
+    private val compatibilityLine = StringBuilder()
 
     fun update(payload: TerminalFullPayload): Boolean = replica.replace(payload)
 
@@ -53,18 +44,48 @@ class TerminalScreen(
 
     override fun removed() {
         ClientPacketDistributor.sendToServer(TerminalClosePayload(position, replica.machineId))
+        pressedKeys.clear()
         super.removed()
     }
 
     override fun keyPressed(event: KeyEvent): Boolean {
-        if (event.key() == GLFW.GLFW_KEY_ENTER) {
-            ClientPacketDistributor.sendToServer(
-                TerminalCompatibilityLinePayload(position, replica.machineId, input.value),
-            )
-            input.value = ""
+        if (event.isPaste) {
+            val pasted = boundedText(minecraft.keyboardHandler.clipboard)
+            if (pasted.isNotEmpty()) {
+                sendText(pasted)
+                appendCompatibilityText(pasted)
+            }
             return true
         }
-        return super.keyPressed(event)
+        val key = KEY_MAP[event.key()] ?: return super.keyPressed(event)
+        val action = if (pressedKeys.add(event.key())) TerminalKeyAction.PRESS else TerminalKeyAction.REPEAT
+        ClientPacketDistributor.sendToServer(
+            TerminalKeyPayload(position, replica.machineId, key, action, modifiers(event.modifiers())),
+        )
+        when (key) {
+            TerminalKey.BACKSPACE -> removeCompatibilityCodePoint()
+            TerminalKey.ENTER -> {
+                ClientPacketDistributor.sendToServer(
+                    TerminalCompatibilityLinePayload(position, replica.machineId, compatibilityLine.toString()),
+                )
+                compatibilityLine.clear()
+            }
+            else -> Unit
+        }
+        return if (key == TerminalKey.ESCAPE) super.keyPressed(event) else true
+    }
+
+    override fun keyReleased(event: KeyEvent): Boolean {
+        val mapped = KEY_MAP.containsKey(event.key())
+        pressedKeys.remove(event.key())
+        return mapped || super.keyReleased(event)
+    }
+
+    override fun charTyped(event: CharacterEvent): Boolean {
+        val text = event.codepointAsString()
+        sendText(text)
+        appendCompatibilityText(text)
+        return true
     }
 
     override fun extractBackground(
@@ -73,7 +94,7 @@ class TerminalScreen(
         mouseY: Int,
         partialTick: Float,
     ) {
-        graphics.fill(0, 0, width, height, BACKGROUND_COLOR)
+        graphics.fill(0, 0, width, height, TerminalRenderGeometry.paletteColor(0))
     }
 
     override fun extractRenderState(
@@ -82,49 +103,154 @@ class TerminalScreen(
         mouseY: Int,
         partialTick: Float,
     ) {
-        graphics.text(font, title, PADDING, PADDING, TITLE_COLOR, true)
-        graphics.text(
-            font,
-            "revision ${replica.state.revision}",
-            PADDING,
-            PADDING + font.lineHeight + 3,
-            STATUS_COLOR,
-            false,
-        )
-
-        val outputTop = PADDING + font.lineHeight * 2 + 8
-        val outputBottom = height - PADDING - INPUT_HEIGHT - 6
-        graphics.fill(PADDING, outputTop, width - PADDING, outputBottom, OUTPUT_BACKGROUND_COLOR)
-        graphics.enableScissor(PADDING + 4, outputTop + 4, width - PADDING - 4, outputBottom - 4)
-        val text = replicaText()
-        val lines = font.split(Component.literal(text.ifEmpty { "(no output yet)" }), width - PADDING * 2 - 8)
-        val visibleLineCount = ((outputBottom - outputTop - 8) / font.lineHeight).coerceAtLeast(0)
-        lines.takeLast(visibleLineCount).forEachIndexed { index, line ->
-            graphics.text(font, line, PADDING + 4, outputTop + 4 + index * font.lineHeight, TEXT_COLOR, false)
+        val geometry = TerminalRenderGeometry(width, height)
+        drawBackgroundRuns(graphics, geometry)
+        drawGlyphs(graphics, geometry)
+        if (TerminalRenderGeometry.drawCursor(replica.state.cursorVisible, System.nanoTime() / 1_000_000L)) {
+            val cursor = geometry.cursor(replica.state.cursor)
+            graphics.fill(cursor.left, cursor.top, cursor.right, cursor.bottom, CURSOR_COLOR)
         }
-        graphics.disableScissor()
         super.extractRenderState(graphics, mouseX, mouseY, partialTick)
     }
 
     override fun isPauseScreen(): Boolean = false
 
-    private fun replicaText(): String {
-        val text = StringBuilder()
+    private fun drawBackgroundRuns(
+        graphics: GuiGraphicsExtractor,
+        geometry: TerminalRenderGeometry,
+    ) {
         repeat(replica.state.height) { y ->
-            val row = StringBuilder()
-            repeat(replica.state.width) { x -> row.appendCodePoint(replica.state.cells[y * replica.state.width + x].codePoint) }
-            text.append(row.toString().trimEnd()).append('\n')
+            var start = 0
+            while (start < replica.state.width) {
+                val background = cell(start, y).background
+                var end = start + 1
+                while (end < replica.state.width && cell(end, y).background == background) end++
+                if (background != 0) {
+                    val first = geometry.cell(start, y)
+                    val last = geometry.cell(end - 1, y)
+                    graphics.fill(first.left, first.top, last.right, first.bottom, TerminalRenderGeometry.paletteColor(background))
+                }
+                start = end
+            }
         }
-        return text.toString().trimEnd()
     }
 
+    private fun drawGlyphs(
+        graphics: GuiGraphicsExtractor,
+        geometry: TerminalRenderGeometry,
+    ) {
+        repeat(replica.state.height) { y ->
+            repeat(replica.state.width) cellLoop@{ x ->
+                val cell = cell(x, y)
+                if (cell.codePoint == ' '.code) return@cellLoop
+                val glyph =
+                    Component
+                        .literal(String(Character.toChars(cell.codePoint)))
+                        .withStyle { style ->
+                            style
+                                .withFont(UNIFORM_FONT)
+                                .withColor(TerminalRenderGeometry.paletteColor(cell.foreground))
+                        }
+                val bounds = geometry.cell(x, y)
+                val clip = geometry.glyphClip(x, y)
+                val glyphX = bounds.left + (bounds.width - font.width(glyph)) / 2
+                val glyphY = bounds.top + (bounds.height - font.lineHeight) / 2
+                graphics.enableScissor(clip.left, clip.top, clip.right, clip.bottom)
+                graphics.text(font, glyph, glyphX, glyphY, TerminalRenderGeometry.paletteColor(cell.foreground), false)
+                graphics.disableScissor()
+            }
+        }
+    }
+
+    private fun cell(
+        x: Int,
+        y: Int,
+    ): TerminalCell = replica.state.cells[y * replica.state.width + x]
+
+    private fun sendText(text: String) {
+        ClientPacketDistributor.sendToServer(TerminalTextPayload(position, replica.machineId, text))
+    }
+
+    private fun appendCompatibilityText(text: String) {
+        val lineText = text.filterNot { it == '\r' || it == '\n' }
+        val available = TerminalCompatibilityLinePayload.MAXIMUM_INPUT_CODE_UNITS - compatibilityLine.length
+        if (available <= 0) return
+        compatibilityLine.append(boundedText(lineText, available))
+    }
+
+    private fun removeCompatibilityCodePoint() {
+        if (compatibilityLine.isEmpty()) return
+        val end = compatibilityLine.length
+        val start = compatibilityLine.offsetByCodePoints(end, -1)
+        compatibilityLine.delete(start, end)
+    }
+
+    private fun boundedText(
+        value: String,
+        maximumCodeUnits: Int = TerminalProtocol.MAXIMUM_TEXT_CODE_UNITS,
+    ): String {
+        val result = StringBuilder(minOf(value.length, maximumCodeUnits))
+        var offset = 0
+        while (offset < value.length) {
+            val first = value[offset]
+            val validPair =
+                Character.isHighSurrogate(first) &&
+                    offset + 1 < value.length &&
+                    Character.isLowSurrogate(value[offset + 1])
+            val codePoint =
+                when {
+                    validPair -> Character.toCodePoint(first, value[offset + 1])
+                    Character.isSurrogate(first) -> 0xFFFD
+                    else -> first.code
+                }
+            val inputUnits = if (validPair) 2 else 1
+            val outputUnits = Character.charCount(codePoint)
+            if (result.length + outputUnits > maximumCodeUnits) break
+            result.appendCodePoint(codePoint)
+            offset += inputUnits
+        }
+        return result.toString()
+    }
+
+    private fun modifiers(bits: Int): Set<TerminalModifier> =
+        buildSet {
+            if (bits and GLFW.GLFW_MOD_SHIFT != 0) add(TerminalModifier.SHIFT)
+            if (bits and GLFW.GLFW_MOD_CONTROL != 0) add(TerminalModifier.CONTROL)
+            if (bits and GLFW.GLFW_MOD_ALT != 0) add(TerminalModifier.ALT)
+            if (bits and GLFW.GLFW_MOD_SUPER != 0) add(TerminalModifier.SUPER)
+        }
+
     private companion object {
-        const val PADDING = 16
-        const val INPUT_HEIGHT = 20
-        val BACKGROUND_COLOR = 0xFF101418.toInt()
-        val OUTPUT_BACKGROUND_COLOR = 0xFF080B0D.toInt()
-        val TITLE_COLOR = 0xFFF2F4F8.toInt()
-        val STATUS_COLOR = 0xFF8BD5CA.toInt()
-        val TEXT_COLOR = 0xFFD8DEE9.toInt()
+        val UNIFORM_FONT = FontDescription.Resource(Identifier.withDefaultNamespace("uniform"))
+        val CURSOR_COLOR = 0xFFFFFFFF.toInt()
+        val KEY_MAP =
+            mapOf(
+                GLFW.GLFW_KEY_ESCAPE to TerminalKey.ESCAPE,
+                GLFW.GLFW_KEY_BACKSPACE to TerminalKey.BACKSPACE,
+                GLFW.GLFW_KEY_TAB to TerminalKey.TAB,
+                GLFW.GLFW_KEY_ENTER to TerminalKey.ENTER,
+                GLFW.GLFW_KEY_INSERT to TerminalKey.INSERT,
+                GLFW.GLFW_KEY_DELETE to TerminalKey.DELETE,
+                GLFW.GLFW_KEY_HOME to TerminalKey.HOME,
+                GLFW.GLFW_KEY_END to TerminalKey.END,
+                GLFW.GLFW_KEY_PAGE_UP to TerminalKey.PAGE_UP,
+                GLFW.GLFW_KEY_PAGE_DOWN to TerminalKey.PAGE_DOWN,
+                GLFW.GLFW_KEY_UP to TerminalKey.UP,
+                GLFW.GLFW_KEY_LEFT to TerminalKey.LEFT,
+                GLFW.GLFW_KEY_DOWN to TerminalKey.DOWN,
+                GLFW.GLFW_KEY_RIGHT to TerminalKey.RIGHT,
+                GLFW.GLFW_KEY_F1 to TerminalKey.F1,
+                GLFW.GLFW_KEY_F2 to TerminalKey.F2,
+                GLFW.GLFW_KEY_F3 to TerminalKey.F3,
+                GLFW.GLFW_KEY_F4 to TerminalKey.F4,
+                GLFW.GLFW_KEY_F5 to TerminalKey.F5,
+                GLFW.GLFW_KEY_F6 to TerminalKey.F6,
+                GLFW.GLFW_KEY_F7 to TerminalKey.F7,
+                GLFW.GLFW_KEY_F8 to TerminalKey.F8,
+                GLFW.GLFW_KEY_F9 to TerminalKey.F9,
+                GLFW.GLFW_KEY_F10 to TerminalKey.F10,
+                GLFW.GLFW_KEY_F11 to TerminalKey.F11,
+                GLFW.GLFW_KEY_F12 to TerminalKey.F12,
+            )
     }
 }

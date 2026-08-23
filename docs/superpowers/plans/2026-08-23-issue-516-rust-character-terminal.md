@@ -261,20 +261,20 @@ git commit -m "feat(terminal): replicate cells and shared input (#516)"
 - Create: `modules/v26_1/v26_1-neoforge/src/main/kotlin/ru/lazyhat/compukters/impl/terminal/TerminalRenderGeometry.kt`
 - Create: `modules/v26_1/v26_1-neoforge/src/test/kotlin/ru/lazyhat/compukters/impl/terminal/TerminalRenderGeometryTest.kt`
 
-- [ ] **Step 1: Test fixed rendering math**
+- [x] **Step 1: Test fixed rendering math**
 
 Prove every coordinate maps to one fixed cell, resizing does not alter 51x19,
 glyph clipping stays inside a cell, palette mapping is exact, and cursor blink
 does not mutate the replica.
 
-- [ ] **Step 2: Replace transcript rendering/input**
+- [x] **Step 2: Replace transcript rendering/input**
 
 Remove `EditBox`, `Font.split`, proportional wrapping, and polling strings.
 Render background runs, fixed-origin `minecraft:uniform` glyphs, and local
 cursor blink. Map key press/repeat to stable keys and `charTyped`/paste to text;
 never derive printable text from GLFW letter codes.
 
-- [ ] **Step 3: Update tests, docs, and removal guards**
+- [x] **Step 3: Update tests, docs, and removal guards**
 
 Cover reboot reset in GameTest. Guard against transcript state/payloads, JNI,
 leases, framebuffer/draw-list terminal code, and restored CC:Tweaked, K16,
