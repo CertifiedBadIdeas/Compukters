@@ -19,20 +19,36 @@ import kotlin.test.assertTrue
 
 class TerminalRenderGeometryTest {
     @Test
-    fun `every terminal coordinate maps to one fixed cell after resize`() {
+    fun `compact panel keeps one fixed 51 by 19 grid centered after resize`() {
         val small = TerminalRenderGeometry(640, 360)
         val large = TerminalRenderGeometry(1_280, 720)
 
         assertEquals(51, small.columns)
         assertEquals(19, small.rows)
-        assertEquals(small.gridWidth, large.gridWidth)
-        assertEquals(small.gridHeight, large.gridHeight)
-        assertEquals(TerminalRect(small.originX, small.originY, small.originX + 9, small.originY + 10), small.cell(0, 0))
+        assertEquals(306, small.grid.width)
+        assertEquals(171, small.grid.height)
+        assertEquals(322, small.panel.width)
+        assertEquals(197, small.panel.height)
+        assertEquals(TerminalRect(159, 81, 481, 278), small.panel)
+        assertEquals(TerminalRect(167, 99, 473, 270), small.grid)
+        assertEquals(TerminalRect(167, 99, 173, 108), small.cell(0, 0))
         assertEquals(
-            TerminalRect(small.originX + 50 * 9, small.originY + 18 * 10, small.originX + 51 * 9, small.originY + 19 * 10),
+            TerminalRect(467, 261, 473, 270),
             small.cell(50, 18),
         )
+        assertEquals(small.panel.width, large.panel.width)
+        assertEquals(small.panel.height, large.panel.height)
         assertEquals(large.cell(7, 11), large.glyphClip(7, 11))
+    }
+
+    @Test
+    fun `small viewport preserves scale and centers the overflowing panel`() {
+        val geometry = TerminalRenderGeometry(300, 180)
+
+        assertEquals(TerminalRect(-11, -8, 311, 189), geometry.panel)
+        assertEquals(TerminalRect(-3, 10, 303, 181), geometry.grid)
+        assertEquals(-3, geometry.titleX)
+        assertEquals(-3, geometry.titleY)
     }
 
     @Test
@@ -61,7 +77,7 @@ class TerminalRenderGeometryTest {
         )
         val cursor = geometry.cursor(TerminalPosition(2, 3))
         val cell = geometry.cell(2, 3)
-        assertEquals(TerminalRect(cell.left, cell.bottom - 2, cell.right, cell.bottom), cursor)
+        assertEquals(TerminalRect(cell.left, cell.bottom - 1, cell.right, cell.bottom), cursor)
         assertTrue(TerminalRenderGeometry.drawCursor(authoritativeVisible = true, milliseconds = 0))
         assertFalse(TerminalRenderGeometry.drawCursor(authoritativeVisible = true, milliseconds = 500))
         assertFalse(TerminalRenderGeometry.drawCursor(authoritativeVisible = false, milliseconds = 0))

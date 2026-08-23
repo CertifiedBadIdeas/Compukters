@@ -38,8 +38,24 @@ class TerminalRenderGeometry(
     val rows: Int = ROWS
     val gridWidth: Int = columns * CELL_WIDTH
     val gridHeight: Int = rows * CELL_HEIGHT
-    val originX: Int = (viewportWidth - gridWidth) / 2
-    val originY: Int = (viewportHeight - gridHeight) / 2
+    val panel: TerminalRect =
+        TerminalRect(
+            (viewportWidth - PANEL_WIDTH) / 2,
+            (viewportHeight - PANEL_HEIGHT) / 2,
+            (viewportWidth - PANEL_WIDTH) / 2 + PANEL_WIDTH,
+            (viewportHeight - PANEL_HEIGHT) / 2 + PANEL_HEIGHT,
+        )
+    val grid: TerminalRect =
+        TerminalRect(
+            panel.left + PANEL_PADDING,
+            panel.top + TITLE_HEIGHT,
+            panel.right - PANEL_PADDING,
+            panel.bottom - PANEL_PADDING,
+        )
+    val originX: Int = grid.left
+    val originY: Int = grid.top
+    val titleX: Int = panel.left + PANEL_PADDING
+    val titleY: Int = panel.top + TITLE_TOP
 
     fun cell(
         x: Int,
@@ -62,11 +78,16 @@ class TerminalRenderGeometry(
     }
 
     companion object {
-        const val CELL_WIDTH = 9
-        const val CELL_HEIGHT = 10
+        const val CELL_WIDTH = 6
+        const val CELL_HEIGHT = 9
         const val COLUMNS = 51
         const val ROWS = 19
-        private const val CURSOR_HEIGHT = 2
+        const val PANEL_PADDING = 8
+        const val TITLE_HEIGHT = 18
+        const val TITLE_TOP = 5
+        const val PANEL_WIDTH = COLUMNS * CELL_WIDTH + PANEL_PADDING * 2
+        const val PANEL_HEIGHT = TITLE_HEIGHT + ROWS * CELL_HEIGHT + PANEL_PADDING
+        private const val CURSOR_HEIGHT = 1
         private const val CURSOR_HALF_PERIOD_MILLISECONDS = 500L
         private val PALETTE =
             intArrayOf(
