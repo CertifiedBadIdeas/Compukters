@@ -30,11 +30,11 @@ class NativeRuntimePlatformTest {
     fun `platform aliases resolve to stable resource paths`() {
         val cases =
             listOf(
-                Triple("Linux", "amd64", "/META-INF/natives/linux/x86_64/libcompukter_jni.so"),
-                Triple(" linux ", "x86_64", "/META-INF/natives/linux/x86_64/libcompukter_jni.so"),
-                Triple("Windows 11", "AMD64", "/META-INF/natives/windows/x86_64/compukter_jni.dll"),
-                Triple("Mac OS X", "arm64", "/META-INF/natives/macos/aarch64/libcompukter_jni.dylib"),
-                Triple("macOS", "aarch64", "/META-INF/natives/macos/aarch64/libcompukter_jni.dylib"),
+                Triple("Linux", "amd64", "/META-INF/natives/linux/x86_64/libcompukter_ffi.so"),
+                Triple(" linux ", "x86_64", "/META-INF/natives/linux/x86_64/libcompukter_ffi.so"),
+                Triple("Windows 11", "AMD64", "/META-INF/natives/windows/x86_64/compukter_ffi.dll"),
+                Triple("Mac OS X", "arm64", "/META-INF/natives/macos/aarch64/libcompukter_ffi.dylib"),
+                Triple("macOS", "aarch64", "/META-INF/natives/macos/aarch64/libcompukter_ffi.dylib"),
             )
 
         cases.forEach { (os, arch, expected) ->
@@ -68,7 +68,7 @@ class NativeRuntimePlatformTest {
 
     @Test
     fun `load exception exposes the typed failure`() {
-        val failure = VmRuntimeLoadFailure.MissingResource("/META-INF/natives/linux/x86_64/libcompukter_jni.so")
+        val failure = VmRuntimeLoadFailure.MissingResource("/META-INF/natives/linux/x86_64/libcompukter_ffi.so")
 
         val exception = VmRuntimeLoadException(failure)
 

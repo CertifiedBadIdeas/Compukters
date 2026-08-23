@@ -93,6 +93,7 @@ loom {
             property("neoforge.enabledGameTestNamespaces", "compukters")
             property("compukter.vm.terminalFixture", terminalFixture.absolutePath)
             ideConfigGenerated(true)
+            vmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
             mods {
                 maybeCreate("main").apply {
                     sourceSet("main")
@@ -141,15 +142,15 @@ val nativeArch =
     }
 val nativeFilename =
     when (nativeOs) {
-        "linux" -> "libcompukter_jni.so"
-        "windows" -> "compukter_jni.dll"
-        "macos" -> "libcompukter_jni.dylib"
+        "linux" -> "libcompukter_ffi.so"
+        "windows" -> "compukter_ffi.dll"
+        "macos" -> "libcompukter_ffi.dylib"
         else -> error("unreachable native build operating system: $nativeOs")
     }
 val nativeResourcePath = "META-INF/natives/$nativeOs/$nativeArch/$nativeFilename"
 val productionJar = tasks.named<ShadowJar>("shadowJar")
-val verifyPackagedCompukterJni =
-    tasks.register("verifyPackagedCompukterJni") {
+val verifyPackagedCompukterFfi =
+    tasks.register("verifyPackagedCompukterFfi") {
         description = "Checks the contents of the production NeoForge jar."
         group = "verification"
         dependsOn(productionJar)
@@ -201,11 +202,11 @@ val verifyPackagedCompukterJni =
     }
 
 tasks.named("check") {
-    dependsOn(verifyPackagedCompukterJni)
+    dependsOn(verifyPackagedCompukterFfi)
 }
 
 tasks.named("buildProductionUniversalJar") {
-    dependsOn(verifyPackagedCompukterJni)
+    dependsOn(verifyPackagedCompukterFfi)
 }
 
 val verifyNeoForgeRuntimeDependencies =

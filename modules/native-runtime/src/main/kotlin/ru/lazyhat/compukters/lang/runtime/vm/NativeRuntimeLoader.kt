@@ -33,7 +33,7 @@ internal class NativeRuntimeLoader(
     private val osArch: () -> String,
     private val resource: (String) -> InputStream?,
     private val createTempDirectory: () -> Path,
-    private val nativeLoad: (Path) -> Unit,
+    private val nativeLoad: (Path) -> LowLevelVmBridge,
     private val maximumPackagedNativeBytes: Long = DEFAULT_MAXIMUM_PACKAGED_NATIVE_BYTES,
 ) {
     init {
@@ -41,12 +41,16 @@ internal class NativeRuntimeLoader(
     }
 
     private var cached: VmRuntimeLoadResult? = null
+    private var bridge: LowLevelVmBridge? = null
 
     @Synchronized
     fun ensurePackagedLoaded(): VmRuntimeLoadResult = cached ?: loadPackaged().also { cached = it }
 
     @Synchronized
     fun ensureExplicitLoaded(path: Path): VmRuntimeLoadResult = cached ?: loadExplicit(path).also { cached = it }
+
+    @Synchronized
+    fun requireBridge(): LowLevelVmBridge = checkNotNull(bridge) { "native runtime is not loaded" }
 
     private fun loadExplicit(path: Path): VmRuntimeLoadResult {
         val normalized =
@@ -144,12 +148,20 @@ internal class NativeRuntimeLoader(
         sourceDetail: String,
     ): VmRuntimeLoadResult =
         try {
-            nativeLoad(path)
+            bridge = nativeLoad(path)
             VmRuntimeLoadResult.Loaded(source)
         } catch (error: UnsatisfiedLinkError) {
             nativeLinkFailure(sourceDetail, error.runtimeDetail("native link failed"))
         } catch (error: SecurityException) {
             nativeLinkFailure(sourceDetail, error.runtimeDetail("native link denied"))
+        } catch (error: IllegalCallerException) {
+            nativeLinkFailure(sourceDetail, error.runtimeDetail("native access denied"))
+        } catch (error: IllegalArgumentException) {
+            nativeLinkFailure(sourceDetail, error.runtimeDetail("native library load failed"))
+        } catch (error: NoSuchElementException) {
+            nativeLinkFailure(sourceDetail, error.runtimeDetail("native ABI symbol is missing"))
+        } catch (error: VmBridgeException) {
+            nativeLinkFailure(sourceDetail, error.runtimeDetail("native ABI is incompatible"))
         }
 
     private fun invalidExplicit(
@@ -222,7 +234,7 @@ internal class NativeRuntimeLoader(
                 osArch = { System.getProperty("os.arch").orEmpty() },
                 resource = resourceAnchor::getResourceAsStream,
                 createTempDirectory = { Files.createTempDirectory("compukters-native-") },
-                nativeLoad = { library -> System.load(library.toString()) },
+                nativeLoad = FfmBridge::open,
             )
 
         private const val COPY_BUFFER_BYTES = 8 * 1024

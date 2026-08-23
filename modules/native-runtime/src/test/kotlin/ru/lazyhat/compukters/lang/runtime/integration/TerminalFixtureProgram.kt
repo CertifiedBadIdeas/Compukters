@@ -24,13 +24,16 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 internal object TerminalFixtureProgram {
-    suspend fun run(fixture: Path) {
+    suspend fun run(
+        fixture: Path,
+        openSession: (ByteArray) -> VmSession = { VmSession.open(it) },
+    ) {
         val artifact = decodeHex(fixture.readText())
         val output = ByteArrayOutputStream()
         val terminal = TerminalCapability(ByteArrayInputStream("answer\r\n".encodeToByteArray()), output)
         val capabilities = CapabilityRegistry(listOf(terminal))
 
-        VmSession.open(artifact).use { session ->
+        openSession(artifact).use { session ->
             repeat(MAXIMUM_ADVANCES) {
                 when (val outcome = session.advance(GUEST_BUDGET, MAINTENANCE_BUDGET)) {
                     is VmOutcome.HostRequest -> {

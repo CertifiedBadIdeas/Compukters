@@ -69,4 +69,4 @@ sealed interface VmRuntimeLoadResult {
 
 class VmRuntimeLoadException(
     val failure: VmRuntimeLoadFailure,
-) : IllegalStateException("Compukter JNI runtime load failed: $failure")
+) : IllegalStateException("Compukter FFM runtime load failed: $failure")

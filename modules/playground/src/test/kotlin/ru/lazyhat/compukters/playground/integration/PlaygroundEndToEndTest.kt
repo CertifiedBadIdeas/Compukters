@@ -34,7 +34,7 @@ import kotlin.test.assertTrue
 
 class PlaygroundEndToEndTest {
     @Test
-    fun `real compiler JNI and VM execute hello with exact terminal transcript`() =
+    fun `real compiler FFM and VM execute hello with exact terminal transcript`() =
         runBlocking {
             val root = Path.of(requiredProperty("compukters.project.root"))
             val temporary = createTempDirectory("compukters-playground-e2e-")
@@ -47,7 +47,7 @@ class PlaygroundEndToEndTest {
                         compilerFactory = ::compiler,
                         executor =
                             NativePlaygroundExecutor(
-                                Path.of(requiredProperty("compukters.jni.library")),
+                                Path.of(requiredProperty("compukters.ffi.library")),
                                 ByteArrayInputStream("Ada\r\n".encodeToByteArray()),
                                 stdout,
                             ),

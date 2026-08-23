@@ -39,6 +39,7 @@ plugins {
 
 fun RunConfigSettings.applyShared() {
     ideConfigGenerated(true)
+    vmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
 }
 
 private val DEV_CLIENT_USERNAMES = listOf("DevA", "DevB", "DevC")

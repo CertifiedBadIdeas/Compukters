@@ -24,49 +24,52 @@
 - Modify: `modules/native-runtime/src/main/kotlin/ru/lazyhat/compukters/lang/runtime/vm/VmSession.kt`
 - Modify: `modules/native-runtime/build.gradle.kts`, `modules/core/build.gradle.kts`, `modules/playground/build.gradle.kts`
 - Test: `modules/native-runtime/src/test/kotlin/ru/lazyhat/compukters/lang/runtime/vm/VmSessionTest.kt`
-- Test: `modules/native-runtime/src/test/kotlin/ru/lazyhat/compukters/lang/runtime/integration/NativeBridgeIntegrationTest.kt`
+- Test: `modules/native-runtime/src/test/kotlin/ru/lazyhat/compukters/lang/runtime/integration/FfmRuntimeIntegrationTest.kt`
 
-- [ ] **Step 1: Write failing C ABI tests**
+- [x] **Step 1: Write failing C ABI tests**
 
 Test ABI version, create/advance/resume/close, null pointer with non-zero
 length, excessive length, short output buffer, stale handle, exact written
 length, and panic containment. Use opaque handles and caller-owned output:
 
 ```rust
-let mut handle = 0_u64;
+let mut output = [0_u8; 9];
+let mut written = 0_usize;
 assert_eq!(Status::Ok, unsafe {
-    compukter_create(bytes.as_ptr(), bytes.len(), &mut handle)
+    compukter_create(
+        bytes.as_ptr(), bytes.len(), output.as_mut_ptr(), output.len(), &mut written,
+    )
 });
-assert_ne!(0, handle);
+assert_eq!(9, written);
 ```
 
-- [ ] **Step 2: Run the missing-export failure**
+- [x] **Step 2: Run the missing-export failure**
 
 Run: `cargo test --manifest-path host/compukter-ffi/Cargo.toml --locked --offline`
 
 Expected: compile failure until the rename and `extern "C"` exports exist.
 
-- [ ] **Step 3: Implement the C ABI**
+- [x] **Step 3: Implement the C ABI**
 
 Export `compukter_abi_version`, create, advance, resume-unit/string/failure,
 and close. Use fixed-width scalars, pointer/length input, and
 buffer/capacity/written output. Return stable `#[repr(i32)] Status`; validate
 before constructing slices, catch unwinds, and never return Rust-owned pointers.
 
-- [ ] **Step 4: Implement and test cached FFM downcalls**
+- [x] **Step 4: Implement and test cached FFM downcalls**
 
 Load the extracted library with `SymbolLookup.libraryLookup`, retain its arena,
 cache exact `MethodHandle`s, and use confined `MemorySegment` buffers. Preserve
 the existing `VmSession` contract and terminal fixture result.
 
-- [ ] **Step 5: Enforce native access**
+- [x] **Step 5: Enforce native access**
 
 Add `--enable-native-access=ALL-UNNAMED` and
 `--illegal-native-access=deny` to native tests, playground, and NeoForge dev
 runs. Fail startup with a bounded diagnostic when the runtime module lacks
 native access.
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 Run: `./gradlew-sandbox-dev-parallel :native-runtime:verifyNativeRuntime :playground:endToEndTest --rerun-tasks`
 

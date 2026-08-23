@@ -16,11 +16,11 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 import java.nio.file.Path
 import kotlin.test.Test
 
-class NativeBridgeIntegrationTest {
+class FfmRuntimeIntegrationTest {
     @Test
-    fun `terminal artifact runs through Kotlin JNI and Rust VM`() =
+    fun `terminal artifact runs through Kotlin FFM and Rust VM`() =
         runBlocking {
-            VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukter.jni.library")))
+            VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukter.ffi.library")))
             TerminalFixtureProgram.run(Path.of(requiredProperty("compukter.vm.terminalFixture")))
         }
 

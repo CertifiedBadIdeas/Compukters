@@ -56,6 +56,7 @@ class NativeRuntimeLoaderTest {
                 .resolve("compukter.so")
                 .createFile()
         val loadedPaths = mutableListOf<Path>()
+        val bridge = FakeBridge()
         var resourceCalls = 0
         var temporaryCalls = 0
         val loader =
@@ -68,7 +69,10 @@ class NativeRuntimeLoaderTest {
                     temporaryCalls++
                     temporaryDirectory.resolve("unused")
                 },
-                nativeLoad = loadedPaths::add,
+                nativeLoad = { path ->
+                    loadedPaths.add(path)
+                    bridge
+                },
             )
 
         val result = assertIs<VmRuntimeLoadResult.Loaded>(loader.ensureExplicitLoaded(library))
@@ -76,6 +80,7 @@ class NativeRuntimeLoaderTest {
         val expected = library.toAbsolutePath().normalize()
         assertEquals(VmRuntimeLoadSource.ExplicitPath(expected), result.source)
         assertEquals(listOf(expected), loadedPaths)
+        assertSame(bridge, loader.requireBridge())
         assertEquals(0, resourceCalls)
         assertEquals(0, temporaryCalls)
     }
@@ -86,7 +91,7 @@ class NativeRuntimeLoaderTest {
         val cases = listOf(temporaryDirectory.resolve("missing"), temporaryDirectory.resolve("directory").createDirectory())
 
         cases.forEach { path ->
-            val result = loader(nativeLoad = { nativeCalls.incrementAndGet() }).ensureExplicitLoaded(path)
+            val result = loader(nativeLoad = { nativeCalls.incrementAndGet(); FakeBridge() }).ensureExplicitLoaded(path)
 
             assertIs<VmRuntimeLoadFailure.InvalidExplicitPath>(assertIs<VmRuntimeLoadResult.Failed>(result).failure)
         }
@@ -102,17 +107,20 @@ class NativeRuntimeLoaderTest {
             loader(
                 resource = { ByteArrayInputStream(nativeBytes) },
                 createTempDirectory = { extractionDirectory.createDirectory() },
-                nativeLoad = { loadedPath = it },
+                nativeLoad = { path ->
+                    loadedPath = path
+                    FakeBridge()
+                },
             )
 
         val result = assertIs<VmRuntimeLoadResult.Loaded>(loader.ensurePackagedLoaded())
 
         assertEquals(
-            VmRuntimeLoadSource.PackagedResource("/META-INF/natives/linux/x86_64/libcompukter_jni.so"),
+            VmRuntimeLoadSource.PackagedResource("/META-INF/natives/linux/x86_64/libcompukter_ffi.so"),
             result.source,
         )
         val extracted = requireNotNull(loadedPath)
-        assertEquals("libcompukter_jni.so", extracted.fileName.toString())
+        assertEquals("libcompukter_ffi.so", extracted.fileName.toString())
         assertEquals(extractionDirectory.toAbsolutePath().normalize(), extracted.parent)
         assertContentEquals(nativeBytes, extracted.readBytes())
     }
@@ -167,7 +175,7 @@ class NativeRuntimeLoaderTest {
             loader(
                 resource = { ByteArrayInputStream(ByteArray(5)) },
                 createTempDirectory = { extractionDirectory.createDirectory() },
-                nativeLoad = { nativeCalls.incrementAndGet() },
+                nativeLoad = { nativeCalls.incrementAndGet(); FakeBridge() },
                 maximumPackagedNativeBytes = 4,
             )
 
@@ -196,6 +204,23 @@ class NativeRuntimeLoaderTest {
     }
 
     @Test
+    fun `FFM lookup failures are typed native link failures`() {
+        val failures =
+            listOf(
+                IllegalArgumentException("not a native library"),
+                NoSuchElementException("missing ABI symbol"),
+                IllegalCallerException("native access denied"),
+                VmBridgeException("unsupported ABI"),
+            )
+
+        failures.forEach { error ->
+            val result = loader(nativeLoad = { throw error }).ensurePackagedLoaded()
+
+            assertIs<VmRuntimeLoadFailure.NativeLink>(assertIs<VmRuntimeLoadResult.Failed>(result).failure)
+        }
+    }
+
+    @Test
     fun `resource access and temporary directory failures are typed`() {
         val resourceFailure =
             loader(resource = { throw SecurityException("resource denied") }).ensurePackagedLoaded()
@@ -212,7 +237,7 @@ class NativeRuntimeLoaderTest {
     @Test
     fun `success and failure are cached by identity`() {
         val successCalls = AtomicInteger()
-        val successLoader = loader(nativeLoad = { successCalls.incrementAndGet() })
+        val successLoader = loader(nativeLoad = { successCalls.incrementAndGet(); FakeBridge() })
         val explicit = temporaryDirectory.resolve("later.so").createFile()
 
         val firstSuccess = successLoader.ensurePackagedLoaded()
@@ -239,6 +264,7 @@ class NativeRuntimeLoaderTest {
                     calls.incrementAndGet()
                     entered.countDown()
                     assertTrue(release.await(5, TimeUnit.SECONDS))
+                    FakeBridge()
                 },
             )
         val executor = Executors.newFixedThreadPool(8)
@@ -279,7 +305,7 @@ class NativeRuntimeLoaderTest {
         createTempDirectory: () -> Path = {
             Files.createTempDirectory(temporaryDirectory, "compukters-native-")
         },
-        nativeLoad: (Path) -> Unit = {},
+        nativeLoad: (Path) -> LowLevelVmBridge = { FakeBridge() },
         maximumPackagedNativeBytes: Long = 64L * 1024 * 1024,
     ): NativeRuntimeLoader =
         NativeRuntimeLoader(
@@ -290,4 +316,22 @@ class NativeRuntimeLoaderTest {
             nativeLoad = nativeLoad,
             maximumPackagedNativeBytes = maximumPackagedNativeBytes,
         )
+
+    private class FakeBridge : LowLevelVmBridge {
+        override fun create(artifact: ByteArray): ByteArray = error("unused")
+
+        override fun advance(
+            handle: Long,
+            guestBudget: Int,
+            maintenanceBudget: Int,
+        ): ByteArray = error("unused")
+
+        override fun resumeUnit(handle: Long, requestId: Long) = error("unused")
+
+        override fun resumeString(handle: Long, requestId: Long, value: CharArray) = error("unused")
+
+        override fun resumeFailure(handle: Long, requestId: Long, kind: Int, code: Long) = error("unused")
+
+        override fun close(handle: Long) = error("unused")
+    }
 }

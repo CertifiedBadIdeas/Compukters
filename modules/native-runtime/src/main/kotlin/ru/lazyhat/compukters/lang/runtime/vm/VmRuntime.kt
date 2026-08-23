@@ -24,6 +24,11 @@ object VmRuntime {
         requireSuccess(loader.ensureExplicitLoaded(library))
     }
 
+    internal fun bridge(): LowLevelVmBridge {
+        requireLoaded()
+        return loader.requireBridge()
+    }
+
     private fun requireSuccess(result: VmRuntimeLoadResult): VmRuntimeLoadResult.Loaded =
         when (result) {
             is VmRuntimeLoadResult.Loaded -> result

@@ -29,8 +29,8 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
-val compukterJniLibrary =
-    rootProject.file(".toolchain/build/cargo/compukter-jni/release/${System.mapLibraryName("compukter_jni")}")
+val compukterFfiLibrary =
+    rootProject.file(".toolchain/build/cargo/compukter-ffi/release/${System.mapLibraryName("compukter_ffi")}")
 val programRuntimeArtifact =
     project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")
 
@@ -45,17 +45,18 @@ val programRuntimeIntegrationTest =
         group = "verification"
         dependsOn(
             ":compiler-k2:generateKotlinSubsetConformanceArtifact",
-            rootProject.tasks.named("cargoBuildCompukterJni"),
+            rootProject.tasks.named("cargoBuildCompukterFfi"),
         )
         useJUnitPlatform()
         testClassesDirs = sourceSets.test.get().output.classesDirs
         classpath = sourceSets.test.get().runtimeClasspath
         filter.includeTestsMatching("ru.lazyhat.compukters.core.device.runtime.program.integration.*")
         filter.includeTestsMatching("ru.lazyhat.compukters.core.device.computer.integration.*")
-        inputs.file(compukterJniLibrary)
+        jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
+        inputs.file(compukterFfiLibrary)
         inputs.file(programRuntimeArtifact)
         doFirst {
-            systemProperty("compukters.jni.library", compukterJniLibrary.absolutePath)
+            systemProperty("compukters.ffi.library", compukterFfiLibrary.absolutePath)
             systemProperty("compukters.programRuntime.artifact", programRuntimeArtifact.get().asFile.absolutePath)
         }
     }

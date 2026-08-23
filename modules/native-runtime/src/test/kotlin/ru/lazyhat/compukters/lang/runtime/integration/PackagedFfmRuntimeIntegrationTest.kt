@@ -18,9 +18,9 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertIs
 
-class PackagedNativeBridgeIntegrationTest {
+class PackagedFfmRuntimeIntegrationTest {
     @Test
-    fun `packaged JNI resource loads and executes terminal fixture`() =
+    fun `packaged FFM resource loads and executes terminal fixture`() =
         runBlocking {
             assertIs<VmRuntimeLoadResult.Loaded>(VmRuntime.ensureLoaded())
             TerminalFixtureProgram.run(Path.of(requiredProperty("compukter.vm.terminalFixture")))
