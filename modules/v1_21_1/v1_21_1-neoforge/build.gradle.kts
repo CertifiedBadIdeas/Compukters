@@ -37,6 +37,8 @@ configurations[gameTest.runtimeOnlyConfigurationName].extendsFrom(configurations
 gameTest.compileClasspath += sourceSets.main.get().compileClasspath + sourceSets.main.get().output
 gameTest.runtimeClasspath += sourceSets.main.get().runtimeClasspath + sourceSets.main.get().output
 
+val terminalFixture = rootProject.file("host/compukter-vm/tests/fixtures/terminal-session.hex")
+
 tasks.named("check") {
     dependsOn(gameTest.classesTaskName)
 }
@@ -58,6 +60,7 @@ loom {
             property("neoforge.enableGameTest", "true")
             property("neoforge.enabledGameTestNamespaces", "compukters,minecraft")
             property("neoforge.gameTestServer", "true")
+            property("compukter.vm.terminalFixture", terminalFixture.absolutePath)
             ideConfigGenerated(true)
         }
     }
@@ -80,8 +83,6 @@ dependencies {
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
     add(gameTest.implementationConfigurationName, project(path = projects.v1211Common.path, configuration = "namedElements"))
 }
-
-val terminalFixture = rootProject.file("host/compukter-vm/tests/fixtures/terminal-session.hex")
 
 tasks.test {
     inputs.file(terminalFixture)

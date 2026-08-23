@@ -57,6 +57,7 @@ dependencies {
 
     neoForgeImplementation(libs.findLibrary("kotlin-stdlib").get())
     neoForgeImplementation(libs.findLibrary("kotlin-logging").get())
+    neoForgeImplementation(libs.findLibrary("kotlinx-coroutines-core").get())
 }
 
 tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
