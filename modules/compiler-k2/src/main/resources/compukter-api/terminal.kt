@@ -1,7 +1,19 @@
 @file:Suppress("UNUSED_PARAMETER")
 
-suspend fun print(value: String): Unit = Unit
+suspend fun terminalAwaitEvent(): Int = 0
 
-suspend fun println(value: String): Unit = Unit
+fun terminalClear(): Unit = Unit
 
-suspend fun readln(): String = ""
+fun terminalErasePrevious(): Unit = Unit
+
+fun terminalEventAction(): Int = 0
+
+fun terminalEventKey(): Int = 0
+
+fun terminalEventModifiers(): Int = 0
+
+fun terminalEventText(): String = ""
+
+fun terminalFinishEvent(): Unit = Unit
+
+fun terminalWrite(value: String): Unit = Unit
