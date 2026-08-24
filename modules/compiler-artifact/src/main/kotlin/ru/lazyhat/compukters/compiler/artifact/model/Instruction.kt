@@ -93,6 +93,11 @@ sealed interface Instruction {
         val length: RegisterId,
     ) : Instruction
 
+    data class ArrayLength(
+        val destination: RegisterId,
+        val array: RegisterId,
+    ) : Instruction
+
     data class ArrayLoad(
         val destination: RegisterId,
         val array: RegisterId,
@@ -174,6 +179,13 @@ sealed interface Instruction {
     data class StringSubstring(
         val destination: RegisterId,
         val string: RegisterId,
+        val start: RegisterId,
+        val end: RegisterId,
+    ) : Instruction
+
+    data class StringFromCharArray(
+        val destination: RegisterId,
+        val array: RegisterId,
         val start: RegisterId,
         val end: RegisterId,
     ) : Instruction

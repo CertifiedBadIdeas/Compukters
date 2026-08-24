@@ -111,6 +111,12 @@ internal fun encodeInstruction(
             operands.writeRegister(instruction.length)
         }
 
+        is Instruction.ArrayLength -> {
+            opcode = 0x32u
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.array)
+        }
+
         is Instruction.ArrayLoad -> {
             opcode = 0x33u
             operands.writeRegister(instruction.destination)
@@ -174,6 +180,14 @@ internal fun encodeInstruction(
             opcode = 0x66u
             operands.writeRegister(instruction.destination)
             operands.writeRegister(instruction.string)
+            operands.writeRegister(instruction.start)
+            operands.writeRegister(instruction.end)
+        }
+
+        is Instruction.StringFromCharArray -> {
+            opcode = 0x67u
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.array)
             operands.writeRegister(instruction.start)
             operands.writeRegister(instruction.end)
         }
@@ -284,6 +298,7 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
         is Instruction.StringGet,
         is Instruction.StringEquals,
         is Instruction.StringSubstring,
+        is Instruction.StringFromCharArray,
         is Instruction.StringConcat,
         is Instruction.Jump,
         is Instruction.Branch,
@@ -292,6 +307,7 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
 
         is Instruction.ArrayLoad,
         is Instruction.ArrayStore,
+        is Instruction.ArrayLength,
         is Instruction.IsType,
         is Instruction.Throw,
         -> 2u

@@ -266,6 +266,8 @@ internal fun validateArtifact(
 
             is Instruction.NewArray -> listOf(length)
 
+            is Instruction.ArrayLength -> listOf(array)
+
             is Instruction.ArrayLoad -> listOf(array, index)
 
             is Instruction.ArrayStore -> listOf(array, index, value)
@@ -285,6 +287,8 @@ internal fun validateArtifact(
             is Instruction.StringEquals -> listOf(left, right)
 
             is Instruction.StringSubstring -> listOf(string, start, end)
+
+            is Instruction.StringFromCharArray -> listOf(array, start, end)
 
             is Instruction.CapabilityCallSync -> arguments
 
@@ -323,6 +327,8 @@ internal fun validateArtifact(
 
             is Instruction.NewArray -> listOf(destination)
 
+            is Instruction.ArrayLength -> listOf(destination)
+
             is Instruction.ArrayLoad -> listOf(destination)
 
             is Instruction.IsType -> listOf(destination)
@@ -340,6 +346,8 @@ internal fun validateArtifact(
             is Instruction.StringEquals -> listOf(destination)
 
             is Instruction.StringSubstring -> listOf(destination)
+
+            is Instruction.StringFromCharArray -> listOf(destination)
 
             is Instruction.CapabilityCallSync -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
 
@@ -365,6 +373,7 @@ internal fun validateArtifact(
     fun Instruction.mayThrow(): Boolean =
         this is Instruction.NewObject ||
             this is Instruction.NewArray ||
+            this is Instruction.ArrayLength ||
             this is Instruction.ArrayLoad ||
             this is Instruction.ArrayStore ||
             this is Instruction.Call ||
@@ -374,6 +383,7 @@ internal fun validateArtifact(
             this is Instruction.StringGet ||
             this is Instruction.StringConcat ||
             this is Instruction.StringSubstring ||
+            this is Instruction.StringFromCharArray ||
             this is Instruction.Throw
 
     if (artifact.entry.module.value
@@ -588,7 +598,8 @@ internal fun validateArtifact(
                         instruction is Instruction.NewObject ||
                             instruction is Instruction.NewArray ||
                             instruction is Instruction.StringConcat ||
-                            instruction is Instruction.StringSubstring
+                            instruction is Instruction.StringSubstring ||
+                            instruction is Instruction.StringFromCharArray
                     }
                 if (allocations.size > 1 || allocations.singleOrNull()?.index?.let { it != 0 } == true) {
                     add(
@@ -743,6 +754,25 @@ internal fun validateArtifact(
                         }
                     }
 
+                    fun arrayElement(
+                        actual: ValueType?,
+                        role: String,
+                    ): ValueType? {
+                        val identity =
+                            (actual as? ValueType.Ref)?.takeIf { !it.nullable }?.let {
+                                resolveType(moduleIndex, it.type)
+                            }
+                        val array = identity?.let { artifact.modules[it.module].types[it.type] as? NominalType.Array }
+                        if (actual != null && array == null) {
+                            add(
+                                ArtifactWriteErrorCode.INVALID_RANGE,
+                                "$role register is not a non-null array type",
+                                location,
+                            )
+                        }
+                        return array?.element
+                    }
+
                     if (
                         instruction.isSuspendingTerminator() &&
                         FunctionFlag.SUSPENDING !in owner.flags
@@ -872,6 +902,14 @@ internal fun validateArtifact(
                             }
                         }
 
+                        is Instruction.ArrayLength -> {
+                            val result = register(instruction.destination, "destination")
+                            if (result != null && result != ValueType.I32) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "array length destination is not I32", location)
+                            }
+                            arrayElement(register(instruction.array, "source"), "array length source")
+                        }
+
                         is Instruction.StringLength -> {
                             val result = register(instruction.destination, "destination")
                             if (result != null && result != ValueType.I32) {
@@ -917,6 +955,28 @@ internal fun validateArtifact(
                                     ),
                                 )
                             }
+                        }
+
+                        is Instruction.StringFromCharArray -> {
+                            listOf(instruction.start, instruction.end).forEach { indexRegister ->
+                                val index = register(indexRegister, "index")
+                                if (index != null && index != ValueType.I32) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "char array range index is not I32", location)
+                                }
+                            }
+                            val element =
+                                arrayElement(
+                                    register(instruction.array, "source"),
+                                    "string materialization source",
+                                )
+                            if (element != null && element != ValueType.Char) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "string materialization source is not CharArray",
+                                    location,
+                                )
+                            }
+                            stringRegister(register(instruction.destination, "destination"))
                         }
 
                         is Instruction.CapabilityCallSync -> {

@@ -90,6 +90,7 @@ private fun executableInstructionsArtifact(): Artifact {
         )
     val libraryHash = encodeModuleSections(library, limits).semanticHash
     val stringType = ValueType.Ref(false, TypeRef.Imported(ImportId.of(0u)))
+    val charArrayType = ValueType.Ref(false, TypeRef.Local(TypeId.of(3u)))
     val app =
         Module(
             name = StringId.of(0u),
@@ -101,6 +102,7 @@ private fun executableInstructionsArtifact(): Artifact {
                     NominalType.Function(StringId.of(2u), true, ValueType.Unit, emptyList()),
                     NominalType.Function(StringId.of(1u), false, ValueType.I32, listOf(ValueType.I32, stringType)),
                     NominalType.Function(StringId.of(1u), true, ValueType.Unit, emptyList()),
+                    NominalType.Array(StringId.of(2u), ValueType.Char),
                 ),
             constants =
                 listOf(
@@ -137,10 +139,11 @@ private fun executableInstructionsArtifact(): Artifact {
                             ValueType.I32,
                             ValueType.Bool,
                             ValueType.Char,
+                            charArrayType,
                         ),
                         0u,
                         BlockId.of(0u),
-                        6u,
+                        8u,
                         0u,
                         0u,
                     ),
@@ -151,7 +154,7 @@ private fun executableInstructionsArtifact(): Artifact {
                         setOf(FunctionFlag.STATIC),
                         listOf(ValueType.I32, stringType),
                         2u,
-                        BlockId.of(6u),
+                        BlockId.of(8u),
                         1u,
                         0u,
                         0u,
@@ -163,7 +166,7 @@ private fun executableInstructionsArtifact(): Artifact {
                         setOf(FunctionFlag.STATIC, FunctionFlag.SUSPENDING),
                         emptyList(),
                         0u,
-                        BlockId.of(7u),
+                        BlockId.of(9u),
                         1u,
                         0u,
                         0u,
@@ -229,8 +232,17 @@ private fun executableInstructionsArtifact(): Artifact {
                         FunctionId.of(0u),
                         false,
                         listOf(
-                            Instruction.StringConcat(RegisterId.of(3u), RegisterId.of(1u), RegisterId.of(2u)),
+                            Instruction.NewArray(RegisterId.of(7u), TypeRef.Local(TypeId.of(3u)), RegisterId.of(0u)),
+                            Instruction.ArrayLength(RegisterId.of(4u), RegisterId.of(7u)),
                             Instruction.Jump(BlockId.of(2u)),
+                        ),
+                    ),
+                    Block(
+                        FunctionId.of(0u),
+                        false,
+                        listOf(
+                            Instruction.StringConcat(RegisterId.of(3u), RegisterId.of(1u), RegisterId.of(2u)),
+                            Instruction.Jump(BlockId.of(3u)),
                         ),
                     ),
                     Block(
@@ -243,7 +255,20 @@ private fun executableInstructionsArtifact(): Artifact {
                                 RegisterId.of(0u),
                                 RegisterId.of(4u),
                             ),
-                            Instruction.Jump(BlockId.of(3u)),
+                            Instruction.Jump(BlockId.of(4u)),
+                        ),
+                    ),
+                    Block(
+                        FunctionId.of(0u),
+                        false,
+                        listOf(
+                            Instruction.StringFromCharArray(
+                                RegisterId.of(3u),
+                                RegisterId.of(7u),
+                                RegisterId.of(0u),
+                                RegisterId.of(4u),
+                            ),
+                            Instruction.Jump(BlockId.of(5u)),
                         ),
                     ),
                     Block(
@@ -255,7 +280,7 @@ private fun executableInstructionsArtifact(): Artifact {
                                 FunctionRef.Local(FunctionId.of(1u)),
                                 listOf(RegisterId.of(0u), RegisterId.of(3u)),
                             ),
-                            Instruction.CallSuspend(Destination.Unit, FunctionRef.Local(FunctionId.of(2u)), emptyList(), BlockId.of(4u)),
+                            Instruction.CallSuspend(Destination.Unit, FunctionRef.Local(FunctionId.of(2u)), emptyList(), BlockId.of(6u)),
                         ),
                     ),
                     Block(
@@ -267,7 +292,7 @@ private fun executableInstructionsArtifact(): Artifact {
                                 CapabilityId.of(0u),
                                 0u,
                                 listOf(RegisterId.of(3u)),
-                                BlockId.of(5u),
+                                BlockId.of(7u),
                             ),
                         ),
                     ),
