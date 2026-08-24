@@ -9,53 +9,54 @@
  * (at your option) any later version.
  */
 
-import process.run
+import compukter.process.Process
+import compukter.terminal.Terminal
 
 suspend fun main() {
     var line = ""
-    terminalWrite("> ")
+    Terminal.write("> ")
     while (true) {
-        val event = terminalAwaitEvent()
+        val event = Terminal.awaitEvent()
         if (event == 1) {
-            line = appendText(line, terminalEventText())
+            line = appendText(line, Terminal.eventText())
         } else if (event == 2) {
-            val key = terminalEventKey()
-            val action = terminalEventAction()
+            val key = Terminal.eventKey()
+            val action = Terminal.eventAction()
             if (key == 13 && action == 1) {
-                terminalWrite("\n")
+                Terminal.write("\n")
                 if (line != "") {
                     if (line == "help") {
-                        terminalWrite("help echo clear\n")
+                        Terminal.write("help echo clear\n")
                     } else if (line == "echo") {
-                        terminalWrite("\n")
+                        Terminal.write("\n")
                     } else if (line.length >= 5 && line.substring(0, 5) == "echo ") {
-                        terminalWrite(line.substring(5, line.length) + "\n")
+                        Terminal.write(line.substring(5, line.length) + "\n")
                     } else if (line == "clear") {
-                        terminalClear()
+                        Terminal.clear()
                     } else {
                         var commandEnd = 0
                         while (commandEnd < line.length && line[commandEnd] != ' ') commandEnd = commandEnd + 1
                         if (commandEnd != line.length) {
-                            terminalWrite("unknown command: " + line.substring(0, commandEnd) + "\n")
+                            Terminal.write("unknown command: " + line.substring(0, commandEnd) + "\n")
                         } else {
                             val path = if (line[0] == '/') line else "/home/" + line
-                            val result = run(path, 7)
+                            val result = Process.run(path, 7)
                             if (result != 0) writeProcessFailure(result)
                         }
                     }
                 }
                 line = ""
-                terminalWrite("> ")
+                Terminal.write("> ")
             } else if (
                 key == 8 &&
                 (action == 1 || action == 2) &&
                 line.length > 0
             ) {
                 line = eraseLastScalar(line)
-                terminalErasePrevious()
+                Terminal.erasePrevious()
             }
         }
-        terminalFinishEvent()
+        Terminal.finishEvent()
     }
 }
 
@@ -75,7 +76,7 @@ private fun appendText(
         if (character >= ' ' && character != '\u007f' && result.length + width <= 256) {
             val accepted = text.substring(index, index + width)
             result = result + accepted
-            terminalWrite(accepted)
+            Terminal.write(accepted)
         }
         index = index + width
     }
@@ -93,23 +94,23 @@ private fun eraseLastScalar(line: String): String {
 }
 
 private fun writeProcessFailure(result: Int) {
-    terminalWrite("process failed: ")
-    if (result == 1) terminalWrite("1")
-    else if (result == 2) terminalWrite("2")
-    else if (result == 3) terminalWrite("3")
-    else if (result == 4) terminalWrite("4")
-    else if (result == 5) terminalWrite("5")
-    else if (result == 6) terminalWrite("6")
-    else if (result == 7) terminalWrite("7")
-    else if (result == 8) terminalWrite("8")
-    else if (result == 9) terminalWrite("9")
-    else if (result == 10) terminalWrite("10")
-    else if (result == 11) terminalWrite("11")
-    else if (result == 12) terminalWrite("12")
-    else if (result == 13) terminalWrite("13")
-    else if (result == 14) terminalWrite("14")
-    else if (result == 15) terminalWrite("15")
-    else if (result == 16) terminalWrite("16")
-    else terminalWrite("unknown")
-    terminalWrite("\n")
+    Terminal.write("process failed: ")
+    if (result == 1) Terminal.write("1")
+    else if (result == 2) Terminal.write("2")
+    else if (result == 3) Terminal.write("3")
+    else if (result == 4) Terminal.write("4")
+    else if (result == 5) Terminal.write("5")
+    else if (result == 6) Terminal.write("6")
+    else if (result == 7) Terminal.write("7")
+    else if (result == 8) Terminal.write("8")
+    else if (result == 9) Terminal.write("9")
+    else if (result == 10) Terminal.write("10")
+    else if (result == 11) Terminal.write("11")
+    else if (result == 12) Terminal.write("12")
+    else if (result == 13) Terminal.write("13")
+    else if (result == 14) Terminal.write("14")
+    else if (result == 15) Terminal.write("15")
+    else if (result == 16) Terminal.write("16")
+    else Terminal.write("unknown")
+    Terminal.write("\n")
 }

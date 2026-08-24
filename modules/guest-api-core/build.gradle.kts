@@ -9,8 +9,18 @@
  * (at your option) any later version.
  */
 
-import compukter.process.Process
+plugins {
+    alias(libs.plugins.kotlinConvention)
+}
 
-suspend fun main() {
-    Process.run("/rom/shell", 7)
+tasks.processResources {
+    from("src/main/kotlin") {
+        include("**/*.kt")
+        into("compukter-guest-api")
+    }
+}
+
+tasks.withType<Jar>().configureEach {
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
 }

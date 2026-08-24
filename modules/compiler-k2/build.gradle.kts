@@ -28,6 +28,7 @@ plugins {
 }
 
 dependencies {
+    implementation(projects.guestApiCore)
     implementation(projects.compilerClient)
     implementation(projects.compilerArtifact)
     implementation(libs.kotlin.stdlib)

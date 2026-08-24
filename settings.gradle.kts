@@ -61,6 +61,7 @@ include("native-runtime", modulesDir)
 include("compiler-artifact", modulesDir)
 include("compiler-client", modulesDir)
 include("compiler-k2", modulesDir)
+include("guest-api-core", modulesDir)
 include("playground", modulesDir)
 include("core", modulesDir)
 

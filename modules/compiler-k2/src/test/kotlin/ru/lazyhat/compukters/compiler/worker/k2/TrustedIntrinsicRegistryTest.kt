@@ -21,7 +21,7 @@ class TrustedIntrinsicRegistryTest {
         val trustedRun =
             TrustedCallableIdentity(
                 bundleIdentity = TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID,
-                name = "run",
+                name = "compukter.process.Process.run",
                 suspending = true,
                 parameters = listOf(TrustedValueType.STRING, TrustedValueType.INT),
                 result = TrustedValueType.INT,
@@ -46,7 +46,7 @@ class TrustedIntrinsicRegistryTest {
         val guestWrite =
             TrustedCallableIdentity(
                 bundleIdentity = null,
-                name = "terminalWrite",
+                name = "compukter.terminal.Terminal.write",
                 suspending = false,
                 parameters = listOf(TrustedValueType.STRING),
                 result = TrustedValueType.UNIT,
@@ -60,7 +60,7 @@ class TrustedIntrinsicRegistryTest {
         val trustedAwait =
             TrustedCallableIdentity(
                 bundleIdentity = TrustedIntrinsicRegistry.TERMINAL_BUNDLE_ID,
-                name = "terminalAwaitEvent",
+                name = "compukter.terminal.Terminal.awaitEvent",
                 suspending = true,
                 parameters = emptyList(),
                 result = TrustedValueType.INT,
@@ -97,35 +97,35 @@ class TrustedIntrinsicRegistryTest {
 
         assertEquals(
             TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 0u, asynchronous = false),
-            resolve("terminalWrite", listOf(TrustedValueType.STRING), TrustedValueType.UNIT),
+            resolve("compukter.terminal.Terminal.write", listOf(TrustedValueType.STRING), TrustedValueType.UNIT),
         )
         assertEquals(
             TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 1u, asynchronous = false),
-            resolve("terminalErasePrevious", emptyList(), TrustedValueType.UNIT),
+            resolve("compukter.terminal.Terminal.erasePrevious", emptyList(), TrustedValueType.UNIT),
         )
         assertEquals(
             TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 2u, asynchronous = false),
-            resolve("terminalClear", emptyList(), TrustedValueType.UNIT),
+            resolve("compukter.terminal.Terminal.clear", emptyList(), TrustedValueType.UNIT),
         )
         assertEquals(
             TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 4u, asynchronous = false),
-            resolve("terminalEventText", emptyList(), TrustedValueType.STRING),
+            resolve("compukter.terminal.Terminal.eventText", emptyList(), TrustedValueType.STRING),
         )
         assertEquals(
             TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 5u, asynchronous = false),
-            resolve("terminalEventKey", emptyList(), TrustedValueType.INT),
+            resolve("compukter.terminal.Terminal.eventKey", emptyList(), TrustedValueType.INT),
         )
         assertEquals(
             TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 6u, asynchronous = false),
-            resolve("terminalEventAction", emptyList(), TrustedValueType.INT),
+            resolve("compukter.terminal.Terminal.eventAction", emptyList(), TrustedValueType.INT),
         )
         assertEquals(
             TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 7u, asynchronous = false),
-            resolve("terminalEventModifiers", emptyList(), TrustedValueType.INT),
+            resolve("compukter.terminal.Terminal.eventModifiers", emptyList(), TrustedValueType.INT),
         )
         assertEquals(
             TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 8u, asynchronous = false),
-            resolve("terminalFinishEvent", emptyList(), TrustedValueType.UNIT),
+            resolve("compukter.terminal.Terminal.finishEvent", emptyList(), TrustedValueType.UNIT),
         )
     }
 }
