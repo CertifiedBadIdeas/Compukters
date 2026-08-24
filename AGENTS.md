@@ -31,7 +31,8 @@ VM code lives in `host/compukter-vm`. Documentation is in
 Kotlin targets JVM 25 and uses the `org.jmailen.kotlinter` plugin. Run Gradle with JDK 25 selected through `JAVA_HOME`
 or a Gradle-discoverable installation. Keep Kotlin package paths under
 `ru.lazyhat.compukters`, use four-space indentation, `PascalCase` for types, `camelCase` for members, and `*Test.kt`
-for tests. Existing source files carry a GPL header; preserve it when editing or adding comparable Kotlin/Gradle files.
+for tests. Existing original source files carry an Apache-2.0 header; preserve it when editing or adding comparable
+Kotlin, Gradle, and Rust files. Do not apply the project header to vendored or generated third-party material.
 Rust crates use edition 2021 conventions: `snake_case` modules/functions, `PascalCase` types, and integration tests in
 `tests/*.rs`.
 

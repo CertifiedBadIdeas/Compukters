@@ -1,26 +1,26 @@
 /*
  * The Compukters Developers
  *
- * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ * Copyright 2026 Vsevolod Petrov (lazyhat)
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *     https://www.apache.org/licenses/LICENSE-2.0
  *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Files
 import java.security.MessageDigest
+import java.util.zip.ZipFile
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
@@ -65,6 +65,26 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
     }
     from(workerRuntimeClasspath) {
         into("lib")
+    }
+    from(rootProject.layout.projectDirectory.file("licenses/project/Apache-2.0.txt")) {
+        into("META-INF/licenses")
+        rename { "Compukters-Apache-2.0.txt" }
+    }
+    from(rootProject.layout.projectDirectory.file("NOTICE")) {
+        into("META-INF")
+        rename { "NOTICE.txt" }
+    }
+    from(rootProject.layout.projectDirectory.file("THIRD-PARTY-NOTICES.md")) {
+        into("META-INF")
+    }
+    from(rootProject.layout.projectDirectory.dir("licenses/kotlin/v2.4.10")) {
+        into("META-INF/licenses/kotlin/v2.4.10")
+    }
+    from(rootProject.layout.projectDirectory.file("licenses/rust/generic-array-0.14.7-LICENSE.txt")) {
+        into("META-INF/licenses/rust")
+    }
+    from(rootProject.layout.projectDirectory.file("licenses/distribution-components.tsv")) {
+        into("META-INF/licenses")
     }
 
     doLast {
@@ -111,13 +131,64 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
     }
 }
 
-tasks.register<Zip>("compilerWorkerPayload") {
+val compilerWorkerPayload = tasks.register<Zip>("compilerWorkerPayload") {
     dependsOn(prepareCompilerWorkerPayload)
     from(workerPayloadDirectory)
     archiveFileName = "compiler-k2-worker.zip"
     destinationDirectory = layout.buildDirectory.dir("distributions")
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
+}
+
+val verifyCompilerWorkerLicenses =
+    tasks.register("verifyCompilerWorkerLicenses") {
+        description = "Checks licenses and the library inventory in the packaged compiler worker."
+        group = "verification"
+        dependsOn(compilerWorkerPayload)
+        inputs.file(compilerWorkerPayload.flatMap { it.archiveFile })
+        inputs.file(rootProject.layout.projectDirectory.file("licenses/distribution-components.tsv"))
+        doLast {
+            val archive = compilerWorkerPayload.get().archiveFile.get().asFile
+            val entries =
+                ZipFile(archive).use { zip ->
+                    zip.entries().asSequence().filterNot { it.isDirectory }.map { it.name }.toList()
+                }
+            listOf(
+                "META-INF/licenses/Compukters-Apache-2.0.txt",
+                "META-INF/NOTICE.txt",
+                "META-INF/THIRD-PARTY-NOTICES.md",
+            ).forEach { required ->
+                check(entries.count { it == required } == 1) {
+                    "expected exactly one $required in ${archive.name}"
+                }
+            }
+
+            val inventory = rootProject.file("licenses/distribution-components.tsv")
+            check(inventory.isFile) { "distribution component inventory is missing: $inventory" }
+            val expectedExternal =
+                inventory
+                    .readLines()
+                    .drop(1)
+                    .filter { it.isNotBlank() }
+                    .map { it.split('\t') }
+                    .filter { it[0] == "jvm-worker" }
+                    .map { (_, component, version, _) -> "$component-$version.jar" }
+                    .sorted()
+            val projectPrefixes = listOf("compiler-artifact-", "compiler-client-", "compiler-k2-", "guest-api-core-")
+            val actualExternal =
+                entries
+                    .filter { it.startsWith("lib/") && it.endsWith(".jar") }
+                    .map { it.removePrefix("lib/") }
+                    .filterNot { name -> projectPrefixes.any(name::startsWith) }
+                    .sorted()
+            check(actualExternal == expectedExternal) {
+                "compiler worker library inventory mismatch: expected $expectedExternal, found $actualExternal"
+            }
+        }
+    }
+
+tasks.named("check") {
+    dependsOn(verifyCompilerWorkerLicenses)
 }
 
 val workerJar = tasks.jar.flatMap { it.archiveFile }
