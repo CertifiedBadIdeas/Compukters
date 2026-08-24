@@ -121,6 +121,8 @@ internal object KotlinProjectLowering {
                     pluginContext.irBuiltIns.unitType,
                     pluginContext.irBuiltIns.stringType,
                     pluginContext.irBuiltIns.intType,
+                    pluginContext.irBuiltIns.booleanType,
+                    pluginContext.irBuiltIns.charType,
                 )
             }
         userFunctions.forEach { function -> function.accept(intrinsicCollector, null) }
@@ -772,7 +774,7 @@ private class FunctionCompiler(
     }
 
     private fun trustedOperation(function: IrSimpleFunction): TrustedIntrinsic.CapabilityOperation? =
-        resolveTrustedOperation(function, session, unitType, kotlinStringType, intType)
+        resolveTrustedOperation(function, session, unitType, kotlinStringType, intType, booleanType, charType)
 
     private fun valueType(
         type: IrType,
@@ -925,6 +927,8 @@ private fun resolveTrustedOperation(
     unitType: IrType,
     stringType: IrType,
     intType: IrType,
+    booleanType: IrType,
+    charType: IrType,
 ): TrustedIntrinsic.CapabilityOperation? {
     var parent = function.parent
     while (parent !is IrFile) {
@@ -937,6 +941,8 @@ private fun resolveTrustedOperation(
             unitType -> TrustedValueType.UNIT
             stringType -> TrustedValueType.STRING
             intType -> TrustedValueType.INT
+            booleanType -> TrustedValueType.BOOL
+            charType -> TrustedValueType.CHAR
             else -> TrustedValueType.OTHER
         }
     val identity =

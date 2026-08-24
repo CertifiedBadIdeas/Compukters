@@ -37,6 +37,23 @@ fn k2_char_array_program_executes_exact_utf16_materialization() {
         OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
         OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
         OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
+        OperationSchema::synchronous(&[HostValueType::I32, HostValueType::I32], HostValueType::Unit),
+        OperationSchema::synchronous(&[HostValueType::Bool], HostValueType::Unit),
+        OperationSchema::synchronous(&[HostValueType::I32, HostValueType::I32], HostValueType::Unit),
+        OperationSchema::synchronous(
+            &[HostValueType::I32, HostValueType::I32, HostValueType::String],
+            HostValueType::Unit,
+        ),
+        OperationSchema::synchronous(
+            &[
+                HostValueType::I32,
+                HostValueType::I32,
+                HostValueType::I32,
+                HostValueType::I32,
+                HostValueType::Char,
+            ],
+            HostValueType::Unit,
+        ),
     ];
     let binding = CapabilityBinding::new("compukter", "terminal", 2, 0, &operations);
     let profile = ExecutionProfile {

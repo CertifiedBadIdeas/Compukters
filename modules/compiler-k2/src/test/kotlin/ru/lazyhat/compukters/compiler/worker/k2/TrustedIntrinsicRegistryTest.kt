@@ -285,5 +285,47 @@ class TrustedIntrinsicRegistryTest {
             TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 8u, asynchronous = false),
             resolve("compukter.terminal.Terminal.finishEvent", emptyList(), TrustedValueType.UNIT),
         )
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 9u, asynchronous = false),
+            resolve(
+                "compukter.terminal.Terminal.setCursor",
+                listOf(TrustedValueType.INT, TrustedValueType.INT),
+                TrustedValueType.UNIT,
+            ),
+        )
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 10u, asynchronous = false),
+            resolve("compukter.terminal.Terminal.setCursorVisible", listOf(TrustedValueType.BOOL), TrustedValueType.UNIT),
+        )
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 11u, asynchronous = false),
+            resolve(
+                "compukter.terminal.Terminal.setColors",
+                listOf(TrustedValueType.INT, TrustedValueType.INT),
+                TrustedValueType.UNIT,
+            ),
+        )
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 12u, asynchronous = false),
+            resolve(
+                "compukter.terminal.Terminal.writeAt",
+                listOf(TrustedValueType.INT, TrustedValueType.INT, TrustedValueType.STRING),
+                TrustedValueType.UNIT,
+            ),
+        )
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 13u, asynchronous = false),
+            resolve(
+                "compukter.terminal.Terminal.fill",
+                listOf(
+                    TrustedValueType.INT,
+                    TrustedValueType.INT,
+                    TrustedValueType.INT,
+                    TrustedValueType.INT,
+                    TrustedValueType.CHAR,
+                ),
+                TrustedValueType.UNIT,
+            ),
+        )
     }
 }

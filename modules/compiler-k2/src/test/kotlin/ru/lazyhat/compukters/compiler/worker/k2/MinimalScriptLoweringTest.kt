@@ -219,6 +219,30 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `positional terminal facade lowers through exact trusted signatures`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        import compukter.terminal.Terminal
+
+                        fun main() {
+                            Terminal.setCursor(1, 2)
+                            Terminal.setCursorVisible(false)
+                            Terminal.setColors(15, 0)
+                            Terminal.writeAt(1, 2, "text")
+                            Terminal.fill(0, 3, 51, 1, ' ')
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+        }
+
+    @Test
     fun `shell language subset lowers control flow scalars strings and raw terminal calls`() =
         withAdapter { adapter ->
             val result =
