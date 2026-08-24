@@ -87,9 +87,17 @@ class K2CompilerAdapter(
             )
         }
         val temporaryBudget = TemporaryBudget(inputs.temporaryRoot, request.limits)
-        val terminalApi = loadTerminalApi()
-        val processApi = loadProcessApi()
-        temporaryBudget.requireCapacity(sourceFootprint(request, terminalApi.size + processApi.size, 2))
+        val trustedApis =
+            TrustedIntrinsicRegistry.CORE_SOURCE_BUNDLES.map { bundle ->
+                bundle to loadTrustedApi(bundle)
+            }
+        temporaryBudget.requireCapacity(
+            sourceFootprint(
+                request,
+                trustedApis.sumOf { (_, bytes) -> bytes.size },
+                trustedApis.size,
+            ),
+        )
         return temporaryBudget.useRequestDirectory { requestRoot ->
             val sourceRoot = requestRoot.resolve("source").toAbsolutePath().normalize()
             val trustedRoot = requestRoot.resolve("trusted").toAbsolutePath().normalize()
@@ -105,13 +113,16 @@ class K2CompilerAdapter(
                     physical.writeBytes(source.content.toByteArray())
                     physical to DiagnosticSource(source.content.toByteArray().decodeToString(), source.path)
                 }
-            val terminalApiSource = trustedRoot.resolve("terminal.kt")
-            val processApiSource = trustedRoot.resolve("process.kt")
-            terminalApiSource.parent.createDirectories()
-            terminalApiSource.writeBytes(terminalApi)
-            processApiSource.writeBytes(processApi)
+            val trustedApiSources =
+                trustedApis.map { (bundle, bytes) ->
+                    val source = trustedRoot.resolve(bundle.fileName).normalize()
+                    require(source.startsWith(trustedRoot)) { "trusted API path escapes request tree" }
+                    source.parent.createDirectories()
+                    source.writeBytes(bytes)
+                    bundle to source
+                }
             val collector = CompilerDiagnosticCollector(physicalSources.toMap(), request.limits)
-            val arguments = fixedArguments(physicalSources.map { it.first } + listOf(terminalApiSource, processApiSource), output)
+            val arguments = fixedArguments(physicalSources.map { it.first } + trustedApiSources.map { (_, source) -> source }, output)
             val exitCode =
                 CompilationBridge.withSession(
                     CompilationSession(
@@ -123,10 +134,7 @@ class K2CompilerAdapter(
                                 physical.toString() to source.virtualPath
                             },
                         trustedApiSourceIdentities =
-                            mapOf(
-                                terminalApiSource.toString() to TrustedIntrinsicRegistry.TERMINAL_BUNDLE_ID,
-                                processApiSource.toString() to TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID,
-                            ),
+                            trustedApiSources.associate { (bundle, source) -> source.toString() to bundle.identity },
                         limits = request.limits,
                     ),
                 ) {
@@ -156,14 +164,9 @@ class K2CompilerAdapter(
         )
     }
 
-    private fun loadTerminalApi(): ByteArray =
-        checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream(TERMINAL_API_RESOURCE)) {
-            "fixed terminal API source is missing from the worker payload"
-        }.use { it.readBytes() }
-
-    private fun loadProcessApi(): ByteArray =
-        checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream(PROCESS_API_RESOURCE)) {
-            "fixed process API source is missing from the worker payload"
+    private fun loadTrustedApi(bundle: TrustedApiSourceBundle): ByteArray =
+        checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream(bundle.resource)) {
+            "fixed trusted API source ${bundle.resource} is missing from the worker payload"
         }.use { it.readBytes() }
 
     private fun fixedArguments(
@@ -184,8 +187,6 @@ class K2CompilerAdapter(
     }
 
     private companion object {
-        const val TERMINAL_API_RESOURCE = "/compukter-api/terminal.kt"
-        const val PROCESS_API_RESOURCE = "/compukter-api/process.kt"
         val DEPENDENCY_ANNOTATION = Regex("(?m)^\\s*@file:(DependsOn|Repository)\\b")
     }
 }

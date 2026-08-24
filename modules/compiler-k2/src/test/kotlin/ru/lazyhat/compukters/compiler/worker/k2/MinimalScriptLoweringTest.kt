@@ -111,9 +111,11 @@ class MinimalScriptLoweringTest {
                         "fun greeting(name: String): String = \"Hello, \" + name + \"!\"",
                     "project/main.kt" to
                         """
+                        import compukter.terminal.Terminal
+
                         suspend fun main() {
-                            terminalWrite(greeting("Ada"))
-                            terminalAwaitEvent()
+                            Terminal.write(greeting("Ada"))
+                            Terminal.awaitEvent()
                         }
                         """.trimIndent(),
                 )
@@ -135,36 +137,38 @@ class MinimalScriptLoweringTest {
                 adapter.compile(
                     request(
                         """
+                        import compukter.terminal.Terminal
+
                         suspend fun main() {
                             var line = ""
                             var running = true
                             var index = 0
-                            terminalWrite("> ")
+                            Terminal.write("> ")
                             while (running) {
-                                val kind = terminalAwaitEvent()
+                                val kind = Terminal.awaitEvent()
                                 if (kind == 1) {
-                                    val text = terminalEventText()
+                                    val text = Terminal.eventText()
                                     while (index < text.length) {
                                         val character = text[index]
                                         if (character >= ' ' && character != '\u007f' && line.length < 256) {
                                             val next = text.substring(index, index + 1)
                                             line = line + next
-                                            terminalWrite(next)
+                                            Terminal.write(next)
                                         }
                                         index = index + 1
                                     }
-                                } else if (terminalEventKey() == 13 && terminalEventAction() == 1) {
-                                    terminalWrite("\n")
-                                    if (line == "clear") terminalClear() else terminalWrite(line)
+                                } else if (Terminal.eventKey() == 13 && Terminal.eventAction() == 1) {
+                                    Terminal.write("\n")
+                                    if (line == "clear") Terminal.clear() else Terminal.write(line)
                                     line = ""
-                                } else if (terminalEventKey() == 8) {
+                                } else if (Terminal.eventKey() == 8) {
                                     if (line.length > 0) {
                                         line = line.substring(0, line.length - 1)
-                                        terminalErasePrevious()
+                                        Terminal.erasePrevious()
                                     }
                                 }
-                                terminalEventModifiers()
-                                terminalFinishEvent()
+                                Terminal.eventModifiers()
+                                Terminal.finishEvent()
                             }
                         }
                         """.trimIndent(),
@@ -212,7 +216,7 @@ class MinimalScriptLoweringTest {
                 adapter.compile(
                     request(
                         "project/main.kt" to
-                            "suspend fun main() { terminalWrite(readln(\"guest\")); terminalAwaitEvent() }",
+                            "import compukter.terminal.Terminal\nsuspend fun main() { Terminal.write(readln(\"guest\")); Terminal.awaitEvent() }",
                         "project/read.kt" to "fun readln(value: String): String = value",
                     ),
                 )

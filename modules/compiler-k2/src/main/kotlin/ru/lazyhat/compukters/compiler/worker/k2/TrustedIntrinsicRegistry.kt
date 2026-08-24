@@ -49,9 +49,28 @@ internal fun interface TrustedIntrinsicProvider {
     fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic?
 }
 
+internal data class TrustedApiSourceBundle(
+    val identity: String,
+    val resource: String,
+    val fileName: String,
+)
+
 internal object TrustedIntrinsicRegistry {
     const val TERMINAL_BUNDLE_ID = "compukter.terminal-api@1"
     const val PROCESS_BUNDLE_ID = "compukter.process-api@1"
+    val CORE_SOURCE_BUNDLES =
+        listOf(
+            TrustedApiSourceBundle(
+                TERMINAL_BUNDLE_ID,
+                "/compukter-guest-api/compukter/terminal/Terminal.kt",
+                "terminal.kt",
+            ),
+            TrustedApiSourceBundle(
+                PROCESS_BUNDLE_ID,
+                "/compukter-guest-api/compukter/process/Process.kt",
+                "process.kt",
+            ),
+        )
     val TERMINAL_CAPABILITY = TrustedCapabilityIdentity("compukter", "terminal", 2u.toUShort(), 0u.toUShort(), 9u)
     val PROCESS_CAPABILITY = TrustedCapabilityIdentity("compukter", "process", 1u.toUShort(), 0u.toUShort(), 1u)
 
@@ -69,7 +88,7 @@ private object ProcessIntrinsicProvider : TrustedIntrinsicProvider {
             asynchronous = true,
         ).takeIf {
             callable.bundleIdentity == TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID &&
-                callable.name == "run" &&
+                callable.name == "compukter.process.Process.run" &&
                 callable.suspending &&
                 callable.parameters == listOf(TrustedValueType.STRING, TrustedValueType.INT) &&
                 callable.result == TrustedValueType.INT
@@ -81,39 +100,39 @@ private object TerminalIntrinsicProvider : TrustedIntrinsicProvider {
         if (callable.bundleIdentity != TrustedIntrinsicRegistry.TERMINAL_BUNDLE_ID) return null
         val intrinsic =
             when (callable.name) {
-                "terminalWrite" -> {
+                "compukter.terminal.Terminal.write" -> {
                     sync(0u, callable, listOf(TrustedValueType.STRING), TrustedValueType.UNIT)
                 }
 
-                "terminalErasePrevious" -> {
+                "compukter.terminal.Terminal.erasePrevious" -> {
                     sync(1u, callable, emptyList(), TrustedValueType.UNIT)
                 }
 
-                "terminalClear" -> {
+                "compukter.terminal.Terminal.clear" -> {
                     sync(2u, callable, emptyList(), TrustedValueType.UNIT)
                 }
 
-                "terminalAwaitEvent" -> {
+                "compukter.terminal.Terminal.awaitEvent" -> {
                     async(3u, callable, TrustedValueType.INT)
                 }
 
-                "terminalEventText" -> {
+                "compukter.terminal.Terminal.eventText" -> {
                     sync(4u, callable, emptyList(), TrustedValueType.STRING)
                 }
 
-                "terminalEventKey" -> {
+                "compukter.terminal.Terminal.eventKey" -> {
                     sync(5u, callable, emptyList(), TrustedValueType.INT)
                 }
 
-                "terminalEventAction" -> {
+                "compukter.terminal.Terminal.eventAction" -> {
                     sync(6u, callable, emptyList(), TrustedValueType.INT)
                 }
 
-                "terminalEventModifiers" -> {
+                "compukter.terminal.Terminal.eventModifiers" -> {
                     sync(7u, callable, emptyList(), TrustedValueType.INT)
                 }
 
-                "terminalFinishEvent" -> {
+                "compukter.terminal.Terminal.finishEvent" -> {
                     sync(8u, callable, emptyList(), TrustedValueType.UNIT)
                 }
 

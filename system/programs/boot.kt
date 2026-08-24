@@ -9,8 +9,8 @@
  * (at your option) any later version.
  */
 
-import process.run
+import compukter.process.Process
 
 suspend fun main() {
-    run("/rom/shell", 7)
+    Process.run("/rom/shell", 7)
 }

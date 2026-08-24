@@ -13,7 +13,9 @@ package ru.lazyhat.compukters.compiler.worker.k2
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrFile
+import org.jetbrains.kotlin.ir.declarations.IrParameterKind
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.IrVariable
 import org.jetbrains.kotlin.ir.expressions.IrBlock
@@ -451,10 +453,12 @@ private class FunctionCompiler(
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun compileCall(call: IrCall): RegisterId? {
         val target = call.symbol.owner
-        compileCompareToPredicate(call, target.name.asString())?.let { return it }
-        val argumentExpressions = call.arguments.filterNotNull()
-        val arguments = argumentExpressions.map(::compileExpression)
         trustedOperation(target)?.let { intrinsic ->
+            val arguments =
+                target.parameters
+                    .zip(call.arguments)
+                    .filter { (parameter, _) -> parameter.kind == IrParameterKind.Regular }
+                    .map { (_, argument) -> compileExpression(requireNotNull(argument)) }
             val capability = requireNotNull(capabilityIds[intrinsic.capability])
             val destination = destinationFor(call.type, call)
             if (intrinsic.asynchronous) {
@@ -474,6 +478,9 @@ private class FunctionCompiler(
             }
             return (destination as? Destination.Register)?.id
         }
+        compileCompareToPredicate(call, target.name.asString())?.let { return it }
+        val argumentExpressions = call.arguments.filterNotNull()
+        val arguments = argumentExpressions.map(::compileExpression)
         val targetId = functionIds[target.symbol]
         if (targetId == null) {
             return compileBuiltinCall(call, target, argumentExpressions, arguments)
@@ -777,7 +784,11 @@ private fun resolveTrustedOperation(
     stringType: IrType,
     intType: IrType,
 ): TrustedIntrinsic.CapabilityOperation? {
-    val sourceName = (function.parent as? IrFile)?.fileEntry?.name ?: return null
+    var parent = function.parent
+    while (parent !is IrFile) {
+        parent = (parent as? IrDeclaration)?.parent ?: return null
+    }
+    val sourceName = parent.fileEntry.name
     fun IrType.trustedType(): TrustedValueType =
         when (this) {
             unitType -> TrustedValueType.UNIT
@@ -788,9 +799,12 @@ private fun resolveTrustedOperation(
     val identity =
         TrustedCallableIdentity(
             bundleIdentity = session.trustedApiIdentity(sourceName),
-            name = function.name.asString(),
+            name = function.fqNameWhenAvailable?.asString() ?: return null,
             suspending = function.isSuspend,
-            parameters = function.parameters.map { parameter -> parameter.type.trustedType() },
+            parameters =
+                function.parameters
+                    .filter { parameter -> parameter.kind == IrParameterKind.Regular }
+                    .map { parameter -> parameter.type.trustedType() },
             result = function.returnType.trustedType(),
         )
     return TrustedIntrinsicRegistry.resolve(identity) as? TrustedIntrinsic.CapabilityOperation

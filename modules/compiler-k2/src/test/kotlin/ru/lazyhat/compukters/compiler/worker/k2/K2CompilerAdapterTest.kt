@@ -47,6 +47,16 @@ import kotlin.test.assertTrue
 
 class K2CompilerAdapterTest {
     @Test
+    fun `core guest API sources are supplied by the dedicated module`() {
+        listOf(
+            "/compukter-guest-api/compukter/terminal/Terminal.kt",
+            "/compukter-guest-api/compukter/process/Process.kt",
+        ).forEach { resource ->
+            assertNotNull(K2CompilerAdapter::class.java.getResourceAsStream(resource), resource).use { }
+        }
+    }
+
+    @Test
     fun `valid Kotlin source reaches IR and request files are removed`() =
         withAdapter { adapter, root ->
             val result = adapter.compile(request("val answer: Int = 42"))
@@ -174,8 +184,8 @@ class K2CompilerAdapterTest {
         withAdapter { adapter, root ->
             val source = "val answer: Int = 42"
             val trustedApiBytes =
-                listOf("/compukter-api/terminal.kt", "/compukter-api/process.kt").sumOf { resource ->
-                    checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream(resource))
+                TrustedIntrinsicRegistry.CORE_SOURCE_BUNDLES.sumOf { bundle ->
+                    checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream(bundle.resource))
                         .use { it.readBytes().size }
                 }
             val result =
