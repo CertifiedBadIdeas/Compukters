@@ -44,6 +44,8 @@ internal interface LowLevelVmBridge {
 
     fun storeClose(handle: Long): Unit = error("filesystem store close is unavailable")
 
+    fun verifyArtifact(artifact: ByteArray): Boolean = error("artifact verification is unavailable")
+
     fun create(artifact: ByteArray): ByteArray
 
     fun createInStore(

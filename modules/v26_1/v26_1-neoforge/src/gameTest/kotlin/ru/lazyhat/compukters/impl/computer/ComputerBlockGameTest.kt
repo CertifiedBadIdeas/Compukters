@@ -104,6 +104,7 @@ object ComputerBlockGameTest {
                         helper,
                         ComputerId.fromLongs(0x50524F43L, 0x455353L),
                     )
+                    verifyTwoComputerCompilation(helper)
                     verifyTombstoneRecovery(helper, position)
                     verifyTwoComputerWorldRestart(helper, position, position.east())
                 }.thenSucceed()
@@ -216,6 +217,72 @@ object ComputerBlockGameTest {
         advanceUntilInput(computer)
     }
 
+    private fun verifyTwoComputerCompilation(helper: GameTestHelper) {
+        val rom = processTestRom()
+        val firstId = ComputerId.fromLongs(0x434F4D50494C45L, 1)
+        val secondId = ComputerId.fromLongs(0x434F4D50494C45L, 2)
+        val firstContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, firstId, rom)
+        val secondContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, secondId, rom)
+        writeFixture(firstContext.store, firstId, "filesystem-compilation-source.cpkt")
+        writeFixture(secondContext.store, secondId, "filesystem-compilation-source.cpkt")
+        val router =
+            ru.lazyhat.compukters.impl.compiler.NeoForgeCompilerServices
+                .router(helper.level.server)
+
+        ProgramComputer(1, { _, _ -> }, firstContext.store, firstId, rom, compilerRouter = router).use { first ->
+            ProgramComputer(2, { _, _ -> }, secondContext.store, secondId, rom, compilerRouter = router).use { second ->
+                helper.assertTrue(first.turnOn() == ProgramComputerState.Running, "first compiler computer did not boot")
+                helper.assertTrue(second.turnOn() == ProgramComputerState.Running, "second compiler computer did not boot")
+                advanceBothUntilInput(first, second)
+
+                enterCommand(first, "kotlinc project/main.kt -o hello")
+                enterCommand(second, "kotlinc project/main.kt -o hello")
+                advanceBothUntilInput(first, second)
+                helper.assertTrue(
+                    terminalText(first.terminalFullState()).contains("compiled: /home/hello\n"),
+                    "first computer did not compile through the shared service",
+                )
+                helper.assertTrue(
+                    terminalText(second.terminalFullState()).contains("compiled: /home/hello\n"),
+                    "second computer did not compile through the shared service",
+                )
+
+                enterCommand(first, "hello")
+                enterCommand(second, "hello")
+                advanceBothUntilInput(first, second)
+            }
+        }
+    }
+
+    private fun enterCommand(
+        computer: ProgramComputer,
+        command: String,
+    ) {
+        check(computer.sendTerminalText(command))
+        check(computer.sendTerminalKey(TerminalKey.ENTER, TerminalKeyAction.PRESS))
+    }
+
+    private fun advanceBothUntilInput(
+        first: ProgramComputer,
+        second: ProgramComputer,
+    ) {
+        repeat(30_000) {
+            val firstState = first.serverTick()
+            val secondState = second.serverTick()
+            if (firstState == ProgramComputerState.WaitingForInput && secondState == ProgramComputerState.WaitingForInput) return
+            check(firstState == ProgramComputerState.Running || firstState == ProgramComputerState.WaitingForCompiler) {
+                "first computer terminated before waiting for input: $firstState"
+            }
+            check(secondState == ProgramComputerState.Running || secondState == ProgramComputerState.WaitingForCompiler) {
+                "second computer terminated before waiting for input: $secondState"
+            }
+            if (firstState == ProgramComputerState.WaitingForCompiler || secondState == ProgramComputerState.WaitingForCompiler) {
+                Thread.sleep(1)
+            }
+        }
+        error("compiler computers did not return to input")
+    }
+
     private fun advanceUntilInput(computer: ProgramComputer) {
         repeat(10_000) {
             when (val state = computer.serverTick()) {
@@ -243,6 +310,7 @@ object ComputerBlockGameTest {
             listOf(
                 "/rom/boot" to resource("/system/programs/boot"),
                 "/rom/hello" to fixture("process-terminal-child.cpkt"),
+                "/rom/kotlinc" to resource("/system/programs/kotlinc"),
                 "/rom/shell" to resource("/system/programs/shell"),
             )
         val payloadSize =

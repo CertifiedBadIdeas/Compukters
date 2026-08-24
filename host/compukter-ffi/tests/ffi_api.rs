@@ -21,7 +21,7 @@ use compukter_ffi::{
     compukter_store_durable_generation, compukter_store_flush, compukter_store_health,
     compukter_store_open, compukter_store_recover, compukter_store_tombstone,
     compukter_terminal_changes_since, compukter_terminal_commit, compukter_terminal_full_state,
-    compukter_terminal_key, compukter_terminal_text, FfiStatus,
+    compukter_terminal_key, compukter_terminal_text, compukter_verify_artifact, FfiStatus,
 };
 use compukter_vm::ProcessResult;
 use std::path::{Path, PathBuf};
@@ -29,7 +29,23 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 #[test]
 fn c_abi_publishes_its_exact_version() {
-    assert_eq!(3, compukter_abi_version());
+    assert_eq!(4, compukter_abi_version());
+}
+
+#[test]
+fn artifact_verification_does_not_apply_runtime_admission_limits() {
+    let artifact = terminal_artifact();
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_verify_artifact(artifact.as_ptr(), artifact.len())
+    });
+
+    let invalid = [0_u8];
+    assert_eq!(FfiStatus::Verification, unsafe {
+        compukter_verify_artifact(invalid.as_ptr(), invalid.len())
+    });
+    assert_eq!(FfiStatus::InvalidArgument, unsafe {
+        compukter_verify_artifact(core::ptr::null(), 1)
+    });
 }
 
 #[test]

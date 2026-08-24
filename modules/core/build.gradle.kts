@@ -22,6 +22,7 @@ plugins {
 }
 
 dependencies {
+    implementation(projects.compilerClient)
     implementation(projects.compilerRuntime)
     implementation(projects.nativeRuntime)
     implementation(libs.kotlin.logging)

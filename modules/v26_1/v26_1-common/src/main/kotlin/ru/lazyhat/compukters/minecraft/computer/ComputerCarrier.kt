@@ -68,6 +68,7 @@ internal object RuntimeComputerCarrierFactory : ComputerCarrierFactory {
                 store = context.store,
                 computerId = context.computerId,
                 romImage = context.romImage(),
+                compilerRouter = context.compilerRouter,
             ),
         )
     }

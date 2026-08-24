@@ -11,6 +11,7 @@
 
 package ru.lazyhat.compukters.compiler.runtime
 
+import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
@@ -83,3 +84,14 @@ data class CompilerCompletion(
     val target: CompilerTarget,
     val outcome: CompilerOutcome,
 )
+
+interface CompilerServicePort {
+    fun submit(
+        target: CompilerTarget,
+        snapshot: ProjectSnapshot,
+    ): CompilerSubmissionResult
+
+    fun drain(maximum: Int): List<CompilerCompletion>
+
+    fun cancel(target: CompilerTarget): Boolean
+}

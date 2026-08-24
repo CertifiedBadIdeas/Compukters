@@ -125,6 +125,10 @@ pub(crate) fn create(artifact_bytes: Vec<u8>) -> Result<u64, CreateError> {
         .map_err(CreateError::Handle)
 }
 
+pub(crate) fn verify(artifact_bytes: &[u8]) -> bool {
+    verify_artifact(Arc::from(artifact_bytes), ArtifactLimits::default()).is_ok()
+}
+
 pub(crate) fn create_in_store(
     store_handle: u64,
     id: ComputerId,

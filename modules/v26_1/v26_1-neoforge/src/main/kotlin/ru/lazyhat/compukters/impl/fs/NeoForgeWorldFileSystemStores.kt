@@ -16,6 +16,7 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.storage.LevelResource
 import net.neoforged.neoforge.event.level.LevelEvent
 import net.neoforged.neoforge.event.server.ServerStoppingEvent
+import ru.lazyhat.compukters.impl.compiler.NeoForgeCompilerServices
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.minecraft.computer.ComputerFileSystemContext
@@ -173,6 +174,7 @@ object NeoForgeWorldFileSystemStores {
                     computerId,
                     romImage,
                     registry.lifecycle(root),
+                    NeoForgeCompilerServices.router(level.server),
                 )
             }
 

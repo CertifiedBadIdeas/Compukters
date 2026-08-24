@@ -23,6 +23,7 @@ class CompuktersModNativeBootstrapTest {
                 .use { it.readAllBytes() }
         checkNotNull(CompuktersModNativeBootstrapTest::class.java.getResourceAsStream("/system/programs/shell")).use { }
         checkNotNull(CompuktersModNativeBootstrapTest::class.java.getResourceAsStream("/system/programs/kotlinc")).use { }
+        checkNotNull(CompuktersModNativeBootstrapTest::class.java.getResourceAsStream("/compiler/worker/compiler-k2-worker.zip")).use { }
 
         VmSession.open(artifact).use { }
     }
