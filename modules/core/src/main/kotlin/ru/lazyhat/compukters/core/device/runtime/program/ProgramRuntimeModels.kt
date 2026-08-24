@@ -44,6 +44,8 @@ sealed interface ProgramRuntimeState {
 
     data object WaitingForInput : ProgramRuntimeState
 
+    data object WaitingForCompiler : ProgramRuntimeState
+
     data class Halted(
         val value: VmValue?,
     ) : ProgramRuntimeState

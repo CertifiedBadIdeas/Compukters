@@ -32,6 +32,8 @@ sealed interface ProgramComputerState {
 
     data object WaitingForInput : ProgramComputerState
 
+    data object WaitingForCompiler : ProgramComputerState
+
     data object Closed : ProgramComputerState
 }
 

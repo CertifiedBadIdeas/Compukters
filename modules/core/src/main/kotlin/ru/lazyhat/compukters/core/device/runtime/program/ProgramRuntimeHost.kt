@@ -19,6 +19,10 @@
 
 package ru.lazyhat.compukters.core.device.runtime.program
 
+import ru.lazyhat.compukters.compiler.runtime.CompilerSubmissionResult
+import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationAddress
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationOutcome
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
@@ -31,6 +35,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmAdmissionException
 import ru.lazyhat.compukters.lang.runtime.vm.VmBootException
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
+import ru.lazyhat.compukters.lang.runtime.vm.VmCompilationRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmStartException
@@ -39,6 +44,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
 class ProgramRuntimeHost internal constructor(
     private val sessionFactory: ProgramVmSessionFactory,
     private val tickBudget: ProgramTickBudget = ProgramTickBudget(),
+    private val computerId: ComputerId = ComputerId.fromLongs(0, 1),
+    private val compilerRouter: CompilerCompletionRouter? = null,
 ) : AutoCloseable {
     constructor(tickBudget: ProgramTickBudget = ProgramTickBudget()) : this(NativeProgramVmSessionFactory(), tickBudget)
 
@@ -47,9 +54,18 @@ class ProgramRuntimeHost internal constructor(
         computerId: ComputerId,
         romImage: ByteArray,
         tickBudget: ProgramTickBudget = ProgramTickBudget(),
-    ) : this(NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, computerId, romImage)), tickBudget)
+        compilerRouter: CompilerCompletionRouter? = null,
+    ) : this(
+        NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, computerId, romImage)),
+        tickBudget,
+        computerId,
+        compilerRouter,
+    )
 
     private var session: ProgramVmSession? = null
+    private var vmEpoch = 0L
+    private var activeVmEpoch = 0L
+    private var pendingCompilation: ComputerCompilationAddress? = null
     var state: ProgramRuntimeState = ProgramRuntimeState.Idle
         private set
 
@@ -64,8 +80,11 @@ class ProgramRuntimeHost internal constructor(
         if (state == ProgramRuntimeState.Closed) return ProgramStartResult.Closed
         releaseSession()
         state = ProgramRuntimeState.Idle
+        val openingEpoch = Math.incrementExact(vmEpoch)
+        vmEpoch = openingEpoch
         return try {
             session = open()
+            activeVmEpoch = openingEpoch
             state = ProgramRuntimeState.Running
             ProgramStartResult.Started
         } catch (_: VmVerificationException) {
@@ -82,8 +101,13 @@ class ProgramRuntimeHost internal constructor(
     }
 
     fun serverTick(): ProgramRuntimeState {
-        if (state != ProgramRuntimeState.Running) return state
+        if (state != ProgramRuntimeState.Running && state != ProgramRuntimeState.WaitingForCompiler) return state
         val activeSession = requireNotNull(session)
+        compilerRouter?.routeCompletions()
+        if (state == ProgramRuntimeState.WaitingForCompiler) {
+            applyCompilationCompletion(activeSession)
+            return state
+        }
         advanceForTick(activeSession)
         if (session !== activeSession) return state
         try {
@@ -157,7 +181,78 @@ class ProgramRuntimeHost internal constructor(
                 is VmOutcome.HostRequest -> {
                     if (!resume(outcome.request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))) return
                 }
+
+                is VmOutcome.CompilationRequested -> {
+                    submitCompilation(activeSession, outcome.request)
+                    return
+                }
             }
+        }
+    }
+
+    private fun submitCompilation(
+        activeSession: ProgramVmSession,
+        request: VmCompilationRequest,
+    ) {
+        val router = compilerRouter
+        if (router == null) {
+            completeCompilationFailure(activeSession, request.token, "compiler is unavailable")
+            return
+        }
+        val address = ComputerCompilationAddress(computerId, activeVmEpoch, request.token)
+        val submission =
+            try {
+                router.submit(address, request.sources)
+            } catch (error: IllegalArgumentException) {
+                completeCompilationFailure(activeSession, request.token, error.message ?: "invalid compilation request")
+                return
+            }
+        when (submission) {
+            CompilerSubmissionResult.ACCEPTED -> {
+                pendingCompilation = address
+                state = ProgramRuntimeState.WaitingForCompiler
+            }
+
+            CompilerSubmissionResult.BUSY -> {
+                completeCompilationFailure(activeSession, request.token, "compiler is busy")
+            }
+
+            CompilerSubmissionResult.CLOSED -> {
+                completeCompilationFailure(activeSession, request.token, "compiler is unavailable")
+            }
+        }
+    }
+
+    private fun applyCompilationCompletion(activeSession: ProgramVmSession) {
+        val address = requireNotNull(pendingCompilation)
+        val outcome = compilerRouter?.take(address) ?: return
+        try {
+            when (outcome) {
+                is ComputerCompilationOutcome.Success -> {
+                    activeSession.completeCompilationArtifact(address.token, outcome.artifactBytes())
+                }
+
+                is ComputerCompilationOutcome.Failure -> {
+                    activeSession.completeCompilationFailure(address.token, outcome.diagnostics)
+                }
+            }
+        } catch (error: VmBridgeException) {
+            finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))
+            return
+        }
+        pendingCompilation = null
+        state = ProgramRuntimeState.Running
+    }
+
+    private fun completeCompilationFailure(
+        activeSession: ProgramVmSession,
+        token: Long,
+        diagnostics: String,
+    ) {
+        try {
+            activeSession.completeCompilationFailure(token, diagnostics)
+        } catch (error: VmBridgeException) {
+            finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))
         }
     }
 
@@ -210,7 +305,13 @@ class ProgramRuntimeHost internal constructor(
     }
 
     private fun terminalInput(input: ProgramVmSession.() -> Unit): Boolean {
-        if (state != ProgramRuntimeState.Running && state != ProgramRuntimeState.WaitingForInput) return false
+        if (
+            state != ProgramRuntimeState.Running &&
+            state != ProgramRuntimeState.WaitingForInput &&
+            state != ProgramRuntimeState.WaitingForCompiler
+        ) {
+            return false
+        }
         val activeSession = session ?: return false
         return try {
             activeSession.input()
@@ -234,8 +335,14 @@ class ProgramRuntimeHost internal constructor(
     }
 
     private fun releaseSession() {
-        session?.close()
-        session = null
+        pendingCompilation?.let { compilerRouter?.cancel(it) }
+        pendingCompilation = null
+        activeVmEpoch = 0
+        try {
+            session?.close()
+        } finally {
+            session = null
+        }
     }
 
     private fun VmBridgeException.bridgeDetail(): String = message ?: "native VM bridge failure"

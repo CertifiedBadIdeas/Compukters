@@ -19,7 +19,15 @@
 
 package ru.lazyhat.compukters.core.device.runtime.program
 
+import ru.lazyhat.compukters.compiler.runtime.CompilerSubmissionResult
+import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationAddress
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationOutcome
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationRequest
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompiler
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilerCompletion
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.GuestTrap
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
@@ -34,6 +42,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmAdmissionException
 import ru.lazyhat.compukters.lang.runtime.vm.VmBootException
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
+import ru.lazyhat.compukters.lang.runtime.vm.VmCompilationRequest
+import ru.lazyhat.compukters.lang.runtime.vm.VmCompilationSource
 import ru.lazyhat.compukters.lang.runtime.vm.VmFault
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
@@ -48,6 +58,139 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ProgramRuntimeHostTest {
+    @Test
+    fun `compilation waits without advancing and applies completion on a tick before resuming`() {
+        val sourceBytes = "fun main() {}".encodeToByteArray()
+        val session =
+            ScriptedSession(
+                outcomes =
+                    listOf(
+                        VmOutcome.CompilationRequested(
+                            VmCompilationRequest(7, listOf(VmCompilationSource("/home/main.kt", sourceBytes))),
+                        ),
+                    ),
+                defaultOutcome = VmOutcome.SliceExhausted,
+            )
+        val compiler = FakeComputerCompiler()
+        val router = CompilerCompletionRouter(compiler, maximumCompletionsPerDrain = 2)
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { session },
+                tickBudget = ProgramTickBudget(8, 4, 1),
+                computerId = ComputerId.fromLongs(10, 20),
+                compilerRouter = router,
+            )
+        host.start(byteArrayOf(1))
+
+        assertEquals(ProgramRuntimeState.WaitingForCompiler, host.serverTick())
+        assertEquals(1, session.advances.size)
+        assertEquals(1, compiler.submissions.size)
+        assertEquals(
+            sourceBytes.toList(),
+            compiler.submissions
+                .single()
+                .sources
+                .single()
+                .utf8Bytes()
+                .toList(),
+        )
+        assertTrue(host.sendTerminalText("queued while compiling"))
+        assertEquals(listOf("queued while compiling"), session.terminalTexts)
+
+        assertEquals(ProgramRuntimeState.WaitingForCompiler, host.serverTick())
+        assertEquals(1, session.advances.size)
+        val address = compiler.submissions.single().address
+        compiler.completions +=
+            ComputerCompilerCompletion(
+                address,
+                ComputerCompilationOutcome.Success(byteArrayOf(4, 5)),
+            )
+
+        assertEquals(ProgramRuntimeState.Running, host.serverTick())
+        assertEquals(listOf(address.token to byteArrayOf(4, 5).toList()), session.compilationArtifacts)
+        assertEquals(1, session.advances.size)
+
+        assertEquals(ProgramRuntimeState.Running, host.serverTick())
+        assertEquals(2, session.advances.size)
+    }
+
+    @Test
+    fun `a compiler wait does not stop another computer from advancing`() {
+        val compiler = FakeComputerCompiler()
+        val router = CompilerCompletionRouter(compiler)
+        val waitingSession =
+            ScriptedSession(
+                outcomes = listOf(compilationRequest(token = 1)),
+                defaultOutcome = VmOutcome.SliceExhausted,
+            )
+        val runningSession = ScriptedSession(defaultOutcome = VmOutcome.SliceExhausted)
+        val waitingHost = compilerHost(waitingSession, router, computer = 1)
+        val runningHost = compilerHost(runningSession, router, computer = 2)
+        waitingHost.start(byteArrayOf(1))
+        runningHost.start(byteArrayOf(2))
+
+        assertEquals(ProgramRuntimeState.WaitingForCompiler, waitingHost.serverTick())
+        assertEquals(ProgramRuntimeState.Running, runningHost.serverTick())
+        assertEquals(1, waitingSession.advances.size)
+        assertEquals(1, runningSession.advances.size)
+        assertEquals(ProgramRuntimeState.WaitingForCompiler, waitingHost.serverTick())
+        assertEquals(ProgramRuntimeState.Running, runningHost.serverTick())
+        assertEquals(1, waitingSession.advances.size)
+        assertEquals(2, runningSession.advances.size)
+    }
+
+    @Test
+    fun `replacement cancels the old epoch before close and a repeated token gets a new address`() {
+        val events = mutableListOf<String>()
+        val compiler = FakeComputerCompiler(events)
+        val router = CompilerCompletionRouter(compiler)
+        val first = ScriptedSession(outcomes = listOf(compilationRequest(token = 5)), closeEvent = { events += "close" })
+        val second = ScriptedSession(outcomes = listOf(compilationRequest(token = 5)))
+        val sessions = ArrayDeque(listOf(first, second))
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { sessions.removeFirst() },
+                tickBudget = ProgramTickBudget(8, 4, 1),
+                computerId = ComputerId.fromLongs(0, 11),
+                compilerRouter = router,
+            )
+        host.start(byteArrayOf(1))
+        host.serverTick()
+        val oldAddress = compiler.submissions.single().address
+
+        host.start(byteArrayOf(2))
+        host.serverTick()
+        val newAddress = compiler.submissions.last().address
+
+        assertEquals(listOf("cancel", "close"), events)
+        assertEquals(oldAddress.computerId, newAddress.computerId)
+        assertEquals(oldAddress.token, newAddress.token)
+        assertEquals(oldAddress.vmEpoch + 1, newAddress.vmEpoch)
+    }
+
+    @Test
+    fun `compilation completion bridge failure closes the VM as a typed bridge failure`() {
+        val compiler = FakeComputerCompiler()
+        val router = CompilerCompletionRouter(compiler)
+        val session =
+            ScriptedSession(
+                outcomes = listOf(compilationRequest(token = 3)),
+                completionError = VmBridgeException("completion bridge failed"),
+            )
+        val host = compilerHost(session, router, computer = 1)
+        host.start(byteArrayOf(1))
+        host.serverTick()
+        val address = compiler.submissions.single().address
+        compiler.completions +=
+            ComputerCompilerCompletion(address, ComputerCompilationOutcome.Success(byteArrayOf(1)))
+
+        assertEquals(
+            ProgramRuntimeState.Failed(ProgramFailure.Bridge("completion bridge failed")),
+            host.serverTick(),
+        )
+        assertEquals(1, session.closeCalls)
+    }
+
     @Test
     fun `boot opens a ROM session without artifact bytes`() {
         val session = ScriptedSession(defaultOutcome = VmOutcome.SliceExhausted)
@@ -350,6 +493,18 @@ class ProgramRuntimeHostTest {
             sessionFactory = ProgramVmSessionFactory { session },
         )
 
+    private fun compilerHost(
+        session: ScriptedSession,
+        router: CompilerCompletionRouter,
+        computer: Long,
+    ): ProgramRuntimeHost =
+        ProgramRuntimeHost(
+            sessionFactory = ProgramVmSessionFactory { session },
+            tickBudget = ProgramTickBudget(8, 4, 1),
+            computerId = ComputerId.fromLongs(0, computer),
+            compilerRouter = router,
+        )
+
     private class ScriptedSession(
         outcomes: List<VmOutcome> = emptyList(),
         private val defaultOutcome: VmOutcome? = null,
@@ -357,6 +512,8 @@ class ProgramRuntimeHostTest {
         val terminalState: TerminalState = terminalState(0),
         val terminalUpdate: TerminalUpdate = TerminalUpdate.Unchanged(0),
         private val filesystemGeneration: Long = 0,
+        private val completionError: VmBridgeException? = null,
+        private val closeEvent: (() -> Unit)? = null,
     ) : ProgramVmSession {
         private val outcomes = ArrayDeque(outcomes)
         val advances = mutableListOf<Pair<Int, Int>>()
@@ -365,6 +522,8 @@ class ProgramRuntimeHostTest {
         var terminalCommits = 0
         val terminalKeys = mutableListOf<Triple<TerminalKey, TerminalKeyAction, Set<TerminalModifier>>>()
         val terminalTexts = mutableListOf<String>()
+        val compilationArtifacts = mutableListOf<Pair<Long, List<Byte>>>()
+        val compilationFailures = mutableListOf<Pair<Long, String>>()
 
         override fun advance(
             guestBudget: Int,
@@ -382,7 +541,24 @@ class ProgramRuntimeHostTest {
             responses += requestId to response
         }
 
+        override fun completeCompilationArtifact(
+            token: Long,
+            artifact: ByteArray,
+        ) {
+            completionError?.let { throw it }
+            compilationArtifacts += token to artifact.toList()
+        }
+
+        override fun completeCompilationFailure(
+            token: Long,
+            diagnostics: String,
+        ) {
+            completionError?.let { throw it }
+            compilationFailures += token to diagnostics
+        }
+
         override fun close() {
+            closeEvent?.invoke()
             closeCalls++
         }
 
@@ -409,12 +585,39 @@ class ProgramRuntimeHostTest {
         override fun filesystemGeneration(): Long = filesystemGeneration
     }
 
+    private class FakeComputerCompiler(
+        private val events: MutableList<String>? = null,
+    ) : ComputerCompiler {
+        val submissions = mutableListOf<ComputerCompilationRequest>()
+        val cancellations = mutableListOf<ComputerCompilationAddress>()
+        val completions = ArrayDeque<ComputerCompilerCompletion>()
+
+        override fun submit(request: ComputerCompilationRequest): CompilerSubmissionResult {
+            submissions += request
+            return CompilerSubmissionResult.ACCEPTED
+        }
+
+        override fun drain(maximum: Int): List<ComputerCompilerCompletion> =
+            List(minOf(maximum, completions.size)) { completions.removeFirst() }
+
+        override fun cancel(address: ComputerCompilationAddress): Boolean {
+            events?.add("cancel")
+            cancellations += address
+            return true
+        }
+    }
+
     private fun response(
         requestId: Long,
         response: HostResponse,
     ): Pair<Long, HostResponse> = requestId to response
 
     private companion object {
+        fun compilationRequest(token: Long): VmOutcome.CompilationRequested =
+            VmOutcome.CompilationRequested(
+                VmCompilationRequest(token, listOf(VmCompilationSource("/home/main.kt", byteArrayOf(1)))),
+            )
+
         fun terminalState(revision: Long): TerminalState =
             TerminalState(
                 revision = revision,
