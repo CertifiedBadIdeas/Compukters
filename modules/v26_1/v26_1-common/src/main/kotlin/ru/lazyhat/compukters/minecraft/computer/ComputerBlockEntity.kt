@@ -174,7 +174,9 @@ open class ComputerBlockEntity internal constructor(
     }
 
     private fun ProgramComputerState.isPoweredOn(): Boolean =
-        this == ProgramComputerState.Running || this == ProgramComputerState.WaitingForInput
+        this == ProgramComputerState.Running ||
+            this == ProgramComputerState.WaitingForInput ||
+            this == ProgramComputerState.WaitingForCompiler
 
     private companion object {
         const val ROOT_KEY = "compukters"
