@@ -19,10 +19,6 @@
 
 package ru.lazyhat.compukters.core.device.computer
 
-fun interface ProgramImageSource {
-    fun loadInstalledArtifact(deviceId: Int): ByteArray?
-}
-
 fun interface ProgramComputerStateSink {
     fun publishState(
         deviceId: Int,

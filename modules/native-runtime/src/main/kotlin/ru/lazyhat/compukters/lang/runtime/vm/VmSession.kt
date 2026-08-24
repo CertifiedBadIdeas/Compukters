@@ -138,6 +138,8 @@ class VmSession private constructor(
                 throw error
             } catch (error: VmStartException) {
                 throw error
+            } catch (error: VmBootException) {
+                throw error
             } catch (error: VmBridgeException) {
                 throw error
             } catch (error: Exception) {

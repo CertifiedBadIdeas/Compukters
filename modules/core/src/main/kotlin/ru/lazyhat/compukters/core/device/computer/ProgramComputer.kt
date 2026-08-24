@@ -33,25 +33,11 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 
 class ProgramComputer internal constructor(
     private val deviceId: Int,
-    private val imageSource: ProgramImageSource,
     private val stateSink: ProgramComputerStateSink,
     private val host: ProgramHost,
 ) : AutoCloseable {
     constructor(
         deviceId: Int,
-        imageSource: ProgramImageSource,
-        stateSink: ProgramComputerStateSink,
-        tickBudget: ProgramTickBudget = ProgramTickBudget(),
-    ) : this(
-        deviceId,
-        imageSource,
-        stateSink,
-        RuntimeProgramHost(ProgramRuntimeHost(tickBudget)),
-    )
-
-    constructor(
-        deviceId: Int,
-        imageSource: ProgramImageSource,
         stateSink: ProgramComputerStateSink,
         store: WorldFileSystemStore,
         computerId: ComputerId,
@@ -59,7 +45,6 @@ class ProgramComputer internal constructor(
         tickBudget: ProgramTickBudget = ProgramTickBudget(),
     ) : this(
         deviceId,
-        imageSource,
         stateSink,
         RuntimeProgramHost(ProgramRuntimeHost(store, computerId, romImage, tickBudget)),
     )
@@ -69,23 +54,15 @@ class ProgramComputer internal constructor(
 
     fun turnOn(): ProgramComputerState {
         if (state == ProgramComputerState.Closed || state.isPoweredOn()) return state
-        return startInstalledImage()
+        return startBoot()
     }
 
-    private fun startInstalledImage(): ProgramComputerState {
-        val artifact =
-            try {
-                imageSource.loadInstalledArtifact(deviceId)
-            } catch (error: Exception) {
-                return transitionTo(failure(ProgramComputerFailure.ImageSource(error.diagnostic("image source failure"))))
-            } ?: return transitionTo(failure(ProgramComputerFailure.MissingImage))
-
-        return when (val result = host.start(artifact)) {
+    private fun startBoot(): ProgramComputerState =
+        when (val result = host.startBoot()) {
             ProgramStartResult.Started -> transitionTo(ProgramComputerState.Running)
             is ProgramStartResult.Rejected -> transitionTo(failure(ProgramComputerFailure.Runtime(result.failure)))
             ProgramStartResult.Closed -> transitionTo(failure(ProgramComputerFailure.RuntimeContract(host.state)))
         }
-    }
 
     fun serverTick(): ProgramComputerState {
         if (!state.isPoweredOn()) return state
@@ -116,7 +93,7 @@ class ProgramComputer internal constructor(
     fun reboot(): ProgramComputerState {
         if (state == ProgramComputerState.Closed) return state
         host.shutdown()
-        return startInstalledImage()
+        return startBoot()
     }
 
     override fun close() {
@@ -163,14 +140,7 @@ class ProgramComputer internal constructor(
     private fun ProgramComputerState.isPoweredOn(): Boolean =
         this == ProgramComputerState.Running || this == ProgramComputerState.WaitingForInput
 
-    private fun Exception.diagnostic(fallback: String): String {
-        val raw = message ?: this::class.simpleName ?: fallback
-        val lineEnd = raw.indexOfAny(charArrayOf('\r', '\n')).let { if (it < 0) raw.length else it }
-        return raw.substring(0, lineEnd).ifEmpty { fallback }.take(MAXIMUM_DIAGNOSTIC_CODE_UNITS)
-    }
-
     private companion object {
-        const val MAXIMUM_DIAGNOSTIC_CODE_UNITS = 256
         val SHUTDOWN_STATE = ProgramComputerState.PoweredOff(ProgramComputerStopReason.Shutdown)
     }
 }

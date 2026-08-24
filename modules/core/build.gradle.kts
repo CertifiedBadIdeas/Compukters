@@ -36,7 +36,6 @@ val programRuntimeArtifact =
 
 tasks.test {
     filter.excludeTestsMatching("ru.lazyhat.compukters.core.device.runtime.program.integration.*")
-    filter.excludeTestsMatching("ru.lazyhat.compukters.core.device.computer.integration.*")
 }
 
 val programRuntimeIntegrationTest =
@@ -51,7 +50,6 @@ val programRuntimeIntegrationTest =
         testClassesDirs = sourceSets.test.get().output.classesDirs
         classpath = sourceSets.test.get().runtimeClasspath
         filter.includeTestsMatching("ru.lazyhat.compukters.core.device.runtime.program.integration.*")
-        filter.includeTestsMatching("ru.lazyhat.compukters.core.device.computer.integration.*")
         jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
         inputs.file(compukterFfiLibrary)
         inputs.file(programRuntimeArtifact)

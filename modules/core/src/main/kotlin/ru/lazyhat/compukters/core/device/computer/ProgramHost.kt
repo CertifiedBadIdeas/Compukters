@@ -31,7 +31,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 internal interface ProgramHost : AutoCloseable {
     val state: ProgramRuntimeState
 
-    fun start(artifact: ByteArray): ProgramStartResult
+    fun startBoot(): ProgramStartResult
 
     fun serverTick(): ProgramRuntimeState
 
@@ -58,7 +58,7 @@ internal class RuntimeProgramHost(
     override val state: ProgramRuntimeState
         get() = delegate.state
 
-    override fun start(artifact: ByteArray): ProgramStartResult = delegate.start(artifact)
+    override fun startBoot(): ProgramStartResult = delegate.startBoot()
 
     override fun serverTick(): ProgramRuntimeState = delegate.serverTick()
 

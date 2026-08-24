@@ -23,7 +23,27 @@ suspend fun main() {
             val action = terminalEventAction()
             if (key == 13 && action == 1) {
                 terminalWrite("\n")
-                runBuiltIn(line)
+                if (line != "") {
+                    if (line == "help") {
+                        terminalWrite("help echo clear\n")
+                    } else if (line == "echo") {
+                        terminalWrite("\n")
+                    } else if (line.length >= 5 && line.substring(0, 5) == "echo ") {
+                        terminalWrite(line.substring(5, line.length) + "\n")
+                    } else if (line == "clear") {
+                        terminalClear()
+                    } else {
+                        var commandEnd = 0
+                        while (commandEnd < line.length && line[commandEnd] != ' ') commandEnd = commandEnd + 1
+                        if (commandEnd != line.length) {
+                            terminalWrite("unknown command: " + line.substring(0, commandEnd) + "\n")
+                        } else {
+                            val path = if (line[0] == '/') line else "/home/" + line
+                            val result = run(path, 7)
+                            if (result != 0) writeProcessFailure(result)
+                        }
+                    }
+                }
                 line = ""
                 terminalWrite("> ")
             } else if (
@@ -70,30 +90,6 @@ private fun eraseLastScalar(line: String): String {
         if (previous >= '\uD800' && previous <= '\uDBFF') width = 2
     }
     return line.substring(0, line.length - width)
-}
-
-private suspend fun runBuiltIn(line: String) {
-    if (line != "") {
-        if (line == "help") {
-            terminalWrite("help echo clear\n")
-        } else if (line == "echo") {
-            terminalWrite("\n")
-        } else if (line.length >= 5 && line.substring(0, 5) == "echo ") {
-            terminalWrite(line.substring(5, line.length) + "\n")
-        } else if (line == "clear") {
-            terminalClear()
-        } else {
-            var commandEnd = 0
-            while (commandEnd < line.length && line[commandEnd] != ' ') commandEnd = commandEnd + 1
-            if (commandEnd != line.length) {
-                terminalWrite("unknown command: " + line.substring(0, commandEnd) + "\n")
-            } else {
-                val path = if (line[0] == '/') line else "/home/" + line
-                val result = run(path, 7)
-                if (result != 0) writeProcessFailure(result)
-            }
-        }
-    }
 }
 
 private fun writeProcessFailure(result: Int) {

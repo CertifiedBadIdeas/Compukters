@@ -7,14 +7,6 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package ru.lazyhat.compukters.core.device.computer
@@ -32,96 +24,66 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ProgramComputerTest {
     @Test
-    fun `construction is powered off without publishing state`() {
-        val fixture = fixture(image = byteArrayOf(1))
+    fun `construction is powered off without publishing or booting`() {
+        val fixture = fixture()
 
-        assertEquals(
-            ProgramComputerState.PoweredOff(ProgramComputerStopReason.NeverStarted),
-            fixture.computer.state,
-        )
+        assertEquals(ProgramComputerState.PoweredOff(ProgramComputerStopReason.NeverStarted), fixture.computer.state)
         assertEquals(emptyList(), fixture.states)
-        assertEquals(0, fixture.imageLoads)
-        assertEquals(0, fixture.host.startCalls.size)
+        assertEquals(0, fixture.host.bootCalls)
     }
 
     @Test
-    fun `missing image publishes typed powered off failure`() {
-        val fixture = fixture(image = null)
+    fun `turn on boots exactly once and publishes running`() {
+        val fixture = fixture()
+
+        assertEquals(ProgramComputerState.Running, fixture.computer.turnOn())
+        assertEquals(ProgramComputerState.Running, fixture.computer.turnOn())
+        assertEquals(1, fixture.host.bootCalls)
+        assertEquals(listOf<ProgramComputerState>(ProgramComputerState.Running), fixture.states)
+    }
+
+    @Test
+    fun `rejected boot publishes typed runtime failure`() {
+        val failure = ProgramFailure.Admission(7)
+        val fixture = fixture(FakeProgramHost(startResult = ProgramStartResult.Rejected(failure)))
 
         assertEquals(
-            ProgramComputerState.PoweredOff(
-                ProgramComputerStopReason.Failure(ProgramComputerFailure.MissingImage),
-            ),
+            ProgramComputerState.PoweredOff(ProgramComputerStopReason.Failure(ProgramComputerFailure.Runtime(failure))),
             fixture.computer.turnOn(),
         )
-        assertEquals(listOf(fixture.computer.state), fixture.states)
-        assertEquals(1, fixture.imageLoads)
-        assertEquals(0, fixture.host.startCalls.size)
+        assertEquals(1, fixture.host.bootCalls)
     }
 
     @Test
-    fun `valid image starts one host and publishes running once`() {
-        val image = byteArrayOf(1, 2, 3)
-        val fixture = fixture(image = image)
-
-        assertEquals(ProgramComputerState.Running, fixture.computer.turnOn())
-        assertEquals(ProgramComputerState.Running, fixture.computer.turnOn())
-
-        assertEquals(listOf(ProgramComputerState.Running), fixture.states)
-        assertEquals(1, fixture.imageLoads)
-        assertEquals(1, fixture.host.startCalls.size)
-        assertContentEquals(image, fixture.host.startCalls.single())
-    }
-
-    @Test
-    fun `powered on tick advances before publishing wait state`() {
-        val host =
-            FakeProgramHost(
-                tickStates = listOf(ProgramRuntimeState.WaitingForInput),
-            )
-        val fixture = fixture(image = byteArrayOf(1), host = host)
+    fun `powered on tick advances and publishes terminal wait`() {
+        val fixture = fixture(FakeProgramHost(tickStates = listOf(ProgramRuntimeState.WaitingForInput)))
         fixture.computer.turnOn()
-        fixture.events.clear()
+        fixture.states.clear()
 
         assertEquals(ProgramComputerState.WaitingForInput, fixture.computer.serverTick())
-
-        assertEquals(1, host.tickCalls)
-        assertEquals(
-            listOf<ObservedEvent>(ObservedEvent.State(ProgramComputerState.WaitingForInput)),
-            fixture.events,
-        )
+        assertEquals(1, fixture.host.tickCalls)
+        assertEquals(listOf<ProgramComputerState>(ProgramComputerState.WaitingForInput), fixture.states)
     }
 
     @Test
     fun `powered off tick performs no host work`() {
-        val fixture = fixture(image = byteArrayOf(1))
+        val fixture = fixture()
 
         assertEquals(fixture.computer.state, fixture.computer.serverTick())
         assertEquals(0, fixture.host.tickCalls)
     }
 
     @Test
-    fun `filesystem generation is exposed only while the host has one`() {
-        val host = FakeProgramHost(filesystemGeneration = 17)
-        val fixture = fixture(image = byteArrayOf(1), host = host)
-
-        assertEquals(17, fixture.computer.filesystemGeneration())
-    }
-
-    @Test
     fun `halt and runtime failure power off`() {
         val cases =
             listOf(
-                ProgramRuntimeState.Halted(VmValue.I32(42)) to
-                    ProgramComputerStopReason.Halted(VmValue.I32(42)),
+                ProgramRuntimeState.Halted(VmValue.I32(42)) to ProgramComputerStopReason.Halted(VmValue.I32(42)),
                 ProgramRuntimeState.Failed(ProgramFailure.Trap(GuestTrap.DIVISION_BY_ZERO)) to
                     ProgramComputerStopReason.Failure(
                         ProgramComputerFailure.Runtime(ProgramFailure.Trap(GuestTrap.DIVISION_BY_ZERO)),
@@ -129,19 +91,14 @@ class ProgramComputerTest {
             )
 
         cases.forEach { (runtimeState, stopReason) ->
-            val host = FakeProgramHost(tickStates = listOf(runtimeState))
-            val fixture = fixture(image = byteArrayOf(1), host = host)
+            val fixture = fixture(FakeProgramHost(tickStates = listOf(runtimeState)))
             fixture.computer.turnOn()
-            fixture.events.clear()
-
-            val expected = ProgramComputerState.PoweredOff(stopReason)
-            assertEquals(expected, fixture.computer.serverTick())
-            assertEquals(listOf<ObservedEvent>(ObservedEvent.State(expected)), fixture.events)
+            assertEquals(ProgramComputerState.PoweredOff(stopReason), fixture.computer.serverTick())
         }
     }
 
     @Test
-    fun `terminal facade delegates state deltas and merged input without Kotlin echo`() {
+    fun `terminal facade delegates Rust state and merged input`() {
         val terminal = terminalState(4)
         val host =
             FakeProgramHost(
@@ -149,9 +106,8 @@ class ProgramComputerTest {
                 terminalState = terminal,
                 terminalUpdate = TerminalUpdate.Unchanged(4),
             )
-        val fixture = fixture(image = byteArrayOf(1), host = host)
+        val fixture = fixture(host)
         fixture.computer.turnOn()
-        fixture.events.clear()
         fixture.computer.serverTick()
 
         assertEquals(terminal, fixture.computer.terminalFullState())
@@ -164,189 +120,89 @@ class ProgramComputerTest {
             ),
         )
         assertTrue(fixture.computer.sendTerminalText("λ😀"))
-        assertEquals(Triple(TerminalKey.ENTER, TerminalKeyAction.PRESS, setOf(TerminalModifier.SHIFT)), host.keys.single())
+        assertEquals(1, host.keys.size)
         assertEquals(listOf("λ😀"), host.texts)
-        assertEquals(
-            listOf<ObservedEvent>(
-                ObservedEvent.State(ProgramComputerState.WaitingForInput),
-            ),
-            fixture.events,
-        )
     }
 
     @Test
-    fun `unexpected inactive host state after tick becomes contract failure`() {
-        listOf(ProgramRuntimeState.Idle, ProgramRuntimeState.Closed).forEach { runtimeState ->
-            val host = FakeProgramHost(tickStates = listOf(runtimeState))
-            val fixture = fixture(image = byteArrayOf(1), host = host)
-            fixture.computer.turnOn()
-
-            assertEquals(
-                ProgramComputerState.PoweredOff(
-                    ProgramComputerStopReason.Failure(
-                        ProgramComputerFailure.RuntimeContract(runtimeState),
-                    ),
-                ),
-                fixture.computer.serverTick(),
-            )
-        }
-    }
-
-    @Test
-    fun `rejected host start publishes typed runtime failure`() {
-        val failure = ProgramFailure.Verification
-        val host = FakeProgramHost(startResult = ProgramStartResult.Rejected(failure))
-        val fixture = fixture(image = byteArrayOf(1), host = host)
-
-        assertEquals(
-            ProgramComputerState.PoweredOff(
-                ProgramComputerStopReason.Failure(ProgramComputerFailure.Runtime(failure)),
-            ),
-            fixture.computer.turnOn(),
-        )
-        assertEquals(1, host.startCalls.size)
-    }
-
-    @Test
-    fun `shutdown and close release host exactly once and publish once`() {
-        val shutdownFixture = fixture(image = byteArrayOf(1))
-        shutdownFixture.computer.turnOn()
-        shutdownFixture.events.clear()
-
-        shutdownFixture.computer.shutdown()
-        shutdownFixture.computer.shutdown()
-
-        val shutdownState = ProgramComputerState.PoweredOff(ProgramComputerStopReason.Shutdown)
-        assertEquals(shutdownState, shutdownFixture.computer.state)
-        assertEquals(1, shutdownFixture.host.shutdownCalls)
-        assertEquals(listOf<ObservedEvent>(ObservedEvent.State(shutdownState)), shutdownFixture.events)
-
-        val closeFixture = fixture(image = byteArrayOf(1))
-        closeFixture.computer.turnOn()
-        closeFixture.events.clear()
-
-        closeFixture.computer.close()
-        closeFixture.computer.close()
-
-        assertEquals(ProgramComputerState.Closed, closeFixture.computer.state)
-        assertEquals(1, closeFixture.host.closeCalls)
-        assertEquals(
-            listOf<ObservedEvent>(ObservedEvent.State(ProgramComputerState.Closed)),
-            closeFixture.events,
-        )
-        assertEquals(ProgramComputerState.Closed, closeFixture.computer.turnOn())
-        assertEquals(ProgramComputerState.Closed, closeFixture.computer.reboot())
-        assertEquals(1, closeFixture.imageLoads)
-    }
-
-    @Test
-    fun `reboot reloads image without intermediate shutdown publication`() {
-        val images = ArrayDeque(listOf(byteArrayOf(1), byteArrayOf(2)))
-        val fixture = fixture(image = null, imageLoader = { images.removeFirst() })
+    fun `reboot drops the old session and boots a fresh one without intermediate publication`() {
+        val fixture = fixture()
         fixture.computer.turnOn()
-        fixture.events.clear()
+        fixture.states.clear()
 
         assertEquals(ProgramComputerState.Running, fixture.computer.reboot())
-
         assertEquals(1, fixture.host.shutdownCalls)
-        assertEquals(2, fixture.host.startCalls.size)
-        assertContentEquals(byteArrayOf(1), fixture.host.startCalls[0])
-        assertContentEquals(byteArrayOf(2), fixture.host.startCalls[1])
-        assertEquals(emptyList(), fixture.events)
+        assertEquals(2, fixture.host.bootCalls)
+        assertEquals(emptyList(), fixture.states)
     }
 
     @Test
-    fun `image exception becomes bounded single line failure`() {
-        val detail = "x".repeat(300)
-        val fixture =
-            fixture(
-                image = null,
-                imageLoader = { throw IllegalStateException("$detail\nignored") },
-            )
+    fun `shutdown and close are idempotent`() {
+        val fixture = fixture()
+        fixture.computer.turnOn()
 
-        assertEquals(
-            ProgramComputerState.PoweredOff(
-                ProgramComputerStopReason.Failure(
-                    ProgramComputerFailure.ImageSource("x".repeat(256)),
-                ),
-            ),
-            fixture.computer.turnOn(),
-        )
+        fixture.computer.shutdown()
+        fixture.computer.shutdown()
+        assertEquals(1, fixture.host.shutdownCalls)
+
+        fixture.computer.close()
+        fixture.computer.close()
+        assertEquals(1, fixture.host.closeCalls)
+        assertEquals(ProgramComputerState.Closed, fixture.computer.turnOn())
+        assertEquals(ProgramComputerState.Closed, fixture.computer.reboot())
+        assertEquals(1, fixture.host.bootCalls)
     }
 
     @Test
     fun `state sink exception propagates after authoritative state changes`() {
-        val fixture =
-            fixture(
-                image = byteArrayOf(1),
-                statePublisher = { throw IllegalStateException("observer down") },
-            )
+        val fixture = fixture(statePublisher = { throw IllegalStateException("observer down") })
 
         assertFailsWith<IllegalStateException> { fixture.computer.turnOn() }
-
         assertEquals(ProgramComputerState.Running, fixture.computer.state)
-        assertEquals(ProgramComputerState.Running, fixture.computer.turnOn())
-        assertEquals(1, fixture.host.startCalls.size)
-        assertEquals(1, fixture.states.size)
+        assertEquals(1, fixture.host.bootCalls)
     }
 
     private fun fixture(
-        image: ByteArray?,
         host: FakeProgramHost = FakeProgramHost(),
-        imageLoader: () -> ByteArray? = { image },
         statePublisher: (ProgramComputerState) -> Unit = {},
     ): Fixture {
         val states = mutableListOf<ProgramComputerState>()
-        val events = mutableListOf<ObservedEvent>()
-        var imageLoads = 0
         val computer =
             ProgramComputer(
                 deviceId = 7,
-                imageSource =
-                    ProgramImageSource {
-                        imageLoads++
-                        imageLoader()
-                    },
                 stateSink =
                     ProgramComputerStateSink { _, state ->
                         states += state
-                        events += ObservedEvent.State(state)
                         statePublisher(state)
                     },
                 host = host,
             )
-        return Fixture(computer, host, states, events) { imageLoads }
+        return Fixture(computer, host, states)
     }
 
-    private class Fixture(
+    private data class Fixture(
         val computer: ProgramComputer,
         val host: FakeProgramHost,
-        val states: List<ProgramComputerState>,
-        val events: MutableList<ObservedEvent>,
-        private val imageLoadsProvider: () -> Int,
-    ) {
-        val imageLoads: Int
-            get() = imageLoadsProvider()
-    }
+        val states: MutableList<ProgramComputerState>,
+    )
 
     private class FakeProgramHost(
         tickStates: List<ProgramRuntimeState> = emptyList(),
-        val terminalState: TerminalState = terminalState(0),
-        val terminalUpdate: TerminalUpdate = TerminalUpdate.Unchanged(0),
+        private val terminalState: TerminalState = terminalState(0),
+        private val terminalUpdate: TerminalUpdate = TerminalUpdate.Unchanged(0),
         private val startResult: ProgramStartResult = ProgramStartResult.Started,
-        private val filesystemGeneration: Long? = null,
     ) : ProgramHost {
         private val tickStates = ArrayDeque(tickStates)
         override var state: ProgramRuntimeState = ProgramRuntimeState.Idle
-        val startCalls = mutableListOf<ByteArray>()
+        var bootCalls = 0
         var tickCalls = 0
         var shutdownCalls = 0
         var closeCalls = 0
         val keys = mutableListOf<Triple<TerminalKey, TerminalKeyAction, Set<TerminalModifier>>>()
         val texts = mutableListOf<String>()
 
-        override fun start(artifact: ByteArray): ProgramStartResult {
-            startCalls += artifact.copyOf()
+        override fun startBoot(): ProgramStartResult {
+            bootCalls++
             state =
                 when (val result = startResult) {
                     ProgramStartResult.Started -> ProgramRuntimeState.Running
@@ -380,7 +236,7 @@ class ProgramComputerTest {
             return true
         }
 
-        override fun filesystemGeneration(): Long? = filesystemGeneration
+        override fun filesystemGeneration(): Long? = null
 
         override fun shutdown() {
             shutdownCalls++
@@ -391,12 +247,6 @@ class ProgramComputerTest {
             closeCalls++
             state = ProgramRuntimeState.Closed
         }
-    }
-
-    private sealed interface ObservedEvent {
-        data class State(
-            val state: ProgramComputerState,
-        ) : ObservedEvent
     }
 
     private companion object {

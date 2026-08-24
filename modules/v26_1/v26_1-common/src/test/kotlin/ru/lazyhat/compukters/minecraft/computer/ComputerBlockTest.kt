@@ -19,7 +19,6 @@ import net.minecraft.world.level.block.entity.BlockEntityType
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStateSink
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
-import ru.lazyhat.compukters.core.device.computer.ProgramImageSource
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
@@ -46,7 +45,6 @@ class ComputerBlockTest {
     fun `server ticker delegates exactly one block entity tick`() {
         val carrier = CountingCarrier()
         val entity = fixtureEntity(carrier)
-        entity.installArtifact(byteArrayOf(1))
         requireNotNull(computerTickerFor(isClientSide = false, actualType = TEST_TYPE, expectedType = TEST_TYPE))
 
         tickComputerEntity(entity)
@@ -60,11 +58,9 @@ class ComputerBlockTest {
             TEST_TYPE,
             BlockPos.ZERO,
             Blocks.FURNACE.defaultBlockState(),
-            ComputerCarrierFactory { _, imageSource, stateSink, _ ->
-                carrier.attach(imageSource, stateSink)
+            ComputerCarrierFactory { _, stateSink, _ ->
+                carrier.attach(stateSink)
             },
-            InstalledProgramStorage(maximumArtifactBytes = 16),
-            { byteArrayOf(1) },
         )
 
     private class CountingCarrier : ComputerCarrier {
@@ -74,11 +70,7 @@ class ComputerBlockTest {
         var serverTickCalls = 0
         private lateinit var stateSink: ProgramComputerStateSink
 
-        fun attach(
-            imageSource: ProgramImageSource,
-            stateSink: ProgramComputerStateSink,
-        ): ComputerCarrier {
-            imageSource.hashCode()
+        fun attach(stateSink: ProgramComputerStateSink): ComputerCarrier {
             this.stateSink = stateSink
             return this
         }

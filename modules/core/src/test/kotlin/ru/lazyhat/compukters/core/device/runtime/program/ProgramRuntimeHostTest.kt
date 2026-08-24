@@ -32,6 +32,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmAdmissionException
+import ru.lazyhat.compukters.lang.runtime.vm.VmBootException
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmFault
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
@@ -47,6 +48,28 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ProgramRuntimeHostTest {
+    @Test
+    fun `boot opens a ROM session without artifact bytes`() {
+        val session = ScriptedSession(defaultOutcome = VmOutcome.SliceExhausted)
+        var bootCalls = 0
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory =
+                    object : ProgramVmSessionFactory {
+                        override fun open(artifact: ByteArray): ProgramVmSession = error("artifact launch is not expected")
+
+                        override fun boot(): ProgramVmSession {
+                            bootCalls++
+                            return session
+                        }
+                    },
+            )
+
+        assertEquals(ProgramStartResult.Started, host.startBoot())
+        assertEquals(1, bootCalls)
+        assertEquals(ProgramRuntimeState.Running, host.state)
+    }
+
     @Test
     fun `execution limits must be positive`() {
         assertFailsWith<IllegalArgumentException> {
@@ -146,6 +169,22 @@ class ProgramRuntimeHostTest {
             assertEquals(ProgramStartResult.Rejected(expected), host.start(byteArrayOf(1)))
             assertEquals(ProgramRuntimeState.Failed(expected), host.state)
         }
+    }
+
+    @Test
+    fun `typed boot failure is a bounded start rejection`() {
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory =
+                    object : ProgramVmSessionFactory {
+                        override fun open(artifact: ByteArray): ProgramVmSession = error("artifact launch is not expected")
+
+                        override fun boot(): ProgramVmSession = throw VmBootException(9)
+                    },
+            )
+
+        assertEquals(ProgramStartResult.Rejected(ProgramFailure.Start(9)), host.startBoot())
+        assertEquals(ProgramRuntimeState.Failed(ProgramFailure.Start(9)), host.state)
     }
 
     @Test
