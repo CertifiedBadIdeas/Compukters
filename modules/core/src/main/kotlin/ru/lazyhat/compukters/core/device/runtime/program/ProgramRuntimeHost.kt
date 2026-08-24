@@ -29,6 +29,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmAdmissionException
+import ru.lazyhat.compukters.lang.runtime.vm.VmBootException
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
@@ -53,11 +54,18 @@ class ProgramRuntimeHost internal constructor(
         private set
 
     fun start(artifact: ByteArray): ProgramStartResult {
+        val launchArtifact = artifact.copyOf()
+        return startSession { sessionFactory.open(launchArtifact) }
+    }
+
+    fun startBoot(): ProgramStartResult = startSession(sessionFactory::boot)
+
+    private fun startSession(open: () -> ProgramVmSession): ProgramStartResult {
         if (state == ProgramRuntimeState.Closed) return ProgramStartResult.Closed
         releaseSession()
         state = ProgramRuntimeState.Idle
         return try {
-            session = sessionFactory.open(artifact)
+            session = open()
             state = ProgramRuntimeState.Running
             ProgramStartResult.Started
         } catch (_: VmVerificationException) {
@@ -65,6 +73,8 @@ class ProgramRuntimeHost internal constructor(
         } catch (error: VmAdmissionException) {
             rejectStart(ProgramFailure.Admission(error.code))
         } catch (error: VmStartException) {
+            rejectStart(ProgramFailure.Start(error.code))
+        } catch (error: VmBootException) {
             rejectStart(ProgramFailure.Start(error.code))
         } catch (error: VmBridgeException) {
             rejectStart(ProgramFailure.Bridge(error.bridgeDetail()))

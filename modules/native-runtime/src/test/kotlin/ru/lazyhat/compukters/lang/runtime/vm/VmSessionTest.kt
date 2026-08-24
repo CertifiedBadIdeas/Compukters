@@ -40,6 +40,20 @@ class VmSessionTest {
     }
 
     @Test
+    fun `boot failure retains its typed Kotlin surface`() {
+        val bridge = FakeBridge(createResult = bytes(5, 9))
+        val store = WorldFileSystemStore.open(Path.of("/tmp/compukters-boot-failure-store"), bridge)
+
+        assertEquals(
+            9,
+            assertFailsWith<VmBootException> {
+                VmSession.bootInStore(store, ComputerId.fromLongs(1, 2), byteArrayOf(1))
+            }.code,
+        )
+        store.close()
+    }
+
+    @Test
     fun `persistent session copies launch inputs and uses its world store handle`() {
         val bridge = FakeBridge(createResult = bytes(0, long(17)))
         val store = WorldFileSystemStore.open(Path.of("/tmp/compukters-session-store"), bridge)

@@ -27,6 +27,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
+import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
 
@@ -60,6 +61,8 @@ internal interface ProgramVmSession : AutoCloseable {
 
 internal fun interface ProgramVmSessionFactory {
     fun open(artifact: ByteArray): ProgramVmSession
+
+    fun boot(): ProgramVmSession = throw VmBridgeException("ROM boot is not configured")
 }
 
 internal class ProgramFileSystemLaunchContext(
@@ -70,6 +73,8 @@ internal class ProgramFileSystemLaunchContext(
     private val romImage = romImage.copyOf()
 
     fun open(artifact: ByteArray): VmSession = VmSession.openInStore(artifact, store, computerId, romImage.copyOf())
+
+    fun boot(): VmSession = VmSession.bootInStore(store, computerId, romImage.copyOf())
 }
 
 internal class NativeProgramVmSessionFactory(
@@ -77,6 +82,11 @@ internal class NativeProgramVmSessionFactory(
 ) : ProgramVmSessionFactory {
     override fun open(artifact: ByteArray): ProgramVmSession =
         NativeProgramVmSession(filesystem?.open(artifact) ?: VmSession.open(artifact))
+
+    override fun boot(): ProgramVmSession {
+        val context = filesystem ?: throw VmBridgeException("ROM boot requires a persistent filesystem")
+        return NativeProgramVmSession(context.boot())
+    }
 }
 
 private class NativeProgramVmSession(

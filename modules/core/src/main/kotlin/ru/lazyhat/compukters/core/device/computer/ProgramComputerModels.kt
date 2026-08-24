@@ -50,12 +50,6 @@ sealed interface ProgramComputerStopReason {
 }
 
 sealed interface ProgramComputerFailure {
-    data object MissingImage : ProgramComputerFailure
-
-    data class ImageSource(
-        val detail: String,
-    ) : ProgramComputerFailure
-
     data class Runtime(
         val failure: ProgramFailure,
     ) : ProgramComputerFailure

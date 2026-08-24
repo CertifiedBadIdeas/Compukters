@@ -34,7 +34,11 @@ internal object SystemRomImage {
                 Math.addExact(size, ENTRY_FIXED_BYTES + path.encodeToByteArray().size + artifact.size)
             }
         val buffer = ByteBuffer.allocate(payloadSize).order(ByteOrder.LITTLE_ENDIAN)
-        buffer.put(MAGIC).putShort(VERSION).putShort(0).putInt(programs.size)
+        buffer
+            .put(MAGIC)
+            .putShort(VERSION)
+            .putShort(0)
+            .putInt(programs.size)
         programs.forEach { (pathText, artifact) ->
             val path = pathText.encodeToByteArray()
             buffer

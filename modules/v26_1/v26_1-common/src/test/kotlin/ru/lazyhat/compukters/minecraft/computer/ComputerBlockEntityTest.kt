@@ -19,13 +19,11 @@ import net.minecraft.server.Bootstrap
 import net.minecraft.util.ProblemReporter
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.entity.BlockEntityType
-import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.storage.TagValueInput
 import net.minecraft.world.level.storage.TagValueOutput
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStateSink
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
-import ru.lazyhat.compukters.core.device.computer.ProgramImageSource
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
@@ -35,53 +33,28 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import java.util.stream.Stream
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ComputerBlockEntityTest {
     @Test
-    fun `system boot image starts without an installed artifact and advances once per tick`() {
+    fun `server tick boots once and then advances once per tick`() {
         val fixture = fixture()
 
         fixture.entity.serverTick()
+        fixture.entity.serverTick()
 
         val carrier = fixture.carriers.single()
-        assertEquals(1, carrier.turnOnCalls)
-        assertEquals(1, carrier.serverTickCalls)
-        assertContentEquals(SYSTEM_IMAGE, carrier.loadedArtifact)
-        assertNull(fixture.entity.installedArtifact())
-
-        fixture.entity.serverTick()
         assertEquals(1, carrier.turnOnCalls)
         assertEquals(2, carrier.serverTickCalls)
     }
 
     @Test
-    fun `installed replacement is defensive and does not replace the system machine`() {
-        val fixture = fixture(maximumArtifactBytes = 3)
-        val initial = byteArrayOf(1)
-        fixture.entity.installArtifact(initial)
-        fixture.entity.serverTick()
-        val carrier = fixture.carriers.single()
-        val initialMachineId = requireNotNull(fixture.entity.terminalMachineId)
-
-        val replacement = byteArrayOf(2, 3)
-        fixture.entity.installArtifact(replacement)
-        replacement[0] = 9
-
-        assertEquals(0, carrier.rebootCalls)
-        assertEquals(initialMachineId, fixture.entity.terminalMachineId)
-        assertEquals(1, fixture.carriers.size)
-        assertContentEquals(byteArrayOf(2, 3), fixture.entity.installedArtifact())
-        assertContentEquals(SYSTEM_IMAGE, carrier.loadedArtifact)
-    }
-
-    @Test
-    fun `terminal open starts a blank machine without advancing an extra tick`() {
+    fun `terminal open boots without advancing an extra tick`() {
         val fixture = fixture()
+
         assertEquals(terminalState("", 0), fixture.entity.prepareTerminal())
         assertEquals(1, fixture.carriers.single().turnOnCalls)
         assertEquals(0, fixture.carriers.single().serverTickCalls)
@@ -89,83 +62,24 @@ class ComputerBlockEntityTest {
     }
 
     @Test
-    fun `oversized replacement is atomic`() {
-        val fixture = fixture(maximumArtifactBytes = 2)
-        fixture.entity.installArtifact(byteArrayOf(1, 2))
-        fixture.entity.serverTick()
-        val carrier = fixture.carriers.single()
-
-        assertFailsWith<IllegalArgumentException> {
-            fixture.entity.installArtifact(byteArrayOf(3, 4, 5))
-        }
-
-        assertContentEquals(byteArrayOf(1, 2), fixture.entity.installedArtifact())
-        assertEquals(0, carrier.rebootCalls)
-    }
-
-    @Test
-    fun `terminal and state adapters expose Rust full and delta observations`() {
+    fun `terminal adapters expose Rust state deltas and merged input`() {
         val fixture = fixture()
-        fixture.entity.installArtifact(byteArrayOf(1))
         fixture.entity.serverTick()
         val carrier = fixture.carriers.single()
-
-        carrier.terminal = terminalState("abcdef", 1)
+        carrier.terminal = terminalState("prompt", 1)
         carrier.update = TerminalUpdate.Unchanged(1)
         carrier.publishState(ProgramComputerState.WaitingForInput)
 
         assertEquals(carrier.terminal, fixture.entity.terminalFullState())
         assertEquals(TerminalUpdate.Unchanged(1), fixture.entity.terminalChangesSince(1))
-        assertEquals(ProgramComputerState.WaitingForInput, fixture.entity.runtimeState)
-    }
-
-    @Test
-    fun `accepted raw terminal input is forwarded without Kotlin echo`() {
-        val fixture = fixture()
-        fixture.entity.installArtifact(byteArrayOf(1))
-        fixture.entity.serverTick()
-        val carrier = fixture.carriers.single()
-        carrier.terminal = terminalState("prompt", 1)
-        carrier.publishState(ProgramComputerState.WaitingForInput)
-
         assertTrue(fixture.entity.submitTerminalText("Ada"))
-
         assertEquals(listOf("Ada"), carrier.texts)
         assertEquals(terminalState("prompt", 1), fixture.entity.terminalFullState())
     }
 
     @Test
-    fun `new install leaves the running system terminal intact`() {
-        val fixture = fixture()
-        fixture.entity.installArtifact(byteArrayOf(1))
-        fixture.entity.serverTick()
-        fixture.carriers.single().terminal = terminalState("old", 4)
-
-        fixture.entity.installArtifact(byteArrayOf(2))
-
-        assertEquals(terminalState("old", 4), fixture.entity.terminalFullState())
-    }
-
-    @Test
-    fun `remove artifact leaves the system machine running`() {
-        val fixture = fixture()
-        fixture.entity.installArtifact(byteArrayOf(1))
-        fixture.entity.serverTick()
-        val carrier = fixture.carriers.single()
-
-        fixture.entity.removeArtifact()
-        fixture.entity.serverTick()
-
-        assertNull(fixture.entity.installedArtifact())
-        assertEquals(0, carrier.shutdownCalls)
-        assertEquals(1, fixture.carriers.size)
-        assertEquals(2, carrier.serverTickCalls)
-    }
-
-    @Test
-    fun `NBT round trip persists only the artifact and reload stays lazy`() {
+    fun `NBT persists stable identity but no installed artifact payload`() {
         val source = fixture()
-        source.entity.installArtifact(byteArrayOf(1, 2, 3))
         source.entity.serverTick()
         source.carriers.single().terminal = terminalState("transient", 1)
         val tag = source.entity.saveForTest()
@@ -174,80 +88,65 @@ class ComputerBlockEntityTest {
         restored.entity.loadForTest(tag)
 
         assertEquals(source.entity.computerId(), restored.entity.computerId())
-        assertContentEquals(byteArrayOf(1, 2, 3), restored.entity.installedArtifact())
         assertNull(restored.entity.terminalFullState())
         assertEquals(neverStarted(), restored.entity.runtimeState)
         assertTrue(restored.carriers.isEmpty())
         assertEquals(setOf("compukters"), tag.keySet())
+        assertFalse(tag.toString().contains("artifact"))
     }
 
     @Test
-    fun `different block entities keep distinct identities across carrier recreation`() {
-        val first = fixture()
-        val second = fixture()
-        assertTrue(first.entity.computerId() != second.entity.computerId())
-
-        val id = first.entity.computerId()
-        first.entity.serverTick()
-        first.entity.setRemoved()
-        first.entity.serverTick()
-
-        assertEquals(id, first.entity.computerId())
-        assertEquals(2, first.carriers.size)
-    }
-
-    @Test
-    fun `loading replacement state closes current carrier and restarts system image lazily`() {
+    fun `loading legacy payload ignores artifact and restarts lazily`() {
         val fixture = fixture()
-        fixture.entity.installArtifact(byteArrayOf(1))
         fixture.entity.serverTick()
-        val carrier = fixture.carriers.single()
+        val first = fixture.carriers.single()
+        val legacy = fixture.entity.saveForTest()
+        val legacyPayload = CompoundTag()
+        legacyPayload.putByteArray("artifact", byteArrayOf(1, 2, 3))
+        legacy.put("compukters", legacyPayload)
 
-        fixture.entity.loadForTest(CompoundTag())
+        fixture.entity.loadForTest(legacy)
         fixture.entity.serverTick()
 
-        assertEquals(1, carrier.closeCalls)
-        assertNull(fixture.entity.installedArtifact())
+        assertEquals(1, first.closeCalls)
         assertEquals(2, fixture.carriers.size)
         assertEquals(ProgramComputerState.Running, fixture.entity.runtimeState)
     }
 
     @Test
-    fun `setRemoved closes one carrier exactly once`() {
+    fun `identity survives carrier recreation and removal closes once`() {
         val fixture = fixture()
-        fixture.entity.installArtifact(byteArrayOf(1))
+        val id = fixture.entity.computerId()
         fixture.entity.serverTick()
-        val carrier = fixture.carriers.single()
+        val first = fixture.carriers.single()
 
         fixture.entity.setRemoved()
         fixture.entity.setRemoved()
+        fixture.entity.serverTick()
 
-        assertEquals(1, carrier.closeCalls)
+        assertEquals(id, fixture.entity.computerId())
+        assertEquals(1, first.closeCalls)
+        assertEquals(2, fixture.carriers.size)
     }
 
-    private fun fixture(maximumArtifactBytes: Int = 16): Fixture {
+    private fun fixture(): Fixture {
         val carriers = mutableListOf<FakeCarrier>()
         val entity =
             TestComputerBlockEntity(
-                carrierFactory =
-                    ComputerCarrierFactory { deviceId, imageSource, stateSink, _ ->
-                        FakeCarrier(deviceId, imageSource, stateSink).also(carriers::add)
-                    },
-                maximumArtifactBytes = maximumArtifactBytes,
+                ComputerCarrierFactory { deviceId, stateSink, _ ->
+                    FakeCarrier(deviceId, stateSink).also(carriers::add)
+                },
             )
         return Fixture(entity, carriers)
     }
 
     private class TestComputerBlockEntity(
         carrierFactory: ComputerCarrierFactory,
-        maximumArtifactBytes: Int,
     ) : ComputerBlockEntity(
             TEST_TYPE,
             BlockPos(2, 3, 4),
             Blocks.FURNACE.defaultBlockState(),
             carrierFactory,
-            InstalledProgramStorage(maximumArtifactBytes),
-            { SYSTEM_IMAGE.copyOf() },
         ) {
         fun saveForTest(): CompoundTag {
             val output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, EMPTY_PROVIDER)
@@ -260,25 +159,20 @@ class ComputerBlockEntityTest {
 
     private class FakeCarrier(
         private val deviceId: Int,
-        private val imageSource: ProgramImageSource,
         private val stateSink: ProgramComputerStateSink,
     ) : ComputerCarrier {
         override var state: ProgramComputerState = neverStarted()
             private set
         var turnOnCalls = 0
         var serverTickCalls = 0
-        var rebootCalls = 0
         var shutdownCalls = 0
         var closeCalls = 0
-        var loadedArtifact: ByteArray? = null
         var terminal: TerminalState = terminalState("", 0)
         var update: TerminalUpdate = TerminalUpdate.Unchanged(0)
-        val keys = mutableListOf<Triple<TerminalKey, TerminalKeyAction, Set<TerminalModifier>>>()
         val texts = mutableListOf<String>()
 
         override fun turnOn(): ProgramComputerState {
             turnOnCalls++
-            loadedArtifact = imageSource.loadInstalledArtifact(deviceId)
             return publishState(ProgramComputerState.Running)
         }
 
@@ -288,10 +182,7 @@ class ComputerBlockEntityTest {
         }
 
         override fun reboot(): ProgramComputerState {
-            rebootCalls++
-            loadedArtifact = imageSource.loadInstalledArtifact(deviceId)
             terminal = terminalState("", 0)
-            update = TerminalUpdate.Unchanged(0)
             return publishState(ProgramComputerState.Running)
         }
 
@@ -308,10 +199,7 @@ class ComputerBlockEntityTest {
             key: TerminalKey,
             action: TerminalKeyAction,
             modifiers: Set<TerminalModifier>,
-        ): Boolean {
-            keys += Triple(key, action, modifiers)
-            return true
-        }
+        ): Boolean = true
 
         override fun sendTerminalText(value: String): Boolean {
             texts += value
@@ -346,7 +234,6 @@ class ComputerBlockEntityTest {
             }
 
         private val EMPTY_PROVIDER = HolderLookup.Provider.create(Stream.empty())
-        private val SYSTEM_IMAGE = byteArrayOf(9, 8, 7)
 
         @Suppress("UNCHECKED_CAST")
         private val TEST_TYPE = BlockEntityType.FURNACE as BlockEntityType<ComputerBlockEntity>

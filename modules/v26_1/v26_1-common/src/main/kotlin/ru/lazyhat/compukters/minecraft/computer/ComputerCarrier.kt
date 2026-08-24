@@ -14,7 +14,6 @@ package ru.lazyhat.compukters.minecraft.computer
 import ru.lazyhat.compukters.core.device.computer.ProgramComputer
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStateSink
-import ru.lazyhat.compukters.core.device.computer.ProgramImageSource
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
@@ -50,7 +49,6 @@ internal interface ComputerCarrier : AutoCloseable {
 internal fun interface ComputerCarrierFactory {
     fun create(
         deviceId: Int,
-        imageSource: ProgramImageSource,
         stateSink: ProgramComputerStateSink,
         filesystem: ComputerFileSystemContext?,
     ): ComputerCarrier
@@ -59,28 +57,20 @@ internal fun interface ComputerCarrierFactory {
 internal object RuntimeComputerCarrierFactory : ComputerCarrierFactory {
     override fun create(
         deviceId: Int,
-        imageSource: ProgramImageSource,
         stateSink: ProgramComputerStateSink,
         filesystem: ComputerFileSystemContext?,
-    ): ComputerCarrier =
-        ProgramComputerCarrier(
-            if (filesystem == null) {
-                ProgramComputer(
-                    deviceId = deviceId,
-                    imageSource = imageSource,
-                    stateSink = stateSink,
-                )
-            } else {
-                ProgramComputer(
-                    deviceId = deviceId,
-                    imageSource = imageSource,
-                    stateSink = stateSink,
-                    store = filesystem.store,
-                    computerId = filesystem.computerId,
-                    romImage = filesystem.romImage(),
-                )
-            },
+    ): ComputerCarrier {
+        val context = requireNotNull(filesystem) { "production computer boot requires a filesystem context" }
+        return ProgramComputerCarrier(
+            ProgramComputer(
+                deviceId = deviceId,
+                stateSink = stateSink,
+                store = context.store,
+                computerId = context.computerId,
+                romImage = context.romImage(),
+            ),
         )
+    }
 }
 
 private class ProgramComputerCarrier(

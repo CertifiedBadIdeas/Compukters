@@ -16,7 +16,10 @@ internal object SystemProgramImage {
 
     fun shell(): ByteArray = load(SHELL_RESOURCE, "shell")
 
-    private fun load(resource: String, name: String): ByteArray =
+    private fun load(
+        resource: String,
+        name: String,
+    ): ByteArray =
         checkNotNull(SystemProgramImage::class.java.getResourceAsStream(resource)) {
             "packaged system $name is missing: $resource"
         }.use { it.readAllBytes() }

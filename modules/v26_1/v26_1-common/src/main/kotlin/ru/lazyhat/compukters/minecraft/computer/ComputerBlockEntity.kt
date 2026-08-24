@@ -31,8 +31,6 @@ open class ComputerBlockEntity internal constructor(
     position: BlockPos,
     blockState: BlockState,
     private val carrierFactory: ComputerCarrierFactory,
-    private val storage: InstalledProgramStorage,
-    private val bootImageSource: () -> ByteArray,
     private val identity: ComputerIdentityStorage = ComputerIdentityStorage(),
     private val filesystemContextSource: ComputerFileSystemContextSource? = null,
 ) : BlockEntity(type, position, blockState) {
@@ -45,8 +43,6 @@ open class ComputerBlockEntity internal constructor(
         position,
         blockState,
         RuntimeComputerCarrierFactory,
-        InstalledProgramStorage(),
-        SystemProgramImage::shell,
     )
 
     constructor(
@@ -59,8 +55,6 @@ open class ComputerBlockEntity internal constructor(
         position,
         blockState,
         RuntimeComputerCarrierFactory,
-        InstalledProgramStorage(),
-        SystemProgramImage::shell,
         filesystemContextSource = filesystemContextSource,
     )
 
@@ -73,18 +67,6 @@ open class ComputerBlockEntity internal constructor(
 
     var runtimeState: ProgramComputerState = neverStarted()
         private set
-
-    fun installArtifact(artifact: ByteArray) {
-        storage.install(artifact)
-        setChanged()
-    }
-
-    fun removeArtifact() {
-        if (!storage.clear()) return
-        setChanged()
-    }
-
-    fun installedArtifact(): ByteArray? = storage.artifact()
 
     fun computerId() = identity.id()
 
@@ -131,16 +113,14 @@ open class ComputerBlockEntity internal constructor(
     override fun loadAdditional(input: ValueInput) {
         super.loadAdditional(input)
         closeCarrier()
-        val payload = input.child(InstalledProgramStorage.ROOT_KEY).orElse(null)
-        storage.loadPayload(payload)
+        val payload = input.child(ROOT_KEY).orElse(null)
         identity.load(payload)
         runtimeState = neverStarted()
     }
 
     override fun saveAdditional(output: ValueOutput) {
         super.saveAdditional(output)
-        val payload = output.child(InstalledProgramStorage.ROOT_KEY)
-        storage.savePayload(payload)
+        val payload = output.child(ROOT_KEY)
         identity.save(payload)
     }
 
@@ -154,7 +134,6 @@ open class ComputerBlockEntity internal constructor(
         val created =
             carrierFactory.create(
                 deviceId = deviceId,
-                imageSource = { bootImageSource() },
                 stateSink = { _, state -> runtimeState = state },
                 filesystem = filesystem,
             )
@@ -191,6 +170,8 @@ open class ComputerBlockEntity internal constructor(
         this == ProgramComputerState.Running || this == ProgramComputerState.WaitingForInput
 
     private companion object {
+        const val ROOT_KEY = "compukters"
+
         fun neverStarted(): ProgramComputerState = ProgramComputerState.PoweredOff(ProgramComputerStopReason.NeverStarted)
     }
 }
