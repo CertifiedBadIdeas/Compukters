@@ -130,6 +130,7 @@ tasks.test {
 }
 
 val kotlinSubsetConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")
+val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = layout.buildDirectory.file("generated/system/shell.cpkt")
 
 val generateKotlinSubsetConformanceArtifact = tasks.register<Test>("generateKotlinSubsetConformanceArtifact") {
@@ -160,6 +161,23 @@ val generateShellArtifact = tasks.register<Test>("generateShellArtifact") {
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateBootArtifact = tasks.register<Test>("generateBootArtifact") {
+    description = "Compiles the checked-in no-std Kotlin boot program into a deterministic Compukter Artifact."
+    group = "build"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*checked in boot compiles deterministically with process intrinsic*")
+    inputs.file(rootProject.file("system/programs/boot.kt"))
+    inputs.file(workerJar)
+    outputs.file(bootArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukters.boot.artifact", bootArtifact.get().asFile.absolutePath)
     }
 }
 

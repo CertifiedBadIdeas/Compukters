@@ -88,7 +88,8 @@ class K2CompilerAdapter(
         }
         val temporaryBudget = TemporaryBudget(inputs.temporaryRoot, request.limits)
         val terminalApi = loadTerminalApi()
-        temporaryBudget.requireCapacity(sourceFootprint(request, terminalApi.size))
+        val processApi = loadProcessApi()
+        temporaryBudget.requireCapacity(sourceFootprint(request, terminalApi.size + processApi.size, 2))
         return temporaryBudget.useRequestDirectory { requestRoot ->
             val sourceRoot = requestRoot.resolve("source").toAbsolutePath().normalize()
             val trustedRoot = requestRoot.resolve("trusted").toAbsolutePath().normalize()
@@ -105,10 +106,12 @@ class K2CompilerAdapter(
                     physical to DiagnosticSource(source.content.toByteArray().decodeToString(), source.path)
                 }
             val terminalApiSource = trustedRoot.resolve("terminal.kt")
+            val processApiSource = trustedRoot.resolve("process.kt")
             terminalApiSource.parent.createDirectories()
             terminalApiSource.writeBytes(terminalApi)
+            processApiSource.writeBytes(processApi)
             val collector = CompilerDiagnosticCollector(physicalSources.toMap(), request.limits)
-            val arguments = fixedArguments(physicalSources.map { it.first } + listOf(terminalApiSource), output)
+            val arguments = fixedArguments(physicalSources.map { it.first } + listOf(terminalApiSource, processApiSource), output)
             val exitCode =
                 CompilationBridge.withSession(
                     CompilationSession(
@@ -120,7 +123,10 @@ class K2CompilerAdapter(
                                 physical.toString() to source.virtualPath
                             },
                         trustedApiSourceIdentities =
-                            mapOf(terminalApiSource.toString() to TrustedIntrinsicRegistry.TERMINAL_BUNDLE_ID),
+                            mapOf(
+                                terminalApiSource.toString() to TrustedIntrinsicRegistry.TERMINAL_BUNDLE_ID,
+                                processApiSource.toString() to TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID,
+                            ),
                         limits = request.limits,
                     ),
                 ) {
@@ -133,7 +139,8 @@ class K2CompilerAdapter(
 
     private fun sourceFootprint(
         request: CompileRequest,
-        terminalApiBytes: Int,
+        trustedApiBytes: Int,
+        trustedApiFiles: Int,
     ): TemporaryUsage {
         val directories = mutableSetOf("source", "trusted")
         request.sources.forEach { source ->
@@ -144,14 +151,19 @@ class K2CompilerAdapter(
             }
         }
         return TemporaryUsage(
-            files = Math.addExact(Math.addExact(request.sources.size, 1), directories.size),
-            bytes = Math.addExact(request.sources.sumOf { it.content.size.toLong() }, terminalApiBytes.toLong()),
+            files = Math.addExact(Math.addExact(request.sources.size, trustedApiFiles), directories.size),
+            bytes = Math.addExact(request.sources.sumOf { it.content.size.toLong() }, trustedApiBytes.toLong()),
         )
     }
 
     private fun loadTerminalApi(): ByteArray =
         checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream(TERMINAL_API_RESOURCE)) {
             "fixed terminal API source is missing from the worker payload"
+        }.use { it.readBytes() }
+
+    private fun loadProcessApi(): ByteArray =
+        checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream(PROCESS_API_RESOURCE)) {
+            "fixed process API source is missing from the worker payload"
         }.use { it.readBytes() }
 
     private fun fixedArguments(
@@ -173,6 +185,7 @@ class K2CompilerAdapter(
 
     private companion object {
         const val TERMINAL_API_RESOURCE = "/compukter-api/terminal.kt"
+        const val PROCESS_API_RESOURCE = "/compukter-api/process.kt"
         val DEPENDENCY_ANNOTATION = Regex("(?m)^\\s*@file:(DependsOn|Repository)\\b")
     }
 }

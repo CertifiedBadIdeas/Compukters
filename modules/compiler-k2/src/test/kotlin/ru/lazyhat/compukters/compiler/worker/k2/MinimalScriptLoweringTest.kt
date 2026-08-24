@@ -191,6 +191,21 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `checked in boot compiles deterministically with process intrinsic`() =
+        withAdapter { adapter ->
+            val source = Path.of("../..", "system/programs/boot.kt").readText()
+            val first = adapter.compile(request("system/programs/boot.kt" to source))
+            val second = adapter.compile(request("system/programs/boot.kt" to source))
+
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukters.boot.artifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `same-named guest function remains an ordinary project call`() =
         withAdapter { adapter ->
             val result =

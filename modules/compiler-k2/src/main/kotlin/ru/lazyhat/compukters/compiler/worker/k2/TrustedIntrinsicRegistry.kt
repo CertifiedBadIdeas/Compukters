@@ -26,9 +26,20 @@ internal data class TrustedCallableIdentity(
     val result: TrustedValueType,
 )
 
+internal data class TrustedCapabilityIdentity(
+    val namespace: String,
+    val name: String,
+    val abiMajor: UShort,
+    val abiMinor: UShort,
+    val operationCount: UInt,
+) : Comparable<TrustedCapabilityIdentity> {
+    override fun compareTo(other: TrustedCapabilityIdentity): Int =
+        compareValuesBy(this, other, { it.namespace }, { it.name }, { it.abiMajor }, { it.abiMinor }, { it.operationCount })
+}
+
 internal sealed interface TrustedIntrinsic {
     data class CapabilityOperation(
-        val capability: UInt,
+        val capability: TrustedCapabilityIdentity,
         val operation: UInt,
         val asynchronous: Boolean,
     ) : TrustedIntrinsic
@@ -40,11 +51,29 @@ internal fun interface TrustedIntrinsicProvider {
 
 internal object TrustedIntrinsicRegistry {
     const val TERMINAL_BUNDLE_ID = "compukter.terminal-api@1"
+    const val PROCESS_BUNDLE_ID = "compukter.process-api@1"
+    val TERMINAL_CAPABILITY = TrustedCapabilityIdentity("compukter", "terminal", 2u.toUShort(), 0u.toUShort(), 9u)
+    val PROCESS_CAPABILITY = TrustedCapabilityIdentity("compukter", "process", 1u.toUShort(), 0u.toUShort(), 1u)
 
-    private val providers: List<TrustedIntrinsicProvider> = listOf(TerminalIntrinsicProvider)
+    private val providers: List<TrustedIntrinsicProvider> = listOf(ProcessIntrinsicProvider, TerminalIntrinsicProvider)
 
     fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic? =
         providers.firstNotNullOfOrNull { provider -> provider.resolve(callable) }
+}
+
+private object ProcessIntrinsicProvider : TrustedIntrinsicProvider {
+    override fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic? =
+        TrustedIntrinsic.CapabilityOperation(
+            TrustedIntrinsicRegistry.PROCESS_CAPABILITY,
+            0u,
+            asynchronous = true,
+        ).takeIf {
+            callable.bundleIdentity == TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID &&
+                callable.name == "run" &&
+                callable.suspending &&
+                callable.parameters == listOf(TrustedValueType.STRING, TrustedValueType.INT) &&
+                callable.result == TrustedValueType.INT
+        }
 }
 
 private object TerminalIntrinsicProvider : TrustedIntrinsicProvider {
@@ -101,7 +130,7 @@ private object TerminalIntrinsicProvider : TrustedIntrinsicProvider {
         parameters: List<TrustedValueType>,
         result: TrustedValueType,
     ): TrustedIntrinsic? =
-        TrustedIntrinsic.CapabilityOperation(0u, operation, asynchronous = false).takeIf {
+        TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, operation, asynchronous = false).takeIf {
             !callable.suspending && callable.parameters == parameters && callable.result == result
         }
 
@@ -110,7 +139,7 @@ private object TerminalIntrinsicProvider : TrustedIntrinsicProvider {
         callable: TrustedCallableIdentity,
         result: TrustedValueType,
     ): TrustedIntrinsic? =
-        TrustedIntrinsic.CapabilityOperation(0u, operation, asynchronous = true).takeIf {
+        TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, operation, asynchronous = true).takeIf {
             callable.suspending && callable.parameters.isEmpty() && callable.result == result
         }
 }
