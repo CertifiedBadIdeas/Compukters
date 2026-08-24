@@ -70,8 +70,7 @@ class VmCompilationSource(
 
     fun utf8Bytes(): ByteArray = utf8.copyOf()
 
-    override fun equals(other: Any?): Boolean =
-        other is VmCompilationSource && path == other.path && utf8.contentEquals(other.utf8)
+    override fun equals(other: Any?): Boolean = other is VmCompilationSource && path == other.path && utf8.contentEquals(other.utf8)
 
     override fun hashCode(): Int = 31 * path.hashCode() + utf8.contentHashCode()
 
