@@ -98,10 +98,29 @@ internal object KotlinProjectLowering {
                     ),
                 )
         require(userFunctions.firstOrNull() === entry)
-        userFunctions.forEach { validateFunction(it, pluginContext, entry) }
+        userFunctions.forEach { validateFunction(it, pluginContext) }
+
+        val intrinsicCollector =
+            IntrinsicCollector { function ->
+                resolveTrustedOperation(
+                    function,
+                    session,
+                    pluginContext.irBuiltIns.unitType,
+                    pluginContext.irBuiltIns.stringType,
+                    pluginContext.irBuiltIns.intType,
+                )
+            }
+        userFunctions.forEach { function -> function.accept(intrinsicCollector, null) }
+        val capabilityIdentities = intrinsicCollector.capabilities.distinct().sorted()
+        val capabilityIds =
+            capabilityIdentities.withIndex().associate { (index, identity) -> identity to CapabilityId.of(index.toUInt()) }
 
         val metadataValues =
-            (listOf("app", "compukter", "terminal") + userFunctions.map { it.name.asString() })
+            (
+                listOf("app") +
+                    capabilityIdentities.flatMap { listOf(it.namespace, it.name) } +
+                    userFunctions.map { it.name.asString() }
+            )
                 .distinct()
                 .map(MetadataText::of)
                 .sorted()
@@ -149,6 +168,7 @@ internal object KotlinProjectLowering {
                     constantIds = constantIds,
                     literalIds = literalIds,
                     session = session,
+                    capabilityIds = capabilityIds,
                 )
             val compiled = compiler.compile()
             blocks += compiled.blocks
@@ -201,7 +221,12 @@ internal object KotlinProjectLowering {
                 blocks = blocks,
             )
         return Artifact(
-            semanticFeatures = setOf(SemanticFeature.COROUTINES, SemanticFeature.CAPABILITIES, SemanticFeature.MODULE_IMPORTS),
+            semanticFeatures =
+                setOfNotNull(
+                    SemanticFeature.COROUTINES,
+                    SemanticFeature.CAPABILITIES.takeIf { capabilityIdentities.isNotEmpty() },
+                    SemanticFeature.MODULE_IMPORTS,
+                ),
             manifest =
                 Manifest(
                     requiredHeapBytes = 64u * 1024u,
@@ -218,22 +243,21 @@ internal object KotlinProjectLowering {
             entry = EntryPoint(ModuleId.of(0u), requireNotNull(functionIds[entry.symbol])),
             modules = listOf(app, library),
             capabilities =
-                listOf(
+                capabilityIdentities.map { identity ->
                     Capability(
-                        namespace = requireNotNull(metadataIds["compukter"]),
-                        name = requireNotNull(metadataIds["terminal"]),
-                        abi = AbiVersion(2u, 0u),
+                        namespace = requireNotNull(metadataIds[identity.namespace]),
+                        name = requireNotNull(metadataIds[identity.name]),
+                        abi = AbiVersion(identity.abiMajor, identity.abiMinor),
                         required = true,
-                        operationCount = 9u,
-                    ),
-                ),
+                        operationCount = identity.operationCount,
+                    )
+                },
         )
     }
 
     private fun validateFunction(
         function: IrSimpleFunction,
         pluginContext: IrPluginContext,
-        entry: IrSimpleFunction,
     ) {
         val supported =
             setOf(
@@ -244,8 +268,7 @@ internal object KotlinProjectLowering {
                 pluginContext.irBuiltIns.charType,
             )
         if (function.parameters.any { it.type !in supported } ||
-            function.returnType !in supported ||
-            (function !== entry && function.isSuspend)
+            function.returnType !in supported
         ) {
             throw UnsupportedKotlinIr(function, "unsupported function signature")
         }
@@ -304,6 +327,7 @@ private class FunctionCompiler(
     private val constantIds: Map<Constant, ConstantId>,
     private val literalIds: Map<Utf16Literal, Utf16LiteralId>,
     private val session: CompilationSession,
+    private val capabilityIds: Map<TrustedCapabilityIdentity, CapabilityId>,
 ) {
     private val localTypes = mutableListOf<ValueType>()
     private val values = mutableMapOf<IrValueSymbol, RegisterId>()
@@ -430,14 +454,15 @@ private class FunctionCompiler(
         compileCompareToPredicate(call, target.name.asString())?.let { return it }
         val argumentExpressions = call.arguments.filterNotNull()
         val arguments = argumentExpressions.map(::compileExpression)
-        terminalOperation(target)?.let { intrinsic ->
+        trustedOperation(target)?.let { intrinsic ->
+            val capability = requireNotNull(capabilityIds[intrinsic.capability])
             val destination = destinationFor(call.type, call)
             if (intrinsic.asynchronous) {
                 val resume = createBlock()
                 emit(
                     Instruction.CapabilityCallAsync(
                         destination,
-                        CapabilityId.of(intrinsic.capability),
+                        capability,
                         intrinsic.operation,
                         arguments,
                         blockId(resume),
@@ -445,7 +470,7 @@ private class FunctionCompiler(
                 )
                 currentBlock = resume
             } else {
-                emit(Instruction.CapabilityCallSync(destination, CapabilityId.of(intrinsic.capability), intrinsic.operation, arguments))
+                emit(Instruction.CapabilityCallSync(destination, capability, intrinsic.operation, arguments))
             }
             return (destination as? Destination.Register)?.id
         }
@@ -630,26 +655,8 @@ private class FunctionCompiler(
         return destination
     }
 
-    private fun terminalOperation(function: IrSimpleFunction): TrustedIntrinsic.CapabilityOperation? {
-        val sourceName = (function.parent as? IrFile)?.fileEntry?.name ?: return null
-        val identity =
-            TrustedCallableIdentity(
-                bundleIdentity = session.trustedApiIdentity(sourceName),
-                name = function.name.asString(),
-                suspending = function.isSuspend,
-                parameters = function.parameters.map { parameter -> parameter.type.toTrustedValueType() },
-                result = function.returnType.toTrustedValueType(),
-            )
-        return TrustedIntrinsicRegistry.resolve(identity) as? TrustedIntrinsic.CapabilityOperation
-    }
-
-    private fun IrType.toTrustedValueType(): TrustedValueType =
-        when (this) {
-            unitType -> TrustedValueType.UNIT
-            kotlinStringType -> TrustedValueType.STRING
-            intType -> TrustedValueType.INT
-            else -> TrustedValueType.OTHER
-        }
+    private fun trustedOperation(function: IrSimpleFunction): TrustedIntrinsic.CapabilityOperation? =
+        resolveTrustedOperation(function, session, unitType, kotlinStringType, intType)
 
     private fun valueType(
         type: IrType,
@@ -744,6 +751,49 @@ private class LiteralCollector : IrVisitorVoid() {
         expression.value?.takeIf { it is String || it is Int || it is Boolean || it is Char }?.let(values::add)
         super.visitConst(expression)
     }
+}
+
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+private class IntrinsicCollector(
+    private val resolve: (IrSimpleFunction) -> TrustedIntrinsic.CapabilityOperation?,
+) : IrVisitorVoid() {
+    val capabilities = mutableListOf<TrustedCapabilityIdentity>()
+
+    override fun visitElement(element: IrElement) {
+        element.acceptChildren(this, null)
+    }
+
+    override fun visitCall(expression: IrCall) {
+        resolve(expression.symbol.owner)?.capability?.let(capabilities::add)
+        super.visitCall(expression)
+    }
+}
+
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+private fun resolveTrustedOperation(
+    function: IrSimpleFunction,
+    session: CompilationSession,
+    unitType: IrType,
+    stringType: IrType,
+    intType: IrType,
+): TrustedIntrinsic.CapabilityOperation? {
+    val sourceName = (function.parent as? IrFile)?.fileEntry?.name ?: return null
+    fun IrType.trustedType(): TrustedValueType =
+        when (this) {
+            unitType -> TrustedValueType.UNIT
+            stringType -> TrustedValueType.STRING
+            intType -> TrustedValueType.INT
+            else -> TrustedValueType.OTHER
+        }
+    val identity =
+        TrustedCallableIdentity(
+            bundleIdentity = session.trustedApiIdentity(sourceName),
+            name = function.name.asString(),
+            suspending = function.isSuspend,
+            parameters = function.parameters.map { parameter -> parameter.type.trustedType() },
+            result = function.returnType.trustedType(),
+        )
+    return TrustedIntrinsicRegistry.resolve(identity) as? TrustedIntrinsic.CapabilityOperation
 }
 
 private fun Any.toArtifactConstant(literalIds: Map<Utf16Literal, Utf16LiteralId>): Constant =

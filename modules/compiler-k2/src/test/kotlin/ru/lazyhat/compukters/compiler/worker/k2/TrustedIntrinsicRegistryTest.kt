@@ -17,6 +17,31 @@ import kotlin.test.assertNull
 
 class TrustedIntrinsicRegistryTest {
     @Test
+    fun `process provider requires trusted bundle and exact suspending signature`() {
+        val trustedRun =
+            TrustedCallableIdentity(
+                bundleIdentity = TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID,
+                name = "run",
+                suspending = true,
+                parameters = listOf(TrustedValueType.STRING, TrustedValueType.INT),
+                result = TrustedValueType.INT,
+            )
+
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(
+                capability = TrustedIntrinsicRegistry.PROCESS_CAPABILITY,
+                operation = 0u,
+                asynchronous = true,
+            ),
+            TrustedIntrinsicRegistry.resolve(trustedRun),
+        )
+        assertNull(TrustedIntrinsicRegistry.resolve(trustedRun.copy(bundleIdentity = null)))
+        assertNull(TrustedIntrinsicRegistry.resolve(trustedRun.copy(suspending = false)))
+        assertNull(TrustedIntrinsicRegistry.resolve(trustedRun.copy(parameters = listOf(TrustedValueType.STRING))))
+        assertNull(TrustedIntrinsicRegistry.resolve(trustedRun.copy(result = TrustedValueType.UNIT)))
+    }
+
+    @Test
     fun `guest declaration cannot spoof a terminal intrinsic by name and signature`() {
         val guestWrite =
             TrustedCallableIdentity(
@@ -42,7 +67,11 @@ class TrustedIntrinsicRegistryTest {
             )
 
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(capability = 0u, operation = 3u, asynchronous = true),
+            TrustedIntrinsic.CapabilityOperation(
+                capability = TrustedIntrinsicRegistry.TERMINAL_CAPABILITY,
+                operation = 3u,
+                asynchronous = true,
+            ),
             TrustedIntrinsicRegistry.resolve(trustedAwait),
         )
         assertNull(TrustedIntrinsicRegistry.resolve(trustedAwait.copy(suspending = false)))
@@ -67,35 +96,35 @@ class TrustedIntrinsicRegistryTest {
         )
 
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(0u, 0u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 0u, asynchronous = false),
             resolve("terminalWrite", listOf(TrustedValueType.STRING), TrustedValueType.UNIT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(0u, 1u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 1u, asynchronous = false),
             resolve("terminalErasePrevious", emptyList(), TrustedValueType.UNIT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(0u, 2u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 2u, asynchronous = false),
             resolve("terminalClear", emptyList(), TrustedValueType.UNIT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(0u, 4u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 4u, asynchronous = false),
             resolve("terminalEventText", emptyList(), TrustedValueType.STRING),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(0u, 5u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 5u, asynchronous = false),
             resolve("terminalEventKey", emptyList(), TrustedValueType.INT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(0u, 6u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 6u, asynchronous = false),
             resolve("terminalEventAction", emptyList(), TrustedValueType.INT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(0u, 7u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 7u, asynchronous = false),
             resolve("terminalEventModifiers", emptyList(), TrustedValueType.INT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(0u, 8u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 8u, asynchronous = false),
             resolve("terminalFinishEvent", emptyList(), TrustedValueType.UNIT),
         )
     }

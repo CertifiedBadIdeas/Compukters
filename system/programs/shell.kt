@@ -9,6 +9,8 @@
  * (at your option) any later version.
  */
 
+import process.run
+
 suspend fun main() {
     var line = ""
     terminalWrite("> ")
@@ -70,7 +72,7 @@ private fun eraseLastScalar(line: String): String {
     return line.substring(0, line.length - width)
 }
 
-private fun runBuiltIn(line: String) {
+private suspend fun runBuiltIn(line: String) {
     if (line != "") {
         if (line == "help") {
             terminalWrite("help echo clear\n")
@@ -83,7 +85,35 @@ private fun runBuiltIn(line: String) {
         } else {
             var commandEnd = 0
             while (commandEnd < line.length && line[commandEnd] != ' ') commandEnd = commandEnd + 1
-            terminalWrite("unknown command: " + line.substring(0, commandEnd) + "\n")
+            if (commandEnd != line.length) {
+                terminalWrite("unknown command: " + line.substring(0, commandEnd) + "\n")
+            } else {
+                val path = if (line[0] == '/') line else "/home/" + line
+                val result = run(path, 7)
+                if (result != 0) writeProcessFailure(result)
+            }
         }
     }
+}
+
+private fun writeProcessFailure(result: Int) {
+    terminalWrite("process failed: ")
+    if (result == 1) terminalWrite("1")
+    else if (result == 2) terminalWrite("2")
+    else if (result == 3) terminalWrite("3")
+    else if (result == 4) terminalWrite("4")
+    else if (result == 5) terminalWrite("5")
+    else if (result == 6) terminalWrite("6")
+    else if (result == 7) terminalWrite("7")
+    else if (result == 8) terminalWrite("8")
+    else if (result == 9) terminalWrite("9")
+    else if (result == 10) terminalWrite("10")
+    else if (result == 11) terminalWrite("11")
+    else if (result == 12) terminalWrite("12")
+    else if (result == 13) terminalWrite("13")
+    else if (result == 14) terminalWrite("14")
+    else if (result == 15) terminalWrite("15")
+    else if (result == 16) terminalWrite("16")
+    else terminalWrite("unknown")
+    terminalWrite("\n")
 }

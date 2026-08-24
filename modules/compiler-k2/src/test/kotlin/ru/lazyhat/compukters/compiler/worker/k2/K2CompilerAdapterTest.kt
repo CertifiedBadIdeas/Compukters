@@ -174,15 +174,17 @@ class K2CompilerAdapterTest {
         withAdapter { adapter, root ->
             val source = "val answer: Int = 42"
             val trustedApiBytes =
-                checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream("/compukter-api/terminal.kt"))
-                    .use { it.readBytes().size }
+                listOf("/compukter-api/terminal.kt", "/compukter-api/process.kt").sumOf { resource ->
+                    checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream(resource))
+                        .use { it.readBytes().size }
+                }
             val result =
                 adapter.compile(
                     request(
                         source,
                         WorkerLimits(
                             temporaryBytes = source.encodeToByteArray().size.toLong() + trustedApiBytes,
-                            temporaryFiles = 5, // source/, source/project/, trusted/, and both Kotlin files
+                            temporaryFiles = 6, // source/, source/project/, trusted/, user source, and two trusted APIs
                         ),
                     ),
                 )
