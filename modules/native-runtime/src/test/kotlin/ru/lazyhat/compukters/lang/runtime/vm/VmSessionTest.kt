@@ -174,11 +174,25 @@ class VmSessionTest {
         assertEquals(emptyList(), bridge.compilationRequestCalls)
         val outcome = session.advance(64, 64) as VmOutcome.CompilationRequested
         assertEquals(token, outcome.request.token)
-        assertEquals("/home/main.kt", outcome.request.sources.single().path)
-        val source = outcome.request.sources.single().utf8Bytes()
+        assertEquals(
+            "/home/main.kt",
+            outcome.request.sources
+                .single()
+                .path,
+        )
+        val source =
+            outcome.request.sources
+                .single()
+                .utf8Bytes()
         assertEquals("fun main() = 42\n", source.decodeToString())
         source.fill(0)
-        assertEquals("fun main() = 42\n", outcome.request.sources.single().utf8Bytes().decodeToString())
+        assertEquals(
+            "fun main() = 42\n",
+            outcome.request.sources
+                .single()
+                .utf8Bytes()
+                .decodeToString(),
+        )
         assertEquals(listOf(11L to token), bridge.compilationRequestCalls)
 
         val artifact = byteArrayOf(1, 2, 3)
