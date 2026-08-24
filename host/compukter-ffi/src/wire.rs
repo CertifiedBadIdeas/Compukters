@@ -1,6 +1,6 @@
 use compukter_vm::{
     AdmissionError, FileSystemLimits, HostFailureKind, QuotaKind, RunError, StoreHealth,
-    StoreOpenError, TerminalCell, TerminalChange, TerminalSnapshot, TerminalUpdate,
+    StoreOpenError, TerminalCell, TerminalChange, TerminalDevice, TerminalSnapshot, TerminalUpdate,
 };
 
 use crate::bridge::{CreateError, OwnedOutcome, OwnedRequest, OwnedValue, StoreCreateError};
@@ -200,7 +200,8 @@ pub(crate) fn encode_outcome(outcome: OwnedOutcome) -> Vec<u8> {
     encoder.finish()
 }
 
-pub(crate) fn encode_terminal_full(snapshot: TerminalSnapshot) -> Vec<u8> {
+#[cfg(test)]
+fn encode_terminal_full(snapshot: TerminalSnapshot) -> Vec<u8> {
     let mut encoder = Encoder::new(2);
     encoder.u64(snapshot.revision());
     encoder.u16(compukter_vm::TERMINAL_WIDTH);
@@ -215,7 +216,8 @@ pub(crate) fn encode_terminal_full(snapshot: TerminalSnapshot) -> Vec<u8> {
     encoder.finish()
 }
 
-pub(crate) fn encode_terminal_update(update: TerminalUpdate) -> Vec<u8> {
+#[cfg(test)]
+fn encode_terminal_update(update: TerminalUpdate) -> Vec<u8> {
     match update {
         TerminalUpdate::Unchanged { revision } => {
             let mut encoder = Encoder::new(0);
@@ -242,19 +244,48 @@ pub(crate) struct TerminalEncodeError;
 
 pub(crate) fn encode_terminal_full_into(
     output: &mut [u8],
+    terminal: &TerminalDevice,
+) -> Result<usize, TerminalEncodeError> {
+    encode_terminal_cells_into(
+        output,
+        terminal.revision(),
+        terminal.logical_cells(),
+        terminal.cursor_position(),
+        terminal.cursor_visible(),
+    )
+}
+
+fn encode_terminal_snapshot_into(
+    output: &mut [u8],
     snapshot: &TerminalSnapshot,
 ) -> Result<usize, TerminalEncodeError> {
+    encode_terminal_cells_into(
+        output,
+        snapshot.revision(),
+        snapshot.cells().iter().copied(),
+        snapshot.cursor_position(),
+        snapshot.cursor_visible(),
+    )
+}
+
+fn encode_terminal_cells_into(
+    output: &mut [u8],
+    revision: u64,
+    cells: impl ExactSizeIterator<Item = TerminalCell>,
+    cursor: compukter_vm::TerminalPosition,
+    cursor_visible: bool,
+) -> Result<usize, TerminalEncodeError> {
     let mut encoder = SliceEncoder::new(output, 2)?;
-    encoder.u64(snapshot.revision())?;
+    encoder.u64(revision)?;
     encoder.u16(compukter_vm::TERMINAL_WIDTH)?;
     encoder.u16(compukter_vm::TERMINAL_HEIGHT)?;
-    encoder.u32(u32::try_from(snapshot.cells().len()).expect("terminal cell count fits u32"))?;
-    for cell in snapshot.cells() {
-        encoder.cell(*cell)?;
+    encoder.u32(u32::try_from(cells.len()).expect("terminal cell count fits u32"))?;
+    for cell in cells {
+        encoder.cell(cell)?;
     }
-    encoder.u16(snapshot.cursor_position().x())?;
-    encoder.u16(snapshot.cursor_position().y())?;
-    encoder.u8(u8::from(snapshot.cursor_visible()))?;
+    encoder.u16(cursor.x())?;
+    encoder.u16(cursor.y())?;
+    encoder.u8(u8::from(cursor_visible))?;
     Ok(encoder.finish())
 }
 
@@ -280,7 +311,7 @@ pub(crate) fn encode_terminal_update_into(
             }
             Ok(encoder.finish())
         }
-        TerminalUpdate::Full(snapshot) => encode_terminal_full_into(output, snapshot),
+        TerminalUpdate::Full(snapshot) => encode_terminal_snapshot_into(output, snapshot),
     }
 }
 
@@ -462,12 +493,14 @@ impl Encoder {
         }
     }
 
+    #[cfg(test)]
     fn cell(&mut self, cell: TerminalCell) {
         self.u32(cell.code_point());
         self.u8(cell.foreground());
         self.u8(cell.background());
     }
 
+    #[cfg(test)]
     fn change(&mut self, change: &TerminalChange) {
         match change {
             TerminalChange::Patch { start, cells } => {

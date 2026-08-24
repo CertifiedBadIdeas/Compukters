@@ -607,18 +607,18 @@ pub unsafe extern "C" fn compukter_terminal_full_state(
             unsafe { written_out.write(MAXIMUM_OUTCOME_BYTES) };
             return FfiStatus::BufferTooSmall;
         }
-        let encoded = match bridge::terminal_full_state(handle) {
-            Ok(snapshot) => crate::wire::encode_terminal_full(snapshot),
+        // SAFETY: The validated ABI contract provides enough writable output.
+        let output = unsafe { core::slice::from_raw_parts_mut(output, output_capacity) };
+        let written = match bridge::with_terminal(handle, |terminal| {
+            crate::wire::encode_terminal_full_into(output, terminal)
+        }) {
+            Ok(Ok(written)) => written,
+            Ok(Err(_)) => return FfiStatus::Internal,
             Err(BridgeError::Handle(error)) => return handle_status(error),
             Err(_) => return FfiStatus::Internal,
         };
-        if encoded.len() > output_capacity {
-            return FfiStatus::Internal;
-        }
-        // SAFETY: The validated ABI contract provides enough writable output.
-        unsafe { core::ptr::copy_nonoverlapping(encoded.as_ptr(), output, encoded.len()) };
         // SAFETY: The validated ABI contract provides writable length output.
-        unsafe { written_out.write(encoded.len()) };
+        unsafe { written_out.write(written) };
         FfiStatus::Ok
     })
 }
@@ -646,18 +646,19 @@ pub unsafe extern "C" fn compukter_terminal_changes_since(
             unsafe { written_out.write(MAXIMUM_OUTCOME_BYTES) };
             return FfiStatus::BufferTooSmall;
         }
-        let encoded = match bridge::terminal_changes_since(handle, revision) {
-            Ok(update) => crate::wire::encode_terminal_update(update),
+        let update = match bridge::terminal_changes_since(handle, revision) {
+            Ok(update) => update,
             Err(BridgeError::Handle(error)) => return handle_status(error),
             Err(_) => return FfiStatus::Internal,
         };
-        if encoded.len() > output_capacity {
-            return FfiStatus::Internal;
-        }
         // SAFETY: The validated ABI contract provides enough writable output.
-        unsafe { core::ptr::copy_nonoverlapping(encoded.as_ptr(), output, encoded.len()) };
+        let output = unsafe { core::slice::from_raw_parts_mut(output, output_capacity) };
+        let written = match crate::wire::encode_terminal_update_into(output, &update) {
+            Ok(written) => written,
+            Err(_) => return FfiStatus::Internal,
+        };
         // SAFETY: The validated ABI contract provides writable length output.
-        unsafe { written_out.write(encoded.len()) };
+        unsafe { written_out.write(written) };
         FfiStatus::Ok
     })
 }

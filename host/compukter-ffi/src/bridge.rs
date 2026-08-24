@@ -6,8 +6,8 @@ use compukter_vm::{
     ComputerId, ComputerMachine, ComputerStartError, ComputerValue, ExecutionProfile,
     FileCapability, FileRights, FileSystemLimits, GuestTrap, HostFailure, HostResponse,
     HostValueInput, ManagedAllocationFailure, ProcessLimits, ProcessResult, QuotaExhaustion,
-    ResumeError, RomImage, RunError, StoreError, StoreHealth, StoreOpenError, TerminalInputError,
-    TerminalKey, TerminalKeyAction, TerminalKeyEvent, TerminalModifiers, TerminalSnapshot,
+    ResumeError, RomImage, RunError, StoreError, StoreHealth, StoreOpenError, TerminalDevice,
+    TerminalInputError, TerminalKey, TerminalKeyAction, TerminalKeyEvent, TerminalModifiers,
     TerminalUpdate, VirtualPath, VmFault, WorldFileSystemStore,
 };
 
@@ -241,14 +241,12 @@ pub(crate) fn filesystem_generation(handle: u64) -> Result<u64, BridgeError> {
         .map_err(BridgeError::Handle)
 }
 
-pub(crate) fn terminal_full_state(handle: u64) -> Result<TerminalSnapshot, BridgeError> {
+pub(crate) fn with_terminal<R>(
+    handle: u64,
+    action: impl FnOnce(&TerminalDevice) -> R,
+) -> Result<R, BridgeError> {
     sessions()
-        .with(handle, |computer| {
-            match computer.terminal().changes_since(u64::MAX) {
-                TerminalUpdate::Full(snapshot) => snapshot,
-                _ => unreachable!("future revision always requests a full terminal state"),
-            }
-        })
+        .with(handle, |computer| action(computer.terminal()))
         .map_err(BridgeError::Handle)
 }
 
