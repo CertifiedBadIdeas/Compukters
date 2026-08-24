@@ -15,8 +15,12 @@ import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.FileSystemStoreHealth
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.FfmBridge
+import ru.lazyhat.compukters.lang.runtime.vm.VmSession
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -30,6 +34,13 @@ class FfmFileSystemIntegrationTest {
                 val store = WorldFileSystemStore.open(root, bridge)
                 val id = ComputerId.fromLongs(1, 2)
                 assertEquals(FileSystemStoreHealth.ACTIVE, store.health())
+                VmSession.openInStore(
+                    Files.readAllBytes(Path.of(requiredProperty("compukters.shell.artifact"))),
+                    store,
+                    id,
+                    emptyRom(),
+                ).use { }
+                assertEquals(0, store.durableGeneration(id))
                 store.tombstone(id)
                 store.recover(id)
                 store.close()
@@ -42,4 +53,17 @@ class FfmFileSystemIntegrationTest {
     }
 
     private fun requiredProperty(name: String): String = requireNotNull(System.getProperty(name)) { "missing $name test property" }
+
+    private fun emptyRom(): ByteArray {
+        val header =
+            ByteBuffer
+                .allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTROM\u0000".encodeToByteArray())
+                .putShort(1.toShort())
+                .putShort(0.toShort())
+                .putInt(0)
+                .array()
+        return header + MessageDigest.getInstance("SHA-256").digest(header)
+    }
 }

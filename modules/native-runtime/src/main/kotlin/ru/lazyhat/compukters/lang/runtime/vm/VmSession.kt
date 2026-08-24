@@ -12,6 +12,8 @@
 package ru.lazyhat.compukters.lang.runtime.vm
 
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.CodingErrorAction
@@ -95,6 +97,17 @@ class VmSession private constructor(
         private const val CLOSED = 0L
 
         fun open(artifact: ByteArray): VmSession = open(artifact, VmRuntime.bridge())
+
+        fun openInStore(
+            artifact: ByteArray,
+            store: WorldFileSystemStore,
+            id: ComputerId,
+            romImage: ByteArray,
+        ): VmSession {
+            val (bridge, result) = store.createMachine(id, romImage.copyOf(), artifact.copyOf())
+            val handle = decodeNative { WireDecoder(result).createdHandle() }
+            return VmSession(handle, bridge)
+        }
 
         internal fun open(
             artifact: ByteArray,

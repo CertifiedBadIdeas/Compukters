@@ -33,6 +33,7 @@ internal class FfmBridge private constructor(
     private val storeRecoverHandle: MethodHandle,
     private val storeCloseHandle: MethodHandle,
     private val createHandle: MethodHandle,
+    private val createInStoreHandle: MethodHandle,
     private val advanceHandle: MethodHandle,
     private val resumeUnitHandle: MethodHandle,
     private val resumeStringHandle: MethodHandle,
@@ -127,6 +128,34 @@ internal class FfmBridge private constructor(
             requireSuccess("create", status)
             copyResult("create", output, written, maximum)
         }
+
+    override fun createInStore(
+        storeHandle: Long,
+        id: ByteArray,
+        rom: ByteArray,
+        artifact: ByteArray,
+    ): ByteArray {
+        requireComputerId(id)
+        return Arena.ofConfined().use { callArena ->
+            val maximum = maximumCreateBytes()
+            val output = callArena.allocate(maximum.toLong())
+            val written = callArena.allocate(ValueLayout.JAVA_LONG)
+            val status =
+                createInStoreHandle.invokeExact(
+                    storeHandle,
+                    callArena.nativeBytes(id),
+                    callArena.nativeBytes(rom),
+                    rom.size.toLong(),
+                    callArena.nativeBytes(artifact),
+                    artifact.size.toLong(),
+                    output,
+                    maximum.toLong(),
+                    written,
+                ) as Int
+            requireSuccess("create in filesystem store", status)
+            copyResult("create in filesystem store", output, written, maximum)
+        }
+    }
 
     override fun advance(
         handle: Long,
@@ -417,6 +446,22 @@ internal class FfmBridge private constructor(
                             "compukter_create",
                             FunctionDescriptor.of(
                                 ValueLayout.JAVA_INT,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    createInStoreHandle =
+                        downcall(
+                            "compukter_create_in_store",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
                                 ValueLayout.ADDRESS,
                                 ValueLayout.JAVA_LONG,
                                 ValueLayout.ADDRESS,

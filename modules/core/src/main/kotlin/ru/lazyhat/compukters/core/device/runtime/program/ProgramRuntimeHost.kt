@@ -37,7 +37,7 @@ class ProgramRuntimeHost internal constructor(
     private val sessionFactory: ProgramVmSessionFactory,
     private val tickBudget: ProgramTickBudget = ProgramTickBudget(),
 ) : AutoCloseable {
-    constructor(tickBudget: ProgramTickBudget = ProgramTickBudget()) : this(NativeProgramVmSessionFactory, tickBudget)
+    constructor(tickBudget: ProgramTickBudget = ProgramTickBudget()) : this(NativeProgramVmSessionFactory(), tickBudget)
 
     private var session: ProgramVmSession? = null
     var state: ProgramRuntimeState = ProgramRuntimeState.Idle

@@ -20,6 +20,8 @@
 package ru.lazyhat.compukters.core.device.runtime.program
 
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
@@ -58,8 +60,21 @@ internal fun interface ProgramVmSessionFactory {
     fun open(artifact: ByteArray): ProgramVmSession
 }
 
-internal object NativeProgramVmSessionFactory : ProgramVmSessionFactory {
-    override fun open(artifact: ByteArray): ProgramVmSession = NativeProgramVmSession(VmSession.open(artifact))
+internal class ProgramFileSystemLaunchContext(
+    val store: WorldFileSystemStore,
+    val computerId: ComputerId,
+    romImage: ByteArray,
+) {
+    private val romImage = romImage.copyOf()
+
+    fun open(artifact: ByteArray): VmSession = VmSession.openInStore(artifact, store, computerId, romImage.copyOf())
+}
+
+internal class NativeProgramVmSessionFactory(
+    private val filesystem: ProgramFileSystemLaunchContext? = null,
+) : ProgramVmSessionFactory {
+    override fun open(artifact: ByteArray): ProgramVmSession =
+        NativeProgramVmSession(filesystem?.open(artifact) ?: VmSession.open(artifact))
 }
 
 private class NativeProgramVmSession(
