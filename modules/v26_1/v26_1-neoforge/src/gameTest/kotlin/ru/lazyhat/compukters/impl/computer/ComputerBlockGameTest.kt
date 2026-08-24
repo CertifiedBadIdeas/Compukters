@@ -31,11 +31,17 @@ import net.neoforged.neoforge.event.RegisterGameTestsEvent
 import net.neoforged.neoforge.event.level.LevelEvent
 import net.neoforged.neoforge.event.server.ServerStoppingEvent
 import ru.lazyhat.compukters.core.MOD_ID
+import ru.lazyhat.compukters.core.device.computer.ProgramComputer
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
 import ru.lazyhat.compukters.impl.fs.NeoForgeWorldFileSystemStores
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
+import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.FileSystemStoreHealth
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
@@ -94,6 +100,10 @@ object ComputerBlockGameTest {
                     helper.setBlock(position, Blocks.AIR)
                     helper.assertTrue(entity.isRemoved, "removing the block did not remove its computer block entity")
                     helper.assertTrue(entity.runtimeState == ProgramComputerState.Closed, "removing the block did not close its VM")
+                    verifyForegroundProcessAndReboot(
+                        helper,
+                        ComputerId.fromLongs(0x50524F43L, 0x455353L),
+                    )
                     verifyTombstoneRecovery(helper, position)
                     verifyTwoComputerWorldRestart(helper, position, position.east())
                 }.thenSucceed()
@@ -149,6 +159,114 @@ object ComputerBlockGameTest {
 
         NeoForgeWorldFileSystemStores.recover(helper.level, computerId)
         assertMarker(helper, context.store, computerId, FIRST_MARKER)
+    }
+
+    private fun verifyForegroundProcessAndReboot(
+        helper: GameTestHelper,
+        computerId: ComputerId,
+    ) {
+        val rom = processTestRom()
+        val context = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, computerId, rom)
+        val generation =
+            VmSession.openInStore(fixture("process-install-rom-executable.cpkt"), context.store, computerId, rom).use { session ->
+                helper.assertTrue(
+                    advanceUntilHalted(session) == VmOutcome.Halted(VmValue.I32(0)),
+                    "ROM executable installer failed",
+                )
+                session.filesystemGeneration()
+            }
+        context.store.flush(computerId, generation)
+        ProgramComputer(
+            deviceId = computerId.hashCode(),
+            stateSink = { _, _ -> },
+            store = context.store,
+            computerId = computerId,
+            romImage = rom,
+            tickBudget = ProgramTickBudget(64, 64, 4),
+        ).use { computer ->
+            helper.assertTrue(computer.turnOn() == ProgramComputerState.Running, "process test computer did not boot")
+            advanceUntilInput(computer)
+            helper.assertTrue(terminalText(computer.terminalFullState()) == ">\n", "boot did not reach a fresh shell")
+
+            runHello(computer)
+            helper.assertTrue(
+                terminalText(computer.terminalFullState()).endsWith("> hello\nnested child ran\n>\n"),
+                "shell did not resume after the foreground child",
+            )
+
+            helper.assertTrue(computer.reboot() == ProgramComputerState.Running, "computer reboot did not start a new boot stack")
+            advanceUntilInput(computer)
+            helper.assertTrue(
+                terminalText(computer.terminalFullState()) == ">\n",
+                "reboot did not replace the terminal with exactly one fresh prompt",
+            )
+
+            runHello(computer)
+            helper.assertTrue(
+                terminalText(computer.terminalFullState()).endsWith("> hello\nnested child ran\n>\n"),
+                "/home child was not executable after reboot",
+            )
+        }
+    }
+
+    private fun runHello(computer: ProgramComputer) {
+        check(computer.sendTerminalText("hello"))
+        advanceUntilInput(computer)
+        check(computer.sendTerminalKey(TerminalKey.ENTER, TerminalKeyAction.PRESS))
+        advanceUntilInput(computer)
+    }
+
+    private fun advanceUntilInput(computer: ProgramComputer) {
+        repeat(10_000) {
+            when (val state = computer.serverTick()) {
+                ProgramComputerState.WaitingForInput -> return
+                ProgramComputerState.Running -> Unit
+                else -> error("computer terminated before waiting for input: $state")
+            }
+        }
+        error("computer did not wait for input")
+    }
+
+    private fun terminalText(state: TerminalState?): String {
+        val terminal = requireNotNull(state) { "computer did not expose terminal state" }
+        val output = StringBuilder()
+        repeat(terminal.height) { y ->
+            val row = StringBuilder()
+            repeat(terminal.width) { x -> row.appendCodePoint(terminal.cells[y * terminal.width + x].codePoint) }
+            output.append(row.toString().trimEnd()).append('\n')
+        }
+        return output.toString().trimEnd('\n') + '\n'
+    }
+
+    private fun processTestRom(): ByteArray {
+        val programs =
+            listOf(
+                "/rom/boot" to resource("/system/programs/boot"),
+                "/rom/hello" to fixture("process-terminal-child.cpkt"),
+                "/rom/shell" to resource("/system/programs/shell"),
+            )
+        val payloadSize =
+            programs.fold(16) { size, (path, artifact) ->
+                Math.addExact(size, 16 + path.encodeToByteArray().size + artifact.size)
+            }
+        val payload = ByteBuffer.allocate(payloadSize).order(ByteOrder.LITTLE_ENDIAN)
+        payload
+            .put("CPKTROM\u0000".encodeToByteArray())
+            .putShort(1.toShort())
+            .putShort(0.toShort())
+            .putInt(programs.size)
+        programs.forEach { (pathText, artifact) ->
+            val path = pathText.encodeToByteArray()
+            payload
+                .putInt(path.size)
+                .put(path)
+                .put(2.toByte())
+                .put(1.toByte())
+                .putShort(0.toShort())
+                .putLong(artifact.size.toLong())
+                .put(artifact)
+        }
+        return payload.array() + MessageDigest.getInstance("SHA-256").digest(payload.array())
     }
 
     private fun verifyTwoComputerWorldRestart(
@@ -265,6 +383,11 @@ object ComputerBlockGameTest {
     private fun fixture(name: String): ByteArray =
         requireNotNull(ComputerBlockGameTest::class.java.getResourceAsStream("/fixtures/$name")) {
             "missing GameTest fixture $name"
+        }.use { it.readAllBytes() }
+
+    private fun resource(name: String): ByteArray =
+        requireNotNull(ComputerBlockGameTest::class.java.getResourceAsStream(name)) {
+            "missing GameTest resource $name"
         }.use { it.readAllBytes() }
 
     private fun emptyRom(): ByteArray {

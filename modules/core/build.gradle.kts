@@ -33,6 +33,12 @@ val compukterFfiLibrary =
     rootProject.file(".toolchain/build/cargo/compukter-ffi/release/${System.mapLibraryName("compukter_ffi")}")
 val programRuntimeArtifact =
     project(":compiler-k2").layout.buildDirectory.file("generated/system/shell.cpkt")
+val bootRuntimeArtifact =
+    project(":compiler-k2").layout.buildDirectory.file("generated/system/boot.cpkt")
+val processTerminalChildArtifact =
+    rootProject.layout.projectDirectory.file("host/compukter-vm/tests/fixtures/process-terminal-child.cpkt")
+val processInstallRomExecutableArtifact =
+    rootProject.layout.projectDirectory.file("host/compukter-vm/tests/fixtures/process-install-rom-executable.cpkt")
 
 tasks.test {
     filter.excludeTestsMatching("ru.lazyhat.compukters.core.device.runtime.program.integration.*")
@@ -43,6 +49,7 @@ val programRuntimeIntegrationTest =
         description = "Runs a compiler-produced Kotlin artifact through the server runtime host and native VM."
         group = "verification"
         dependsOn(
+            ":compiler-k2:generateBootArtifact",
             ":compiler-k2:generateShellArtifact",
             rootProject.tasks.named("cargoBuildCompukterFfi"),
         )
@@ -53,9 +60,18 @@ val programRuntimeIntegrationTest =
         jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
         inputs.file(compukterFfiLibrary)
         inputs.file(programRuntimeArtifact)
+        inputs.file(bootRuntimeArtifact)
+        inputs.file(processTerminalChildArtifact)
+        inputs.file(processInstallRomExecutableArtifact)
         doFirst {
             systemProperty("compukters.ffi.library", compukterFfiLibrary.absolutePath)
             systemProperty("compukters.programRuntime.artifact", programRuntimeArtifact.get().asFile.absolutePath)
+            systemProperty("compukters.bootRuntime.artifact", bootRuntimeArtifact.get().asFile.absolutePath)
+            systemProperty("compukters.processTerminalChild.artifact", processTerminalChildArtifact.asFile.absolutePath)
+            systemProperty(
+                "compukters.processInstallRomExecutable.artifact",
+                processInstallRomExecutableArtifact.asFile.absolutePath,
+            )
         }
     }
 

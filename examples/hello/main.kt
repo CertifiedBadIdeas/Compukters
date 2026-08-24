@@ -1,15 +1,17 @@
+import compukter.terminal.Terminal
+
 suspend fun main() {
-    terminalWrite("Your name: ")
+    Terminal.write("Your name: ")
     var name = ""
     var reading = true
     while (reading) {
-        val event = terminalAwaitEvent()
+        val event = Terminal.awaitEvent()
         if (event == 1) {
-            name = name + terminalEventText()
-        } else if (terminalEventKey() == 13 && terminalEventAction() == 1) {
+            name = name + Terminal.eventText()
+        } else if (Terminal.eventKey() == 13 && Terminal.eventAction() == 1) {
             reading = false
         }
-        terminalFinishEvent()
+        Terminal.finishEvent()
     }
-    terminalWrite("Hello, " + name + "!\n")
+    Terminal.write("Hello, " + name + "!\n")
 }
