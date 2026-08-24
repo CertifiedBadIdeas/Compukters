@@ -153,6 +153,10 @@ class NativePlaygroundExecutor(
                         is VmOutcome.HostFailed -> {
                             return PlaygroundExecution.HostFailure(outcome.kind, outcome.code)
                         }
+
+                        is VmOutcome.CompilationRequested -> {
+                            return unsupportedPlaygroundOutcome(outcome)
+                        }
                     }
                 }
             }
@@ -224,4 +228,9 @@ class NativePlaygroundExecutor(
         const val GUEST_BUDGET = 4096
         const val MAINTENANCE_BUDGET = 4096
     }
+}
+
+internal fun unsupportedPlaygroundOutcome(outcome: VmOutcome.CompilationRequested): PlaygroundExecution.PlatformFailure {
+    check(outcome.request.sources.isNotEmpty())
+    return PlaygroundExecution.PlatformFailure("guest requested the unavailable in-game compiler service")
 }

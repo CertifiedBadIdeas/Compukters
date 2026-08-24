@@ -16,9 +16,12 @@ playground, loader-independent `ProgramRuntimeHost`, and server computer block
 form an executable vertical slice. A computer starts the source-visible no-std
 `system/programs/boot.kt` from `/rom/boot`; boot launches `/rom/shell`, and the
 shell can run verified extensionless programs in the foreground through
-`Process.run`. NeoForge GameTests cover registration, automatic boot, nested
-program execution, reboot, ticking, removal, VM shutdown, and recovery of a
-tombstoned persistent filesystem.
+`Process.run`. The ordinary `/rom/kotlinc` program compiles one `.kt` source
+from `/home` into an extensionless executable, using a server-global persistent
+cache and an isolated K2 child process without blocking the server tick.
+NeoForge GameTests cover registration, automatic boot, two computers compiling
+and executing the same source, nested program execution, reboot, ticking,
+removal, VM shutdown, and recovery of a tombstoned persistent filesystem.
 
 The active game baseline is **Minecraft 26.1.2**, **NeoForge 26.1.2.97**, and
 **JDK 25**. The production archive uses Minecraft's official names directly;
@@ -49,8 +52,29 @@ a stable `ComputerId`; the immutable packaged `/rom` and isolated persistent
 `<world>/compukters/filesystems`, flushed on saves and shutdown, and moved to a
 recoverable tombstone when a player destroys the corresponding computer. Guest
 code currently has bounded read-only `FileSystem.stat` and `FileSystem.list`
-operations. Compilation, the shared server artifact cache, and installation of
-user programs remain tracked in issue #522.
+operations. Compilation is requested by the Rust machine from an immutable
+source snapshot. The JVM service compiles or retrieves a verified artifact from
+`<world>/compukters/compiler-cache`, then Rust re-verifies and atomically
+installs it into the requesting computer's `/home`.
+
+Inside a computer, compile and run a program with:
+
+```text
+kotlinc hello.kt
+hello
+```
+
+Without `-o`, the output name is the source filename without `.kt`. An explicit
+extensionless output is also supported:
+
+```text
+kotlinc hello.kt -o app
+app
+```
+
+The current in-game compiler accepts exactly one source file per invocation.
+Compiler failures leave an existing output untouched and are reported back in
+the shell.
 
 See [the current architecture](docs/ARCHITECTURE.md).
 

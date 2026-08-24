@@ -11,12 +11,15 @@ Kotlin .kt project
   -> isolated pinned K2 worker
   -> Kotlin IR lowering
   -> canonical Compukter artifact
+  -> server-global persistent content-addressed cache
   -> ProgramRuntimeHost / VM session
   -> JDK 25 FFM / versioned Rust C ABI
   -> Rust Compukter VM
 ```
 
-The trusted JVM side owns source snapshots, compiler isolation, diagnostics, Kotlin IR lowering, and artifact production. Kotlin compiler internals do not cross the bounded FFM boundary. The Rust side receives immutable artifact bytes, verifies the complete container, admits it under explicit limits, and owns execution state. Native buffers remain caller-owned and no Rust pointer enters Kotlin.
+The trusted JVM side owns compiler isolation, diagnostics, Kotlin IR lowering, artifact production, and the server-global content-addressed cache. Kotlin compiler internals do not cross the bounded FFM boundary. The Rust machine validates guest paths, captures an immutable source snapshot plus filesystem preconditions, and suspends only the requesting foreground process. The server tick submits and polls bounded compiler work without waiting on the worker or cache. On completion Rust re-verifies the complete artifact and atomically installs it only if the source and output preconditions still match. Native buffers remain caller-owned and no Rust pointer enters Kotlin.
+
+The compiler worker is packaged as pinned data rather than added to the mod runtime classpath. At server startup its bounded ZIP is validated and published beneath `<world>/compukters/compiler-worker`; temporary worker state is kept separately beneath `<world>/compukters/compiler-temp`. Successful artifacts are stored beneath `<world>/compukters/compiler-cache/v1`, shared by every computer and dimension in that server world, and reused after restart. Cache keys cover the source snapshot, compiler/worker identity, target, trusted API metadata, and limits. Both cache publication and cache hits pass the stateless Rust artifact verifier over FFM; runtime admission quotas are deliberately not part of cache validity.
 
 The raw terminal is a synchronous Rust device: cell writes, cursor changes, and input polling never cross into Minecraft. Waiting for an absent input event and foreground process execution are explicit suspension points. Kotlin guests consume ordered raw Text and Key events; there is no compatibility line buffer or second input protocol. The server host never blocks the Minecraft thread.
 
@@ -32,9 +35,9 @@ The Rust VM owns verification, the Tier 0 interpreter, managed memory and collec
 
 The Rust runtime also owns the guest filesystem and its persistence. Minecraft stores only a stable 128-bit `ComputerId`; guest paths and bytes never enter block-entity NBT or a JVM-side mirror. Every computer sees an immutable packaged `/rom` and a private persistent `/home`. The world store lives under `<world>/compukters/filesystems`, performs bounded I/O on its own worker, flushes active generations on world saves, and drains, flushes, and closes before server shutdown completes. Removing a computer through the player destruction lifecycle closes its machine before creating a recoverable tombstone; ordinary block-entity removal during chunk unload only closes the current machine and preserves its filesystem.
 
-The versioned FFM ABI exposes opaque world-store lifecycle operations and machine creation inside a store. Kotlin can select a world store, identify a computer, request flush/tombstone/recovery, and start a machine, but it cannot perform arbitrary guest file operations. Guest code reaches Rust-owned state only through declared capabilities. The initial filesystem facade exposes bounded read-only `stat` and `list`; the shell maps their stable integer results to user-facing diagnostics. A narrow lower-level operation can install an executable already present in immutable ROM into a new writable path without accepting host bytes or replacing an existing file; it is used to seed integration-test `/home` state and is not part of the public guest facade. Compilation, a shared server artifact cache, and general user-program installation remain in issue #522.
+The versioned FFM ABI exposes opaque world-store lifecycle operations, machine creation inside a store, stateless artifact verification, and dedicated bounded compilation request/completion calls. Kotlin can select a world store, identify a computer, request flush/tombstone/recovery, and route compiler results, but it cannot perform arbitrary guest file operations. Guest code reaches Rust-owned state only through declared capabilities. The initial filesystem facade exposes bounded read-only `stat` and `list`; the shell maps their stable integer results to user-facing diagnostics. Executable installation remains a Rust-owned filesystem transaction and never accepts a host path.
 
-Boot and shell are ordinary no-std Kotlin programs. Shell owns line editing, authoritative echo, prompts, and built-ins; non-built-in commands resolve to `/home/<name>` unless the user supplies an absolute path. `Process.run(path, capabilities)` accepts an explicit integer capability mask, executes one verified extensionless artifact as a foreground child, and returns a stable integer result code without exposing VM internals. Terminal, process, and filesystem declarations live in the `guest-api-core` metadata bundle so the compiler and future IDE autocomplete consume the same Kotlin API surface. General stream handles, pipes, process redirection, compilation, and cache policy remain later layers.
+Boot, shell, and `kotlinc` are ordinary no-std Kotlin programs. Shell owns line editing, authoritative echo, prompts, and built-ins; non-built-in commands resolve to `/home/<name>` unless the user supplies an absolute path. `Process.run(path, capabilities)` accepts an explicit integer capability mask, executes one verified extensionless artifact as a foreground child, and returns a stable integer result code without exposing VM internals. `/rom/kotlinc source.kt [-o output]` accepts one source today; its default output is the source basename without `.kt`. Terminal, process, filesystem, and compiler declarations live in the `guest-api-core` metadata bundle so the compiler and future IDE autocomplete consume the same Kotlin API surface. General stream handles, pipes, process redirection, multi-file projects, and addon API bundles remain later layers.
 
 ## Module ownership
 
@@ -43,6 +46,7 @@ Boot and shell are ordinary no-std Kotlin programs. Shell owns line editing, aut
 | `compiler-artifact` | Canonical artifact model, validation, and encoding |
 | `compiler-client` | Bounded controller and protocol for the isolated compiler worker |
 | `compiler-k2` | Pinned K2/IR integration and Compukter lowering |
+| `compiler-runtime` | Server-global single-flight scheduling, persistent artifact cache, and packaged-worker lifecycle |
 | `guest-api-core` | Trusted Guest Kotlin facade declarations and compiler source metadata |
 | `native-runtime` | Kotlin-facing JDK 25 FFM VM session, opaque world-store lifecycle, and trusted host capabilities |
 | `core` | Loader-independent server behavior and `ProgramRuntimeHost` |
