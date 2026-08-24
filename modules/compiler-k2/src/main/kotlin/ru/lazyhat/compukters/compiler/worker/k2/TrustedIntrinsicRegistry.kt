@@ -22,6 +22,8 @@ internal enum class TrustedValueType {
     UNIT,
     STRING,
     INT,
+    BOOL,
+    CHAR,
     OTHER,
 }
 
@@ -90,7 +92,7 @@ internal object TrustedIntrinsicRegistry {
                 "compiler.kt",
             ),
         )
-    val TERMINAL_CAPABILITY = TrustedCapabilityIdentity("compukter", "terminal", 2u.toUShort(), 0u.toUShort(), 9u)
+    val TERMINAL_CAPABILITY = TrustedCapabilityIdentity("compukter", "terminal", 2u.toUShort(), 0u.toUShort(), 14u)
     val PROCESS_CAPABILITY = TrustedCapabilityIdentity("compukter", "process", 1u.toUShort(), 1u.toUShort(), 3u)
     val FILESYSTEM_CAPABILITY = TrustedCapabilityIdentity("compukter", "filesystem", 1u.toUShort(), 0u.toUShort(), 7u)
     val COMPILER_CAPABILITY = TrustedCapabilityIdentity("compukter", "compiler", 1u.toUShort(), 0u.toUShort(), 2u)
@@ -242,6 +244,42 @@ private object TerminalIntrinsicProvider : TrustedIntrinsicProvider {
 
                 "compukter.terminal.Terminal.finishEvent" -> {
                     sync(8u, callable, emptyList(), TrustedValueType.UNIT)
+                }
+
+                "compukter.terminal.Terminal.setCursor" -> {
+                    sync(9u, callable, listOf(TrustedValueType.INT, TrustedValueType.INT), TrustedValueType.UNIT)
+                }
+
+                "compukter.terminal.Terminal.setCursorVisible" -> {
+                    sync(10u, callable, listOf(TrustedValueType.BOOL), TrustedValueType.UNIT)
+                }
+
+                "compukter.terminal.Terminal.setColors" -> {
+                    sync(11u, callable, listOf(TrustedValueType.INT, TrustedValueType.INT), TrustedValueType.UNIT)
+                }
+
+                "compukter.terminal.Terminal.writeAt" -> {
+                    sync(
+                        12u,
+                        callable,
+                        listOf(TrustedValueType.INT, TrustedValueType.INT, TrustedValueType.STRING),
+                        TrustedValueType.UNIT,
+                    )
+                }
+
+                "compukter.terminal.Terminal.fill" -> {
+                    sync(
+                        13u,
+                        callable,
+                        listOf(
+                            TrustedValueType.INT,
+                            TrustedValueType.INT,
+                            TrustedValueType.INT,
+                            TrustedValueType.INT,
+                            TrustedValueType.CHAR,
+                        ),
+                        TrustedValueType.UNIT,
+                    )
                 }
 
                 else -> {

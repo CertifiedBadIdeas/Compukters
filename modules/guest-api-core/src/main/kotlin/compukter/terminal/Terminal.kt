@@ -38,4 +38,30 @@ object Terminal {
     fun eventModifiers(): Int = 0
 
     fun finishEvent(): Unit = Unit
+
+    fun setCursor(
+        x: Int,
+        y: Int,
+    ): Unit = Unit
+
+    fun setCursorVisible(visible: Boolean): Unit = Unit
+
+    fun setColors(
+        foreground: Int,
+        background: Int,
+    ): Unit = Unit
+
+    fun writeAt(
+        x: Int,
+        y: Int,
+        text: String,
+    ): Unit = Unit
+
+    fun fill(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        character: Char,
+    ): Unit = Unit
 }
