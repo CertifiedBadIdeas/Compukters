@@ -16,31 +16,37 @@ import java.nio.ByteOrder
 import java.security.MessageDigest
 
 internal object SystemRomImage {
-    fun packaged(): ByteArray = encodeShell(SystemProgramImage.shell())
+    fun packaged(): ByteArray = encodePrograms(SystemProgramImage.boot(), SystemProgramImage.shell())
 
-    fun encodeShell(shellArtifact: ByteArray): ByteArray {
-        require(shellArtifact.isNotEmpty()) { "system shell artifact must not be empty" }
-        require(shellArtifact.size <= InstalledProgramStorage.MAXIMUM_ARTIFACT_BYTES) {
-            "system shell artifact exceeds ${InstalledProgramStorage.MAXIMUM_ARTIFACT_BYTES} bytes"
+    fun encodePrograms(
+        bootArtifact: ByteArray,
+        shellArtifact: ByteArray,
+    ): ByteArray {
+        val programs = listOf("/rom/boot" to bootArtifact, "/rom/shell" to shellArtifact).sortedBy { it.first }
+        programs.forEach { (path, artifact) ->
+            require(artifact.isNotEmpty()) { "system program $path must not be empty" }
+            require(artifact.size <= MAXIMUM_PROGRAM_BYTES) {
+                "system program $path exceeds $MAXIMUM_PROGRAM_BYTES bytes"
+            }
         }
-        val path = "/rom/shell".encodeToByteArray()
-        val payloadSize = Math.addExact(HEADER_BYTES + ENTRY_FIXED_BYTES + path.size, shellArtifact.size)
-        val payload =
-            ByteBuffer
-                .allocate(payloadSize)
-                .order(ByteOrder.LITTLE_ENDIAN)
-                .put(MAGIC)
-                .putShort(VERSION)
-                .putShort(0)
-                .putInt(1)
+        val payloadSize =
+            programs.fold(HEADER_BYTES) { size, (path, artifact) ->
+                Math.addExact(size, ENTRY_FIXED_BYTES + path.encodeToByteArray().size + artifact.size)
+            }
+        val buffer = ByteBuffer.allocate(payloadSize).order(ByteOrder.LITTLE_ENDIAN)
+        buffer.put(MAGIC).putShort(VERSION).putShort(0).putInt(programs.size)
+        programs.forEach { (pathText, artifact) ->
+            val path = pathText.encodeToByteArray()
+            buffer
                 .putInt(path.size)
                 .put(path)
                 .put(FILE_KIND)
                 .put(EXECUTABLE_FLAG)
                 .putShort(0)
-                .putLong(shellArtifact.size.toLong())
-                .put(shellArtifact)
-                .array()
+                .putLong(artifact.size.toLong())
+                .put(artifact)
+        }
+        val payload = buffer.array()
         return payload + MessageDigest.getInstance("SHA-256").digest(payload)
     }
 
@@ -50,4 +56,5 @@ internal object SystemRomImage {
     private const val EXECUTABLE_FLAG: Byte = 1
     private const val HEADER_BYTES = 16
     private const val ENTRY_FIXED_BYTES = 16
+    private const val MAXIMUM_PROGRAM_BYTES = 16 * 1024 * 1024
 }

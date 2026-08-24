@@ -17,13 +17,15 @@ import kotlin.test.assertTrue
 
 class SystemProgramImageTest {
     @Test
-    fun `packaged shell is present and returned defensively`() {
-        val first = SystemProgramImage.shell()
-        val second = SystemProgramImage.shell()
+    fun `packaged extensionless programs are present and returned defensively`() {
+        listOf(SystemProgramImage::boot, SystemProgramImage::shell).forEach { load ->
+            val first = load()
+            val second = load()
 
-        assertTrue(first.isNotEmpty())
-        assertContentEquals(first, second)
-        first[0] = first[0].inc()
-        assertTrue(!first.contentEquals(SystemProgramImage.shell()))
+            assertTrue(first.isNotEmpty())
+            assertContentEquals(first, second)
+            first[0] = first[0].inc()
+            assertTrue(!first.contentEquals(load()))
+        }
     }
 }
