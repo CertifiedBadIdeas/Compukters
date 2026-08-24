@@ -13,10 +13,16 @@ package ru.lazyhat.compukters.impl.computer
 
 import net.minecraft.core.BlockPos
 import net.minecraft.world.level.block.state.BlockState
+import ru.lazyhat.compukters.impl.fs.NeoForgeWorldFileSystemStores
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity
 
 class NeoForgeComputerBlockEntity(
     position: BlockPos,
     blockState: BlockState,
-) : ComputerBlockEntity(CompuktersRegistry.COMPUTER_BLOCK_ENTITY.get(), position, blockState)
+) : ComputerBlockEntity(
+        CompuktersRegistry.COMPUTER_BLOCK_ENTITY.get(),
+        position,
+        blockState,
+        NeoForgeWorldFileSystemStores.contextSource,
+    )

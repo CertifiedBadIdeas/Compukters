@@ -34,12 +34,13 @@ class FfmFileSystemIntegrationTest {
                 val store = WorldFileSystemStore.open(root, bridge)
                 val id = ComputerId.fromLongs(1, 2)
                 assertEquals(FileSystemStoreHealth.ACTIVE, store.health())
-                VmSession.openInStore(
-                    Files.readAllBytes(Path.of(requiredProperty("compukters.shell.artifact"))),
-                    store,
-                    id,
-                    emptyRom(),
-                ).use { }
+                VmSession
+                    .openInStore(
+                        Files.readAllBytes(Path.of(requiredProperty("compukters.shell.artifact"))),
+                        store,
+                        id,
+                        emptyRom(),
+                    ).use { }
                 assertEquals(0, store.durableGeneration(id))
                 store.tombstone(id)
                 store.recover(id)

@@ -60,7 +60,7 @@ class ComputerBlockTest {
             TEST_TYPE,
             BlockPos.ZERO,
             Blocks.FURNACE.defaultBlockState(),
-            ComputerCarrierFactory { _, imageSource, stateSink ->
+            ComputerCarrierFactory { _, imageSource, stateSink, _ ->
                 carrier.attach(imageSource, stateSink)
             },
             InstalledProgramStorage(maximumArtifactBytes = 16),
@@ -106,6 +106,8 @@ class ComputerBlockTest {
         ): Boolean = false
 
         override fun sendTerminalText(value: String): Boolean = false
+
+        override fun filesystemGeneration(): Long? = null
 
         override fun reboot(): ProgramComputerState = turnOn()
 

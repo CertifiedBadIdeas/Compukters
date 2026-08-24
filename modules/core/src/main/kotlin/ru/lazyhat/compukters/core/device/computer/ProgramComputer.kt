@@ -23,6 +23,8 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
+import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
@@ -45,6 +47,21 @@ class ProgramComputer internal constructor(
         imageSource,
         stateSink,
         RuntimeProgramHost(ProgramRuntimeHost(tickBudget)),
+    )
+
+    constructor(
+        deviceId: Int,
+        imageSource: ProgramImageSource,
+        stateSink: ProgramComputerStateSink,
+        store: WorldFileSystemStore,
+        computerId: ComputerId,
+        romImage: ByteArray,
+        tickBudget: ProgramTickBudget = ProgramTickBudget(),
+    ) : this(
+        deviceId,
+        imageSource,
+        stateSink,
+        RuntimeProgramHost(ProgramRuntimeHost(store, computerId, romImage, tickBudget)),
     )
 
     var state: ProgramComputerState = ProgramComputerState.PoweredOff(ProgramComputerStopReason.NeverStarted)
@@ -87,6 +104,8 @@ class ProgramComputer internal constructor(
     ): Boolean = state.isPoweredOn() && host.sendTerminalKey(key, action, modifiers)
 
     fun sendTerminalText(value: String): Boolean = state.isPoweredOn() && host.sendTerminalText(value)
+
+    fun filesystemGeneration(): Long? = host.filesystemGeneration()
 
     fun shutdown() {
         if (state == ProgramComputerState.Closed || state == SHUTDOWN_STATE) return

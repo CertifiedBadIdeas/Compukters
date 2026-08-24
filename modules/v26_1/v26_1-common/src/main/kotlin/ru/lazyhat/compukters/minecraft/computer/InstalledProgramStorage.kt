@@ -49,14 +49,26 @@ class InstalledProgramStorage(
             root.discard(ROOT_KEY)
             return
         }
-        val payload = root.child(ROOT_KEY)
+        savePayload(root.child(ROOT_KEY))
+    }
+
+    internal fun savePayload(payload: ValueOutput) {
+        val artifact = installedArtifact
         payload.putInt(SCHEMA_KEY, CURRENT_SCHEMA)
-        payload.store(ARTIFACT_KEY, Codec.BYTE_BUFFER, ByteBuffer.wrap(artifact.copyOf()))
+        if (artifact == null) {
+            payload.discard(ARTIFACT_KEY)
+        } else {
+            payload.store(ARTIFACT_KEY, Codec.BYTE_BUFFER, ByteBuffer.wrap(artifact.copyOf()))
+        }
     }
 
     fun load(root: ValueInput) {
+        loadPayload(root.child(ROOT_KEY).orElse(null))
+    }
+
+    internal fun loadPayload(payload: ValueInput?) {
         installedArtifact = null
-        val payload = root.child(ROOT_KEY).orElse(null) ?: return
+        payload ?: return
         if (payload.getIntOr(SCHEMA_KEY, 0) != CURRENT_SCHEMA) return
         val buffer = payload.read(ARTIFACT_KEY, Codec.BYTE_BUFFER).orElse(null) ?: return
         val artifact = ByteArray(buffer.remaining())
@@ -68,7 +80,7 @@ class InstalledProgramStorage(
     companion object {
         const val MAXIMUM_ARTIFACT_BYTES: Int = 16 * 1024 * 1024
         private const val CURRENT_SCHEMA = 1
-        private const val ROOT_KEY = "compukters"
+        internal const val ROOT_KEY = "compukters"
         private const val SCHEMA_KEY = "schema"
         private const val ARTIFACT_KEY = "artifact"
     }

@@ -12,6 +12,7 @@
 package ru.lazyhat.compukters.minecraft.computer
 
 import net.minecraft.core.BlockPos
+import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
@@ -32,6 +33,8 @@ open class ComputerBlockEntity internal constructor(
     private val carrierFactory: ComputerCarrierFactory,
     private val storage: InstalledProgramStorage,
     private val bootImageSource: () -> ByteArray,
+    private val identity: ComputerIdentityStorage = ComputerIdentityStorage(),
+    private val filesystemContextSource: ComputerFileSystemContextSource? = null,
 ) : BlockEntity(type, position, blockState) {
     constructor(
         type: BlockEntityType<*>,
@@ -46,7 +49,23 @@ open class ComputerBlockEntity internal constructor(
         SystemProgramImage::shell,
     )
 
+    constructor(
+        type: BlockEntityType<*>,
+        position: BlockPos,
+        blockState: BlockState,
+        filesystemContextSource: ComputerFileSystemContextSource,
+    ) : this(
+        type,
+        position,
+        blockState,
+        RuntimeComputerCarrierFactory,
+        InstalledProgramStorage(),
+        SystemProgramImage::shell,
+        filesystemContextSource = filesystemContextSource,
+    )
+
     private var carrier: ComputerCarrier? = null
+    private var filesystemLease: ComputerFileSystemLease? = null
     private var lastMachineId = 0L
 
     var terminalMachineId: Long? = null
@@ -66,6 +85,8 @@ open class ComputerBlockEntity internal constructor(
     }
 
     fun installedArtifact(): ByteArray? = storage.artifact()
+
+    fun computerId() = identity.id()
 
     fun terminalFullState(): TerminalState? = carrier?.terminalFullState()
 
@@ -103,29 +124,55 @@ open class ComputerBlockEntity internal constructor(
     override fun loadAdditional(input: ValueInput) {
         super.loadAdditional(input)
         closeCarrier()
-        storage.load(input)
+        val payload = input.child(InstalledProgramStorage.ROOT_KEY).orElse(null)
+        storage.loadPayload(payload)
+        identity.load(payload)
         runtimeState = neverStarted()
     }
 
     override fun saveAdditional(output: ValueOutput) {
         super.saveAdditional(output)
-        storage.save(output)
+        val payload = output.child(InstalledProgramStorage.ROOT_KEY)
+        storage.savePayload(payload)
+        identity.save(payload)
     }
 
     private fun createCarrier(): ComputerCarrier {
         val deviceId = blockPos.hashCode()
         terminalMachineId = nextMachineId()
-        return carrierFactory.create(
-            deviceId = deviceId,
-            imageSource = { bootImageSource() },
-            stateSink = { _, state -> runtimeState = state },
-        )
+        val filesystem =
+            (level as? ServerLevel)?.let { serverLevel ->
+                filesystemContextSource?.create(serverLevel, identity.id(), SystemRomImage.packaged())
+            }
+        val created =
+            carrierFactory.create(
+                deviceId = deviceId,
+                imageSource = { bootImageSource() },
+                stateSink = { _, state -> runtimeState = state },
+                filesystem = filesystem,
+            )
+        filesystemLease = filesystem?.attach(created::filesystemGeneration, ::drainCarrier)
+        return created
     }
 
     private fun closeCarrier() {
-        carrier?.close()
+        val current = carrier
+        val generation = current?.filesystemGeneration()
+        current?.close()
         carrier = null
         terminalMachineId = null
+        filesystemLease?.release(generation)
+        filesystemLease = null
+    }
+
+    private fun drainCarrier(): Long? {
+        val current = carrier
+        val generation = current?.filesystemGeneration()
+        current?.close()
+        carrier = null
+        terminalMachineId = null
+        filesystemLease = null
+        return generation
     }
 
     private fun nextMachineId(): Long {

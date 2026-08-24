@@ -192,6 +192,12 @@ pub(crate) fn terminal_commit(handle: u64) -> Result<(), BridgeError> {
         .map_err(BridgeError::Handle)
 }
 
+pub(crate) fn filesystem_generation(handle: u64) -> Result<u64, BridgeError> {
+    sessions()
+        .with(handle, |computer| computer.filesystem_generation())
+        .map_err(BridgeError::Handle)
+}
+
 pub(crate) fn terminal_full_state(handle: u64) -> Result<TerminalSnapshot, BridgeError> {
     sessions()
         .with(handle, |computer| {

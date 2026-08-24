@@ -38,6 +38,7 @@ class VmSessionTest {
         assertEquals(id.toByteArray().toList(), bridge.persistentCreate?.id?.toList())
         assertEquals(listOf<Byte>(4, 5, 6), bridge.persistentCreate?.rom?.toList())
         assertEquals(listOf<Byte>(1, 2, 3), bridge.persistentCreate?.artifact?.toList())
+        assertEquals(3, session.filesystemGeneration())
         session.close()
         store.close()
     }
@@ -207,7 +208,12 @@ class VmSessionTest {
         val terminalTexts = mutableListOf<IntArray>()
         var persistentCreate: PersistentCreate? = null
 
-        override fun storeOpen(rootUtf8: ByteArray, limitsWire: ByteArray): ByteArray = bytes(1, 0, long(23))
+        override fun filesystemGeneration(handle: Long): ByteArray = bytes(1, long(3))
+
+        override fun storeOpen(
+            rootUtf8: ByteArray,
+            limitsWire: ByteArray,
+        ): ByteArray = bytes(1, 0, long(23))
 
         override fun storeClose(handle: Long) = Unit
 

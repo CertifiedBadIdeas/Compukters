@@ -34,6 +34,7 @@ internal class FfmBridge private constructor(
     private val storeCloseHandle: MethodHandle,
     private val createHandle: MethodHandle,
     private val createInStoreHandle: MethodHandle,
+    private val filesystemGenerationHandle: MethodHandle,
     private val advanceHandle: MethodHandle,
     private val resumeUnitHandle: MethodHandle,
     private val resumeStringHandle: MethodHandle,
@@ -109,8 +110,7 @@ internal class FfmBridge private constructor(
         id: ByteArray,
     ) = storeIdOperation("filesystem recovery", storeRecoverHandle, handle, id)
 
-    override fun storeClose(handle: Long) =
-        requireSuccess("filesystem store close", storeCloseHandle.invokeExact(handle) as Int)
+    override fun storeClose(handle: Long) = requireSuccess("filesystem store close", storeCloseHandle.invokeExact(handle) as Int)
 
     override fun create(artifact: ByteArray): ByteArray =
         Arena.ofConfined().use { callArena ->
@@ -156,6 +156,16 @@ internal class FfmBridge private constructor(
             copyResult("create in filesystem store", output, written, maximum)
         }
     }
+
+    override fun filesystemGeneration(handle: Long): ByteArray =
+        fixedOutput("filesystem generation", MAXIMUM_STORE_GENERATION_BYTES) { _, output, written ->
+            filesystemGenerationHandle.invokeExact(
+                handle,
+                output,
+                MAXIMUM_STORE_GENERATION_BYTES.toLong(),
+                written,
+            ) as Int
+        }
 
     override fun advance(
         handle: Long,
@@ -463,6 +473,17 @@ internal class FfmBridge private constructor(
                                 ValueLayout.ADDRESS,
                                 ValueLayout.JAVA_LONG,
                                 ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    filesystemGenerationHandle =
+                        downcall(
+                            "compukter_filesystem_generation",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
                                 ValueLayout.JAVA_LONG,
                                 ValueLayout.ADDRESS,
                                 ValueLayout.JAVA_LONG,

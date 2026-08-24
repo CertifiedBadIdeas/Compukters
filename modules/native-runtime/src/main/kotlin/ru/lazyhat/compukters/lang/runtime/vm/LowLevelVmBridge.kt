@@ -51,6 +51,8 @@ internal interface LowLevelVmBridge {
         artifact: ByteArray,
     ): ByteArray = error("persistent VM creation is unavailable")
 
+    fun filesystemGeneration(handle: Long): ByteArray = error("filesystem generation is unavailable")
+
     fun advance(
         handle: Long,
         guestBudget: Int,

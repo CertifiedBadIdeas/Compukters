@@ -109,6 +109,14 @@ class ProgramComputerTest {
     }
 
     @Test
+    fun `filesystem generation is exposed only while the host has one`() {
+        val host = FakeProgramHost(filesystemGeneration = 17)
+        val fixture = fixture(image = byteArrayOf(1), host = host)
+
+        assertEquals(17, fixture.computer.filesystemGeneration())
+    }
+
+    @Test
     fun `halt and runtime failure power off`() {
         val cases =
             listOf(
@@ -326,6 +334,7 @@ class ProgramComputerTest {
         val terminalState: TerminalState = terminalState(0),
         val terminalUpdate: TerminalUpdate = TerminalUpdate.Unchanged(0),
         private val startResult: ProgramStartResult = ProgramStartResult.Started,
+        private val filesystemGeneration: Long? = null,
     ) : ProgramHost {
         private val tickStates = ArrayDeque(tickStates)
         override var state: ProgramRuntimeState = ProgramRuntimeState.Idle
@@ -370,6 +379,8 @@ class ProgramComputerTest {
             texts += value
             return true
         }
+
+        override fun filesystemGeneration(): Long? = filesystemGeneration
 
         override fun shutdown() {
             shutdownCalls++
