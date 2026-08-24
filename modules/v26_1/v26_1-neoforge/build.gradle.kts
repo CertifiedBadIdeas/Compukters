@@ -43,6 +43,12 @@ tasks.named<ProcessResources>(gameTest.processResourcesTaskName) {
     from(rootProject.layout.projectDirectory.file("host/compukter-vm/tests/fixtures/filesystem-read.cpkt")) {
         into("fixtures")
     }
+    from(rootProject.layout.projectDirectory.file("host/compukter-vm/tests/fixtures/process-terminal-child.cpkt")) {
+        into("fixtures")
+    }
+    from(rootProject.layout.projectDirectory.file("host/compukter-vm/tests/fixtures/process-install-rom-executable.cpkt")) {
+        into("fixtures")
+    }
 }
 
 configurations[gameTest.implementationConfigurationName].extendsFrom(configurations.testImplementation.get())
@@ -290,8 +296,8 @@ val verifyPackagedCompukterFfi =
             check(entries.none { it.contains("ComputerBlockGameTest") }) {
                 "GameTest classes leaked into ${archive.name}"
             }
-            check(entries.none { it.startsWith("fixtures/filesystem-") }) {
-                "GameTest filesystem artifacts leaked into ${archive.name}"
+            check(entries.none { it.startsWith("fixtures/") }) {
+                "GameTest artifacts leaked into ${archive.name}"
             }
             check("ru/lazyhat/compukters/minecraft/computer/ComputerBlock.class" in entries) {
                 "common computer classes are missing from ${archive.name}"

@@ -13,11 +13,12 @@ shell and programs executing on a computer inside Minecraft.
 
 The compiler, canonical artifact, JDK 25 FFM session, managed Rust VM, standalone
 playground, loader-independent `ProgramRuntimeHost`, and server computer block
-form an executable vertical slice. Computers temporarily boot the packaged
-artifact compiled from the source-visible no-std `system/programs/shell.kt`;
-`boot.kt` and generic `process.run` are the next lifecycle layer. A real
-NeoForge GameTests cover registration, automatic boot, ticking, removal, VM
-shutdown, and recovery of a tombstoned persistent filesystem.
+form an executable vertical slice. A computer starts the source-visible no-std
+`system/programs/boot.kt` from `/rom/boot`; boot launches `/rom/shell`, and the
+shell can run verified extensionless programs in the foreground through
+`Process.run`. NeoForge GameTests cover registration, automatic boot, nested
+program execution, reboot, ticking, removal, VM shutdown, and recovery of a
+tombstoned persistent filesystem.
 
 The active game baseline is **Minecraft 26.1.2**, **NeoForge 26.1.2.97**, and
 **JDK 25**. The production archive uses Minecraft's official names directly;
@@ -47,7 +48,9 @@ a stable `ComputerId`; the immutable packaged `/rom` and isolated persistent
 `/home` are mounted inside Rust. World data is rooted at
 `<world>/compukters/filesystems`, flushed on saves and shutdown, and moved to a
 recoverable tombstone when a player destroys the corresponding computer. Guest
-filesystem/std APIs are tracked separately in issue #522.
+code currently has bounded read-only `FileSystem.stat` and `FileSystem.list`
+operations. Compilation, the shared server artifact cache, and installation of
+user programs remain tracked in issue #522.
 
 See [the current architecture](docs/ARCHITECTURE.md).
 
