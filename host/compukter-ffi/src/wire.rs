@@ -237,6 +237,146 @@ pub(crate) fn encode_terminal_update(update: TerminalUpdate) -> Vec<u8> {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct TerminalEncodeError;
+
+pub(crate) fn encode_terminal_full_into(
+    output: &mut [u8],
+    snapshot: &TerminalSnapshot,
+) -> Result<usize, TerminalEncodeError> {
+    let mut encoder = SliceEncoder::new(output, 2)?;
+    encoder.u64(snapshot.revision())?;
+    encoder.u16(compukter_vm::TERMINAL_WIDTH)?;
+    encoder.u16(compukter_vm::TERMINAL_HEIGHT)?;
+    encoder.u32(u32::try_from(snapshot.cells().len()).expect("terminal cell count fits u32"))?;
+    for cell in snapshot.cells() {
+        encoder.cell(*cell)?;
+    }
+    encoder.u16(snapshot.cursor_position().x())?;
+    encoder.u16(snapshot.cursor_position().y())?;
+    encoder.u8(u8::from(snapshot.cursor_visible()))?;
+    Ok(encoder.finish())
+}
+
+pub(crate) fn encode_terminal_update_into(
+    output: &mut [u8],
+    update: &TerminalUpdate,
+) -> Result<usize, TerminalEncodeError> {
+    match update {
+        TerminalUpdate::Unchanged { revision } => {
+            let mut encoder = SliceEncoder::new(output, 0)?;
+            encoder.u64(*revision)?;
+            Ok(encoder.finish())
+        }
+        TerminalUpdate::Delta(delta) => {
+            let mut encoder = SliceEncoder::new(output, 1)?;
+            encoder.u64(delta.base_revision())?;
+            encoder.u64(delta.target_revision())?;
+            encoder.u32(
+                u32::try_from(delta.changes().len()).expect("terminal change count fits u32"),
+            )?;
+            for change in delta.changes() {
+                encoder.change(change)?;
+            }
+            Ok(encoder.finish())
+        }
+        TerminalUpdate::Full(snapshot) => encode_terminal_full_into(output, snapshot),
+    }
+}
+
+struct SliceEncoder<'a> {
+    bytes: &'a mut [u8],
+    offset: usize,
+}
+
+impl<'a> SliceEncoder<'a> {
+    fn new(bytes: &'a mut [u8], tag: u8) -> Result<Self, TerminalEncodeError> {
+        let mut encoder = Self { bytes, offset: 0 };
+        encoder.u8(tag)?;
+        Ok(encoder)
+    }
+
+    const fn finish(self) -> usize {
+        self.offset
+    }
+
+    fn write(&mut self, value: &[u8]) -> Result<(), TerminalEncodeError> {
+        let end = self
+            .offset
+            .checked_add(value.len())
+            .ok_or(TerminalEncodeError)?;
+        let destination = self
+            .bytes
+            .get_mut(self.offset..end)
+            .ok_or(TerminalEncodeError)?;
+        destination.copy_from_slice(value);
+        self.offset = end;
+        Ok(())
+    }
+
+    fn u8(&mut self, value: u8) -> Result<(), TerminalEncodeError> {
+        self.write(&[value])
+    }
+
+    fn u16(&mut self, value: u16) -> Result<(), TerminalEncodeError> {
+        self.write(&value.to_le_bytes())
+    }
+
+    fn u32(&mut self, value: u32) -> Result<(), TerminalEncodeError> {
+        self.write(&value.to_le_bytes())
+    }
+
+    fn u64(&mut self, value: u64) -> Result<(), TerminalEncodeError> {
+        self.write(&value.to_le_bytes())
+    }
+
+    fn cell(&mut self, cell: TerminalCell) -> Result<(), TerminalEncodeError> {
+        self.u32(cell.code_point())?;
+        self.u8(cell.foreground())?;
+        self.u8(cell.background())
+    }
+
+    fn change(&mut self, change: &TerminalChange) -> Result<(), TerminalEncodeError> {
+        match change {
+            TerminalChange::Patch { start, cells } => {
+                self.u8(0)?;
+                self.u16(*start)?;
+                self.u16(u16::try_from(cells.len()).expect("terminal patch length fits u16"))?;
+                for cell in cells {
+                    self.cell(*cell)?;
+                }
+                Ok(())
+            }
+            TerminalChange::Fill {
+                x,
+                y,
+                width,
+                height,
+                cell,
+            } => {
+                self.u8(1)?;
+                self.u16(*x)?;
+                self.u16(*y)?;
+                self.u16(*width)?;
+                self.u16(*height)?;
+                self.cell(*cell)
+            }
+            TerminalChange::Scroll { rows, fill } => {
+                self.u8(2)?;
+                self.u16(*rows)?;
+                self.cell(*fill)
+            }
+            TerminalChange::Cursor { position, visible } => {
+                self.u8(3)?;
+                self.u16(position.x())?;
+                self.u16(position.y())?;
+                self.u8(u8::from(*visible))
+            }
+            TerminalChange::Reset => self.u8(4),
+        }
+    }
+}
+
 struct Encoder {
     bytes: Vec<u8>,
 }
@@ -426,7 +566,7 @@ pub(crate) fn host_failure_code(kind: HostFailureKind) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use compukter_vm::{GuestTrap, QuotaExhaustion, VmFault};
+    use compukter_vm::{GuestTrap, QuotaExhaustion, TerminalDevice, VmFault};
 
     use super::*;
 
@@ -525,6 +665,34 @@ mod tests {
         assert_eq!(
             vec![9],
             encode_outcome(OwnedOutcome::WaitingForTerminalEvent)
+        );
+    }
+
+    #[test]
+    fn terminal_slice_encoder_matches_vector_wire_and_rejects_short_output() {
+        let mut terminal = TerminalDevice::default();
+        assert_terminal_slice_encoding(terminal.changes_since(0));
+
+        terminal.write_utf16(&['A' as u16]).unwrap();
+        terminal.commit();
+        assert_terminal_slice_encoding(terminal.changes_since(0));
+        assert_terminal_slice_encoding(terminal.changes_since(u64::MAX));
+    }
+
+    fn assert_terminal_slice_encoding(update: TerminalUpdate) {
+        let expected = encode_terminal_update(update.clone());
+        let mut exact = vec![0; expected.len()];
+
+        assert_eq!(
+            Ok(expected.len()),
+            encode_terminal_update_into(&mut exact, &update)
+        );
+        assert_eq!(expected, exact);
+
+        let mut short = vec![0; expected.len() - 1];
+        assert_eq!(
+            Err(TerminalEncodeError),
+            encode_terminal_update_into(&mut short, &update)
         );
     }
 }
