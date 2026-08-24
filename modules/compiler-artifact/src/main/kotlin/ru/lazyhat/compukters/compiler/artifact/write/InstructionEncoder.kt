@@ -307,9 +307,6 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
         is Instruction.Null,
         is Instruction.AddI32,
         is Instruction.SubtractI32,
-        is Instruction.MultiplyI32,
-        is Instruction.DivideI32,
-        is Instruction.RemainderI32,
         is Instruction.Equal,
         is Instruction.Less,
         is Instruction.LessOrEqual,
@@ -325,6 +322,12 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
         is Instruction.Branch,
         is Instruction.Return,
         -> 1u
+
+        is Instruction.MultiplyI32 -> 2u
+
+        is Instruction.DivideI32,
+        is Instruction.RemainderI32,
+        -> 4u
 
         is Instruction.ArrayLoad,
         is Instruction.ArrayStore,
