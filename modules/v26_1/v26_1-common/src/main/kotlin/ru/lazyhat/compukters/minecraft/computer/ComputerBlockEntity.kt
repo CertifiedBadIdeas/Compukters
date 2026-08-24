@@ -121,6 +121,13 @@ open class ComputerBlockEntity internal constructor(
         super.setRemoved()
     }
 
+    internal fun destroyFileSystem() {
+        val serverLevel = level as? ServerLevel ?: return
+        val source = filesystemContextSource ?: return
+        closeCarrier()
+        source.tombstone(serverLevel, identity.id())
+    }
+
     override fun loadAdditional(input: ValueInput) {
         super.loadAdditional(input)
         closeCarrier()

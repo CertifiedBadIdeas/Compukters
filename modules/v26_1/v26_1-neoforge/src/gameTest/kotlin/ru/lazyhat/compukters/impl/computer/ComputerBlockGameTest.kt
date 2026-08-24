@@ -21,6 +21,7 @@ import net.minecraft.gametest.framework.TestEnvironmentDefinition
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.MutableComponent
 import net.minecraft.resources.Identifier
+import net.minecraft.world.level.GameType
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.Rotation
 import net.neoforged.bus.api.SubscribeEvent
@@ -29,7 +30,15 @@ import net.neoforged.neoforge.event.RegisterGameTestsEvent
 import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
+import ru.lazyhat.compukters.impl.fs.NeoForgeWorldFileSystemStores
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
+import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
+import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
+import ru.lazyhat.compukters.lang.runtime.vm.VmSession
+import ru.lazyhat.compukters.lang.runtime.vm.VmValue
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.security.MessageDigest
 
 @EventBusSubscriber(modid = MOD_ID)
 object ComputerBlockGameTest {
@@ -58,6 +67,10 @@ object ComputerBlockGameTest {
         event.registerTest(
             Identifier.fromNamespaceAndPath(MOD_ID, "computer_lifecycle"),
             ComputerLifecycleGameTest(testData),
+        )
+        event.registerTest(
+            Identifier.fromNamespaceAndPath(MOD_ID, "computer_filesystem_recovery"),
+            ComputerFileSystemRecoveryGameTest(testData),
         )
     }
 
@@ -93,6 +106,92 @@ object ComputerBlockGameTest {
         override fun codec(): MapCodec<out GameTestInstance> = MapCodec.unit(this)
 
         override fun typeDescription(): MutableComponent = Component.literal("Compukters computer lifecycle")
+    }
+
+    private class ComputerFileSystemRecoveryGameTest(
+        testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
+    ) : GameTestInstance(testData) {
+        override fun run(helper: GameTestHelper) {
+            val position = BlockPos.ZERO
+            val block = CompuktersRegistry.COMPUTER.get()
+            helper.setBlock(position, block)
+            val entity = helper.getBlockEntity(position, NeoForgeComputerBlockEntity::class.java)
+            val computerId = entity.computerId()
+            val context = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, computerId, emptyRom())
+            val writtenGeneration =
+                VmSession
+                    .openInStore(fixture("filesystem-write.cpkt"), context.store, computerId, emptyRom())
+                    .use { session ->
+                        advanceUntilHalted(session)
+                        session.filesystemGeneration()
+                    }
+            context.store.flush(computerId, writtenGeneration)
+
+            helper.succeedWhen {
+                val absolutePosition = helper.absolutePos(position)
+                block.playerWillDestroy(
+                    helper.level,
+                    absolutePosition,
+                    helper.level.getBlockState(absolutePosition),
+                    helper.makeMockPlayer(GameType.SURVIVAL),
+                )
+                helper.setBlock(position, Blocks.AIR)
+
+                val tombstoneRejected =
+                    try {
+                        VmSession
+                            .openInStore(fixture("filesystem-read.cpkt"), context.store, computerId, emptyRom())
+                            .use { }
+                        false
+                    } catch (_: VmBridgeException) {
+                        true
+                    }
+                helper.assertTrue(tombstoneRejected, "tombstoned filesystem accepted a new machine")
+
+                NeoForgeWorldFileSystemStores.recover(helper.level, computerId)
+                VmSession
+                    .openInStore(fixture("filesystem-read.cpkt"), context.store, computerId, emptyRom())
+                    .use { session ->
+                        helper.assertTrue(
+                            advanceUntilHalted(session) == VmOutcome.Halted(VmValue.I32("fun main() = 42\n".hashCode())),
+                            "recovered filesystem did not retain /home/project/main.kt",
+                        )
+                    }
+            }
+        }
+
+        override fun codec(): MapCodec<out GameTestInstance> = MapCodec.unit(this)
+
+        override fun typeDescription(): MutableComponent = Component.literal("Compukters filesystem recovery")
+    }
+
+    private fun advanceUntilHalted(session: VmSession): VmOutcome.Halted {
+        repeat(10_000) {
+            when (val outcome = session.advance(64, 64)) {
+                VmOutcome.SliceExhausted -> Unit
+                is VmOutcome.Halted -> return outcome
+                else -> error("unexpected VM outcome: $outcome")
+            }
+        }
+        error("filesystem reader did not halt")
+    }
+
+    private fun fixture(name: String): ByteArray =
+        requireNotNull(ComputerBlockGameTest::class.java.getResourceAsStream("/fixtures/$name")) {
+            "missing GameTest fixture $name"
+        }.use { it.readAllBytes() }
+
+    private fun emptyRom(): ByteArray {
+        val header =
+            ByteBuffer
+                .allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTROM\u0000".encodeToByteArray())
+                .putShort(1.toShort())
+                .putShort(0.toShort())
+                .putInt(0)
+                .array()
+        return header + MessageDigest.getInstance("SHA-256").digest(header)
     }
 
     private fun neverStarted(): ProgramComputerState = ProgramComputerState.PoweredOff(ProgramComputerStopReason.NeverStarted)

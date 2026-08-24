@@ -37,6 +37,11 @@ fun interface ComputerFileSystemContextSource {
         computerId: ComputerId,
         romImage: ByteArray,
     ): ComputerFileSystemContext
+
+    fun tombstone(
+        level: ServerLevel,
+        computerId: ComputerId,
+    ) = Unit
 }
 
 fun interface ComputerFileSystemLifecycle {

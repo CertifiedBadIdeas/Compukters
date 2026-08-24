@@ -30,6 +30,10 @@ The client renders the fixed 51x19 grid in a centered compact panel using one 6x
 
 The Rust VM owns verification, the Tier 0 interpreter, managed memory and collection, quotas, traps/faults, capability suspension, and host-neutral sessions. Future JIT/AOT tiers must remain behind the same verified artifact and session contract.
 
+The Rust runtime also owns the guest filesystem and its persistence. Minecraft stores only a stable 128-bit `ComputerId`; guest paths and bytes never enter block-entity NBT or a JVM-side mirror. Every computer sees an immutable packaged `/rom` and a private persistent `/home`. The world store lives under `<world>/compukters/filesystems`, performs bounded I/O on its own worker, flushes active generations on world saves, and drains, flushes, and closes before server shutdown completes. Removing a computer through the player destruction lifecycle closes its machine before creating a recoverable tombstone; ordinary block-entity removal during chunk unload only closes the current machine and preserves its filesystem.
+
+The versioned FFM ABI exposes opaque world-store lifecycle operations and machine creation inside a store. Kotlin can select a world store, identify a computer, request flush/tombstone/recovery, and start a machine, but it cannot perform arbitrary guest file operations. The guest-facing filesystem/std API and its compiler surface belong to issue #522; process and boot orchestration remain in issue #518.
+
 The current shell is an ordinary no-std Kotlin program over the raw terminal ABI. It owns line editing, authoritative echo, prompts, and built-ins. Direct shell boot is temporary: issue #518 adds a sibling `boot.kt` artifact and generic foreground `process.run`, after which the VM starts boot and boot launches shell. That boundary will also establish the fixed stdin/stdout primitives used by the first std sysroot; general stream handles, pipes, and process redirection remain later extensions rather than terminal responsibilities.
 
 ## Module ownership
@@ -39,7 +43,7 @@ The current shell is an ordinary no-std Kotlin program over the raw terminal ABI
 | `compiler-artifact` | Canonical artifact model, validation, and encoding |
 | `compiler-client` | Bounded controller and protocol for the isolated compiler worker |
 | `compiler-k2` | Pinned K2/IR integration and Compukter lowering |
-| `native-runtime` | Kotlin-facing JDK 25 FFM VM session and trusted host capabilities |
+| `native-runtime` | Kotlin-facing JDK 25 FFM VM session, opaque world-store lifecycle, and trusted host capabilities |
 | `core` | Loader-independent server behavior and `ProgramRuntimeHost` |
 | `playground` | Standalone compile-and-run entry point with stdin/stdout |
 | `v26_1-common` | Loader-independent Minecraft 26.1 adapters and computer carrier |

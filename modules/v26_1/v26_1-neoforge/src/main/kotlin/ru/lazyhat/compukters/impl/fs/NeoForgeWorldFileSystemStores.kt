@@ -28,6 +28,8 @@ import java.nio.file.Path
 internal class WorldFileSystemStoreRegistry<S : Any>(
     private val opener: (Path) -> S,
     private val flusher: (S, ComputerId, Long) -> Unit,
+    private val tombstoner: (S, ComputerId) -> Unit,
+    private val recoverer: (S, ComputerId) -> Unit,
     private val closer: (S) -> Unit,
 ) {
     private val entries = mutableMapOf<Path, Entry<S>>()
@@ -46,6 +48,18 @@ internal class WorldFileSystemStoreRegistry<S : Any>(
     fun save(worldRoot: Path) {
         entries[canonicalWorldRoot(worldRoot)]?.flushActive()
     }
+
+    @Synchronized
+    fun tombstone(
+        worldRoot: Path,
+        computerId: ComputerId,
+    ) = tombstoner(entry(worldRoot).store, computerId)
+
+    @Synchronized
+    fun recover(
+        worldRoot: Path,
+        computerId: ComputerId,
+    ) = recoverer(entry(worldRoot).store, computerId)
 
     @Synchronized
     fun stop(worldRoot: Path) {
@@ -141,19 +155,39 @@ object NeoForgeWorldFileSystemStores {
         WorldFileSystemStoreRegistry(
             opener = WorldFileSystemStore::open,
             flusher = WorldFileSystemStore::flush,
+            tombstoner = WorldFileSystemStore::tombstone,
+            recoverer = WorldFileSystemStore::recover,
             closer = WorldFileSystemStore::close,
         )
 
     val contextSource =
-        ComputerFileSystemContextSource { level, computerId, romImage ->
-            val root = worldRoot(level.server)
-            ComputerFileSystemContext(
-                registry.store(root),
-                computerId,
-                romImage,
-                registry.lifecycle(root),
-            )
+        object : ComputerFileSystemContextSource {
+            override fun create(
+                level: ServerLevel,
+                computerId: ComputerId,
+                romImage: ByteArray,
+            ): ComputerFileSystemContext {
+                val root = worldRoot(level.server)
+                return ComputerFileSystemContext(
+                    registry.store(root),
+                    computerId,
+                    romImage,
+                    registry.lifecycle(root),
+                )
+            }
+
+            override fun tombstone(
+                level: ServerLevel,
+                computerId: ComputerId,
+            ) {
+                registry.tombstone(worldRoot(level.server), computerId)
+            }
         }
+
+    fun recover(
+        level: ServerLevel,
+        computerId: ComputerId,
+    ) = registry.recover(worldRoot(level.server), computerId)
 
     fun onLevelSave(event: LevelEvent.Save) {
         val level = event.level as? ServerLevel ?: return
