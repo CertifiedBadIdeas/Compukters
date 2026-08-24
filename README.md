@@ -102,8 +102,16 @@ verification, `7` VM admission/start, `8` guest trap, `9` VM fault, `10` host
 failure or EOF, `11` quota, `12` allocation resource failure, and `13` launcher
 or native platform failure.
 
+## Licensing
+
+The current original Compukters and Compukter VM work is licensed under
+[Apache-2.0](LICENSE.md). Third-party material remains under the licenses listed
+in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Copies and releases made
+available before the Apache-2.0 migration remain available under the license
+which accompanied them; this migration does not revoke earlier license grants.
+
 ## Links and credits
 
 - Devlog (in Russian): https://t.me/lazyhatdev
 - Source: https://github.com/CertifiedBadIdeas/Compukters
-- License: GPL-3.0
+- License: [Apache-2.0](LICENSE.md)

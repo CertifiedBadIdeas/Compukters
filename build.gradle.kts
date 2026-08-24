@@ -1,20 +1,19 @@
 /*
  * The Compukters Developers
  *
- * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ * Copyright 2026 Vsevolod Petrov (lazyhat)
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *     https://www.apache.org/licenses/LICENSE-2.0
  *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 plugins {
@@ -275,16 +274,111 @@ val verifyActiveMinecraftBaseline =
         }
     }
 
+val verifyLicensePolicy =
+    tasks.register("verifyLicensePolicy") {
+        description = "Rejects stale GPL identity and inconsistent Apache-2.0 metadata."
+        group = "verification"
+        val eligibleFiles =
+            fileTree(rootDir) {
+                include(
+                    "*.gradle.kts",
+                    "*.properties",
+                    "README.md",
+                    "AGENTS.md",
+                    ".github/**/*.md",
+                    "build-scripts/**/*.gradle.kts",
+                    "build-scripts/**/*.kt",
+                    "build-scripts/**/*.properties",
+                    "config/**/*.properties",
+                    "modules/**/*.gradle.kts",
+                    "modules/**/*.kt",
+                    "modules/**/*.rs",
+                    "system/**/*.kt",
+                    "host/**/*.rs",
+                    "host/**/Cargo.toml",
+                    "host/**/README.md",
+                )
+                exclude(
+                    "**/build/**",
+                    "**/target/**",
+                    "**/.gradle/**",
+                    "**/.gradle-sandbox/**",
+                    "**/run/**",
+                    "**/.agents/**",
+                    "**/META-INF/licenses/**",
+                    "tools/fonts/**",
+                )
+            }
+        val canonicalLicense = rootProject.file("licenses/project/Apache-2.0.txt")
+        val rootLicense = rootProject.file("LICENSE.md")
+        val modProperties = rootProject.file("config/mod.properties")
+        val ffiManifest = rootProject.file("host/compukter-ffi/Cargo.toml")
+        val ffiLock = rootProject.file("host/compukter-ffi/Cargo.lock")
+        val vmManifest = rootProject.file("host/compukter-vm/Cargo.toml")
+        val componentInventory = rootProject.file("licenses/distribution-components.tsv")
+
+        inputs.files(eligibleFiles)
+        inputs.files(rootLicense, canonicalLicense, modProperties, ffiManifest, ffiLock, vmManifest, componentInventory)
+        doLast {
+            val forbidden = listOf("GNU General " + "Public License", "GPL-" + "3.0", "GPL" + "v3")
+            val stale =
+                eligibleFiles.files
+                    .asSequence()
+                    .filter(File::isFile)
+                    .filter { file -> forbidden.any(file.readText()::contains) }
+                    .map { it.relativeTo(rootDir).path }
+                    .sorted()
+                    .toList()
+            check(stale.isEmpty()) { "stale GPL identity in active files: ${stale.joinToString()}" }
+            check(canonicalLicense.isFile) { "canonical Apache-2.0 license is missing" }
+            check(rootLicense.readBytes().contentEquals(canonicalLicense.readBytes())) {
+                "LICENSE.md differs from the canonical Apache-2.0 text"
+            }
+            check("common_mod_license=Apache-2.0" in modProperties.readText()) {
+                "mod metadata must use common_mod_license=Apache-2.0"
+            }
+            listOf(ffiManifest, vmManifest).forEach { manifest ->
+                check("license = \"Apache-2.0\"" in manifest.readText()) {
+                    "${manifest.relativeTo(rootDir)} must declare license = \"Apache-2.0\""
+                }
+            }
+            val expectedRust =
+                componentInventory
+                    .readLines()
+                    .drop(1)
+                    .filter { it.isNotBlank() }
+                    .map { it.split('\t') }
+                    .filter { it[0] == "rust-native" }
+                    .map { (_, component, version, _) -> component to version }
+                    .sortedWith(compareBy<Pair<String, String>>({ it.first }, { it.second }))
+            val actualRust =
+                Regex("""(?ms)\[\[package]]\s+name = "([^"]+)"\s+version = "([^"]+)"""")
+                    .findAll(ffiLock.readText())
+                    .map { match -> match.groupValues[1] to match.groupValues[2] }
+                    .filterNot { (component, _) -> component == "compukter-ffi" || component == "compukter-vm" }
+                    .sortedWith(compareBy<Pair<String, String>>({ it.first }, { it.second }))
+                    .toList()
+            check(actualRust == expectedRust) {
+                "native Rust dependency inventory mismatch: expected $expectedRust, found $actualRust"
+            }
+        }
+    }
+
 tasks.register("verifyLocalFast") {
     description = "Runs the standard local JVM and build-script verification slice."
     group = "verification"
     dependsOn(buildScriptsTest)
     dependsOn(verifyActiveMinecraftBaseline)
+    dependsOn(verifyLicensePolicy)
     dependsOn(":core:test")
     dependsOn(":native-runtime:test")
     dependsOn(":playground:test")
     dependsOn(":v26_1-common:test")
     dependsOn(":v26_1-neoforge:test")
+}
+
+tasks.named("check") {
+    dependsOn(verifyLicensePolicy)
 }
 
 tasks.register("verifyLocalFull") {
