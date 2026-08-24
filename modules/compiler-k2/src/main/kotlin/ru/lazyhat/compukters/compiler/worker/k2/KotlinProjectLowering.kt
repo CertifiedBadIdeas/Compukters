@@ -122,8 +122,7 @@ internal object KotlinProjectLowering {
                 listOf("app") +
                     capabilityIdentities.flatMap { listOf(it.namespace, it.name) } +
                     userFunctions.map { it.name.asString() }
-            )
-                .distinct()
+            ).distinct()
                 .map(MetadataText::of)
                 .sorted()
         val metadataIds = metadataValues.withIndex().associate { (index, value) -> value.toString() to StringId.of(index.toUInt()) }
@@ -745,6 +744,7 @@ private class FunctionCompiler(
     )
 }
 
+@OptIn(UnsafeDuringIrConstructionAPI::class)
 private class LiteralCollector : IrVisitorVoid() {
     val values = mutableListOf<Any>()
     val strings: List<String>
@@ -757,6 +757,15 @@ private class LiteralCollector : IrVisitorVoid() {
     override fun visitConst(expression: IrConst) {
         expression.value?.takeIf { it is String || it is Int || it is Boolean || it is Char }?.let(values::add)
         super.visitConst(expression)
+    }
+
+    override fun visitCall(expression: IrCall) {
+        if (expression.symbol.owner.fqNameWhenAvailable
+                ?.asString() == "kotlin.Boolean.not"
+        ) {
+            values += false
+        }
+        super.visitCall(expression)
     }
 }
 
@@ -789,6 +798,7 @@ private fun resolveTrustedOperation(
         parent = (parent as? IrDeclaration)?.parent ?: return null
     }
     val sourceName = parent.fileEntry.name
+
     fun IrType.trustedType(): TrustedValueType =
         when (this) {
             unitType -> TrustedValueType.UNIT

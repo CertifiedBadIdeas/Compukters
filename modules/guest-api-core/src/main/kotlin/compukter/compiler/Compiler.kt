@@ -11,19 +11,13 @@
 
 @file:Suppress("UNUSED_PARAMETER")
 
-package compukter.process
+package compukter.compiler
 
-object Process {
-    suspend fun run(
-        path: String,
-        capabilities: Int,
+object Compiler {
+    suspend fun compile(
+        source: String,
+        output: String,
     ): Int = 0
 
-    suspend fun run(
-        path: String,
-        capabilities: Int,
-        commandLine: String,
-    ): Int = 0
-
-    fun commandLine(): String = ""
+    fun diagnostics(): String = ""
 }

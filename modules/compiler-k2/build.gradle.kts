@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Files
 import java.security.MessageDigest
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     application
@@ -130,9 +131,17 @@ tasks.test {
     }
 }
 
+tasks.named<KotlinCompile>("compileTestKotlin") {
+    source(
+        rootProject.file("system/programs/kotlinc.kt"),
+        rootProject.file("system/programs/shell.kt"),
+    )
+}
+
 val kotlinSubsetConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")
 val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = layout.buildDirectory.file("generated/system/shell.cpkt")
+val kotlincArtifact = layout.buildDirectory.file("generated/system/kotlinc.cpkt")
 
 val generateKotlinSubsetConformanceArtifact = tasks.register<Test>("generateKotlinSubsetConformanceArtifact") {
     dependsOn(tasks.jar)
@@ -179,6 +188,23 @@ val generateBootArtifact = tasks.register<Test>("generateBootArtifact") {
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukters.boot.artifact", bootArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateKotlincArtifact = tasks.register<Test>("generateKotlincArtifact") {
+    description = "Compiles the checked-in no-std Kotlin compiler CLI into a deterministic Compukter Artifact."
+    group = "build"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*checked in kotlinc compiles deterministically*")
+    inputs.file(rootProject.file("system/programs/kotlinc.kt"))
+    inputs.file(workerJar)
+    outputs.file(kotlincArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukters.kotlinc.artifact", kotlincArtifact.get().asFile.absolutePath)
     }
 }
 

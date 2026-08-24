@@ -50,9 +50,10 @@ class ProgramRuntimeHostIntegrationTest {
         VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.ffi.library")))
         val boot = Path.of(requiredProperty("compukters.bootRuntime.artifact")).readBytes()
         val shell = Path.of(requiredProperty("compukters.programRuntime.artifact")).readBytes()
+        val kotlinc = Path.of(requiredProperty("compukters.kotlincRuntime.artifact")).readBytes()
         val child = Path.of(requiredProperty("compukters.processTerminalChild.artifact")).readBytes()
         val installer = Path.of(requiredProperty("compukters.processInstallRomExecutable.artifact")).readBytes()
-        val rom = rom(boot, shell, child)
+        val rom = rom(boot, shell, kotlinc, child)
         val root = Files.createTempDirectory("compukters-foreground-process-").toRealPath()
         try {
             WorldFileSystemStore.open(root).use { store ->
@@ -84,6 +85,27 @@ class ProgramRuntimeHostIntegrationTest {
                             .endsWith("> hello\nnested child ran\n>\n"),
                     )
 
+                    submit(computer, "hello raw tail")
+                    pressEnter(computer)
+                    assertTrue(
+                        terminalText(requireNotNull(computer.terminalFullState()))
+                            .endsWith("> hello raw tail\nnested child ran\n>\n"),
+                    )
+
+                    submit(computer, "kotlinc")
+                    pressEnter(computer)
+                    assertTrue(
+                        terminalText(requireNotNull(computer.terminalFullState()))
+                            .endsWith("> kotlinc\nusage: kotlinc <source.kt> [-o output]\n>\n"),
+                    )
+
+                    submit(computer, "missing")
+                    pressEnter(computer)
+                    assertTrue(
+                        terminalText(requireNotNull(computer.terminalFullState()))
+                            .endsWith("> missing\ncommand not found: /rom/missing\n>\n"),
+                    )
+
                     assertEquals(ProgramComputerState.Running, computer.reboot())
                     advanceUntil(computer) { it == ProgramComputerState.WaitingForInput }
                     assertEquals(">\n", terminalText(requireNotNull(computer.terminalFullState())))
@@ -113,7 +135,7 @@ class ProgramRuntimeHostIntegrationTest {
 
         submit(host, "help")
         pressEnter(host)
-        assertEquals("> help\nhelp echo clear pwd ls stat\n>\n", terminalText(requireNotNull(host.terminalFullState())))
+        assertEquals("> help\nhelp echo clear pwd ls stat kotlinc\n>\n", terminalText(requireNotNull(host.terminalFullState())))
 
         submit(host, "pwd")
         pressEnter(host)
@@ -141,7 +163,8 @@ class ProgramRuntimeHostIntegrationTest {
 
         submit(host, "missing")
         pressEnter(host)
-        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> missing\ncommand not found: /home/missing\n>\n"))
+        val missingOutput = terminalText(requireNotNull(host.terminalFullState()))
+        assertTrue(missingOutput.endsWith("> missing\npermission denied: /rom/missing\n>\n"), missingOutput)
 
         submit(host, "echo λ😀")
         press(host, TerminalKey.BACKSPACE)
@@ -151,7 +174,7 @@ class ProgramRuntimeHostIntegrationTest {
 
         submit(host, "wat argument")
         pressEnter(host)
-        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("unknown command: wat\n>\n"))
+        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("permission denied: /rom/wat\n>\n"))
 
         submit(host, "clear")
         pressEnter(host)
@@ -219,7 +242,9 @@ class ProgramRuntimeHostIntegrationTest {
         repeat(MAXIMUM_TICKS) {
             val state = computer.serverTick()
             if (predicate(state)) return state
-            check(state == ProgramComputerState.Running) { "computer terminated before expected state: $state" }
+            check(state == ProgramComputerState.Running) {
+                "computer terminated before expected state: $state; terminal=${computer.terminalFullState()?.let(::terminalText)}"
+            }
         }
         error("computer did not reach expected state within $MAXIMUM_TICKS ticks; last state was ${computer.state}")
     }
@@ -238,9 +263,10 @@ class ProgramRuntimeHostIntegrationTest {
     private fun rom(
         boot: ByteArray,
         shell: ByteArray,
+        kotlinc: ByteArray,
         child: ByteArray,
     ): ByteArray {
-        val programs = listOf("/rom/boot" to boot, "/rom/hello" to child, "/rom/shell" to shell)
+        val programs = listOf("/rom/boot" to boot, "/rom/hello" to child, "/rom/kotlinc" to kotlinc, "/rom/shell" to shell)
         val size =
             programs.fold(16) { total, (path, artifact) ->
                 Math.addExact(total, 16 + path.encodeToByteArray().size + artifact.size)

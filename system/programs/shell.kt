@@ -9,6 +9,8 @@
  * (at your option) any later version.
  */
 
+package compukter.system.shell
+
 import compukter.filesystem.FileSystem
 import compukter.process.Process
 import compukter.terminal.Terminal
@@ -27,7 +29,7 @@ suspend fun main() {
                 Terminal.write("\n")
                 if (line != "") {
                     if (line == "help") {
-                        Terminal.write("help echo clear pwd ls stat\n")
+                        Terminal.write("help echo clear pwd ls stat kotlinc\n")
                     } else if (line == "echo") {
                         Terminal.write("\n")
                     } else if (line.length >= 5 && line.substring(0, 5) == "echo ") {
@@ -55,15 +57,21 @@ suspend fun main() {
                             writeStat(resolvePath(argument))
                         }
                     } else {
-                        var commandEnd = 0
-                        while (commandEnd < line.length && line[commandEnd] != ' ') commandEnd = commandEnd + 1
-                        if (commandEnd != line.length) {
-                            Terminal.write("unknown command: " + line.substring(0, commandEnd) + "\n")
+                        val command = shellCommand(line)
+                        val commandLine = shellCommandLine(line)
+                        var path = command
+                        var result = 0
+                        if (command[0] == '/') {
+                            result = if (commandLine == "") Process.run(path, 15) else Process.run(path, 15, commandLine)
                         } else {
-                            val path = resolvePath(line)
-                            val result = Process.run(path, 7)
-                            if (result != 0) writeProcessFailure(result, path)
+                            path = "/home/" + command
+                            result = if (commandLine == "") Process.run(path, 15) else Process.run(path, 15, commandLine)
+                            if (result == 5) {
+                                path = "/rom/" + command
+                                result = if (commandLine == "") Process.run(path, 15) else Process.run(path, 15, commandLine)
+                            }
                         }
+                        if (result != 0) writeProcessFailure(result, path)
                     }
                 }
                 line = ""
@@ -79,6 +87,18 @@ suspend fun main() {
         }
         Terminal.finishEvent()
     }
+}
+
+fun shellCommand(line: String): String {
+    var end = 0
+    while (end < line.length && line[end] != ' ') end = end + 1
+    return line.substring(0, end)
+}
+
+fun shellCommandLine(line: String): String {
+    var end = 0
+    while (end < line.length && line[end] != ' ') end = end + 1
+    return if (end == line.length) "" else line.substring(end + 1, line.length)
 }
 
 private fun containsSpace(value: String): Boolean {

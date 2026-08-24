@@ -16,13 +16,19 @@ import java.nio.ByteOrder
 import java.security.MessageDigest
 
 internal object SystemRomImage {
-    fun packaged(): ByteArray = encodePrograms(SystemProgramImage.boot(), SystemProgramImage.shell())
+    fun packaged(): ByteArray = encodePrograms(SystemProgramImage.boot(), SystemProgramImage.shell(), SystemProgramImage.kotlinc())
 
     fun encodePrograms(
         bootArtifact: ByteArray,
         shellArtifact: ByteArray,
+        kotlincArtifact: ByteArray,
     ): ByteArray {
-        val programs = listOf("/rom/boot" to bootArtifact, "/rom/shell" to shellArtifact).sortedBy { it.first }
+        val programs =
+            listOf(
+                "/rom/boot" to bootArtifact,
+                "/rom/shell" to shellArtifact,
+                "/rom/kotlinc" to kotlincArtifact,
+            ).sortedBy { it.first }
         programs.forEach { (path, artifact) ->
             require(artifact.isNotEmpty()) { "system program $path must not be empty" }
             require(artifact.size <= MAXIMUM_PROGRAM_BYTES) {
