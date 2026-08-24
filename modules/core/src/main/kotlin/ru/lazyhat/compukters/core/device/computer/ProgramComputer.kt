@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukters.core.device.computer
 
+import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
@@ -43,10 +44,11 @@ class ProgramComputer internal constructor(
         computerId: ComputerId,
         romImage: ByteArray,
         tickBudget: ProgramTickBudget = ProgramTickBudget(),
+        compilerRouter: CompilerCompletionRouter? = null,
     ) : this(
         deviceId,
         stateSink,
-        RuntimeProgramHost(ProgramRuntimeHost(store, computerId, romImage, tickBudget)),
+        RuntimeProgramHost(ProgramRuntimeHost(store, computerId, romImage, tickBudget, compilerRouter)),
     )
 
     var state: ProgramComputerState = ProgramComputerState.PoweredOff(ProgramComputerStopReason.NeverStarted)
@@ -122,6 +124,10 @@ class ProgramComputer internal constructor(
                 transitionTo(ProgramComputerState.WaitingForInput)
             }
 
+            ProgramRuntimeState.WaitingForCompiler -> {
+                transitionTo(ProgramComputerState.WaitingForCompiler)
+            }
+
             is ProgramRuntimeState.Halted -> {
                 transitionTo(ProgramComputerState.PoweredOff(ProgramComputerStopReason.Halted(runtimeState.value)))
             }
@@ -138,7 +144,9 @@ class ProgramComputer internal constructor(
         }
 
     private fun ProgramComputerState.isPoweredOn(): Boolean =
-        this == ProgramComputerState.Running || this == ProgramComputerState.WaitingForInput
+        this == ProgramComputerState.Running ||
+            this == ProgramComputerState.WaitingForInput ||
+            this == ProgramComputerState.WaitingForCompiler
 
     private companion object {
         val SHUTDOWN_STATE = ProgramComputerState.PoweredOff(ProgramComputerStopReason.Shutdown)

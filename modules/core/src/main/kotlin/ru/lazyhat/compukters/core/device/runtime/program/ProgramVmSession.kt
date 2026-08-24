@@ -42,6 +42,16 @@ internal interface ProgramVmSession : AutoCloseable {
         response: HostResponse,
     )
 
+    fun completeCompilationArtifact(
+        token: Long,
+        artifact: ByteArray,
+    )
+
+    fun completeCompilationFailure(
+        token: Long,
+        diagnostics: String,
+    )
+
     fun commitTerminal()
 
     fun terminalFullState(): TerminalState
@@ -101,6 +111,16 @@ private class NativeProgramVmSession(
         requestId: Long,
         response: HostResponse,
     ) = session.resume(requestId, response)
+
+    override fun completeCompilationArtifact(
+        token: Long,
+        artifact: ByteArray,
+    ) = session.completeCompilationArtifact(token, artifact)
+
+    override fun completeCompilationFailure(
+        token: Long,
+        diagnostics: String,
+    ) = session.completeCompilationFailure(token, diagnostics)
 
     override fun commitTerminal() = session.commitTerminal()
 

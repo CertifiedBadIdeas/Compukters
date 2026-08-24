@@ -22,6 +22,7 @@ plugins {
 }
 
 dependencies {
+    implementation(projects.compilerRuntime)
     implementation(projects.nativeRuntime)
     implementation(libs.kotlin.logging)
     implementation(libs.slf4j.api)
