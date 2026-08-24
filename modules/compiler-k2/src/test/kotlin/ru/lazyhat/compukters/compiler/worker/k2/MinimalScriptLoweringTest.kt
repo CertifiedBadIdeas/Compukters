@@ -243,6 +243,27 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `filesystem text facade lowers through exact trusted signatures`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        import compukter.filesystem.FileSystem
+
+                        fun main() {
+                            val contents = FileSystem.readText("notes.txt")
+                            FileSystem.writeText("copy.txt", contents)
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+        }
+
+    @Test
     fun `shell language subset lowers control flow scalars strings and raw terminal calls`() =
         withAdapter { adapter ->
             val result =

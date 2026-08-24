@@ -24,4 +24,11 @@ object FileSystem {
     fun stat(path: String): Int = 0
 
     fun list(path: String): String = ""
+
+    fun readText(path: String): String = ""
+
+    fun writeText(
+        path: String,
+        contents: String,
+    ): Int = 0
 }
