@@ -360,7 +360,10 @@ val verifyPackagedCompukterFfi =
             check("ru/lazyhat/compukters/impl/computer/NeoForgeComputerBlockEntity.class" in entries) {
                 "NeoForge computer classes are missing from ${archive.name}"
             }
-            check("system/programs/boot" in entries && "system/programs/shell" in entries) {
+            check(
+                listOf("boot", "shell", "kotlinc", "edit")
+                    .all { program -> "system/programs/$program" in entries },
+            ) {
                 "packaged extensionless system programs are missing from ${archive.name}"
             }
             check(entries.none { it.startsWith("system/programs/") && it.endsWith(".cpkt") }) {
