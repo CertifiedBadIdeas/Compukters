@@ -162,6 +162,26 @@ private object FilesystemIntrinsicProvider : TrustedIntrinsicProvider {
                 )
             }
 
+            "compukter.filesystem.FileSystem.readText" -> {
+                sync(
+                    2u,
+                    callable,
+                    listOf(TrustedValueType.STRING),
+                    TrustedValueType.STRING,
+                    TrustedIntrinsicRegistry.FILESYSTEM_CAPABILITY,
+                )
+            }
+
+            "compukter.filesystem.FileSystem.writeText" -> {
+                sync(
+                    3u,
+                    callable,
+                    listOf(TrustedValueType.STRING, TrustedValueType.STRING),
+                    TrustedValueType.INT,
+                    TrustedIntrinsicRegistry.FILESYSTEM_CAPABILITY,
+                )
+            }
+
             else -> {
                 null
             }

@@ -118,6 +118,18 @@ class TrustedIntrinsicRegistryTest {
             TrustedIntrinsic.CapabilityOperation(filesystem, 1u, asynchronous = false),
             resolve("compukter.filesystem.FileSystem.list", listOf(TrustedValueType.STRING), TrustedValueType.STRING),
         )
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(filesystem, 2u, asynchronous = false),
+            resolve("compukter.filesystem.FileSystem.readText", listOf(TrustedValueType.STRING), TrustedValueType.STRING),
+        )
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(filesystem, 3u, asynchronous = false),
+            resolve(
+                "compukter.filesystem.FileSystem.writeText",
+                listOf(TrustedValueType.STRING, TrustedValueType.STRING),
+                TrustedValueType.INT,
+            ),
+        )
         assertNull(
             resolve(
                 "compukter.filesystem.FileSystem.stat",
@@ -143,6 +155,21 @@ class TrustedIntrinsicRegistryTest {
         )
         assertNull(
             resolve("compukter.filesystem.FileSystem.list", emptyList(), TrustedValueType.STRING),
+        )
+        assertNull(
+            resolve(
+                "compukter.filesystem.FileSystem.writeText",
+                listOf(TrustedValueType.STRING),
+                TrustedValueType.INT,
+            ),
+        )
+        assertNull(
+            resolve(
+                "compukter.filesystem.FileSystem.readText",
+                listOf(TrustedValueType.STRING),
+                TrustedValueType.STRING,
+                bundle = null,
+            ),
         )
     }
 
