@@ -64,8 +64,6 @@ Currently targeting:
 - **NeoForge**
 - **Java 25**
 
-Older published builds may represent an earlier generation of the project and can differ substantially from the current source code.
-
 ## Links
 
 - [Source code](https://github.com/CertifiedBadIdeas/Compukters)
