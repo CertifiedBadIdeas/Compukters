@@ -28,15 +28,18 @@ suspend fun main() {
     while (true) {
         val event = Terminal.awaitEvent()
         if (event == 1) {
-            line = appendText(line, Terminal.eventText())
+            val text = Terminal.eventText()
+            Terminal.finishEvent()
+            line = appendText(line, text)
         } else if (event == 2) {
             val key = Terminal.eventKey()
             val action = Terminal.eventAction()
+            Terminal.finishEvent()
             if (key == 13 && action == 1) {
                 Terminal.write("\n")
                 if (line != "") {
                     if (line == "help") {
-                        Terminal.write("help echo clear pwd ls stat kotlinc\n")
+                        Terminal.write("help echo clear pwd ls stat kotlinc edit\n")
                     } else if (line == "echo") {
                         Terminal.write("\n")
                     } else if (line.length >= 5 && line.substring(0, 5) == "echo ") {
@@ -92,7 +95,6 @@ suspend fun main() {
                 Terminal.erasePrevious()
             }
         }
-        Terminal.finishEvent()
     }
 }
 

@@ -25,6 +25,8 @@ internal object SystemProgramImage {
 
     fun kotlinc(): ByteArray = load(KOTLINC_RESOURCE, "kotlinc")
 
+    fun edit(): ByteArray = load(EDIT_RESOURCE, "edit")
+
     private fun load(
         resource: String,
         name: String,
@@ -36,4 +38,5 @@ internal object SystemProgramImage {
     private const val BOOT_RESOURCE = "/system/programs/boot"
     private const val SHELL_RESOURCE = "/system/programs/shell"
     private const val KOTLINC_RESOURCE = "/system/programs/kotlinc"
+    private const val EDIT_RESOURCE = "/system/programs/edit"
 }
