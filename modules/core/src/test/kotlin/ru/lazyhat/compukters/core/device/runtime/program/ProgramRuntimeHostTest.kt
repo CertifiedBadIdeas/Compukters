@@ -43,6 +43,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ProgramRuntimeHostTest {
@@ -160,6 +161,17 @@ class ProgramRuntimeHostTest {
         assertEquals(1, first.closeCalls)
         assertEquals(0, second.closeCalls)
         assertEquals(ProgramRuntimeState.Running, host.state)
+    }
+
+    @Test
+    fun `active session publishes its current filesystem generation`() {
+        val session = ScriptedSession(defaultOutcome = VmOutcome.SliceExhausted, filesystemGeneration = 7)
+        val host = host(session)
+
+        host.start(byteArrayOf(1))
+        assertEquals(7, host.filesystemGeneration())
+        host.shutdown()
+        assertNull(host.filesystemGeneration())
     }
 
     @Test
@@ -305,6 +317,7 @@ class ProgramRuntimeHostTest {
         private val resumeError: VmBridgeException? = null,
         val terminalState: TerminalState = terminalState(0),
         val terminalUpdate: TerminalUpdate = TerminalUpdate.Unchanged(0),
+        private val filesystemGeneration: Long = 0,
     ) : ProgramVmSession {
         private val outcomes = ArrayDeque(outcomes)
         val advances = mutableListOf<Pair<Int, Int>>()
@@ -353,6 +366,8 @@ class ProgramRuntimeHostTest {
         override fun sendTerminalText(value: String) {
             terminalTexts += value
         }
+
+        override fun filesystemGeneration(): Long = filesystemGeneration
     }
 
     private fun response(

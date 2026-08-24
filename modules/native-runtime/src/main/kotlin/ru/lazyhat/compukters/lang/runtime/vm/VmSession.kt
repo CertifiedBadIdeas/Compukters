@@ -86,6 +86,8 @@ class VmSession private constructor(
 
     fun sendTerminalText(value: String): Unit = bridge.terminalText(requireHandle(), value.codePoints().toArray())
 
+    fun filesystemGeneration(): Long = decodeNative { GenerationWireDecoder(bridge.filesystemGeneration(requireHandle())).generation() }
+
     override fun close() {
         val closing = handle.getAndSet(CLOSED)
         if (closing != CLOSED) bridge.close(closing)
@@ -131,6 +133,20 @@ class VmSession private constructor(
             } catch (error: Exception) {
                 throw VmBridgeException("invalid native VM result", error)
             }
+    }
+}
+
+private class GenerationWireDecoder(
+    bytes: ByteArray,
+) {
+    private val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+
+    fun generation(): Long {
+        require(buffer.get().toInt() and 0xff == 1) { "unsupported filesystem generation wire version" }
+        val generation = buffer.long
+        require(generation >= 0) { "native filesystem generation exceeds the JVM range" }
+        require(!buffer.hasRemaining()) { "native filesystem generation contains trailing bytes" }
+        return generation
     }
 }
 

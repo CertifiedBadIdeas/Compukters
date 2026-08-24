@@ -173,11 +173,27 @@ class ComputerBlockEntityTest {
         val restored = fixture()
         restored.entity.loadForTest(tag)
 
+        assertEquals(source.entity.computerId(), restored.entity.computerId())
         assertContentEquals(byteArrayOf(1, 2, 3), restored.entity.installedArtifact())
         assertNull(restored.entity.terminalFullState())
         assertEquals(neverStarted(), restored.entity.runtimeState)
         assertTrue(restored.carriers.isEmpty())
         assertEquals(setOf("compukters"), tag.keySet())
+    }
+
+    @Test
+    fun `different block entities keep distinct identities across carrier recreation`() {
+        val first = fixture()
+        val second = fixture()
+        assertTrue(first.entity.computerId() != second.entity.computerId())
+
+        val id = first.entity.computerId()
+        first.entity.serverTick()
+        first.entity.setRemoved()
+        first.entity.serverTick()
+
+        assertEquals(id, first.entity.computerId())
+        assertEquals(2, first.carriers.size)
     }
 
     @Test
@@ -214,7 +230,7 @@ class ComputerBlockEntityTest {
         val entity =
             TestComputerBlockEntity(
                 carrierFactory =
-                    ComputerCarrierFactory { deviceId, imageSource, stateSink ->
+                    ComputerCarrierFactory { deviceId, imageSource, stateSink, _ ->
                         FakeCarrier(deviceId, imageSource, stateSink).also(carriers::add)
                     },
                 maximumArtifactBytes = maximumArtifactBytes,
@@ -301,6 +317,8 @@ class ComputerBlockEntityTest {
             texts += value
             return true
         }
+
+        override fun filesystemGeneration(): Long? = null
 
         override fun close() {
             closeCalls++

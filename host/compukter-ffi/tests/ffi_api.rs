@@ -15,9 +15,9 @@ mod support;
 
 use compukter_ffi::{
     compukter_abi_version, compukter_advance, compukter_close, compukter_create,
-    compukter_create_in_store, compukter_max_create_bytes, compukter_max_outcome_bytes,
-    compukter_store_close, compukter_store_durable_generation, compukter_store_flush,
-    compukter_store_health, compukter_store_open, compukter_store_recover,
+    compukter_create_in_store, compukter_filesystem_generation, compukter_max_create_bytes,
+    compukter_max_outcome_bytes, compukter_store_close, compukter_store_durable_generation,
+    compukter_store_flush, compukter_store_health, compukter_store_open, compukter_store_recover,
     compukter_store_tombstone, compukter_terminal_changes_since, compukter_terminal_commit,
     compukter_terminal_full_state, compukter_terminal_key, compukter_terminal_text, FfiStatus,
 };
@@ -211,6 +211,18 @@ fn c_abi_creates_a_machine_inside_an_open_world_store() {
     assert_eq!(0, output[0]);
     let machine = u64::from_le_bytes(output[1..9].try_into().unwrap());
     assert_ne!(0, machine);
+    let mut generation = [0_u8; 9];
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_filesystem_generation(
+            machine,
+            generation.as_mut_ptr(),
+            generation.len(),
+            &mut written,
+        )
+    });
+    assert_eq!(9, written);
+    assert_eq!(1, generation[0]);
+    assert_eq!(0, u64::from_le_bytes(generation[1..9].try_into().unwrap()));
     assert_eq!(FfiStatus::Ok, compukter_close(machine));
     assert_eq!(FfiStatus::Ok, compukter_store_close(store));
 }

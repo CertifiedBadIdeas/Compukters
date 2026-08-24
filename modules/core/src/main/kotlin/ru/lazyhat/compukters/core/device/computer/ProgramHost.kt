@@ -47,6 +47,8 @@ internal interface ProgramHost : AutoCloseable {
 
     fun sendTerminalText(value: String): Boolean
 
+    fun filesystemGeneration(): Long?
+
     fun shutdown()
 }
 
@@ -71,6 +73,8 @@ internal class RuntimeProgramHost(
     ): Boolean = delegate.sendTerminalKey(key, action, modifiers)
 
     override fun sendTerminalText(value: String): Boolean = delegate.sendTerminalText(value)
+
+    override fun filesystemGeneration(): Long? = delegate.filesystemGeneration()
 
     override fun shutdown() = delegate.shutdown()
 

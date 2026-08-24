@@ -381,6 +381,41 @@ pub extern "C" fn compukter_close(handle: u64) -> FfiStatus {
 }
 
 #[unsafe(no_mangle)]
+/// Writes the current visible filesystem generation for a VM session.
+///
+/// # Safety
+///
+/// Non-empty output must name a writable region and `written_out` must name
+/// one writable `usize`.
+pub unsafe extern "C" fn compukter_filesystem_generation(
+    handle: u64,
+    output: *mut u8,
+    output_capacity: usize,
+    written_out: *mut usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if written_out.is_null() || (output_capacity != 0 && output.is_null()) {
+            return FfiStatus::InvalidArgument;
+        }
+        if output_capacity < MAXIMUM_STORE_GENERATION_BYTES {
+            // SAFETY: The validated ABI contract provides writable length output.
+            unsafe { written_out.write(MAXIMUM_STORE_GENERATION_BYTES) };
+            return FfiStatus::BufferTooSmall;
+        }
+        let generation = match bridge::filesystem_generation(handle) {
+            Ok(generation) => generation,
+            Err(error) => return bridge_status(Err(error)),
+        };
+        let encoded = crate::wire::encode_store_generation(generation);
+        // SAFETY: The fixed maximum was checked before the fixed encoding.
+        unsafe { core::ptr::copy_nonoverlapping(encoded.as_ptr(), output, encoded.len()) };
+        // SAFETY: The validated ABI contract provides writable length output.
+        unsafe { written_out.write(encoded.len()) };
+        FfiStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
 /// Advances a VM session and writes its bounded outcome wire result.
 ///
 /// # Safety

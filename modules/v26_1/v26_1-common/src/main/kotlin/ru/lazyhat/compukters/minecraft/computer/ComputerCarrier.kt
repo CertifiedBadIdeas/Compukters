@@ -40,6 +40,8 @@ internal interface ComputerCarrier : AutoCloseable {
 
     fun sendTerminalText(value: String): Boolean
 
+    fun filesystemGeneration(): Long?
+
     fun reboot(): ProgramComputerState
 
     fun shutdown()
@@ -50,6 +52,7 @@ internal fun interface ComputerCarrierFactory {
         deviceId: Int,
         imageSource: ProgramImageSource,
         stateSink: ProgramComputerStateSink,
+        filesystem: ComputerFileSystemContext?,
     ): ComputerCarrier
 }
 
@@ -58,13 +61,25 @@ internal object RuntimeComputerCarrierFactory : ComputerCarrierFactory {
         deviceId: Int,
         imageSource: ProgramImageSource,
         stateSink: ProgramComputerStateSink,
+        filesystem: ComputerFileSystemContext?,
     ): ComputerCarrier =
         ProgramComputerCarrier(
-            ProgramComputer(
-                deviceId = deviceId,
-                imageSource = imageSource,
-                stateSink = stateSink,
-            ),
+            if (filesystem == null) {
+                ProgramComputer(
+                    deviceId = deviceId,
+                    imageSource = imageSource,
+                    stateSink = stateSink,
+                )
+            } else {
+                ProgramComputer(
+                    deviceId = deviceId,
+                    imageSource = imageSource,
+                    stateSink = stateSink,
+                    store = filesystem.store,
+                    computerId = filesystem.computerId,
+                    romImage = filesystem.romImage(),
+                )
+            },
         )
 }
 
@@ -89,6 +104,8 @@ private class ProgramComputerCarrier(
     ): Boolean = delegate.sendTerminalKey(key, action, modifiers)
 
     override fun sendTerminalText(value: String): Boolean = delegate.sendTerminalText(value)
+
+    override fun filesystemGeneration(): Long? = delegate.filesystemGeneration()
 
     override fun reboot(): ProgramComputerState = delegate.reboot()
 

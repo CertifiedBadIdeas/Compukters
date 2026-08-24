@@ -20,6 +20,8 @@
 package ru.lazyhat.compukters.core.device.runtime.program
 
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
@@ -38,6 +40,13 @@ class ProgramRuntimeHost internal constructor(
     private val tickBudget: ProgramTickBudget = ProgramTickBudget(),
 ) : AutoCloseable {
     constructor(tickBudget: ProgramTickBudget = ProgramTickBudget()) : this(NativeProgramVmSessionFactory(), tickBudget)
+
+    constructor(
+        store: WorldFileSystemStore,
+        computerId: ComputerId,
+        romImage: ByteArray,
+        tickBudget: ProgramTickBudget = ProgramTickBudget(),
+    ) : this(NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, computerId, romImage)), tickBudget)
 
     private var session: ProgramVmSession? = null
     var state: ProgramRuntimeState = ProgramRuntimeState.Idle
@@ -153,6 +162,8 @@ class ProgramRuntimeHost internal constructor(
     ): Boolean = terminalInput { sendTerminalKey(key, action, modifiers) }
 
     fun sendTerminalText(value: String): Boolean = terminalInput { sendTerminalText(value) }
+
+    fun filesystemGeneration(): Long? = session?.filesystemGeneration()
 
     fun shutdown() {
         if (state == ProgramRuntimeState.Closed) return

@@ -48,8 +48,7 @@ class WorldFileSystemStore private constructor(
         id: ComputerId,
         romImage: ByteArray,
         artifact: ByteArray,
-    ): Pair<LowLevelVmBridge, ByteArray> =
-        bridge to bridge.createInStore(requireHandle(), id.toByteArray(), romImage, artifact)
+    ): Pair<LowLevelVmBridge, ByteArray> = bridge to bridge.createInStore(requireHandle(), id.toByteArray(), romImage, artifact)
 
     override fun close() {
         val closing = handle.getAndSet(CLOSED)
@@ -102,17 +101,21 @@ private class StoreWireDecoder(
         version()
         return when (val code = u8()) {
             0 -> i64().also { require(it != 0L) { "native filesystem store returned a zero handle" } }
+
             in 1..5 -> throw FileSystemStoreOpenException(
                 FileSystemStoreOpenFailure.entries.first { it.wireCode == code },
             )
+
             6 -> throw VmBridgeException("native filesystem store handle allocation failed with code ${u8()}")
+
             else -> invalid()
         }.also { end() }
     }
 
     fun health(): FileSystemStoreHealth {
         version()
-        return FileSystemStoreHealth.entries.firstOrNull { it.wireCode == u8() }
+        return FileSystemStoreHealth.entries
+            .firstOrNull { it.wireCode == u8() }
             ?.also { end() }
             ?: invalid()
     }

@@ -161,11 +161,23 @@ class WorldFileSystemStoreTest {
             maintenanceBudget: Int,
         ): ByteArray = error("unused")
 
-        override fun resumeUnit(handle: Long, requestId: Long) = error("unused")
+        override fun resumeUnit(
+            handle: Long,
+            requestId: Long,
+        ) = error("unused")
 
-        override fun resumeString(handle: Long, requestId: Long, value: CharArray) = error("unused")
+        override fun resumeString(
+            handle: Long,
+            requestId: Long,
+            value: CharArray,
+        ) = error("unused")
 
-        override fun resumeFailure(handle: Long, requestId: Long, kind: Int, code: Long) = error("unused")
+        override fun resumeFailure(
+            handle: Long,
+            requestId: Long,
+            kind: Int,
+            code: Long,
+        ) = error("unused")
 
         override fun close(handle: Long) = error("unused")
     }
@@ -182,4 +194,8 @@ private fun bytes(vararg parts: Any): ByteArray =
         }.toByteArray()
 
 private fun long(value: Long): ByteArray =
-    ByteBuffer.allocate(Long.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).putLong(value).array()
+    ByteBuffer
+        .allocate(Long.SIZE_BYTES)
+        .order(ByteOrder.LITTLE_ENDIAN)
+        .putLong(value)
+        .array()
