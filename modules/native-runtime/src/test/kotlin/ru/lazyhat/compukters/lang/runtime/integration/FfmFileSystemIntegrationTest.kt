@@ -33,14 +33,16 @@ class FfmFileSystemIntegrationTest {
             FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
                 val store = WorldFileSystemStore.open(root, bridge)
                 val id = ComputerId.fromLongs(1, 2)
+                val artifact = Files.readAllBytes(Path.of(requiredProperty("compukters.shell.artifact")))
                 assertEquals(FileSystemStoreHealth.ACTIVE, store.health())
                 VmSession
                     .openInStore(
-                        Files.readAllBytes(Path.of(requiredProperty("compukters.shell.artifact"))),
+                        artifact,
                         store,
                         id,
                         emptyRom(),
                     ).use { }
+                VmSession.bootInStore(store, id, bootRom(artifact)).use { }
                 assertEquals(0, store.durableGeneration(id))
                 store.tombstone(id)
                 store.recover(id)
@@ -66,5 +68,26 @@ class FfmFileSystemIntegrationTest {
                 .putInt(0)
                 .array()
         return header + MessageDigest.getInstance("SHA-256").digest(header)
+    }
+
+    private fun bootRom(artifact: ByteArray): ByteArray {
+        val path = "/rom/boot".encodeToByteArray()
+        val unsigned =
+            ByteBuffer
+                .allocate(16 + Int.SIZE_BYTES + path.size + 1 + 1 + Short.SIZE_BYTES + Long.SIZE_BYTES + artifact.size)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTROM\u0000".encodeToByteArray())
+                .putShort(1.toShort())
+                .putShort(0.toShort())
+                .putInt(1)
+                .putInt(path.size)
+                .put(path)
+                .put(2.toByte())
+                .put(1.toByte())
+                .putShort(0.toShort())
+                .putLong(artifact.size.toLong())
+                .put(artifact)
+                .array()
+        return unsigned + MessageDigest.getInstance("SHA-256").digest(unsigned)
     }
 }

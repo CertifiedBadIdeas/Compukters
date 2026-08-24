@@ -24,6 +24,11 @@ pub(crate) fn encode_create(outcome: Result<u64, CreateError>) -> Vec<u8> {
             encoder.u16(run_code(error));
             encoder
         }
+        Err(CreateError::Process(error)) => {
+            let mut encoder = Encoder::new(5);
+            encoder.u8(error.code() as u8);
+            encoder
+        }
         Err(CreateError::Handle(error)) => {
             let mut encoder = Encoder::new(4);
             encoder.u8(handle_code(error));

@@ -23,6 +23,23 @@ import kotlin.test.assertFailsWith
 
 class VmSessionTest {
     @Test
+    fun `boot session copies ROM and does not pass a separate artifact`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(19)))
+        val store = WorldFileSystemStore.open(Path.of("/tmp/compukters-boot-store"), bridge)
+        val rom = byteArrayOf(4, 5, 6)
+        val id = ComputerId.fromLongs(9, 10)
+
+        val session = VmSession.bootInStore(store, id, rom)
+        rom.fill(0)
+
+        assertEquals(23L, bridge.bootCreate?.storeHandle)
+        assertEquals(id.toByteArray().toList(), bridge.bootCreate?.id?.toList())
+        assertEquals(listOf<Byte>(4, 5, 6), bridge.bootCreate?.rom?.toList())
+        session.close()
+        store.close()
+    }
+
+    @Test
     fun `persistent session copies launch inputs and uses its world store handle`() {
         val bridge = FakeBridge(createResult = bytes(0, long(17)))
         val store = WorldFileSystemStore.open(Path.of("/tmp/compukters-session-store"), bridge)
@@ -207,6 +224,7 @@ class VmSessionTest {
         val terminalKeys = mutableListOf<TerminalKeyInput>()
         val terminalTexts = mutableListOf<IntArray>()
         var persistentCreate: PersistentCreate? = null
+        var bootCreate: BootCreate? = null
 
         override fun filesystemGeneration(handle: Long): ByteArray = bytes(1, long(3))
 
@@ -224,6 +242,15 @@ class VmSessionTest {
             artifact: ByteArray,
         ): ByteArray {
             persistentCreate = PersistentCreate(storeHandle, id.copyOf(), rom.copyOf(), artifact.copyOf())
+            return createResult
+        }
+
+        override fun createBootInStore(
+            storeHandle: Long,
+            id: ByteArray,
+            rom: ByteArray,
+        ): ByteArray {
+            bootCreate = BootCreate(storeHandle, id.copyOf(), rom.copyOf())
             return createResult
         }
 
@@ -309,6 +336,12 @@ class VmSessionTest {
         val id: ByteArray,
         val rom: ByteArray,
         val artifact: ByteArray,
+    )
+
+    private data class BootCreate(
+        val storeHandle: Long,
+        val id: ByteArray,
+        val rom: ByteArray,
     )
 }
 

@@ -51,6 +51,12 @@ internal interface LowLevelVmBridge {
         artifact: ByteArray,
     ): ByteArray = error("persistent VM creation is unavailable")
 
+    fun createBootInStore(
+        storeHandle: Long,
+        id: ByteArray,
+        rom: ByteArray,
+    ): ByteArray = error("persistent VM boot is unavailable")
+
     fun filesystemGeneration(handle: Long): ByteArray = error("filesystem generation is unavailable")
 
     fun advance(

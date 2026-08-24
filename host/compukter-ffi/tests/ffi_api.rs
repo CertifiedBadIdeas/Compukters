@@ -15,12 +15,14 @@ mod support;
 
 use compukter_ffi::{
     compukter_abi_version, compukter_advance, compukter_close, compukter_create,
-    compukter_create_in_store, compukter_filesystem_generation, compukter_max_create_bytes,
-    compukter_max_outcome_bytes, compukter_store_close, compukter_store_durable_generation,
-    compukter_store_flush, compukter_store_health, compukter_store_open, compukter_store_recover,
-    compukter_store_tombstone, compukter_terminal_changes_since, compukter_terminal_commit,
-    compukter_terminal_full_state, compukter_terminal_key, compukter_terminal_text, FfiStatus,
+    compukter_create_boot_in_store, compukter_create_in_store, compukter_filesystem_generation,
+    compukter_max_create_bytes, compukter_max_outcome_bytes, compukter_store_close,
+    compukter_store_durable_generation, compukter_store_flush, compukter_store_health,
+    compukter_store_open, compukter_store_recover, compukter_store_tombstone,
+    compukter_terminal_changes_since, compukter_terminal_commit, compukter_terminal_full_state,
+    compukter_terminal_key, compukter_terminal_text, FfiStatus,
 };
+use compukter_vm::ProcessResult;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -228,6 +230,46 @@ fn c_abi_creates_a_machine_inside_an_open_world_store() {
 }
 
 #[test]
+fn c_abi_boots_a_machine_from_the_executable_rom_entry() {
+    let root = TestRoot::new();
+    let store = open_store(root.path());
+    let rom = rom_with_boot(&terminal_artifact(), true);
+    let id = [9_u8; 16];
+    let mut output = vec![0_u8; compukter_max_create_bytes()];
+    let mut written = 0_usize;
+
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_create_boot_in_store(
+            store,
+            id.as_ptr(),
+            rom.as_ptr(),
+            rom.len(),
+            output.as_mut_ptr(),
+            output.len(),
+            &mut written,
+        )
+    });
+    assert_eq!(9, written);
+    assert_eq!(0, output[0]);
+    let machine = u64::from_le_bytes(output[1..9].try_into().unwrap());
+    assert_eq!(FfiStatus::Ok, compukter_close(machine));
+
+    assert_eq!(
+        vec![5, ProcessResult::NotFound.code() as u8],
+        boot_create_wire(store, [10; 16], &empty_rom()),
+    );
+    assert_eq!(
+        vec![5, ProcessResult::NotExecutable.code() as u8],
+        boot_create_wire(store, [11; 16], &rom_with_boot(&terminal_artifact(), false)),
+    );
+    assert_eq!(
+        vec![5, ProcessResult::InvalidArtifact.code() as u8],
+        boot_create_wire(store, [12; 16], &rom_with_boot(b"invalid", true)),
+    );
+    assert_eq!(FfiStatus::Ok, compukter_store_close(store));
+}
+
+#[test]
 fn create_preserves_the_typed_wire_result_and_rejects_short_output_first() {
     let invalid_artifact = [0_u8];
     let mut short = [0_u8; 1];
@@ -386,6 +428,45 @@ fn empty_rom() -> Vec<u8> {
         0xf5, 0x95,
     ]);
     bytes
+}
+
+fn rom_with_boot(artifact: &[u8], executable: bool) -> Vec<u8> {
+    use sha2::{Digest, Sha256};
+
+    let path = b"/rom/boot";
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"CPKTROM\0");
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&0_u16.to_le_bytes());
+    bytes.extend_from_slice(&1_u32.to_le_bytes());
+    bytes.extend_from_slice(&(path.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(path);
+    bytes.push(2);
+    bytes.push(u8::from(executable));
+    bytes.extend_from_slice(&0_u16.to_le_bytes());
+    bytes.extend_from_slice(&(artifact.len() as u64).to_le_bytes());
+    bytes.extend_from_slice(artifact);
+    let digest = Sha256::digest(&bytes);
+    bytes.extend_from_slice(&digest);
+    bytes
+}
+
+fn boot_create_wire(store: u64, id: [u8; 16], rom: &[u8]) -> Vec<u8> {
+    let mut output = vec![0_u8; compukter_max_create_bytes()];
+    let mut written = 0_usize;
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_create_boot_in_store(
+            store,
+            id.as_ptr(),
+            rom.as_ptr(),
+            rom.len(),
+            output.as_mut_ptr(),
+            output.len(),
+            &mut written,
+        )
+    });
+    output.truncate(written);
+    output
 }
 
 fn open_store(root: &Path) -> u64 {

@@ -34,6 +34,7 @@ internal class FfmBridge private constructor(
     private val storeCloseHandle: MethodHandle,
     private val createHandle: MethodHandle,
     private val createInStoreHandle: MethodHandle,
+    private val createBootInStoreHandle: MethodHandle,
     private val filesystemGenerationHandle: MethodHandle,
     private val advanceHandle: MethodHandle,
     private val resumeUnitHandle: MethodHandle,
@@ -154,6 +155,31 @@ internal class FfmBridge private constructor(
                 ) as Int
             requireSuccess("create in filesystem store", status)
             copyResult("create in filesystem store", output, written, maximum)
+        }
+    }
+
+    override fun createBootInStore(
+        storeHandle: Long,
+        id: ByteArray,
+        rom: ByteArray,
+    ): ByteArray {
+        requireComputerId(id)
+        return Arena.ofConfined().use { callArena ->
+            val maximum = maximumCreateBytes()
+            val output = callArena.allocate(maximum.toLong())
+            val written = callArena.allocate(ValueLayout.JAVA_LONG)
+            val status =
+                createBootInStoreHandle.invokeExact(
+                    storeHandle,
+                    callArena.nativeBytes(id),
+                    callArena.nativeBytes(rom),
+                    rom.size.toLong(),
+                    output,
+                    maximum.toLong(),
+                    written,
+                ) as Int
+            requireSuccess("boot in filesystem store", status)
+            copyResult("boot in filesystem store", output, written, maximum)
         }
     }
 
@@ -472,6 +498,20 @@ internal class FfmBridge private constructor(
                                 ValueLayout.ADDRESS,
                                 ValueLayout.ADDRESS,
                                 ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    createBootInStoreHandle =
+                        downcall(
+                            "compukter_create_boot_in_store",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
                                 ValueLayout.ADDRESS,
                                 ValueLayout.JAVA_LONG,
                                 ValueLayout.ADDRESS,
