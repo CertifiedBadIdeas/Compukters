@@ -58,6 +58,7 @@ internal data class TrustedApiSourceBundle(
 internal object TrustedIntrinsicRegistry {
     const val TERMINAL_BUNDLE_ID = "compukter.terminal-api@1"
     const val PROCESS_BUNDLE_ID = "compukter.process-api@1"
+    const val FILESYSTEM_BUNDLE_ID = "compukter.filesystem-api@1"
     val CORE_SOURCE_BUNDLES =
         listOf(
             TrustedApiSourceBundle(
@@ -70,14 +71,48 @@ internal object TrustedIntrinsicRegistry {
                 "/compukter-guest-api/compukter/process/Process.kt",
                 "process.kt",
             ),
+            TrustedApiSourceBundle(
+                FILESYSTEM_BUNDLE_ID,
+                "/compukter-guest-api/compukter/filesystem/FileSystem.kt",
+                "filesystem.kt",
+            ),
         )
     val TERMINAL_CAPABILITY = TrustedCapabilityIdentity("compukter", "terminal", 2u.toUShort(), 0u.toUShort(), 9u)
     val PROCESS_CAPABILITY = TrustedCapabilityIdentity("compukter", "process", 1u.toUShort(), 0u.toUShort(), 1u)
+    val FILESYSTEM_CAPABILITY = TrustedCapabilityIdentity("compukter", "filesystem", 1u.toUShort(), 0u.toUShort(), 7u)
 
-    private val providers: List<TrustedIntrinsicProvider> = listOf(ProcessIntrinsicProvider, TerminalIntrinsicProvider)
+    private val providers: List<TrustedIntrinsicProvider> =
+        listOf(FilesystemIntrinsicProvider, ProcessIntrinsicProvider, TerminalIntrinsicProvider)
 
     fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic? =
         providers.firstNotNullOfOrNull { provider -> provider.resolve(callable) }
+}
+
+private object FilesystemIntrinsicProvider : TrustedIntrinsicProvider {
+    override fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic? {
+        if (callable.bundleIdentity != TrustedIntrinsicRegistry.FILESYSTEM_BUNDLE_ID || callable.suspending) return null
+        return when (callable.name) {
+            "compukter.filesystem.FileSystem.stat" ->
+                sync(
+                    0u,
+                    callable,
+                    listOf(TrustedValueType.STRING),
+                    TrustedValueType.INT,
+                    TrustedIntrinsicRegistry.FILESYSTEM_CAPABILITY,
+                )
+
+            "compukter.filesystem.FileSystem.list" ->
+                sync(
+                    1u,
+                    callable,
+                    listOf(TrustedValueType.STRING),
+                    TrustedValueType.STRING,
+                    TrustedIntrinsicRegistry.FILESYSTEM_CAPABILITY,
+                )
+
+            else -> null
+        }
+    }
 }
 
 private object ProcessIntrinsicProvider : TrustedIntrinsicProvider {
@@ -162,3 +197,14 @@ private object TerminalIntrinsicProvider : TrustedIntrinsicProvider {
             callable.suspending && callable.parameters.isEmpty() && callable.result == result
         }
 }
+
+private fun sync(
+    operation: UInt,
+    callable: TrustedCallableIdentity,
+    parameters: List<TrustedValueType>,
+    result: TrustedValueType,
+    capability: TrustedCapabilityIdentity,
+): TrustedIntrinsic.CapabilityOperation? =
+    TrustedIntrinsic.CapabilityOperation(capability, operation, asynchronous = false).takeIf {
+        !callable.suspending && callable.parameters == parameters && callable.result == result
+    }
