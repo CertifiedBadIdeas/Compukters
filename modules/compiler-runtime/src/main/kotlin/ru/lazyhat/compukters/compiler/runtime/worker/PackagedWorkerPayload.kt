@@ -124,8 +124,18 @@ object PackagedWorkerPayload {
             throw PackagedWorkerPayloadException("packaged worker entry path is invalid")
         }
         if (directory) {
-            if (components.first() != "lib") throw PackagedWorkerPayloadException("unexpected packaged worker directory")
-        } else if (name != MANIFEST_FILE && !(name.startsWith("lib/") && name.endsWith(".jar"))) {
+            val expected =
+                name == "lib" ||
+                    name == "META-INF" ||
+                    name == "META-INF/licenses" ||
+                    name.startsWith("META-INF/licenses/")
+            if (!expected) throw PackagedWorkerPayloadException("unexpected packaged worker directory")
+        } else if (
+            name != MANIFEST_FILE &&
+            !(name.startsWith("lib/") && name.endsWith(".jar")) &&
+            name !in LICENSE_METADATA_FILES &&
+            !name.startsWith("META-INF/licenses/")
+        ) {
             throw PackagedWorkerPayloadException("unexpected packaged worker file")
         }
         return name
@@ -137,4 +147,9 @@ object PackagedWorkerPayload {
     }
 
     private const val MANIFEST_FILE = "worker.payload"
+    private val LICENSE_METADATA_FILES =
+        setOf(
+            "META-INF/NOTICE.txt",
+            "META-INF/THIRD-PARTY-NOTICES.md",
+        )
 }

@@ -21,6 +21,7 @@ import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
@@ -44,10 +45,36 @@ class PackagedWorkerPayloadTest {
         }
 
     @Test
+    fun `package accepts bounded license metadata without adding it to the worker classpath`() =
+        withPackage { archive, root, expected ->
+            val licensed =
+                appendZipEntries(
+                    archive,
+                    "META-INF/licenses/Compukters-Apache-2.0.txt" to "Apache License 2.0".toByteArray(),
+                    "META-INF/licenses/kotlin/v2.4.10/NOTICE.txt" to "Kotlin Compiler".toByteArray(),
+                    "META-INF/NOTICE.txt" to "Compukters".toByteArray(),
+                    "META-INF/THIRD-PARTY-NOTICES.md" to "Third-party notices".toByteArray(),
+                )
+
+            val published = PackagedWorkerPayload.publish(ByteArrayInputStream(licensed), root)
+
+            assertEquals(expected.identity, published.manifest.identity)
+            assertContentEquals(WORKER_BYTES, published.classpath.single().readBytes())
+        }
+
+    @Test
     fun `package rejects unsafe duplicate and over-budget entries`() {
         val root = createTempDirectory("compukters-packaged-worker-reject-").toAbsolutePath().normalize()
         try {
-            listOf("../escape.jar", "/absolute.jar", "lib/../escape.jar", "lib\\escape.jar").forEach { entry ->
+            listOf(
+                "../escape.jar",
+                "/absolute.jar",
+                "lib/../escape.jar",
+                "lib\\escape.jar",
+                "META-INF/arbitrary.txt",
+                "META-INF/licenses/../escape.txt",
+                "licenses/Compukters.txt",
+            ).forEach { entry ->
                 assertFailsWith<PackagedWorkerPayloadException> {
                     PackagedWorkerPayload.publish(ByteArrayInputStream(zip(entry to byteArrayOf(1))), root)
                 }
@@ -119,6 +146,30 @@ class PackagedWorkerPayloadTest {
                 zip.putNextEntry(ZipEntry(name))
                 zip.write(bytes)
                 zip.closeEntry()
+            }
+        }
+        return output.toByteArray()
+    }
+
+    private fun appendZipEntries(
+        archive: ByteArray,
+        vararg entries: Pair<String, ByteArray>,
+    ): ByteArray {
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { target ->
+            ZipInputStream(ByteArrayInputStream(archive)).use { source ->
+                while (true) {
+                    val entry = source.nextEntry ?: break
+                    target.putNextEntry(ZipEntry(entry.name))
+                    source.copyTo(target)
+                    target.closeEntry()
+                    source.closeEntry()
+                }
+            }
+            entries.forEach { (name, bytes) ->
+                target.putNextEntry(ZipEntry(name))
+                target.write(bytes)
+                target.closeEntry()
             }
         }
         return output.toByteArray()
