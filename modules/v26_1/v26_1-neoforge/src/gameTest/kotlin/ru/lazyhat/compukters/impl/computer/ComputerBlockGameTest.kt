@@ -48,6 +48,7 @@ import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.FileSystemStoreHealth
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
@@ -112,6 +113,7 @@ object ComputerBlockGameTest {
                         ComputerId.fromLongs(0x50524F43L, 0x455353L),
                     )
                     verifyTwoComputerCompilation(helper)
+                    verifyPersistentProgrammingLoop(helper)
                     verifyTombstoneRecovery(helper, position)
                     verifyTwoComputerWorldRestart(helper, position, position.east())
                 }.thenSucceed()
@@ -261,6 +263,84 @@ object ComputerBlockGameTest {
         }
     }
 
+    private fun verifyPersistentProgrammingLoop(helper: GameTestHelper) {
+        val rom = processTestRom()
+        val firstId = ComputerId.fromLongs(0x454449544F52L, 1)
+        val secondId = ComputerId.fromLongs(0x454449544F52L, 2)
+        val firstContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, firstId, rom)
+        val secondContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, secondId, rom)
+        val router =
+            ru.lazyhat.compukters.impl.compiler.NeoForgeCompilerServices
+                .router(helper.level.server)
+
+        val generation =
+            ProgramComputer(1, { _, _ -> }, firstContext.store, firstId, rom, compilerRouter = router).use { computer ->
+                helper.assertTrue(computer.turnOn() == ProgramComputerState.Running, "editor computer did not boot")
+                advanceUntilInput(computer)
+
+                enterCommand(computer, "edit demo.kt")
+                advanceUntilInput(computer)
+                helper.assertTrue(
+                    terminalText(computer.terminalFullState()).startsWith("Compukters edit"),
+                    "guest editor did not start",
+                )
+                check(
+                    computer.sendTerminalText(
+                        "import compukter.terminal.Terminal\nfun main() { Terminal.write(\"persistent editor loop\\n\") }",
+                    ),
+                )
+                advanceUntilInput(computer)
+                check(computer.sendTerminalKey(TerminalKey.S, TerminalKeyAction.PRESS, setOf(TerminalModifier.CONTROL)))
+                advanceUntilInput(computer)
+                check(computer.sendTerminalKey(TerminalKey.X, TerminalKeyAction.PRESS, setOf(TerminalModifier.CONTROL)))
+                advanceUntilInput(computer)
+
+                enterCommand(computer, "clear")
+                advanceUntilInput(computer)
+                enterCommand(computer, "kotlinc demo.kt")
+                advanceUntilInput(computer)
+                helper.assertTrue(
+                    terminalText(computer.terminalFullState()).contains("compiled: /home/demo\n"),
+                    "edited source did not compile",
+                )
+                enterCommand(computer, "demo")
+                advanceUntilInput(computer)
+                helper.assertTrue(
+                    terminalText(computer.terminalFullState()).contains("persistent editor loop\n"),
+                    "compiled editor program did not execute",
+                )
+                requireNotNull(computer.filesystemGeneration())
+            }
+        firstContext.store.flush(firstId, generation)
+
+        ProgramComputer(1, { _, _ -> }, firstContext.store, firstId, rom, compilerRouter = router).use { restored ->
+            helper.assertTrue(restored.turnOn() == ProgramComputerState.Running, "restored editor computer did not boot")
+            advanceUntilInput(restored)
+            enterCommand(restored, "stat demo.kt")
+            advanceUntilInput(restored)
+            enterCommand(restored, "stat demo")
+            advanceUntilInput(restored)
+            enterCommand(restored, "demo")
+            advanceUntilInput(restored)
+            val output = terminalText(restored.terminalFullState())
+            helper.assertTrue(output.contains("file: /home/demo.kt\n"), "edited source did not survive reload")
+            helper.assertTrue(output.contains("file: /home/demo\n"), "compiled program did not survive reload")
+            helper.assertTrue(output.contains("persistent editor loop\n"), "restored program did not execute")
+        }
+
+        ProgramComputer(2, { _, _ -> }, secondContext.store, secondId, rom, compilerRouter = router).use { isolated ->
+            helper.assertTrue(isolated.turnOn() == ProgramComputerState.Running, "isolated editor computer did not boot")
+            advanceUntilInput(isolated)
+            enterCommand(isolated, "stat demo.kt")
+            advanceUntilInput(isolated)
+            enterCommand(isolated, "stat demo")
+            advanceUntilInput(isolated)
+            val output = terminalText(isolated.terminalFullState())
+            helper.assertTrue(output.contains("not found: /home/demo.kt\n"), "source leaked into a second computer")
+            helper.assertTrue(output.contains("not found: /home/demo\n"), "compiled program leaked into a second computer")
+        }
+    }
+
     private fun enterCommand(
         computer: ProgramComputer,
         command: String,
@@ -295,6 +375,7 @@ object ComputerBlockGameTest {
             when (val state = computer.serverTick()) {
                 ProgramComputerState.WaitingForInput -> return
                 ProgramComputerState.Running -> Unit
+                ProgramComputerState.WaitingForCompiler -> Thread.sleep(1)
                 else -> error("computer terminated before waiting for input: $state")
             }
         }
@@ -316,6 +397,7 @@ object ComputerBlockGameTest {
         val programs =
             listOf(
                 "/rom/boot" to resource("/system/programs/boot"),
+                "/rom/edit" to resource("/system/programs/edit"),
                 "/rom/hello" to fixture("process-terminal-child.cpkt"),
                 "/rom/kotlinc" to resource("/system/programs/kotlinc"),
                 "/rom/shell" to resource("/system/programs/shell"),
