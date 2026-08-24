@@ -155,6 +155,47 @@ class VmSessionTest {
     }
 
     @Test
+    fun `compilation request is copied only for its outcome and completes through a dedicated bridge`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(11)))
+        val session = VmSession.open(byteArrayOf(1), bridge)
+        val token = 31L
+        bridge.outcomes += bytes(0)
+        bridge.outcomes += bytes(10, long(token))
+        bridge.compilationRequests[token] = compilationRequest(token, "/home/main.kt", "fun main() = 42\n".encodeToByteArray())
+
+        assertEquals(VmOutcome.SliceExhausted, session.advance(64, 64))
+        assertEquals(emptyList(), bridge.compilationRequestCalls)
+        val outcome = session.advance(64, 64) as VmOutcome.CompilationRequested
+        assertEquals(token, outcome.request.token)
+        assertEquals("/home/main.kt", outcome.request.sources.single().path)
+        val source = outcome.request.sources.single().utf8Bytes()
+        assertEquals("fun main() = 42\n", source.decodeToString())
+        source.fill(0)
+        assertEquals("fun main() = 42\n", outcome.request.sources.single().utf8Bytes().decodeToString())
+        assertEquals(listOf(11L to token), bridge.compilationRequestCalls)
+
+        val artifact = byteArrayOf(1, 2, 3)
+        session.completeCompilationArtifact(token, artifact)
+        artifact.fill(0)
+        session.completeCompilationFailure(token + 1, "compiler failed")
+        assertEquals(listOf(CompilationArtifact(11, token, listOf<Byte>(1, 2, 3))), bridge.compilationArtifacts)
+        assertEquals(listOf(CompilationFailure(11, token + 1, "compiler failed")), bridge.compilationFailures)
+    }
+
+    @Test
+    fun `malformed compilation snapshots are bridge failures`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(11)))
+        val session = VmSession.open(byteArrayOf(1), bridge)
+        bridge.outcomes += bytes(10, long(7))
+        bridge.compilationRequests[7] = compilationRequest(7, "/home/main.kt", byteArrayOf(0xff.toByte()))
+        assertFailsWith<VmBridgeException> { session.advance(64, 64) }
+
+        bridge.outcomes += bytes(10, long(8))
+        bridge.compilationRequests[8] = compilationRequest(8, "/home/main.kt", byteArrayOf()).plus(99)
+        assertFailsWith<VmBridgeException> { session.advance(64, 64) }
+    }
+
+    @Test
     fun `typed host responses are forwarded with the pending request id`() {
         val bridge = FakeBridge(createResult = bytes(0, long(11)))
         val session = VmSession.open(byteArrayOf(1), bridge)
@@ -275,6 +316,10 @@ class VmSessionTest {
         var terminalTransportFactory: (() -> TerminalWireTransport)? = null
         var terminalTransportOpens = 0
         val lifecycleEvents = mutableListOf<String>()
+        val compilationRequests = mutableMapOf<Long, ByteArray>()
+        val compilationRequestCalls = mutableListOf<Pair<Long, Long>>()
+        val compilationArtifacts = mutableListOf<CompilationArtifact>()
+        val compilationFailures = mutableListOf<CompilationFailure>()
 
         override fun openTerminalTransport(): TerminalWireTransport =
             terminalTransportFactory?.invoke() ?: super<LowLevelVmBridge>.openTerminalTransport()
@@ -314,6 +359,27 @@ class VmSessionTest {
             guestBudget: Int,
             maintenanceBudget: Int,
         ): ByteArray = outcomes.removeFirst()
+
+        override fun compilationRequest(
+            handle: Long,
+            token: Long,
+        ): ByteArray = compilationRequests.getValue(token).also { compilationRequestCalls += handle to token }
+
+        override fun completeCompilationArtifact(
+            handle: Long,
+            token: Long,
+            artifact: ByteArray,
+        ) {
+            compilationArtifacts += CompilationArtifact(handle, token, artifact.toList())
+        }
+
+        override fun completeCompilationFailure(
+            handle: Long,
+            token: Long,
+            diagnostics: String,
+        ) {
+            compilationFailures += CompilationFailure(handle, token, diagnostics)
+        }
 
         override fun resumeUnit(
             handle: Long,
@@ -418,6 +484,18 @@ class VmSessionTest {
         val id: ByteArray,
         val rom: ByteArray,
     )
+
+    private data class CompilationArtifact(
+        val handle: Long,
+        val token: Long,
+        val artifact: List<Byte>,
+    )
+
+    private data class CompilationFailure(
+        val handle: Long,
+        val token: Long,
+        val diagnostics: String,
+    )
 }
 
 private fun cell(
@@ -456,3 +534,12 @@ private fun short(value: Int): ByteArray =
         .order(ByteOrder.LITTLE_ENDIAN)
         .putShort(value.toShort())
         .array()
+
+private fun compilationRequest(
+    token: Long,
+    path: String,
+    source: ByteArray,
+): ByteArray {
+    val pathBytes = path.encodeToByteArray()
+    return bytes(short(1), long(token), int(1), int(pathBytes.size), pathBytes, int(source.size), source)
+}

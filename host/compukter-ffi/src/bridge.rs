@@ -2,18 +2,18 @@ use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
 use compukter_vm::{
-    verify_artifact, AdmissionError, ArtifactLimits, ComputerAdvanceOutcome, ComputerError,
-    ComputerId, ComputerMachine, ComputerStartError, ComputerValue, ExecutionProfile,
-    FileCapability, FileRights, FileSystemLimits, GuestTrap, HostFailure, HostResponse,
-    HostValueInput, ManagedAllocationFailure, ProcessLimits, ProcessResult, QuotaExhaustion,
-    ResumeError, RomImage, RunError, StoreError, StoreHealth, StoreOpenError, TerminalDevice,
-    TerminalInputError, TerminalKey, TerminalKeyAction, TerminalKeyEvent, TerminalModifiers,
-    TerminalUpdate, VirtualPath, VmFault, WorldFileSystemStore,
+    verify_artifact, AdmissionError, ArtifactLimits, CompilationRequest, ComputerAdvanceOutcome,
+    ComputerError, ComputerId, ComputerMachine, ComputerStartError, ComputerValue,
+    ExecutionProfile, FileCapability, FileRights, FileSystemLimits, GuestTrap, HostFailure,
+    HostResponse, HostValueInput, ManagedAllocationFailure, ProcessLimits, ProcessResult,
+    QuotaExhaustion, ResumeError, RomImage, RunError, StoreError, StoreHealth, StoreOpenError,
+    TerminalDevice, TerminalInputError, TerminalKey, TerminalKeyAction, TerminalKeyEvent,
+    TerminalModifiers, TerminalUpdate, VirtualPath, VmFault, WorldFileSystemStore,
 };
 
 use crate::handle_table::{HandleError, HandleTable};
 
-static SESSIONS: OnceLock<HandleTable<ComputerMachine>> = OnceLock::new();
+static SESSIONS: OnceLock<HandleTable<BridgeSession>> = OnceLock::new();
 static STORES: OnceLock<HandleTable<Arc<WorldFileSystemStore>>> = OnceLock::new();
 
 #[derive(Debug)]
@@ -65,6 +65,22 @@ pub(crate) enum OwnedOutcome {
     Faulted(VmFault),
     HostFailed(HostFailure),
     WaitingForTerminalEvent,
+    CompilationRequested { token: u64 },
+}
+
+#[derive(Debug)]
+struct BridgeSession {
+    computer: ComputerMachine,
+    compilation: Option<CompilationRequest>,
+}
+
+impl BridgeSession {
+    fn new(computer: ComputerMachine) -> Self {
+        Self {
+            computer,
+            compilation: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -104,7 +120,9 @@ pub(crate) fn create(artifact_bytes: Vec<u8>) -> Result<u64, CreateError> {
             ComputerStartError::Start(error) => CreateError::Run(error),
             ComputerStartError::Process(error) => CreateError::Process(error),
         })?;
-    sessions().insert(computer).map_err(CreateError::Handle)
+    sessions()
+        .insert(BridgeSession::new(computer))
+        .map_err(CreateError::Handle)
 }
 
 pub(crate) fn create_in_store(
@@ -147,7 +165,7 @@ pub(crate) fn create_in_store(
         })
         .map_err(|error| CreateInStoreError::Store(StoreBridgeError::Handle(error)))??;
     sessions()
-        .insert(computer)
+        .insert(BridgeSession::new(computer))
         .map_err(|error| CreateInStoreError::Create(CreateError::Handle(error)))
 }
 
@@ -187,7 +205,7 @@ pub(crate) fn create_boot_in_store(
         })
         .map_err(|error| CreateInStoreError::Store(StoreBridgeError::Handle(error)))??;
     sessions()
-        .insert(computer)
+        .insert(BridgeSession::new(computer))
         .map_err(|error| CreateInStoreError::Create(CreateError::Handle(error)))
 }
 
@@ -197,11 +215,18 @@ pub(crate) fn advance(
     maintenance_budget: u32,
 ) -> Result<OwnedOutcome, BridgeError> {
     sessions()
-        .with(handle, |computer| {
-            computer
+        .with(handle, |session| {
+            let outcome = session
+                .computer
                 .advance(guest_budget, maintenance_budget)
-                .map(copy_outcome)
-                .map_err(copy_error)
+                .map_err(copy_error)?;
+            if let ComputerAdvanceOutcome::CompilationRequested(request) = outcome {
+                let token = request.token;
+                session.compilation = Some(request);
+                Ok(OwnedOutcome::CompilationRequested { token })
+            } else {
+                Ok(copy_outcome(outcome))
+            }
         })
         .map_err(BridgeError::Handle)?
 }
@@ -212,7 +237,7 @@ pub(crate) fn resume(
     response: &OwnedResponse,
 ) -> Result<(), BridgeError> {
     sessions()
-        .with(handle, |computer| {
+        .with(handle, |session| {
             let borrowed = match response {
                 OwnedResponse::SuccessUnit => HostResponse::Success(HostValueInput::Unit),
                 OwnedResponse::SuccessString(units) => {
@@ -220,7 +245,8 @@ pub(crate) fn resume(
                 }
                 OwnedResponse::Failure(failure) => HostResponse::Failure(*failure),
             };
-            computer
+            session
+                .computer
                 .resume_host_request(request_id, borrowed)
                 .map_err(copy_error)
         })
@@ -229,15 +255,15 @@ pub(crate) fn resume(
 
 pub(crate) fn terminal_commit(handle: u64) -> Result<(), BridgeError> {
     sessions()
-        .with(handle, |computer| {
-            computer.terminal_mut().commit();
+        .with(handle, |session| {
+            session.computer.terminal_mut().commit();
         })
         .map_err(BridgeError::Handle)
 }
 
 pub(crate) fn filesystem_generation(handle: u64) -> Result<u64, BridgeError> {
     sessions()
-        .with(handle, |computer| computer.filesystem_generation())
+        .with(handle, |session| session.computer.filesystem_generation())
         .map_err(BridgeError::Handle)
 }
 
@@ -246,7 +272,7 @@ pub(crate) fn with_terminal<R>(
     action: impl FnOnce(&TerminalDevice) -> R,
 ) -> Result<R, BridgeError> {
     sessions()
-        .with(handle, |computer| action(computer.terminal()))
+        .with(handle, |session| action(session.computer.terminal()))
         .map_err(BridgeError::Handle)
 }
 
@@ -255,8 +281,8 @@ pub(crate) fn terminal_changes_since(
     revision: u64,
 ) -> Result<TerminalUpdate, BridgeError> {
     sessions()
-        .with(handle, |computer| {
-            computer.terminal().changes_since(revision)
+        .with(handle, |session| {
+            session.computer.terminal().changes_since(revision)
         })
         .map_err(BridgeError::Handle)
 }
@@ -278,8 +304,9 @@ pub(crate) fn terminal_key(
         .and_then(|value| TerminalModifiers::new(value).ok())
         .ok_or(BridgeError::InvalidOperation)?;
     sessions()
-        .with(handle, |computer| {
-            computer
+        .with(handle, |session| {
+            session
+                .computer
                 .terminal_mut()
                 .push_key(TerminalKeyEvent::new(key, action, modifiers))
         })
@@ -289,7 +316,9 @@ pub(crate) fn terminal_key(
 
 pub(crate) fn terminal_text(handle: u64, text: &str) -> Result<(), BridgeError> {
     sessions()
-        .with(handle, |computer| computer.terminal_mut().push_text(text))
+        .with(handle, |session| {
+            session.computer.terminal_mut().push_text(text)
+        })
         .map_err(BridgeError::Handle)?
         .map_err(copy_input_error)
 }
@@ -352,7 +381,77 @@ pub(crate) fn store_close(handle: u64) -> Result<(), StoreBridgeError> {
     stores().close(handle).map_err(StoreBridgeError::Handle)
 }
 
-fn sessions() -> &'static HandleTable<ComputerMachine> {
+pub(crate) fn compilation_request_size(handle: u64, token: u64) -> Result<usize, BridgeError> {
+    sessions()
+        .with(handle, |session| {
+            let request = pending_compilation(session, token)?;
+            crate::wire::compilation_request_size(request).ok_or(BridgeError::InvalidOperation)
+        })
+        .map_err(BridgeError::Handle)?
+}
+
+pub(crate) fn copy_compilation_request(
+    handle: u64,
+    token: u64,
+    output: &mut [u8],
+) -> Result<usize, BridgeError> {
+    sessions()
+        .with(handle, |session| {
+            let request = pending_compilation(session, token)?;
+            crate::wire::encode_compilation_request_into(output, request)
+                .map_err(|_| BridgeError::InvalidOperation)
+        })
+        .map_err(BridgeError::Handle)?
+}
+
+pub(crate) fn complete_compilation_artifact(
+    handle: u64,
+    token: u64,
+    artifact: &[u8],
+) -> Result<(), BridgeError> {
+    sessions()
+        .with(handle, |session| {
+            pending_compilation(session, token)?;
+            session
+                .computer
+                .complete_compilation_success(token, artifact)
+                .map_err(copy_error)?;
+            session.compilation = None;
+            Ok(())
+        })
+        .map_err(BridgeError::Handle)?
+}
+
+pub(crate) fn complete_compilation_failure(
+    handle: u64,
+    token: u64,
+    diagnostics: &str,
+) -> Result<(), BridgeError> {
+    sessions()
+        .with(handle, |session| {
+            pending_compilation(session, token)?;
+            session
+                .computer
+                .complete_compilation_failure(token, diagnostics)
+                .map_err(copy_error)?;
+            session.compilation = None;
+            Ok(())
+        })
+        .map_err(BridgeError::Handle)?
+}
+
+fn pending_compilation(
+    session: &BridgeSession,
+    token: u64,
+) -> Result<&CompilationRequest, BridgeError> {
+    session
+        .compilation
+        .as_ref()
+        .filter(|request| request.token == token)
+        .ok_or(BridgeError::InvalidOperation)
+}
+
+fn sessions() -> &'static HandleTable<BridgeSession> {
     SESSIONS.get_or_init(HandleTable::default)
 }
 
@@ -386,6 +485,9 @@ fn copy_outcome(outcome: ComputerAdvanceOutcome) -> OwnedOutcome {
         ComputerAdvanceOutcome::Crashed(value) => OwnedOutcome::Crashed(value),
         ComputerAdvanceOutcome::Faulted(value) => OwnedOutcome::Faulted(value),
         ComputerAdvanceOutcome::HostFailed(value) => OwnedOutcome::HostFailed(value),
+        ComputerAdvanceOutcome::CompilationRequested(_) => {
+            unreachable!("compilation requests are retained by the bridge session")
+        }
     }
 }
 
@@ -409,6 +511,10 @@ fn copy_error(error: ComputerError) -> BridgeError {
         ComputerError::InvalidTerminalRequest
         | ComputerError::InvalidFileSystemRequest
         | ComputerError::InvalidProcessRequest
+        | ComputerError::InvalidCompilerRequest
+        | ComputerError::ActiveCompilation
+        | ComputerError::NoActiveCompilation
+        | ComputerError::InvalidCompilationToken
         | ComputerError::ActiveTerminalEvent
         | ComputerError::NoActiveTerminalEvent
         | ComputerError::WrongTerminalEventKind => BridgeError::InvalidOperation,

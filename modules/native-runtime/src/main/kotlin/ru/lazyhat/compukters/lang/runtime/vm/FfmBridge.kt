@@ -37,6 +37,9 @@ internal class FfmBridge private constructor(
     private val createBootInStoreHandle: MethodHandle,
     private val filesystemGenerationHandle: MethodHandle,
     private val advanceHandle: MethodHandle,
+    private val compilationRequestSizeHandle: MethodHandle,
+    private val compilationRequestCopyHandle: MethodHandle,
+    private val compilationCompleteHandle: MethodHandle,
     private val resumeUnitHandle: MethodHandle,
     private val resumeStringHandle: MethodHandle,
     private val resumeFailureHandle: MethodHandle,
@@ -234,6 +237,43 @@ internal class FfmBridge private constructor(
             copyResult("advance", output, written, maximum)
         }
 
+    override fun compilationRequest(
+        handle: Long,
+        token: Long,
+    ): ByteArray =
+        Arena.ofConfined().use { callArena ->
+            val requiredOut = callArena.allocate(ValueLayout.JAVA_LONG)
+            requireSuccess(
+                "compilation request size",
+                compilationRequestSizeHandle.invokeExact(handle, token, requiredOut) as Int,
+            )
+            val required = requiredOut.get(ValueLayout.JAVA_LONG, 0)
+            if (required !in 1..MAXIMUM_COMPILATION_REQUEST_BYTES.toLong()) {
+                throw VmBridgeException("invalid FFM compilation request size")
+            }
+            val output = callArena.allocate(required)
+            val written = callArena.allocate(ValueLayout.JAVA_LONG)
+            requireSuccess(
+                "compilation request copy",
+                compilationRequestCopyHandle.invokeExact(handle, token, output, required, written) as Int,
+            )
+            val actual = written.get(ValueLayout.JAVA_LONG, 0)
+            if (actual != required) throw VmBridgeException("invalid FFM compilation request length")
+            output.toArray(ValueLayout.JAVA_BYTE)
+        }
+
+    override fun completeCompilationArtifact(
+        handle: Long,
+        token: Long,
+        artifact: ByteArray,
+    ) = completeCompilation(handle, token, COMPILATION_ARTIFACT, artifact)
+
+    override fun completeCompilationFailure(
+        handle: Long,
+        token: Long,
+        diagnostics: String,
+    ) = completeCompilation(handle, token, COMPILATION_FAILURE, diagnostics.encodeToByteArray())
+
     override fun resumeUnit(
         handle: Long,
         requestId: Long,
@@ -298,6 +338,26 @@ internal class FfmBridge private constructor(
     }
 
     override fun close() = arena.close()
+
+    private fun completeCompilation(
+        handle: Long,
+        token: Long,
+        kind: Int,
+        payload: ByteArray,
+    ) {
+        Arena.ofConfined().use { callArena ->
+            requireSuccess(
+                "compilation completion",
+                compilationCompleteHandle.invokeExact(
+                    handle,
+                    token,
+                    kind,
+                    callArena.nativeBytes(payload),
+                    payload.size.toLong(),
+                ) as Int,
+            )
+        }
+    }
 
     private fun maximumCreateBytes(): Int {
         val value = maximumCreateBytesHandle.invokeExact() as Long
@@ -384,6 +444,9 @@ internal class FfmBridge private constructor(
         private const val MAXIMUM_STORE_OPEN_BYTES = 10
         private const val MAXIMUM_STORE_HEALTH_BYTES = 2
         private const val MAXIMUM_STORE_GENERATION_BYTES = 9
+        private const val MAXIMUM_COMPILATION_REQUEST_BYTES = 512 * 1024
+        private const val COMPILATION_ARTIFACT = 0
+        private const val COMPILATION_FAILURE = 1
 
         fun open(library: Path): FfmBridge {
             val arena = Arena.ofShared()
@@ -531,6 +594,40 @@ internal class FfmBridge private constructor(
                                 ValueLayout.ADDRESS,
                             ),
                         ),
+                    compilationRequestSizeHandle =
+                        downcall(
+                            "compukter_compilation_request_size",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    compilationRequestCopyHandle =
+                        downcall(
+                            "compukter_compilation_request_copy",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    compilationCompleteHandle =
+                        downcall(
+                            "compukter_compilation_complete",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                            ),
+                        ),
                     resumeUnitHandle =
                         downcall(
                             "compukter_resume_unit",
@@ -610,7 +707,7 @@ internal class FfmBridge private constructor(
                             ),
                         ),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 2) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 3) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()

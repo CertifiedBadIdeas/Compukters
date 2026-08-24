@@ -55,6 +55,40 @@ data class VmHostRequest(
     val arguments: List<VmValue>,
 )
 
+class VmCompilationSource(
+    val path: String,
+    utf8: ByteArray,
+) {
+    private val utf8 = utf8.copyOf()
+
+    fun utf8Bytes(): ByteArray = utf8.copyOf()
+
+    override fun equals(other: Any?): Boolean =
+        other is VmCompilationSource && path == other.path && utf8.contentEquals(other.utf8)
+
+    override fun hashCode(): Int = 31 * path.hashCode() + utf8.contentHashCode()
+
+    override fun toString(): String = "VmCompilationSource(path=$path, utf8Bytes=${utf8.size})"
+}
+
+class VmCompilationRequest(
+    val token: Long,
+    sources: List<VmCompilationSource>,
+) {
+    val sources = sources.toList()
+
+    init {
+        require(token > 0) { "compilation token must be positive" }
+        require(this.sources.isNotEmpty()) { "compilation request must contain sources" }
+    }
+
+    override fun equals(other: Any?): Boolean = other is VmCompilationRequest && token == other.token && sources == other.sources
+
+    override fun hashCode(): Int = 31 * token.hashCode() + sources.hashCode()
+
+    override fun toString(): String = "VmCompilationRequest(token=$token, sources=$sources)"
+}
+
 enum class GuestTrap(
     internal val wireCode: Int,
 ) {
@@ -133,6 +167,10 @@ sealed interface VmOutcome {
     data class HostFailed(
         val kind: HostFailureKind,
         val code: Long,
+    ) : VmOutcome
+
+    data class CompilationRequested(
+        val request: VmCompilationRequest,
     ) : VmOutcome
 }
 
