@@ -18,8 +18,20 @@
 
 package ru.lazyhat.compukters.core.device.runtime.program.integration
 
+import ru.lazyhat.compukters.compiler.runtime.CompilerServiceConfiguration
+import ru.lazyhat.compukters.compiler.runtime.ServerCompilerService
+import ru.lazyhat.compukters.compiler.runtime.WorkerCompilerBackend
+import ru.lazyhat.compukters.compiler.runtime.cache.ArtifactVerifier
+import ru.lazyhat.compukters.compiler.runtime.cache.PersistentCompilationCache
+import ru.lazyhat.compukters.compiler.runtime.worker.PackagedWorkerPayload
+import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
+import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory
+import ru.lazyhat.compukters.compiler.worker.controller.WorkerLaunch
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.core.device.computer.ProgramComputer
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
+import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
+import ru.lazyhat.compukters.core.device.runtime.compiler.ServerComputerCompiler
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
@@ -28,7 +40,9 @@ import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
@@ -38,6 +52,8 @@ import java.nio.ByteOrder
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -50,73 +66,103 @@ class ProgramRuntimeHostIntegrationTest {
         val boot = Path.of(requiredProperty("compukters.bootRuntime.artifact")).readBytes()
         val shell = Path.of(requiredProperty("compukters.programRuntime.artifact")).readBytes()
         val kotlinc = Path.of(requiredProperty("compukters.kotlincRuntime.artifact")).readBytes()
+        val edit = Path.of(requiredProperty("compukters.editRuntime.artifact")).readBytes()
         val child = Path.of(requiredProperty("compukters.processTerminalChild.artifact")).readBytes()
         val installer = Path.of(requiredProperty("compukters.processInstallRomExecutable.artifact")).readBytes()
-        val rom = rom(boot, shell, kotlinc, child)
+        assertTrue(VmArtifactVerifier.verify(edit))
+        val rom = rom(boot, shell, kotlinc, edit, child)
         val root = Files.createTempDirectory("compukters-foreground-process-").toRealPath()
         try {
-            WorldFileSystemStore.open(root).use { store ->
-                val computerId = ComputerId.fromLongs(1, 2)
-                val generation =
-                    VmSession.openInStore(installer, store, computerId, rom).use { session ->
-                        assertEquals(VmOutcome.Halted(VmValue.I32(0)), advanceUntilHalted(session))
-                        session.filesystemGeneration()
+            TestCompilerService
+                .open(
+                    root.resolve("compiler"),
+                    Path.of(requiredProperty("compukters.compilerWorker.payload")),
+                ).use { compiler ->
+                    WorldFileSystemStore.open(root).use { store ->
+                        val computerId = ComputerId.fromLongs(1, 2)
+                        val generation =
+                            VmSession.openInStore(installer, store, computerId, rom).use { session ->
+                                assertEquals(VmOutcome.Halted(VmValue.I32(0)), advanceUntilHalted(session))
+                                session.filesystemGeneration()
+                            }
+                        store.flush(computerId, generation)
+                        val computer =
+                            ProgramComputer(
+                                deviceId = 1,
+                                stateSink = { _, _ -> },
+                                store = store,
+                                computerId = computerId,
+                                romImage = rom,
+                                tickBudget = ProgramTickBudget(64, 64, 4),
+                                compilerRouter = compiler.router,
+                            )
+                        computer.use {
+                            assertEquals(ProgramComputerState.Running, computer.turnOn())
+                            advanceUntil(computer) { it == ProgramComputerState.WaitingForInput }
+                            assertEquals(">\n", terminalText(requireNotNull(computer.terminalFullState())))
+
+                            submit(computer, "hello")
+                            pressEnter(computer)
+                            assertTrue(
+                                terminalText(requireNotNull(computer.terminalFullState()))
+                                    .endsWith("> hello\nnested child ran\n>\n"),
+                            )
+
+                            submit(computer, "hello raw tail")
+                            pressEnter(computer)
+                            assertTrue(
+                                terminalText(requireNotNull(computer.terminalFullState()))
+                                    .endsWith("> hello raw tail\nnested child ran\n>\n"),
+                            )
+
+                            submit(computer, "kotlinc")
+                            pressEnter(computer)
+                            assertTrue(
+                                terminalText(requireNotNull(computer.terminalFullState()))
+                                    .endsWith("> kotlinc\nusage: kotlinc <source.kt> [-o output]\n>\n"),
+                            )
+
+                            submit(computer, "missing")
+                            pressEnter(computer)
+                            assertTrue(
+                                terminalText(requireNotNull(computer.terminalFullState()))
+                                    .endsWith("> missing\ncommand not found: /rom/missing\n>\n"),
+                            )
+
+                            submit(computer, "edit demo.kt")
+                            pressEnter(computer)
+                            val editorScreen = terminalText(requireNotNull(computer.terminalFullState()))
+                            assertTrue(editorScreen.startsWith("Compukters edit"), editorScreen)
+                            submit(
+                                computer,
+                                "import compukter.terminal.Terminal\nfun main() { Terminal.write(\"compiled editor loop\\n\") }",
+                            )
+                            press(computer, TerminalKey.S, setOf(TerminalModifier.CONTROL))
+                            press(computer, TerminalKey.X, setOf(TerminalModifier.CONTROL))
+                            submit(computer, "clear")
+                            pressEnter(computer)
+                            submit(computer, "stat demo.kt")
+                            pressEnter(computer)
+                            assertTrue(terminalText(requireNotNull(computer.terminalFullState())).contains("file: /home/demo.kt"))
+                            submit(computer, "kotlinc demo.kt")
+                            pressEnter(computer)
+                            submit(computer, "demo")
+                            pressEnter(computer)
+                            assertTrue(terminalText(requireNotNull(computer.terminalFullState())).contains("compiled editor loop"))
+
+                            assertEquals(ProgramComputerState.Running, computer.reboot())
+                            advanceUntil(computer) { it == ProgramComputerState.WaitingForInput }
+                            assertEquals(">\n", terminalText(requireNotNull(computer.terminalFullState())))
+
+                            submit(computer, "hello")
+                            pressEnter(computer)
+                            assertTrue(
+                                terminalText(requireNotNull(computer.terminalFullState()))
+                                    .endsWith("> hello\nnested child ran\n>\n"),
+                            )
+                        }
                     }
-                store.flush(computerId, generation)
-                val computer =
-                    ProgramComputer(
-                        deviceId = 1,
-                        stateSink = { _, _ -> },
-                        store = store,
-                        computerId = computerId,
-                        romImage = rom,
-                        tickBudget = ProgramTickBudget(64, 64, 4),
-                    )
-                computer.use {
-                    assertEquals(ProgramComputerState.Running, computer.turnOn())
-                    advanceUntil(computer) { it == ProgramComputerState.WaitingForInput }
-                    assertEquals(">\n", terminalText(requireNotNull(computer.terminalFullState())))
-
-                    submit(computer, "hello")
-                    pressEnter(computer)
-                    assertTrue(
-                        terminalText(requireNotNull(computer.terminalFullState()))
-                            .endsWith("> hello\nnested child ran\n>\n"),
-                    )
-
-                    submit(computer, "hello raw tail")
-                    pressEnter(computer)
-                    assertTrue(
-                        terminalText(requireNotNull(computer.terminalFullState()))
-                            .endsWith("> hello raw tail\nnested child ran\n>\n"),
-                    )
-
-                    submit(computer, "kotlinc")
-                    pressEnter(computer)
-                    assertTrue(
-                        terminalText(requireNotNull(computer.terminalFullState()))
-                            .endsWith("> kotlinc\nusage: kotlinc <source.kt> [-o output]\n>\n"),
-                    )
-
-                    submit(computer, "missing")
-                    pressEnter(computer)
-                    assertTrue(
-                        terminalText(requireNotNull(computer.terminalFullState()))
-                            .endsWith("> missing\ncommand not found: /rom/missing\n>\n"),
-                    )
-
-                    assertEquals(ProgramComputerState.Running, computer.reboot())
-                    advanceUntil(computer) { it == ProgramComputerState.WaitingForInput }
-                    assertEquals(">\n", terminalText(requireNotNull(computer.terminalFullState())))
-
-                    submit(computer, "hello")
-                    pressEnter(computer)
-                    assertTrue(
-                        terminalText(requireNotNull(computer.terminalFullState()))
-                            .endsWith("> hello\nnested child ran\n>\n"),
-                    )
                 }
-            }
         } finally {
             root.toFile().deleteRecursively()
         }
@@ -134,7 +180,7 @@ class ProgramRuntimeHostIntegrationTest {
 
         submit(host, "help")
         pressEnter(host)
-        assertEquals("> help\nhelp echo clear pwd ls stat kotlinc\n>\n", terminalText(requireNotNull(host.terminalFullState())))
+        assertEquals("> help\nhelp echo clear pwd ls stat kotlinc edit\n>\n", terminalText(requireNotNull(host.terminalFullState())))
 
         submit(host, "pwd")
         pressEnter(host)
@@ -215,6 +261,15 @@ class ProgramRuntimeHostIntegrationTest {
     }
 
     private fun press(
+        computer: ProgramComputer,
+        key: TerminalKey,
+        modifiers: Set<TerminalModifier>,
+    ) {
+        assertTrue(computer.sendTerminalKey(key, TerminalKeyAction.PRESS, modifiers))
+        advanceUntil(computer) { it == ProgramComputerState.WaitingForInput }
+    }
+
+    private fun press(
         host: ProgramRuntimeHost,
         key: TerminalKey,
     ) {
@@ -241,9 +296,10 @@ class ProgramRuntimeHostIntegrationTest {
         repeat(MAXIMUM_TICKS) {
             val state = computer.serverTick()
             if (predicate(state)) return state
-            check(state == ProgramComputerState.Running) {
+            check(state == ProgramComputerState.Running || state == ProgramComputerState.WaitingForCompiler) {
                 "computer terminated before expected state: $state; terminal=${computer.terminalFullState()?.let(::terminalText)}"
             }
+            if (state == ProgramComputerState.WaitingForCompiler) Thread.sleep(1)
         }
         error("computer did not reach expected state within $MAXIMUM_TICKS ticks; last state was ${computer.state}")
     }
@@ -263,9 +319,17 @@ class ProgramRuntimeHostIntegrationTest {
         boot: ByteArray,
         shell: ByteArray,
         kotlinc: ByteArray,
+        edit: ByteArray,
         child: ByteArray,
     ): ByteArray {
-        val programs = listOf("/rom/boot" to boot, "/rom/hello" to child, "/rom/kotlinc" to kotlinc, "/rom/shell" to shell)
+        val programs =
+            listOf(
+                "/rom/boot" to boot,
+                "/rom/edit" to edit,
+                "/rom/hello" to child,
+                "/rom/kotlinc" to kotlinc,
+                "/rom/shell" to shell,
+            )
         val size =
             programs.fold(16) { total, (path, artifact) ->
                 Math.addExact(total, 16 + path.encodeToByteArray().size + artifact.size)
@@ -304,6 +368,79 @@ class ProgramRuntimeHostIntegrationTest {
             text.append(row.toString().trimEnd()).append('\n')
         }
         return text.toString().trimEnd('\n') + '\n'
+    }
+
+    private class TestCompilerService private constructor(
+        val router: CompilerCompletionRouter,
+        private val service: ServerCompilerService,
+        private val executor: ExecutorService,
+    ) : AutoCloseable {
+        override fun close() {
+            try {
+                service.close()
+            } finally {
+                executor.shutdownNow()
+            }
+        }
+
+        companion object {
+            fun open(
+                root: Path,
+                archive: Path,
+            ): TestCompilerService {
+                val payload =
+                    Files.newInputStream(archive).use { input ->
+                        PackagedWorkerPayload.publish(input, root.resolve("payload"))
+                    }
+                val limits = WorkerLimits()
+                val temporary = root.resolve("temporary")
+                Files.createDirectories(temporary)
+                val launch =
+                    WorkerLaunch(
+                        javaExecutable = javaExecutable(),
+                        maximumHeapMiB = 256,
+                        maximumMetaspaceMiB = 256,
+                        temporaryDirectory = temporary,
+                        expectedIdentity = payload.manifest.identity,
+                        maximumFrameBytes = limits.frameBytes,
+                        maximumStderrBytes = limits.stderrBytes,
+                    )
+                val backend =
+                    WorkerCompilerBackend(
+                        CompilerWorkerController(payload, launch, limits, JdkWorkerProcessFactory()),
+                    )
+                val cache =
+                    PersistentCompilationCache.open(
+                        root.resolve("cache"),
+                        verifier = ArtifactVerifier(VmArtifactVerifier::verify),
+                    )
+                val executor = Executors.newFixedThreadPool(2)
+                try {
+                    val service =
+                        ServerCompilerService(
+                            cache,
+                            backend,
+                            CompilerServiceConfiguration(payload.manifest.identity, limits),
+                            executor = executor,
+                        )
+                    return TestCompilerService(
+                        CompilerCompletionRouter(ServerComputerCompiler(service, limits)),
+                        service,
+                        executor,
+                    )
+                } catch (error: Throwable) {
+                    executor.shutdownNow()
+                    runCatching(backend::close)
+                    runCatching(cache::close)
+                    throw error
+                }
+            }
+
+            private fun javaExecutable(): Path {
+                val executable = if (System.getProperty("os.name").startsWith("Windows", true)) "java.exe" else "java"
+                return Path.of(System.getProperty("java.home"), "bin", executable).toAbsolutePath().normalize()
+            }
+        }
     }
 
     private companion object {

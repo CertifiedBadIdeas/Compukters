@@ -38,6 +38,10 @@ val bootRuntimeArtifact =
     project(":compiler-k2").layout.buildDirectory.file("generated/system/boot.cpkt")
 val kotlincRuntimeArtifact =
     project(":compiler-k2").layout.buildDirectory.file("generated/system/kotlinc.cpkt")
+val editRuntimeArtifact =
+    project(":compiler-k2").layout.buildDirectory.file("generated/system/edit.cpkt")
+val compilerWorkerPayload =
+    project(":compiler-k2").tasks.named<Zip>("compilerWorkerPayload").flatMap { it.archiveFile }
 val processTerminalChildArtifact =
     rootProject.layout.projectDirectory.file("host/compukter-vm/tests/fixtures/process-terminal-child.cpkt")
 val processInstallRomExecutableArtifact =
@@ -55,6 +59,8 @@ val programRuntimeIntegrationTest =
             ":compiler-k2:generateBootArtifact",
             ":compiler-k2:generateKotlincArtifact",
             ":compiler-k2:generateShellArtifact",
+            ":compiler-k2:generateEditArtifact",
+            ":compiler-k2:compilerWorkerPayload",
             rootProject.tasks.named("cargoBuildCompukterFfi"),
         )
         useJUnitPlatform()
@@ -66,6 +72,8 @@ val programRuntimeIntegrationTest =
         inputs.file(programRuntimeArtifact)
         inputs.file(bootRuntimeArtifact)
         inputs.file(kotlincRuntimeArtifact)
+        inputs.file(editRuntimeArtifact)
+        inputs.file(compilerWorkerPayload)
         inputs.file(processTerminalChildArtifact)
         inputs.file(processInstallRomExecutableArtifact)
         doFirst {
@@ -73,6 +81,8 @@ val programRuntimeIntegrationTest =
             systemProperty("compukters.programRuntime.artifact", programRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.bootRuntime.artifact", bootRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.kotlincRuntime.artifact", kotlincRuntimeArtifact.get().asFile.absolutePath)
+            systemProperty("compukters.editRuntime.artifact", editRuntimeArtifact.get().asFile.absolutePath)
+            systemProperty("compukters.compilerWorker.payload", compilerWorkerPayload.get().asFile.absolutePath)
             systemProperty("compukters.processTerminalChild.artifact", processTerminalChildArtifact.asFile.absolutePath)
             systemProperty(
                 "compukters.processInstallRomExecutable.artifact",

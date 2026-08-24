@@ -28,6 +28,7 @@ architectury {
 val bootArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/shell.cpkt")
 val kotlincArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/kotlinc.cpkt")
+val editArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/edit.cpkt")
 val compilerWorkerPayload = project(":compiler-k2").tasks.named<Zip>("compilerWorkerPayload").flatMap { it.archiveFile }
 
 tasks.processResources {
@@ -35,6 +36,7 @@ tasks.processResources {
         ":compiler-k2:generateBootArtifact",
         ":compiler-k2:generateShellArtifact",
         ":compiler-k2:generateKotlincArtifact",
+        ":compiler-k2:generateEditArtifact",
         ":compiler-k2:compilerWorkerPayload",
     )
     from(bootArtifact) {
@@ -48,6 +50,10 @@ tasks.processResources {
     from(kotlincArtifact) {
         into("system/programs")
         rename { "kotlinc" }
+    }
+    from(editArtifact) {
+        into("system/programs")
+        rename { "edit" }
     }
     from(compilerWorkerPayload) {
         into("compiler/worker")
