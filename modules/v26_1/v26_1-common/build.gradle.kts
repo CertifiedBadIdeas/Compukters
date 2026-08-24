@@ -28,9 +28,10 @@ architectury {
 
 val bootArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/shell.cpkt")
+val kotlincArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/kotlinc.cpkt")
 
 tasks.processResources {
-    dependsOn(":compiler-k2:generateBootArtifact", ":compiler-k2:generateShellArtifact")
+    dependsOn(":compiler-k2:generateBootArtifact", ":compiler-k2:generateShellArtifact", ":compiler-k2:generateKotlincArtifact")
     from(bootArtifact) {
         into("system/programs")
         rename { "boot" }
@@ -38,5 +39,9 @@ tasks.processResources {
     from(shellArtifact) {
         into("system/programs")
         rename { "shell" }
+    }
+    from(kotlincArtifact) {
+        into("system/programs")
+        rename { "kotlinc" }
     }
 }

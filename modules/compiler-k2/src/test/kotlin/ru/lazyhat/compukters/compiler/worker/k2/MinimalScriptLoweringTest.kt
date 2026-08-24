@@ -19,6 +19,11 @@
 
 package ru.lazyhat.compukters.compiler.worker.k2
 
+import compukter.system.kotlinc.kotlincError
+import compukter.system.kotlinc.kotlincOutput
+import compukter.system.kotlinc.kotlincSource
+import compukter.system.shell.shellCommand
+import compukter.system.shell.shellCommandLine
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
@@ -67,6 +72,37 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
+    @Test
+    fun `shell separates one executable name from its bounded raw tail`() {
+        assertEquals("kotlinc", shellCommand("kotlinc foo.kt -o hello"))
+        assertEquals("foo.kt -o hello", shellCommandLine("kotlinc foo.kt -o hello"))
+        assertEquals("hello", shellCommand("hello"))
+        assertEquals("", shellCommandLine("hello"))
+        assertEquals("/rom/hello", shellCommand("/rom/hello raw tail"))
+        assertEquals("raw tail", shellCommandLine("/rom/hello raw tail"))
+    }
+
+    @Test
+    fun `kotlinc command line accepts one source and optional output`() {
+        assertEquals("usage: kotlinc <source.kt> [-o output]", kotlincError(""))
+        assertEquals("/home/foo.kt", kotlincSource("foo.kt"))
+        assertEquals("/home/foo", kotlincOutput("foo.kt"))
+        assertEquals("", kotlincError("foo.kt"))
+        assertEquals("/home/foo.kt", kotlincSource("foo.kt -o bin/hello"))
+        assertEquals("/home/bin/hello", kotlincOutput("foo.kt -o bin/hello"))
+        assertEquals("/src/foo.kt", kotlincSource("/src/foo.kt -o /bin/hello"))
+        assertEquals("/bin/hello", kotlincOutput("/src/foo.kt -o /bin/hello"))
+    }
+
+    @Test
+    fun `kotlinc command line rejects ambiguous or unsupported arguments`() {
+        assertTrue(kotlincError("foo.kt bar.kt").isNotEmpty())
+        assertTrue(kotlincError("foo.txt").contains(".kt"))
+        assertTrue(kotlincError("foo.kt -o").isNotEmpty())
+        assertTrue(kotlincError("foo.kt -o out -o other").contains("duplicate"))
+        assertTrue(kotlincError("-o out").isNotEmpty())
+    }
+
     @Test
     fun `ordinary and suspend zero argument Unit main lower deterministically`() =
         withAdapter { adapter ->
@@ -205,6 +241,21 @@ class MinimalScriptLoweringTest {
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             System.getProperty("compukters.boot.artifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
+    fun `checked in kotlinc compiles deterministically`() =
+        withAdapter { adapter ->
+            val source = Path.of("../..", "system/programs/kotlinc.kt").readText()
+            val first = adapter.compile(request("system/programs/kotlinc.kt" to source))
+            val second = adapter.compile(request("system/programs/kotlinc.kt" to source))
+
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukters.kotlinc.artifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
             }
         }

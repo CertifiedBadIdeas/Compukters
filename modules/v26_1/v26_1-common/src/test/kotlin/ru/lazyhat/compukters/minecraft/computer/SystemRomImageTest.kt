@@ -23,10 +23,12 @@ class SystemRomImageTest {
     fun `program ROM is canonical executable and deterministic`() {
         val boot = byteArrayOf(9, 8)
         val shell = byteArrayOf(1, 2, 3, 4)
-        val first = SystemRomImage.encodePrograms(boot, shell)
+        val kotlinc = byteArrayOf(5, 6, 7)
+        val first = SystemRomImage.encodePrograms(boot, shell, kotlinc)
         boot.fill(0)
         shell.fill(0)
-        val second = SystemRomImage.encodePrograms(byteArrayOf(9, 8), byteArrayOf(1, 2, 3, 4))
+        kotlinc.fill(0)
+        val second = SystemRomImage.encodePrograms(byteArrayOf(9, 8), byteArrayOf(1, 2, 3, 4), byteArrayOf(5, 6, 7))
         assertContentEquals(first, second)
 
         val payload = first.copyOf(first.size - 32)
@@ -35,8 +37,9 @@ class SystemRomImageTest {
         assertContentEquals("CPKTROM\u0000".encodeToByteArray(), ByteArray(8).also(buffer::get))
         assertEquals(1, buffer.short.toInt())
         assertEquals(0, buffer.short.toInt())
-        assertEquals(2, buffer.int)
+        assertEquals(3, buffer.int)
         assertEntry(buffer, "/rom/boot", byteArrayOf(9, 8))
+        assertEntry(buffer, "/rom/kotlinc", byteArrayOf(5, 6, 7))
         assertEntry(buffer, "/rom/shell", byteArrayOf(1, 2, 3, 4))
         assertEquals(0, buffer.remaining())
     }

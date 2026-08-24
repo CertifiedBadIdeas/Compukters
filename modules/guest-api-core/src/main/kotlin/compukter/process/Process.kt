@@ -18,4 +18,12 @@ object Process {
         path: String,
         capabilities: Int,
     ): Int = 0
+
+    suspend fun run(
+        path: String,
+        capabilities: Int,
+        commandLine: String,
+    ): Int = 0
+
+    fun commandLine(): String = ""
 }

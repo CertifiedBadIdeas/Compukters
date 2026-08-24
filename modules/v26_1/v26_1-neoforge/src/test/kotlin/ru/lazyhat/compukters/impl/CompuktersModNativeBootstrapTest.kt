@@ -22,6 +22,7 @@ class CompuktersModNativeBootstrapTest {
             checkNotNull(CompuktersModNativeBootstrapTest::class.java.getResourceAsStream("/system/programs/boot"))
                 .use { it.readAllBytes() }
         checkNotNull(CompuktersModNativeBootstrapTest::class.java.getResourceAsStream("/system/programs/shell")).use { }
+        checkNotNull(CompuktersModNativeBootstrapTest::class.java.getResourceAsStream("/system/programs/kotlinc")).use { }
 
         VmSession.open(artifact).use { }
     }

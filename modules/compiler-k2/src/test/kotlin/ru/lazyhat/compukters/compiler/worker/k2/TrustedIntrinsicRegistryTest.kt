@@ -17,6 +17,80 @@ import kotlin.test.assertNull
 
 class TrustedIntrinsicRegistryTest {
     @Test
+    fun `compiler provider requires trusted bundle and exact async and sync signatures`() {
+        fun resolve(
+            name: String,
+            suspending: Boolean,
+            parameters: List<TrustedValueType>,
+            result: TrustedValueType,
+            bundle: String? = "compukter.compiler-api@1",
+        ) = TrustedIntrinsicRegistry.resolve(
+            TrustedCallableIdentity(bundle, name, suspending, parameters, result),
+        )
+
+        val compiler = TrustedCapabilityIdentity("compukter", "compiler", 1u.toUShort(), 0u.toUShort(), 2u)
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(compiler, 0u, asynchronous = true),
+            resolve(
+                "compukter.compiler.Compiler.compile",
+                suspending = true,
+                parameters = listOf(TrustedValueType.STRING, TrustedValueType.STRING),
+                result = TrustedValueType.INT,
+            ),
+        )
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(compiler, 1u, asynchronous = false),
+            resolve(
+                "compukter.compiler.Compiler.diagnostics",
+                suspending = false,
+                parameters = emptyList(),
+                result = TrustedValueType.STRING,
+            ),
+        )
+        assertNull(
+            resolve(
+                "compukter.compiler.Compiler.compile",
+                suspending = true,
+                parameters = listOf(TrustedValueType.STRING, TrustedValueType.STRING),
+                result = TrustedValueType.INT,
+                bundle = null,
+            ),
+        )
+        assertNull(
+            resolve(
+                "compukter.compiler.Other.compile",
+                suspending = true,
+                parameters = listOf(TrustedValueType.STRING, TrustedValueType.STRING),
+                result = TrustedValueType.INT,
+            ),
+        )
+        assertNull(
+            resolve(
+                "compukter.compiler.Compiler.compile",
+                suspending = false,
+                parameters = listOf(TrustedValueType.STRING, TrustedValueType.STRING),
+                result = TrustedValueType.INT,
+            ),
+        )
+        assertNull(
+            resolve(
+                "compukter.compiler.Compiler.diagnostics",
+                suspending = true,
+                parameters = emptyList(),
+                result = TrustedValueType.STRING,
+            ),
+        )
+        assertNull(
+            resolve(
+                "compukter.compiler.Compiler.compile",
+                suspending = true,
+                parameters = listOf(TrustedValueType.STRING),
+                result = TrustedValueType.INT,
+            ),
+        )
+    }
+
+    @Test
     fun `filesystem provider requires trusted facade and exact synchronous signatures`() {
         fun resolve(
             name: String,
@@ -66,7 +140,7 @@ class TrustedIntrinsicRegistryTest {
     }
 
     @Test
-    fun `process provider requires trusted bundle and exact suspending signature`() {
+    fun `process provider preserves ABI 1_0 and requires exact ABI 1_1 signatures`() {
         val trustedRun =
             TrustedCallableIdentity(
                 bundleIdentity = TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID,
@@ -76,18 +150,46 @@ class TrustedIntrinsicRegistryTest {
                 result = TrustedValueType.INT,
             )
 
+        val process = TrustedCapabilityIdentity("compukter", "process", 1u.toUShort(), 1u.toUShort(), 3u)
         assertEquals(
             TrustedIntrinsic.CapabilityOperation(
-                capability = TrustedIntrinsicRegistry.PROCESS_CAPABILITY,
+                capability = process,
                 operation = 0u,
                 asynchronous = true,
             ),
             TrustedIntrinsicRegistry.resolve(trustedRun),
         )
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(process, 1u, asynchronous = true),
+            TrustedIntrinsicRegistry.resolve(
+                trustedRun.copy(parameters = listOf(TrustedValueType.STRING, TrustedValueType.INT, TrustedValueType.STRING)),
+            ),
+        )
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(process, 2u, asynchronous = false),
+            TrustedIntrinsicRegistry.resolve(
+                trustedRun.copy(
+                    name = "compukter.process.Process.commandLine",
+                    suspending = false,
+                    parameters = emptyList(),
+                    result = TrustedValueType.STRING,
+                ),
+            ),
+        )
         assertNull(TrustedIntrinsicRegistry.resolve(trustedRun.copy(bundleIdentity = null)))
         assertNull(TrustedIntrinsicRegistry.resolve(trustedRun.copy(suspending = false)))
         assertNull(TrustedIntrinsicRegistry.resolve(trustedRun.copy(parameters = listOf(TrustedValueType.STRING))))
         assertNull(TrustedIntrinsicRegistry.resolve(trustedRun.copy(result = TrustedValueType.UNIT)))
+        assertNull(
+            TrustedIntrinsicRegistry.resolve(
+                trustedRun.copy(
+                    name = "compukter.process.Process.commandLine",
+                    suspending = true,
+                    parameters = emptyList(),
+                    result = TrustedValueType.STRING,
+                ),
+            ),
+        )
     }
 
     @Test

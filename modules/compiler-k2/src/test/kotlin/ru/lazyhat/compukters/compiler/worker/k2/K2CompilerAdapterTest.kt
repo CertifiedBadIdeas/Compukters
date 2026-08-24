@@ -195,7 +195,8 @@ class K2CompilerAdapterTest {
                         source,
                         WorkerLimits(
                             temporaryBytes = source.encodeToByteArray().size.toLong() + trustedApiBytes,
-                            temporaryFiles = 7, // source/, source/project/, trusted/, user source, and three trusted APIs
+                            // source/, source/project/, trusted/, the user source, and every trusted API source.
+                            temporaryFiles = TrustedIntrinsicRegistry.CORE_SOURCE_BUNDLES.size + 4,
                         ),
                     ),
                 )
