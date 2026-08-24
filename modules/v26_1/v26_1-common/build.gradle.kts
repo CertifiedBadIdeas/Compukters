@@ -26,12 +26,17 @@ architectury {
     common("neoforge")
 }
 
+val bootArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/shell.cpkt")
 
 tasks.processResources {
-    dependsOn(":compiler-k2:generateShellArtifact")
+    dependsOn(":compiler-k2:generateBootArtifact", ":compiler-k2:generateShellArtifact")
+    from(bootArtifact) {
+        into("system/programs")
+        rename { "boot" }
+    }
     from(shellArtifact) {
         into("system/programs")
-        rename { "shell.cpkt" }
+        rename { "shell" }
     }
 }

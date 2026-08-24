@@ -20,11 +20,13 @@ import kotlin.test.assertEquals
 
 class SystemRomImageTest {
     @Test
-    fun `shell ROM is canonical executable and deterministic`() {
+    fun `program ROM is canonical executable and deterministic`() {
+        val boot = byteArrayOf(9, 8)
         val shell = byteArrayOf(1, 2, 3, 4)
-        val first = SystemRomImage.encodeShell(shell)
+        val first = SystemRomImage.encodePrograms(boot, shell)
+        boot.fill(0)
         shell.fill(0)
-        val second = SystemRomImage.encodeShell(byteArrayOf(1, 2, 3, 4))
+        val second = SystemRomImage.encodePrograms(byteArrayOf(9, 8), byteArrayOf(1, 2, 3, 4))
         assertContentEquals(first, second)
 
         val payload = first.copyOf(first.size - 32)
@@ -33,14 +35,23 @@ class SystemRomImageTest {
         assertContentEquals("CPKTROM\u0000".encodeToByteArray(), ByteArray(8).also(buffer::get))
         assertEquals(1, buffer.short.toInt())
         assertEquals(0, buffer.short.toInt())
-        assertEquals(1, buffer.int)
+        assertEquals(2, buffer.int)
+        assertEntry(buffer, "/rom/boot", byteArrayOf(9, 8))
+        assertEntry(buffer, "/rom/shell", byteArrayOf(1, 2, 3, 4))
+        assertEquals(0, buffer.remaining())
+    }
+
+    private fun assertEntry(
+        buffer: ByteBuffer,
+        expectedPath: String,
+        expectedArtifact: ByteArray,
+    ) {
         val path = ByteArray(buffer.int).also(buffer::get).decodeToString()
-        assertEquals("/rom/shell", path)
+        assertEquals(expectedPath, path)
         assertEquals(2, buffer.get().toInt())
         assertEquals(1, buffer.get().toInt())
         assertEquals(0, buffer.short.toInt())
-        assertEquals(4, buffer.long)
-        assertContentEquals(byteArrayOf(1, 2, 3, 4), ByteArray(4).also(buffer::get))
-        assertEquals(0, buffer.remaining())
+        assertEquals(expectedArtifact.size.toLong(), buffer.long)
+        assertContentEquals(expectedArtifact, ByteArray(expectedArtifact.size).also(buffer::get))
     }
 }

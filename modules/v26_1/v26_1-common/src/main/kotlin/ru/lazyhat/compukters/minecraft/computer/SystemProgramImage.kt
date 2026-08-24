@@ -12,10 +12,15 @@
 package ru.lazyhat.compukters.minecraft.computer
 
 internal object SystemProgramImage {
-    fun shell(): ByteArray =
-        checkNotNull(SystemProgramImage::class.java.getResourceAsStream(SHELL_RESOURCE)) {
-            "packaged system shell is missing: $SHELL_RESOURCE"
+    fun boot(): ByteArray = load(BOOT_RESOURCE, "boot")
+
+    fun shell(): ByteArray = load(SHELL_RESOURCE, "shell")
+
+    private fun load(resource: String, name: String): ByteArray =
+        checkNotNull(SystemProgramImage::class.java.getResourceAsStream(resource)) {
+            "packaged system $name is missing: $resource"
         }.use { it.readAllBytes() }
 
-    private const val SHELL_RESOURCE = "/system/programs/shell.cpkt"
+    private const val BOOT_RESOURCE = "/system/programs/boot"
+    private const val SHELL_RESOURCE = "/system/programs/shell"
 }

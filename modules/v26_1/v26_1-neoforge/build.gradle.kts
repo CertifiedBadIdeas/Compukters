@@ -299,8 +299,11 @@ val verifyPackagedCompukterFfi =
             check("ru/lazyhat/compukters/impl/computer/NeoForgeComputerBlockEntity.class" in entries) {
                 "NeoForge computer classes are missing from ${archive.name}"
             }
-            check("system/programs/shell.cpkt" in entries) {
-                "packaged system shell is missing from ${archive.name}"
+            check("system/programs/boot" in entries && "system/programs/shell" in entries) {
+                "packaged extensionless system programs are missing from ${archive.name}"
+            }
+            check(entries.none { it.startsWith("system/programs/") && it.endsWith(".cpkt") }) {
+                "extension-bearing system program leaked into ${archive.name}"
             }
             check("assets/compukters/items/compukter.json" in entries) {
                 "26.1 item model is missing from ${archive.name}"

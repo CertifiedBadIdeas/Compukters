@@ -19,8 +19,9 @@ class CompuktersModNativeBootstrapTest {
     fun `mod construction loads packaged native runtime before a VM session opens`() {
         CompuktersMod.requireNativeRuntime()
         val artifact =
-            checkNotNull(CompuktersModNativeBootstrapTest::class.java.getResourceAsStream("/system/programs/shell.cpkt"))
+            checkNotNull(CompuktersModNativeBootstrapTest::class.java.getResourceAsStream("/system/programs/boot"))
                 .use { it.readAllBytes() }
+        checkNotNull(CompuktersModNativeBootstrapTest::class.java.getResourceAsStream("/system/programs/shell")).use { }
 
         VmSession.open(artifact).use { }
     }
