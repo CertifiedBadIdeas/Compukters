@@ -48,7 +48,26 @@ internal class FfmBridge private constructor(
     private val terminalTextHandle: MethodHandle,
 ) : LowLevelVmBridge,
     AutoCloseable {
+    private val maximumOutcomeBytes: Int =
+        (maximumOutcomeBytesHandle.invokeExact() as Long)
+            .takeIf { it in 1..MAXIMUM_OUTCOME_BYTES }
+            ?.toInt()
+            ?: throw VmBridgeException("invalid maximum FFM outcome size")
+
     fun abiVersion(): Int = abiVersionHandle.invokeExact() as Int
+
+    override fun openTerminalTransport(): TerminalWireTransport =
+        ReusableTerminalWireTransport(
+            maximumBytes = maximumOutcomeBytes,
+            fullStateCall =
+                TerminalFullStateCall { handle, output, maximum, written ->
+                    terminalFullStateHandle.invokeExact(handle, output, maximum, written) as Int
+                },
+            changesSinceCall =
+                TerminalChangesSinceCall { handle, revision, output, maximum, written ->
+                    terminalChangesSinceHandle.invokeExact(handle, revision, output, maximum, written) as Int
+                },
+        )
 
     override fun storeOpen(
         rootUtf8: ByteArray,
@@ -199,7 +218,7 @@ internal class FfmBridge private constructor(
         maintenanceBudget: Int,
     ): ByteArray =
         Arena.ofConfined().use { callArena ->
-            val maximum = maximumOutcomeBytes()
+            val maximum = maximumOutcomeBytes
             val output = callArena.allocate(maximum.toLong())
             val written = callArena.allocate(ValueLayout.JAVA_LONG)
             val status =
@@ -252,19 +271,6 @@ internal class FfmBridge private constructor(
 
     override fun terminalCommit(handle: Long) = requireSuccess("terminal commit", terminalCommitHandle.invokeExact(handle) as Int)
 
-    override fun terminalFullState(handle: Long): ByteArray =
-        terminalOutput("terminal full state") { output, maximum, written ->
-            terminalFullStateHandle.invokeExact(handle, output, maximum, written) as Int
-        }
-
-    override fun terminalChangesSince(
-        handle: Long,
-        revision: Long,
-    ): ByteArray =
-        terminalOutput("terminal changes") { output, maximum, written ->
-            terminalChangesSinceHandle.invokeExact(handle, revision, output, maximum, written) as Int
-        }
-
     override fun terminalKey(
         handle: Long,
         key: Int,
@@ -293,12 +299,6 @@ internal class FfmBridge private constructor(
 
     override fun close() = arena.close()
 
-    private fun maximumOutcomeBytes(): Int {
-        val value = maximumOutcomeBytesHandle.invokeExact() as Long
-        if (value !in 1..MAXIMUM_OUTCOME_BYTES) throw VmBridgeException("invalid maximum FFM outcome size")
-        return value.toInt()
-    }
-
     private fun maximumCreateBytes(): Int {
         val value = maximumCreateBytesHandle.invokeExact() as Long
         if (value !in 1..MAXIMUM_CREATE_BYTES) throw VmBridgeException("invalid maximum FFM create size")
@@ -315,18 +315,6 @@ internal class FfmBridge private constructor(
         if (length !in 1..maximum.toLong()) throw VmBridgeException("invalid FFM $operation length")
         return output.asSlice(0, length).toArray(ValueLayout.JAVA_BYTE)
     }
-
-    private inline fun terminalOutput(
-        operation: String,
-        call: (MemorySegment, Long, MemorySegment) -> Int,
-    ): ByteArray =
-        Arena.ofConfined().use { callArena ->
-            val maximum = maximumOutcomeBytes()
-            val output = callArena.allocate(maximum.toLong())
-            val written = callArena.allocate(ValueLayout.JAVA_LONG)
-            requireSuccess(operation, call(output, maximum.toLong(), written))
-            copyResult(operation, output, written, maximum)
-        }
 
     private inline fun fixedOutput(
         operation: String,
