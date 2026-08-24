@@ -31,6 +31,8 @@ class NeoForgeWorldFileSystemStoresTest {
                     FakeStore()
                 },
                 flusher = { _, _, _ -> },
+                tombstoner = { _, _ -> },
+                recoverer = { _, _ -> },
                 closer = { it.closeCalls++ },
             )
 
@@ -47,6 +49,8 @@ class NeoForgeWorldFileSystemStoresTest {
             WorldFileSystemStoreRegistry(
                 opener = { FakeStore() },
                 flusher = { _, id, generation -> events += "flush:$id:$generation" },
+                tombstoner = { _, _ -> },
+                recoverer = { _, _ -> },
                 closer = { store ->
                     store.closeCalls++
                     events += "close"
@@ -77,6 +81,8 @@ class NeoForgeWorldFileSystemStoresTest {
             WorldFileSystemStoreRegistry(
                 opener = { FakeStore() },
                 flusher = { _, _, generation -> events += "flush:$generation" },
+                tombstoner = { _, _ -> },
+                recoverer = { _, _ -> },
                 closer = { it.closeCalls++ },
             )
         val store = registry.store(world)
@@ -87,6 +93,25 @@ class NeoForgeWorldFileSystemStoresTest {
 
         assertEquals(listOf("flush:10"), events)
         assertEquals(0, store.closeCalls)
+    }
+
+    @Test
+    fun `destruction tombstones and admin recovery restores the same identity`() {
+        val events = mutableListOf<String>()
+        val id = ComputerId.fromLongs(11, 12)
+        val registry =
+            WorldFileSystemStoreRegistry(
+                opener = { FakeStore() },
+                flusher = { _, _, _ -> },
+                tombstoner = { _, computerId -> events += "tombstone:$computerId" },
+                recoverer = { _, computerId -> events += "recover:$computerId" },
+                closer = { it.closeCalls++ },
+            )
+
+        registry.tombstone(world, id)
+        registry.recover(world, id)
+
+        assertEquals(listOf("tombstone:$id", "recover:$id"), events)
     }
 
     private class FakeStore {

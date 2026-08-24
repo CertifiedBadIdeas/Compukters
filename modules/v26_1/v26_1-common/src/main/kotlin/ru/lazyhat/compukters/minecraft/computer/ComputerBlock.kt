@@ -57,6 +57,18 @@ class ComputerBlock(
         terminalOpener(serverPlayer, entity)
         return InteractionResult.SUCCESS_SERVER
     }
+
+    override fun playerWillDestroy(
+        level: Level,
+        position: BlockPos,
+        blockState: BlockState,
+        player: Player,
+    ): BlockState {
+        if (!level.isClientSide) {
+            (level.getBlockEntity(position) as? ComputerBlockEntity)?.destroyFileSystem()
+        }
+        return super.playerWillDestroy(level, position, blockState, player)
+    }
 }
 
 internal fun <T : BlockEntity> computerTickerFor(

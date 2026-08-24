@@ -16,8 +16,8 @@ playground, loader-independent `ProgramRuntimeHost`, and server computer block
 form an executable vertical slice. Computers temporarily boot the packaged
 artifact compiled from the source-visible no-std `system/programs/shell.kt`;
 `boot.kt` and generic `process.run` are the next lifecycle layer. A real
-NeoForge GameTest covers registration, automatic boot, ticking, removal, and
-VM shutdown.
+NeoForge GameTests cover registration, automatic boot, ticking, removal, VM
+shutdown, and recovery of a tombstoned persistent filesystem.
 
 The active game baseline is **Minecraft 26.1.2**, **NeoForge 26.1.2.97**, and
 **JDK 25**. The production archive uses Minecraft's official names directly;
@@ -41,6 +41,13 @@ installation:
 Kotlin compiler internals remain on the trusted JVM side; immutable verified
 Compukter artifacts cross into the Rust runtime, which owns execution, quotas,
 managed memory, scheduling, snapshots, and future optimization tiers.
+
+The Rust runtime also owns each computer's filesystem. Minecraft persists only
+a stable `ComputerId`; the immutable packaged `/rom` and isolated persistent
+`/home` are mounted inside Rust. World data is rooted at
+`<world>/compukters/filesystems`, flushed on saves and shutdown, and moved to a
+recoverable tombstone when a player destroys the corresponding computer. Guest
+filesystem/std APIs are tracked separately in issue #522.
 
 See [the current architecture](docs/ARCHITECTURE.md).
 
