@@ -10,7 +10,7 @@
  */
 
 use crate::{
-    bridge::{self, BridgeError, OwnedResponse},
+    bridge::{self, BridgeError, OwnedResponse, StoreBridgeError},
     handle_table::HandleError,
 };
 
@@ -30,15 +30,26 @@ pub enum FfiStatus {
     BufferTooSmall = 10,
     Run = 11,
     Resume = 12,
+    StoreNotFound = 13,
+    StoreBusy = 14,
+    StoreFaulted = 15,
+    StoreClosed = 16,
+    StoreInvalidGeneration = 17,
+    StoreIo = 18,
 }
 
 const MAXIMUM_OUTCOME_BYTES: usize = 64 * 1024;
 const MAXIMUM_CREATE_BYTES: usize = 9;
 const MAXIMUM_INBOUND_UTF16_CODE_UNITS: usize = 4_096;
+const MAXIMUM_STORE_OPEN_BYTES: usize = 10;
+const MAXIMUM_STORE_HEALTH_BYTES: usize = 2;
+const MAXIMUM_STORE_GENERATION_BYTES: usize = 9;
+const MAXIMUM_STORE_ROOT_BYTES: usize = 32 * 1_024;
+const MAXIMUM_FILESYSTEM_LIMITS_BYTES: usize = 1 + 17 * 8;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn compukter_abi_version() -> u32 {
-    1
+    2
 }
 
 #[unsafe(no_mangle)]
@@ -49,6 +60,203 @@ pub extern "C" fn compukter_max_outcome_bytes() -> usize {
 #[unsafe(no_mangle)]
 pub extern "C" fn compukter_max_create_bytes() -> usize {
     MAXIMUM_CREATE_BYTES
+}
+
+#[unsafe(no_mangle)]
+/// Opens one world-scoped persistent filesystem store.
+///
+/// # Safety
+///
+/// Non-empty inputs and outputs must name readable or writable regions of the
+/// declared lengths. `written_out` must always name one writable `usize`.
+pub unsafe extern "C" fn compukter_store_open(
+    root_utf8: *const u8,
+    root_len: usize,
+    limits_wire: *const u8,
+    limits_len: usize,
+    output: *mut u8,
+    output_capacity: usize,
+    written_out: *mut usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if written_out.is_null()
+            || root_len > MAXIMUM_STORE_ROOT_BYTES
+            || limits_len > MAXIMUM_FILESYSTEM_LIMITS_BYTES
+            || (root_len != 0 && root_utf8.is_null())
+            || (limits_len != 0 && limits_wire.is_null())
+            || (output_capacity != 0 && output.is_null())
+        {
+            return FfiStatus::InvalidArgument;
+        }
+        if output_capacity < MAXIMUM_STORE_OPEN_BYTES {
+            // SAFETY: The validated ABI contract provides writable length output.
+            unsafe { written_out.write(MAXIMUM_STORE_OPEN_BYTES) };
+            return FfiStatus::BufferTooSmall;
+        }
+        let root_bytes = if root_len == 0 {
+            Vec::new()
+        } else {
+            // SAFETY: The validated ABI contract provides readable root bytes.
+            unsafe { core::slice::from_raw_parts(root_utf8, root_len) }.to_vec()
+        };
+        let root = match String::from_utf8(root_bytes) {
+            Ok(root) => std::path::PathBuf::from(root),
+            Err(_) => return FfiStatus::InvalidArgument,
+        };
+        let limits_bytes = if limits_len == 0 {
+            &[][..]
+        } else {
+            // SAFETY: The validated ABI contract provides readable limits bytes.
+            unsafe { core::slice::from_raw_parts(limits_wire, limits_len) }
+        };
+        let Some(limits) = crate::wire::decode_filesystem_limits(limits_bytes) else {
+            return FfiStatus::InvalidArgument;
+        };
+        let encoded = crate::wire::encode_store_open(bridge::store_open(root, limits));
+        // SAFETY: The fixed maximum was checked before the bounded encoding.
+        unsafe { core::ptr::copy_nonoverlapping(encoded.as_ptr(), output, encoded.len()) };
+        // SAFETY: The validated ABI contract provides writable length output.
+        unsafe { written_out.write(encoded.len()) };
+        FfiStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Writes the observable lifecycle health for a store.
+///
+/// # Safety
+///
+/// Non-empty output must name a writable region and `written_out` must name one
+/// writable `usize`.
+pub unsafe extern "C" fn compukter_store_health(
+    store_handle: u64,
+    output: *mut u8,
+    output_capacity: usize,
+    written_out: *mut usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if written_out.is_null() || (output_capacity != 0 && output.is_null()) {
+            return FfiStatus::InvalidArgument;
+        }
+        if output_capacity < MAXIMUM_STORE_HEALTH_BYTES {
+            // SAFETY: The validated ABI contract provides writable length output.
+            unsafe { written_out.write(MAXIMUM_STORE_HEALTH_BYTES) };
+            return FfiStatus::BufferTooSmall;
+        }
+        let health = match bridge::store_health(store_handle) {
+            Ok(health) => health,
+            Err(error) => return store_status(error),
+        };
+        let encoded = crate::wire::encode_store_health(health);
+        // SAFETY: The fixed maximum was checked before the fixed encoding.
+        unsafe { core::ptr::copy_nonoverlapping(encoded.as_ptr(), output, encoded.len()) };
+        // SAFETY: The validated ABI contract provides writable length output.
+        unsafe { written_out.write(encoded.len()) };
+        FfiStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Writes the latest durable generation for one computer identity.
+///
+/// # Safety
+///
+/// `id` must name 16 readable bytes. Non-empty output must name a writable
+/// region and `written_out` must name one writable `usize`.
+pub unsafe extern "C" fn compukter_store_durable_generation(
+    store_handle: u64,
+    id: *const u8,
+    output: *mut u8,
+    output_capacity: usize,
+    written_out: *mut usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if written_out.is_null() || id.is_null() || (output_capacity != 0 && output.is_null()) {
+            return FfiStatus::InvalidArgument;
+        }
+        if output_capacity < MAXIMUM_STORE_GENERATION_BYTES {
+            // SAFETY: The validated ABI contract provides writable length output.
+            unsafe { written_out.write(MAXIMUM_STORE_GENERATION_BYTES) };
+            return FfiStatus::BufferTooSmall;
+        }
+        // SAFETY: The C ABI requires exactly 16 readable identity bytes.
+        let id = unsafe { copy_computer_id(id) };
+        let generation = match bridge::store_durable_generation(store_handle, id) {
+            Ok(generation) => generation,
+            Err(error) => return store_status(error),
+        };
+        let encoded = crate::wire::encode_store_generation(generation);
+        // SAFETY: The fixed maximum was checked before the fixed encoding.
+        unsafe { core::ptr::copy_nonoverlapping(encoded.as_ptr(), output, encoded.len()) };
+        // SAFETY: The validated ABI contract provides writable length output.
+        unsafe { written_out.write(encoded.len()) };
+        FfiStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Flushes one admitted computer generation.
+///
+/// # Safety
+///
+/// `id` must name 16 readable bytes.
+pub unsafe extern "C" fn compukter_store_flush(
+    store_handle: u64,
+    id: *const u8,
+    generation: u64,
+) -> FfiStatus {
+    ffi_status(|| {
+        if id.is_null() {
+            return FfiStatus::InvalidArgument;
+        }
+        // SAFETY: The C ABI requires exactly 16 readable identity bytes.
+        store_status_result(bridge::store_flush(
+            store_handle,
+            unsafe { copy_computer_id(id) },
+            generation,
+        ))
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Persists a tombstone for one computer identity.
+///
+/// # Safety
+///
+/// `id` must name 16 readable bytes.
+pub unsafe extern "C" fn compukter_store_tombstone(store_handle: u64, id: *const u8) -> FfiStatus {
+    ffi_status(|| {
+        if id.is_null() {
+            return FfiStatus::InvalidArgument;
+        }
+        // SAFETY: The C ABI requires exactly 16 readable identity bytes.
+        store_status_result(bridge::store_tombstone(store_handle, unsafe {
+            copy_computer_id(id)
+        }))
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Removes a retained tombstone for one computer identity.
+///
+/// # Safety
+///
+/// `id` must name 16 readable bytes.
+pub unsafe extern "C" fn compukter_store_recover(store_handle: u64, id: *const u8) -> FfiStatus {
+    ffi_status(|| {
+        if id.is_null() {
+            return FfiStatus::InvalidArgument;
+        }
+        // SAFETY: The C ABI requires exactly 16 readable identity bytes.
+        store_status_result(bridge::store_recover(store_handle, unsafe {
+            copy_computer_id(id)
+        }))
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn compukter_store_close(store_handle: u64) -> FfiStatus {
+    ffi_status(|| store_status_result(bridge::store_close(store_handle)))
 }
 
 #[unsafe(no_mangle)]
@@ -360,6 +568,34 @@ fn bridge_status(outcome: Result<(), BridgeError>) -> FfiStatus {
         Err(BridgeError::InvalidRequestId) => FfiStatus::InvalidArgument,
         Err(BridgeError::InvalidOperation) => FfiStatus::InvalidArgument,
     }
+}
+
+fn store_status_result(outcome: Result<(), StoreBridgeError>) -> FfiStatus {
+    match outcome {
+        Ok(()) => FfiStatus::Ok,
+        Err(error) => store_status(error),
+    }
+}
+
+fn store_status(error: StoreBridgeError) -> FfiStatus {
+    match error {
+        StoreBridgeError::Handle(error) => handle_status(error),
+        StoreBridgeError::Store(error) => match error {
+            compukter_vm::StoreError::NotFound => FfiStatus::StoreNotFound,
+            compukter_vm::StoreError::Busy => FfiStatus::StoreBusy,
+            compukter_vm::StoreError::StorageFaulted => FfiStatus::StoreFaulted,
+            compukter_vm::StoreError::Closed => FfiStatus::StoreClosed,
+            compukter_vm::StoreError::InvalidGeneration => FfiStatus::StoreInvalidGeneration,
+            compukter_vm::StoreError::Io => FfiStatus::StoreIo,
+        },
+    }
+}
+
+unsafe fn copy_computer_id(id: *const u8) -> compukter_vm::ComputerId {
+    let mut bytes = [0_u8; 16];
+    // SAFETY: The caller validated the ABI's fixed 16-byte readable region.
+    unsafe { core::ptr::copy_nonoverlapping(id, bytes.as_mut_ptr(), bytes.len()) };
+    compukter_vm::ComputerId::from_bytes(bytes)
 }
 
 fn handle_status(error: HandleError) -> FfiStatus {

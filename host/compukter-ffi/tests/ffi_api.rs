@@ -15,14 +15,150 @@ mod support;
 
 use compukter_ffi::{
     compukter_abi_version, compukter_advance, compukter_close, compukter_create,
-    compukter_max_create_bytes, compukter_max_outcome_bytes, compukter_terminal_changes_since,
-    compukter_terminal_commit, compukter_terminal_full_state, compukter_terminal_key,
-    compukter_terminal_text, FfiStatus,
+    compukter_max_create_bytes, compukter_max_outcome_bytes, compukter_store_close,
+    compukter_store_durable_generation, compukter_store_flush, compukter_store_health,
+    compukter_store_open, compukter_store_recover, compukter_store_tombstone,
+    compukter_terminal_changes_since, compukter_terminal_commit, compukter_terminal_full_state,
+    compukter_terminal_key, compukter_terminal_text, FfiStatus,
 };
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[test]
 fn c_abi_publishes_its_exact_version() {
-    assert_eq!(1, compukter_abi_version());
+    assert_eq!(2, compukter_abi_version());
+}
+
+#[test]
+fn store_open_validates_inputs_before_publishing_a_versioned_handle() {
+    let root = TestRoot::new();
+    let root_bytes = root.path().as_os_str().as_encoded_bytes();
+    let mut output = [0_u8; 10];
+    let mut written = 0_usize;
+
+    assert_eq!(FfiStatus::BufferTooSmall, unsafe {
+        compukter_store_open(
+            root_bytes.as_ptr(),
+            root_bytes.len(),
+            core::ptr::null(),
+            0,
+            output.as_mut_ptr(),
+            1,
+            &mut written,
+        )
+    });
+    assert_eq!(10, written);
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_store_open(
+            root_bytes.as_ptr(),
+            root_bytes.len(),
+            core::ptr::null(),
+            0,
+            output.as_mut_ptr(),
+            output.len(),
+            &mut written,
+        )
+    });
+    assert_eq!(10, written);
+    assert_eq!(&[1, 0], &output[..2]);
+    let handle = u64::from_le_bytes(output[2..10].try_into().unwrap());
+    assert_ne!(0, handle);
+    assert_eq!(FfiStatus::Ok, compukter_store_close(handle));
+
+    let invalid_utf8 = [0xff];
+    assert_eq!(FfiStatus::InvalidArgument, unsafe {
+        compukter_store_open(
+            invalid_utf8.as_ptr(),
+            invalid_utf8.len(),
+            core::ptr::null(),
+            0,
+            output.as_mut_ptr(),
+            output.len(),
+            &mut written,
+        )
+    });
+
+    let relative = b"relative";
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_store_open(
+            relative.as_ptr(),
+            relative.len(),
+            core::ptr::null(),
+            0,
+            output.as_mut_ptr(),
+            output.len(),
+            &mut written,
+        )
+    });
+    assert_eq!(&[1, 1], &output[..written]);
+}
+
+#[test]
+fn store_lifecycle_is_typed_bounded_and_uses_exact_computer_id_bytes() {
+    let root = TestRoot::new();
+    let handle = open_store(root.path());
+    let id = [
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+        0x0f,
+    ];
+    let mut output = [0_u8; 9];
+    let mut written = 0_usize;
+
+    assert_eq!(FfiStatus::BufferTooSmall, unsafe {
+        compukter_store_health(handle, output.as_mut_ptr(), 1, &mut written)
+    });
+    assert_eq!(2, written);
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_store_health(handle, output.as_mut_ptr(), output.len(), &mut written)
+    });
+    assert_eq!(&[1, 0], &output[..written]);
+
+    assert_eq!(FfiStatus::BufferTooSmall, unsafe {
+        compukter_store_durable_generation(
+            handle,
+            id.as_ptr(),
+            output.as_mut_ptr(),
+            1,
+            &mut written,
+        )
+    });
+    assert_eq!(9, written);
+    assert_eq!(FfiStatus::StoreNotFound, unsafe {
+        compukter_store_durable_generation(
+            handle,
+            id.as_ptr(),
+            output.as_mut_ptr(),
+            output.len(),
+            &mut written,
+        )
+    });
+    assert_eq!(FfiStatus::StoreInvalidGeneration, unsafe {
+        compukter_store_flush(handle, id.as_ptr(), 1)
+    });
+
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_store_tombstone(handle, id.as_ptr())
+    });
+    assert!(root
+        .path()
+        .join("computers/000102030405060708090a0b0c0d0e0f/tombstone")
+        .is_file());
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_store_recover(handle, id.as_ptr())
+    });
+    assert!(!root
+        .path()
+        .join("computers/000102030405060708090a0b0c0d0e0f/tombstone")
+        .exists());
+
+    assert_eq!(FfiStatus::InvalidHandle, unsafe {
+        compukter_store_health(0, output.as_mut_ptr(), output.len(), &mut written)
+    });
+    assert_eq!(FfiStatus::InvalidHandle, unsafe {
+        compukter_store_health(u64::MAX, output.as_mut_ptr(), output.len(), &mut written)
+    });
+    assert_eq!(FfiStatus::Ok, compukter_store_close(handle));
+    assert_eq!(FfiStatus::StaleHandle, compukter_store_close(handle));
 }
 
 #[test]
@@ -183,4 +319,52 @@ fn terminal_changes_since(handle: u64, revision: u64) -> Vec<u8> {
 
 fn terminal_artifact() -> Vec<u8> {
     support::executable_minimal_vector()
+}
+
+fn open_store(root: &Path) -> u64 {
+    let root_bytes = root.as_os_str().as_encoded_bytes();
+    let mut output = [0_u8; 10];
+    let mut written = 0_usize;
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_store_open(
+            root_bytes.as_ptr(),
+            root_bytes.len(),
+            core::ptr::null(),
+            0,
+            output.as_mut_ptr(),
+            output.len(),
+            &mut written,
+        )
+    });
+    assert_eq!(&[1, 0], &output[..2]);
+    u64::from_le_bytes(output[2..10].try_into().unwrap())
+}
+
+struct TestRoot(PathBuf);
+
+impl TestRoot {
+    fn new() -> Self {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        let path = std::env::temp_dir()
+            .join("compukters-ffi-tests")
+            .join(format!(
+                "{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+        std::fs::create_dir_all(&path).unwrap();
+        Self(path.canonicalize().unwrap())
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TestRoot {
+    fn drop(&mut self) {
+        let expected = std::env::temp_dir().join("compukters-ffi-tests");
+        assert!(self.0.starts_with(expected));
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }

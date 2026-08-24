@@ -25,6 +25,13 @@ internal class FfmBridge private constructor(
     private val abiVersionHandle: MethodHandle,
     private val maximumCreateBytesHandle: MethodHandle,
     private val maximumOutcomeBytesHandle: MethodHandle,
+    private val storeOpenHandle: MethodHandle,
+    private val storeHealthHandle: MethodHandle,
+    private val storeDurableGenerationHandle: MethodHandle,
+    private val storeFlushHandle: MethodHandle,
+    private val storeTombstoneHandle: MethodHandle,
+    private val storeRecoverHandle: MethodHandle,
+    private val storeCloseHandle: MethodHandle,
     private val createHandle: MethodHandle,
     private val advanceHandle: MethodHandle,
     private val resumeUnitHandle: MethodHandle,
@@ -39,6 +46,70 @@ internal class FfmBridge private constructor(
 ) : LowLevelVmBridge,
     AutoCloseable {
     fun abiVersion(): Int = abiVersionHandle.invokeExact() as Int
+
+    override fun storeOpen(
+        rootUtf8: ByteArray,
+        limitsWire: ByteArray,
+    ): ByteArray =
+        fixedOutput("filesystem store open", MAXIMUM_STORE_OPEN_BYTES) { callArena, output, written ->
+            storeOpenHandle.invokeExact(
+                callArena.nativeBytes(rootUtf8),
+                rootUtf8.size.toLong(),
+                callArena.nativeBytes(limitsWire),
+                limitsWire.size.toLong(),
+                output,
+                MAXIMUM_STORE_OPEN_BYTES.toLong(),
+                written,
+            ) as Int
+        }
+
+    override fun storeHealth(handle: Long): ByteArray =
+        fixedOutput("filesystem store health", MAXIMUM_STORE_HEALTH_BYTES) { _, output, written ->
+            storeHealthHandle.invokeExact(handle, output, MAXIMUM_STORE_HEALTH_BYTES.toLong(), written) as Int
+        }
+
+    override fun storeDurableGeneration(
+        handle: Long,
+        id: ByteArray,
+    ): ByteArray {
+        requireComputerId(id)
+        return fixedOutput("filesystem durable generation", MAXIMUM_STORE_GENERATION_BYTES) { callArena, output, written ->
+            storeDurableGenerationHandle.invokeExact(
+                handle,
+                callArena.nativeBytes(id),
+                output,
+                MAXIMUM_STORE_GENERATION_BYTES.toLong(),
+                written,
+            ) as Int
+        }
+    }
+
+    override fun storeFlush(
+        handle: Long,
+        id: ByteArray,
+        generation: Long,
+    ) {
+        requireComputerId(id)
+        Arena.ofConfined().use { callArena ->
+            requireSuccess(
+                "filesystem flush",
+                storeFlushHandle.invokeExact(handle, callArena.nativeBytes(id), generation) as Int,
+            )
+        }
+    }
+
+    override fun storeTombstone(
+        handle: Long,
+        id: ByteArray,
+    ) = storeIdOperation("filesystem tombstone", storeTombstoneHandle, handle, id)
+
+    override fun storeRecover(
+        handle: Long,
+        id: ByteArray,
+    ) = storeIdOperation("filesystem recovery", storeRecoverHandle, handle, id)
+
+    override fun storeClose(handle: Long) =
+        requireSuccess("filesystem store close", storeCloseHandle.invokeExact(handle) as Int)
 
     override fun create(artifact: ByteArray): ByteArray =
         Arena.ofConfined().use { callArena ->
@@ -192,6 +263,34 @@ internal class FfmBridge private constructor(
             copyResult(operation, output, written, maximum)
         }
 
+    private inline fun fixedOutput(
+        operation: String,
+        maximum: Int,
+        call: (Arena, MemorySegment, MemorySegment) -> Int,
+    ): ByteArray =
+        Arena.ofConfined().use { callArena ->
+            val output = callArena.allocate(maximum.toLong())
+            val written = callArena.allocate(ValueLayout.JAVA_LONG)
+            requireSuccess(operation, call(callArena, output, written))
+            copyResult(operation, output, written, maximum)
+        }
+
+    private fun storeIdOperation(
+        operation: String,
+        method: MethodHandle,
+        handle: Long,
+        id: ByteArray,
+    ) {
+        requireComputerId(id)
+        Arena.ofConfined().use { callArena ->
+            requireSuccess(operation, method.invokeExact(handle, callArena.nativeBytes(id)) as Int)
+        }
+    }
+
+    private fun requireComputerId(id: ByteArray) {
+        require(id.size == 16) { "computer identity must contain exactly 16 bytes" }
+    }
+
     private fun requireSuccess(
         operation: String,
         status: Int,
@@ -229,6 +328,9 @@ internal class FfmBridge private constructor(
         private const val STATUS_OK = 0
         private const val MAXIMUM_CREATE_BYTES = 1024
         private const val MAXIMUM_OUTCOME_BYTES = 1024 * 1024
+        private const val MAXIMUM_STORE_OPEN_BYTES = 10
+        private const val MAXIMUM_STORE_HEALTH_BYTES = 2
+        private const val MAXIMUM_STORE_GENERATION_BYTES = 9
 
         fun open(library: Path): FfmBridge {
             val arena = Arena.ofShared()
@@ -248,6 +350,68 @@ internal class FfmBridge private constructor(
                         downcall("compukter_max_create_bytes", FunctionDescriptor.of(ValueLayout.JAVA_LONG)),
                     maximumOutcomeBytesHandle =
                         downcall("compukter_max_outcome_bytes", FunctionDescriptor.of(ValueLayout.JAVA_LONG)),
+                    storeOpenHandle =
+                        downcall(
+                            "compukter_store_open",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    storeHealthHandle =
+                        downcall(
+                            "compukter_store_health",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    storeDurableGenerationHandle =
+                        downcall(
+                            "compukter_store_durable_generation",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    storeFlushHandle =
+                        downcall(
+                            "compukter_store_flush",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                            ),
+                        ),
+                    storeTombstoneHandle =
+                        downcall(
+                            "compukter_store_tombstone",
+                            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS),
+                        ),
+                    storeRecoverHandle =
+                        downcall(
+                            "compukter_store_recover",
+                            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS),
+                        ),
+                    storeCloseHandle =
+                        downcall(
+                            "compukter_store_close",
+                            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG),
+                        ),
                     createHandle =
                         downcall(
                             "compukter_create",
@@ -352,7 +516,7 @@ internal class FfmBridge private constructor(
                             ),
                         ),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 1) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 2) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()
