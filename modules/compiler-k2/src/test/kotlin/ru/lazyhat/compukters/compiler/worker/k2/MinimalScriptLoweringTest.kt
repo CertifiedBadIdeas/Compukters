@@ -243,6 +243,28 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `unbounded terminal loop compiles without executing guest code`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        import compukter.terminal.Terminal
+
+                        fun main() {
+                            while (true) {
+                                Terminal.write("yes")
+                            }
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+        }
+
+    @Test
     fun `filesystem text facade lowers through exact trusted signatures`() =
         withAdapter { adapter ->
             val result =

@@ -59,6 +59,18 @@ class ComputerBlockEntityTest {
     }
 
     @Test
+    fun `server tick keeps advancing while compiler completion is pending`() {
+        val fixture = fixture()
+        fixture.entity.serverTick()
+        val carrier = fixture.carriers.single()
+        carrier.publishState(ProgramComputerState.WaitingForCompiler)
+
+        fixture.entity.serverTick()
+
+        assertEquals(2, carrier.serverTickCalls)
+    }
+
+    @Test
     fun `terminal open boots without advancing an extra tick`() {
         val fixture = fixture()
 
