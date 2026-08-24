@@ -47,6 +47,24 @@ sealed interface Instruction {
         val right: RegisterId,
     ) : Instruction
 
+    data class MultiplyI32(
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    data class DivideI32(
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    data class RemainderI32(
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
     data class Equal(
         val type: ScalarValueType,
         val destination: RegisterId,

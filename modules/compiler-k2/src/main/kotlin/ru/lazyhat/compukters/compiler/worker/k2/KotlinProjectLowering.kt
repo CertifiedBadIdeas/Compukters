@@ -631,6 +631,9 @@ private class FunctionCompiler(
             when (name) {
                 "plus" -> return result(ValueType.I32) { Instruction.AddI32(it, arguments[0], arguments[1]) }
                 "minus" -> return result(ValueType.I32) { Instruction.SubtractI32(it, arguments[0], arguments[1]) }
+                "times" -> return result(ValueType.I32) { Instruction.MultiplyI32(it, arguments[0], arguments[1]) }
+                "div" -> return result(ValueType.I32) { Instruction.DivideI32(it, arguments[0], arguments[1]) }
+                "rem" -> return result(ValueType.I32) { Instruction.RemainderI32(it, arguments[0], arguments[1]) }
             }
         }
         if (arguments.size == 1 && argumentExpressions[0].type == booleanType && name == "not") {

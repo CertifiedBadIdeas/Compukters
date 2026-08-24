@@ -191,6 +191,12 @@ class InstructionEncoderTest {
                     byteArrayOf(0x10, 1, 10, 0, 1, 0, 2, 0, 3, 0),
                 Instruction.SubtractI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
                     byteArrayOf(0x11, 1, 10, 0, 1, 0, 2, 0, 3, 0),
+                Instruction.MultiplyI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                    byteArrayOf(0x12, 1, 10, 0, 1, 0, 2, 0, 3, 0),
+                Instruction.DivideI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                    byteArrayOf(0x13, 1, 10, 0, 1, 0, 2, 0, 3, 0),
+                Instruction.RemainderI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                    byteArrayOf(0x14, 1, 10, 0, 1, 0, 2, 0, 3, 0),
                 Instruction.Equal(
                     ScalarValueType.CHAR,
                     RegisterId.of(1u),

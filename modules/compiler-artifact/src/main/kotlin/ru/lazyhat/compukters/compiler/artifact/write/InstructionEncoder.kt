@@ -68,6 +68,24 @@ internal fun encodeInstruction(
             operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
         }
 
+        is Instruction.MultiplyI32 -> {
+            opcode = 0x12u
+            form = 1u
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
+        }
+
+        is Instruction.DivideI32 -> {
+            opcode = 0x13u
+            form = 1u
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
+        }
+
+        is Instruction.RemainderI32 -> {
+            opcode = 0x14u
+            form = 1u
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
+        }
+
         is Instruction.Equal -> {
             opcode = 0x20u
             form = instruction.type.artifactForm
@@ -289,6 +307,9 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
         is Instruction.Null,
         is Instruction.AddI32,
         is Instruction.SubtractI32,
+        is Instruction.MultiplyI32,
+        is Instruction.DivideI32,
+        is Instruction.RemainderI32,
         is Instruction.Equal,
         is Instruction.Less,
         is Instruction.LessOrEqual,
