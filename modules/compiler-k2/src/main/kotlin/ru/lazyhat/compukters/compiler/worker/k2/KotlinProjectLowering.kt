@@ -244,6 +244,11 @@ internal object KotlinProjectLowering {
                 functions = loweredFunctions,
                 blocks = blocks,
             )
+        val maximumCallDepth = 16u
+        val maximumFrameBytes =
+            loweredFunctions.maxOfOrNull { function -> function.registers.size.toULong() * 16uL + 32uL } ?: 32uL
+        val requiredStackBytes = maximumFrameBytes * maximumCallDepth.toULong()
+        require(requiredStackBytes <= UInt.MAX_VALUE.toULong()) { "required frame storage exceeds u32" }
         return Artifact(
             semanticFeatures =
                 setOfNotNull(
@@ -254,9 +259,9 @@ internal object KotlinProjectLowering {
             manifest =
                 Manifest(
                     requiredHeapBytes = 64u * 1024u,
-                    requiredStackBytes = 64u * 1024u,
+                    requiredStackBytes = maxOf(64u * 1024u, requiredStackBytes.toUInt()),
                     maximumCoroutines = 1u,
-                    maximumCallDepth = 16u,
+                    maximumCallDepth = maximumCallDepth,
                     maximumHostRequests = 64u,
                     maximumEvents = 0u,
                     maximumBlockCost = 64u,
