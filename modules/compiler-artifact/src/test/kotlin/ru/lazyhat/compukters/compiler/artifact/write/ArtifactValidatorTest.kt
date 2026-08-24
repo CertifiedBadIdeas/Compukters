@@ -459,6 +459,81 @@ class ArtifactValidatorTest {
     }
 
     @Test
+    fun `array length and char array materialization validate exact register types`() {
+        val valid =
+            listOf(
+                charArrayArtifact(Instruction.ArrayLength(RegisterId.of(0u), RegisterId.of(4u))),
+                charArrayArtifact(
+                    Instruction.StringFromCharArray(
+                        RegisterId.of(3u),
+                        RegisterId.of(4u),
+                        RegisterId.of(0u),
+                        RegisterId.of(0u),
+                    ),
+                ),
+            )
+        valid.forEach { artifact ->
+            assertEquals(emptyList(), validateArtifact(artifact, ArtifactWriteLimits()))
+        }
+
+        val wrongArray =
+            executableArtifact(
+                Instruction.StringFromCharArray(
+                    RegisterId.of(3u),
+                    RegisterId.of(1u),
+                    RegisterId.of(0u),
+                    RegisterId.of(0u),
+                ),
+            )
+        assertTrue(validateArtifact(wrongArray, ArtifactWriteLimits()).any { it.detail.contains("array type") })
+    }
+
+    @Test
+    fun `char array materialization reads every source before publishing its destination`() {
+        val instruction =
+            Instruction.StringFromCharArray(
+                RegisterId.of(3u),
+                RegisterId.of(4u),
+                RegisterId.of(0u),
+                RegisterId.of(0u),
+            )
+        val uninitialized = charArrayArtifact(instruction, initializeArray = false)
+
+        assertTrue(
+            validateArtifact(uninitialized, ArtifactWriteLimits()).any { it.detail.contains("uninitialized register") },
+        )
+    }
+
+    @Test
+    fun `char array materialization obeys the pinned allocation block placement rule`() {
+        val artifact =
+            charArrayArtifact(
+                Instruction.StringFromCharArray(
+                    RegisterId.of(3u),
+                    RegisterId.of(4u),
+                    RegisterId.of(0u),
+                    RegisterId.of(0u),
+                ),
+            )
+        val module = artifact.modules[0]
+        val invalid =
+            artifact.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            blocks =
+                                module.blocks.toMutableList().also {
+                                    it[0] = it[0].copy(instructions = listOf(Instruction.Null(RegisterId.of(3u))) + it[0].instructions)
+                                },
+                        ),
+                        artifact.modules[1],
+                    ),
+            )
+
+        assertTrue(validateArtifact(invalid, ArtifactWriteLimits()).any { it.detail.contains("allocation") })
+    }
+
+    @Test
     fun `direct calls reject inconsistent target function metadata`() {
         val call =
             Instruction.Call(
@@ -1010,6 +1085,36 @@ private fun executableArtifact(
             listOf(
                 artifact.modules[0].copy(
                     imports = artifact.modules[0].imports.map { it.copy(targetModuleHash = targetHash) },
+                ),
+                artifact.modules[1],
+            ),
+    )
+}
+
+private fun charArrayArtifact(
+    instruction: Instruction,
+    initializeArray: Boolean = true,
+): Artifact {
+    val artifact = executableArtifact(instruction)
+    val module = artifact.modules[0]
+    val arrayType = ValueType.Ref(nullable = false, TypeRef.Local(TypeId.of(2u)))
+    val signature = module.types[0] as NominalType.Function
+    val entry = module.functions[0]
+    val parameters = if (initializeArray) signature.parameters + arrayType else signature.parameters
+    val parameterCount = if (initializeArray) entry.parameterCount + 1u else entry.parameterCount
+    return artifact.copy(
+        modules =
+            listOf(
+                module.copy(
+                    types =
+                        module.types.toMutableList().also {
+                            it[0] = signature.copy(parameters = parameters)
+                            it += NominalType.Array(StringId.of(0u), ValueType.Char)
+                        },
+                    functions =
+                        module.functions.toMutableList().also {
+                            it[0] = entry.copy(registers = entry.registers + arrayType, parameterCount = parameterCount)
+                        },
                 ),
                 artifact.modules[1],
             ),

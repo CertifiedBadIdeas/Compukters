@@ -218,24 +218,52 @@ class InstructionEncoderTest {
     fun `string primitive instructions encode canonical registers`() {
         val cases =
             listOf(
-                Instruction.StringLength(RegisterId.of(1u), RegisterId.of(2u)) to
+                Triple(
+                    Instruction.ArrayLength(RegisterId.of(1u), RegisterId.of(2u)),
+                    byteArrayOf(0x32, 0, 8, 0, 1, 0, 2, 0),
+                    2u,
+                ),
+                Triple(
+                    Instruction.StringLength(RegisterId.of(1u), RegisterId.of(2u)),
                     byteArrayOf(0x60, 0, 8, 0, 1, 0, 2, 0),
-                Instruction.StringGet(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                    1u,
+                ),
+                Triple(
+                    Instruction.StringGet(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)),
                     byteArrayOf(0x61, 0, 10, 0, 1, 0, 2, 0, 3, 0),
-                Instruction.StringEquals(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                    1u,
+                ),
+                Triple(
+                    Instruction.StringEquals(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)),
                     byteArrayOf(0x62, 0, 10, 0, 1, 0, 2, 0, 3, 0),
-                Instruction.StringSubstring(
-                    RegisterId.of(1u),
-                    RegisterId.of(2u),
-                    RegisterId.of(3u),
-                    RegisterId.of(4u),
-                ) to byteArrayOf(0x66, 0, 12, 0, 1, 0, 2, 0, 3, 0, 4, 0),
+                    1u,
+                ),
+                Triple(
+                    Instruction.StringSubstring(
+                        RegisterId.of(1u),
+                        RegisterId.of(2u),
+                        RegisterId.of(3u),
+                        RegisterId.of(4u),
+                    ),
+                    byteArrayOf(0x66, 0, 12, 0, 1, 0, 2, 0, 3, 0, 4, 0),
+                    1u,
+                ),
+                Triple(
+                    Instruction.StringFromCharArray(
+                        RegisterId.of(1u),
+                        RegisterId.of(2u),
+                        RegisterId.of(3u),
+                        RegisterId.of(4u),
+                    ),
+                    byteArrayOf(0x67, 0, 12, 0, 1, 0, 2, 0, 3, 0, 4, 0),
+                    1u,
+                ),
             )
 
-        cases.forEach { (instruction, expected) ->
+        cases.forEach { (instruction, expected, fixedCost) ->
             val encoded = encodeInstruction(instruction, 64)
             assertContentEquals(expected, encoded.bytes)
-            assertEquals(1u, encoded.fixedCost)
+            assertEquals(fixedCost, encoded.fixedCost)
         }
     }
 
