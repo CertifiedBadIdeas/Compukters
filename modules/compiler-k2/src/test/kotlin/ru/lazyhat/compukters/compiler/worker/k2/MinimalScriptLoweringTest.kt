@@ -166,6 +166,59 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `primitive char array lowers deterministically for exact utf16 materialization`() =
+        withAdapter { adapter ->
+            val request =
+                request(
+                    "project/main.kt" to
+                        """
+                        import compukter.terminal.Terminal
+
+                        fun main() {
+                            val value = CharArray(5)
+                            value[0] = 'A'
+                            value[1] = '\uD83D'
+                            value[2] = '\uDE00'
+                            value[3] = 'Z'
+                            value[4] = '!'
+                            val last = value[value.size - 1]
+                            if (last == '!') Terminal.write(value.concatToString(0, 4))
+                        }
+                        """.trimIndent(),
+                )
+            val first = adapter.compile(request)
+            val second = adapter.compile(request)
+
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukter.vm.kotlinSubsetArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
+    fun `same-named char array helper remains an ordinary project call`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        fun CharArray.concatToString(startIndex: Int, endIndex: Int): String = "guest"
+
+                        fun main() {
+                            val value = CharArray(1)
+                            value.concatToString(0, 1)
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+        }
+
+    @Test
     fun `shell language subset lowers control flow scalars strings and raw terminal calls`() =
         withAdapter { adapter ->
             val result =

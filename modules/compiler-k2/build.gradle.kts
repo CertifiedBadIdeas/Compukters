@@ -219,7 +219,7 @@ val generateKotlinSubsetConformanceArtifact = tasks.register<Test>("generateKotl
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
-    filter.includeTestsMatching("*multi-file terminal program lowers through trusted symbols*")
+    filter.includeTestsMatching("*primitive char array lowers deterministically for exact utf16 materialization*")
     inputs.file(workerJar)
     outputs.file(kotlinSubsetConformanceArtifact)
     doFirst {

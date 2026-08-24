@@ -203,6 +203,7 @@ val testKotlinSubsetVmConformance =
         commandLine("cargo", "test", "--locked", "--offline", "--manifest-path", harness.absolutePath)
         environment("CARGO_TARGET_DIR", target.absolutePath)
         environment("COMPUKTER_KOTLIN_EXECUTABLE_ARTIFACT", artifact.get().asFile.absolutePath)
+        environment("COMPUKTER_KOTLIN_SUBSET_ARTIFACT", artifact.get().asFile.absolutePath)
     }
 
 val buildScriptsTest = gradle.includedBuild("build-scripts").task(":test")
