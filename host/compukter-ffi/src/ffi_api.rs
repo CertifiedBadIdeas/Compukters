@@ -372,6 +372,59 @@ pub unsafe extern "C" fn compukter_create_in_store(
 }
 
 #[unsafe(no_mangle)]
+/// Creates a persistent VM session from executable `/rom/boot`.
+///
+/// # Safety
+///
+/// `id` must name 16 readable bytes. Non-empty ROM and output inputs must name
+/// readable or writable regions of their declared lengths. `written_out` must
+/// always name one writable `usize`.
+pub unsafe extern "C" fn compukter_create_boot_in_store(
+    store_handle: u64,
+    id: *const u8,
+    rom: *const u8,
+    rom_len: usize,
+    output: *mut u8,
+    output_capacity: usize,
+    written_out: *mut usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if written_out.is_null()
+            || id.is_null()
+            || rom_len > MAXIMUM_ROM_BYTES
+            || (rom_len != 0 && rom.is_null())
+            || (output_capacity != 0 && output.is_null())
+        {
+            return FfiStatus::InvalidArgument;
+        }
+        if output_capacity < MAXIMUM_CREATE_BYTES {
+            // SAFETY: The validated ABI contract provides writable length output.
+            unsafe { written_out.write(MAXIMUM_CREATE_BYTES) };
+            return FfiStatus::BufferTooSmall;
+        }
+        // SAFETY: The C ABI requires exactly 16 readable identity bytes.
+        let id = unsafe { copy_computer_id(id) };
+        let rom = if rom_len == 0 {
+            Vec::new()
+        } else {
+            // SAFETY: The validated ABI contract provides readable ROM bytes.
+            unsafe { core::slice::from_raw_parts(rom, rom_len) }.to_vec()
+        };
+        let encoded = match bridge::create_boot_in_store(store_handle, id, rom) {
+            Ok(handle) => crate::wire::encode_create(Ok(handle)),
+            Err(CreateInStoreError::Create(error)) => crate::wire::encode_create(Err(error)),
+            Err(CreateInStoreError::Rom) => return FfiStatus::Admission,
+            Err(CreateInStoreError::Store(error)) => return store_status(error),
+        };
+        // SAFETY: The fixed maximum was checked before the bounded encoding.
+        unsafe { core::ptr::copy_nonoverlapping(encoded.as_ptr(), output, encoded.len()) };
+        // SAFETY: The validated ABI contract provides writable length output.
+        unsafe { written_out.write(encoded.len()) };
+        FfiStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn compukter_close(handle: u64) -> FfiStatus {
     ffi_status(|| match bridge::close(handle) {
         Ok(()) => FfiStatus::Ok,

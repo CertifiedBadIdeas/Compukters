@@ -111,6 +111,16 @@ class VmSession private constructor(
             return VmSession(handle, bridge)
         }
 
+        fun bootInStore(
+            store: WorldFileSystemStore,
+            id: ComputerId,
+            romImage: ByteArray,
+        ): VmSession {
+            val (bridge, result) = store.createBootMachine(id, romImage.copyOf())
+            val handle = decodeNative { WireDecoder(result).createdHandle() }
+            return VmSession(handle, bridge)
+        }
+
         internal fun open(
             artifact: ByteArray,
             bridge: LowLevelVmBridge,
@@ -162,6 +172,7 @@ private class WireDecoder(
             2 -> throw VmAdmissionException(u16())
             3 -> throw VmStartException(u16())
             4 -> throw VmBridgeException("native VM handle allocation failed with code ${u8()}")
+            5 -> throw VmBootException(u8())
             else -> invalid()
         }.also { end() }
 

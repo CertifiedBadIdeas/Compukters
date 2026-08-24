@@ -5,10 +5,10 @@ use compukter_vm::{
     verify_artifact, AdmissionError, ArtifactLimits, ComputerAdvanceOutcome, ComputerError,
     ComputerId, ComputerMachine, ComputerStartError, ComputerValue, ExecutionProfile,
     FileCapability, FileRights, FileSystemLimits, GuestTrap, HostFailure, HostResponse,
-    HostValueInput, ManagedAllocationFailure, QuotaExhaustion, ResumeError, RomImage, RunError,
-    StoreError, StoreHealth, StoreOpenError, TerminalInputError, TerminalKey, TerminalKeyAction,
-    TerminalKeyEvent, TerminalModifiers, TerminalSnapshot, TerminalUpdate, VirtualPath, VmFault,
-    WorldFileSystemStore,
+    HostValueInput, ManagedAllocationFailure, ProcessLimits, ProcessResult, QuotaExhaustion,
+    ResumeError, RomImage, RunError, StoreError, StoreHealth, StoreOpenError, TerminalInputError,
+    TerminalKey, TerminalKeyAction, TerminalKeyEvent, TerminalModifiers, TerminalSnapshot,
+    TerminalUpdate, VirtualPath, VmFault, WorldFileSystemStore,
 };
 
 use crate::handle_table::{HandleError, HandleTable};
@@ -21,6 +21,7 @@ pub(crate) enum CreateError {
     Verification,
     Admission(AdmissionError),
     Run(RunError),
+    Process(ProcessResult),
     Handle(HandleError),
 }
 
@@ -101,6 +102,7 @@ pub(crate) fn create(artifact_bytes: Vec<u8>) -> Result<u64, CreateError> {
         ComputerMachine::start(artifact, profile(), &[], &[]).map_err(|error| match error {
             ComputerStartError::Admission(error) => CreateError::Admission(error),
             ComputerStartError::Start(error) => CreateError::Run(error),
+            ComputerStartError::Process(error) => CreateError::Process(error),
         })?;
     sessions().insert(computer).map_err(CreateError::Handle)
 }
@@ -139,6 +141,47 @@ pub(crate) fn create_in_store(
                 CreateInStoreError::Create(match error {
                     ComputerStartError::Admission(error) => CreateError::Admission(error),
                     ComputerStartError::Start(error) => CreateError::Run(error),
+                    ComputerStartError::Process(error) => CreateError::Process(error),
+                })
+            })
+        })
+        .map_err(|error| CreateInStoreError::Store(StoreBridgeError::Handle(error)))??;
+    sessions()
+        .insert(computer)
+        .map_err(|error| CreateInStoreError::Create(CreateError::Handle(error)))
+}
+
+pub(crate) fn create_boot_in_store(
+    store_handle: u64,
+    id: ComputerId,
+    rom_bytes: Vec<u8>,
+) -> Result<u64, CreateInStoreError> {
+    let computer = stores()
+        .with(store_handle, |store| {
+            let limits = *store.limits();
+            let rom = RomImage::admit(Arc::from(rom_bytes), &limits)
+                .map(Arc::new)
+                .map_err(|_| CreateInStoreError::Rom)?;
+            let filesystem = store
+                .open_computer(id, rom)
+                .map_err(|error| CreateInStoreError::Store(StoreBridgeError::Store(error)))?;
+            let initial_capability = FileCapability::new(
+                VirtualPath::parse_utf8("/", &limits)
+                    .expect("fixed boot filesystem capability path"),
+                FileRights::OWNER,
+            );
+            ComputerMachine::boot_in_filesystem(
+                profile(),
+                ProcessLimits::default(),
+                &[],
+                filesystem,
+                initial_capability,
+            )
+            .map_err(|error| {
+                CreateInStoreError::Create(match error {
+                    ComputerStartError::Admission(error) => CreateError::Admission(error),
+                    ComputerStartError::Start(error) => CreateError::Run(error),
+                    ComputerStartError::Process(error) => CreateError::Process(error),
                 })
             })
         })
@@ -367,6 +410,7 @@ fn copy_error(error: ComputerError) -> BridgeError {
         ComputerError::InvalidRequestId => BridgeError::InvalidRequestId,
         ComputerError::InvalidTerminalRequest
         | ComputerError::InvalidFileSystemRequest
+        | ComputerError::InvalidProcessRequest
         | ComputerError::ActiveTerminalEvent
         | ComputerError::NoActiveTerminalEvent
         | ComputerError::WrongTerminalEventKind => BridgeError::InvalidOperation,

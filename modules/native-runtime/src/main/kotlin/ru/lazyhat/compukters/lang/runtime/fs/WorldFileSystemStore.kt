@@ -50,6 +50,11 @@ class WorldFileSystemStore private constructor(
         artifact: ByteArray,
     ): Pair<LowLevelVmBridge, ByteArray> = bridge to bridge.createInStore(requireHandle(), id.toByteArray(), romImage, artifact)
 
+    internal fun createBootMachine(
+        id: ComputerId,
+        romImage: ByteArray,
+    ): Pair<LowLevelVmBridge, ByteArray> = bridge to bridge.createBootInStore(requireHandle(), id.toByteArray(), romImage)
+
     override fun close() {
         val closing = handle.getAndSet(CLOSED)
         if (closing == CLOSED) return

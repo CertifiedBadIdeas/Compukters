@@ -146,6 +146,10 @@ class VmStartException(
     val code: Int,
 ) : IllegalStateException("native VM start failed with code $code")
 
+class VmBootException(
+    val code: Int,
+) : IllegalStateException("native VM boot failed with process result $code")
+
 class VmBridgeException(
     message: String,
     cause: Throwable? = null,
