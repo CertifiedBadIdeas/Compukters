@@ -254,6 +254,12 @@ internal fun validateArtifact(
 
             is Instruction.SubtractI32 -> listOf(left, right)
 
+            is Instruction.MultiplyI32 -> listOf(left, right)
+
+            is Instruction.DivideI32 -> listOf(left, right)
+
+            is Instruction.RemainderI32 -> listOf(left, right)
+
             is Instruction.Equal -> listOf(left, right)
 
             is Instruction.Less -> listOf(left, right)
@@ -312,6 +318,12 @@ internal fun validateArtifact(
             is Instruction.AddI32 -> listOf(destination)
 
             is Instruction.SubtractI32 -> listOf(destination)
+
+            is Instruction.MultiplyI32 -> listOf(destination)
+
+            is Instruction.DivideI32 -> listOf(destination)
+
+            is Instruction.RemainderI32 -> listOf(destination)
 
             is Instruction.Equal -> listOf(destination)
 
@@ -817,6 +829,41 @@ internal fun validateArtifact(
                                     add(ArtifactWriteErrorCode.INVALID_RANGE, "I32 subtract register is not I32", location)
                                 }
                             }
+                        }
+
+                        is Instruction.MultiplyI32,
+                        is Instruction.DivideI32,
+                        is Instruction.RemainderI32,
+                        -> {
+                            val name =
+                                when (instruction) {
+                                    is Instruction.MultiplyI32 -> "multiply"
+                                    is Instruction.DivideI32 -> "divide"
+                                    is Instruction.RemainderI32 -> "remainder"
+                                }
+                            val registers =
+                                when (instruction) {
+                                    is Instruction.MultiplyI32 -> {
+                                        listOf(instruction.destination, instruction.left, instruction.right)
+                                    }
+
+                                    is Instruction.DivideI32 -> {
+                                        listOf(instruction.destination, instruction.left, instruction.right)
+                                    }
+
+                                    is Instruction.RemainderI32 -> {
+                                        listOf(instruction.destination, instruction.left, instruction.right)
+                                    }
+                                }
+                            registers
+                                .mapIndexed { index, id ->
+                                    register(id, if (index == 0) "destination" else "source")
+                                }.filterNotNull()
+                                .forEach { actual ->
+                                    if (actual != ValueType.I32) {
+                                        add(ArtifactWriteErrorCode.INVALID_RANGE, "I32 $name register is not I32", location)
+                                    }
+                                }
                         }
 
                         is Instruction.Equal,

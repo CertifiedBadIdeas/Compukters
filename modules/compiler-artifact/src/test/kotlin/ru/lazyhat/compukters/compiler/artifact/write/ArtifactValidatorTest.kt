@@ -266,6 +266,9 @@ class ArtifactValidatorTest {
             listOf(
                 Instruction.Move(RegisterId.of(0u), RegisterId.of(1u)) to "move source and destination types differ",
                 Instruction.AddI32(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 add register",
+                Instruction.MultiplyI32(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 multiply register",
+                Instruction.DivideI32(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 divide register",
+                Instruction.RemainderI32(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 remainder register",
                 Instruction.StringLength(RegisterId.of(1u), RegisterId.of(1u)) to "string length destination",
                 Instruction.CapabilityCallSync(Destination.Unit, CapabilityId.of(0u), 2u, emptyList()) to
                     "capability operation",
