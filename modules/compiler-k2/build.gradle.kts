@@ -204,6 +204,7 @@ tasks.test {
 
 tasks.named<KotlinCompile>("compileTestKotlin") {
     source(
+        rootProject.file("system/programs/edit.kt"),
         rootProject.file("system/programs/kotlinc.kt"),
         rootProject.file("system/programs/shell.kt"),
     )
@@ -213,6 +214,7 @@ val kotlinSubsetConformanceArtifact = layout.buildDirectory.file("generated/conf
 val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = layout.buildDirectory.file("generated/system/shell.cpkt")
 val kotlincArtifact = layout.buildDirectory.file("generated/system/kotlinc.cpkt")
+val editArtifact = layout.buildDirectory.file("generated/system/edit.cpkt")
 
 val generateKotlinSubsetConformanceArtifact = tasks.register<Test>("generateKotlinSubsetConformanceArtifact") {
     dependsOn(tasks.jar)
@@ -276,6 +278,23 @@ val generateKotlincArtifact = tasks.register<Test>("generateKotlincArtifact") {
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukters.kotlinc.artifact", kotlincArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateEditArtifact = tasks.register<Test>("generateEditArtifact") {
+    description = "Compiles the checked-in no-std Kotlin editor into a deterministic Compukter Artifact."
+    group = "build"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*checked in editor compiles deterministically*")
+    inputs.file(rootProject.file("system/programs/edit.kt"))
+    inputs.file(workerJar)
+    outputs.file(editArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukters.edit.artifact", editArtifact.get().asFile.absolutePath)
     }
 }
 
