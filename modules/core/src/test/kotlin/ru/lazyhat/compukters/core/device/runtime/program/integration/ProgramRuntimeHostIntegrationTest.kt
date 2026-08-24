@@ -46,7 +46,35 @@ class ProgramRuntimeHostIntegrationTest {
 
         submit(host, "help")
         pressEnter(host)
-        assertEquals("> help\nhelp echo clear\n>\n", terminalText(requireNotNull(host.terminalFullState())))
+        assertEquals("> help\nhelp echo clear pwd ls stat\n>\n", terminalText(requireNotNull(host.terminalFullState())))
+
+        submit(host, "pwd")
+        pressEnter(host)
+        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> pwd\n/home\n>\n"))
+
+        submit(host, "stat /home")
+        pressEnter(host)
+        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> stat /home\ndirectory: /home\n>\n"))
+
+        submit(host, "stat missing")
+        pressEnter(host)
+        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> stat missing\nnot found: /home/missing\n>\n"))
+
+        submit(host, "ls")
+        pressEnter(host)
+        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> ls\n>\n"))
+
+        submit(host, "ls a b")
+        pressEnter(host)
+        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> ls a b\nusage: ls [path]\n>\n"))
+
+        submit(host, "stat")
+        pressEnter(host)
+        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> stat\nusage: stat <path>\n>\n"))
+
+        submit(host, "missing")
+        pressEnter(host)
+        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> missing\ncommand not found: /home/missing\n>\n"))
 
         submit(host, "echo λ😀")
         press(host, TerminalKey.BACKSPACE)

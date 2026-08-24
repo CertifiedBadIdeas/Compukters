@@ -51,6 +51,7 @@ class K2CompilerAdapterTest {
         listOf(
             "/compukter-guest-api/compukter/terminal/Terminal.kt",
             "/compukter-guest-api/compukter/process/Process.kt",
+            "/compukter-guest-api/compukter/filesystem/FileSystem.kt",
         ).forEach { resource ->
             assertNotNull(K2CompilerAdapter::class.java.getResourceAsStream(resource), resource).use { }
         }
@@ -194,7 +195,7 @@ class K2CompilerAdapterTest {
                         source,
                         WorkerLimits(
                             temporaryBytes = source.encodeToByteArray().size.toLong() + trustedApiBytes,
-                            temporaryFiles = 6, // source/, source/project/, trusted/, user source, and two trusted APIs
+                            temporaryFiles = 7, // source/, source/project/, trusted/, user source, and three trusted APIs
                         ),
                     ),
                 )

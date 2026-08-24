@@ -17,6 +17,55 @@ import kotlin.test.assertNull
 
 class TrustedIntrinsicRegistryTest {
     @Test
+    fun `filesystem provider requires trusted facade and exact synchronous signatures`() {
+        fun resolve(
+            name: String,
+            parameters: List<TrustedValueType>,
+            result: TrustedValueType,
+            bundle: String? = "compukter.filesystem-api@1",
+            suspending: Boolean = false,
+        ) = TrustedIntrinsicRegistry.resolve(
+            TrustedCallableIdentity(bundle, name, suspending, parameters, result),
+        )
+
+        val filesystem = TrustedCapabilityIdentity("compukter", "filesystem", 1u.toUShort(), 0u.toUShort(), 7u)
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(filesystem, 0u, asynchronous = false),
+            resolve("compukter.filesystem.FileSystem.stat", listOf(TrustedValueType.STRING), TrustedValueType.INT),
+        )
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(filesystem, 1u, asynchronous = false),
+            resolve("compukter.filesystem.FileSystem.list", listOf(TrustedValueType.STRING), TrustedValueType.STRING),
+        )
+        assertNull(
+            resolve(
+                "compukter.filesystem.FileSystem.stat",
+                listOf(TrustedValueType.STRING),
+                TrustedValueType.INT,
+                bundle = null,
+            ),
+        )
+        assertNull(
+            resolve(
+                "compukter.filesystem.Other.stat",
+                listOf(TrustedValueType.STRING),
+                TrustedValueType.INT,
+            ),
+        )
+        assertNull(
+            resolve(
+                "compukter.filesystem.FileSystem.stat",
+                listOf(TrustedValueType.STRING),
+                TrustedValueType.INT,
+                suspending = true,
+            ),
+        )
+        assertNull(
+            resolve("compukter.filesystem.FileSystem.list", emptyList(), TrustedValueType.STRING),
+        )
+    }
+
+    @Test
     fun `process provider requires trusted bundle and exact suspending signature`() {
         val trustedRun =
             TrustedCallableIdentity(

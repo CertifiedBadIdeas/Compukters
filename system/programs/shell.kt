@@ -9,6 +9,7 @@
  * (at your option) any later version.
  */
 
+import compukter.filesystem.FileSystem
 import compukter.process.Process
 import compukter.terminal.Terminal
 
@@ -26,22 +27,42 @@ suspend fun main() {
                 Terminal.write("\n")
                 if (line != "") {
                     if (line == "help") {
-                        Terminal.write("help echo clear\n")
+                        Terminal.write("help echo clear pwd ls stat\n")
                     } else if (line == "echo") {
                         Terminal.write("\n")
                     } else if (line.length >= 5 && line.substring(0, 5) == "echo ") {
                         Terminal.write(line.substring(5, line.length) + "\n")
                     } else if (line == "clear") {
                         Terminal.clear()
+                    } else if (line == "pwd") {
+                        Terminal.write("/home\n")
+                    } else if (line == "ls") {
+                        writeList("/home")
+                    } else if (line.length >= 3 && line.substring(0, 3) == "ls ") {
+                        val argument = line.substring(3, line.length)
+                        if (argument == "" || containsSpace(argument)) {
+                            Terminal.write("usage: ls [path]\n")
+                        } else {
+                            writeList(resolvePath(argument))
+                        }
+                    } else if (line == "stat") {
+                        Terminal.write("usage: stat <path>\n")
+                    } else if (line.length >= 5 && line.substring(0, 5) == "stat ") {
+                        val argument = line.substring(5, line.length)
+                        if (argument == "" || containsSpace(argument)) {
+                            Terminal.write("usage: stat <path>\n")
+                        } else {
+                            writeStat(resolvePath(argument))
+                        }
                     } else {
                         var commandEnd = 0
                         while (commandEnd < line.length && line[commandEnd] != ' ') commandEnd = commandEnd + 1
                         if (commandEnd != line.length) {
                             Terminal.write("unknown command: " + line.substring(0, commandEnd) + "\n")
                         } else {
-                            val path = if (line[0] == '/') line else "/home/" + line
+                            val path = resolvePath(line)
                             val result = Process.run(path, 7)
-                            if (result != 0) writeProcessFailure(result)
+                            if (result != 0) writeProcessFailure(result, path)
                         }
                     }
                 }
@@ -58,6 +79,67 @@ suspend fun main() {
         }
         Terminal.finishEvent()
     }
+}
+
+private fun containsSpace(value: String): Boolean {
+    var index = 0
+    var found = false
+    while (index < value.length && !found) {
+        if (value[index] == ' ') found = true
+        index = index + 1
+    }
+    return found
+}
+
+private fun resolvePath(path: String): String {
+    return if (path[0] == '/') path else "/home/" + path
+}
+
+private fun writeList(path: String) {
+    val kind = FileSystem.stat(path)
+    if (kind == 1) {
+        Terminal.write(path + "\n")
+    } else if (kind == 2) {
+        val names = FileSystem.list(path)
+        var start = 0
+        while (start < names.length) {
+            var end = start
+            while (end < names.length && names[end] != '\u0000') end = end + 1
+            if (end != start) Terminal.write(names.substring(start, end) + "\n")
+            start = end + 1
+        }
+    } else {
+        writeFileSystemFailure(kind, path)
+    }
+}
+
+private fun writeStat(path: String) {
+    val kind = FileSystem.stat(path)
+    if (kind == 1) Terminal.write("file: " + path + "\n")
+    else if (kind == 2) Terminal.write("directory: " + path + "\n")
+    else writeFileSystemFailure(kind, path)
+}
+
+private fun writeFileSystemFailure(
+    result: Int,
+    path: String,
+) {
+    if (result == -1) Terminal.write("invalid path: " + path)
+    else if (result == -2) Terminal.write("not found: " + path)
+    else if (result == -3) Terminal.write("already exists: " + path)
+    else if (result == -4) Terminal.write("not a directory: " + path)
+    else if (result == -5) Terminal.write("is a directory: " + path)
+    else if (result == -6) Terminal.write("directory not empty: " + path)
+    else if (result == -7) Terminal.write("read-only filesystem: " + path)
+    else if (result == -8) Terminal.write("permission denied: " + path)
+    else if (result == -9) Terminal.write("stale file handle: " + path)
+    else if (result == -10) Terminal.write("filesystem quota exceeded")
+    else if (result == -11) Terminal.write("filesystem busy")
+    else if (result == -12) Terminal.write("filesystem unavailable")
+    else if (result == -13) Terminal.write("filesystem closed")
+    else if (result == -14) Terminal.write("not executable: " + path)
+    else Terminal.write("filesystem error")
+    Terminal.write("\n")
 }
 
 private fun appendText(
@@ -93,24 +175,26 @@ private fun eraseLastScalar(line: String): String {
     return line.substring(0, line.length - width)
 }
 
-private fun writeProcessFailure(result: Int) {
-    Terminal.write("process failed: ")
-    if (result == 1) Terminal.write("1")
-    else if (result == 2) Terminal.write("2")
-    else if (result == 3) Terminal.write("3")
-    else if (result == 4) Terminal.write("4")
-    else if (result == 5) Terminal.write("5")
-    else if (result == 6) Terminal.write("6")
-    else if (result == 7) Terminal.write("7")
-    else if (result == 8) Terminal.write("8")
-    else if (result == 9) Terminal.write("9")
-    else if (result == 10) Terminal.write("10")
-    else if (result == 11) Terminal.write("11")
-    else if (result == 12) Terminal.write("12")
-    else if (result == 13) Terminal.write("13")
-    else if (result == 14) Terminal.write("14")
-    else if (result == 15) Terminal.write("15")
-    else if (result == 16) Terminal.write("16")
-    else Terminal.write("unknown")
+private fun writeProcessFailure(
+    result: Int,
+    path: String,
+) {
+    if (result == 1) Terminal.write("invalid child capabilities")
+    else if (result == 2) Terminal.write("process nesting limit reached")
+    else if (result == 3) Terminal.write("process start limit reached")
+    else if (result == 4) Terminal.write("invalid path: " + path)
+    else if (result == 5) Terminal.write("command not found: " + path)
+    else if (result == 6) Terminal.write("permission denied: " + path)
+    else if (result == 7) Terminal.write("not executable: " + path)
+    else if (result == 8) Terminal.write("invalid executable: " + path)
+    else if (result == 9) Terminal.write("incompatible program: " + path)
+    else if (result == 10) Terminal.write("failed to start: " + path)
+    else if (result == 11) Terminal.write("process allocation exhausted")
+    else if (result == 12) Terminal.write("process quota exceeded")
+    else if (result == 13) Terminal.write("program trapped: " + path)
+    else if (result == 14) Terminal.write("virtual machine fault")
+    else if (result == 15) Terminal.write("host capability failed")
+    else if (result == 16) Terminal.write("I/O error: " + path)
+    else Terminal.write("process failed: unknown status")
     Terminal.write("\n")
 }
