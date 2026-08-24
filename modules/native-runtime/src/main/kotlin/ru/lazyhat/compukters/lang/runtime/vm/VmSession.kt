@@ -32,7 +32,30 @@ class VmSession private constructor(
         maintenanceBudget: Int,
     ): VmOutcome {
         require(guestBudget >= 0 && maintenanceBudget >= 0) { "VM budgets must be non-negative" }
-        return decodeNative { WireDecoder(bridge.advance(requireHandle(), guestBudget, maintenanceBudget)).outcome() }
+        val activeHandle = requireHandle()
+        return decodeNative {
+            WireDecoder(bridge.advance(activeHandle, guestBudget, maintenanceBudget)).outcome { token ->
+                val request = CompilationWireDecoder(bridge.compilationRequest(activeHandle, token)).request()
+                require(request.token == token) { "native compilation token mismatch" }
+                VmOutcome.CompilationRequested(request)
+            }
+        }
+    }
+
+    fun completeCompilationArtifact(
+        token: Long,
+        artifact: ByteArray,
+    ) {
+        require(token > 0) { "compilation token must be positive" }
+        bridge.completeCompilationArtifact(requireHandle(), token, artifact)
+    }
+
+    fun completeCompilationFailure(
+        token: Long,
+        diagnostics: String,
+    ) {
+        require(token > 0) { "compilation token must be positive" }
+        bridge.completeCompilationFailure(requireHandle(), token, diagnostics)
     }
 
     fun resume(
@@ -198,7 +221,7 @@ private class WireDecoder(
             else -> invalid()
         }.also { end() }
 
-    fun outcome(): VmOutcome =
+    fun outcome(compilation: (Long) -> VmOutcome): VmOutcome =
         when (u8()) {
             0 -> VmOutcome.SliceExhausted
             1 -> VmOutcome.HostRequest(request())
@@ -209,6 +232,7 @@ private class WireDecoder(
             6 -> VmOutcome.Faulted(vmFault(u8()))
             7 -> VmOutcome.HostFailed(hostFailureKind(u8()), u32())
             9 -> VmOutcome.WaitingForTerminalEvent
+            10 -> compilation(i64().also { require(it > 0) { "invalid native compilation token" } })
             else -> invalid()
         }.also { end() }
 
@@ -280,6 +304,54 @@ private class WireDecoder(
     private fun end() = require(!buffer.hasRemaining()) { "native VM result contains trailing bytes" }
 
     private fun invalid(): Nothing = throw IllegalArgumentException("invalid native VM result")
+}
+
+private class CompilationWireDecoder(
+    private val bytes: ByteArray,
+) {
+    private val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+
+    fun request(): VmCompilationRequest {
+        require(u16() == VERSION) { "unsupported compilation request wire version" }
+        val token = i64().also { require(it > 0) { "invalid compilation request token" } }
+        val sourceCount = count(MAXIMUM_SOURCES)
+        require(sourceCount > 0) { "compilation request contains no sources" }
+        val sources =
+            List(sourceCount) {
+                val path = strictUtf8(byteArray())
+                require(path.startsWith('/')) { "compilation source path is not absolute" }
+                val source = byteArray()
+                strictUtf8(source)
+                VmCompilationSource(path, source)
+            }
+        require(sources.zipWithNext().all { (left, right) -> left.path < right.path }) {
+            "compilation source paths are not strictly ordered"
+        }
+        require(!buffer.hasRemaining()) { "compilation request contains trailing bytes" }
+        return VmCompilationRequest(token, sources)
+    }
+
+    private fun byteArray(): ByteArray = ByteArray(count(buffer.remaining())).also(buffer::get)
+
+    private fun strictUtf8(value: ByteArray): String =
+        StandardCharsets.UTF_8
+            .newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(value))
+            .toString()
+
+    private fun count(maximum: Int): Int =
+        buffer.int.also { require(it in 0..maximum && it <= buffer.remaining()) { "invalid compilation request length" } }
+
+    private fun u16(): Int = buffer.short.toInt() and 0xffff
+
+    private fun i64(): Long = buffer.long
+
+    private companion object {
+        const val VERSION = 1
+        const val MAXIMUM_SOURCES = 64
+    }
 }
 
 internal class TerminalWireDecoder(

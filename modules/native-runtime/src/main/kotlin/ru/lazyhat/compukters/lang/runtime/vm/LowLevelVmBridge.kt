@@ -67,6 +67,23 @@ internal interface LowLevelVmBridge {
         maintenanceBudget: Int,
     ): ByteArray
 
+    fun compilationRequest(
+        handle: Long,
+        token: Long,
+    ): ByteArray = error("compilation requests are unavailable")
+
+    fun completeCompilationArtifact(
+        handle: Long,
+        token: Long,
+        artifact: ByteArray,
+    ): Unit = error("compilation completion is unavailable")
+
+    fun completeCompilationFailure(
+        handle: Long,
+        token: Long,
+        diagnostics: String,
+    ): Unit = error("compilation completion is unavailable")
+
     fun resumeUnit(
         handle: Long,
         requestId: Long,

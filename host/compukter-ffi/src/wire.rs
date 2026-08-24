@@ -1,6 +1,7 @@
 use compukter_vm::{
-    AdmissionError, FileSystemLimits, HostFailureKind, QuotaKind, RunError, StoreHealth,
-    StoreOpenError, TerminalCell, TerminalChange, TerminalDevice, TerminalSnapshot, TerminalUpdate,
+    AdmissionError, CompilationRequest, FileSystemLimits, HostFailureKind, QuotaKind, RunError,
+    StoreHealth, StoreOpenError, TerminalCell, TerminalChange, TerminalDevice, TerminalSnapshot,
+    TerminalUpdate,
 };
 
 use crate::bridge::{CreateError, OwnedOutcome, OwnedRequest, OwnedValue, StoreCreateError};
@@ -196,8 +197,87 @@ pub(crate) fn encode_outcome(outcome: OwnedOutcome) -> Vec<u8> {
             encoder
         }
         OwnedOutcome::WaitingForTerminalEvent => Encoder::new(9),
+        OwnedOutcome::CompilationRequested { token } => {
+            let mut encoder = Encoder::new(10);
+            encoder.u64(token);
+            encoder
+        }
     };
     encoder.finish()
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct CompilationEncodeError;
+
+pub(crate) fn compilation_request_size(request: &CompilationRequest) -> Option<usize> {
+    let mut size = 2_usize.checked_add(8)?.checked_add(4)?;
+    u32::try_from(request.sources.len()).ok()?;
+    for source in &request.sources {
+        u32::try_from(source.path.len()).ok()?;
+        u32::try_from(source.utf8.len()).ok()?;
+        size = size
+            .checked_add(4)?
+            .checked_add(source.path.len())?
+            .checked_add(4)?
+            .checked_add(source.utf8.len())?;
+    }
+    Some(size)
+}
+
+pub(crate) fn encode_compilation_request_into(
+    output: &mut [u8],
+    request: &CompilationRequest,
+) -> Result<usize, CompilationEncodeError> {
+    let required = compilation_request_size(request).ok_or(CompilationEncodeError)?;
+    if output.len() < required {
+        return Err(CompilationEncodeError);
+    }
+    let mut offset = 0;
+    write_compilation_bytes(output, &mut offset, &request.version.to_le_bytes())?;
+    write_compilation_bytes(output, &mut offset, &request.token.to_le_bytes())?;
+    write_compilation_bytes(
+        output,
+        &mut offset,
+        &u32::try_from(request.sources.len())
+            .map_err(|_| CompilationEncodeError)?
+            .to_le_bytes(),
+    )?;
+    for source in &request.sources {
+        write_compilation_bytes(
+            output,
+            &mut offset,
+            &u32::try_from(source.path.len())
+                .map_err(|_| CompilationEncodeError)?
+                .to_le_bytes(),
+        )?;
+        write_compilation_bytes(output, &mut offset, source.path.as_bytes())?;
+        write_compilation_bytes(
+            output,
+            &mut offset,
+            &u32::try_from(source.utf8.len())
+                .map_err(|_| CompilationEncodeError)?
+                .to_le_bytes(),
+        )?;
+        write_compilation_bytes(output, &mut offset, &source.utf8)?;
+    }
+    debug_assert_eq!(required, offset);
+    Ok(offset)
+}
+
+fn write_compilation_bytes(
+    output: &mut [u8],
+    offset: &mut usize,
+    value: &[u8],
+) -> Result<(), CompilationEncodeError> {
+    let end = offset
+        .checked_add(value.len())
+        .ok_or(CompilationEncodeError)?;
+    output
+        .get_mut(*offset..end)
+        .ok_or(CompilationEncodeError)?
+        .copy_from_slice(value);
+    *offset = end;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -599,7 +679,9 @@ pub(crate) fn host_failure_code(kind: HostFailureKind) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use compukter_vm::{GuestTrap, QuotaExhaustion, TerminalDevice, VmFault};
+    use compukter_vm::{
+        CompilationRequest, CompilationSource, GuestTrap, QuotaExhaustion, TerminalDevice, VmFault,
+    };
 
     use super::*;
 
@@ -698,6 +780,46 @@ mod tests {
         assert_eq!(
             vec![9],
             encode_outcome(OwnedOutcome::WaitingForTerminalEvent)
+        );
+    }
+
+    #[test]
+    fn compilation_request_uses_a_versioned_exact_bounded_wire() {
+        let request = CompilationRequest {
+            version: 1,
+            token: 0x0102_0304_0506_0708,
+            sources: vec![CompilationSource {
+                path: "/home/main.kt".into(),
+                utf8: b"fun main() = 42\n".to_vec().into(),
+            }]
+            .into_boxed_slice(),
+        };
+        let required = compilation_request_size(&request).unwrap();
+        let mut exact = vec![0; required];
+        assert_eq!(
+            Ok(required),
+            encode_compilation_request_into(&mut exact, &request)
+        );
+        assert_eq!(&[1, 0], &exact[..2]);
+        assert_eq!(request.token.to_le_bytes(), exact[2..10]);
+        assert_eq!(1_u32.to_le_bytes(), exact[10..14]);
+        assert!(exact
+            .windows(b"/home/main.kt".len())
+            .any(|value| value == b"/home/main.kt"));
+        assert!(!exact
+            .windows(b"/home/main".len())
+            .any(|value| value == b"/home/main\0"));
+
+        let mut short = vec![0; required - 1];
+        assert_eq!(
+            Err(CompilationEncodeError),
+            encode_compilation_request_into(&mut short, &request)
+        );
+        assert_eq!(
+            vec![10, 8, 7, 6, 5, 4, 3, 2, 1],
+            encode_outcome(OwnedOutcome::CompilationRequested {
+                token: request.token
+            })
         );
     }
 

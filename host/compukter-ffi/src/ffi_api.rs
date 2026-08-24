@@ -47,10 +47,12 @@ const MAXIMUM_STORE_GENERATION_BYTES: usize = 9;
 const MAXIMUM_STORE_ROOT_BYTES: usize = 32 * 1_024;
 const MAXIMUM_ROM_BYTES: usize = 16 * 1_024 * 1_024;
 const MAXIMUM_FILESYSTEM_LIMITS_BYTES: usize = 1 + 17 * 8;
+const MAXIMUM_COMPILATION_ARTIFACT_BYTES: usize = 16 * 1024 * 1024;
+const MAXIMUM_COMPILATION_DIAGNOSTIC_BYTES: usize = 64 * 1024;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn compukter_abi_version() -> u32 {
-    2
+    3
 }
 
 #[unsafe(no_mangle)]
@@ -511,6 +513,118 @@ pub unsafe extern "C" fn compukter_advance(
         // SAFETY: Null was rejected above and the C ABI requires writable output.
         unsafe { written_out.write(encoded.len()) };
         FfiStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Writes the exact byte count required for the pending compilation request.
+///
+/// # Safety
+///
+/// `required_out` must point to one writable `usize`.
+pub unsafe extern "C" fn compukter_compilation_request_size(
+    handle: u64,
+    token: u64,
+    required_out: *mut usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if required_out.is_null() {
+            return FfiStatus::InvalidArgument;
+        }
+        let required = match bridge::compilation_request_size(handle, token) {
+            Ok(required) => required,
+            Err(BridgeError::Handle(error)) => return handle_status(error),
+            Err(_) => return FfiStatus::InvalidArgument,
+        };
+        // SAFETY: The validated ABI contract provides one writable usize.
+        unsafe { required_out.write(required) };
+        FfiStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Copies the pending versioned compilation request into caller-owned memory.
+///
+/// # Safety
+///
+/// Non-empty output must name `output_capacity` writable bytes and
+/// `written_out` must point to one writable `usize`.
+pub unsafe extern "C" fn compukter_compilation_request_copy(
+    handle: u64,
+    token: u64,
+    output: *mut u8,
+    output_capacity: usize,
+    written_out: *mut usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if written_out.is_null() || (output_capacity != 0 && output.is_null()) {
+            return FfiStatus::InvalidArgument;
+        }
+        let required = match bridge::compilation_request_size(handle, token) {
+            Ok(required) => required,
+            Err(BridgeError::Handle(error)) => return handle_status(error),
+            Err(_) => return FfiStatus::InvalidArgument,
+        };
+        if output_capacity < required {
+            // SAFETY: The validated ABI contract provides one writable usize.
+            unsafe { written_out.write(required) };
+            return FfiStatus::BufferTooSmall;
+        }
+        // SAFETY: The validated ABI contract provides `output_capacity` writable bytes.
+        let output = unsafe { core::slice::from_raw_parts_mut(output, output_capacity) };
+        let written = match bridge::copy_compilation_request(handle, token, output) {
+            Ok(written) => written,
+            Err(BridgeError::Handle(error)) => return handle_status(error),
+            Err(_) => return FfiStatus::InvalidArgument,
+        };
+        // SAFETY: The validated ABI contract provides one writable usize.
+        unsafe { written_out.write(written) };
+        FfiStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Completes a compilation with an artifact (`kind = 0`) or UTF-8 diagnostics
+/// (`kind = 1`). The payload is borrowed only for this call.
+///
+/// # Safety
+///
+/// A non-empty payload must name `payload_len` readable bytes.
+pub unsafe extern "C" fn compukter_compilation_complete(
+    handle: u64,
+    token: u64,
+    kind: u32,
+    payload: *const u8,
+    payload_len: usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if kind > 1
+            || (payload_len != 0 && payload.is_null())
+            || (kind == 0 && payload_len > MAXIMUM_COMPILATION_ARTIFACT_BYTES)
+            || (kind == 1 && payload_len > MAXIMUM_COMPILATION_DIAGNOSTIC_BYTES)
+        {
+            return FfiStatus::InvalidArgument;
+        }
+        let payload = if payload_len == 0 {
+            &[][..]
+        } else {
+            // SAFETY: The validated ABI contract provides `payload_len` readable bytes.
+            unsafe { core::slice::from_raw_parts(payload, payload_len) }
+        };
+        match kind {
+            0 => bridge_status(bridge::complete_compilation_artifact(
+                handle, token, payload,
+            )),
+            1 => match std::str::from_utf8(payload) {
+                Ok(diagnostics) => bridge_status(bridge::complete_compilation_failure(
+                    handle,
+                    token,
+                    diagnostics,
+                )),
+                Err(_) => FfiStatus::InvalidArgument,
+            },
+            _ => FfiStatus::InvalidArgument,
+        }
     })
 }
 

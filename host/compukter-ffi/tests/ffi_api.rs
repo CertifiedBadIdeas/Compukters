@@ -14,7 +14,8 @@
 mod support;
 
 use compukter_ffi::{
-    compukter_abi_version, compukter_advance, compukter_close, compukter_create,
+    compukter_abi_version, compukter_advance, compukter_close, compukter_compilation_complete,
+    compukter_compilation_request_copy, compukter_compilation_request_size, compukter_create,
     compukter_create_boot_in_store, compukter_create_in_store, compukter_filesystem_generation,
     compukter_max_create_bytes, compukter_max_outcome_bytes, compukter_store_close,
     compukter_store_durable_generation, compukter_store_flush, compukter_store_health,
@@ -28,7 +29,32 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 #[test]
 fn c_abi_publishes_its_exact_version() {
-    assert_eq!(2, compukter_abi_version());
+    assert_eq!(3, compukter_abi_version());
+}
+
+#[test]
+fn compilation_ffi_rejects_invalid_handles_tags_lengths_and_pointers() {
+    let mut required = 0_usize;
+    assert_eq!(FfiStatus::InvalidHandle, unsafe {
+        compukter_compilation_request_size(0, 1, &mut required)
+    });
+    assert_eq!(FfiStatus::InvalidArgument, unsafe {
+        compukter_compilation_request_size(0, 1, core::ptr::null_mut())
+    });
+    assert_eq!(FfiStatus::InvalidArgument, unsafe {
+        compukter_compilation_request_copy(0, 1, core::ptr::null_mut(), 1, &mut required)
+    });
+
+    let byte = [0xff_u8];
+    assert_eq!(FfiStatus::InvalidArgument, unsafe {
+        compukter_compilation_complete(0, 1, 2, core::ptr::null(), 0)
+    });
+    assert_eq!(FfiStatus::InvalidArgument, unsafe {
+        compukter_compilation_complete(0, 1, 1, byte.as_ptr(), byte.len())
+    });
+    assert_eq!(FfiStatus::InvalidArgument, unsafe {
+        compukter_compilation_complete(0, 1, 0, core::ptr::null(), 1)
+    });
 }
 
 #[test]

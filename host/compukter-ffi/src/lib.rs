@@ -15,7 +15,8 @@ mod handle_table;
 mod wire;
 
 pub use ffi_api::{
-    compukter_abi_version, compukter_advance, compukter_close, compukter_create,
+    compukter_abi_version, compukter_advance, compukter_close, compukter_compilation_complete,
+    compukter_compilation_request_copy, compukter_compilation_request_size, compukter_create,
     compukter_create_boot_in_store, compukter_create_in_store, compukter_filesystem_generation,
     compukter_max_create_bytes, compukter_max_outcome_bytes, compukter_resume_failure,
     compukter_resume_string, compukter_resume_unit, compukter_store_close,
