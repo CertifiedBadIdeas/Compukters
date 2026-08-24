@@ -54,6 +54,12 @@ dependencies {
     implementation(project(":core"))
     shadowBundle(project(":core")) { isTransitive = false }
 
+    implementation(project(":compiler-client"))
+    shadowBundle(project(":compiler-client")) { isTransitive = false }
+
+    implementation(project(":compiler-runtime"))
+    shadowBundle(project(":compiler-runtime")) { isTransitive = false }
+
     neoForgeImplementation(libs.findLibrary("kotlin-stdlib").get())
     neoForgeImplementation(libs.findLibrary("kotlin-logging").get())
     neoForgeImplementation(libs.findLibrary("kotlinx-coroutines-core").get())

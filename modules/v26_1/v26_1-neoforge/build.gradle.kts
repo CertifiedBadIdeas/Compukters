@@ -40,6 +40,9 @@ tasks.named<ProcessResources>(gameTest.processResourcesTaskName) {
     from(rootProject.layout.projectDirectory.file("host/compukter-vm/tests/fixtures/filesystem-write-alternate.cpkt")) {
         into("fixtures")
     }
+    from(rootProject.layout.projectDirectory.file("host/compukter-vm/tests/fixtures/filesystem-compilation-source.cpkt")) {
+        into("fixtures")
+    }
     from(rootProject.layout.projectDirectory.file("host/compukter-vm/tests/fixtures/filesystem-read.cpkt")) {
         into("fixtures")
     }

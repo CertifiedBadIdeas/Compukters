@@ -32,6 +32,7 @@ internal class FfmBridge private constructor(
     private val storeTombstoneHandle: MethodHandle,
     private val storeRecoverHandle: MethodHandle,
     private val storeCloseHandle: MethodHandle,
+    private val verifyArtifactHandle: MethodHandle,
     private val createHandle: MethodHandle,
     private val createInStoreHandle: MethodHandle,
     private val createBootInStoreHandle: MethodHandle,
@@ -134,6 +135,21 @@ internal class FfmBridge private constructor(
     ) = storeIdOperation("filesystem recovery", storeRecoverHandle, handle, id)
 
     override fun storeClose(handle: Long) = requireSuccess("filesystem store close", storeCloseHandle.invokeExact(handle) as Int)
+
+    override fun verifyArtifact(artifact: ByteArray): Boolean =
+        Arena.ofConfined().use { callArena ->
+            when (
+                val status =
+                    verifyArtifactHandle.invokeExact(
+                        callArena.nativeBytes(artifact),
+                        artifact.size.toLong(),
+                    ) as Int
+            ) {
+                STATUS_OK -> true
+                STATUS_VERIFICATION -> false
+                else -> throw failure("artifact verification", status)
+            }
+        }
 
     override fun create(artifact: ByteArray): ByteArray =
         Arena.ofConfined().use { callArena ->
@@ -439,6 +455,7 @@ internal class FfmBridge private constructor(
 
     companion object {
         private const val STATUS_OK = 0
+        private const val STATUS_VERIFICATION = 2
         private const val MAXIMUM_CREATE_BYTES = 1024
         private const val MAXIMUM_OUTCOME_BYTES = 1024 * 1024
         private const val MAXIMUM_STORE_OPEN_BYTES = 10
@@ -527,6 +544,15 @@ internal class FfmBridge private constructor(
                         downcall(
                             "compukter_store_close",
                             FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG),
+                        ),
+                    verifyArtifactHandle =
+                        downcall(
+                            "compukter_verify_artifact",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                            ),
                         ),
                     createHandle =
                         downcall(
@@ -707,7 +733,7 @@ internal class FfmBridge private constructor(
                             ),
                         ),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 3) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 4) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()

@@ -23,5 +23,5 @@ pub use ffi_api::{
     compukter_store_durable_generation, compukter_store_flush, compukter_store_health,
     compukter_store_open, compukter_store_recover, compukter_store_tombstone,
     compukter_terminal_changes_since, compukter_terminal_commit, compukter_terminal_full_state,
-    compukter_terminal_key, compukter_terminal_text, FfiStatus,
+    compukter_terminal_key, compukter_terminal_text, compukter_verify_artifact, FfiStatus,
 };

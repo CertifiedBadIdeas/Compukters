@@ -30,7 +30,8 @@ class ServerCompilerService(
     private val configuration: CompilerServiceConfiguration,
     private val policy: CompilerServicePolicy = CompilerServicePolicy(),
     private val executor: Executor,
-) : AutoCloseable {
+) : CompilerServicePort,
+    AutoCloseable {
     private val lock = Any()
     private val pending = mutableMapOf<CompilerTarget, ProjectSnapshot>()
     private val flights = mutableMapOf<Hash256, Flight>()
@@ -40,7 +41,7 @@ class ServerCompilerService(
     private var completionArtifactBytes = 0L
     private var closed = false
 
-    fun submit(
+    override fun submit(
         target: CompilerTarget,
         snapshot: ProjectSnapshot,
     ): CompilerSubmissionResult {
@@ -60,7 +61,7 @@ class ServerCompilerService(
         return CompilerSubmissionResult.ACCEPTED
     }
 
-    fun cancel(target: CompilerTarget): Boolean {
+    override fun cancel(target: CompilerTarget): Boolean {
         var cancellation: Pair<CompletableFuture<CompileResult>, CompilerBackend>? = null
         synchronized(lock) {
             if (!outstanding.remove(target)) return false
@@ -85,7 +86,7 @@ class ServerCompilerService(
         return true
     }
 
-    fun drain(maximum: Int): List<CompilerCompletion> {
+    override fun drain(maximum: Int): List<CompilerCompletion> {
         require(maximum >= 0) { "completion drain limit must not be negative" }
         synchronized(lock) {
             val result = ArrayList<CompilerCompletion>(minOf(maximum, completions.size))

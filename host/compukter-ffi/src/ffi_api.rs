@@ -52,7 +52,7 @@ const MAXIMUM_COMPILATION_DIAGNOSTIC_BYTES: usize = 64 * 1024;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn compukter_abi_version() -> u32 {
-    3
+    4
 }
 
 #[unsafe(no_mangle)]
@@ -63,6 +63,37 @@ pub extern "C" fn compukter_max_outcome_bytes() -> usize {
 #[unsafe(no_mangle)]
 pub extern "C" fn compukter_max_create_bytes() -> usize {
     MAXIMUM_CREATE_BYTES
+}
+
+#[unsafe(no_mangle)]
+/// Verifies an artifact without creating or admitting a VM session.
+///
+/// # Safety
+///
+/// When `artifact_len` is non-zero, `artifact` must point to a readable region
+/// of at least that many bytes.
+pub unsafe extern "C" fn compukter_verify_artifact(
+    artifact: *const u8,
+    artifact_len: usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if artifact_len > compukter_vm::ArtifactLimits::default().artifact_bytes
+            || (artifact_len != 0 && artifact.is_null())
+        {
+            return FfiStatus::InvalidArgument;
+        }
+        let bytes = if artifact_len == 0 {
+            &[][..]
+        } else {
+            // SAFETY: The validated ABI contract provides readable artifact bytes.
+            unsafe { core::slice::from_raw_parts(artifact, artifact_len) }
+        };
+        if bridge::verify(bytes) {
+            FfiStatus::Ok
+        } else {
+            FfiStatus::Verification
+        }
+    })
 }
 
 #[unsafe(no_mangle)]

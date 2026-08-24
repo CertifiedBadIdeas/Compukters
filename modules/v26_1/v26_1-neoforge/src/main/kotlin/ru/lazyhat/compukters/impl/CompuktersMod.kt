@@ -26,6 +26,7 @@ import net.neoforged.fml.config.ModConfig
 import net.neoforged.neoforge.common.NeoForge
 import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.MOD_ID
+import ru.lazyhat.compukters.impl.compiler.NeoForgeCompilerServices
 import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
 import ru.lazyhat.compukters.impl.fs.NeoForgeWorldFileSystemStores
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
@@ -43,6 +44,7 @@ class CompuktersMod(
         eventBus.addListener(TerminalNetwork::register)
         NeoForge.EVENT_BUS.addListener(NeoForgeWorldFileSystemStores::onLevelSave)
         NeoForge.EVENT_BUS.addListener(NeoForgeWorldFileSystemStores::onServerStopping)
+        NeoForge.EVENT_BUS.addListener(NeoForgeCompilerServices::onServerStopping)
         modContainer.registerConfig(ModConfig.Type.CLIENT, CompuktersClientConfig.SPEC)
         LOGGER.debug { "$MOD_ID loaded native VM from ${native.source}" }
     }
