@@ -87,6 +87,39 @@ class VmSessionTest {
     }
 
     @Test
+    fun `session owns one terminal transport and closes it before its native handle`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(7)))
+        val state = TerminalState(3, 51, 19, List(969) { TerminalCell(' '.code, 15, 0) }, TerminalPosition(0, 0), true)
+        val transport = RecordingTerminalTransport(bridge.lifecycleEvents, state)
+        bridge.terminalTransportFactory = {
+            bridge.terminalTransportOpens++
+            transport
+        }
+
+        val session = VmSession.open(byteArrayOf(1), bridge)
+        assertEquals(state, session.terminalFullState())
+        assertEquals(TerminalUpdate.Unchanged(3), session.terminalChangesSince(3))
+        session.close()
+        session.close()
+
+        assertEquals(1, bridge.terminalTransportOpens)
+        assertEquals(listOf(7L), transport.fullStateHandles)
+        assertEquals(listOf(7L to 3L), transport.changeRequests)
+        assertEquals(1, transport.closeCount)
+        assertEquals(listOf("transport", "handle:7"), bridge.lifecycleEvents)
+    }
+
+    @Test
+    fun `terminal transport construction failure closes admitted native handle`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(13)))
+        bridge.terminalTransportFactory = { error("transport failed") }
+
+        assertFailsWith<IllegalStateException> { VmSession.open(byteArrayOf(1), bridge) }
+
+        assertEquals(listOf(13L), bridge.closed)
+    }
+
+    @Test
     fun `advance maps copied slice request waits trap fault quota and host failure outcomes`() {
         val bridge = FakeBridge(createResult = bytes(0, long(11)))
         val session = VmSession.open(byteArrayOf(1), bridge)
@@ -239,6 +272,12 @@ class VmSessionTest {
         val terminalTexts = mutableListOf<IntArray>()
         var persistentCreate: PersistentCreate? = null
         var bootCreate: BootCreate? = null
+        var terminalTransportFactory: (() -> TerminalWireTransport)? = null
+        var terminalTransportOpens = 0
+        val lifecycleEvents = mutableListOf<String>()
+
+        override fun openTerminalTransport(): TerminalWireTransport =
+            terminalTransportFactory?.invoke() ?: super<LowLevelVmBridge>.openTerminalTransport()
 
         override fun filesystemGeneration(handle: Long): ByteArray = bytes(1, long(3))
 
@@ -302,6 +341,7 @@ class VmSessionTest {
 
         override fun close(handle: Long) {
             closed += handle
+            lifecycleEvents += "handle:$handle"
         }
 
         override fun terminalCommit(handle: Long) {
@@ -329,6 +369,27 @@ class VmSessionTest {
             codePoints: IntArray,
         ) {
             terminalTexts += codePoints
+        }
+    }
+
+    private class RecordingTerminalTransport(
+        private val lifecycleEvents: MutableList<String>,
+        private val state: TerminalState,
+    ) : TerminalWireTransport {
+        val fullStateHandles = mutableListOf<Long>()
+        val changeRequests = mutableListOf<Pair<Long, Long>>()
+        var closeCount = 0
+
+        override fun fullState(handle: Long): TerminalState = state.also { fullStateHandles += handle }
+
+        override fun changesSince(
+            handle: Long,
+            revision: Long,
+        ): TerminalUpdate = TerminalUpdate.Unchanged(state.revision).also { changeRequests += handle to revision }
+
+        override fun close() {
+            closeCount++
+            lifecycleEvents += "transport"
         }
     }
 
