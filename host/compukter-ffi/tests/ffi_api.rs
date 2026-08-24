@@ -15,11 +15,11 @@ mod support;
 
 use compukter_ffi::{
     compukter_abi_version, compukter_advance, compukter_close, compukter_create,
-    compukter_max_create_bytes, compukter_max_outcome_bytes, compukter_store_close,
-    compukter_store_durable_generation, compukter_store_flush, compukter_store_health,
-    compukter_store_open, compukter_store_recover, compukter_store_tombstone,
-    compukter_terminal_changes_since, compukter_terminal_commit, compukter_terminal_full_state,
-    compukter_terminal_key, compukter_terminal_text, FfiStatus,
+    compukter_create_in_store, compukter_max_create_bytes, compukter_max_outcome_bytes,
+    compukter_store_close, compukter_store_durable_generation, compukter_store_flush,
+    compukter_store_health, compukter_store_open, compukter_store_recover,
+    compukter_store_tombstone, compukter_terminal_changes_since, compukter_terminal_commit,
+    compukter_terminal_full_state, compukter_terminal_key, compukter_terminal_text, FfiStatus,
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -171,6 +171,51 @@ fn c_abi_creates_and_closes_an_opaque_machine_handle() {
 }
 
 #[test]
+fn c_abi_creates_a_machine_inside_an_open_world_store() {
+    let root = TestRoot::new();
+    let store = open_store(root.path());
+    let artifact = terminal_artifact();
+    let rom = empty_rom();
+    let id = [7_u8; 16];
+    let mut output = vec![0_u8; compukter_max_create_bytes()];
+    let mut written = 0_usize;
+
+    assert_eq!(FfiStatus::BufferTooSmall, unsafe {
+        compukter_create_in_store(
+            store,
+            id.as_ptr(),
+            rom.as_ptr(),
+            rom.len(),
+            artifact.as_ptr(),
+            artifact.len(),
+            output.as_mut_ptr(),
+            1,
+            &mut written,
+        )
+    });
+    assert_eq!(compukter_max_create_bytes(), written);
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_create_in_store(
+            store,
+            id.as_ptr(),
+            rom.as_ptr(),
+            rom.len(),
+            artifact.as_ptr(),
+            artifact.len(),
+            output.as_mut_ptr(),
+            output.len(),
+            &mut written,
+        )
+    });
+    assert_eq!(9, written);
+    assert_eq!(0, output[0]);
+    let machine = u64::from_le_bytes(output[1..9].try_into().unwrap());
+    assert_ne!(0, machine);
+    assert_eq!(FfiStatus::Ok, compukter_close(machine));
+    assert_eq!(FfiStatus::Ok, compukter_store_close(store));
+}
+
+#[test]
 fn create_preserves_the_typed_wire_result_and_rejects_short_output_first() {
     let invalid_artifact = [0_u8];
     let mut short = [0_u8; 1];
@@ -319,6 +364,16 @@ fn terminal_changes_since(handle: u64, revision: u64) -> Vec<u8> {
 
 fn terminal_artifact() -> Vec<u8> {
     support::executable_minimal_vector()
+}
+
+fn empty_rom() -> Vec<u8> {
+    let mut bytes = b"CPKTROM\0\x01\0\0\0\0\0\0\0".to_vec();
+    bytes.extend_from_slice(&[
+        0xcc, 0x66, 0xe6, 0x9e, 0x46, 0x7a, 0xbd, 0x44, 0xda, 0x92, 0x6f, 0xbb, 0xd2, 0x70, 0x3f,
+        0x99, 0xac, 0x00, 0x66, 0x27, 0x01, 0x21, 0x13, 0x00, 0xa3, 0xef, 0x3e, 0x03, 0x67, 0x3d,
+        0xf5, 0x95,
+    ]);
+    bytes
 }
 
 fn open_store(root: &Path) -> u64 {

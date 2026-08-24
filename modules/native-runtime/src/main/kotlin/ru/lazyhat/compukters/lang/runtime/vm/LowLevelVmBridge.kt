@@ -44,6 +44,13 @@ internal interface LowLevelVmBridge {
 
     fun create(artifact: ByteArray): ByteArray
 
+    fun createInStore(
+        storeHandle: Long,
+        id: ByteArray,
+        rom: ByteArray,
+        artifact: ByteArray,
+    ): ByteArray = error("persistent VM creation is unavailable")
+
     fun advance(
         handle: Long,
         guestBudget: Int,

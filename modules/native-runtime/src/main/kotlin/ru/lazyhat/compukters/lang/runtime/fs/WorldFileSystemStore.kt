@@ -44,6 +44,13 @@ class WorldFileSystemStore private constructor(
 
     fun recover(id: ComputerId) = bridge.storeRecover(requireHandle(), id.toByteArray())
 
+    internal fun createMachine(
+        id: ComputerId,
+        romImage: ByteArray,
+        artifact: ByteArray,
+    ): Pair<LowLevelVmBridge, ByteArray> =
+        bridge to bridge.createInStore(requireHandle(), id.toByteArray(), romImage, artifact)
+
     override fun close() {
         val closing = handle.getAndSet(CLOSED)
         if (closing == CLOSED) return

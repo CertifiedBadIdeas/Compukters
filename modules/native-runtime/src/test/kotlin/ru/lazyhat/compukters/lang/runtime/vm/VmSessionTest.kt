@@ -12,13 +12,36 @@
 package ru.lazyhat.compukters.lang.runtime.vm
 
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class VmSessionTest {
+    @Test
+    fun `persistent session copies launch inputs and uses its world store handle`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(17)))
+        val store = WorldFileSystemStore.open(Path.of("/tmp/compukters-session-store"), bridge)
+        val artifact = byteArrayOf(1, 2, 3)
+        val rom = byteArrayOf(4, 5, 6)
+        val id = ComputerId.fromLongs(7, 8)
+
+        val session = VmSession.openInStore(artifact, store, id, rom)
+        artifact.fill(0)
+        rom.fill(0)
+
+        assertEquals(23L, bridge.persistentCreate?.storeHandle)
+        assertEquals(id.toByteArray().toList(), bridge.persistentCreate?.id?.toList())
+        assertEquals(listOf<Byte>(4, 5, 6), bridge.persistentCreate?.rom?.toList())
+        assertEquals(listOf<Byte>(1, 2, 3), bridge.persistentCreate?.artifact?.toList())
+        session.close()
+        store.close()
+    }
+
     @Test
     fun `session owns its opaque handle and closes idempotently`() {
         val bridge = FakeBridge(createResult = bytes(0, long(7)))
@@ -182,6 +205,21 @@ class VmSessionTest {
         var terminalCommits = 0
         val terminalKeys = mutableListOf<TerminalKeyInput>()
         val terminalTexts = mutableListOf<IntArray>()
+        var persistentCreate: PersistentCreate? = null
+
+        override fun storeOpen(rootUtf8: ByteArray, limitsWire: ByteArray): ByteArray = bytes(1, 0, long(23))
+
+        override fun storeClose(handle: Long) = Unit
+
+        override fun createInStore(
+            storeHandle: Long,
+            id: ByteArray,
+            rom: ByteArray,
+            artifact: ByteArray,
+        ): ByteArray {
+            persistentCreate = PersistentCreate(storeHandle, id.copyOf(), rom.copyOf(), artifact.copyOf())
+            return createResult
+        }
 
         override fun create(artifact: ByteArray): ByteArray = createResult
 
@@ -258,6 +296,13 @@ class VmSessionTest {
         val key: Int,
         val action: Int,
         val modifiers: Int,
+    )
+
+    private data class PersistentCreate(
+        val storeHandle: Long,
+        val id: ByteArray,
+        val rom: ByteArray,
+        val artifact: ByteArray,
     )
 }
 

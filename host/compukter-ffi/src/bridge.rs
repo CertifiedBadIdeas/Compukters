@@ -4,10 +4,11 @@ use std::sync::{Arc, OnceLock};
 use compukter_vm::{
     verify_artifact, AdmissionError, ArtifactLimits, ComputerAdvanceOutcome, ComputerError,
     ComputerId, ComputerMachine, ComputerStartError, ComputerValue, ExecutionProfile,
-    FileSystemLimits, GuestTrap, HostFailure, HostResponse, HostValueInput,
-    ManagedAllocationFailure, QuotaExhaustion, ResumeError, RunError, StoreError, StoreHealth,
-    StoreOpenError, TerminalInputError, TerminalKey, TerminalKeyAction, TerminalKeyEvent,
-    TerminalModifiers, TerminalSnapshot, TerminalUpdate, VmFault, WorldFileSystemStore,
+    FileCapability, FileRights, FileSystemLimits, GuestTrap, HostFailure, HostResponse,
+    HostValueInput, ManagedAllocationFailure, QuotaExhaustion, ResumeError, RomImage, RunError,
+    StoreError, StoreHealth, StoreOpenError, TerminalInputError, TerminalKey, TerminalKeyAction,
+    TerminalKeyEvent, TerminalModifiers, TerminalSnapshot, TerminalUpdate, VirtualPath, VmFault,
+    WorldFileSystemStore,
 };
 
 use crate::handle_table::{HandleError, HandleTable};
@@ -21,6 +22,13 @@ pub(crate) enum CreateError {
     Admission(AdmissionError),
     Run(RunError),
     Handle(HandleError),
+}
+
+#[derive(Debug)]
+pub(crate) enum CreateInStoreError {
+    Create(CreateError),
+    Rom,
+    Store(StoreBridgeError),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -95,6 +103,49 @@ pub(crate) fn create(artifact_bytes: Vec<u8>) -> Result<u64, CreateError> {
             ComputerStartError::Start(error) => CreateError::Run(error),
         })?;
     sessions().insert(computer).map_err(CreateError::Handle)
+}
+
+pub(crate) fn create_in_store(
+    store_handle: u64,
+    id: ComputerId,
+    rom_bytes: Vec<u8>,
+    artifact_bytes: Vec<u8>,
+) -> Result<u64, CreateInStoreError> {
+    let artifact = verify_artifact(Arc::from(artifact_bytes), ArtifactLimits::default())
+        .map_err(|_| CreateInStoreError::Create(CreateError::Verification))?;
+    let computer = stores()
+        .with(store_handle, |store| {
+            let limits = *store.limits();
+            let rom = RomImage::admit(Arc::from(rom_bytes), &limits)
+                .map(Arc::new)
+                .map_err(|_| CreateInStoreError::Rom)?;
+            let filesystem = store
+                .open_computer(id, rom)
+                .map_err(|error| CreateInStoreError::Store(StoreBridgeError::Store(error)))?;
+            let initial_capability = FileCapability::new(
+                VirtualPath::parse_utf8("/home", &limits)
+                    .expect("fixed initial filesystem capability path"),
+                FileRights::OWNER,
+            );
+            ComputerMachine::start_in_filesystem(
+                artifact,
+                profile(),
+                &[],
+                &[],
+                filesystem,
+                initial_capability,
+            )
+            .map_err(|error| {
+                CreateInStoreError::Create(match error {
+                    ComputerStartError::Admission(error) => CreateError::Admission(error),
+                    ComputerStartError::Start(error) => CreateError::Run(error),
+                })
+            })
+        })
+        .map_err(|error| CreateInStoreError::Store(StoreBridgeError::Handle(error)))??;
+    sessions()
+        .insert(computer)
+        .map_err(|error| CreateInStoreError::Create(CreateError::Handle(error)))
 }
 
 pub(crate) fn advance(
@@ -309,6 +360,7 @@ fn copy_error(error: ComputerError) -> BridgeError {
         ComputerError::Resume(error) => BridgeError::Resume(error),
         ComputerError::InvalidRequestId => BridgeError::InvalidRequestId,
         ComputerError::InvalidTerminalRequest
+        | ComputerError::InvalidFileSystemRequest
         | ComputerError::ActiveTerminalEvent
         | ComputerError::NoActiveTerminalEvent
         | ComputerError::WrongTerminalEventKind => BridgeError::InvalidOperation,
