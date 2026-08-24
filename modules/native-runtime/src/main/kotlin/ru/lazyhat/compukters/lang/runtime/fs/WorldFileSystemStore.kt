@@ -1,0 +1,130 @@
+/*
+ * The Compukters Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package ru.lazyhat.compukters.lang.runtime.fs
+
+import ru.lazyhat.compukters.lang.runtime.vm.LowLevelVmBridge
+import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
+import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicLong
+
+class WorldFileSystemStore private constructor(
+    handle: Long,
+    private val bridge: LowLevelVmBridge,
+) : AutoCloseable {
+    private val handle = AtomicLong(handle)
+
+    fun health(): FileSystemStoreHealth = decodeNative { StoreWireDecoder(bridge.storeHealth(requireHandle())).health() }
+
+    fun durableGeneration(id: ComputerId): Long =
+        decodeNative {
+            StoreWireDecoder(bridge.storeDurableGeneration(requireHandle(), id.toByteArray())).generation()
+        }
+
+    fun flush(
+        id: ComputerId,
+        generation: Long,
+    ) {
+        require(generation >= 0) { "filesystem generation must not be negative" }
+        bridge.storeFlush(requireHandle(), id.toByteArray(), generation)
+    }
+
+    fun tombstone(id: ComputerId) = bridge.storeTombstone(requireHandle(), id.toByteArray())
+
+    fun recover(id: ComputerId) = bridge.storeRecover(requireHandle(), id.toByteArray())
+
+    override fun close() {
+        val closing = handle.getAndSet(CLOSED)
+        if (closing == CLOSED) return
+        try {
+            bridge.storeClose(closing)
+        } catch (error: Throwable) {
+            handle.compareAndSet(CLOSED, closing)
+            throw error
+        }
+    }
+
+    private fun requireHandle(): Long = handle.get().takeIf { it != CLOSED } ?: error("filesystem store is closed")
+
+    companion object {
+        private const val CLOSED = 0L
+
+        fun open(root: Path): WorldFileSystemStore = open(root, VmRuntime.bridge())
+
+        internal fun open(
+            root: Path,
+            bridge: LowLevelVmBridge,
+        ): WorldFileSystemStore {
+            require(root.isAbsolute) { "filesystem root must be absolute" }
+            require(root.normalize() == root) { "filesystem root must already be normalized" }
+            val rootBytes = root.toString().encodeToByteArray()
+            val handle = decodeNative { StoreWireDecoder(bridge.storeOpen(rootBytes.copyOf(), ByteArray(0))).openedHandle() }
+            return WorldFileSystemStore(handle, bridge)
+        }
+
+        private inline fun <T> decodeNative(block: () -> T): T =
+            try {
+                block()
+            } catch (error: FileSystemStoreOpenException) {
+                throw error
+            } catch (error: VmBridgeException) {
+                throw error
+            } catch (error: Exception) {
+                throw VmBridgeException("invalid native filesystem store result", error)
+            }
+    }
+}
+
+private class StoreWireDecoder(
+    bytes: ByteArray,
+) {
+    private val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+
+    fun openedHandle(): Long {
+        version()
+        return when (val code = u8()) {
+            0 -> i64().also { require(it != 0L) { "native filesystem store returned a zero handle" } }
+            in 1..5 -> throw FileSystemStoreOpenException(
+                FileSystemStoreOpenFailure.entries.first { it.wireCode == code },
+            )
+            6 -> throw VmBridgeException("native filesystem store handle allocation failed with code ${u8()}")
+            else -> invalid()
+        }.also { end() }
+    }
+
+    fun health(): FileSystemStoreHealth {
+        version()
+        return FileSystemStoreHealth.entries.firstOrNull { it.wireCode == u8() }
+            ?.also { end() }
+            ?: invalid()
+    }
+
+    fun generation(): Long {
+        version()
+        return i64().also {
+            require(it >= 0) { "native filesystem generation exceeds the JVM range" }
+            end()
+        }
+    }
+
+    private fun version() = require(u8() == 1) { "unsupported native filesystem wire version" }
+
+    private fun u8(): Int = buffer.get().toInt() and 0xff
+
+    private fun i64(): Long = buffer.long
+
+    private fun end() = require(!buffer.hasRemaining()) { "native filesystem result contains trailing bytes" }
+
+    private fun invalid(): Nothing = throw IllegalArgumentException("invalid native filesystem store result")
+}

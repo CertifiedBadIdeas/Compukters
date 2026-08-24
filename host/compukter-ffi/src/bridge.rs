@@ -1,16 +1,19 @@
+use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
 use compukter_vm::{
     verify_artifact, AdmissionError, ArtifactLimits, ComputerAdvanceOutcome, ComputerError,
-    ComputerMachine, ComputerStartError, ComputerValue, ExecutionProfile, GuestTrap, HostFailure,
-    HostResponse, HostValueInput, ManagedAllocationFailure, QuotaExhaustion, ResumeError, RunError,
-    TerminalInputError, TerminalKey, TerminalKeyAction, TerminalKeyEvent, TerminalModifiers,
-    TerminalSnapshot, TerminalUpdate, VmFault,
+    ComputerId, ComputerMachine, ComputerStartError, ComputerValue, ExecutionProfile,
+    FileSystemLimits, GuestTrap, HostFailure, HostResponse, HostValueInput,
+    ManagedAllocationFailure, QuotaExhaustion, ResumeError, RunError, StoreError, StoreHealth,
+    StoreOpenError, TerminalInputError, TerminalKey, TerminalKeyAction, TerminalKeyEvent,
+    TerminalModifiers, TerminalSnapshot, TerminalUpdate, VmFault, WorldFileSystemStore,
 };
 
 use crate::handle_table::{HandleError, HandleTable};
 
 static SESSIONS: OnceLock<HandleTable<ComputerMachine>> = OnceLock::new();
+static STORES: OnceLock<HandleTable<Arc<WorldFileSystemStore>>> = OnceLock::new();
 
 #[derive(Debug)]
 pub(crate) enum CreateError {
@@ -69,6 +72,18 @@ pub(crate) enum BridgeError {
     Resume(ResumeError),
     InvalidRequestId,
     InvalidOperation,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StoreBridgeError {
+    Handle(HandleError),
+    Store(StoreError),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StoreCreateError {
+    Open(StoreOpenError),
+    Handle(HandleError),
 }
 
 pub(crate) fn create(artifact_bytes: Vec<u8>) -> Result<u64, CreateError> {
@@ -185,8 +200,66 @@ pub(crate) fn close(handle: u64) -> Result<(), BridgeError> {
     sessions().close(handle).map_err(BridgeError::Handle)
 }
 
+pub(crate) fn store_open(root: PathBuf, limits: FileSystemLimits) -> Result<u64, StoreCreateError> {
+    let store = WorldFileSystemStore::open(&root, limits).map_err(StoreCreateError::Open)?;
+    stores().insert(store).map_err(StoreCreateError::Handle)
+}
+
+pub(crate) fn store_health(handle: u64) -> Result<StoreHealth, StoreBridgeError> {
+    stores()
+        .with(handle, |store| store.health())
+        .map_err(StoreBridgeError::Handle)
+}
+
+pub(crate) fn store_durable_generation(
+    handle: u64,
+    id: ComputerId,
+) -> Result<u64, StoreBridgeError> {
+    stores()
+        .with(handle, |store| store.durable_generation(id))
+        .map_err(StoreBridgeError::Handle)?
+        .map_err(StoreBridgeError::Store)
+}
+
+pub(crate) fn store_flush(
+    handle: u64,
+    id: ComputerId,
+    generation: u64,
+) -> Result<(), StoreBridgeError> {
+    stores()
+        .with(handle, |store| store.flush(id, generation))
+        .map_err(StoreBridgeError::Handle)?
+        .map_err(StoreBridgeError::Store)
+}
+
+pub(crate) fn store_tombstone(handle: u64, id: ComputerId) -> Result<(), StoreBridgeError> {
+    stores()
+        .with(handle, |store| store.tombstone(id))
+        .map_err(StoreBridgeError::Handle)?
+        .map_err(StoreBridgeError::Store)
+}
+
+pub(crate) fn store_recover(handle: u64, id: ComputerId) -> Result<(), StoreBridgeError> {
+    stores()
+        .with(handle, |store| store.recover_tombstone(id))
+        .map_err(StoreBridgeError::Handle)?
+        .map_err(StoreBridgeError::Store)
+}
+
+pub(crate) fn store_close(handle: u64) -> Result<(), StoreBridgeError> {
+    stores()
+        .with(handle, |store| store.close())
+        .map_err(StoreBridgeError::Handle)?
+        .map_err(StoreBridgeError::Store)?;
+    stores().close(handle).map_err(StoreBridgeError::Handle)
+}
+
 fn sessions() -> &'static HandleTable<ComputerMachine> {
     SESSIONS.get_or_init(HandleTable::default)
+}
+
+fn stores() -> &'static HandleTable<Arc<WorldFileSystemStore>> {
+    STORES.get_or_init(HandleTable::default)
 }
 
 fn copy_outcome(outcome: ComputerAdvanceOutcome) -> OwnedOutcome {
@@ -261,5 +334,62 @@ fn profile() -> ExecutionProfile {
         maximum_outbound_utf16_code_units: 4096,
         maximum_inbound_utf16_code_units: 4096,
         maximum_accepted_responses: 64,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use compukter_vm::{FileCapability, FileRights, FileSystemError, RomImage, VirtualPath};
+    use sha2::{Digest, Sha256};
+
+    use super::*;
+
+    #[test]
+    fn closing_a_store_faults_an_existing_computer_lease_closed() {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        let root = std::env::temp_dir()
+            .join("compukters-ffi-bridge-tests")
+            .join(format!(
+                "{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+        std::fs::create_dir_all(&root).unwrap();
+        let root = root.canonicalize().unwrap();
+        let limits = FileSystemLimits::testing();
+        let handle = store_open(root.clone(), limits).unwrap();
+        let mut filesystem = stores()
+            .with(handle, |store| {
+                store.open_computer(
+                    ComputerId::from_bytes([1; 16]),
+                    Arc::new(empty_rom(&limits)),
+                )
+            })
+            .unwrap()
+            .unwrap();
+
+        store_close(handle).unwrap();
+
+        let home = VirtualPath::parse_utf8("/home", &limits).unwrap();
+        let child = VirtualPath::parse_utf8("/home/after-close", &limits).unwrap();
+        let owner = FileCapability::new(home, FileRights::OWNER);
+        assert_eq!(
+            Err(FileSystemError::Closed),
+            filesystem.create_directory(&owner, &child)
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn empty_rom(limits: &FileSystemLimits) -> RomImage {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"CPKTROM\0");
+        bytes.extend_from_slice(&1_u16.to_le_bytes());
+        bytes.extend_from_slice(&0_u16.to_le_bytes());
+        bytes.extend_from_slice(&0_u32.to_le_bytes());
+        let digest = Sha256::digest(&bytes);
+        bytes.extend_from_slice(&digest);
+        RomImage::admit(bytes.into(), limits).unwrap()
     }
 }

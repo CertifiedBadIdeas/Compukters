@@ -12,6 +12,36 @@
 package ru.lazyhat.compukters.lang.runtime.vm
 
 internal interface LowLevelVmBridge {
+    fun storeOpen(
+        rootUtf8: ByteArray,
+        limitsWire: ByteArray,
+    ): ByteArray = error("filesystem store open is unavailable")
+
+    fun storeHealth(handle: Long): ByteArray = error("filesystem store health is unavailable")
+
+    fun storeDurableGeneration(
+        handle: Long,
+        id: ByteArray,
+    ): ByteArray = error("filesystem durable generation is unavailable")
+
+    fun storeFlush(
+        handle: Long,
+        id: ByteArray,
+        generation: Long,
+    ): Unit = error("filesystem flush is unavailable")
+
+    fun storeTombstone(
+        handle: Long,
+        id: ByteArray,
+    ): Unit = error("filesystem tombstone is unavailable")
+
+    fun storeRecover(
+        handle: Long,
+        id: ByteArray,
+    ): Unit = error("filesystem recovery is unavailable")
+
+    fun storeClose(handle: Long): Unit = error("filesystem store close is unavailable")
+
     fun create(artifact: ByteArray): ByteArray
 
     fun advance(
