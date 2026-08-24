@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 class VmSession private constructor(
     handle: Long,
     private val bridge: LowLevelVmBridge,
+    private val terminalTransport: TerminalWireTransport,
 ) : AutoCloseable {
     private val handle = AtomicLong(handle)
 
@@ -63,13 +64,11 @@ class VmSession private constructor(
 
     fun commitTerminal(): Unit = bridge.terminalCommit(requireHandle())
 
-    fun terminalFullState(): TerminalState = decodeNative { TerminalWireDecoder(bridge.terminalFullState(requireHandle())).fullState() }
+    fun terminalFullState(): TerminalState = decodeNative { terminalTransport.fullState(requireHandle()) }
 
     fun terminalChangesSince(revision: Long): TerminalUpdate {
         require(revision >= 0) { "terminal revision must not be negative" }
-        return decodeNative {
-            TerminalWireDecoder(bridge.terminalChangesSince(requireHandle(), revision)).update()
-        }
+        return decodeNative { terminalTransport.changesSince(requireHandle(), revision) }
     }
 
     fun sendTerminalKey(
@@ -90,7 +89,13 @@ class VmSession private constructor(
 
     override fun close() {
         val closing = handle.getAndSet(CLOSED)
-        if (closing != CLOSED) bridge.close(closing)
+        if (closing != CLOSED) {
+            try {
+                terminalTransport.close()
+            } finally {
+                bridge.close(closing)
+            }
+        }
     }
 
     private fun requireHandle(): Long = handle.get().takeIf { it != CLOSED } ?: error("VM session is closed")
@@ -108,7 +113,7 @@ class VmSession private constructor(
         ): VmSession {
             val (bridge, result) = store.createMachine(id, romImage.copyOf(), artifact.copyOf())
             val handle = decodeNative { WireDecoder(result).createdHandle() }
-            return VmSession(handle, bridge)
+            return admitted(handle, bridge)
         }
 
         fun bootInStore(
@@ -118,7 +123,7 @@ class VmSession private constructor(
         ): VmSession {
             val (bridge, result) = store.createBootMachine(id, romImage.copyOf())
             val handle = decodeNative { WireDecoder(result).createdHandle() }
-            return VmSession(handle, bridge)
+            return admitted(handle, bridge)
         }
 
         internal fun open(
@@ -126,8 +131,23 @@ class VmSession private constructor(
             bridge: LowLevelVmBridge,
         ): VmSession {
             val handle = decodeNative { WireDecoder(bridge.create(artifact.copyOf())).createdHandle() }
-            return VmSession(handle, bridge)
+            return admitted(handle, bridge)
         }
+
+        private fun admitted(
+            handle: Long,
+            bridge: LowLevelVmBridge,
+        ): VmSession =
+            try {
+                VmSession(handle, bridge, bridge.openTerminalTransport())
+            } catch (error: Throwable) {
+                try {
+                    bridge.close(handle)
+                } catch (closeError: Throwable) {
+                    error.addSuppressed(closeError)
+                }
+                throw error
+            }
 
         private inline fun <T> decodeNative(block: () -> T): T =
             try {
@@ -262,10 +282,14 @@ private class WireDecoder(
     private fun invalid(): Nothing = throw IllegalArgumentException("invalid native VM result")
 }
 
-private class TerminalWireDecoder(
-    bytes: ByteArray,
+internal class TerminalWireDecoder(
+    private val buffer: ByteBuffer,
 ) {
-    private val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+    init {
+        buffer.order(ByteOrder.LITTLE_ENDIAN)
+    }
+
+    constructor(bytes: ByteArray) : this(ByteBuffer.wrap(bytes))
 
     fun fullState(): TerminalState {
         require(u8() == 2) { "native terminal result is not a full state" }

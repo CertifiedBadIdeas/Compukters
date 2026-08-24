@@ -12,6 +12,8 @@
 package ru.lazyhat.compukters.lang.runtime.vm
 
 internal interface LowLevelVmBridge {
+    fun openTerminalTransport(): TerminalWireTransport = ByteArrayTerminalWireTransport(this)
+
     fun storeOpen(
         rootUtf8: ByteArray,
         limitsWire: ByteArray,
