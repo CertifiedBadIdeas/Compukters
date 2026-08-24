@@ -30,6 +30,7 @@ import org.jetbrains.kotlin.ir.expressions.IrBlockBody
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrComposite
 import org.jetbrains.kotlin.ir.expressions.IrConst
+import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrGetValue
 import org.jetbrains.kotlin.ir.expressions.IrReturn
@@ -38,11 +39,14 @@ import org.jetbrains.kotlin.ir.expressions.IrStringConcatenation
 import org.jetbrains.kotlin.ir.expressions.IrTypeOperatorCall
 import org.jetbrains.kotlin.ir.expressions.IrWhen
 import org.jetbrains.kotlin.ir.expressions.IrWhileLoop
+import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
+import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
+import org.jetbrains.kotlin.ir.util.parentAsClass
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
@@ -150,9 +154,10 @@ internal object KotlinProjectLowering {
         val constants = constantPool.freeze().records
         val constantIds = constants.withIndex().associate { (index, value) -> value to ConstantId.of(index.toUInt()) }
 
-        val library = stringLibrary()
+        val library = kotlinLibrary()
         val libraryHash = ArtifactWriter.moduleSemanticHash(library)
-        val stringType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(0u)))
+        val charArrayType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(0u)))
+        val stringType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(1u)))
         val functionIds = userFunctions.withIndex().associate { (index, function) -> function.symbol to FunctionId.of(index.toUInt()) }
         val typeIds = userFunctions.withIndex().associate { (index, function) -> function.symbol to TypeId.of(index.toUInt()) }
         val blocks = mutableListOf<Block>()
@@ -167,8 +172,10 @@ internal object KotlinProjectLowering {
                     functionId = functionId,
                     blockBase = firstBlock,
                     stringType = stringType,
+                    charArrayType = charArrayType,
                     unitType = pluginContext.irBuiltIns.unitType,
                     kotlinStringType = pluginContext.irBuiltIns.stringType,
+                    kotlinCharArrayClass = pluginContext.irBuiltIns.charArray,
                     intType = pluginContext.irBuiltIns.intType,
                     booleanType = pluginContext.irBuiltIns.booleanType,
                     charType = pluginContext.irBuiltIns.charType,
@@ -180,8 +187,8 @@ internal object KotlinProjectLowering {
                 )
             val compiled = compiler.compile()
             blocks += compiled.blocks
-            val resultType = valueType(function.returnType, pluginContext, stringType, function)
-            val parameterTypes = function.parameters.map { valueType(it.type, pluginContext, stringType, it) }
+            val resultType = valueType(function.returnType, pluginContext, stringType, charArrayType, function)
+            val parameterTypes = function.parameters.map { valueType(it.type, pluginContext, stringType, charArrayType, it) }
             val flags = setOfNotNull(FunctionFlag.STATIC, FunctionFlag.SUSPENDING.takeIf { function.isSuspend })
             loweredFunctions +=
                 Function(
@@ -203,8 +210,8 @@ internal object KotlinProjectLowering {
                 NominalType.Function(
                     name = requireNotNull(metadataIds[function.name.asString()]),
                     suspending = function.isSuspend,
-                    result = valueType(function.returnType, pluginContext, stringType, function),
-                    parameters = function.parameters.map { valueType(it.type, pluginContext, stringType, it) },
+                    result = valueType(function.returnType, pluginContext, stringType, charArrayType, function),
+                    parameters = function.parameters.map { valueType(it.type, pluginContext, stringType, charArrayType, it) },
                 )
             }
         val app =
@@ -224,6 +231,13 @@ internal object KotlinProjectLowering {
                             expectedSignature = TypeRef.Imported(ImportId.of(0u)),
                             targetModuleHash = libraryHash,
                         ),
+                        Import(
+                            kind = SymbolKind.TYPE,
+                            targetModule = ModuleId.of(1u),
+                            targetName = StringId.of(1u),
+                            expectedSignature = TypeRef.Imported(ImportId.of(1u)),
+                            targetModuleHash = libraryHash,
+                        ),
                     ),
                 functions = loweredFunctions,
                 blocks = blocks,
@@ -231,7 +245,7 @@ internal object KotlinProjectLowering {
         return Artifact(
             semanticFeatures =
                 setOfNotNull(
-                    SemanticFeature.COROUTINES,
+                    SemanticFeature.COROUTINES.takeIf { userFunctions.any { it.isSuspend } },
                     SemanticFeature.CAPABILITIES.takeIf { capabilityIdentities.isNotEmpty() },
                     SemanticFeature.MODULE_IMPORTS,
                 ),
@@ -275,8 +289,10 @@ internal object KotlinProjectLowering {
                 pluginContext.irBuiltIns.booleanType,
                 pluginContext.irBuiltIns.charType,
             )
-        if (function.parameters.any { it.type !in supported } ||
-            function.returnType !in supported
+
+        fun isSupported(type: IrType): Boolean = type in supported || type.isExactClass(pluginContext.irBuiltIns.charArray)
+        if (function.parameters.any { !isSupported(it.type) } ||
+            !isSupported(function.returnType)
         ) {
             throw UnsupportedKotlinIr(function, "unsupported function signature")
         }
@@ -286,23 +302,49 @@ internal object KotlinProjectLowering {
         type: IrType,
         pluginContext: IrPluginContext,
         stringType: ValueType,
+        charArrayType: ValueType,
         element: IrElement,
     ): ValueType =
         when (type) {
-            pluginContext.irBuiltIns.unitType -> ValueType.Unit
-            pluginContext.irBuiltIns.stringType -> stringType
-            pluginContext.irBuiltIns.intType -> ValueType.I32
-            pluginContext.irBuiltIns.booleanType -> ValueType.Bool
-            pluginContext.irBuiltIns.charType -> ValueType.Char
-            else -> throw UnsupportedKotlinIr(element, "unsupported value type")
+            pluginContext.irBuiltIns.unitType -> {
+                ValueType.Unit
+            }
+
+            pluginContext.irBuiltIns.stringType -> {
+                stringType
+            }
+
+            pluginContext.irBuiltIns.intType -> {
+                ValueType.I32
+            }
+
+            pluginContext.irBuiltIns.booleanType -> {
+                ValueType.Bool
+            }
+
+            pluginContext.irBuiltIns.charType -> {
+                ValueType.Char
+            }
+
+            else -> {
+                if (type.isExactClass(pluginContext.irBuiltIns.charArray)) {
+                    charArrayType
+                } else {
+                    throw UnsupportedKotlinIr(element, "unsupported value type")
+                }
+            }
         }
 
-    private fun stringLibrary(): Module =
+    private fun kotlinLibrary(): Module =
         Module(
             name = StringId.of(0u),
             kind = ModuleKind.LIBRARY,
-            strings = listOf(MetadataText.of("kotlin.String")),
-            types = listOf(NominalType.Class(name = StringId.of(0u), final = true)),
+            strings = listOf(MetadataText.of("kotlin.CharArray"), MetadataText.of("kotlin.String")),
+            types =
+                listOf(
+                    NominalType.Array(name = StringId.of(0u), element = ValueType.Char),
+                    NominalType.Class(name = StringId.of(1u), final = true),
+                ),
             exports =
                 listOf(
                     Export(
@@ -311,6 +353,13 @@ internal object KotlinProjectLowering {
                         name = StringId.of(0u),
                         localSymbol = 0u,
                         signature = TypeRef.Local(TypeId.of(0u)),
+                    ),
+                    Export(
+                        kind = SymbolKind.TYPE,
+                        visibility = ExportVisibility.PUBLIC_LIBRARY,
+                        name = StringId.of(1u),
+                        localSymbol = 1u,
+                        signature = TypeRef.Local(TypeId.of(1u)),
                     ),
                 ),
         )
@@ -326,8 +375,10 @@ private class FunctionCompiler(
     private val functionId: FunctionId,
     private val blockBase: Int,
     private val stringType: ValueType,
+    private val charArrayType: ValueType,
     private val unitType: IrType,
     private val kotlinStringType: IrType,
+    private val kotlinCharArrayClass: IrClassSymbol,
     private val intType: IrType,
     private val booleanType: IrType,
     private val charType: IrType,
@@ -424,6 +475,10 @@ private class FunctionCompiler(
                 compileConcat(expression)
             }
 
+            is IrConstructorCall -> {
+                compileCharArrayConstructor(expression)
+            }
+
             is IrCall -> {
                 compileCall(expression)
                     ?: throw UnsupportedKotlinIr(expression, "Unit call used as a value")
@@ -441,6 +496,24 @@ private class FunctionCompiler(
                 throw UnsupportedKotlinIr(expression, "unsupported expression ${expression::class.simpleName}")
             }
         }
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    private fun compileCharArrayConstructor(call: IrConstructorCall): RegisterId {
+        val target = call.symbol.owner
+        val arguments = call.arguments.filterNotNull()
+        if (target.parentAsClass.symbol != kotlinCharArrayClass ||
+            !call.type.isExactClass(kotlinCharArrayClass) ||
+            arguments.size != 1 ||
+            arguments[0].type != intType
+        ) {
+            throw UnsupportedKotlinIr(call, "constructor is outside the project subset")
+        }
+        val length = compileExpression(arguments.single())
+        prepareAllocationBlock()
+        return allocate(charArrayType).also { destination ->
+            emit(Instruction.NewArray(destination, (charArrayType as ValueType.Ref).type, length))
+        }
+    }
 
     private fun compileConcat(expression: IrStringConcatenation): RegisterId {
         val arguments = expression.arguments
@@ -574,6 +647,36 @@ private class FunctionCompiler(
             prepareAllocationBlock()
             return result(stringType) { Instruction.StringSubstring(it, arguments[0], arguments[1], arguments[2]) }
         }
+        if (arguments.size == 1 &&
+            argumentExpressions[0].type.isExactClass(kotlinCharArrayClass) &&
+            name == "<get-size>" &&
+            fqName == "kotlin.CharArray.<get-size>"
+        ) {
+            return result(ValueType.I32) { Instruction.ArrayLength(it, arguments[0]) }
+        }
+        if (arguments.size == 2 &&
+            argumentExpressions[0].type.isExactClass(kotlinCharArrayClass) &&
+            name == "get" &&
+            fqName == "kotlin.CharArray.get"
+        ) {
+            return result(ValueType.Char) { Instruction.ArrayLoad(it, arguments[0], arguments[1]) }
+        }
+        if (arguments.size == 3 &&
+            argumentExpressions[0].type.isExactClass(kotlinCharArrayClass) &&
+            name == "set" &&
+            fqName == "kotlin.CharArray.set"
+        ) {
+            emit(Instruction.ArrayStore(arguments[0], arguments[1], arguments[2]))
+            return null
+        }
+        if (arguments.size == 3 &&
+            argumentExpressions[0].type.isExactClass(kotlinCharArrayClass) &&
+            name == "concatToString" &&
+            fqName == "kotlin.text.concatToString"
+        ) {
+            prepareAllocationBlock()
+            return result(stringType) { Instruction.StringFromCharArray(it, arguments[0], arguments[1], arguments[2]) }
+        }
         throw UnsupportedKotlinIr(call, "call target ${fqName.ifEmpty { name }} is outside the project subset")
     }
 
@@ -676,12 +779,33 @@ private class FunctionCompiler(
         element: IrElement,
     ): ValueType =
         when (type) {
-            unitType -> ValueType.Unit
-            kotlinStringType -> stringType
-            intType -> ValueType.I32
-            booleanType -> ValueType.Bool
-            charType -> ValueType.Char
-            else -> throw UnsupportedKotlinIr(element, "unsupported value type")
+            unitType -> {
+                ValueType.Unit
+            }
+
+            kotlinStringType -> {
+                stringType
+            }
+
+            intType -> {
+                ValueType.I32
+            }
+
+            booleanType -> {
+                ValueType.Bool
+            }
+
+            charType -> {
+                ValueType.Char
+            }
+
+            else -> {
+                if (type.isExactClass(kotlinCharArrayClass)) {
+                    charArrayType
+                } else {
+                    throw UnsupportedKotlinIr(element, "unsupported value type")
+                }
+            }
         }
 
     private fun destinationFor(
@@ -750,6 +874,8 @@ private class FunctionCompiler(
         val instructions: MutableList<Instruction> = mutableListOf(),
     )
 }
+
+private fun IrType.isExactClass(symbol: IrClassSymbol): Boolean = (this as? IrSimpleType)?.classifier == symbol
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private class LiteralCollector : IrVisitorVoid() {
