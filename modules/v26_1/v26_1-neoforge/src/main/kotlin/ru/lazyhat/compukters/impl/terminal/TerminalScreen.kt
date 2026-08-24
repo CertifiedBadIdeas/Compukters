@@ -88,7 +88,10 @@ class TerminalScreen(
             }
             return true
         }
-        val key = KEY_MAP[event.key()] ?: return super.keyPressed(event)
+        val key =
+            KEY_MAP[event.key()]
+                ?: CONTROL_KEY_MAP[event.key()]?.takeIf { event.modifiers() and GLFW.GLFW_MOD_CONTROL != 0 }
+                ?: return super.keyPressed(event)
         val action = if (pressedKeys.add(event.key())) TerminalKeyAction.PRESS else TerminalKeyAction.REPEAT
         ClientPacketDistributor.sendToServer(
             TerminalKeyPayload(position, replica.machineId, key, action, modifiers(event.modifiers())),
@@ -97,7 +100,7 @@ class TerminalScreen(
     }
 
     override fun keyReleased(event: KeyEvent): Boolean {
-        val mapped = KEY_MAP.containsKey(event.key())
+        val mapped = KEY_MAP.containsKey(event.key()) || CONTROL_KEY_MAP.containsKey(event.key())
         pressedKeys.remove(event.key())
         return mapped || super.keyReleased(event)
     }
@@ -299,6 +302,11 @@ class TerminalScreen(
                 GLFW.GLFW_KEY_F10 to TerminalKey.F10,
                 GLFW.GLFW_KEY_F11 to TerminalKey.F11,
                 GLFW.GLFW_KEY_F12 to TerminalKey.F12,
+            )
+        val CONTROL_KEY_MAP =
+            mapOf(
+                GLFW.GLFW_KEY_S to TerminalKey.S,
+                GLFW.GLFW_KEY_X to TerminalKey.X,
             )
     }
 }

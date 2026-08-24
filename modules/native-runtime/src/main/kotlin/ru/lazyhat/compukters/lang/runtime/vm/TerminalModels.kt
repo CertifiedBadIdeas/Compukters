@@ -88,6 +88,8 @@ enum class TerminalKey(
     BACKSPACE(8),
     TAB(9),
     ENTER(13),
+    S(83),
+    X(88),
     INSERT(256),
     DELETE(257),
     HOME(258),

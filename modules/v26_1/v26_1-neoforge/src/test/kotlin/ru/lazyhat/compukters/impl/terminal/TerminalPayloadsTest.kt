@@ -72,6 +72,10 @@ class TerminalPayloadsTest {
                 setOf(TerminalModifier.SHIFT, TerminalModifier.CONTROL),
             )
         assertEquals(key, roundTrip(TerminalKeyPayload.STREAM_CODEC, key))
+        val save = key.copy(key = TerminalKey.S)
+        assertEquals(save, roundTrip(TerminalKeyPayload.STREAM_CODEC, save))
+        val exit = key.copy(key = TerminalKey.X)
+        assertEquals(exit, roundTrip(TerminalKeyPayload.STREAM_CODEC, exit))
 
         val text = TerminalTextPayload(POSITION, 9, "λ😀")
         assertEquals(text, roundTrip(TerminalTextPayload.STREAM_CODEC, text))
