@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.compiler.artifact.write
 
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
+import ru.lazyhat.compukters.compiler.artifact.model.FieldRef
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
@@ -92,6 +93,18 @@ internal fun encodeInstruction(
             operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
         }
 
+        is Instruction.RefEqual -> {
+            opcode = 0x26u
+            form = 7u
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
+        }
+
+        is Instruction.RefNotEqual -> {
+            opcode = 0x27u
+            form = 7u
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
+        }
+
         is Instruction.Less -> {
             opcode = 0x22u
             form = instruction.type.artifactForm
@@ -149,8 +162,41 @@ internal fun encodeInstruction(
             operands.writeRegister(instruction.value)
         }
 
+        is Instruction.FieldGet -> {
+            opcode = 0x35u
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.receiver)
+            operands.writeUleb128(encodeFieldRef(instruction.field))
+        }
+
+        is Instruction.FieldSet -> {
+            opcode = 0x36u
+            operands.writeRegister(instruction.receiver)
+            operands.writeUleb128(encodeFieldRef(instruction.field))
+            operands.writeRegister(instruction.value)
+        }
+
+        is Instruction.StaticGet -> {
+            opcode = 0x37u
+            operands.writeRegister(instruction.destination)
+            operands.writeUleb128(encodeFieldRef(instruction.field))
+        }
+
+        is Instruction.StaticSet -> {
+            opcode = 0x38u
+            operands.writeUleb128(encodeFieldRef(instruction.field))
+            operands.writeRegister(instruction.value)
+        }
+
         is Instruction.IsType -> {
             opcode = 0x39u
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.value)
+            operands.writeUleb128(encodeTypeRef(instruction.type))
+        }
+
+        is Instruction.CheckedCast -> {
+            opcode = 0x3au
             operands.writeRegister(instruction.destination)
             operands.writeRegister(instruction.value)
             operands.writeUleb128(encodeTypeRef(instruction.type))
@@ -308,6 +354,8 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
         is Instruction.AddI32,
         is Instruction.SubtractI32,
         is Instruction.Equal,
+        is Instruction.RefEqual,
+        is Instruction.RefNotEqual,
         is Instruction.Less,
         is Instruction.LessOrEqual,
         is Instruction.Greater,
@@ -332,7 +380,12 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
         is Instruction.ArrayLoad,
         is Instruction.ArrayStore,
         is Instruction.ArrayLength,
+        is Instruction.FieldGet,
+        is Instruction.FieldSet,
+        is Instruction.StaticGet,
+        is Instruction.StaticSet,
         is Instruction.IsType,
+        is Instruction.CheckedCast,
         is Instruction.Throw,
         -> 2u
 
@@ -359,4 +412,10 @@ internal fun encodeFunctionRef(reference: FunctionRef): UInt =
     when (reference) {
         is FunctionRef.Local -> reference.id.value
         is FunctionRef.Imported -> reference.id.value or 0x8000_0000u
+    }
+
+internal fun encodeFieldRef(reference: FieldRef): UInt =
+    when (reference) {
+        is FieldRef.Local -> reference.id.value
+        is FieldRef.Imported -> reference.id.value or 0x8000_0000u
     }

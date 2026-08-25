@@ -21,6 +21,8 @@ package ru.lazyhat.compukters.compiler.artifact.write
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.CapabilityId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
+import ru.lazyhat.compukters.compiler.artifact.model.FieldId
+import ru.lazyhat.compukters.compiler.artifact.model.FieldRef
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
 import ru.lazyhat.compukters.compiler.artifact.model.ImportId
@@ -36,6 +38,100 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class InstructionEncoderTest {
+    @Test
+    fun `checked cast encodes the VM narrowing opcode`() {
+        val encoded =
+            encodeInstruction(
+                Instruction.CheckedCast(
+                    RegisterId.of(1u),
+                    RegisterId.of(2u),
+                    TypeRef.Local(TypeId.of(3u)),
+                ),
+                64,
+            )
+
+        assertContentEquals(byteArrayOf(0x3a, 0, 9, 0, 1, 0, 2, 0, 3), encoded.bytes)
+        assertEquals(2u, encoded.fixedCost)
+    }
+
+    @Test
+    fun `reference identity comparisons encode dedicated canonical opcodes`() {
+        val equal =
+            encodeInstruction(
+                Instruction.RefEqual(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)),
+                64,
+            )
+        val notEqual =
+            encodeInstruction(
+                Instruction.RefNotEqual(RegisterId.of(4u), RegisterId.of(5u), RegisterId.of(6u)),
+                64,
+            )
+
+        assertContentEquals(byteArrayOf(0x26, 7, 10, 0, 1, 0, 2, 0, 3, 0), equal.bytes)
+        assertContentEquals(byteArrayOf(0x27, 7, 10, 0, 4, 0, 5, 0, 6, 0), notEqual.bytes)
+        assertEquals(1u, equal.fixedCost)
+        assertEquals(1u, notEqual.fixedCost)
+    }
+
+    @Test
+    fun `field and static instructions encode canonical references and VM costs`() {
+        val cases =
+            listOf(
+                Instruction.FieldGet(
+                    RegisterId.of(1u),
+                    RegisterId.of(2u),
+                    FieldRef.Local(FieldId.of(128u)),
+                ) to byteArrayOf(0x35, 0, 10, 0, 1, 0, 2, 0, 0x80.toByte(), 0x01),
+                Instruction.FieldSet(
+                    RegisterId.of(2u),
+                    FieldRef.Imported(ImportId.of(3u)),
+                    RegisterId.of(4u),
+                ) to
+                    byteArrayOf(
+                        0x36,
+                        0,
+                        13,
+                        0,
+                        2,
+                        0,
+                        0x83.toByte(),
+                        0x80.toByte(),
+                        0x80.toByte(),
+                        0x80.toByte(),
+                        0x08,
+                        4,
+                        0,
+                    ),
+                Instruction.StaticGet(
+                    RegisterId.of(5u),
+                    FieldRef.Local(FieldId.of(0u)),
+                ) to byteArrayOf(0x37, 0, 7, 0, 5, 0, 0),
+                Instruction.StaticSet(
+                    FieldRef.Imported(ImportId.of(1u)),
+                    RegisterId.of(6u),
+                ) to
+                    byteArrayOf(
+                        0x38,
+                        0,
+                        11,
+                        0,
+                        0x81.toByte(),
+                        0x80.toByte(),
+                        0x80.toByte(),
+                        0x80.toByte(),
+                        0x08,
+                        6,
+                        0,
+                    ),
+            )
+
+        cases.forEach { (instruction, expected) ->
+            val encoded = encodeInstruction(instruction, 64)
+            assertContentEquals(expected, encoded.bytes)
+            assertEquals(2u, encoded.fixedCost)
+        }
+    }
+
     @Test
     fun `encodes canonical fixture frames and costs`() {
         val cases =

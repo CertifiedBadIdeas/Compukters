@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.compiler.worker.k2
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.IrBlockBody
@@ -59,7 +60,8 @@ internal object MinimalScriptLowering {
         pluginContext: IrPluginContext,
         session: CompilationSession,
     ) {
-        val functions = SourceFunctionCollector().also { module.accept(it, null) }.functions
+        val declarations = SourceDeclarationCollector().also { module.accept(it, null) }
+        val functions = declarations.functions
         val guestTypes = GuestTypeRegistry(pluginContext)
         val namedMain = functions.filter { it.name.asString() == "main" }
         if (namedMain.isNotEmpty()) {
@@ -86,7 +88,7 @@ internal object MinimalScriptLowering {
                 return
             }
             try {
-                writeArtifact(session, KotlinProjectLowering.lower(functions, entry, pluginContext, session))
+                writeArtifact(session, KotlinProjectLowering.lower(functions, declarations.classes, entry, pluginContext, session))
             } catch (unsupported: UnsupportedKotlinIr) {
                 session.diagnosticSink(unsupported(session, unsupported.element, unsupported.message))
             }
@@ -198,8 +200,9 @@ internal object MinimalScriptLowering {
         )
 }
 
-private class SourceFunctionCollector : IrVisitorVoid() {
+private class SourceDeclarationCollector : IrVisitorVoid() {
     val functions = mutableListOf<IrSimpleFunction>()
+    val classes = mutableListOf<IrClass>()
 
     override fun visitElement(element: IrElement) {
         element.acceptChildren(this, null)
@@ -210,5 +213,12 @@ private class SourceFunctionCollector : IrVisitorVoid() {
             functions += declaration
         }
         super.visitSimpleFunction(declaration)
+    }
+
+    override fun visitClass(declaration: IrClass) {
+        if (declaration.startOffset >= 0 && declaration.parent is org.jetbrains.kotlin.ir.declarations.IrFile) {
+            classes += declaration
+        }
+        super.visitClass(declaration)
     }
 }
