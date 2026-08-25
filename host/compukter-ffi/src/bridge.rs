@@ -5,8 +5,8 @@ use compukter_vm::{
     verify_artifact, AdmissionError, ArtifactLimits, CompilationRequest, ComputerAdvanceOutcome,
     ComputerError, ComputerId, ComputerMachine, ComputerStartError, ComputerValue,
     EntryArgumentLimits, ExecutionProfile, FileCapability, FileRights, FileSystemLimits, GuestTrap,
-    HostFailure, HostResponse, HostValueInput, ManagedAllocationFailure, ProcessLimits,
-    ProcessResult, QuotaExhaustion, ResumeError, RomImage, RunError, StoreError, StoreHealth,
+    HostFailure, HostResponse, HostValueInput, ManagedAllocationFailure, ProcessFailureReason,
+    ProcessLimits, QuotaExhaustion, ResumeError, RomImage, RunError, StoreError, StoreHealth,
     StoreOpenError, TerminalDevice, TerminalInputError, TerminalKey, TerminalKeyAction,
     TerminalKeyEvent, TerminalModifiers, TerminalUpdate, VirtualPath, VmFault,
     WorldFileSystemStore,
@@ -22,7 +22,7 @@ pub(crate) enum CreateError {
     Verification,
     Admission(AdmissionError),
     Run(RunError),
-    Process(ProcessResult),
+    Process(ProcessFailureReason),
     Handle(HandleError),
 }
 
