@@ -228,6 +228,45 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `bounded when forms compile for admitted scalar types`() =
+        withAdapter { adapter ->
+            listOf(
+                "fun classify(value: Int): String = when (value) { 1 -> \"one\"; else -> \"other\" }; fun main() { classify(1) }",
+                "fun classify(value: Char): Int = when (value) { 'x' -> 1; else -> 0 }; fun main() { classify('x') }",
+                "fun classify(value: Boolean): String = when (value) { true -> \"yes\"; else -> \"no\" }; fun main() { classify(true) }",
+                "fun classify(value: String): Int = when (value) { \"run\" -> 1; else -> 0 }; fun main() { classify(\"run\") }",
+                "fun classify(value: Int): String = when { value == 1 -> \"one\"; else -> \"other\" }; fun main() { classify(1) }",
+                "fun main() { var value = 0; when (1) { 1 -> value = 1; else -> value = 2 }; when { value == 1 -> value = 3; else -> value = 4 } }",
+            ).forEach { source ->
+                val result = adapter.compile(request(source))
+
+                assertNotNull(result.artifact, "$source\n${result.diagnostics.joinToString()}")
+                assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, "$source\n${result.diagnostics}")
+            }
+        }
+
+    @Test
+    fun `unsupported when patterns produce no artifact`() =
+        withAdapter { adapter ->
+            listOf(
+                "fun main() { when (2) { in 1..3 -> Unit; else -> Unit } }",
+                "fun classify(value: Any): Int = when (value) { is String -> 1; else -> 0 }; fun main() { classify(\"x\") }",
+                "fun main() { when (2) { 1, 2 -> Unit; else -> Unit } }",
+            ).forEach { source ->
+                val result = adapter.compile(request(source))
+
+                assertNull(result.artifact, source)
+                assertTrue(result.hasErrors, source)
+                assertTrue(
+                    result.diagnostics.any {
+                        it.category != DiagnosticCategory.TARGET || it.code == "UNSUPPORTED_IR"
+                    },
+                    "$source\n${result.diagnostics}",
+                )
+            }
+        }
+
+    @Test
     fun `same-named char array helper remains an ordinary project call`() =
         withAdapter { adapter ->
             val result =
