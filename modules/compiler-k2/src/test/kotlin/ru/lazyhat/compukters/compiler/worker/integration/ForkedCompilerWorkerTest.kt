@@ -59,17 +59,15 @@ class ForkedCompilerWorkerTest {
                         ),
                         ProjectSource(
                             VirtualSourcePath.kotlin("project/Main.kt"),
-                            BinaryValue.of("package project\nval answer = shared() + 1".encodeToByteArray()),
+                            BinaryValue.of("package project\nfun main() { shared() + 1 }".encodeToByteArray()),
                         ),
                     ),
                     WorkerLimits(),
                 )
 
-            val failure = assertIs<CompilerFailure>(controller.compile(snapshot).get(90, TimeUnit.SECONDS))
-            val unsupported = failure.diagnostics.single { it.code == "UNSUPPORTED_IR" }
+            val success = assertIs<CompileSuccess>(controller.compile(snapshot).get(90, TimeUnit.SECONDS))
 
-            assertEquals("project/Main.kt", unsupported.path?.value)
-            assertTrue(failure.diagnostics.none { it.message.contains("unresolved reference", ignoreCase = true) })
+            assertTrue(success.artifact.toByteArray().isNotEmpty())
         }
 
     @Test
@@ -98,8 +96,9 @@ class ForkedCompilerWorkerTest {
                 factory,
                 CompilerWorkerPolicy(startupTimeoutNanos = 30_000_000_000, compilationTimeoutNanos = 60_000_000_000),
             ).use { controller ->
-                val first = assertIs<CompileSuccess>(compile(controller, "val answer: Int = 42"))
-                val second = assertIs<CompileSuccess>(compile(controller, "val answer: Int = 42"))
+                val program = "fun main() { val answer: Int = 42 }"
+                val first = assertIs<CompileSuccess>(compile(controller, program))
+                val second = assertIs<CompileSuccess>(compile(controller, program))
                 assertContentEquals(first.artifact.toByteArray(), second.artifact.toByteArray())
                 assertEquals(first.artifactHash, second.artifactHash)
                 assertContentEquals(
@@ -111,7 +110,7 @@ class ForkedCompilerWorkerTest {
                 assertTrue(syntax.diagnostics.any { it.category == DiagnosticCategory.SYNTAX })
                 val type = assertIs<CompilerFailure>(compile(controller, "val answer: Missing = 42"))
                 assertTrue(type.diagnostics.any { it.category == DiagnosticCategory.TYPE })
-                assertIs<CompileSuccess>(compile(controller, "val answer: Int = 42"))
+                assertIs<CompileSuccess>(compile(controller, program))
                 assertEquals(1, starts, "compiler failures must not restart a healthy worker")
             }
         } finally {

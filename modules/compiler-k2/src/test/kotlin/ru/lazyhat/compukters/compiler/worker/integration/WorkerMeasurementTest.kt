@@ -120,7 +120,12 @@ class WorkerMeasurementTest {
         limits: WorkerLimits,
     ) = CompileRequest(
         RequestId.of(id),
-        listOf(ProjectSource(VirtualSourcePath.kotlin("project/main.kt"), BinaryValue.of("val answer: Int = 42".encodeToByteArray()))),
+        listOf(
+            ProjectSource(
+                VirtualSourcePath.kotlin("project/main.kt"),
+                BinaryValue.of("fun main() { val answer: Int = 42 }".encodeToByteArray()),
+            ),
+        ),
         TargetSettings.KOTLIN_2_4_JVM_17,
         identity,
         limits,

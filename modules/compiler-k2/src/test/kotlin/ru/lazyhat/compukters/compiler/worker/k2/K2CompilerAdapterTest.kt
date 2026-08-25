@@ -59,7 +59,7 @@ class K2CompilerAdapterTest {
     @Test
     fun `valid Kotlin source reaches IR and request files are removed`() =
         withAdapter { adapter, root ->
-            val result = adapter.compile(request("val answer: Int = 42"))
+            val result = adapter.compile(request("fun main() { val answer: Int = 42 }"))
             assertTrue(result.reachedIr)
             assertFalse(result.hasErrors)
             assertNotNull(result.artifact)
@@ -104,15 +104,14 @@ class K2CompilerAdapterTest {
                     request(
                         listOf(
                             source("project/Helper.kt", "package project\nfun shared() = 41"),
-                            source("project/Main.kt", "package project\nval answer = shared() + 1"),
+                            source("project/Main.kt", "package project\nfun main() { shared() + 1 }"),
                         ),
                     ),
                 )
 
             assertTrue(result.reachedIr)
-            val unsupported = result.diagnostics.single { it.code == "UNSUPPORTED_IR" }
-            assertEquals("project/Main.kt", unsupported.path?.value)
-            assertTrue(unsupported.startUtf16 != null)
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+            assertFalse(result.hasErrors, result.diagnostics.toString())
             assertFalse(result.diagnostics.any { it.message.contains("unresolved reference", ignoreCase = true) })
         }
 
@@ -182,7 +181,7 @@ class K2CompilerAdapterTest {
     @Test
     fun `IR compilation writes no temporary output beyond its exact source footprint`() =
         withAdapter { adapter, root ->
-            val source = "val answer: Int = 42"
+            val source = "fun main() { val answer: Int = 42 }"
             val trustedApiBytes =
                 TrustedIntrinsicRegistry.CORE_SOURCE_BUNDLES.sumOf { bundle ->
                     checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream(bundle.resource))
