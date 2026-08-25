@@ -37,7 +37,7 @@ class TrustedIntrinsicRegistryTest {
 
         val compiler = TrustedCapabilityIdentity("compukter", "compiler", 1u.toUShort(), 0u.toUShort(), 2u)
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(compiler, 0u, asynchronous = true),
+            TrustedIntrinsic.CapabilityOperation(compiler, 0u, BlockingMode.VM_TASK),
             resolve(
                 "compukter.compiler.Compiler.compile",
                 suspending = true,
@@ -46,7 +46,7 @@ class TrustedIntrinsicRegistryTest {
             ),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(compiler, 1u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(compiler, 1u, BlockingMode.NONE),
             resolve(
                 "compukter.compiler.Compiler.diagnostics",
                 suspending = false,
@@ -111,19 +111,19 @@ class TrustedIntrinsicRegistryTest {
 
         val filesystem = TrustedCapabilityIdentity("compukter", "filesystem", 1u.toUShort(), 0u.toUShort(), 7u)
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(filesystem, 0u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(filesystem, 0u, BlockingMode.NONE),
             resolve("compukter.filesystem.FileSystem.stat", listOf(TrustedValueType.STRING), TrustedValueType.INT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(filesystem, 1u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(filesystem, 1u, BlockingMode.NONE),
             resolve("compukter.filesystem.FileSystem.list", listOf(TrustedValueType.STRING), TrustedValueType.STRING),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(filesystem, 2u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(filesystem, 2u, BlockingMode.NONE),
             resolve("compukter.filesystem.FileSystem.readText", listOf(TrustedValueType.STRING), TrustedValueType.STRING),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(filesystem, 3u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(filesystem, 3u, BlockingMode.NONE),
             resolve(
                 "compukter.filesystem.FileSystem.writeText",
                 listOf(TrustedValueType.STRING, TrustedValueType.STRING),
@@ -189,18 +189,18 @@ class TrustedIntrinsicRegistryTest {
             TrustedIntrinsic.CapabilityOperation(
                 capability = process,
                 operation = 0u,
-                asynchronous = true,
+                blocking = BlockingMode.VM_TASK,
             ),
             TrustedIntrinsicRegistry.resolve(trustedRun),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(process, 1u, asynchronous = true),
+            TrustedIntrinsic.CapabilityOperation(process, 1u, BlockingMode.VM_TASK),
             TrustedIntrinsicRegistry.resolve(
                 trustedRun.copy(parameters = listOf(TrustedValueType.STRING, TrustedValueType.INT, TrustedValueType.STRING)),
             ),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(process, 2u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(process, 2u, BlockingMode.NONE),
             TrustedIntrinsicRegistry.resolve(
                 trustedRun.copy(
                     name = "compukter.process.Process.commandLine",
@@ -246,7 +246,7 @@ class TrustedIntrinsicRegistryTest {
             TrustedCallableIdentity(
                 bundleIdentity = TrustedIntrinsicRegistry.TERMINAL_BUNDLE_ID,
                 name = "compukter.terminal.Terminal.awaitEvent",
-                suspending = true,
+                suspending = false,
                 parameters = emptyList(),
                 result = TrustedValueType.INT,
             )
@@ -255,11 +255,12 @@ class TrustedIntrinsicRegistryTest {
             TrustedIntrinsic.CapabilityOperation(
                 capability = TrustedIntrinsicRegistry.TERMINAL_CAPABILITY,
                 operation = 3u,
-                asynchronous = true,
+                blocking = BlockingMode.VM_TASK,
             ),
             TrustedIntrinsicRegistry.resolve(trustedAwait),
         )
-        assertNull(TrustedIntrinsicRegistry.resolve(trustedAwait.copy(suspending = false)))
+        assertNull(TrustedIntrinsicRegistry.resolve(trustedAwait.copy(bundleIdentity = null)))
+        assertNull(TrustedIntrinsicRegistry.resolve(trustedAwait.copy(suspending = true)))
         assertNull(TrustedIntrinsicRegistry.resolve(trustedAwait.copy(parameters = listOf(TrustedValueType.STRING))))
         assertNull(TrustedIntrinsicRegistry.resolve(trustedAwait.copy(result = TrustedValueType.UNIT)))
     }
@@ -281,39 +282,39 @@ class TrustedIntrinsicRegistryTest {
         )
 
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 0u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 0u, BlockingMode.NONE),
             resolve("compukter.terminal.Terminal.write", listOf(TrustedValueType.STRING), TrustedValueType.UNIT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 1u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 1u, BlockingMode.NONE),
             resolve("compukter.terminal.Terminal.erasePrevious", emptyList(), TrustedValueType.UNIT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 2u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 2u, BlockingMode.NONE),
             resolve("compukter.terminal.Terminal.clear", emptyList(), TrustedValueType.UNIT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 4u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 4u, BlockingMode.NONE),
             resolve("compukter.terminal.Terminal.eventText", emptyList(), TrustedValueType.STRING),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 5u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 5u, BlockingMode.NONE),
             resolve("compukter.terminal.Terminal.eventKey", emptyList(), TrustedValueType.INT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 6u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 6u, BlockingMode.NONE),
             resolve("compukter.terminal.Terminal.eventAction", emptyList(), TrustedValueType.INT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 7u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 7u, BlockingMode.NONE),
             resolve("compukter.terminal.Terminal.eventModifiers", emptyList(), TrustedValueType.INT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 8u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 8u, BlockingMode.NONE),
             resolve("compukter.terminal.Terminal.finishEvent", emptyList(), TrustedValueType.UNIT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 9u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 9u, BlockingMode.NONE),
             resolve(
                 "compukter.terminal.Terminal.setCursor",
                 listOf(TrustedValueType.INT, TrustedValueType.INT),
@@ -321,11 +322,11 @@ class TrustedIntrinsicRegistryTest {
             ),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 10u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 10u, BlockingMode.NONE),
             resolve("compukter.terminal.Terminal.setCursorVisible", listOf(TrustedValueType.BOOL), TrustedValueType.UNIT),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 11u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 11u, BlockingMode.NONE),
             resolve(
                 "compukter.terminal.Terminal.setColors",
                 listOf(TrustedValueType.INT, TrustedValueType.INT),
@@ -333,7 +334,7 @@ class TrustedIntrinsicRegistryTest {
             ),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 12u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 12u, BlockingMode.NONE),
             resolve(
                 "compukter.terminal.Terminal.writeAt",
                 listOf(TrustedValueType.INT, TrustedValueType.INT, TrustedValueType.STRING),
@@ -341,7 +342,7 @@ class TrustedIntrinsicRegistryTest {
             ),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 13u, asynchronous = false),
+            TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, 13u, BlockingMode.NONE),
             resolve(
                 "compukter.terminal.Terminal.fill",
                 listOf(

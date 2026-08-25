@@ -27,7 +27,7 @@ object Terminal {
 
     fun clear(): Unit = Unit
 
-    suspend fun awaitEvent(): Int = 0
+    fun awaitEvent(): Int = 0
 
     fun eventText(): String = ""
 

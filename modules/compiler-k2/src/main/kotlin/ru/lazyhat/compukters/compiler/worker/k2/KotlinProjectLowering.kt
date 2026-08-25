@@ -610,7 +610,7 @@ private class FunctionCompiler(
                     .map { (_, argument) -> compileExpression(requireNotNull(argument)) }
             val capability = requireNotNull(capabilityIds[intrinsic.capability])
             val destination = destinationFor(call.type, call)
-            if (intrinsic.asynchronous) {
+            if (intrinsic.blocking == BlockingMode.VM_TASK) {
                 val resume = createBlock()
                 emit(
                     Instruction.CapabilityCallAsync(

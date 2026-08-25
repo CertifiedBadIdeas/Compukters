@@ -297,6 +297,26 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `ordinary main lowers trusted terminal wait as vm blocking`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.terminal.Terminal
+
+                fun main() {
+                    val event = Terminal.awaitEvent()
+                    if (event == 1) Terminal.write("event")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+        }
+
+    @Test
     fun `primitive char array lowers deterministically for exact utf16 materialization`() =
         withAdapter { adapter ->
             val request =

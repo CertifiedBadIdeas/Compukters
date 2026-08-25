@@ -230,7 +230,10 @@ internal fun validateArtifact(
         val elementIdentity = resolveType(arrayIdentity.module, elementReference.type) ?: return false
         val elementType = artifact.modules[elementIdentity.module].types[elementIdentity.type]
         if (elementType !is NominalType.Class) return false
-        return artifact.modules[elementIdentity.module].strings.getOrNull(elementType.name.value.toInt())?.toString() == "kotlin.String"
+        return artifact.modules[elementIdentity.module]
+            .strings
+            .getOrNull(elementType.name.value.toInt())
+            ?.toString() == "kotlin.String"
     }
 
     fun stringIdentity(): TypeIdentity? {
@@ -429,17 +432,27 @@ internal fun validateArtifact(
     ) {
         add(ArtifactWriteErrorCode.BAD_REFERENCE, "entry function is outside the function table")
     } else {
-        val entryModuleIndex = artifact.entry.module.value.toInt()
-        val entryFunction = artifact.modules[entryModuleIndex].functions[artifact.entry.function.value.toInt()]
+        val entryModuleIndex =
+            artifact.entry.module.value
+                .toInt()
+        val entryFunction =
+            artifact.modules[entryModuleIndex].functions[
+                artifact.entry.function.value
+                    .toInt(),
+            ]
         val signatureIdentity = resolveType(entryModuleIndex, entryFunction.signature)
         val signature = signatureIdentity?.let { artifact.modules[it.module].types[it.type] as? NominalType.Function }
         val matches =
             when (artifact.entry.arguments) {
-                EntryArguments.NONE -> signature?.parameters?.isEmpty() == true && entryFunction.parameterCount == 0u
-                EntryArguments.STRING_ARRAY ->
+                EntryArguments.NONE -> {
+                    signature?.parameters?.isEmpty() == true && entryFunction.parameterCount == 0u
+                }
+
+                EntryArguments.STRING_ARRAY -> {
                     signature?.parameters?.singleOrNull()?.let {
                         isExactStringArray(requireNotNull(signatureIdentity).module, it)
                     } == true && entryFunction.parameterCount == 1u
+                }
             }
         if (!matches) {
             add(
@@ -471,7 +484,7 @@ internal fun validateArtifact(
         if (
             module.functions.any { FunctionFlag.SUSPENDING in it.flags } ||
             module.blocks.any { block ->
-                block.instructions.any { it is Instruction.CallSuspend || it is Instruction.CapabilityCallAsync }
+                block.instructions.any { it is Instruction.CallSuspend }
             }
         ) {
             expectedFeatures += SemanticFeature.COROUTINES
@@ -822,7 +835,7 @@ internal fun validateArtifact(
                     }
 
                     if (
-                        instruction.isSuspendingTerminator() &&
+                        instruction.isKotlinSuspendingTerminator() &&
                         FunctionFlag.SUSPENDING !in owner.flags
                     ) {
                         add(
@@ -1310,4 +1323,4 @@ private fun Instruction.isTerminator(): Boolean =
         this is Instruction.CallSuspend ||
         this is Instruction.CapabilityCallAsync
 
-private fun Instruction.isSuspendingTerminator(): Boolean = this is Instruction.CallSuspend || this is Instruction.CapabilityCallAsync
+private fun Instruction.isKotlinSuspendingTerminator(): Boolean = this is Instruction.CallSuspend

@@ -25,8 +25,8 @@ import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.Capability
 import ru.lazyhat.compukters.compiler.artifact.model.CapabilityId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
-import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
 import ru.lazyhat.compukters.compiler.artifact.model.EntryArguments
+import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
 import ru.lazyhat.compukters.compiler.artifact.model.ExceptionEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Export
 import ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility
@@ -660,17 +660,16 @@ class ArtifactValidatorTest {
     }
 
     @Test
-    fun `suspending terminators require a suspending owning function`() {
-        val artifact =
-            executableArtifact(
-                Instruction.CapabilityCallAsync(Destination.Unit, CapabilityId.of(0u), 0u, emptyList(), BlockId.of(1u)),
-            )
-        val module = artifact.modules[0]
-        val invalid =
-            artifact.copy(
+    fun `only Kotlin suspend calls require a suspending owning function`() {
+        fun ordinaryCaller(artifact: Artifact): Artifact {
+            val module = artifact.modules[0]
+            val signature = module.types[0] as NominalType.Function
+            return artifact.copy(
+                semanticFeatures = artifact.semanticFeatures - SemanticFeature.COROUTINES,
                 modules =
                     listOf(
                         module.copy(
+                            types = module.types.toMutableList().also { it[0] = signature.copy(suspending = false) },
                             functions =
                                 module.functions.toMutableList().also {
                                     it[0] = it[0].copy(flags = setOf(FunctionFlag.STATIC))
@@ -679,8 +678,28 @@ class ArtifactValidatorTest {
                         artifact.modules[1],
                     ),
             )
+        }
 
-        assertTrue(validateArtifact(invalid, ArtifactWriteLimits()).any { it.detail.contains("non-suspending function") })
+        val vmBlocking =
+            executableArtifact(
+                Instruction.CapabilityCallAsync(Destination.Unit, CapabilityId.of(0u), 0u, emptyList(), BlockId.of(1u)),
+            )
+        assertEquals(emptyList(), validateArtifact(ordinaryCaller(vmBlocking), ArtifactWriteLimits()))
+
+        val kotlinSuspend =
+            executableArtifact(
+                Instruction.CallSuspend(
+                    Destination.Register(RegisterId.of(0u)),
+                    FunctionRef.Local(FunctionId.of(1u)),
+                    listOf(RegisterId.of(0u), RegisterId.of(1u)),
+                    BlockId.of(1u),
+                ),
+            )
+
+        assertTrue(
+            validateArtifact(ordinaryCaller(kotlinSuspend), ArtifactWriteLimits())
+                .any { it.detail.contains("non-suspending function") },
+        )
     }
 
     @Test
