@@ -215,6 +215,133 @@ fn k2_suspend_project_call_resumes_across_async_capability() {
     }
 }
 
+#[test]
+fn k2_bounded_when_selects_matched_and_fallback_branches() {
+    let Ok(path) = std::env::var("COMPUKTER_KOTLIN_WHEN_ARTIFACT") else {
+        return;
+    };
+    let bytes = fs::read(path).expect("K2 when output must exist");
+
+    assert_eq!(utf16("enter"), execute_when_artifact(&bytes, 13));
+    assert_eq!(utf16("other"), execute_when_artifact(&bytes, 99));
+}
+
+fn execute_when_artifact(bytes: &[u8], key: i32) -> Vec<u16> {
+    let verified = verify_artifact(Arc::from(bytes.to_vec()), ArtifactLimits::default())
+        .expect("pinned VM must verify K2 when output");
+    let string_argument = [HostValueType::String];
+    let no_arguments = [];
+    let operations = [
+        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
+        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
+        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
+        OperationSchema::asynchronous(&no_arguments, HostValueType::I32),
+        OperationSchema::synchronous(&no_arguments, HostValueType::String),
+        OperationSchema::synchronous(&no_arguments, HostValueType::I32),
+        OperationSchema::synchronous(&no_arguments, HostValueType::I32),
+        OperationSchema::synchronous(&no_arguments, HostValueType::I32),
+        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
+        OperationSchema::synchronous(
+            &[HostValueType::I32, HostValueType::I32],
+            HostValueType::Unit,
+        ),
+        OperationSchema::synchronous(&[HostValueType::Bool], HostValueType::Unit),
+        OperationSchema::synchronous(
+            &[HostValueType::I32, HostValueType::I32],
+            HostValueType::Unit,
+        ),
+        OperationSchema::synchronous(
+            &[
+                HostValueType::I32,
+                HostValueType::I32,
+                HostValueType::String,
+            ],
+            HostValueType::Unit,
+        ),
+        OperationSchema::synchronous(
+            &[
+                HostValueType::I32,
+                HostValueType::I32,
+                HostValueType::I32,
+                HostValueType::I32,
+                HostValueType::Char,
+            ],
+            HostValueType::Unit,
+        ),
+    ];
+    let binding = CapabilityBinding::new("compukter", "terminal", 2, 0, &operations);
+    let profile = ExecutionProfile {
+        heap_bytes: 1024 * 1024,
+        frame_storage_bytes: 1024 * 1024,
+        maximum_call_depth: 64,
+        maximum_coroutines: 1,
+        maximum_host_requests: 64,
+        maximum_events: 0,
+        maximum_slice_budget: u32::MAX,
+        compiler_abi: [0; 32],
+        standard_library_abi: [0; 32],
+        maximum_host_arguments: 16,
+        maximum_outbound_utf16_code_units: 4096,
+        maximum_inbound_utf16_code_units: 4096,
+        maximum_accepted_responses: 64,
+    };
+    let mut session =
+        Session::admit(verified, profile, &[binding]).expect("K2 when program must admit");
+    session.start(&[]).expect("K2 when program must start");
+
+    let await_request = next_host_request(&mut session, "awaitEvent", 3, None);
+    session
+        .resume(await_request, HostResponse::Success(HostValueInput::I32(1)))
+        .expect("awaitEvent must resume");
+    let key_request = next_host_request(&mut session, "eventKey", 5, None);
+    session
+        .resume(key_request, HostResponse::Success(HostValueInput::I32(key)))
+        .expect("eventKey must resume");
+    let (write_request, output) = next_string_host_request(&mut session, "write", 0);
+    session
+        .resume(write_request, HostResponse::Success(HostValueInput::Unit))
+        .expect("write must resume");
+    loop {
+        match session
+            .advance(64, 64)
+            .expect("K2 when program must finish")
+        {
+            AdvanceOutcome::SliceExhausted => {}
+            AdvanceOutcome::Halted(None) => break,
+            outcome => panic!("unexpected K2 when outcome after write: {outcome:?}"),
+        }
+    }
+    output
+}
+
+fn next_string_host_request(
+    session: &mut Session,
+    operation_name: &str,
+    expected_operation: u32,
+) -> (RequestId, Vec<u16>) {
+    loop {
+        match session
+            .advance(64, 64)
+            .unwrap_or_else(|error| panic!("K2 program failed before {operation_name}: {error:?}"))
+        {
+            AdvanceOutcome::SliceExhausted => {}
+            AdvanceOutcome::HostRequest(request) => {
+                assert_eq!(expected_operation, request.operation(), "{operation_name}");
+                let value = match request.arguments().get(0) {
+                    Some(HostValueView::String(value)) => value.to_vec(),
+                    argument => panic!("unexpected {operation_name} argument: {argument:?}"),
+                };
+                return (request.id(), value);
+            }
+            outcome => panic!("unexpected K2 program outcome before {operation_name}: {outcome:?}"),
+        }
+    }
+}
+
+fn utf16(value: &str) -> Vec<u16> {
+    value.encode_utf16().collect()
+}
+
 fn next_host_request(
     session: &mut Session,
     operation_name: &str,
