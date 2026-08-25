@@ -495,6 +495,10 @@ private class FunctionCompiler(
                 compileWhenValue(expression)
             }
 
+            is IrBlock -> {
+                compileBlockValue(expression)
+            }
+
             is IrTypeOperatorCall -> {
                 compileExpression(expression.argument)
             }
@@ -738,7 +742,7 @@ private class FunctionCompiler(
     }
 
     private fun compileWhenStatement(expression: IrWhen) {
-        val join = createBlock(loopHeader = true)
+        val exits = mutableListOf<Int>()
         expression.branches.forEachIndexed { index, branch ->
             val isElse = index == expression.branches.lastIndex && branch.condition.isTrueConstant()
             if (isElse) {
@@ -750,17 +754,22 @@ private class FunctionCompiler(
                 emit(Instruction.Branch(condition, blockId(body), blockId(otherwise)))
                 currentBlock = body
                 compileStatement(branch.result)
-                if (!isTerminated()) jumpTo(join)
+                if (!isTerminated()) exits += currentBlock
                 currentBlock = otherwise
             }
         }
-        if (!isTerminated()) jumpTo(join)
+        if (!isTerminated()) exits += currentBlock
+        val join = createBlock()
+        exits.forEach { exit ->
+            currentBlock = exit
+            jumpTo(join)
+        }
         currentBlock = join
     }
 
     private fun compileWhenValue(expression: IrWhen): RegisterId {
         val destination = allocate(valueType(expression.type, expression))
-        val join = createBlock(loopHeader = true)
+        val exits = mutableListOf<Int>()
         expression.branches.forEachIndexed { index, branch ->
             val isElse = index == expression.branches.lastIndex && branch.condition.isTrueConstant()
             if (isElse) {
@@ -772,13 +781,25 @@ private class FunctionCompiler(
                 emit(Instruction.Branch(condition, blockId(body), blockId(otherwise)))
                 currentBlock = body
                 emit(Instruction.Move(destination, compileExpression(branch.result)))
-                jumpTo(join)
+                exits += currentBlock
                 currentBlock = otherwise
             }
         }
-        if (!isTerminated()) jumpTo(join)
+        if (!isTerminated()) exits += currentBlock
+        val join = createBlock()
+        exits.forEach { exit ->
+            currentBlock = exit
+            jumpTo(join)
+        }
         currentBlock = join
         return destination
+    }
+
+    private fun compileBlockValue(block: IrBlock): RegisterId {
+        val result = block.statements.lastOrNull() as? IrExpression
+            ?: throw UnsupportedKotlinIr(block, "value block has no result expression")
+        block.statements.dropLast(1).forEach(::compileStatement)
+        return compileExpression(result)
     }
 
     private fun trustedOperation(function: IrSimpleFunction): TrustedIntrinsic.CapabilityOperation? =
