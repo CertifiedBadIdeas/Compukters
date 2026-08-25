@@ -212,6 +212,7 @@ tasks.named<KotlinCompile>("compileTestKotlin") {
 
 val kotlinSubsetConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")
 val suspendCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/suspend-call.cpkt")
+val whenConformanceArtifact = layout.buildDirectory.file("generated/conformance/when.cpkt")
 val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = layout.buildDirectory.file("generated/system/shell.cpkt")
 val kotlincArtifact = layout.buildDirectory.file("generated/system/kotlinc.cpkt")
@@ -244,6 +245,22 @@ val generateSuspendCallConformanceArtifact = tasks.register<Test>("generateSuspe
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.suspendCallArtifact", suspendCallConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateWhenConformanceArtifact = tasks.register<Test>("generateWhenConformanceArtifact") {
+    description = "Compiles a bounded Kotlin when program for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*bounded when lowers deterministically for vm execution*")
+    inputs.file(workerJar)
+    outputs.file(whenConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.whenArtifact", whenConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

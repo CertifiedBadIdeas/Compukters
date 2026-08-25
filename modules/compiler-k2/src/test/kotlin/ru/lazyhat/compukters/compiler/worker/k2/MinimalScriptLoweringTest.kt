@@ -228,6 +228,41 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `bounded when lowers deterministically for vm execution`() =
+        withAdapter { adapter ->
+            val request =
+                request(
+                    "project/main.kt" to
+                        """
+                        import compukter.terminal.Terminal
+
+                        suspend fun key(): Int {
+                            Terminal.awaitEvent()
+                            return Terminal.eventKey()
+                        }
+
+                        suspend fun main() {
+                            val text = when (key()) {
+                                13 -> "enter"
+                                27 -> "escape"
+                                else -> "other"
+                            }
+                            Terminal.write(text)
+                        }
+                        """.trimIndent(),
+                )
+            val first = adapter.compile(request)
+            val second = adapter.compile(request)
+
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukter.vm.whenArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `bounded when forms compile for admitted scalar types`() =
         withAdapter { adapter ->
             listOf(
