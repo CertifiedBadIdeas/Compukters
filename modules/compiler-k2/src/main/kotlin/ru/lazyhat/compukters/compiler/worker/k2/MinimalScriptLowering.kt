@@ -20,18 +20,14 @@ package ru.lazyhat.compukters.compiler.worker.k2
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.ir.IrElement
-import org.jetbrains.kotlin.ir.declarations.IrField
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.IrBlockBody
-import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
-import ru.lazyhat.compukters.compiler.artifact.model.Constant
-import ru.lazyhat.compukters.compiler.artifact.model.ConstantId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
 import ru.lazyhat.compukters.compiler.artifact.model.Function
@@ -44,7 +40,6 @@ import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
-import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
@@ -65,11 +60,15 @@ internal object MinimalScriptLowering {
         session: CompilationSession,
     ) {
         val functions = SourceFunctionCollector().also { module.accept(it, null) }.functions
+        val guestTypes = GuestTypeRegistry(pluginContext)
         val namedMain = functions.filter { it.name.asString() == "main" }
         if (namedMain.isNotEmpty()) {
             val validMain =
                 namedMain.filter { function ->
-                    function.parameters.isEmpty() &&
+                    (
+                        function.parameters.isEmpty() ||
+                            (function.parameters.size == 1 && guestTypes.isStringArray(function.parameters.single().type))
+                    ) &&
                         function.returnType == pluginContext.irBuiltIns.unitType
                 }
             if (validMain.size != 1 || namedMain.size != 1) {
@@ -82,7 +81,7 @@ internal object MinimalScriptLowering {
                 session.diagnosticSink(unsupported(session, entry))
                 return
             }
-            if (body.statements.isEmpty()) {
+            if (body.statements.isEmpty() && entry.parameters.isEmpty()) {
                 writeArtifact(session, mainArtifact(entry.isSuspend))
                 return
             }
@@ -94,16 +93,7 @@ internal object MinimalScriptLowering {
             return
         }
 
-        val fields = SourceFieldCollector().also { module.accept(it, null) }.fields
-        val field = fields.singleOrNull()
-        val constant = field?.initializer?.expression as? IrConst
-        val value = constant?.value as? Int
-        if (field == null || field.type != pluginContext.irBuiltIns.intType || constant == null || value == null) {
-            session.diagnosticSink(unsupported(session, field))
-            return
-        }
-
-        writeArtifact(session, artifact(value))
+        session.diagnosticSink(invalidEntry(session, null))
     }
 
     private fun writeArtifact(
@@ -146,7 +136,7 @@ internal object MinimalScriptLowering {
         DiagnosticSeverity.ERROR,
         DiagnosticCategory.TARGET,
         "INVALID_ENTRY_POINT",
-        "project must declare exactly one zero-argument fun main() or suspend fun main() returning Unit",
+        "project must declare exactly one fun main() or suspend fun main() returning Unit, with no parameters or one Array<String>",
         session.virtualSourcePath(function?.file?.fileEntry?.name),
         function?.startOffset?.takeIf { it >= 0 }?.toUInt(),
         function?.endOffset?.takeIf { it >= 0 }?.toUInt(),
@@ -206,59 +196,6 @@ internal object MinimalScriptLowering {
                     ),
                 ),
         )
-
-    private fun artifact(value: Int): Artifact =
-        Artifact(
-            manifest = Manifest.minimal(maximumBlockCost = BLOCK_COST),
-            entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
-            modules =
-                listOf(
-                    Module(
-                        name = StringId.of(0u),
-                        kind = ModuleKind.APPLICATION,
-                        strings = listOf(MetadataText.of("app"), MetadataText.of("entry")),
-                        types =
-                            listOf(
-                                NominalType.Function(
-                                    name = StringId.of(1u),
-                                    suspending = false,
-                                    result = ValueType.Unit,
-                                    parameters = emptyList(),
-                                ),
-                            ),
-                        constants = listOf(Constant.I32(value)),
-                        functions =
-                            listOf(
-                                Function(
-                                    owner = null,
-                                    name = StringId.of(1u),
-                                    signature = TypeRef.Local(TypeId.of(0u)),
-                                    flags = setOf(FunctionFlag.STATIC),
-                                    registers = listOf(ValueType.I32),
-                                    parameterCount = 0u,
-                                    firstBlock = BlockId.of(0u),
-                                    blockCount = 1u,
-                                    firstException = 0u,
-                                    exceptionCount = 0u,
-                                ),
-                            ),
-                        blocks =
-                            listOf(
-                                Block(
-                                    owner = FunctionId.of(0u),
-                                    loopHeaderSafepoint = false,
-                                    instructions =
-                                        listOf(
-                                            Instruction.Const(RegisterId.of(0u), ConstantId.of(0u)),
-                                            Instruction.Return(Destination.Unit),
-                                        ),
-                                ),
-                            ),
-                    ),
-                ),
-        )
-
-    private const val BLOCK_COST = 2u
 }
 
 private class SourceFunctionCollector : IrVisitorVoid() {
@@ -273,21 +210,5 @@ private class SourceFunctionCollector : IrVisitorVoid() {
             functions += declaration
         }
         super.visitSimpleFunction(declaration)
-    }
-}
-
-private class SourceFieldCollector : IrVisitorVoid() {
-    val fields = mutableListOf<IrField>()
-
-    override fun visitElement(element: IrElement) {
-        element.acceptChildren(this, null)
-    }
-
-    override fun visitField(declaration: IrField) {
-        val initializerStart = declaration.initializer?.expression?.startOffset
-        if (declaration.startOffset >= 0 && initializerStart != null && initializerStart >= 0) {
-            fields += declaration
-        }
-        super.visitField(declaration)
     }
 }

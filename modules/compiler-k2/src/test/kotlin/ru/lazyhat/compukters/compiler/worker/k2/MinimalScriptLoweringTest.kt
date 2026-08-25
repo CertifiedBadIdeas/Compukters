@@ -27,7 +27,6 @@ import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.Constant
-import ru.lazyhat.compukters.compiler.artifact.model.ConstantId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
 import ru.lazyhat.compukters.compiler.artifact.model.Function
@@ -40,7 +39,6 @@ import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
-import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
@@ -120,6 +118,52 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `all four legal main forms lower deterministically with an explicit entry contract`() =
+        withAdapter { adapter ->
+            val sources =
+                listOf(
+                    "fun main() {}" to 0,
+                    "suspend fun main() {}" to 0,
+                    "fun main(args: Array<String>) {}" to 1,
+                    "suspend fun main(args: Array<String>) {}" to 1,
+                )
+
+            sources.forEach { (source, expectedTag) ->
+                val first = adapter.compile(request(source))
+                val second = adapter.compile(request(source))
+                val firstBytes = assertNotNull(first.artifact).toByteArray()
+                val secondBytes = assertNotNull(second.artifact).toByteArray()
+
+                assertContentEquals(firstBytes, secondBytes)
+                assertEquals(expectedTag, firstBytes[48].toInt() and 0xff)
+                assertTrue(first.diagnostics.none { it.severity.name == "ERROR" })
+            }
+        }
+
+    @Test
+    fun `string array entry lowers deterministically for vm argv conformance`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.terminal.Terminal
+
+                fun main(args: Array<String>) {
+                    Terminal.write(args[0] + ":" + args[1])
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertEquals(1, artifact[48].toInt() and 0xff)
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukter.vm.argvArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `entry policy rejects duplicate and invalid main functions`() =
         withAdapter { adapter ->
             val duplicate =
@@ -129,12 +173,99 @@ class MinimalScriptLoweringTest {
                         "b/Main.kt" to "package b\nsuspend fun main() {}",
                     ),
                 )
-            val invalid = adapter.compile(request("fun main(value: String) {}"))
+            val invalid =
+                listOf(
+                    adapter.compile(request("fun main(value: String) {}")),
+                    adapter.compile(request("fun main(value: Array<Int>) {}")),
+                    adapter.compile(request("fun main(value: Array<String>?) {}")),
+                    adapter.compile(request("fun main(): Int = 0")),
+                )
 
-            listOf(duplicate, invalid).forEach { result ->
+            (listOf(duplicate) + invalid).forEach { result ->
                 assertNull(result.artifact)
                 assertTrue(result.diagnostics.any { it.category == DiagnosticCategory.TARGET && it.code == "INVALID_ENTRY_POINT" })
             }
+        }
+
+    @Test
+    fun `entry policy rejects a project without main`() =
+        withAdapter { adapter ->
+            val result = adapter.compile(request("val answer: Int = 42"))
+
+            assertNull(result.artifact)
+            assertTrue(
+                result.diagnostics.any {
+                    it.category == DiagnosticCategory.TARGET && it.code == "INVALID_ENTRY_POINT"
+                },
+                result.diagnostics.toString(),
+            )
+        }
+
+    @Test
+    fun `string arrays can be constructed read and written`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                fun main(args: Array<String>) {
+                    val empty = emptyArray<String>()
+                    val values = arrayOf(args[0], "")
+                    values[1] = args[1]
+                    empty.size
+                    values[0]
+                    values[1]
+                }
+                """.trimIndent()
+
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+        }
+
+    @Test
+    fun `string arrays support copyOfRange and supported default arguments`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                fun select(args: Array<String> = emptyArray()): Array<String> =
+                    args.copyOfRange(1, args.size)
+
+                fun main(args: Array<String>) {
+                    select()
+                    select(arrayOf("prefix", args[0]))[0]
+                }
+                """.trimIndent()
+
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+        }
+
+    @Test
+    fun `string array entry supports bounded loop access`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        fun main(args: Array<String>) {
+                            var index = 0
+                            while (index < args.size) {
+                                val value = args[index]
+                                index = index + value.length
+                            }
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
         }
 
     @Test
@@ -515,26 +646,12 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `typed Int constant lowers to deterministic minimal artifact`() =
-        withAdapter { adapter ->
-            val first = assertNotNull(adapter.compile(request("val answer: Int = 42")).artifact).toByteArray()
-            val second = assertNotNull(adapter.compile(request("val answer: Int = 42")).artifact).toByteArray()
-            val expected =
-                (ArtifactWriter.write(expectedArtifact()) as ArtifactWriteResult.Success)
-                    .bytes
-
-            assertContentEquals(expected, first)
-            assertContentEquals(first, second)
-            assertContentEquals(sha256(first), sha256(second))
-        }
-
-    @Test
     fun `unsupported source IR produces one stable target diagnostic and no artifact`() =
         withAdapter { adapter ->
             listOf(
-                "val answer: Long = 42L",
-                "val answer: Int = 41 + 1",
-                "val answer: Int = 42\nval other: Int = 7",
+                "fun main() { val answer: Long = 42L }",
+                "fun main() { listOf(1) }",
+                "fun main() { val answer: UInt = 42u }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))
                 val target = result.diagnostics.filter { it.category == DiagnosticCategory.TARGET }
@@ -542,7 +659,7 @@ class MinimalScriptLoweringTest {
                 assertNull(result.artifact, source)
                 assertEquals(1, target.size, source)
                 assertEquals("UNSUPPORTED_IR", target.single().code, source)
-                assertEquals("source IR is outside the minimal script subset", target.single().message, source)
+                assertTrue(target.single().message.startsWith("source IR is outside the minimal script subset"), source)
                 assertTrue(result.hasErrors, source)
             }
         }
@@ -553,7 +670,7 @@ class MinimalScriptLoweringTest {
             val result =
                 adapter.compile(
                     request(
-                        source = "val answer: Int = 42",
+                        source = "fun main() { val answer: Int = 42 }",
                         limits = WorkerLimits(artifactBytes = 1, diagnostics = 1, diagnosticTextBytes = 32),
                     ),
                 )
@@ -565,57 +682,6 @@ class MinimalScriptLoweringTest {
             assertTrue(diagnostic.code?.startsWith("ARTIFACT_WRITE_") == true)
             assertTrue(diagnostic.message.encodeToByteArray().size <= 32)
         }
-
-    private fun expectedArtifact(): Artifact =
-        Artifact(
-            manifest = Manifest.minimal(maximumBlockCost = 2u),
-            entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
-            modules =
-                listOf(
-                    Module(
-                        name = StringId.of(0u),
-                        kind = ModuleKind.APPLICATION,
-                        strings = listOf(MetadataText.of("app"), MetadataText.of("entry")),
-                        types =
-                            listOf(
-                                NominalType.Function(
-                                    name = StringId.of(1u),
-                                    suspending = false,
-                                    result = ValueType.Unit,
-                                    parameters = emptyList(),
-                                ),
-                            ),
-                        constants = listOf(Constant.I32(42)),
-                        functions =
-                            listOf(
-                                Function(
-                                    owner = null,
-                                    name = StringId.of(1u),
-                                    signature = TypeRef.Local(TypeId.of(0u)),
-                                    flags = setOf(FunctionFlag.STATIC),
-                                    registers = listOf(ValueType.I32),
-                                    parameterCount = 0u,
-                                    firstBlock = BlockId.of(0u),
-                                    blockCount = 1u,
-                                    firstException = 0u,
-                                    exceptionCount = 0u,
-                                ),
-                            ),
-                        blocks =
-                            listOf(
-                                Block(
-                                    owner = FunctionId.of(0u),
-                                    loopHeaderSafepoint = false,
-                                    instructions =
-                                        listOf(
-                                            Instruction.Const(RegisterId.of(0u), ConstantId.of(0u)),
-                                            Instruction.Return(Destination.Unit),
-                                        ),
-                                ),
-                            ),
-                    ),
-                ),
-        )
 
     private fun expectedMainArtifact(suspending: Boolean): Artifact =
         Artifact(
