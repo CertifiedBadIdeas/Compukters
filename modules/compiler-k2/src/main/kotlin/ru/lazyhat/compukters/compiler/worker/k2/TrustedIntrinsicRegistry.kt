@@ -46,11 +46,16 @@ internal data class TrustedCapabilityIdentity(
         compareValuesBy(this, other, { it.namespace }, { it.name }, { it.abiMajor }, { it.abiMinor }, { it.operationCount })
 }
 
+internal enum class BlockingMode {
+    NONE,
+    VM_TASK,
+}
+
 internal sealed interface TrustedIntrinsic {
     data class CapabilityOperation(
         val capability: TrustedCapabilityIdentity,
         val operation: UInt,
-        val asynchronous: Boolean,
+        val blocking: BlockingMode,
     ) : TrustedIntrinsic
 }
 
@@ -113,7 +118,7 @@ private object CompilerIntrinsicProvider : TrustedIntrinsicProvider {
                     .CapabilityOperation(
                         TrustedIntrinsicRegistry.COMPILER_CAPABILITY,
                         0u,
-                        asynchronous = true,
+                        blocking = BlockingMode.VM_TASK,
                     ).takeIf {
                         callable.suspending &&
                             callable.parameters == listOf(TrustedValueType.STRING, TrustedValueType.STRING) &&
@@ -204,7 +209,7 @@ private object ProcessIntrinsicProvider : TrustedIntrinsicProvider {
                     .CapabilityOperation(
                         TrustedIntrinsicRegistry.PROCESS_CAPABILITY,
                         operation,
-                        asynchronous = true,
+                        blocking = BlockingMode.VM_TASK,
                     ).takeIf { callable.suspending && callable.result == TrustedValueType.INT }
             }
 
@@ -243,7 +248,7 @@ private object TerminalIntrinsicProvider : TrustedIntrinsicProvider {
                 }
 
                 "compukter.terminal.Terminal.awaitEvent" -> {
-                    async(3u, callable, TrustedValueType.INT)
+                    vmBlocking(3u, callable, TrustedValueType.INT)
                 }
 
                 "compukter.terminal.Terminal.eventText" -> {
@@ -315,17 +320,17 @@ private object TerminalIntrinsicProvider : TrustedIntrinsicProvider {
         parameters: List<TrustedValueType>,
         result: TrustedValueType,
     ): TrustedIntrinsic? =
-        TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, operation, asynchronous = false).takeIf {
+        TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, operation, BlockingMode.NONE).takeIf {
             !callable.suspending && callable.parameters == parameters && callable.result == result
         }
 
-    private fun async(
+    private fun vmBlocking(
         operation: UInt,
         callable: TrustedCallableIdentity,
         result: TrustedValueType,
     ): TrustedIntrinsic? =
-        TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, operation, asynchronous = true).takeIf {
-            callable.suspending && callable.parameters.isEmpty() && callable.result == result
+        TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.TERMINAL_CAPABILITY, operation, BlockingMode.VM_TASK).takeIf {
+            !callable.suspending && callable.parameters.isEmpty() && callable.result == result
         }
 }
 
@@ -336,6 +341,6 @@ private fun sync(
     result: TrustedValueType,
     capability: TrustedCapabilityIdentity,
 ): TrustedIntrinsic.CapabilityOperation? =
-    TrustedIntrinsic.CapabilityOperation(capability, operation, asynchronous = false).takeIf {
+    TrustedIntrinsic.CapabilityOperation(capability, operation, BlockingMode.NONE).takeIf {
         !callable.suspending && callable.parameters == parameters && callable.result == result
     }
