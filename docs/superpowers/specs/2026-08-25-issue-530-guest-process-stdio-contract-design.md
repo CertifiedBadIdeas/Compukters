@@ -425,19 +425,22 @@ memory/performance benchmarks are defined.
 ## Implementation Decomposition
 
 Issue #530 is the integration parent. Implementation proceeds as sequential
-child issues and commits on `main`:
+child issues and commits on the repository's default development branch, `dev`:
 
-1. **Entry argv:** object `Array<String>` support, the four entry forms,
+1. **[#531 Entry argv](https://github.com/CertifiedBadIdeas/Compukters/issues/531):** object `Array<String>` support, the four entry forms,
    ambiguity diagnostics, and bounded child-heap materialization.
-2. **VM-blocking calls:** trusted synchronous-looking calls that park a task,
+2. **[#532 VM-blocking calls](https://github.com/CertifiedBadIdeas/Compukters/issues/532):** trusted synchronous-looking calls that park a task,
    task-owned continuation state, and removal of Kotlin `suspend` leakage.
-3. **Process completion:** the Guest Kotlin types required by
+3. **[#533 Process completion](https://github.com/CertifiedBadIdeas/Compukters/issues/533):** the Guest Kotlin types required by
    `ProcessResult`, stable failure mapping, bounded diagnostics,
    `Process.exit`, and `process@2`.
-4. **Standard streams:** `stdio@1`, canonical terminal input, stdout/stderr,
+4. **[#534 Standard streams](https://github.com/CertifiedBadIdeas/Compukters/issues/534):** `stdio@1`, canonical terminal input, stdout/stderr,
    and the initial print/println/readln surface.
-5. **Shell integration:** the bounded lexer, structured argv, migrated ROM
+5. **[#535 Shell integration](https://github.com/CertifiedBadIdeas/Compukters/issues/535):** the bounded lexer, structured argv, migrated ROM
    programs, regenerated artifacts, and complete playable-loop coverage.
+
+The executable task sequence is recorded in the
+[implementation plan](../plans/2026-08-25-issue-530-guest-process-stdio-contract.md).
 
 Project manifests, controller module templates, addon SDK selection, UART
 binding, and peripheral search remain follow-up designs and do not enter these
