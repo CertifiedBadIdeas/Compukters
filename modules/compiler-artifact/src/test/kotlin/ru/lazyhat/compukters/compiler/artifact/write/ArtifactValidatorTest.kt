@@ -26,6 +26,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Capability
 import ru.lazyhat.compukters.compiler.artifact.model.CapabilityId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
+import ru.lazyhat.compukters.compiler.artifact.model.EntryArguments
 import ru.lazyhat.compukters.compiler.artifact.model.ExceptionEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Export
 import ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility
@@ -55,6 +56,29 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ArtifactValidatorTest {
+    @Test
+    fun `entry arguments must match the exact entry function signature`() {
+        val noArguments = minimalArtifact()
+        val stringArguments = stringArrayEntryArtifact()
+
+        assertEquals(emptyList(), validateArtifact(noArguments, ArtifactWriteLimits()))
+        assertEquals(emptyList(), validateArtifact(stringArguments, ArtifactWriteLimits()))
+
+        val missingArgumentContract =
+            validateArtifact(
+                stringArguments.copy(entry = stringArguments.entry.copy(arguments = EntryArguments.NONE)),
+                ArtifactWriteLimits(),
+            )
+        val unexpectedArgumentContract =
+            validateArtifact(
+                noArguments.copy(entry = noArguments.entry.copy(arguments = EntryArguments.STRING_ARRAY)),
+                ArtifactWriteLimits(),
+            )
+
+        assertTrue(missingArgumentContract.any { it.detail.contains("entry argument contract") })
+        assertTrue(unexpectedArgumentContract.any { it.detail.contains("entry argument contract") })
+    }
+
     @Test
     fun `invalid entry produces a stable bounded diagnostic without bytes`() {
         val artifact =
@@ -935,6 +959,67 @@ class ArtifactValidatorTest {
     }
 }
 
+private fun stringArrayEntryArtifact(): Artifact {
+    val stringType = TypeRef.Local(TypeId.of(0u))
+    val arrayType = TypeRef.Local(TypeId.of(1u))
+    val arrayValue = ValueType.Ref(nullable = false, type = arrayType)
+    return Artifact(
+        manifest = Manifest.minimal(),
+        entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u), EntryArguments.STRING_ARRAY),
+        modules =
+            listOf(
+                Module(
+                    name = StringId.of(0u),
+                    kind = ModuleKind.APPLICATION,
+                    strings =
+                        listOf(
+                            MetadataText.of("app"),
+                            MetadataText.of("entry"),
+                            MetadataText.of("kotlin.Array<kotlin.String>"),
+                            MetadataText.of("kotlin.String"),
+                        ),
+                    types =
+                        listOf(
+                            NominalType.Class(name = StringId.of(3u), final = true),
+                            NominalType.Array(
+                                name = StringId.of(2u),
+                                element = ValueType.Ref(nullable = false, type = stringType),
+                            ),
+                            NominalType.Function(
+                                name = StringId.of(1u),
+                                suspending = false,
+                                result = ValueType.Unit,
+                                parameters = listOf(arrayValue),
+                            ),
+                        ),
+                    functions =
+                        listOf(
+                            Function(
+                                owner = null,
+                                name = StringId.of(1u),
+                                signature = TypeRef.Local(TypeId.of(2u)),
+                                flags = setOf(FunctionFlag.STATIC),
+                                registers = listOf(arrayValue),
+                                parameterCount = 1u,
+                                firstBlock = BlockId.of(0u),
+                                blockCount = 1u,
+                                firstException = 0u,
+                                exceptionCount = 0u,
+                            ),
+                        ),
+                    blocks =
+                        listOf(
+                            Block(
+                                owner = FunctionId.of(0u),
+                                loopHeaderSafepoint = false,
+                                instructions = listOf(Instruction.Return(Destination.Unit)),
+                            ),
+                        ),
+                ),
+            ),
+    )
+}
+
 private fun executableArtifact(
     instruction: Instruction,
     appendControlFlow: Boolean = false,
@@ -946,14 +1031,14 @@ private fun executableArtifact(
             isSuspending -> listOf(instruction)
             else -> listOf(instruction, Instruction.Jump(BlockId.of(1u)))
         }
-    val strings = listOf("app", "callee", "entry").map(MetadataText::of)
+    val strings = listOf("app", "callee", "entry", "testEntry").map(MetadataText::of)
     val stringType = ValueType.Ref(nullable = false, TypeRef.Imported(ImportId.of(0u)))
     val calleeSuspending = instruction is Instruction.CallSuspend
     val artifact =
         Artifact(
             semanticFeatures = setOf(SemanticFeature.COROUTINES, SemanticFeature.CAPABILITIES, SemanticFeature.MODULE_IMPORTS),
             manifest = Manifest.minimal(maximumBlockCost = 16u),
-            entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
+            entry = EntryPoint(ModuleId.of(0u), FunctionId.of(2u)),
             modules =
                 listOf(
                     Module(
@@ -969,6 +1054,7 @@ private fun executableArtifact(
                                     listOf(ValueType.I32, stringType, stringType, stringType),
                                 ),
                                 NominalType.Function(StringId.of(1u), calleeSuspending, ValueType.I32, listOf(ValueType.I32, stringType)),
+                                NominalType.Function(StringId.of(3u), false, ValueType.Unit, emptyList()),
                             ),
                         imports =
                             listOf(
@@ -1013,12 +1099,25 @@ private fun executableArtifact(
                                     0u,
                                     0u,
                                 ),
+                                Function(
+                                    null,
+                                    StringId.of(3u),
+                                    TypeRef.Local(TypeId.of(2u)),
+                                    setOf(FunctionFlag.STATIC),
+                                    emptyList(),
+                                    0u,
+                                    BlockId.of(3u),
+                                    1u,
+                                    0u,
+                                    0u,
+                                ),
                             ),
                         blocks =
                             listOf(
                                 Block(FunctionId.of(0u), false, firstInstructions),
                                 Block(FunctionId.of(0u), false, listOf(Instruction.Return(Destination.Unit))),
                                 Block(FunctionId.of(1u), false, listOf(Instruction.Return(Destination.Register(RegisterId.of(0u))))),
+                                Block(FunctionId.of(2u), false, listOf(Instruction.Return(Destination.Unit))),
                             ),
                     ),
                     Module(
@@ -1100,7 +1199,7 @@ private fun charArrayArtifact(
 ): Artifact {
     val artifact = executableArtifact(instruction)
     val module = artifact.modules[0]
-    val arrayType = ValueType.Ref(nullable = false, TypeRef.Local(TypeId.of(2u)))
+    val arrayType = ValueType.Ref(nullable = false, TypeRef.Local(TypeId.of(module.types.size.toUInt())))
     val signature = module.types[0] as NominalType.Function
     val entry = module.functions[0]
     val parameters = if (initializeArray) signature.parameters + arrayType else signature.parameters

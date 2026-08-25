@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.compiler.artifact.write
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
+import ru.lazyhat.compukters.compiler.artifact.model.EntryArguments
 import ru.lazyhat.compukters.compiler.artifact.model.ExceptionEntry
 import ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
@@ -215,6 +216,22 @@ internal fun validateArtifact(
                 }
             }
         }
+
+    fun isExactStringArray(
+        sourceModule: Int,
+        value: ValueType,
+    ): Boolean {
+        val arrayReference = value as? ValueType.Ref ?: return false
+        if (arrayReference.nullable) return false
+        val arrayIdentity = resolveType(sourceModule, arrayReference.type) ?: return false
+        val arrayType = artifact.modules[arrayIdentity.module].types[arrayIdentity.type] as? NominalType.Array ?: return false
+        val elementReference = arrayType.element as? ValueType.Ref ?: return false
+        if (elementReference.nullable) return false
+        val elementIdentity = resolveType(arrayIdentity.module, elementReference.type) ?: return false
+        val elementType = artifact.modules[elementIdentity.module].types[elementIdentity.type]
+        if (elementType !is NominalType.Class) return false
+        return artifact.modules[elementIdentity.module].strings.getOrNull(elementType.name.value.toInt())?.toString() == "kotlin.String"
+    }
 
     fun stringIdentity(): TypeIdentity? {
         val matches =
@@ -411,6 +428,25 @@ internal fun validateArtifact(
         ].functions.size
     ) {
         add(ArtifactWriteErrorCode.BAD_REFERENCE, "entry function is outside the function table")
+    } else {
+        val entryModuleIndex = artifact.entry.module.value.toInt()
+        val entryFunction = artifact.modules[entryModuleIndex].functions[artifact.entry.function.value.toInt()]
+        val signatureIdentity = resolveType(entryModuleIndex, entryFunction.signature)
+        val signature = signatureIdentity?.let { artifact.modules[it.module].types[it.type] as? NominalType.Function }
+        val matches =
+            when (artifact.entry.arguments) {
+                EntryArguments.NONE -> signature?.parameters?.isEmpty() == true && entryFunction.parameterCount == 0u
+                EntryArguments.STRING_ARRAY ->
+                    signature?.parameters?.singleOrNull()?.let {
+                        isExactStringArray(requireNotNull(signatureIdentity).module, it)
+                    } == true && entryFunction.parameterCount == 1u
+            }
+        if (!matches) {
+            add(
+                ArtifactWriteErrorCode.INCONSISTENT_RANGE,
+                "entry argument contract disagrees with the entry function signature",
+            )
+        }
     }
     if (artifact.modules.size > limits.modules) {
         add(ArtifactWriteErrorCode.LIMIT_EXCEEDED, "module count exceeds ${limits.modules}")

@@ -27,6 +27,15 @@ import kotlin.test.assertIs
 
 class MinimalArtifactGoldenTest {
     @Test
+    fun `writer publishes format v2 and a canonical no-argument entry tag`() {
+        val result = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(minimalArtifact()))
+
+        assertEquals(2, result.bytes[4].toInt() and 0xff)
+        assertEquals(0, result.bytes[48].toInt() and 0xff)
+        assertContentEquals(ByteArray(15), result.bytes.copyOfRange(49, 64))
+    }
+
+    @Test
     fun `Kotlin writer reproduces canonical Rust vector A`() {
         val expected = fixture("vector-a.cpkt")
         val result = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(minimalArtifact()))
@@ -34,7 +43,7 @@ class MinimalArtifactGoldenTest {
         assertEquals(1144, result.bytes.size)
         assertContentEquals(expected, result.bytes)
         assertEquals(
-            "23a3d933f13f78ac679e0cf10eca0355566f25e7e80a5937e45fb65ce8d06876",
+            "ffdf3638f06189ffee32fe1c0df945a4f47e4a4efe7064fd37099139e3b809ac",
             result.sha256.toHex(),
         )
     }

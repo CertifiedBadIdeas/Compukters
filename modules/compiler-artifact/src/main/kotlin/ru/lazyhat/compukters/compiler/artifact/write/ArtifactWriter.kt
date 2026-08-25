@@ -119,7 +119,7 @@ private fun encodeArtifact(
 
     val sink = BinarySink(limits.artifactBytes)
     sink.writeBytes(byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'K'.code.toByte(), 'T'.code.toByte()))
-    sink.writeU16(1u)
+    sink.writeU16(2u)
     sink.writeU16(0u)
     sink.writeU16(artifact.minimumRuntimeAbi.major.toUInt())
     sink.writeU16(artifact.minimumRuntimeAbi.minor.toUInt())
@@ -131,7 +131,8 @@ private fun encodeArtifact(
     sink.writeU64(payloadEnd.toULong())
     sink.writeU32(artifact.entry.module.value)
     sink.writeU32(artifact.entry.function.value)
-    sink.writeBytes(ByteArray(16))
+    sink.writeU8(artifact.entry.arguments.artifactTag)
+    sink.writeBytes(ByteArray(15))
     entries.forEach { entry ->
         sink.writeU16(entry.section.kind.toUInt())
         sink.writeU16(entry.section.flags.toUInt())
