@@ -30,9 +30,17 @@ enum class SemanticFeature {
     MODULE_IMPORTS,
 }
 
+enum class EntryArguments(
+    internal val artifactTag: UInt,
+) {
+    NONE(0u),
+    STRING_ARRAY(1u),
+}
+
 data class EntryPoint(
     val module: ModuleId,
     val function: FunctionId,
+    val arguments: EntryArguments = EntryArguments.NONE,
 )
 
 class Manifest(

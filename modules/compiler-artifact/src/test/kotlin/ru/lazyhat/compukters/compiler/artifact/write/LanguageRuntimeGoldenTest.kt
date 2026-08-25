@@ -30,7 +30,7 @@ class LanguageRuntimeGoldenTest {
 
         assertContentEquals(fixture("language-runtime.cpkt"), result.bytes)
         assertEquals(1552, result.bytes.size)
-        assertEquals("7ace82d2b36a81403ba73a53aba83f916405ab2ba2868a0f236d97a57cd269e5", result.sha256.toHex())
+        assertEquals("968d9b8fbc48fd7f5227837369910f945dba441f08868ae6c0be002a5b452492", result.sha256.toHex())
         assertEquals(
             "ab4e670a18323eab2cc1a734e54f1d78df4f89fb24eb68141f2bc747d2480fd6",
             encodeModuleSections(languageRuntimeArtifact().modules.single(), ArtifactWriteLimits()).semanticHash.toHex(),
