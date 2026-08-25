@@ -30,7 +30,7 @@ use compukter_ffi::{
     compukter_terminal_changes_since, compukter_terminal_commit, compukter_terminal_full_state,
     compukter_terminal_key, compukter_terminal_text, compukter_verify_artifact, FfiStatus,
 };
-use compukter_vm::ProcessResult;
+use compukter_vm::ProcessFailureReason;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -304,15 +304,15 @@ fn c_abi_boots_a_machine_from_the_executable_rom_entry() {
     assert_eq!(FfiStatus::Ok, compukter_close(machine));
 
     assert_eq!(
-        vec![5, ProcessResult::NotFound.code() as u8],
+        vec![5, ProcessFailureReason::NotFound.code() as u8],
         boot_create_wire(store, [10; 16], &empty_rom()),
     );
     assert_eq!(
-        vec![5, ProcessResult::NotExecutable.code() as u8],
+        vec![5, ProcessFailureReason::NotExecutable.code() as u8],
         boot_create_wire(store, [11; 16], &rom_with_boot(&terminal_artifact(), false)),
     );
     assert_eq!(
-        vec![5, ProcessResult::InvalidArtifact.code() as u8],
+        vec![5, ProcessFailureReason::InvalidProgram.code() as u8],
         boot_create_wire(store, [12; 16], &rom_with_boot(b"invalid", true)),
     );
     assert_eq!(FfiStatus::Ok, compukter_store_close(store));
