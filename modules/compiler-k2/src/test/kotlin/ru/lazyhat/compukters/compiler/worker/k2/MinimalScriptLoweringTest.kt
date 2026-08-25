@@ -118,6 +118,71 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `guest object subset lowers sealed results data values enum identity and type branches`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                sealed interface Result
+                data class Exited(val code: Int) : Result
+                data class Failed(val reason: Reason, val diagnostic: String) : Result
+                enum class Reason { NOT_FOUND, TRAPPED }
+
+                fun classify(value: Result): Int = when (value) {
+                    is Exited -> value.code
+                    is Failed -> if (value.reason == Reason.NOT_FOUND) value.diagnostic.length else -1
+                }
+
+                fun main() {
+                    classify(Exited(7))
+                }
+                """.trimIndent()
+
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            val typeTags = indexedSectionRecords(artifact, 0x0101).map { it.first().toInt() and 0xff }
+            val opcodes = applicationCodeOpcodes(artifact)
+
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertEquals(4, typeTags.count { it == 3 }, "two source and two constructor function types")
+            assertEquals(3, typeTags.count { it == 0 }, "Exited, Failed and Reason classes")
+            assertEquals(1, typeTags.count { it == 1 }, "sealed Result interface")
+            assertEquals(5, indexedSectionRecords(artifact, 0x0105).size, "three properties and two enum roots")
+            setOf(0x26, 0x30, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x40).forEach { opcode ->
+                assertTrue(opcode in opcodes, "missing expected guest object opcode 0x${opcode.toString(16)} in $opcodes")
+            }
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukter.vm.objectArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
+    fun `guest object subset rejects mutable generic initialized secondary and explicitly cast shapes`() =
+        withAdapter { adapter ->
+            val unsupported =
+                listOf(
+                    "data class Mutable(var value: Int)\nfun main() { Mutable(1) }",
+                    "data class Generic<T>(val value: T)\nfun main() { Generic(1) }",
+                    "class Initialized(val value: Int) { init { value + 1 } }\nfun main() { Initialized(1) }",
+                    "class Secondary(val value: Int) { constructor() : this(0) }\nfun main() { Secondary() }",
+                    "class Defaulted(val value: Int = 1)\nfun main() { Defaulted() }",
+                    "class Computed(val value: Int) { val doubled: Int get() = value + value }\nfun main() { Computed(1) }",
+                    "enum class Stateful(val code: Int) { ONE(1) }\nfun main() { Stateful.ONE }",
+                    "sealed interface Value\ndata class NumberValue(val value: Int) : Value\nfun read(value: Value): Int = (value as NumberValue).value\nfun main() { read(NumberValue(1)) }",
+                )
+
+            unsupported.forEach { source ->
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact, source)
+                assertTrue(
+                    result.diagnostics.any { it.code == "UNSUPPORTED_IR" },
+                    result.diagnostics.toString(),
+                )
+            }
+        }
+
+    @Test
     fun `all four legal main forms lower deterministically with an explicit entry contract`() =
         withAdapter { adapter ->
             val sources =
@@ -805,3 +870,50 @@ class MinimalScriptLoweringTest {
 
     private fun sha256(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(bytes)
 }
+
+private fun applicationCodeOpcodes(artifact: ByteArray): List<Int> =
+    indexedSectionRecords(artifact, 0x0108).flatMap { record ->
+        buildList {
+            var cursor = 0
+            while (cursor < record.size) {
+                add(record[cursor].toInt() and 0xff)
+                val length = record.u16(cursor + 2)
+                require(length >= 4 && cursor + length <= record.size)
+                cursor += length
+            }
+        }
+    }
+
+private fun indexedSectionRecords(
+    artifact: ByteArray,
+    kind: Int,
+): List<ByteArray> {
+    val sectionCount = artifact.u32(16)
+    val entry =
+        (0 until sectionCount)
+            .map { 64 + it * 32 }
+            .single { offset -> artifact.u16(offset) == kind && artifact.u32(offset + 4) == 1 }
+    val sectionOffset = artifact.u64(entry + 8)
+    val sectionLength = artifact.u64(entry + 16)
+    val payload = artifact.copyOfRange(sectionOffset, sectionOffset + sectionLength)
+    val count = payload.u32(0)
+    val dataStart = align8(16 + (count + 1) * 4)
+    return (0 until count).map { index ->
+        val start = payload.u32(16 + index * 4)
+        val end = payload.u32(16 + (index + 1) * 4)
+        payload.copyOfRange(dataStart + start, dataStart + end)
+    }
+}
+
+private fun ByteArray.u16(offset: Int): Int = (this[offset].toInt() and 0xff) or ((this[offset + 1].toInt() and 0xff) shl 8)
+
+private fun ByteArray.u32(offset: Int): Int =
+    (0 until 4).fold(0) { value, byte -> value or ((this[offset + byte].toInt() and 0xff) shl (byte * 8)) }
+
+private fun ByteArray.u64(offset: Int): Int {
+    val value = (0 until 8).fold(0L) { result, byte -> result or ((this[offset + byte].toLong() and 0xffL) shl (byte * 8)) }
+    require(value in 0..Int.MAX_VALUE)
+    return value.toInt()
+}
+
+private fun align8(value: Int): Int = (value + 7) and -8

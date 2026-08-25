@@ -24,12 +24,17 @@ import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.Capability
 import ru.lazyhat.compukters.compiler.artifact.model.CapabilityId
+import ru.lazyhat.compukters.compiler.artifact.model.Constant
+import ru.lazyhat.compukters.compiler.artifact.model.ConstantId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.EntryArguments
 import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
 import ru.lazyhat.compukters.compiler.artifact.model.ExceptionEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Export
 import ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility
+import ru.lazyhat.compukters.compiler.artifact.model.Field
+import ru.lazyhat.compukters.compiler.artifact.model.FieldId
+import ru.lazyhat.compukters.compiler.artifact.model.FieldRef
 import ru.lazyhat.compukters.compiler.artifact.model.Function
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
@@ -56,6 +61,178 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ArtifactValidatorTest {
+    @Test
+    fun `field instructions require resolving references with matching storage kind and mutability`() {
+        val artifact = fieldInstructionArtifact()
+
+        assertEquals(emptyList(), validateArtifact(artifact, ArtifactWriteLimits()))
+
+        fun errors(replacement: Instruction): List<ArtifactWriteError> =
+            validateArtifact(artifact.withFieldInstruction(2, replacement), ArtifactWriteLimits())
+
+        assertTrue(
+            errors(Instruction.FieldGet(RegisterId.of(2u), RegisterId.of(0u), FieldRef.Local(FieldId.of(1u))))
+                .any { it.detail.contains("instance field") },
+        )
+        assertTrue(
+            errors(Instruction.FieldGet(RegisterId.of(2u), RegisterId.of(0u), FieldRef.Local(FieldId.of(2u))))
+                .any { it.detail.contains("does not resolve") },
+        )
+
+        val immutable =
+            artifact.copy(
+                modules =
+                    listOf(
+                        artifact.modules.single().let { module ->
+                            module.copy(fields = module.fields.toMutableList().also { it[0] = it[0].copy(mutable = false) })
+                        },
+                    ),
+            )
+        assertTrue(
+            validateArtifact(immutable, ArtifactWriteLimits()).any { it.detail.contains("mutable instance field") },
+        )
+    }
+
+    @Test
+    fun `field instructions require compatible receiver value and destination types`() {
+        val artifact = fieldInstructionArtifact()
+
+        fun errors(
+            index: Int,
+            replacement: Instruction,
+        ): List<ArtifactWriteError> = validateArtifact(artifact.withFieldInstruction(index, replacement), ArtifactWriteLimits())
+
+        assertTrue(
+            errors(2, Instruction.FieldGet(RegisterId.of(2u), RegisterId.of(1u), FieldRef.Local(FieldId.of(0u))))
+                .any { it.detail.contains("receiver") },
+        )
+        assertTrue(
+            errors(1, Instruction.FieldSet(RegisterId.of(0u), FieldRef.Local(FieldId.of(0u)), RegisterId.of(0u)))
+                .any { it.detail.contains("store value") },
+        )
+        assertTrue(
+            errors(2, Instruction.FieldGet(RegisterId.of(0u), RegisterId.of(0u), FieldRef.Local(FieldId.of(0u))))
+                .any { it.detail.contains("destination") },
+        )
+    }
+
+    @Test
+    fun `static field instructions require mutable static storage and compatible values`() {
+        val artifact = fieldInstructionArtifact()
+
+        assertTrue(
+            validateArtifact(
+                artifact.withFieldInstruction(
+                    5,
+                    Instruction.StaticGet(RegisterId.of(3u), FieldRef.Local(FieldId.of(0u))),
+                ),
+                ArtifactWriteLimits(),
+            ).any { it.detail.contains("static field") },
+        )
+        assertTrue(
+            validateArtifact(
+                artifact.withFieldInstruction(
+                    4,
+                    Instruction.StaticSet(FieldRef.Local(FieldId.of(1u)), RegisterId.of(0u)),
+                ),
+                ArtifactWriteLimits(),
+            ).any { it.detail.contains("store") },
+        )
+        assertTrue(
+            validateArtifact(
+                artifact.withFieldInstruction(
+                    5,
+                    Instruction.StaticGet(RegisterId.of(0u), FieldRef.Local(FieldId.of(1u))),
+                ),
+                ArtifactWriteLimits(),
+            ).any { it.detail.contains("destination") },
+        )
+
+        val immutable =
+            artifact.copy(
+                modules =
+                    listOf(
+                        artifact.modules.single().let { module ->
+                            module.copy(fields = module.fields.toMutableList().also { it[1] = it[1].copy(mutable = false) })
+                        },
+                    ),
+            )
+        assertTrue(
+            validateArtifact(immutable, ArtifactWriteLimits()).any { it.detail.contains("mutable static field") },
+        )
+    }
+
+    @Test
+    fun `reference identity comparisons require Bool destination and compatible references`() {
+        val artifact =
+            fieldInstructionArtifact()
+                .withFieldRegisterType(2, ValueType.Bool)
+                .withFieldInstruction(
+                    3,
+                    Instruction.RefEqual(RegisterId.of(2u), RegisterId.of(0u), RegisterId.of(0u)),
+                )
+
+        assertEquals(emptyList(), validateArtifact(artifact, ArtifactWriteLimits()))
+        assertTrue(
+            validateArtifact(
+                artifact.withFieldInstruction(
+                    3,
+                    Instruction.RefEqual(RegisterId.of(2u), RegisterId.of(0u), RegisterId.of(1u)),
+                ),
+                ArtifactWriteLimits(),
+            ).any { it.detail.contains("reference") },
+        )
+        assertTrue(
+            validateArtifact(
+                artifact.withFieldInstruction(
+                    3,
+                    Instruction.RefNotEqual(RegisterId.of(0u), RegisterId.of(0u), RegisterId.of(0u)),
+                ),
+                ArtifactWriteLimits(),
+            ).any { it.detail.contains("Bool") },
+        )
+    }
+
+    @Test
+    fun `type tests and checked casts validate reference and narrowed destination types`() {
+        val box = ValueType.Ref(nullable = false, type = TypeRef.Local(TypeId.of(0u)))
+        val cast =
+            fieldInstructionArtifact()
+                .withFieldRegisterType(2, box)
+                .withFieldInstruction(
+                    3,
+                    Instruction.CheckedCast(RegisterId.of(2u), RegisterId.of(0u), TypeRef.Local(TypeId.of(0u))),
+                )
+        val typeTest =
+            fieldInstructionArtifact()
+                .withFieldRegisterType(2, ValueType.Bool)
+                .withFieldInstruction(
+                    3,
+                    Instruction.IsType(RegisterId.of(2u), RegisterId.of(0u), TypeRef.Local(TypeId.of(0u))),
+                )
+
+        assertEquals(emptyList(), validateArtifact(cast, ArtifactWriteLimits()))
+        assertEquals(emptyList(), validateArtifact(typeTest, ArtifactWriteLimits()))
+        assertTrue(
+            validateArtifact(
+                cast.withFieldInstruction(
+                    3,
+                    Instruction.CheckedCast(RegisterId.of(2u), RegisterId.of(1u), TypeRef.Local(TypeId.of(0u))),
+                ),
+                ArtifactWriteLimits(),
+            ).any { it.detail.contains("reference") },
+        )
+        assertTrue(
+            validateArtifact(
+                fieldInstructionArtifact().withFieldInstruction(
+                    3,
+                    Instruction.CheckedCast(RegisterId.of(2u), RegisterId.of(0u), TypeRef.Local(TypeId.of(0u))),
+                ),
+                ArtifactWriteLimits(),
+            ).any { it.detail.contains("target reference type") },
+        )
+    }
+
     @Test
     fun `entry arguments must match the exact entry function signature`() {
         val noArguments = minimalArtifact()
@@ -1038,6 +1215,125 @@ private fun stringArrayEntryArtifact(): Artifact {
             ),
     )
 }
+
+private fun fieldInstructionArtifact(): Artifact {
+    val boxType = TypeRef.Local(TypeId.of(0u))
+    val boxValue = ValueType.Ref(nullable = false, type = boxType)
+    return Artifact(
+        manifest = Manifest.minimal(maximumBlockCost = 14u),
+        entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
+        modules =
+            listOf(
+                Module(
+                    name = StringId.of(1u),
+                    kind = ModuleKind.APPLICATION,
+                    strings =
+                        listOf(
+                            MetadataText.of("Box"),
+                            MetadataText.of("app"),
+                            MetadataText.of("entry"),
+                            MetadataText.of("instance"),
+                            MetadataText.of("static"),
+                        ),
+                    types =
+                        listOf(
+                            NominalType.Class(name = StringId.of(0u), final = true, fieldCount = 2u),
+                            NominalType.Function(
+                                name = StringId.of(2u),
+                                suspending = false,
+                                result = ValueType.Unit,
+                                parameters = emptyList(),
+                            ),
+                        ),
+                    constants = listOf(Constant.I32(7)),
+                    fields =
+                        listOf(
+                            Field(boxType, StringId.of(3u), ValueType.I32, mutable = true, static = false),
+                            Field(boxType, StringId.of(4u), ValueType.I32, mutable = true, static = true),
+                        ),
+                    functions =
+                        listOf(
+                            Function(
+                                owner = null,
+                                name = StringId.of(2u),
+                                signature = TypeRef.Local(TypeId.of(1u)),
+                                flags = setOf(FunctionFlag.STATIC),
+                                registers = listOf(boxValue, ValueType.I32, ValueType.I32, ValueType.I32),
+                                parameterCount = 0u,
+                                firstBlock = BlockId.of(0u),
+                                blockCount = 1u,
+                                firstException = 0u,
+                                exceptionCount = 0u,
+                            ),
+                        ),
+                    blocks =
+                        listOf(
+                            Block(
+                                FunctionId.of(0u),
+                                false,
+                                listOf(
+                                    Instruction.NewObject(RegisterId.of(0u), boxType),
+                                    Instruction.Const(RegisterId.of(1u), ConstantId.of(0u)),
+                                    Instruction.FieldSet(
+                                        RegisterId.of(0u),
+                                        FieldRef.Local(FieldId.of(0u)),
+                                        RegisterId.of(1u),
+                                    ),
+                                    Instruction.FieldGet(
+                                        RegisterId.of(2u),
+                                        RegisterId.of(0u),
+                                        FieldRef.Local(FieldId.of(0u)),
+                                    ),
+                                    Instruction.StaticSet(FieldRef.Local(FieldId.of(1u)), RegisterId.of(1u)),
+                                    Instruction.StaticGet(RegisterId.of(3u), FieldRef.Local(FieldId.of(1u))),
+                                    Instruction.Return(Destination.Unit),
+                                ),
+                            ),
+                        ),
+                ),
+            ),
+    )
+}
+
+private fun Artifact.withFieldInstruction(
+    index: Int,
+    replacement: Instruction,
+): Artifact =
+    copy(
+        modules =
+            listOf(
+                modules.single().let { module ->
+                    module.copy(
+                        blocks =
+                            listOf(
+                                module.blocks.single().let { block ->
+                                    block.copy(instructions = block.instructions.toMutableList().also { it[index] = replacement })
+                                },
+                            ),
+                    )
+                },
+            ),
+    )
+
+private fun Artifact.withFieldRegisterType(
+    index: Int,
+    type: ValueType,
+): Artifact =
+    copy(
+        modules =
+            listOf(
+                modules.single().let { module ->
+                    module.copy(
+                        functions =
+                            listOf(
+                                module.functions.single().let { function ->
+                                    function.copy(registers = function.registers.toMutableList().also { it[index] = type })
+                                },
+                            ),
+                    )
+                },
+            ),
+    )
 
 private fun executableArtifact(
     instruction: Instruction,

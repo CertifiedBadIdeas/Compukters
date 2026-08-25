@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.EntryArguments
 import ru.lazyhat.compukters.compiler.artifact.model.ExceptionEntry
 import ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility
+import ru.lazyhat.compukters.compiler.artifact.model.FieldRef
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
@@ -57,6 +58,11 @@ internal fun validateArtifact(
     data class FunctionIdentity(
         val module: Int,
         val function: Int,
+    )
+
+    data class FieldIdentity(
+        val module: Int,
+        val field: Int,
     )
 
     fun resolveType(
@@ -217,6 +223,35 @@ internal fun validateArtifact(
             }
         }
 
+    fun resolveField(
+        sourceModule: Int,
+        reference: FieldRef,
+    ): FieldIdentity? =
+        when (reference) {
+            is FieldRef.Local -> {
+                reference.id.value.toInt().takeIf { it in artifact.modules[sourceModule].fields.indices }?.let {
+                    FieldIdentity(sourceModule, it)
+                }
+            }
+
+            is FieldRef.Imported -> {
+                val import = artifact.modules[sourceModule].imports.getOrNull(reference.id.value.toInt())
+                if (import?.kind != SymbolKind.FIELD) {
+                    null
+                } else {
+                    val targetModule = artifact.modules.getOrNull(import.targetModule.value.toInt())
+                    val targetModuleIndex = import.targetModule.value.toInt()
+                    targetModule
+                        ?.exports
+                        ?.singleOrNull { it.kind == SymbolKind.FIELD && it.name == import.targetName }
+                        ?.localSymbol
+                        ?.toInt()
+                        ?.takeIf { it in targetModule.fields.indices }
+                        ?.let { FieldIdentity(targetModuleIndex, it) }
+                }
+            }
+        }
+
     fun isExactStringArray(
         sourceModule: Int,
         value: ValueType,
@@ -282,6 +317,10 @@ internal fun validateArtifact(
 
             is Instruction.Equal -> listOf(left, right)
 
+            is Instruction.RefEqual -> listOf(left, right)
+
+            is Instruction.RefNotEqual -> listOf(left, right)
+
             is Instruction.Less -> listOf(left, right)
 
             is Instruction.LessOrEqual -> listOf(left, right)
@@ -298,7 +337,17 @@ internal fun validateArtifact(
 
             is Instruction.ArrayStore -> listOf(array, index, value)
 
+            is Instruction.FieldGet -> listOf(receiver)
+
+            is Instruction.FieldSet -> listOf(receiver, value)
+
+            is Instruction.StaticGet -> emptyList()
+
+            is Instruction.StaticSet -> listOf(value)
+
             is Instruction.IsType -> listOf(value)
+
+            is Instruction.CheckedCast -> listOf(value)
 
             is Instruction.Call -> arguments
 
@@ -347,6 +396,10 @@ internal fun validateArtifact(
 
             is Instruction.Equal -> listOf(destination)
 
+            is Instruction.RefEqual -> listOf(destination)
+
+            is Instruction.RefNotEqual -> listOf(destination)
+
             is Instruction.Less -> listOf(destination)
 
             is Instruction.LessOrEqual -> listOf(destination)
@@ -363,7 +416,13 @@ internal fun validateArtifact(
 
             is Instruction.ArrayLoad -> listOf(destination)
 
+            is Instruction.FieldGet -> listOf(destination)
+
+            is Instruction.StaticGet -> listOf(destination)
+
             is Instruction.IsType -> listOf(destination)
+
+            is Instruction.CheckedCast -> listOf(destination)
 
             is Instruction.Call -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
 
@@ -386,6 +445,8 @@ internal fun validateArtifact(
             is Instruction.CapabilityCallAsync -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
 
             is Instruction.ArrayStore,
+            is Instruction.FieldSet,
+            is Instruction.StaticSet,
             is Instruction.Jump,
             is Instruction.Branch,
             is Instruction.Return,
@@ -408,6 +469,11 @@ internal fun validateArtifact(
             this is Instruction.ArrayLength ||
             this is Instruction.ArrayLoad ||
             this is Instruction.ArrayStore ||
+            this is Instruction.FieldGet ||
+            this is Instruction.FieldSet ||
+            this is Instruction.StaticGet ||
+            this is Instruction.StaticSet ||
+            this is Instruction.CheckedCast ||
             this is Instruction.Call ||
             this is Instruction.CallSuspend ||
             this is Instruction.CapabilityCallSync ||
@@ -834,6 +900,27 @@ internal fun validateArtifact(
                         return array?.element
                     }
 
+                    fun field(reference: FieldRef): Pair<FieldIdentity, ru.lazyhat.compukters.compiler.artifact.model.Field>? {
+                        val identity = resolveField(moduleIndex, reference)
+                        if (identity == null) {
+                            add(ArtifactWriteErrorCode.BAD_REFERENCE, "field reference does not resolve", location)
+                            return null
+                        }
+                        return identity to artifact.modules[identity.module].fields[identity.field]
+                    }
+
+                    fun fieldReceiver(
+                        registerId: RegisterId,
+                        identity: FieldIdentity,
+                        declaration: ru.lazyhat.compukters.compiler.artifact.model.Field,
+                    ) {
+                        val actual = register(registerId, "receiver")
+                        val expected = ValueType.Ref(nullable = false, type = declaration.owner)
+                        if (actual != null && !valueAssignable(moduleIndex, actual, identity.module, expected)) {
+                            add(ArtifactWriteErrorCode.INVALID_RANGE, "field receiver has an incompatible type", location)
+                        }
+                    }
+
                     if (
                         instruction.isKotlinSuspendingTerminator() &&
                         FunctionFlag.SUSPENDING !in owner.flags
@@ -965,6 +1052,88 @@ internal fun validateArtifact(
                             }
                         }
 
+                        is Instruction.RefEqual,
+                        is Instruction.RefNotEqual,
+                        -> {
+                            val destinationRegister =
+                                when (instruction) {
+                                    is Instruction.RefEqual -> instruction.destination
+                                    is Instruction.RefNotEqual -> instruction.destination
+                                }
+                            val leftRegister =
+                                when (instruction) {
+                                    is Instruction.RefEqual -> instruction.left
+                                    is Instruction.RefNotEqual -> instruction.left
+                                }
+                            val rightRegister =
+                                when (instruction) {
+                                    is Instruction.RefEqual -> instruction.right
+                                    is Instruction.RefNotEqual -> instruction.right
+                                }
+                            val destinationType = register(destinationRegister, "destination")
+                            if (destinationType != null && destinationType != ValueType.Bool) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "reference comparison destination is not Bool",
+                                    location,
+                                )
+                            }
+                            val leftType = register(leftRegister, "source")
+                            val rightType = register(rightRegister, "source")
+                            val leftIdentity =
+                                (leftType as? ValueType.Ref)?.let { resolveType(moduleIndex, it.type) }
+                            val rightIdentity =
+                                (rightType as? ValueType.Ref)?.let { resolveType(moduleIndex, it.type) }
+                            if ((leftType != null && leftIdentity == null) || (rightType != null && rightIdentity == null)) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "reference comparison operands must be references",
+                                    location,
+                                )
+                            } else if (leftIdentity != null && rightIdentity != null && leftIdentity != rightIdentity) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "reference comparison operands have incompatible reference types",
+                                    location,
+                                )
+                            }
+                        }
+
+                        is Instruction.IsType -> {
+                            val destinationType = register(instruction.destination, "destination")
+                            if (destinationType != null && destinationType != ValueType.Bool) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "type test destination is not Bool", location)
+                            }
+                            val sourceType = register(instruction.value, "source")
+                            if (sourceType != null && sourceType !is ValueType.Ref) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "type test source is not a reference", location)
+                            }
+                            if (resolveType(moduleIndex, instruction.type) == null) {
+                                add(ArtifactWriteErrorCode.BAD_REFERENCE, "type test target does not resolve", location)
+                            }
+                        }
+
+                        is Instruction.CheckedCast -> {
+                            val sourceType = register(instruction.value, "source")
+                            if (sourceType != null && sourceType !is ValueType.Ref) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "checked cast source is not a reference", location)
+                            }
+                            val targetIdentity = resolveType(moduleIndex, instruction.type)
+                            if (targetIdentity == null) {
+                                add(ArtifactWriteErrorCode.BAD_REFERENCE, "checked cast target does not resolve", location)
+                            }
+                            val destinationType = register(instruction.destination, "destination")
+                            val destinationIdentity =
+                                (destinationType as? ValueType.Ref)?.let { resolveType(moduleIndex, it.type) }
+                            if (destinationType != null && destinationIdentity != targetIdentity) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "checked cast destination does not have the target reference type",
+                                    location,
+                                )
+                            }
+                        }
+
                         is Instruction.Call -> {
                             call(instruction.function, instruction.destination, instruction.arguments, suspending = false)
                         }
@@ -1004,6 +1173,72 @@ internal fun validateArtifact(
                                 add(ArtifactWriteErrorCode.INVALID_RANGE, "array length destination is not I32", location)
                             }
                             arrayElement(register(instruction.array, "source"), "array length source")
+                        }
+
+                        is Instruction.FieldGet -> {
+                            val resolved = field(instruction.field)
+                            if (resolved != null) {
+                                val (identity, declaration) = resolved
+                                if (declaration.static) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "field get requires an instance field", location)
+                                }
+                                fieldReceiver(instruction.receiver, identity, declaration)
+                                val destinationType = register(instruction.destination, "destination")
+                                if (destinationType != null &&
+                                    !valueAssignable(identity.module, declaration.type, moduleIndex, destinationType)
+                                ) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "field value is not assignable to destination", location)
+                                }
+                            }
+                        }
+
+                        is Instruction.FieldSet -> {
+                            val resolved = field(instruction.field)
+                            if (resolved != null) {
+                                val (identity, declaration) = resolved
+                                if (!declaration.mutable || declaration.static) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "field set requires a mutable instance field", location)
+                                }
+                                fieldReceiver(instruction.receiver, identity, declaration)
+                                val sourceType = register(instruction.value, "value")
+                                if (sourceType != null &&
+                                    !valueAssignable(moduleIndex, sourceType, identity.module, declaration.type)
+                                ) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "field store value has the wrong type", location)
+                                }
+                            }
+                        }
+
+                        is Instruction.StaticGet -> {
+                            val resolved = field(instruction.field)
+                            if (resolved != null) {
+                                val (identity, declaration) = resolved
+                                if (!declaration.static) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "static get requires a static field", location)
+                                }
+                                val destinationType = register(instruction.destination, "destination")
+                                if (destinationType != null &&
+                                    !valueAssignable(identity.module, declaration.type, moduleIndex, destinationType)
+                                ) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "static field value has the wrong destination type", location)
+                                }
+                            }
+                        }
+
+                        is Instruction.StaticSet -> {
+                            val resolved = field(instruction.field)
+                            if (resolved != null) {
+                                val (identity, declaration) = resolved
+                                if (!declaration.mutable || !declaration.static) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "static set requires a mutable static field", location)
+                                }
+                                val sourceType = register(instruction.value, "value")
+                                if (sourceType != null &&
+                                    !valueAssignable(moduleIndex, sourceType, identity.module, declaration.type)
+                                ) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "static field store has the wrong type", location)
+                                }
+                            }
                         }
 
                         is Instruction.StringLength -> {

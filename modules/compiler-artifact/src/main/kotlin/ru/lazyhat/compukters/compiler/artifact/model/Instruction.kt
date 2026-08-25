@@ -72,6 +72,18 @@ sealed interface Instruction {
         val right: RegisterId,
     ) : Instruction
 
+    data class RefEqual(
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    data class RefNotEqual(
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
     data class Less(
         val type: OrderedScalarValueType,
         val destination: RegisterId,
@@ -128,7 +140,35 @@ sealed interface Instruction {
         val value: RegisterId,
     ) : Instruction
 
+    data class FieldGet(
+        val destination: RegisterId,
+        val receiver: RegisterId,
+        val field: FieldRef,
+    ) : Instruction
+
+    data class FieldSet(
+        val receiver: RegisterId,
+        val field: FieldRef,
+        val value: RegisterId,
+    ) : Instruction
+
+    data class StaticGet(
+        val destination: RegisterId,
+        val field: FieldRef,
+    ) : Instruction
+
+    data class StaticSet(
+        val field: FieldRef,
+        val value: RegisterId,
+    ) : Instruction
+
     data class IsType(
+        val destination: RegisterId,
+        val value: RegisterId,
+        val type: TypeRef,
+    ) : Instruction
+
+    data class CheckedCast(
         val destination: RegisterId,
         val value: RegisterId,
         val type: TypeRef,
