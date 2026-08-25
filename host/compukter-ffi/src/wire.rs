@@ -1,7 +1,7 @@
 use compukter_vm::{
-    AdmissionError, CompilationRequest, FileSystemLimits, HostFailureKind, QuotaKind, RunError,
-    StoreHealth, StoreOpenError, TerminalCell, TerminalChange, TerminalDevice, TerminalSnapshot,
-    TerminalUpdate,
+    AdmissionError, CompilationRequest, EntryArgumentLimit, FileSystemLimits, HostFailureKind,
+    QuotaKind, RunError, StoreHealth, StoreOpenError, TerminalCell, TerminalChange, TerminalDevice,
+    TerminalSnapshot, TerminalUpdate,
 };
 
 use crate::bridge::{CreateError, OwnedOutcome, OwnedRequest, OwnedValue, StoreCreateError};
@@ -654,6 +654,10 @@ fn run_code(error: RunError) -> u16 {
         RunError::EntryType { .. } => 5,
         RunError::ForeignReference { .. } => 6,
         RunError::DeadReference { .. } => 7,
+        RunError::EntryArgumentLimit(EntryArgumentLimit::Count) => 8,
+        RunError::EntryArgumentLimit(EntryArgumentLimit::ArgumentCodeUnits) => 9,
+        RunError::EntryArgumentLimit(EntryArgumentLimit::TotalCodeUnits) => 10,
+        RunError::EntryAllocationFailed => 11,
     }
 }
 
@@ -690,6 +694,32 @@ mod tests {
         assert_eq!(
             vec![0, 8, 7, 6, 5, 4, 3, 2, 1],
             encode_create(Ok(0x0102_0304_0506_0708)),
+        );
+    }
+
+    #[test]
+    fn entry_argument_start_failures_have_stable_wire_codes() {
+        assert_eq!(
+            vec![3, 8, 0],
+            encode_create(Err(CreateError::Run(RunError::EntryArgumentLimit(
+                EntryArgumentLimit::Count,
+            )))),
+        );
+        assert_eq!(
+            vec![3, 9, 0],
+            encode_create(Err(CreateError::Run(RunError::EntryArgumentLimit(
+                EntryArgumentLimit::ArgumentCodeUnits,
+            )))),
+        );
+        assert_eq!(
+            vec![3, 10, 0],
+            encode_create(Err(CreateError::Run(RunError::EntryArgumentLimit(
+                EntryArgumentLimit::TotalCodeUnits,
+            )))),
+        );
+        assert_eq!(
+            vec![3, 11, 0],
+            encode_create(Err(CreateError::Run(RunError::EntryAllocationFailed))),
         );
     }
 

@@ -63,6 +63,7 @@ val nativeResourcePath = "META-INF/natives/$nativeOs/$nativeArch/$nativeFilename
 val compukterFfiLibrary = rootProject.file(".toolchain/build/cargo/compukter-ffi/release/$nativeFilename")
 val generatedNativeResources = layout.buildDirectory.dir("generated/native-resources")
 val shellArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/shell.cpkt")
+val blockingCallArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/blocking-call.cpkt")
 
 val preparePackagedCompukterFfi =
     tasks.register<Sync>("preparePackagedCompukterFfi") {
@@ -89,17 +90,19 @@ val nativeIntegrationTest =
     tasks.register<Test>("nativeIntegrationTest") {
         description = "Runs Kotlin-to-FFM-to-Rust Compukter VM integration tests."
         group = "verification"
-        dependsOn(rootProject.tasks.named("cargoBuildCompukterFfi"))
+        dependsOn(rootProject.tasks.named("cargoBuildCompukterFfi"), ":compiler-k2:generateBlockingCallConformanceArtifact")
         useJUnitPlatform()
         testClassesDirs = sourceSets.test.get().output.classesDirs
         classpath = sourceSets.test.get().runtimeClasspath
         filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.*")
         inputs.file(compukterFfiLibrary)
         inputs.file(shellArtifact)
+        inputs.file(blockingCallArtifact)
         jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
         doFirst {
             systemProperty("compukter.ffi.library", compukterFfiLibrary.absolutePath)
             systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
+            systemProperty("compukters.blocking-call.artifact", blockingCallArtifact.get().asFile.absolutePath)
         }
     }
 

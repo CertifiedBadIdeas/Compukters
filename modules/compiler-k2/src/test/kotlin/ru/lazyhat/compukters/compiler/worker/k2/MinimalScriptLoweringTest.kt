@@ -314,6 +314,9 @@ class MinimalScriptLoweringTest {
             val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukter.vm.blockingCallArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
         }
 
     @Test

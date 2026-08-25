@@ -211,6 +211,7 @@ tasks.named<KotlinCompile>("compileTestKotlin") {
 }
 
 val kotlinSubsetConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")
+val blockingCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/blocking-call.cpkt")
 val suspendCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/suspend-call.cpkt")
 val whenConformanceArtifact = layout.buildDirectory.file("generated/conformance/when.cpkt")
 val argvConformanceArtifact = layout.buildDirectory.file("generated/conformance/argv.cpkt")
@@ -246,6 +247,22 @@ val generateSuspendCallConformanceArtifact = tasks.register<Test>("generateSuspe
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.suspendCallArtifact", suspendCallConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateBlockingCallConformanceArtifact = tasks.register<Test>("generateBlockingCallConformanceArtifact") {
+    description = "Compiles an ordinary Kotlin main with a VM-blocking call for native runtime conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*ordinary main lowers trusted terminal wait as vm blocking*")
+    inputs.file(workerJar)
+    outputs.file(blockingCallConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.blockingCallArtifact", blockingCallConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
