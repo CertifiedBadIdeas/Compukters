@@ -213,6 +213,7 @@ tasks.named<KotlinCompile>("compileTestKotlin") {
 val kotlinSubsetConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")
 val suspendCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/suspend-call.cpkt")
 val whenConformanceArtifact = layout.buildDirectory.file("generated/conformance/when.cpkt")
+val argvConformanceArtifact = layout.buildDirectory.file("generated/conformance/argv.cpkt")
 val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = layout.buildDirectory.file("generated/system/shell.cpkt")
 val kotlincArtifact = layout.buildDirectory.file("generated/system/kotlinc.cpkt")
@@ -261,6 +262,22 @@ val generateWhenConformanceArtifact = tasks.register<Test>("generateWhenConforma
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.whenArtifact", whenConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateArgvConformanceArtifact = tasks.register<Test>("generateArgvConformanceArtifact") {
+    description = "Compiles a Kotlin Array<String> entry program for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*string array entry lowers deterministically for vm argv conformance*")
+    inputs.file(workerJar)
+    outputs.file(argvConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.argvArtifact", argvConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
