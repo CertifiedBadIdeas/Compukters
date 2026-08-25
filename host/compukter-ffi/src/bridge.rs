@@ -4,11 +4,12 @@ use std::sync::{Arc, OnceLock};
 use compukter_vm::{
     verify_artifact, AdmissionError, ArtifactLimits, CompilationRequest, ComputerAdvanceOutcome,
     ComputerError, ComputerId, ComputerMachine, ComputerStartError, ComputerValue,
-    ExecutionProfile, FileCapability, FileRights, FileSystemLimits, GuestTrap, HostFailure,
-    HostResponse, HostValueInput, ManagedAllocationFailure, ProcessLimits, ProcessResult,
-    QuotaExhaustion, ResumeError, RomImage, RunError, StoreError, StoreHealth, StoreOpenError,
-    TerminalDevice, TerminalInputError, TerminalKey, TerminalKeyAction, TerminalKeyEvent,
-    TerminalModifiers, TerminalUpdate, VirtualPath, VmFault, WorldFileSystemStore,
+    EntryArgumentLimits, ExecutionProfile, FileCapability, FileRights, FileSystemLimits, GuestTrap,
+    HostFailure, HostResponse, HostValueInput, ManagedAllocationFailure, ProcessLimits,
+    ProcessResult, QuotaExhaustion, ResumeError, RomImage, RunError, StoreError, StoreHealth,
+    StoreOpenError, TerminalDevice, TerminalInputError, TerminalKey, TerminalKeyAction,
+    TerminalKeyEvent, TerminalModifiers, TerminalUpdate, VirtualPath, VmFault,
+    WorldFileSystemStore,
 };
 
 use crate::handle_table::{HandleError, HandleTable};
@@ -544,6 +545,11 @@ fn profile() -> ExecutionProfile {
         maximum_outbound_utf16_code_units: 4096,
         maximum_inbound_utf16_code_units: 4096,
         maximum_accepted_responses: 64,
+        entry_argument_limits: EntryArgumentLimits {
+            maximum_count: 64,
+            maximum_code_units_per_argument: 4096,
+            maximum_total_code_units: 16_384,
+        },
     }
 }
 

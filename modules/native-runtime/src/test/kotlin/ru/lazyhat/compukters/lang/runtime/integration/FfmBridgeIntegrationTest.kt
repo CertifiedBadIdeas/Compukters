@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.lang.runtime.integration
 
 import kotlinx.coroutines.runBlocking
 import ru.lazyhat.compukters.lang.runtime.vm.FfmBridge
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
@@ -76,6 +77,22 @@ class FfmBridgeIntegrationTest {
     }
 
     @Test
+    fun `ordinary main releases JVM thread while terminal call waits and resumes in Rust VM`() {
+        FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
+            val artifact = Path.of(requiredProperty("compukters.blocking-call.artifact")).readBytes()
+            VmSession.open(artifact, bridge).use { session ->
+                advanceUntilWaiting(session)
+
+                session.sendTerminalText("input")
+                advanceUntilHalted(session)
+                session.commitTerminal()
+
+                assertEquals("event\n", terminalText(session.terminalFullState()))
+            }
+        }
+    }
+
+    @Test
     fun `FFM preserves typed create failures`() {
         FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
             assertFailsWith<VmVerificationException> { VmSession.open(byteArrayOf(0), bridge) }
@@ -93,5 +110,26 @@ class FfmBridgeIntegrationTest {
             }
         }
         error("shell did not wait")
+    }
+
+    private fun advanceUntilHalted(session: VmSession) {
+        repeat(10_000) {
+            when (val outcome = session.advance(64, 64)) {
+                VmOutcome.SliceExhausted -> Unit
+                is VmOutcome.Halted -> return
+                else -> error("unexpected VM outcome: $outcome")
+            }
+        }
+        error("program did not halt")
+    }
+
+    private fun terminalText(state: TerminalState): String {
+        val output = StringBuilder()
+        repeat(state.height) { y ->
+            val row = StringBuilder()
+            repeat(state.width) { x -> row.appendCodePoint(state.cells[y * state.width + x].codePoint) }
+            output.append(row.toString().trimEnd()).append('\n')
+        }
+        return output.toString().trimEnd('\n') + '\n'
     }
 }
