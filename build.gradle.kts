@@ -206,6 +206,27 @@ val testKotlinSubsetVmConformance =
         environment("COMPUKTER_KOTLIN_SUBSET_ARTIFACT", artifact.get().asFile.absolutePath)
     }
 
+val testKotlinSuspendCallVmConformance =
+    tasks.register<Exec>("testKotlinSuspendCallVmConformance") {
+        description = "Executes a K2-produced suspend project call with the pinned Compukter VM."
+        group = "verification"
+        dependsOn(":compiler-k2:generateSuspendCallConformanceArtifact")
+        val harness = rootProject.file("modules/compiler-artifact/src/test/rust/executable-conformance/Cargo.toml")
+        val artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/suspend-call.cpkt")
+        val target = rootProject.file(".toolchain/build/cargo/compiler-k2-suspend-call-conformance")
+        inputs.file(harness)
+        inputs.file(rootProject.file("modules/compiler-artifact/src/test/rust/executable-conformance/Cargo.lock"))
+        inputs.file(rootProject.file("modules/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs"))
+        inputs.file(artifact)
+        doFirst {
+            check(harness.isFile) { "compiler artifact Rust conformance harness is missing" }
+        }
+        commandLine("cargo", "test", "--locked", "--offline", "--manifest-path", harness.absolutePath)
+        environment("CARGO_TARGET_DIR", target.absolutePath)
+        environment("COMPUKTER_KOTLIN_EXECUTABLE_ARTIFACT", artifact.get().asFile.absolutePath)
+        environment("COMPUKTER_KOTLIN_SUSPEND_CALL_ARTIFACT", artifact.get().asFile.absolutePath)
+    }
+
 val buildScriptsTest = gradle.includedBuild("build-scripts").task(":test")
 
 val verifyActiveMinecraftBaseline =

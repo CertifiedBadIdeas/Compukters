@@ -198,6 +198,36 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `suspend project call lowers deterministically for vm execution`() =
+        withAdapter { adapter ->
+            val request =
+                request(
+                    "project/main.kt" to
+                        """
+                        import compukter.terminal.Terminal
+
+                        suspend fun readKey(): Int {
+                            Terminal.awaitEvent()
+                            return Terminal.eventKey()
+                        }
+
+                        suspend fun main() {
+                            Terminal.write(if (readKey() == 13) "enter" else "other")
+                        }
+                        """.trimIndent(),
+                )
+            val first = adapter.compile(request)
+            val second = adapter.compile(request)
+
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukter.vm.suspendCallArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `same-named char array helper remains an ordinary project call`() =
         withAdapter { adapter ->
             val result =
