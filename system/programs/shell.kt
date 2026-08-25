@@ -38,50 +38,52 @@ suspend fun main() {
             if (key == 13 && action == 1) {
                 Terminal.write("\n")
                 if (line != "") {
-                    if (line == "help") {
-                        Terminal.write("help echo clear pwd ls stat kotlinc edit\n")
-                    } else if (line == "echo") {
-                        Terminal.write("\n")
-                    } else if (line.length >= 5 && line.substring(0, 5) == "echo ") {
-                        Terminal.write(line.substring(5, line.length) + "\n")
-                    } else if (line == "clear") {
-                        Terminal.clear()
-                    } else if (line == "pwd") {
-                        Terminal.write("/home\n")
-                    } else if (line == "ls") {
-                        writeList("/home")
-                    } else if (line.length >= 3 && line.substring(0, 3) == "ls ") {
-                        val argument = line.substring(3, line.length)
-                        if (argument == "" || containsSpace(argument)) {
-                            Terminal.write("usage: ls [path]\n")
-                        } else {
-                            writeList(resolvePath(argument))
+                    when {
+                        line == "help" -> Terminal.write("help echo clear pwd ls stat kotlinc edit\n")
+                        line == "echo" -> Terminal.write("\n")
+                        line.length >= 5 && line.substring(0, 5) == "echo " -> {
+                            Terminal.write(line.substring(5, line.length) + "\n")
                         }
-                    } else if (line == "stat") {
-                        Terminal.write("usage: stat <path>\n")
-                    } else if (line.length >= 5 && line.substring(0, 5) == "stat ") {
-                        val argument = line.substring(5, line.length)
-                        if (argument == "" || containsSpace(argument)) {
-                            Terminal.write("usage: stat <path>\n")
-                        } else {
-                            writeStat(resolvePath(argument))
-                        }
-                    } else {
-                        val command = shellCommand(line)
-                        val commandLine = shellCommandLine(line)
-                        var path = command
-                        var result = 0
-                        if (command[0] == '/') {
-                            result = if (commandLine == "") Process.run(path, 15) else Process.run(path, 15, commandLine)
-                        } else {
-                            path = "/home/" + command
-                            result = if (commandLine == "") Process.run(path, 15) else Process.run(path, 15, commandLine)
-                            if (result == 5) {
-                                path = "/rom/" + command
-                                result = if (commandLine == "") Process.run(path, 15) else Process.run(path, 15, commandLine)
+
+                        line == "clear" -> Terminal.clear()
+                        line == "pwd" -> Terminal.write("/home\n")
+                        line == "ls" -> writeList("/home")
+                        line.length >= 3 && line.substring(0, 3) == "ls " -> {
+                            val argument = line.substring(3, line.length)
+                            if (argument == "" || containsSpace(argument)) {
+                                Terminal.write("usage: ls [path]\n")
+                            } else {
+                                writeList(resolvePath(argument))
                             }
                         }
-                        if (result != 0) writeProcessFailure(result, path)
+
+                        line == "stat" -> Terminal.write("usage: stat <path>\n")
+                        line.length >= 5 && line.substring(0, 5) == "stat " -> {
+                            val argument = line.substring(5, line.length)
+                            if (argument == "" || containsSpace(argument)) {
+                                Terminal.write("usage: stat <path>\n")
+                            } else {
+                                writeStat(resolvePath(argument))
+                            }
+                        }
+
+                        else -> {
+                            val command = shellCommand(line)
+                            val commandLine = shellCommandLine(line)
+                            var path = command
+                            var result = 0
+                            if (command[0] == '/') {
+                                result = if (commandLine == "") Process.run(path, 15) else Process.run(path, 15, commandLine)
+                            } else {
+                                path = "/home/" + command
+                                result = if (commandLine == "") Process.run(path, 15) else Process.run(path, 15, commandLine)
+                                if (result == 5) {
+                                    path = "/rom/" + command
+                                    result = if (commandLine == "") Process.run(path, 15) else Process.run(path, 15, commandLine)
+                                }
+                            }
+                            if (result != 0) writeProcessFailure(result, path)
+                        }
                     }
                 }
                 line = ""
