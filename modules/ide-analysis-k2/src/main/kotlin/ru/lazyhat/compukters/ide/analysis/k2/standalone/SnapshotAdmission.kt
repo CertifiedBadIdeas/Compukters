@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.ide.analysis.k2.standalone
 
+import org.jetbrains.kotlin.psi.KtFile
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.protocol.OpenSnapshotRequest
 import java.nio.ByteBuffer
@@ -34,6 +36,8 @@ internal class AdmittedK2Snapshot(
     val identity: AnalysisSnapshotIdentity,
     private val root: Path,
     val environment: K2ProjectEnvironment,
+    val files: Map<VirtualSourcePath, KtFile>,
+    val sourceLengthsUtf16: Map<VirtualSourcePath, Int>,
 ) : AutoCloseable {
     override fun close() {
         environment.close()
@@ -61,15 +65,26 @@ internal class SnapshotAdmission(
         val sourceRoot = root.resolve("source")
         sourceRoot.createDirectories()
         try {
+            val sourceLengths = mutableMapOf<VirtualSourcePath, Int>()
             request.sources.sources.forEach { source ->
                 val target = sourceRoot.resolve(source.path.value).normalize()
                 require(target.startsWith(sourceRoot)) { "source path escapes snapshot root" }
                 val text = decodeStrict(source.content.toByteArray())
+                sourceLengths[source.path] = text.length
                 target.parent.createDirectories()
                 Files.writeString(target, text, StandardCharsets.UTF_8)
             }
             val environment = K2ProjectEnvironment.create(sourceRoot, standardLibrary, binaryRoots, jdkHome)
-            return AdmittedK2Snapshot(request.identity, root, environment)
+            val files =
+                environment.session.modulesWithFiles.values
+                    .flatten()
+                    .filterIsInstance<KtFile>()
+                    .associateBy { file ->
+                        val physical = Path.of(file.virtualFilePath).toAbsolutePath().normalize()
+                        VirtualSourcePath.kotlin(sourceRoot.relativize(physical).toString().replace('\\', '/'))
+                    }
+            require(files.keys == sourceLengths.keys) { "standalone K2 source mapping differs from admitted snapshot" }
+            return AdmittedK2Snapshot(request.identity, root, environment, files.toMap(), sourceLengths.toMap())
         } catch (exception: Exception) {
             root.toFile().deleteRecursively()
             throw exception
