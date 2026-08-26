@@ -28,12 +28,20 @@ internal enum class TrustedValueType {
     OTHER,
 }
 
+internal enum class TrustedCallableOrigin {
+    TRUSTED_SDK_SOURCE,
+    PINNED_KOTLIN_STDLIB,
+    PLAYER_SOURCE,
+}
+
 internal data class TrustedCallableIdentity(
     val bundleIdentity: String?,
     val name: String,
     val suspending: Boolean,
     val parameters: List<TrustedValueType>,
     val result: TrustedValueType,
+    val origin: TrustedCallableOrigin =
+        if (bundleIdentity == null) TrustedCallableOrigin.PLAYER_SOURCE else TrustedCallableOrigin.TRUSTED_SDK_SOURCE,
 )
 
 internal data class TrustedCapabilityIdentity(
@@ -59,6 +67,11 @@ internal sealed interface TrustedIntrinsic {
         val blocking: BlockingMode,
         val terminal: Boolean = false,
     ) : TrustedIntrinsic
+
+    data class StandardOutput(
+        val newline: Boolean,
+        val declaredType: TrustedValueType?,
+    ) : TrustedIntrinsic
 }
 
 internal fun interface TrustedIntrinsicProvider {
@@ -72,12 +85,19 @@ internal data class TrustedApiSourceBundle(
 )
 
 internal object TrustedIntrinsicRegistry {
+    const val KOTLIN_STDLIB_BUNDLE_ID = "kotlin-stdlib@2.4.10"
+    const val STDIO_BUNDLE_ID = "compukter.stdio-api@1"
     const val TERMINAL_BUNDLE_ID = "compukter.terminal-api@1"
     const val PROCESS_BUNDLE_ID = "compukter.process-api@2"
     const val FILESYSTEM_BUNDLE_ID = "compukter.filesystem-api@1"
     const val COMPILER_BUNDLE_ID = "compukter.compiler-api@1"
     val CORE_SOURCE_BUNDLES =
         listOf(
+            TrustedApiSourceBundle(
+                STDIO_BUNDLE_ID,
+                "/compukter-guest-api/compukter/io/Stderr.kt",
+                "stdio.kt",
+            ),
             TrustedApiSourceBundle(
                 TERMINAL_BUNDLE_ID,
                 "/compukter-guest-api/compukter/terminal/Terminal.kt",
@@ -100,20 +120,96 @@ internal object TrustedIntrinsicRegistry {
             ),
         )
     val TERMINAL_CAPABILITY = TrustedCapabilityIdentity("compukter", "terminal", 2u.toUShort(), 0u.toUShort(), 14u)
+    val STDIO_CAPABILITY = TrustedCapabilityIdentity("compukter", "stdio", 1u.toUShort(), 0u.toUShort(), 3u)
     val PROCESS_CAPABILITY = TrustedCapabilityIdentity("compukter", "process", 2u.toUShort(), 0u.toUShort(), 3u)
     val FILESYSTEM_CAPABILITY = TrustedCapabilityIdentity("compukter", "filesystem", 1u.toUShort(), 0u.toUShort(), 7u)
     val COMPILER_CAPABILITY = TrustedCapabilityIdentity("compukter", "compiler", 1u.toUShort(), 0u.toUShort(), 2u)
 
     private val providers: List<TrustedIntrinsicProvider> =
-        listOf(CompilerIntrinsicProvider, FilesystemIntrinsicProvider, ProcessIntrinsicProvider, TerminalIntrinsicProvider)
+        listOf(
+            CompilerIntrinsicProvider,
+            FilesystemIntrinsicProvider,
+            ProcessIntrinsicProvider,
+            StdioIntrinsicProvider,
+            TerminalIntrinsicProvider,
+        )
 
     fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic? =
         providers.firstNotNullOfOrNull { provider -> provider.resolve(callable) }
 }
 
+private object StdioIntrinsicProvider : TrustedIntrinsicProvider {
+    override fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic? =
+        when (callable.bundleIdentity) {
+            TrustedIntrinsicRegistry.KOTLIN_STDLIB_BUNDLE_ID -> resolveKotlin(callable)
+            TrustedIntrinsicRegistry.STDIO_BUNDLE_ID -> resolveFacade(callable)
+            else -> null
+        }
+
+    private fun resolveKotlin(callable: TrustedCallableIdentity): TrustedIntrinsic? {
+        if (callable.origin != TrustedCallableOrigin.PINNED_KOTLIN_STDLIB) return null
+        if (callable.suspending) return null
+        if (callable.name == "kotlin.io.readln") {
+            return TrustedIntrinsic
+                .CapabilityOperation(
+                    TrustedIntrinsicRegistry.STDIO_CAPABILITY,
+                    0u,
+                    BlockingMode.VM_TASK,
+                ).takeIf { callable.parameters.isEmpty() && callable.result == TrustedValueType.STRING }
+        }
+        if (callable.result != TrustedValueType.UNIT) return null
+        if (callable.name == "kotlin.io.println" && callable.parameters.isEmpty()) {
+            return TrustedIntrinsic.StandardOutput(newline = true, declaredType = null)
+        }
+        if (callable.name !in setOf("kotlin.io.print", "kotlin.io.println")) return null
+        val type = callable.parameters.singleOrNull() ?: return null
+        if (type !in setOf(TrustedValueType.OTHER, TrustedValueType.INT, TrustedValueType.BOOL, TrustedValueType.CHAR)) return null
+        return TrustedIntrinsic.StandardOutput(
+            newline = callable.name == "kotlin.io.println",
+            declaredType = type,
+        )
+    }
+
+    private fun resolveFacade(callable: TrustedCallableIdentity): TrustedIntrinsic? =
+        if (callable.origin != TrustedCallableOrigin.TRUSTED_SDK_SOURCE) {
+            null
+        } else {
+            when (callable.name) {
+                "compukter.io.StdioBindings.write" -> {
+                    sync(
+                        1u,
+                        callable,
+                        listOf(TrustedValueType.STRING),
+                        TrustedValueType.UNIT,
+                        TrustedIntrinsicRegistry.STDIO_CAPABILITY,
+                    )
+                }
+
+                "compukter.io.Stderr.write" -> {
+                    sync(
+                        2u,
+                        callable,
+                        listOf(TrustedValueType.STRING),
+                        TrustedValueType.UNIT,
+                        TrustedIntrinsicRegistry.STDIO_CAPABILITY,
+                    )
+                }
+
+                else -> {
+                    null
+                }
+            }
+        }
+}
+
 private object CompilerIntrinsicProvider : TrustedIntrinsicProvider {
     override fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic? {
-        if (callable.bundleIdentity != TrustedIntrinsicRegistry.COMPILER_BUNDLE_ID) return null
+        if (
+            callable.origin != TrustedCallableOrigin.TRUSTED_SDK_SOURCE ||
+            callable.bundleIdentity != TrustedIntrinsicRegistry.COMPILER_BUNDLE_ID
+        ) {
+            return null
+        }
         return when (callable.name) {
             "compukter.compiler.Compiler.compile" -> {
                 TrustedIntrinsic
@@ -147,7 +243,13 @@ private object CompilerIntrinsicProvider : TrustedIntrinsicProvider {
 
 private object FilesystemIntrinsicProvider : TrustedIntrinsicProvider {
     override fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic? {
-        if (callable.bundleIdentity != TrustedIntrinsicRegistry.FILESYSTEM_BUNDLE_ID || callable.suspending) return null
+        if (
+            callable.origin != TrustedCallableOrigin.TRUSTED_SDK_SOURCE ||
+            callable.bundleIdentity != TrustedIntrinsicRegistry.FILESYSTEM_BUNDLE_ID ||
+            callable.suspending
+        ) {
+            return null
+        }
         return when (callable.name) {
             "compukter.filesystem.FileSystem.stat" -> {
                 sync(
@@ -198,7 +300,13 @@ private object FilesystemIntrinsicProvider : TrustedIntrinsicProvider {
 
 private object ProcessIntrinsicProvider : TrustedIntrinsicProvider {
     override fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic? {
-        if (callable.bundleIdentity != TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID || callable.suspending) return null
+        if (
+            callable.origin != TrustedCallableOrigin.TRUSTED_SDK_SOURCE ||
+            callable.bundleIdentity != TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID ||
+            callable.suspending
+        ) {
+            return null
+        }
         return when (callable.name) {
             "compukter.process.ProcessBindings.run" -> {
                 TrustedIntrinsic
@@ -222,7 +330,7 @@ private object ProcessIntrinsicProvider : TrustedIntrinsicProvider {
                 )
             }
 
-            "compukter.process.ProcessBindings.exit" ->
+            "compukter.process.ProcessBindings.exit" -> {
                 TrustedIntrinsic
                     .CapabilityOperation(
                         TrustedIntrinsicRegistry.PROCESS_CAPABILITY,
@@ -232,6 +340,7 @@ private object ProcessIntrinsicProvider : TrustedIntrinsicProvider {
                     ).takeIf {
                         callable.parameters == listOf(TrustedValueType.INT) && callable.result == TrustedValueType.NOTHING
                     }
+            }
 
             else -> {
                 null
@@ -242,7 +351,12 @@ private object ProcessIntrinsicProvider : TrustedIntrinsicProvider {
 
 private object TerminalIntrinsicProvider : TrustedIntrinsicProvider {
     override fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic? {
-        if (callable.bundleIdentity != TrustedIntrinsicRegistry.TERMINAL_BUNDLE_ID) return null
+        if (
+            callable.origin != TrustedCallableOrigin.TRUSTED_SDK_SOURCE ||
+            callable.bundleIdentity != TrustedIntrinsicRegistry.TERMINAL_BUNDLE_ID
+        ) {
+            return null
+        }
         val intrinsic =
             when (callable.name) {
                 "compukter.terminal.Terminal.write" -> {

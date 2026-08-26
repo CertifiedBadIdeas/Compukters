@@ -574,6 +574,48 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `ordinary Kotlin standard streams lower to stdio capability operations`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        import compukter.io.Stderr
+
+                        fun main() {
+                            print("name: ")
+                            val name = readln()
+                            println()
+                            println(name)
+                            println(7)
+                            println(true)
+                            println('x')
+                            Stderr.write("done\n")
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val opcodes = applicationCodeOpcodes(artifact)
+
+            assertEquals(1, opcodes.count { it == 0xe9 }, "readln must be the only async capability call")
+            assertTrue(0x51 in opcodes, "standard output must lower through a sync capability call")
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+
+            listOf(
+                "fun main() { print(7) }",
+                "import compukter.io.Stderr\nfun main() { Stderr.write(\"error\") }",
+            ).forEach { source ->
+                val endpoint = adapter.compile(request(source))
+                val endpointArtifact = assertNotNull(endpoint.artifact, endpoint.diagnostics.joinToString()).toByteArray()
+                val endpointOpcodes = applicationCodeOpcodes(endpointArtifact)
+                assertTrue(0x51 in endpointOpcodes, "$source: $endpointOpcodes")
+                assertTrue(endpoint.diagnostics.none { it.severity.name == "ERROR" }, endpoint.diagnostics.toString())
+            }
+        }
+
+    @Test
     fun `unbounded terminal loop compiles without executing guest code`() =
         withAdapter { adapter ->
             val result =

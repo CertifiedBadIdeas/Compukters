@@ -25,9 +25,86 @@ import kotlin.test.assertNull
 
 class TrustedIntrinsicRegistryTest {
     @Test
+    fun `stdio provider pins ordinary Kotlin console calls and stderr to exact signatures`() {
+        fun resolve(
+            bundle: String,
+            name: String,
+            parameters: List<TrustedValueType>,
+            result: TrustedValueType,
+            origin: TrustedCallableOrigin =
+                if (bundle.startsWith("kotlin-stdlib@")) {
+                    TrustedCallableOrigin.PINNED_KOTLIN_STDLIB
+                } else {
+                    TrustedCallableOrigin.TRUSTED_SDK_SOURCE
+                },
+        ) = TrustedIntrinsicRegistry.resolve(
+            TrustedCallableIdentity(bundle, name, false, parameters, result, origin),
+        )
+
+        val stdio = TrustedCapabilityIdentity("compukter", "stdio", 1u.toUShort(), 0u.toUShort(), 3u)
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(stdio, 0u, BlockingMode.VM_TASK),
+            resolve("kotlin-stdlib@2.4.10", "kotlin.io.readln", emptyList(), TrustedValueType.STRING),
+        )
+        listOf(TrustedValueType.OTHER, TrustedValueType.INT, TrustedValueType.BOOL, TrustedValueType.CHAR).forEach { type ->
+            assertEquals(
+                TrustedIntrinsic.StandardOutput(newline = false, declaredType = type),
+                resolve("kotlin-stdlib@2.4.10", "kotlin.io.print", listOf(type), TrustedValueType.UNIT),
+            )
+            assertEquals(
+                TrustedIntrinsic.StandardOutput(newline = true, declaredType = type),
+                resolve("kotlin-stdlib@2.4.10", "kotlin.io.println", listOf(type), TrustedValueType.UNIT),
+            )
+        }
+        assertEquals(
+            TrustedIntrinsic.StandardOutput(newline = true, declaredType = null),
+            resolve("kotlin-stdlib@2.4.10", "kotlin.io.println", emptyList(), TrustedValueType.UNIT),
+        )
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(stdio, 1u, BlockingMode.NONE),
+            resolve(
+                "compukter.stdio-api@1",
+                "compukter.io.StdioBindings.write",
+                listOf(TrustedValueType.STRING),
+                TrustedValueType.UNIT,
+            ),
+        )
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(stdio, 2u, BlockingMode.NONE),
+            resolve("compukter.stdio-api@1", "compukter.io.Stderr.write", listOf(TrustedValueType.STRING), TrustedValueType.UNIT),
+        )
+        assertNull(resolve("kotlin-stdlib@2.4.9", "kotlin.io.readln", emptyList(), TrustedValueType.STRING))
+        assertNull(resolve("kotlin-stdlib@2.4.10", "kotlin.io.print", listOf(TrustedValueType.STRING), TrustedValueType.UNIT))
+        assertNull(resolve("compukter.stdio-api@1", "compukter.io.Stderr.write", listOf(TrustedValueType.INT), TrustedValueType.UNIT))
+        assertNull(
+            resolve(
+                "kotlin-stdlib@2.4.10",
+                "kotlin.io.readln",
+                emptyList(),
+                TrustedValueType.STRING,
+                TrustedCallableOrigin.PLAYER_SOURCE,
+            ),
+        )
+    }
+
+    @Test
+    fun `stdio integer formatter covers the full signed range`() {
+        val method =
+            Class
+                .forName("compukter.io.StderrKt")
+                .getDeclaredMethod("stdoutInt", Int::class.javaPrimitiveType)
+                .also { it.isAccessible = true }
+
+        listOf(Int.MIN_VALUE, -1, 0, 1, Int.MAX_VALUE).forEach { value ->
+            assertEquals(value.toString(), method.invoke(null, value))
+        }
+    }
+
+    @Test
     fun `process v2 encoder preserves exact length delimited utf16 arguments`() {
         val method =
-            Class.forName("compukter.process.ProcessKt")
+            Class
+                .forName("compukter.process.ProcessKt")
                 .getDeclaredMethod("encodeArgs", Array<String>::class.java)
                 .also { it.isAccessible = true }
         val encoded = method.invoke(null, arrayOf("a\u0000😀", "")) as String
