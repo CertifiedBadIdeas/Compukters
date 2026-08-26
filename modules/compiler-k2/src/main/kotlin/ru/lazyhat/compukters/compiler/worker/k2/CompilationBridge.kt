@@ -39,6 +39,7 @@ class CompilationSession(
     val diagnosticSink: (WorkerDiagnostic) -> Unit = {},
     sourcePaths: Map<String, VirtualSourcePath> = emptyMap(),
     trustedApiSourceIdentities: Map<String, String> = emptyMap(),
+    val trustedStandardLibraryIdentity: String? = null,
     val limits: WorkerLimits = WorkerLimits(),
 ) {
     private val sourcePaths = sourcePaths.mapKeys { (path, _) -> normalize(path) }

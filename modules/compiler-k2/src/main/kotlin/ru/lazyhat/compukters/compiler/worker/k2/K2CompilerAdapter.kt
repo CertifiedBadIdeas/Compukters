@@ -134,6 +134,7 @@ class K2CompilerAdapter(
                             },
                         trustedApiSourceIdentities =
                             trustedApiSources.associate { (bundle, source) -> source.toString() to bundle.identity },
+                        trustedStandardLibraryIdentity = TrustedIntrinsicRegistry.KOTLIN_STDLIB_BUNDLE_ID,
                         limits = request.limits,
                     ),
                 ) {
