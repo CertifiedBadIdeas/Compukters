@@ -114,7 +114,7 @@ highlighting, and viewport queries read through the buffer and line index.
 - a monotonic content revision;
 - the preferred visual column used by vertical navigation;
 - bounded undo and redo journals;
-- a synchronous internal change listener used by
+- synchronous internal change listeners used by
   `ProjectDocumentSession` and `IncrementalKotlinHighlighter`.
 
 Offsets are the canonical coordinate. A selection is the ordered range between
@@ -163,20 +163,24 @@ viewport without touching text or undo history.
 
 Each accepted mutation emits one immutable `EditorChange` containing old and
 new revisions, the replaced old range, inserted code-unit count, and old/new
-affected logical line ranges. It never contains the complete document.
+affected logical line ranges. It also carries a stable origin: User, UndoRedo,
+or ExternalReset. It never contains the complete document. Listener
+registration returns a removable subscription so the session and highlighter
+have independent lifetimes.
 
 `ProjectDocumentSession` owns and exposes its `EditorDocument`. Its internal
 listener compares buffer content with the last persisted snapshot without
 allocating a full `String`, updates dirty state, and arms the existing autosave
-controller. Save, Save As, close recovery, and the build barrier materialize
+controller for User and UndoRedo changes. Save, Save As, close recovery, and the build barrier materialize
 the text only at their existing I/O boundary. A clean external reload replaces
-the complete editor content through a non-user reset that clears history and
-does not arm autosave. A dirty external change retains the editor and enters the
-existing Conflict state.
+the complete editor content through an ExternalReset that clears history,
+updates highlighters, and does not arm autosave. A dirty external change retains
+the editor and enters the existing Conflict state.
 
 Undoing back to the persisted content returns the session to clean state and
 disarms autosave. Root invalidation still closes the session with an immutable
-recovery string.
+recovery string. Closing the session removes its listener and closes the editor;
+later mutation attempts return a typed Closed rejection.
 
 ## Incremental Lexical Highlighting
 
