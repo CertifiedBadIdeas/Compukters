@@ -57,6 +57,10 @@ data class AdmittedAnalysisSnapshot(
     val profile: AdmittedAnalysisProfile,
     val limits: AnalysisLimits,
 ) {
+    internal val protocolContext: AnalysisProtocolContext by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        AnalysisProtocolContext.of(sources, profile, limits)
+    }
+
     init {
         OpenSnapshotRequest(RequestId.of(1uL), identity, sources, profile, limits)
     }
@@ -454,7 +458,12 @@ class AnalysisWorkerController(
             workerSnapshot = null
         }
 
-    private fun context(snapshot: AdmittedAnalysisSnapshot) = AnalysisProtocolContext.of(snapshot.sources, snapshot.limits)
+    private fun context(snapshot: AdmittedAnalysisSnapshot) =
+        try {
+            snapshot.protocolContext
+        } catch (exception: Exception) {
+            throw ControllerFault(AnalysisFailureKind.InvalidSnapshot, exception.message ?: "invalid attached bundle sources")
+        }
 
     private fun schedulerItems(): List<Pending> = scheduler.values().map { it.value }
 

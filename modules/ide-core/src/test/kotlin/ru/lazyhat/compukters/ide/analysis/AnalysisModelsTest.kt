@@ -110,6 +110,33 @@ class AnalysisModelsTest {
     }
 
     @Test
+    fun `attached bundle declarations require their exact source catalog range`() {
+        val bundle = AnalysisBundleIdentity("std.core", hash(4))
+        val origin = DeclarationOrigin.Bundle(bundle)
+        val path = VirtualSourcePath.kotlin("compukter/terminal/Terminal.kt")
+        val location = DeclarationLocation.Source(origin, path, EditorRange(3, 8))
+
+        assertEquals(
+            listOf(location),
+            AnalysisResult.Declaration
+                .create(
+                    identity,
+                    listOf(location),
+                    sourceLengthsUtf16 = emptyMap(),
+                    bundleSourceLengthsUtf16 = mapOf(bundle to mapOf(path to 8)),
+                ).locations,
+        )
+        assertFailsWith<IllegalArgumentException> {
+            AnalysisResult.Declaration.create(
+                identity,
+                listOf(location),
+                sourceLengthsUtf16 = emptyMap(),
+                bundleSourceLengthsUtf16 = mapOf(bundle to mapOf(path to 7)),
+            )
+        }
+    }
+
+    @Test
     fun `expression information enforces bounded strict text and source range`() {
         assertFailsWith<IllegalArgumentException> {
             AnalysisResult.ExpressionInfo.create(
