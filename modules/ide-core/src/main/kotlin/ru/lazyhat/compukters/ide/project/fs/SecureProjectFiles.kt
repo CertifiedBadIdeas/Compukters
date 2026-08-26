@@ -18,7 +18,10 @@
 
 package ru.lazyhat.compukters.ide.project.fs
 
+import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.ide.project.TomlSupport
+import ru.lazyhat.compukters.ide.project.document.FileRevision
+import ru.lazyhat.compukters.ide.project.document.ProjectWriteStep
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
@@ -35,6 +38,7 @@ import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.BasicFileAttributeView
 import java.nio.file.attribute.BasicFileAttributes
+import java.security.MessageDigest
 import java.util.UUID
 
 class SecureProjectFileException(
@@ -61,6 +65,68 @@ internal object SecureProjectFiles {
         name: String,
         maximumBytes: Int,
     ): String = TomlSupport.decodeStrictUtf8(readBytes(directory, Path.of(name), maximumBytes))
+
+    fun readSource(
+        identity: ProjectRootIdentity,
+        path: ProjectPath,
+        maximumBytes: Int,
+    ): ByteArray? =
+        withValidProject(identity) { root ->
+            withParentDirectory(root, path) { parent, target ->
+                if (attributesOrNull(parent, target) == null) null else readBytes(parent, target, maximumBytes)
+            }
+        }
+
+    fun writeSource(
+        identity: ProjectRootIdentity,
+        path: ProjectPath,
+        expected: FileRevision,
+        content: ByteArray,
+        maximumBytes: Int,
+        hook: (ProjectWriteStep) -> Unit,
+    ): SecureWriteResult =
+        synchronized(identity) {
+            withValidProject(identity) { root ->
+                withParentDirectory(root, path) { parent, target ->
+                    val actual = revision(parent, target, maximumBytes)
+                    if (actual != expected) return@withParentDirectory SecureWriteResult.Conflict(actual)
+                    val temporary = Path.of(".compukter-save-${UUID.randomUUID()}.tmp")
+                    try {
+                        parent.newByteChannel(temporary, WRITE_NEW_OPTIONS).use { channel ->
+                            hook(ProjectWriteStep.TEMPORARY_CREATED)
+                            writeFully(channel, content)
+                            (channel as? FileChannel)?.force(true)
+                            hook(ProjectWriteStep.TEMPORARY_WRITTEN)
+                        }
+                        hook(ProjectWriteStep.BEFORE_PUBLISH)
+                        if (!isValid(identity)) throw SecureProjectFileException("project root was invalidated")
+                        val latest = revision(parent, target, maximumBytes)
+                        if (latest != expected) return@withParentDirectory SecureWriteResult.Conflict(latest)
+                        when (expected) {
+                            FileRevision.Absent -> {
+                                parent.move(temporary, parent, target)
+                            }
+
+                            is FileRevision.Present -> {
+                                try {
+                                    Files.move(
+                                        identity.canonicalPath.resolve(path.value).resolveSibling(temporary.toString()),
+                                        identity.canonicalPath.resolve(path.value),
+                                        StandardCopyOption.ATOMIC_MOVE,
+                                        StandardCopyOption.REPLACE_EXISTING,
+                                    )
+                                } catch (exception: AtomicMoveNotSupportedException) {
+                                    throw SecureProjectFileException("filesystem does not support atomic source replacement", exception)
+                                }
+                            }
+                        }
+                        SecureWriteResult.Saved(FileRevision.Present(hash(content)))
+                    } finally {
+                        runCatching { parent.deleteFile(temporary) }
+                    }
+                }
+            }
+        }
 
     fun writeNew(
         identity: ProjectRootIdentity,
@@ -95,6 +161,38 @@ internal object SecureProjectFiles {
                 opened += current
             }
             return action(current, currentAttributes)
+        } finally {
+            opened.asReversed().forEach { runCatching { it.close() } }
+        }
+    }
+
+    private fun <T> withValidProject(
+        identity: ProjectRootIdentity,
+        action: (SecureDirectoryStream<Path>) -> T,
+    ): T =
+        withDirectory(identity.canonicalPath) { directory, attributes ->
+            if (attributes.fileKey() != identity.fileKey) throw SecureProjectFileException("project root was invalidated")
+            action(directory)
+        }
+
+    private fun <T> withParentDirectory(
+        root: SecureDirectoryStream<Path>,
+        path: ProjectPath,
+        action: (SecureDirectoryStream<Path>, Path) -> T,
+    ): T {
+        val opened = mutableListOf<SecureDirectoryStream<Path>>()
+        try {
+            var current = root
+            path.components.dropLast(1).forEach { component ->
+                val name = Path.of(component)
+                val attributes = attributes(current, name)
+                if (attributes.isSymbolicLink || !attributes.isDirectory) {
+                    throw SecureProjectFileException("source parent must be a real directory")
+                }
+                current = current.newDirectoryStream(name, LinkOption.NOFOLLOW_LINKS)
+                opened += current
+            }
+            return action(current, Path.of(path.components.last()))
         } finally {
             opened.asReversed().forEach { runCatching { it.close() } }
         }
@@ -204,6 +302,19 @@ internal object SecureProjectFiles {
             }
     }
 
+    private fun revision(
+        directory: SecureDirectoryStream<Path>,
+        name: Path,
+        maximumBytes: Int,
+    ): FileRevision =
+        if (attributesOrNull(directory, name) == null) {
+            FileRevision.Absent
+        } else {
+            FileRevision.Present(hash(readBytes(directory, name, maximumBytes)))
+        }
+
+    private fun hash(content: ByteArray): Hash256 = Hash256.of(MessageDigest.getInstance("SHA-256").digest(content))
+
     private fun writeFully(
         channel: SeekableByteChannel,
         content: ByteArray,
@@ -221,4 +332,14 @@ internal object SecureProjectFiles {
     private val READ_OPTIONS: Set<OpenOption> = setOf(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)
     private val WRITE_NEW_OPTIONS: Set<OpenOption> =
         setOf(StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW, LinkOption.NOFOLLOW_LINKS)
+}
+
+internal sealed interface SecureWriteResult {
+    data class Saved(
+        val revision: FileRevision.Present,
+    ) : SecureWriteResult
+
+    data class Conflict(
+        val actual: FileRevision,
+    ) : SecureWriteResult
 }
