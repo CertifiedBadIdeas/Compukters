@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.ide.project.document
 
+import ru.lazyhat.compukters.ide.editor.EditorEditResult
+import ru.lazyhat.compukters.ide.editor.EditorRejection
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import kotlin.io.path.createTempDirectory
@@ -27,13 +29,14 @@ import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class ProjectDocumentSessionTest {
     @Test
     fun `edit autosaves after delay and build observes persisted state`() {
         val fixture = fixture()
-        fixture.session.edit("fun main() = Unit\n")
+        fixture.session.replaceText("fun main() = Unit\n")
         fixture.clock.advanceMillis(499)
         assertEquals(ProjectSessionEvent.NoAction, fixture.session.poll())
         fixture.clock.advanceMillis(1)
@@ -56,7 +59,7 @@ class ProjectDocumentSessionTest {
             )
         actions.forEach { action ->
             val fixture = fixture()
-            fixture.session.edit("changed\n")
+            fixture.session.replaceText("changed\n")
             val event = action(fixture.session)
             assertTrue(
                 event is ProjectSessionEvent.Saved || event is ProjectSessionEvent.ReadyToBuild || event is ProjectSessionEvent.Closed,
@@ -73,7 +76,7 @@ class ProjectDocumentSessionTest {
         assertEquals("external\n", reloaded.snapshot.text)
 
         val dirty = fixture()
-        dirty.session.edit("local\n")
+        dirty.session.replaceText("local\n")
         dirty.source.writeText("external\n")
         assertIs<ProjectSessionEvent.Conflict>(dirty.session.poll())
         assertIs<ProjectSessionEvent.Conflict>(dirty.session.prepareBuild())
@@ -86,13 +89,15 @@ class ProjectDocumentSessionTest {
     @Test
     fun `save as preserves conflicting source and switches active document`() {
         val fixture = fixture()
-        fixture.session.edit("local\n")
+        val editor = fixture.session.editor
+        fixture.session.replaceText("local\n")
         fixture.source.writeText("external\n")
         assertIs<ProjectSessionEvent.Conflict>(fixture.session.poll())
         val alternate = ProjectPath.source("src/recovered.kt")
 
         val saved = assertIs<ProjectSessionEvent.Saved>(fixture.session.saveAs(alternate))
 
+        assertSame(editor, fixture.session.editor)
         assertEquals(alternate, saved.snapshot.path)
         assertEquals("external\n", fixture.source.readText())
         assertEquals(
@@ -106,7 +111,7 @@ class ProjectDocumentSessionTest {
     @Test
     fun `root invalidation closes with dirty recovery and close supports cancel discard save`() {
         val invalidated = fixture()
-        invalidated.session.edit("recover me\n")
+        invalidated.session.replaceText("recover me\n")
         invalidated.project.handle.canonicalPath
             .moveTo(
                 invalidated.project.handle.canonicalPath
@@ -116,16 +121,16 @@ class ProjectDocumentSessionTest {
         assertEquals("recover me\n", closed.recovery?.text)
 
         val cancelled = fixture()
-        cancelled.session.edit("dirty\n")
+        cancelled.session.replaceText("dirty\n")
         assertEquals(ProjectSessionEvent.CloseCancelled, cancelled.session.close(CloseDecision.Cancel))
         assertTrue(cancelled.session.isOpen)
 
         val discarded = fixture()
-        discarded.session.edit("discarded\n")
+        discarded.session.replaceText("discarded\n")
         assertEquals(ProjectSessionEvent.Closed(null), discarded.session.close(CloseDecision.Discard))
 
         val saved = fixture()
-        saved.session.edit("saved\n")
+        saved.session.replaceText("saved\n")
         assertEquals(ProjectSessionEvent.Closed(null), saved.session.close(CloseDecision.Save))
         assertEquals("saved\n", saved.source.readText())
     }
@@ -133,7 +138,7 @@ class ProjectDocumentSessionTest {
     @Test
     fun `closed session ignores persistence boundaries and rejects build`() {
         val fixture = fixture()
-        fixture.session.edit("discarded\n")
+        fixture.session.replaceText("discarded\n")
         assertEquals(ProjectSessionEvent.Closed(null), fixture.session.close(CloseDecision.Discard))
 
         assertEquals(ProjectSessionEvent.NoAction, fixture.session.mouseActivity())
@@ -146,6 +151,56 @@ class ProjectDocumentSessionTest {
             fixture.session.saveAs(ProjectPath.source("src/recovered.kt")),
         )
         assertEquals("fun main() {\n}\n", fixture.source.readText())
+        assertEquals(EditorEditResult.Rejected(EditorRejection.Closed), fixture.session.editor.type("x"))
+    }
+
+    @Test
+    fun `undoing to persisted content disarms autosave`() {
+        val fixture = fixture()
+        fixture.session.replaceText("changed\n")
+
+        assertIs<EditorEditResult.Applied>(fixture.session.editor.undo())
+        fixture.clock.advanceMillis(1_000)
+
+        assertEquals(ProjectSessionEvent.NoAction, fixture.session.poll())
+        assertEquals("fun main() {\n}\n", fixture.source.readText())
+    }
+
+    @Test
+    fun `successful autosave closes the current typing undo group`() {
+        val fixture = fixture()
+        val editor = fixture.session.editor
+        assertTrue(editor.setCaret(editor.length))
+        assertIs<EditorEditResult.Applied>(editor.type("a"))
+        fixture.clock.advanceMillis(500)
+        assertIs<ProjectSessionEvent.Saved>(fixture.session.poll())
+
+        assertIs<EditorEditResult.Applied>(editor.type("b"))
+        assertIs<EditorEditResult.Applied>(editor.undo())
+
+        assertEquals("fun main() {\n}\na", editor.materialize())
+    }
+
+    @Test
+    fun `clean external reload resets the same editor and clears its history`() {
+        val fixture = fixture()
+        val editor = fixture.session.editor
+        fixture.session.replaceText("temporary\n")
+        editor.undo()
+        assertTrue(editor.setCaret(editor.length))
+        fixture.source.writeText("external\n")
+
+        assertIs<ProjectSessionEvent.Reloaded>(fixture.session.poll())
+
+        assertSame(editor, fixture.session.editor)
+        assertEquals("external\n", editor.materialize())
+        assertEquals(0, editor.caretOffset)
+        assertEquals(EditorEditResult.NoChange, editor.undo())
+    }
+
+    private fun ProjectDocumentSession.replaceText(text: String) {
+        editor.selectAll()
+        assertIs<EditorEditResult.Applied>(editor.type(text))
     }
 
     private fun fixture(): Fixture {
