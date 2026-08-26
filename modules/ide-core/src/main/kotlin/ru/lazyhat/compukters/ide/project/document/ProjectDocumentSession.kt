@@ -18,6 +18,9 @@
 
 package ru.lazyhat.compukters.ide.project.document
 
+import ru.lazyhat.compukters.ide.editor.EditorChangeOrigin
+import ru.lazyhat.compukters.ide.editor.EditorDocument
+import ru.lazyhat.compukters.ide.editor.EditorLimits
 import ru.lazyhat.compukters.ide.project.ProjectHandle
 import ru.lazyhat.compukters.ide.project.ProjectLimits
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
@@ -27,20 +30,21 @@ class ProjectDocumentSession private constructor(
     private val store: ProjectDocumentStore,
     private val autosave: AutosaveController,
     initial: DocumentSnapshot,
+    editorLimits: EditorLimits,
 ) {
     private var snapshot = initial
-    private var text = initial.text
     private var dirty = false
     private var conflict: ProjectSessionEvent.Conflict? = null
+    val editor = EditorDocument(initial.text, editorLimits)
+    private val editorSubscription =
+        editor.addChangeListener { change ->
+            dirty = !editor.contentEquals(snapshot.text)
+            if (change.origin != EditorChangeOrigin.ExternalReset) {
+                if (dirty) autosave.edited() else autosave.saveSucceeded()
+            }
+        }
     var isOpen: Boolean = true
         private set
-
-    fun edit(newText: String) {
-        check(isOpen) { "project document session is closed" }
-        text = newText
-        dirty = text != snapshot.text
-        if (dirty) autosave.edited() else autosave.saveSucceeded()
-    }
 
     fun poll(): ProjectSessionEvent {
         if (!isOpen) return ProjectSessionEvent.NoAction
@@ -56,7 +60,7 @@ class ProjectDocumentSession private constructor(
                 return enterConflict(snapshot.revision, disk.revision)
             }
             snapshot = disk
-            text = disk.text
+            editor.reset(disk.text)
             autosave.saveSucceeded()
             return ProjectSessionEvent.Reloaded(disk)
         }
@@ -86,7 +90,7 @@ class ProjectDocumentSession private constructor(
         return try {
             val reloaded = store.open(snapshot.path)
             snapshot = reloaded
-            text = reloaded.text
+            editor.reset(reloaded.text)
             dirty = false
             conflict = null
             autosave.saveSucceeded()
@@ -98,11 +102,12 @@ class ProjectDocumentSession private constructor(
 
     fun saveAs(path: ProjectPath): ProjectSessionEvent {
         if (!isOpen) return ProjectSessionEvent.Closed(null)
-        return when (val result = store.save(path, FileRevision.Absent, text)) {
+        return when (val result = store.save(path, FileRevision.Absent, editor.materialize())) {
             is DocumentSaveResult.Saved -> {
                 snapshot = result.snapshot
                 dirty = false
                 conflict = null
+                editor.breakUndoGroup()
                 autosave.saveSucceeded()
                 ProjectSessionEvent.Saved(result.snapshot)
             }
@@ -121,13 +126,13 @@ class ProjectDocumentSession private constructor(
         if (!isOpen) return ProjectSessionEvent.Closed(null)
         if (decision == CloseDecision.Cancel) return ProjectSessionEvent.CloseCancelled
         if (decision == CloseDecision.Discard || !dirty) {
-            isOpen = false
+            finishClose()
             return ProjectSessionEvent.Closed(null)
         }
         conflict?.let { return it }
         return when (val saved = saveIfRequested(autosave.closeRequested())) {
             is ProjectSessionEvent.Saved -> {
-                isOpen = false
+                finishClose()
                 ProjectSessionEvent.Closed(null)
             }
 
@@ -140,11 +145,12 @@ class ProjectDocumentSession private constructor(
     private fun saveIfRequested(action: AutosaveAction): ProjectSessionEvent {
         if (action == AutosaveAction.NoAction) return ProjectSessionEvent.NoAction
         return try {
-            when (val result = store.save(snapshot.path, snapshot.revision, text)) {
+            when (val result = store.save(snapshot.path, snapshot.revision, editor.materialize())) {
                 is DocumentSaveResult.Saved -> {
                     snapshot = result.snapshot
                     dirty = false
                     conflict = null
+                    editor.breakUndoGroup()
                     autosave.saveSucceeded()
                     ProjectSessionEvent.Saved(result.snapshot)
                 }
@@ -172,8 +178,15 @@ class ProjectDocumentSession private constructor(
     }
 
     private fun invalidate(): ProjectSessionEvent.Closed {
+        val recovery = if (dirty) UnsavedRecovery(snapshot.path, editor.materialize()) else null
+        finishClose()
+        return ProjectSessionEvent.Closed(recovery)
+    }
+
+    private fun finishClose() {
         isOpen = false
-        return ProjectSessionEvent.Closed(if (dirty) UnsavedRecovery(snapshot.path, text) else null)
+        editorSubscription.close()
+        editor.close()
     }
 
     private fun failure(exception: Exception): ProjectSessionEvent.Failure =
@@ -187,7 +200,16 @@ class ProjectDocumentSession private constructor(
             limits: ProjectLimits = ProjectLimits(),
         ): ProjectDocumentSession {
             val store = ProjectDocumentStore(handle, limits)
-            return ProjectDocumentSession(handle, store, AutosaveController(clockNanos), store.open(path))
+            val editorLimits =
+                EditorLimits(
+                    maxCodeUnits = limits.sourceFileBytes,
+                    maxUtf8Bytes = limits.sourceFileBytes,
+                    initialGapCodeUnits = minOf(4 * 1024, limits.sourceFileBytes),
+                    maxUndoEntries = 256,
+                    maxUndoCodeUnits = limits.sourceFileBytes,
+                    tabWidth = 4,
+                )
+            return ProjectDocumentSession(handle, store, AutosaveController(clockNanos), store.open(path), editorLimits)
         }
     }
 }
