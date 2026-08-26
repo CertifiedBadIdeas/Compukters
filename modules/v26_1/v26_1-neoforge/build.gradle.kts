@@ -345,20 +345,37 @@ val verifyPackagedCompukterFfi =
             check(entries.none { it.startsWith("dev/architectury/") }) {
                 "Architectury runtime classes leaked into ${archive.name}"
             }
-            check(entries.none { it.contains("kotlin/compiler") }) {
-                "Kotlin compiler implementation leaked into ${archive.name}"
+            val forbiddenIdeClassPrefixes =
+                listOf(
+                    "com/intellij/",
+                    "dev/architectury/",
+                    "org/jetbrains/kotlin/analysis/",
+                    "org/jetbrains/kotlin/fir/",
+                )
+            check(entries.none { entry -> forbiddenIdeClassPrefixes.any(entry::startsWith) || entry.contains("kotlin/compiler") }) {
+                "forbidden IDE/platform runtime classes leaked into ${archive.name}"
             }
             check(entries.none { it.startsWith("ru/lazyhat/compukters/ide/") }) {
                 "ide-core classes leaked into ${archive.name} before the IDE is packaged"
             }
-            val forbiddenIdeLibraries = listOf("tomlj-", "antlr4-runtime-", "checker-qual-")
+            val forbiddenIdeLibraries =
+                listOf(
+                    "analysis-api",
+                    "antlr4-runtime-",
+                    "architectury-",
+                    "checker-qual-",
+                    "intellij-",
+                    "kotlin-compiler",
+                    "kotlin-fir",
+                    "tomlj-",
+                )
             check(
                 entries.none { entry ->
                     entry.startsWith("META-INF/jars/") &&
                         forbiddenIdeLibraries.any(entry.substringAfterLast('/')::startsWith)
                 },
             ) {
-                "ide-core TOML dependencies leaked into ${archive.name} before the IDE is packaged"
+                "IDE/platform dependencies leaked into ${archive.name} before the IDE is packaged"
             }
             check(entries.none { it.contains("ComputerBlockGameTest") }) {
                 "GameTest classes leaked into ${archive.name}"
