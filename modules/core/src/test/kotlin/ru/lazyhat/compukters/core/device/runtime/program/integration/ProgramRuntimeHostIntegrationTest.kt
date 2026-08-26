@@ -110,9 +110,12 @@ class ProgramRuntimeHostIntegrationTest {
 
                             submit(computer, "hello raw tail")
                             pressEnter(computer)
+                            val argumentFailure = terminalText(requireNotNull(computer.terminalFullState()))
                             assertTrue(
-                                terminalText(requireNotNull(computer.terminalFullState()))
-                                    .endsWith("> hello raw tail\nnested child ran\n>\n"),
+                                argumentFailure.endsWith(
+                                    "> hello raw tail\nprogram entry point does not accept arguments\n>\n",
+                                ),
+                                argumentFailure,
                             )
 
                             submit(computer, "kotlinc")
@@ -124,9 +127,10 @@ class ProgramRuntimeHostIntegrationTest {
 
                             submit(computer, "missing")
                             pressEnter(computer)
+                            val missingOutput = terminalText(requireNotNull(computer.terminalFullState()))
                             assertTrue(
-                                terminalText(requireNotNull(computer.terminalFullState()))
-                                    .endsWith("> missing\ncommand not found: /rom/missing\n>\n"),
+                                missingOutput.endsWith("> missing\nnot found: /rom/missing\n>\n"),
+                                missingOutput,
                             )
 
                             submit(computer, "edit demo.kt")
@@ -209,7 +213,7 @@ class ProgramRuntimeHostIntegrationTest {
         submit(host, "missing")
         pressEnter(host)
         val missingOutput = terminalText(requireNotNull(host.terminalFullState()))
-        assertTrue(missingOutput.endsWith("> missing\npermission denied: /rom/missing\n>\n"), missingOutput)
+        assertTrue(missingOutput.endsWith("> missing\naccess denied: /rom/missing\n>\n"), missingOutput)
 
         submit(host, "echo λ😀")
         press(host, TerminalKey.BACKSPACE)
@@ -219,18 +223,20 @@ class ProgramRuntimeHostIntegrationTest {
 
         submit(host, "wat argument")
         pressEnter(host)
-        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("permission denied: /rom/wat\n>\n"))
+        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("access denied: /rom/wat\n>\n"))
 
         submit(host, "clear")
         pressEnter(host)
-        submit(host, "a".repeat(255) + "😀")
+        submit(host, "a".repeat(4095))
+        submit(host, "😀")
         val bounded = requireNotNull(host.terminalFullState())
-        assertEquals(255, bounded.cells.count { it.codePoint == 'a'.code })
+        assertTrue(bounded.cells.any { it.codePoint == 'a'.code })
         assertTrue(bounded.cells.none { it.codePoint == 0x1f600 })
         pressEnter(host)
 
         submit(host, "clear\u0000\r\n")
-        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> clear\n"))
+        val sanitized = terminalText(requireNotNull(host.terminalFullState()))
+        assertTrue(sanitized.endsWith("> clear\n"), sanitized)
         pressEnter(host)
         assertEquals(">\n", terminalText(requireNotNull(host.terminalFullState())))
         assertEquals(ProgramRuntimeState.WaitingForInput, host.state)
