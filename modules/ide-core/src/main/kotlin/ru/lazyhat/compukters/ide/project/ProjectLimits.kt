@@ -24,6 +24,9 @@ data class ProjectLimits(
     val modules: Int = 128,
     val projectNameCodePoints: Int = 64,
     val projectNameUtf8Bytes: Int = 128,
+    val sourceFiles: Int = 64,
+    val sourceFileBytes: Int = 256 * 1024,
+    val sourceBytes: Int = 256 * 1024,
 ) {
     init {
         require(manifestBytes >= 0) { "manifest byte limit must be non-negative" }
@@ -31,5 +34,8 @@ data class ProjectLimits(
         require(modules >= 0) { "module count limit must be non-negative" }
         require(projectNameCodePoints >= 0) { "project name code-point limit must be non-negative" }
         require(projectNameUtf8Bytes >= 0) { "project name byte limit must be non-negative" }
+        require(sourceFiles >= 0) { "source file count limit must be non-negative" }
+        require(sourceFileBytes >= 0) { "source file byte limit must be non-negative" }
+        require(sourceBytes >= 0) { "source byte limit must be non-negative" }
     }
 }
