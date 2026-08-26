@@ -29,6 +29,9 @@ kotlin-logging = "8.0.4"
 slf4j = "2.0.18"
 kotlinx-collections-immutable = "0.5.0"
 tomlj = "1.1.1"
+kotlinx-serialization-runtime = "1.7.3"
+caffeine-kotlin = "2.9.3"
+intellij-coroutines = "1.8.0-intellij-13"
 
 # 26.1
 minecraft-v261 = "26.1.2"
@@ -38,12 +41,23 @@ minecraft-v261 = "26.1.2"
 kotlin-logging = { module = "io.github.oshai:kotlin-logging-jvm", version.ref = "kotlin-logging" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
+kotlin-compiler = { module = "org.jetbrains.kotlin:kotlin-compiler", version.ref = "kotlin" }
 kotlin-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-compiler-embeddable", version.ref = "kotlin" }
 kotlin-scripting-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable", version.ref = "kotlin" }
+kotlin-analysis-api-standalone = { module = "org.jetbrains.kotlin:analysis-api-standalone-for-ide", version.ref = "kotlin" }
+kotlin-analysis-api = { module = "org.jetbrains.kotlin:analysis-api-for-ide", version.ref = "kotlin" }
+kotlin-analysis-api-impl-base = { module = "org.jetbrains.kotlin:analysis-api-impl-base-for-ide", version.ref = "kotlin" }
+kotlin-analysis-api-k2 = { module = "org.jetbrains.kotlin:analysis-api-k2-for-ide", version.ref = "kotlin" }
+kotlin-analysis-platform = { module = "org.jetbrains.kotlin:analysis-api-platform-interface-for-ide", version.ref = "kotlin" }
+kotlin-analysis-low-level-fir = { module = "org.jetbrains.kotlin:low-level-api-fir-for-ide", version.ref = "kotlin" }
+kotlin-symbol-light-classes = { module = "org.jetbrains.kotlin:symbol-light-classes-for-ide", version.ref = "kotlin" }
 
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable-jvm", version.ref = "kotlinx-collections-immutable" }
+kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm", version.ref = "kotlinx-serialization-runtime" }
+caffeine-kotlin = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine-kotlin" }
+intellij-coroutines-core = { module = "com.intellij.platform:kotlinx-coroutines-core", version.ref = "intellij-coroutines" }
 tomlj = { module = "org.tomlj:tomlj", version.ref = "tomlj" }
 
 # 26.1

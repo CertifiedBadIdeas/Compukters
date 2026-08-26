@@ -26,6 +26,29 @@ identified by its upstream license inventory.
 The worker also contains JetBrains annotations 13.0, licensed under
 Apache-2.0: <https://github.com/JetBrains/java-annotations>.
 
+## Kotlin Analysis API worker
+
+The separately launched IDE analysis worker contains the pinned Kotlin 2.4.10
+unshaded compiler and the `analysis-api-*-for-ide`,
+`low-level-api-fir-for-ide`, `symbol-light-classes-for-ide`, and
+`analysis-api-standalone-for-ide` aggregates published by JetBrains. These
+artifacts are licensed under Apache-2.0 and use the Kotlin license corpus
+listed above.
+
+The worker also contains these pinned runtime dependencies:
+
+- IntelliJ's patched `kotlinx-coroutines-core-jvm` 1.8.0-intellij-13,
+  `kotlinx-serialization-core-jvm` 1.7.3, Caffeine 2.9.3, Error Prone
+  annotations 2.10.0, and JetBrains annotations 23.0.0 — Apache-2.0.
+- Checker Qual 3.19.0 — MIT; complete text at
+  `licenses/jvm/checker-qual-3.19.0-MIT.txt`.
+
+The Analysis API artifacts come from
+<https://packages.jetbrains.team/maven/p/ij/intellij-dependencies>. Their
+generated POMs name unpublished source modules which are already shaded into
+the `for-ide` JARs, so the build resolves those aggregates non-transitively and
+verifies the complete packaged JAR inventory.
+
 ## Kotlin coroutines and logging
 
 The worker contains `kotlinx-coroutines-core-jvm` 1.8.0 and the outer archive
