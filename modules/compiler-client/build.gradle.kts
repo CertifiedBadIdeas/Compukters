@@ -18,6 +18,7 @@
 
 import org.gradle.api.DefaultTask
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.SetProperty
 import org.gradle.api.tasks.Input
@@ -30,9 +31,15 @@ abstract class AssertNoK2CompilerRuntime : DefaultTask() {
     @get:Input
     abstract val runtimeModules: ListProperty<String>
 
+    @get:Input
+    abstract val forbiddenRuntimeModuleFragments: SetProperty<String>
+
     @TaskAction
     fun verify() {
-        val disallowed = runtimeModules.get().filterNot(allowedRuntimeModules.get()::contains)
+        val resolved = runtimeModules.get()
+        val forbidden = resolved.filter { module -> forbiddenRuntimeModuleFragments.get().any(module::contains) }
+        check(forbidden.isEmpty()) { "compiler-client runtimeClasspath contains K2/platform dependencies: $forbidden" }
+        val disallowed = resolved.filterNot(allowedRuntimeModules.get()::contains)
         check(disallowed.isEmpty()) { "compiler-client runtimeClasspath contains disallowed dependencies: $disallowed" }
     }
 }
@@ -49,6 +56,7 @@ dependencies {
 
 val allowedClientRuntimeModules =
     setOf(
+        ":worker-client",
         "org.jetbrains.kotlin:kotlin-stdlib",
         "org.jetbrains:annotations",
     )
@@ -56,7 +64,11 @@ val resolvedRuntimeModules =
     configurations.named("runtimeClasspath").map { runtimeClasspath ->
         runtimeClasspath.incoming.resolutionResult.allComponents
             .mapNotNull { component ->
-                (component.id as? ModuleComponentIdentifier)?.let { "${it.group}:${it.module}" }
+                when (val id = component.id) {
+                    is ModuleComponentIdentifier -> "${id.group}:${id.module}"
+                    is ProjectComponentIdentifier -> id.projectPath.takeUnless { it == project.path }
+                    else -> null
+                }
             }
             .sorted()
     }
@@ -65,6 +77,17 @@ val assertNoK2CompilerRuntime = tasks.register<AssertNoK2CompilerRuntime>("asser
     group = "verification"
     description = "Fails when dependencies outside compiler-client's production runtime allowlist are resolved."
     allowedRuntimeModules.set(allowedClientRuntimeModules)
+    forbiddenRuntimeModuleFragments.set(
+        setOf(
+            "analysis-api",
+            "intellij",
+            "kotlin-compiler",
+            "kotlin-fir",
+            "kotlin-psi",
+            "low-level-api-fir",
+            "symbol-light-classes",
+        ),
+    )
     runtimeModules.set(resolvedRuntimeModules)
 }
 

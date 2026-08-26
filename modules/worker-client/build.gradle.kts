@@ -16,6 +16,9 @@
  * limitations under the License.
  */
 
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+
 plugins {
     alias(libs.plugins.kotlinConvention)
 }
@@ -23,4 +26,41 @@ plugins {
 dependencies {
     implementation(libs.kotlin.stdlib)
     testImplementation(kotlin("test"))
+}
+
+val allowedWorkerClientRuntimeModules =
+    setOf(
+        "org.jetbrains.kotlin:kotlin-stdlib",
+        "org.jetbrains:annotations",
+    )
+
+val verifyWorkerClientRuntimeIsolation =
+    tasks.register("verifyWorkerClientRuntimeIsolation") {
+        group = "verification"
+        description = "Fails when K2 or IntelliJ implementation dependencies leak into worker-client."
+        val runtimeClasspath = configurations.named("runtimeClasspath")
+        inputs.files(runtimeClasspath)
+        doLast {
+            val resolved =
+                runtimeClasspath
+                    .get()
+                    .incoming
+                    .resolutionResult
+                    .allComponents
+                    .mapNotNull { component ->
+                        when (val id = component.id) {
+                            is ModuleComponentIdentifier -> "${id.group}:${id.module}"
+                            is ProjectComponentIdentifier -> id.projectPath.takeUnless { it == project.path }
+                            else -> null
+                        }
+                    }.sorted()
+            val disallowed = resolved.filterNot(allowedWorkerClientRuntimeModules::contains)
+            check(disallowed.isEmpty()) {
+                "worker-client runtimeClasspath contains forbidden platform dependencies: $disallowed"
+            }
+        }
+    }
+
+tasks.check {
+    dependsOn(verifyWorkerClientRuntimeIsolation)
 }

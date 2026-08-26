@@ -16,6 +16,7 @@
  * limitations under the License.
  */
 
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Files
@@ -222,6 +223,7 @@ val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
         isFailOnNoMatchingTests = false
     }
     doFirst {
+        systemProperty("compukters.analysis.testClasspath", classpath.files.joinToString(File.pathSeparator))
         systemProperty("compukters.analysis.java", javaToolchains.launcherFor {
             languageVersion = JavaLanguageVersion.of(25)
         }.get().executablePath.asFile.absolutePath)
