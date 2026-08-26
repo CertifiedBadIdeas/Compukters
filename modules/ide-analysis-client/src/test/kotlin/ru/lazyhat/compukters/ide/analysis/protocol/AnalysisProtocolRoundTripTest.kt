@@ -1,0 +1,196 @@
+/*
+ * The Compukters Developers
+ *
+ * Copyright 2026 Vsevolod Petrov (lazyhat)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package ru.lazyhat.compukters.ide.analysis.protocol
+
+import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
+import ru.lazyhat.compukters.compiler.project.ProjectSource
+import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
+import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
+import ru.lazyhat.compukters.ide.analysis.AnalysisResult
+import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
+import ru.lazyhat.compukters.ide.analysis.CompletionItem
+import ru.lazyhat.compukters.ide.analysis.CompletionKind
+import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
+import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
+import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
+import ru.lazyhat.compukters.ide.analysis.EditorDiagnostic
+import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
+import ru.lazyhat.compukters.ide.analysis.EditorExpressionInfo
+import ru.lazyhat.compukters.ide.analysis.EditorPresentationLimits
+import ru.lazyhat.compukters.ide.analysis.SemanticCategory
+import ru.lazyhat.compukters.ide.analysis.SemanticToken
+import ru.lazyhat.compukters.ide.analysis.SnapshotPresentation
+import ru.lazyhat.compukters.ide.analysis.SnapshotPresentationAcceptance
+import ru.lazyhat.compukters.ide.analysis.SourceLocation
+import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
+import ru.lazyhat.compukters.ide.editor.EditorRange
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+
+class AnalysisProtocolRoundTripTest {
+    private val snapshot = snapshot("src/main.kt" to "val answer = 42")
+    private val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(snapshot), AnalysisProfileIdentity(hash(2)))
+    private val context = AnalysisProtocolContext.of(snapshot)
+    private val requestId = RequestId.of(7uL)
+
+    @Test
+    fun `handshake snapshot lifecycle queries cancellation and failure round trip`() {
+        val profile =
+            AdmittedAnalysisProfile(
+                identity.profile,
+                listOf(AdmittedAnalysisBundle(AnalysisBundleIdentity("std", hash(3)), "/safe/std.jar", "/safe/std-sources.jar")),
+            )
+        val messages =
+            listOf<AnalysisMessage>(
+                AnalysisHandshake(
+                    ANALYSIS_PROTOCOL_VERSION,
+                    AnalysisWorkerIdentity("2.4.10", "2.4", hash(4)),
+                    AnalysisFeature.entries.toSet(),
+                    AnalysisLimits(),
+                ),
+                OpenSnapshotRequest(requestId, identity, snapshot, profile, AnalysisLimits()),
+                SnapshotReady(requestId, identity),
+                AnalysisQueryRequest(requestId, AnalysisQuery.Presentation(identity)),
+                AnalysisQueryRequest(
+                    requestId,
+                    AnalysisQuery.Completion(identity, path(), 3, CompletionTrigger.Automatic),
+                ),
+                AnalysisQueryRequest(requestId, AnalysisQuery.ExpressionInfo(identity, path(), 4)),
+                AnalysisQueryRequest(requestId, AnalysisQuery.Declaration(identity, path(), 5)),
+                AnalysisQueryRequest(requestId, AnalysisQuery.References(identity, path(), 6)),
+                CancelAnalysisRequest(requestId),
+                AnalysisCancelled(requestId, identity),
+                CloseSnapshotRequest(requestId, identity),
+                SnapshotClosed(requestId, identity),
+                AnalysisFailure(requestId, identity, AnalysisFailureKind.Timeout, "deadline exceeded"),
+            )
+
+        messages.forEach { message -> assertEquals(message, roundTrip(message)) }
+    }
+
+    @Test
+    fun `handshake defensively owns its feature set`() {
+        val features = mutableSetOf(AnalysisFeature.Presentation)
+        val handshake =
+            AnalysisHandshake(
+                ANALYSIS_PROTOCOL_VERSION,
+                AnalysisWorkerIdentity("2.4.10", "2.4", hash(4)),
+                features,
+                AnalysisLimits(),
+            )
+
+        features.clear()
+
+        assertEquals(setOf(AnalysisFeature.Presentation), handshake.features)
+    }
+
+    @Test
+    fun `all stable result variants round trip`() {
+        val origin = DeclarationOrigin.Bundle(AnalysisBundleIdentity("std", hash(3)))
+        val results =
+            listOf(
+                AnalysisQuery.Completion(identity, path(), 6, CompletionTrigger.Manual) to
+                    AnalysisResult.Completion.create(
+                        identity,
+                        EditorRange(4, 6),
+                        listOf(CompletionItem("answer", "answer", CompletionKind.Property, "kotlin.Int", origin)),
+                    ),
+                AnalysisQuery.ExpressionInfo(identity, path(), 6) to
+                    AnalysisResult.ExpressionInfo.create(
+                        identity,
+                        EditorExpressionInfo(path(), EditorRange(4, 10), "kotlin.Int", "val answer: kotlin.Int", origin),
+                        sourceLengths(),
+                    ),
+                AnalysisQuery.Declaration(identity, path(), 6) to
+                    AnalysisResult.Declaration.create(
+                        identity,
+                        listOf(DeclarationLocation.Source(DeclarationOrigin.Project, path(), EditorRange(4, 10))),
+                        sourceLengths(),
+                    ),
+                AnalysisQuery.References(identity, path(), 6) to
+                    AnalysisResult.References.create(
+                        identity,
+                        listOf(DeclarationLocation.Source(DeclarationOrigin.Project, path(), EditorRange(4, 10))),
+                        sourceLengths(),
+                    ),
+            )
+
+        results.forEach { (query, result) ->
+            val message = AnalysisQuerySuccess(requestId, result)
+            assertEquals(message, roundTrip(message, context.forQuery(query)))
+        }
+    }
+
+    @Test
+    fun `presentation result round trips without leaking implementation objects`() {
+        val presentation =
+            SnapshotPresentation.create(
+                identity,
+                sourceLengths(),
+                diagnostics = listOf(EditorDiagnostic(EditorDiagnosticSeverity.Warning, "warning", path(), EditorRange(0, 3))),
+                semanticTokens = listOf(SemanticToken(path(), EditorRange(4, 10), SemanticCategory.Property)),
+                locations = listOf(SourceLocation(path(), EditorRange(4, 10))),
+                limits = EditorPresentationLimits(),
+            )
+
+        val decoded =
+            assertIs<AnalysisQuerySuccess>(
+                roundTrip(
+                    AnalysisQuerySuccess(requestId, AnalysisResult.Presentation(identity, presentation)),
+                    context.forQuery(AnalysisQuery.Presentation(identity)),
+                ),
+            )
+        val decodedPresentation = assertIs<AnalysisResult.Presentation>(decoded.result).value
+        val active = assertIs<SnapshotPresentationAcceptance.Active>(decodedPresentation.accept(identity))
+
+        assertEquals(listOf(EditorDiagnostic(EditorDiagnosticSeverity.Warning, "warning", path(), EditorRange(0, 3))), active.diagnostics)
+        assertEquals(listOf(SemanticToken(path(), EditorRange(4, 10), SemanticCategory.Property)), active.semanticTokens)
+        assertEquals(listOf(SourceLocation(path(), EditorRange(4, 10))), active.locations)
+    }
+
+    private fun roundTrip(
+        message: AnalysisMessage,
+        protocolContext: AnalysisProtocolContext = context,
+    ): AnalysisMessage {
+        val frame = AnalysisMessageCodec.encode(message, protocolContext)
+        val bytes = AnalysisFrameCodec.encode(frame)
+        return AnalysisMessageCodec.decode(AnalysisFrameCodec.decode(bytes, ProtocolLimits.MAX_FRAME_PAYLOAD_BYTES), protocolContext)
+    }
+
+    private fun path() = VirtualSourcePath.kotlin("src/main.kt")
+
+    private fun sourceLengths() = mapOf(path() to "val answer = 42".length)
+
+    private fun hash(value: Int) = Hash256.of(ByteArray(32) { value.toByte() })
+
+    private fun snapshot(vararg sources: Pair<String, String>): ProjectSnapshot =
+        ProjectSnapshot.of(
+            sources.map { (path, source) ->
+                ProjectSource(VirtualSourcePath.kotlin(path), BinaryValue.of(source.encodeToByteArray()))
+            },
+            WorkerLimits(),
+        )
+}
