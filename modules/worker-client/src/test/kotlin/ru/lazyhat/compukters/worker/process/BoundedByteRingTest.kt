@@ -16,20 +16,17 @@
  * limitations under the License.
  */
 
-package ru.lazyhat.compukters.compiler.worker.controller
+package ru.lazyhat.compukters.worker.process
 
-import java.nio.file.Path
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
 
-typealias WorkerPayloadLoadLimits = ru.lazyhat.compukters.worker.payload.WorkerPayloadLoadLimits
-
-object WorkerPayloadLoader {
-    fun load(
-        root: Path,
-        limits: WorkerPayloadLoadLimits = WorkerPayloadLoadLimits(),
-    ): PublishedWorkerPayload {
-        val loaded =
-            ru.lazyhat.compukters.worker.payload.WorkerPayloadLoader
-                .load(root, limits)
-        return PublishedWorkerPayload(loaded.root, WorkerPayloadManifest.fromGeneric(loaded.manifest), loaded.classpath)
+class BoundedByteRingTest {
+    @Test
+    fun `ring retains only newest bytes`() {
+        val ring = BoundedByteRing(5)
+        ring.append(byteArrayOf(1, 2, 3))
+        ring.append(byteArrayOf(4, 5, 6, 7))
+        assertContentEquals(byteArrayOf(3, 4, 5, 6, 7), ring.snapshot())
     }
 }

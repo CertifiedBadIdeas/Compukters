@@ -76,10 +76,11 @@ internal data class WorkerBootstrap(
             val payloadRoot = checkNotNull(workerJar.parent?.parent) { "worker jar is outside a payload" }
             val properties = readManifest(payloadRoot.resolve(MANIFEST_FILE))
             require(properties.getValue("format") == "1") { "unsupported worker payload format" }
-            require(properties.getValue("compiler") == COMPILER_VERSION) { "worker compiler version mismatch" }
-            require(properties.getValue("language") == LANGUAGE_VERSION) { "worker language version mismatch" }
-            require(properties.getValue("codegenAbi") == CODEGEN_ABI.toString()) { "worker codegen ABI mismatch" }
-            require(properties.getValue("artifactWriter") == ARTIFACT_WRITER_VERSION.toString()) {
+            require(properties.getValue("kind") == "compiler") { "worker payload kind mismatch" }
+            require(properties.getValue("identity.compiler") == COMPILER_VERSION) { "worker compiler version mismatch" }
+            require(properties.getValue("identity.language") == LANGUAGE_VERSION) { "worker language version mismatch" }
+            require(properties.getValue("identity.codegenAbi") == CODEGEN_ABI.toString()) { "worker codegen ABI mismatch" }
+            require(properties.getValue("identity.artifactWriter") == ARTIFACT_WRITER_VERSION.toString()) {
                 "worker artifact writer mismatch"
             }
             require(properties.getValue("mainClass") == MAIN_CLASS) { "worker main class mismatch" }
@@ -94,7 +95,7 @@ internal data class WorkerBootstrap(
                     CODEGEN_ABI,
                     ARTIFACT_WRITER_VERSION,
                     payloadHash,
-                    Hash256.zero(),
+                    Hash256.of(properties.getValue("identity.standardLibraryAbi").decodeHex()),
                 ),
                 workerJar,
                 standardLibrary,
@@ -125,7 +126,17 @@ internal data class WorkerBootstrap(
         private const val ARTIFACT_WRITER_VERSION = 1u
         private const val MAIN_CLASS = "ru.lazyhat.compukters.compiler.worker.server.CompilerWorkerMainKt"
         private val REQUIRED_PROPERTIES =
-            linkedSetOf("format", "compiler", "language", "codegenAbi", "artifactWriter", "mainClass", "payloadSha256")
+            linkedSetOf(
+                "format",
+                "kind",
+                "identity.artifactWriter",
+                "identity.codegenAbi",
+                "identity.compiler",
+                "identity.language",
+                "identity.standardLibraryAbi",
+                "mainClass",
+                "payloadSha256",
+            )
     }
 }
 

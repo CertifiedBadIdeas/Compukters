@@ -42,6 +42,7 @@ plugins {
 }
 
 dependencies {
+    api(projects.workerClient)
     implementation(libs.kotlin.stdlib)
     testImplementation(kotlin("test"))
 }

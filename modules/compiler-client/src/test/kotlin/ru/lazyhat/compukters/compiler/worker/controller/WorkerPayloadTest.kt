@@ -74,17 +74,6 @@ class WorkerPayloadTest {
         }
 
     @Test
-    fun `forged manifests are rejected before publication`() =
-        withTempDirectory { root ->
-            val file = WorkerPayloadFile("lib/compiler.jar", 1, Hash256.zero())
-            val duplicate = WorkerPayloadManifest(testIdentity(), "example.WorkerMain", listOf(file, file), Hash256.zero())
-
-            assertFailsWith<WorkerPayloadException> {
-                WorkerPayloadPublisher.publish(duplicate, MapPayloadSource(emptyMap()), root.resolve("cache"))
-            }
-        }
-
-    @Test
     fun `missing file removes only the failed staging directory`() =
         withTempDirectory { root ->
             val files = linkedMapOf("lib/a.jar" to byteArrayOf(1), "lib/b.jar" to byteArrayOf(2))

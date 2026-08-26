@@ -20,9 +20,9 @@ package ru.lazyhat.compukters.compiler.worker.controller
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
+import java.io.ByteArrayInputStream
 import java.nio.file.Files
 import java.nio.file.Path
-import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeBytes
 import kotlin.test.Test
@@ -44,9 +44,14 @@ class WorkerPayloadLoaderTest {
         val mutations =
             listOf<(String) -> String>(
                 { it.replace("format=1", "format=2") },
-                { it.replace("compiler=", "unknown=x\ncompiler=") },
-                { it.replace("compiler=", "compiler=duplicate\ncompiler=") },
-                { it.replace("compiler=2.3.20\nlanguage=2.4", "language=2.4\ncompiler=2.3.20") },
+                { it.replace("identity.compiler=", "unknown=x\nidentity.compiler=") },
+                { it.replace("identity.compiler=", "identity.compiler=duplicate\nidentity.compiler=") },
+                {
+                    it.replace(
+                        "identity.compiler=2.3.20\nidentity.language=2.4",
+                        "identity.language=2.4\nidentity.compiler=2.3.20",
+                    )
+                },
                 { it.replace("file=lib/worker.jar", "file=../worker.jar") },
                 { it.replace("\t3\t", "\tbad\t") },
                 { it.replace(Regex("file=.*"), "file=broken") },
@@ -100,7 +105,7 @@ class WorkerPayloadLoaderTest {
         }
 
     private fun withPayload(block: (Path, WorkerPayloadManifest) -> Unit) {
-        val root = createTempDirectory("compukters-payload-loader-")
+        val temporary = createTempDirectory("compukters-payload-loader-")
         try {
             val bytes = byteArrayOf(1, 2, 3)
             val manifest =
@@ -109,26 +114,15 @@ class WorkerPayloadLoaderTest {
                     "worker.MainKt",
                     mapOf("lib/worker.jar" to bytes),
                 )
-            root.resolve("lib").createDirectories()
-            root.resolve("lib/worker.jar").writeBytes(bytes)
-            root.resolve("worker.payload").writeBytes(render(manifest).encodeToByteArray())
-            block(root, manifest)
+            val published =
+                WorkerPayloadPublisher.publish(
+                    manifest,
+                    WorkerPayloadSource { ByteArrayInputStream(bytes) },
+                    temporary.resolve("cache"),
+                )
+            block(published.root, manifest)
         } finally {
-            root.toFile().deleteRecursively()
+            temporary.toFile().deleteRecursively()
         }
     }
-
-    private fun render(manifest: WorkerPayloadManifest): String =
-        buildString {
-            appendLine("format=1")
-            appendLine("compiler=${manifest.identity.compilerVersion}")
-            appendLine("language=${manifest.identity.languageVersion}")
-            appendLine("codegenAbi=${manifest.identity.codegenAbi}")
-            appendLine("artifactWriter=${manifest.identity.artifactWriterVersion}")
-            appendLine("mainClass=${manifest.mainClass}")
-            appendLine("payloadSha256=${manifest.payloadHash.hex()}")
-            manifest.files.forEach { file ->
-                appendLine("file=${file.path}\t${file.bytes}\t${file.sha256.hex()}")
-            }
-        }
 }

@@ -247,7 +247,7 @@ class CompilerWorkerController(
         }
         val child =
             try {
-                processFactory.start(payload, launch)
+                processFactory.start(launch.processLaunch(payload))
             } catch (exception: Exception) {
                 throw ControllerFault(PlatformFailureClass.WORKER_STARTUP, exception.message ?: "worker failed to start")
             }

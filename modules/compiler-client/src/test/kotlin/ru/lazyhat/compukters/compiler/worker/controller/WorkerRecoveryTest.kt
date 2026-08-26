@@ -37,19 +37,10 @@ import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class WorkerRecoveryTest {
-    @Test
-    fun `bounded stderr ring retains only newest bytes`() {
-        val ring = BoundedByteRing(5)
-        ring.append(byteArrayOf(1, 2, 3))
-        ring.append(byteArrayOf(4, 5, 6, 7))
-        assertContentEquals(byteArrayOf(3, 4, 5, 6, 7), ring.snapshot())
-    }
-
     @Test
     fun `startup and compilation timeouts are distinct and terminate after grace`() {
         withController(2) { controller, processes, identity, limits ->
@@ -111,40 +102,12 @@ class WorkerRecoveryTest {
         }
     }
 
-    @Test
-    fun `JDK launch command contains only fixed controller-owned arguments`() {
-        val manifest = WorkerPayloadManifest.create(baseIdentity(), "example.WorkerMain", emptyMap())
-        val payload = PublishedWorkerPayload(Path.of("payload"), manifest, listOf(Path.of("payload/lib/worker.jar")))
-        val launch = WorkerLaunch(Path.of("jdk/bin/java"), 256, 128, Path.of("worker-tmp"), manifest.identity)
-
-        assertEquals(
-            listOf(
-                "jdk/bin/java",
-                "-Xms16m",
-                "-Xmx256m",
-                "-XX:MaxMetaspaceSize=128m",
-                "-Djava.io.tmpdir=worker-tmp",
-                "-cp",
-                "payload/lib/worker.jar",
-                "example.WorkerMain",
-            ),
-            JdkWorkerProcessFactory.command(payload, launch),
-        )
-        assertEquals(
-            mapOf("SystemRoot" to "safe"),
-            JdkWorkerProcessFactory.admittedEnvironment(
-                mapOf("SystemRoot" to "safe", "SECRET" to "must-not-leak"),
-                setOf("SystemRoot", "WINDIR"),
-            ),
-        )
-    }
-
     private fun withController(
         processCount: Int,
         block: (CompilerWorkerController, List<FakeWorkerProcess>, WorkerIdentity, WorkerLimits) -> Unit,
     ) {
         val manifest = WorkerPayloadManifest.create(baseIdentity(), "example.WorkerMain", emptyMap())
-        val payload = PublishedWorkerPayload(Path.of("payload"), manifest, emptyList())
+        val payload = PublishedWorkerPayload(Path.of("payload"), manifest, listOf(Path.of("payload", "lib", "worker.jar")))
         val processes = List(processCount) { FakeWorkerProcess() }
         val limits = WorkerLimits()
         val launch = WorkerLaunch(Path.of("java"), 256, 128, Path.of("tmp"), manifest.identity)
