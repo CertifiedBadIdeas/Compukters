@@ -19,15 +19,14 @@
 package compukter.system.edit
 
 import compukter.filesystem.FileSystem
-import compukter.process.Process
 import compukter.terminal.Terminal
 
-suspend fun main() {
-    val commandLine = Process.commandLine()
-    if (commandLine == "" || editContainsSpace(commandLine)) {
+fun main(args: Array<String>) {
+    if (args.size != 1) {
         Terminal.write("usage: edit <path>\n")
         return
     }
+    val commandLine = args[0]
     val path = if (commandLine[0] == '/') commandLine else "/home/" + commandLine
     val kind = FileSystem.stat(path)
     if (kind == 2) {

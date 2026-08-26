@@ -301,9 +301,12 @@ internal fun validateArtifact(
             is Instruction.Null,
             is Instruction.NewObject,
             is Instruction.Jump,
+            Instruction.Unreachable,
             -> emptyList()
 
             is Instruction.Move -> listOf(source)
+
+            is Instruction.Convert -> listOf(source)
 
             is Instruction.AddI32 -> listOf(left, right)
 
@@ -384,6 +387,8 @@ internal fun validateArtifact(
 
             is Instruction.Null -> listOf(destination)
 
+            is Instruction.Convert -> listOf(destination)
+
             is Instruction.AddI32 -> listOf(destination)
 
             is Instruction.SubtractI32 -> listOf(destination)
@@ -451,6 +456,7 @@ internal fun validateArtifact(
             is Instruction.Branch,
             is Instruction.Return,
             is Instruction.Throw,
+            Instruction.Unreachable,
             -> emptyList()
         }
 
@@ -933,6 +939,8 @@ internal fun validateArtifact(
                     }
 
                     when (instruction) {
+                        Instruction.Unreachable -> {}
+
                         is Instruction.Move -> {
                             val destinationType = register(instruction.destination, "destination")
                             val sourceType = register(instruction.source, "source")
@@ -941,6 +949,11 @@ internal fun validateArtifact(
                             ) {
                                 add(ArtifactWriteErrorCode.INVALID_RANGE, "move source and destination types differ", location)
                             }
+                        }
+
+                        is Instruction.Convert -> {
+                            register(instruction.destination, "destination")
+                            register(instruction.source, "source")
                         }
 
                         is Instruction.AddI32 -> {
@@ -1555,6 +1568,7 @@ private fun Instruction.isTerminator(): Boolean =
         this is Instruction.Branch ||
         this is Instruction.Return ||
         this is Instruction.Throw ||
+        this is Instruction.Unreachable ||
         this is Instruction.CallSuspend ||
         this is Instruction.CapabilityCallAsync
 

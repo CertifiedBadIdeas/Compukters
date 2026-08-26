@@ -19,17 +19,15 @@
 package compukter.system.kotlinc
 
 import compukter.compiler.Compiler
-import compukter.process.Process
 import compukter.terminal.Terminal
 
-suspend fun main() {
-    val commandLine = Process.commandLine()
-    val error = kotlincError(commandLine)
+suspend fun main(args: Array<String>) {
+    val error = kotlincError(args)
     if (error != "") {
         Terminal.write(error + "\n")
     } else {
-        val source = kotlincSource(commandLine)
-        val output = kotlincOutput(commandLine)
+        val source = kotlincSource(args)
+        val output = kotlincOutput(args)
         val result = Compiler.compile(source, output)
         if (result == 0) {
             Terminal.write("compiled: " + output + "\n")
@@ -41,47 +39,47 @@ suspend fun main() {
     }
 }
 
-fun kotlincError(commandLine: String): String {
-    val parsed = parseKotlincCommandLine(commandLine)
+fun kotlincError(args: Array<String>): String {
+    val parsed = parseKotlincArguments(args)
     val separator = separator(parsed, 0)
     return parsed.substring(0, separator)
 }
 
-fun kotlincSource(commandLine: String): String {
-    val parsed = parseKotlincCommandLine(commandLine)
+fun kotlincSource(args: Array<String>): String {
+    val parsed = parseKotlincArguments(args)
     val first = separator(parsed, 0)
     val second = separator(parsed, first + 1)
     return parsed.substring(first + 1, second)
 }
 
-fun kotlincOutput(commandLine: String): String {
-    val parsed = parseKotlincCommandLine(commandLine)
+fun kotlincOutput(args: Array<String>): String {
+    val parsed = parseKotlincArguments(args)
     val first = separator(parsed, 0)
     val second = separator(parsed, first + 1)
     return parsed.substring(second + 1, parsed.length)
 }
 
-private fun parseKotlincCommandLine(commandLine: String): String {
-    val count = tokenCount(commandLine)
+private fun parseKotlincArguments(args: Array<String>): String {
+    val count = args.size
     if (count == 0) return failure("usage: kotlinc <source.kt> [-o output]")
 
     var outputOptions = 0
     var index = 0
     while (index < count) {
-        if (tokenAt(commandLine, index) == "-o") outputOptions = outputOptions + 1
+        if (args[index] == "-o") outputOptions = outputOptions + 1
         index = index + 1
     }
     if (outputOptions > 1) return failure("duplicate -o option")
 
-    val source = tokenAt(commandLine, 0)
+    val source = args[0]
     if (source == "-o") return failure("source file must precede -o")
     if (!hasKotlinExtension(source)) return failure("source file must end in .kt")
 
     val resolvedSource = resolveUserPath(source)
     var output = ""
     if (count == 1) output = resolvedSource.substring(0, resolvedSource.length - 3)
-    else if (count == 2 && tokenAt(commandLine, 1) == "-o") return failure("missing output after -o")
-    else if (count == 3 && tokenAt(commandLine, 1) == "-o") output = resolveUserPath(tokenAt(commandLine, 2))
+    else if (count == 2 && args[1] == "-o") return failure("missing output after -o")
+    else if (count == 3 && args[1] == "-o") output = resolveUserPath(args[2])
     else return failure("kotlinc accepts exactly one source file")
     return "\u0000" + resolvedSource + "\u0000" + output
 }
@@ -95,37 +93,6 @@ private fun separator(
     var index = start
     while (index < value.length && value[index] != '\u0000') index = index + 1
     return index
-}
-
-private fun tokenCount(commandLine: String): Int {
-    var count = 0
-    var index = 0
-    while (index < commandLine.length) {
-        while (index < commandLine.length && commandLine[index] == ' ') index = index + 1
-        if (index < commandLine.length) {
-            count = count + 1
-            while (index < commandLine.length && commandLine[index] != ' ') index = index + 1
-        }
-    }
-    return count
-}
-
-private fun tokenAt(
-    commandLine: String,
-    requested: Int,
-): String {
-    var token = 0
-    var index = 0
-    while (index < commandLine.length) {
-        while (index < commandLine.length && commandLine[index] == ' ') index = index + 1
-        val start = index
-        while (index < commandLine.length && commandLine[index] != ' ') index = index + 1
-        if (start != index) {
-            if (token == requested) return commandLine.substring(start, index)
-            token = token + 1
-        }
-    }
-    return ""
 }
 
 private fun hasKotlinExtension(path: String): Boolean =

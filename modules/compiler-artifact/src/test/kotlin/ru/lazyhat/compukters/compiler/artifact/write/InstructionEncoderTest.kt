@@ -39,6 +39,26 @@ import kotlin.test.assertFailsWith
 
 class InstructionEncoderTest {
     @Test
+    fun `scalar conversion encodes the canonical vm opcode`() {
+        val encoded =
+            encodeInstruction(
+                Instruction.Convert(RegisterId.of(1u), RegisterId.of(2u)),
+                64,
+            )
+
+        assertContentEquals(byteArrayOf(0x04, 0, 8, 0, 1, 0, 2, 0), encoded.bytes)
+        assertEquals(2u, encoded.fixedCost)
+    }
+
+    @Test
+    fun `unreachable encodes the canonical terminal opcode`() {
+        val encoded = encodeInstruction(Instruction.Unreachable, 64)
+
+        assertContentEquals(byteArrayOf(0xff.toByte(), 0, 4, 0), encoded.bytes)
+        assertEquals(1u, encoded.fixedCost)
+    }
+
+    @Test
     fun `checked cast encodes the VM narrowing opcode`() {
         val encoded =
             encodeInstruction(

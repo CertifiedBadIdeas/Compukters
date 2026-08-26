@@ -35,6 +35,11 @@ sealed interface Instruction {
         val destination: RegisterId,
     ) : Instruction
 
+    data class Convert(
+        val destination: RegisterId,
+        val source: RegisterId,
+    ) : Instruction
+
     data class AddI32(
         val destination: RegisterId,
         val left: RegisterId,
@@ -318,4 +323,6 @@ sealed interface Instruction {
     data class Throw(
         val exception: RegisterId,
     ) : Instruction
+
+    data object Unreachable : Instruction
 }
