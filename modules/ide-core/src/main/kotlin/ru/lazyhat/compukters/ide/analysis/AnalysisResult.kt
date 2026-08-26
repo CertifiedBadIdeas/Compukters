@@ -1,0 +1,188 @@
+/*
+ * The Compukters Developers
+ *
+ * Copyright 2026 Vsevolod Petrov (lazyhat)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package ru.lazyhat.compukters.ide.analysis
+
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.ide.editor.EditorRange
+import java.util.Collections
+
+data class AnalysisResultLimits(
+    val maxCompletionItems: Int = 256,
+    val maxDeclarationLocations: Int = 64,
+    val maxReferences: Int = 4 * 1024,
+    val maxDetailUtf8Bytes: Int = 64 * 1024,
+) {
+    init {
+        require(maxCompletionItems >= 0) { "completion-item limit must be non-negative" }
+        require(maxDeclarationLocations >= 0) { "declaration-location limit must be non-negative" }
+        require(maxReferences >= 0) { "reference limit must be non-negative" }
+        require(maxDetailUtf8Bytes >= 0) { "analysis detail limit must be non-negative" }
+    }
+}
+
+data class EditorExpressionInfo(
+    val path: VirtualSourcePath,
+    val range: EditorRange,
+    val renderedType: String,
+    val signature: String?,
+    val origin: DeclarationOrigin?,
+) {
+    init {
+        VirtualSourcePath.kotlin(path.value)
+        require(range.length > 0) { "expression range must not be empty" }
+        require(renderedType.isNotEmpty()) { "rendered expression type must not be empty" }
+        strictUtf8Size(renderedType)
+        signature?.let(::strictUtf8Size)
+    }
+}
+
+sealed interface AnalysisResult {
+    val identity: AnalysisSnapshotIdentity
+
+    data class Presentation(
+        override val identity: AnalysisSnapshotIdentity,
+        val value: SnapshotPresentation,
+    ) : AnalysisResult {
+        init {
+            require(value.identity == identity) { "presentation identity does not match its result" }
+        }
+    }
+
+    @ConsistentCopyVisibility
+    data class Completion private constructor(
+        override val identity: AnalysisSnapshotIdentity,
+        val replacement: EditorRange,
+        val items: List<CompletionItem>,
+    ) : AnalysisResult {
+        companion object {
+            fun create(
+                identity: AnalysisSnapshotIdentity,
+                replacement: EditorRange,
+                items: List<CompletionItem>,
+                limits: AnalysisResultLimits = AnalysisResultLimits(),
+            ): Completion {
+                require(items.size <= limits.maxCompletionItems) { "completion-item count exceeds limit" }
+                items.forEach { item ->
+                    require(strictUtf8Size(item.label) <= limits.maxDetailUtf8Bytes) { "completion label exceeds limit" }
+                    require(strictUtf8Size(item.insertText) <= limits.maxDetailUtf8Bytes) { "completion insert text exceeds limit" }
+                    item.detail?.let { detail ->
+                        require(strictUtf8Size(detail) <= limits.maxDetailUtf8Bytes) { "completion detail exceeds limit" }
+                    }
+                }
+                return Completion(identity, replacement, immutableCopy(items))
+            }
+        }
+    }
+
+    @ConsistentCopyVisibility
+    data class ExpressionInfo private constructor(
+        override val identity: AnalysisSnapshotIdentity,
+        val value: EditorExpressionInfo?,
+    ) : AnalysisResult {
+        companion object {
+            fun create(
+                identity: AnalysisSnapshotIdentity,
+                value: EditorExpressionInfo?,
+                sourceLengthsUtf16: Map<VirtualSourcePath, Int>,
+                limits: AnalysisResultLimits = AnalysisResultLimits(),
+            ): ExpressionInfo {
+                val sourceLengths = validateSourceLengths(sourceLengthsUtf16)
+                value?.let { info ->
+                    validateSourceRange(sourceLengths, info.path, info.range)
+                    require(strictUtf8Size(info.renderedType) <= limits.maxDetailUtf8Bytes) { "rendered type exceeds limit" }
+                    info.signature?.let { signature ->
+                        require(strictUtf8Size(signature) <= limits.maxDetailUtf8Bytes) { "expression signature exceeds limit" }
+                    }
+                }
+                return ExpressionInfo(identity, value)
+            }
+        }
+    }
+
+    @ConsistentCopyVisibility
+    data class Declaration private constructor(
+        override val identity: AnalysisSnapshotIdentity,
+        val locations: List<DeclarationLocation>,
+    ) : AnalysisResult {
+        companion object {
+            fun create(
+                identity: AnalysisSnapshotIdentity,
+                locations: List<DeclarationLocation>,
+                sourceLengthsUtf16: Map<VirtualSourcePath, Int>,
+                limits: AnalysisResultLimits = AnalysisResultLimits(),
+            ): Declaration {
+                require(locations.size <= limits.maxDeclarationLocations) { "declaration-location count exceeds limit" }
+                validateLocations(locations, sourceLengthsUtf16, allowUnavailable = true)
+                return Declaration(identity, immutableCopy(locations))
+            }
+        }
+    }
+
+    @ConsistentCopyVisibility
+    data class References private constructor(
+        override val identity: AnalysisSnapshotIdentity,
+        val locations: List<DeclarationLocation>,
+    ) : AnalysisResult {
+        companion object {
+            fun create(
+                identity: AnalysisSnapshotIdentity,
+                locations: List<DeclarationLocation>,
+                sourceLengthsUtf16: Map<VirtualSourcePath, Int>,
+                limits: AnalysisResultLimits = AnalysisResultLimits(),
+            ): References {
+                require(locations.size <= limits.maxReferences) { "reference count exceeds limit" }
+                validateLocations(locations, sourceLengthsUtf16, allowUnavailable = false)
+                return References(identity, immutableCopy(locations))
+            }
+        }
+    }
+}
+
+private fun validateLocations(
+    locations: List<DeclarationLocation>,
+    sourceLengthsUtf16: Map<VirtualSourcePath, Int>,
+    allowUnavailable: Boolean,
+) {
+    val sourceLengths = validateSourceLengths(sourceLengthsUtf16)
+    locations.forEach { location ->
+        when (location) {
+            is DeclarationLocation.Source -> validateSourceRange(sourceLengths, location.path, location.range)
+            is DeclarationLocation.SourceUnavailable -> require(allowUnavailable) { "a reference must have available project source" }
+        }
+    }
+}
+
+private fun validateSourceLengths(sourceLengthsUtf16: Map<VirtualSourcePath, Int>): Map<VirtualSourcePath, Int> =
+    sourceLengthsUtf16.toMap().also { sourceLengths ->
+        sourceLengths.forEach { (path, length) ->
+            VirtualSourcePath.kotlin(path.value)
+            require(length >= 0) { "source UTF-16 length must be non-negative" }
+        }
+    }
+
+private fun validateSourceRange(
+    sourceLengthsUtf16: Map<VirtualSourcePath, Int>,
+    path: VirtualSourcePath,
+    range: EditorRange,
+) {
+    val length = requireNotNull(sourceLengthsUtf16[path]) { "analysis path does not belong to the source snapshot" }
+    require(range.endUtf16 <= length) { "analysis range exceeds its source" }
+}
+
+private fun <T> immutableCopy(values: List<T>): List<T> = Collections.unmodifiableList(values.toList())

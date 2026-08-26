@@ -30,6 +30,8 @@ class EditorPresentationTest {
     private val main = VirtualSourcePath.kotlin("src/main.kt")
     private val util = VirtualSourcePath.kotlin("src/util.kt")
     private val snapshotId = SourceSnapshotId(Hash256.of(ByteArray(32) { 1 }))
+    private val profileId = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 2 }))
+    private val identity = AnalysisSnapshotIdentity(snapshotId, profileId)
 
     @Test
     fun `matching snapshot exposes defensive positional data while mismatch is stale`() {
@@ -38,7 +40,7 @@ class EditorPresentationTest {
         val locations = mutableListOf(SourceLocation(util, EditorRange(2, 4)))
         val presentation =
             SnapshotPresentation.create(
-                snapshotId,
+                identity,
                 mapOf(main to 10, util to 5),
                 diagnostics,
                 tokens,
@@ -48,13 +50,15 @@ class EditorPresentationTest {
         tokens.clear()
         locations.clear()
 
-        val active = assertIs<SnapshotPresentationAcceptance.Active>(presentation.accept(snapshotId))
+        val active = assertIs<SnapshotPresentationAcceptance.Active>(presentation.accept(identity))
         assertEquals(1, active.diagnostics.size)
         assertEquals(1, active.semanticTokens.size)
         assertEquals(1, active.locations.size)
 
-        val different = SourceSnapshotId(Hash256.of(ByteArray(32) { 2 }))
-        assertEquals(SnapshotPresentationAcceptance.Stale, presentation.accept(different))
+        val differentSource = AnalysisSnapshotIdentity(SourceSnapshotId(Hash256.of(ByteArray(32) { 3 })), profileId)
+        val differentProfile = AnalysisSnapshotIdentity(snapshotId, AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 4 })))
+        assertEquals(SnapshotPresentationAcceptance.Stale, presentation.accept(differentSource))
+        assertEquals(SnapshotPresentationAcceptance.Stale, presentation.accept(differentProfile))
     }
 
     @Test
@@ -62,14 +66,14 @@ class EditorPresentationTest {
         val sources = mapOf(main to 4)
         assertFailsWith<IllegalArgumentException> {
             SnapshotPresentation.create(
-                snapshotId,
+                identity,
                 sources,
                 semanticTokens = listOf(SemanticToken(util, EditorRange(0, 1), SemanticCategory.Class)),
             )
         }
         assertFailsWith<IllegalArgumentException> {
             SnapshotPresentation.create(
-                snapshotId,
+                identity,
                 sources,
                 locations = listOf(SourceLocation(main, EditorRange(3, 5))),
             )
@@ -79,7 +83,7 @@ class EditorPresentationTest {
         }
         assertFailsWith<IllegalArgumentException> {
             SnapshotPresentation.create(
-                snapshotId,
+                identity,
                 sources,
                 diagnostics = listOf(EditorDiagnostic(EditorDiagnosticSeverity.Warning, "too long")),
                 limits = EditorPresentationLimits(maxDiagnostics = 0),
@@ -87,7 +91,7 @@ class EditorPresentationTest {
         }
         assertFailsWith<IllegalArgumentException> {
             SnapshotPresentation.create(
-                snapshotId,
+                identity,
                 sources,
                 diagnostics = listOf(EditorDiagnostic(EditorDiagnosticSeverity.Info, "😀")),
                 limits = EditorPresentationLimits(maxDiagnosticMessageUtf8Bytes = 3),
