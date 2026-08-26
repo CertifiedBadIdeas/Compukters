@@ -18,8 +18,8 @@
 
 package ru.lazyhat.compukters.compiler.runtime
 
+import ru.lazyhat.compukters.compiler.cache.PersistentCompilationCache
 import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
-import ru.lazyhat.compukters.compiler.runtime.cache.PersistentCompilationCache
 import ru.lazyhat.compukters.compiler.worker.controller.CompilationCacheArtifact
 import ru.lazyhat.compukters.compiler.worker.controller.CompilationIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest

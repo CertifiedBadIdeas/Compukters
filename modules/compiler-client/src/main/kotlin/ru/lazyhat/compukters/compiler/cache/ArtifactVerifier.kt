@@ -16,16 +16,8 @@
  * limitations under the License.
  */
 
-package ru.lazyhat.compukters.compiler.runtime.cache
+package ru.lazyhat.compukters.compiler.cache
 
-import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
-import java.nio.file.Path
-
-internal data class CompilationCacheEntry(
-    val identity: Hash256,
-    val directory: Path,
-    val artifactHash: Hash256,
-    val artifactBytes: Int,
-    var lastAccessSequence: Long,
-    var recencyDirty: Boolean = false,
-)
+fun interface ArtifactVerifier {
+    fun verify(artifact: ByteArray): Boolean
+}

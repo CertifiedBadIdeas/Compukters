@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package ru.lazyhat.compukters.compiler.runtime.cache
+package ru.lazyhat.compukters.compiler.cache
 
 data class CompilationCachePolicy(
     val maximumEntries: Int = 1_024,

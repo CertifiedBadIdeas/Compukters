@@ -21,11 +21,11 @@ package ru.lazyhat.compukters.impl.compiler
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.storage.LevelResource
 import net.neoforged.neoforge.event.server.ServerStoppingEvent
+import ru.lazyhat.compukters.compiler.cache.ArtifactVerifier
+import ru.lazyhat.compukters.compiler.cache.PersistentCompilationCache
 import ru.lazyhat.compukters.compiler.runtime.CompilerServiceConfiguration
 import ru.lazyhat.compukters.compiler.runtime.ServerCompilerService
 import ru.lazyhat.compukters.compiler.runtime.WorkerCompilerBackend
-import ru.lazyhat.compukters.compiler.runtime.cache.ArtifactVerifier
-import ru.lazyhat.compukters.compiler.runtime.cache.PersistentCompilationCache
 import ru.lazyhat.compukters.compiler.runtime.worker.PackagedWorkerPayload
 import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
 import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory
