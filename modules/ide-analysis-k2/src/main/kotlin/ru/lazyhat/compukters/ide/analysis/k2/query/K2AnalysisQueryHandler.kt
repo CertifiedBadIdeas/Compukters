@@ -35,6 +35,8 @@ internal class K2AnalysisQueryHandler(
     ) = when (request.query) {
         is AnalysisQuery.Presentation,
         is AnalysisQuery.ExpressionInfo,
+        is AnalysisQuery.Declaration,
+        is AnalysisQuery.References,
         -> {
             try {
                 AnalysisQuerySuccess(request.requestId, K2QueryDispatcher.execute(request.query, snapshot, limits))

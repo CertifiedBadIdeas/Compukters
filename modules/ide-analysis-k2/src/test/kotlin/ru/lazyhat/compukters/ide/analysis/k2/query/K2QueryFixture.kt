@@ -25,6 +25,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
@@ -32,10 +33,13 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.SnapshotAdmission
+import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisBundle
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.analysis.protocol.OpenSnapshotRequest
+import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
 import kotlin.io.path.createTempDirectory
 
 internal class K2QueryFixture private constructor(
@@ -55,7 +59,30 @@ internal class K2QueryFixture private constructor(
     }
 
     companion object {
-        fun source(vararg sources: Pair<String, String>): K2QueryFixture {
+        fun source(vararg sources: Pair<String, String>): K2QueryFixture = create(emptyList(), *sources)
+
+        fun sourceWithGuestApi(
+            attachedSources: Boolean,
+            vararg sources: Pair<String, String>,
+        ): K2QueryFixture {
+            val jar = Path.of(requireNotNull(System.getProperty("compukters.test.guestApi"))).toAbsolutePath().normalize()
+            val hash = Hash256.of(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(jar)))
+            return create(
+                listOf(
+                    AdmittedAnalysisBundle(
+                        AnalysisBundleIdentity("std.core", hash),
+                        jar.toString(),
+                        jar.toString().takeIf { attachedSources },
+                    ),
+                ),
+                *sources,
+            )
+        }
+
+        private fun create(
+            bundles: List<AdmittedAnalysisBundle>,
+            vararg sources: Pair<String, String>,
+        ): K2QueryFixture {
             val root = createTempDirectory("compukters-k2-query-")
             val mapped = sources.associate { (path, text) -> VirtualSourcePath.kotlin(path) to text }
             val project =
@@ -70,7 +97,7 @@ internal class K2QueryFixture private constructor(
                     RequestId.of(1uL),
                     identity,
                     project,
-                    AdmittedAnalysisProfile(profile, emptyList()),
+                    AdmittedAnalysisProfile(profile, bundles),
                     AnalysisLimits(),
                 )
             val standardLibrary =

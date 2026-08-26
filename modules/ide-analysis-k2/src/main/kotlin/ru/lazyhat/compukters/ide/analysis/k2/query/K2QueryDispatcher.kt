@@ -38,6 +38,8 @@ internal object K2QueryDispatcher {
             when (query) {
                 is AnalysisQuery.Presentation -> presentation(query, snapshot, limits)
                 is AnalysisQuery.ExpressionInfo -> ExpressionInfoQuery.execute(query, snapshot, limits)
+                is AnalysisQuery.Declaration -> DeclarationQuery.execute(query, snapshot, limits)
+                is AnalysisQuery.References -> ReferenceQuery.execute(query, snapshot, limits)
                 else -> throw UnsupportedOperationException("analysis query is not implemented")
             }
         }

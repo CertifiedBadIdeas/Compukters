@@ -202,6 +202,11 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
 }
 
 tasks.test {
+    val guestApiJar = project(":guest-api-core").tasks.named<Jar>("jar")
+    dependsOn(guestApiJar)
+    doFirst {
+        systemProperty("compukters.test.guestApi", guestApiJar.get().archiveFile.get().asFile.absolutePath)
+    }
     filter.excludeTestsMatching("ru.lazyhat.compukters.ide.analysis.k2.integration.*")
 }
 

@@ -74,7 +74,7 @@ internal class FakeAnalysisWorkerProcess : WorkerProcess {
                     AnalysisProtocolContext.unchecked()
                 },
             )
-        if (decoded is OpenSnapshotRequest) context = AnalysisProtocolContext.of(decoded.sources, decoded.limits)
+        if (decoded is OpenSnapshotRequest) context = AnalysisProtocolContext.of(decoded.sources, decoded.profile, decoded.limits)
         synchronized(operations) { operations += "write:${envelope.type}" }
         writes.put(decoded)
     }

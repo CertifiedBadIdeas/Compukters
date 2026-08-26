@@ -53,9 +53,14 @@ import java.nio.CharBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.util.zip.ZipFile
 
 class AnalysisProtocolContext private constructor(
     internal val sourceLengthsUtf16: Map<VirtualSourcePath, Int>?,
+    internal val bundleSourceLengthsUtf16: Map<AnalysisBundleIdentity, Map<VirtualSourcePath, Int>>,
     internal val limits: AnalysisLimits,
     private val validatePositions: Boolean,
     internal val expectedQuery: AnalysisQuery?,
@@ -84,7 +89,7 @@ class AnalysisProtocolContext private constructor(
     fun forQuery(query: AnalysisQuery): AnalysisProtocolContext {
         require(validatePositions) { "an unchecked analysis context cannot correlate a query" }
         validateQuery(query, this)
-        return AnalysisProtocolContext(sourceLengthsUtf16, limits, true, query)
+        return AnalysisProtocolContext(sourceLengthsUtf16, bundleSourceLengthsUtf16, limits, true, query)
     }
 
     internal fun isUnchecked(): Boolean = !validatePositions
@@ -99,14 +104,63 @@ class AnalysisProtocolContext private constructor(
                     validateProtocolSourcePath(source.path.value)
                     source.path to decodeStrictUtf8(source.content).length
                 }
-            return AnalysisProtocolContext(lengths, limits, true, null)
+            return AnalysisProtocolContext(lengths, emptyMap(), limits, true, null)
+        }
+
+        fun of(
+            snapshot: ProjectSnapshot,
+            profile: AdmittedAnalysisProfile,
+            limits: AnalysisLimits = AnalysisLimits(),
+        ): AnalysisProtocolContext {
+            val project = of(snapshot, limits)
+            return AnalysisProtocolContext(
+                project.sourceLengthsUtf16,
+                loadBundleSourceLengths(profile, limits),
+                limits,
+                true,
+                null,
+            )
         }
 
         internal fun unchecked(limits: AnalysisLimits = AnalysisLimits()): AnalysisProtocolContext =
-            AnalysisProtocolContext(null, limits, false, null)
+            AnalysisProtocolContext(null, emptyMap(), limits, false, null)
 
-        fun unbound(limits: AnalysisLimits = AnalysisLimits()): AnalysisProtocolContext = AnalysisProtocolContext(null, limits, false, null)
+        fun unbound(limits: AnalysisLimits = AnalysisLimits()): AnalysisProtocolContext =
+            AnalysisProtocolContext(null, emptyMap(), limits, false, null)
     }
+}
+
+private fun loadBundleSourceLengths(
+    profile: AdmittedAnalysisProfile,
+    limits: AnalysisLimits,
+): Map<AnalysisBundleIdentity, Map<VirtualSourcePath, Int>> {
+    var sourceCount = 0
+    var totalBytes = 0L
+    return profile.bundles
+        .mapNotNull { bundle ->
+            val sourceRoot = bundle.sourceRoot ?: return@mapNotNull null
+            val path = Path.of(sourceRoot)
+            require(path.isAbsolute && path.normalize() == path) { "bundle source root must be absolute and normalized" }
+            require(!Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+                "bundle source root is missing or is not a regular file"
+            }
+            val lengths = linkedMapOf<VirtualSourcePath, Int>()
+            ZipFile(path.toFile()).use { archive ->
+                archive.entries().asSequence().filterNot { it.isDirectory }.filter { it.name.endsWith(".kt") }.forEach { entry ->
+                    require(sourceCount < limits.sourceFiles) { "bundle source count exceeds analysis limit" }
+                    val bytes = archive.getInputStream(entry).use { it.readNBytes(limits.sourceFileBytes + 1) }
+                    require(bytes.size <= limits.sourceFileBytes) { "bundle source file exceeds analysis limit" }
+                    sourceCount += 1
+                    totalBytes += bytes.size
+                    require(totalBytes <= limits.sourceBytes) { "bundle source bytes exceed analysis limit" }
+                    val sourcePath = VirtualSourcePath.kotlin(entry.name)
+                    require(lengths.put(sourcePath, decodeStrictUtf8(BinaryValue.of(bytes)).length) == null) {
+                        "duplicate bundle source path: ${entry.name}"
+                    }
+                }
+            }
+            bundle.identity to lengths.toMap()
+        }.toMap()
 }
 
 object AnalysisMessageCodec {
@@ -305,7 +359,13 @@ private fun validateResult(
 
         is AnalysisResult.Declaration -> {
             require(query is AnalysisQuery.Declaration) { "analysis result kind does not match its query" }
-            AnalysisResult.Declaration.create(result.identity, result.locations, sourceLengths, limits.resultLimits())
+            AnalysisResult.Declaration.create(
+                result.identity,
+                result.locations,
+                sourceLengths,
+                limits.resultLimits(),
+                context.bundleSourceLengthsUtf16,
+            )
         }
 
         is AnalysisResult.References -> {
@@ -790,6 +850,7 @@ private class MessageSource(
                     locations(context.limits.declarationLocations),
                     sourceLengths,
                     context.limits.resultLimits(),
+                    context.bundleSourceLengthsUtf16,
                 )
             }
 

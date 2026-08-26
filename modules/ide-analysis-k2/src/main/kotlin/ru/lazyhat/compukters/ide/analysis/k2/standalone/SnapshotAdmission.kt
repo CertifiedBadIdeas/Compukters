@@ -18,8 +18,12 @@
 
 package ru.lazyhat.compukters.ide.analysis.k2.standalone
 
+import com.intellij.openapi.vfs.StandardFileSystems
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.PsiManager
 import org.jetbrains.kotlin.psi.KtFile
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.protocol.OpenSnapshotRequest
 import java.nio.ByteBuffer
@@ -38,6 +42,8 @@ internal class AdmittedK2Snapshot(
     val environment: K2ProjectEnvironment,
     val files: Map<VirtualSourcePath, KtFile>,
     val sourceLengthsUtf16: Map<VirtualSourcePath, Int>,
+    val bundles: List<AdmittedK2Bundle>,
+    val bundleSourceFiles: Map<AnalysisBundleIdentity, Map<VirtualSourcePath, KtFile>>,
 ) : AutoCloseable {
     override fun close() {
         environment.close()
@@ -45,25 +51,32 @@ internal class AdmittedK2Snapshot(
     }
 }
 
+internal data class AdmittedK2Bundle(
+    val identity: AnalysisBundleIdentity,
+    val classRoot: Path,
+    val sourceRoot: Path?,
+)
+
 internal class SnapshotAdmission(
     private val temporaryRoot: Path,
     private val standardLibrary: Path,
     private val jdkHome: Path,
 ) {
     fun admit(request: OpenSnapshotRequest): AdmittedK2Snapshot {
-        val binaryRoots =
+        val bundles =
             request.profile.bundles.map { bundle ->
                 val classRoot = validatedRegularFile(bundle.classRoot, "bundle class root")
                 val actualHash = sha256(classRoot)
                 require(actualHash.contentEquals(bundle.identity.hash.toByteArray())) {
                     "bundle class root hash mismatch: ${bundle.identity.name}"
                 }
-                bundle.sourceRoot?.let { validatedRegularFile(it, "bundle source root") }
-                classRoot
+                val sourceRoot = bundle.sourceRoot?.let { validatedRegularFile(it, "bundle source root") }
+                AdmittedK2Bundle(bundle.identity, classRoot, sourceRoot)
             }
         val root = temporaryRoot.resolve("snapshot-${UUID.randomUUID()}").toAbsolutePath().normalize()
         val sourceRoot = root.resolve("source")
         sourceRoot.createDirectories()
+        var environment: K2ProjectEnvironment? = null
         try {
             val sourceLengths = mutableMapOf<VirtualSourcePath, Int>()
             request.sources.sources.forEach { source ->
@@ -74,18 +87,39 @@ internal class SnapshotAdmission(
                 target.parent.createDirectories()
                 Files.writeString(target, text, StandardCharsets.UTF_8)
             }
-            val environment = K2ProjectEnvironment.create(sourceRoot, standardLibrary, binaryRoots, jdkHome)
+            environment = K2ProjectEnvironment.create(sourceRoot, standardLibrary, bundles, jdkHome)
             val files =
                 environment.session.modulesWithFiles.values
                     .flatten()
                     .filterIsInstance<KtFile>()
+                    .filter { file -> file.virtualFilePath.startsWith(sourceRoot.toString()) && "!/" !in file.virtualFilePath }
                     .associateBy { file ->
                         val physical = Path.of(file.virtualFilePath).toAbsolutePath().normalize()
                         VirtualSourcePath.kotlin(sourceRoot.relativize(physical).toString().replace('\\', '/'))
                     }
             require(files.keys == sourceLengths.keys) { "standalone K2 source mapping differs from admitted snapshot" }
-            return AdmittedK2Snapshot(request.identity, root, environment, files.toMap(), sourceLengths.toMap())
+            val bundleSourceFiles =
+                BundleSourceBudget().let { budget ->
+                    bundles.associate { bundle ->
+                        val attachedFiles =
+                            bundle.sourceRoot
+                                ?.let { attachedRoot ->
+                                    loadBundleSourceFiles(environment, attachedRoot, request, budget)
+                                }.orEmpty()
+                        bundle.identity to attachedFiles
+                    }
+                }
+            return AdmittedK2Snapshot(
+                request.identity,
+                root,
+                environment,
+                files.toMap(),
+                sourceLengths.toMap(),
+                bundles.toList(),
+                bundleSourceFiles,
+            )
         } catch (exception: Exception) {
+            environment?.close()
             root.toFile().deleteRecursively()
             throw exception
         }
@@ -98,6 +132,40 @@ internal class SnapshotAdmission(
             .onUnmappableCharacter(CodingErrorAction.REPORT)
             .decode(ByteBuffer.wrap(bytes))
             .toString()
+
+    private fun loadBundleSourceFiles(
+        environment: K2ProjectEnvironment,
+        sourceArchive: Path,
+        request: OpenSnapshotRequest,
+        budget: BundleSourceBudget,
+    ): Map<VirtualSourcePath, KtFile> {
+        val root =
+            requireNotNull(StandardFileSystems.jar().findFileByPath("$sourceArchive!/")) {
+                "bundle source archive is not visible to the standalone VFS"
+            }
+        val files = linkedMapOf<VirtualSourcePath, KtFile>()
+
+        fun visit(file: VirtualFile) {
+            if (file.isDirectory) {
+                file.children.sortedBy { it.name }.forEach(::visit)
+                return
+            }
+            if (file.extension != "kt") return
+            require(budget.sourceCount < request.limits.sourceFiles) { "bundle source count exceeds analysis limit" }
+            require(file.length <= request.limits.sourceFileBytes) { "bundle source file exceeds analysis limit" }
+            budget.sourceCount += 1
+            budget.totalBytes += file.length
+            require(budget.totalBytes <= request.limits.sourceBytes) { "bundle source bytes exceed analysis limit" }
+            val path = VirtualSourcePath.kotlin(file.path.removePrefix(root.path).removePrefix("/"))
+            val psi = PsiManager.getInstance(environment.session.project).findFile(file) as? KtFile
+            requireNotNull(psi) { "bundle source is not Kotlin PSI: ${path.value}" }
+            val decoded = file.inputStream.use { input -> decodeStrict(input.readAllBytes()) }
+            require(decoded == psi.text) { "bundle source PSI differs from strict UTF-8 content: ${path.value}" }
+            require(files.put(path, psi) == null) { "duplicate bundle source path: ${path.value}" }
+        }
+        visit(root)
+        return files.toMap()
+    }
 
     private fun validatedRegularFile(
         value: String,
@@ -128,3 +196,8 @@ internal class SnapshotAdmission(
         const val HASH_BUFFER_BYTES = 16 * 1024
     }
 }
+
+private class BundleSourceBudget(
+    var sourceCount: Int = 0,
+    var totalBytes: Long = 0,
+)

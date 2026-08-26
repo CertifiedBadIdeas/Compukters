@@ -46,6 +46,9 @@ import ru.lazyhat.compukters.ide.analysis.SnapshotPresentationAcceptance
 import ru.lazyhat.compukters.ide.analysis.SourceLocation
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
 import ru.lazyhat.compukters.ide.editor.EditorRange
+import java.nio.file.Files
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -141,6 +144,45 @@ class AnalysisProtocolRoundTripTest {
         results.forEach { (query, result) ->
             val message = AnalysisQuerySuccess(requestId, result)
             assertEquals(message, roundTrip(message, context.forQuery(query)))
+        }
+    }
+
+    @Test
+    fun `attached bundle declaration round trips against the admitted source archive`() {
+        val sourcePath = VirtualSourcePath.kotlin("api/Terminal.kt")
+        val sourceText = "package api\nobject Terminal { fun write(value: String) = Unit }"
+        val sourceArchive = Files.createTempFile("compukters-analysis-sources-", ".jar")
+        try {
+            ZipOutputStream(Files.newOutputStream(sourceArchive)).use { output ->
+                output.putNextEntry(ZipEntry(sourcePath.value))
+                output.write(sourceText.encodeToByteArray())
+                output.closeEntry()
+            }
+            val bundle = AnalysisBundleIdentity("std", hash(3))
+            val profile =
+                AdmittedAnalysisProfile(
+                    identity.profile,
+                    listOf(AdmittedAnalysisBundle(bundle, "/safe/std.jar", sourceArchive.toString())),
+                )
+            val protocolContext = AnalysisProtocolContext.of(snapshot, profile).forQuery(AnalysisQuery.Declaration(identity, path(), 6))
+            val start = sourceText.indexOf("write")
+            val result =
+                AnalysisResult.Declaration.create(
+                    identity,
+                    listOf(
+                        DeclarationLocation.Source(
+                            DeclarationOrigin.Bundle(bundle),
+                            sourcePath,
+                            EditorRange(start, start + "write".length),
+                        ),
+                    ),
+                    sourceLengths(),
+                    bundleSourceLengthsUtf16 = mapOf(bundle to mapOf(sourcePath to sourceText.length)),
+                )
+
+            assertEquals(AnalysisQuerySuccess(requestId, result), roundTrip(AnalysisQuerySuccess(requestId, result), protocolContext))
+        } finally {
+            Files.deleteIfExists(sourceArchive)
         }
     }
 
