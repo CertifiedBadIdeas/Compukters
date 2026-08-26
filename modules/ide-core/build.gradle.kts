@@ -16,6 +16,27 @@
  * limitations under the License.
  */
 
+import org.gradle.api.DefaultTask
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.SetProperty
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.TaskAction
+
+abstract class AssertIdeCoreRuntime : DefaultTask() {
+    @get:Input
+    abstract val allowedRuntimeModules: SetProperty<String>
+
+    @get:Input
+    abstract val runtimeModules: ListProperty<String>
+
+    @TaskAction
+    fun verify() {
+        val disallowed = runtimeModules.get().filterNot(allowedRuntimeModules.get()::contains)
+        check(disallowed.isEmpty()) { "ide-core runtimeClasspath contains disallowed dependencies: $disallowed" }
+    }
+}
+
 plugins {
     alias(libs.plugins.kotlinConvention)
 }
@@ -25,4 +46,31 @@ dependencies {
     implementation(libs.tomlj)
     implementation(libs.kotlin.stdlib)
     testImplementation(kotlin("test"))
+}
+
+val allowedIdeCoreRuntimeModules =
+    setOf(
+        "org.jetbrains.kotlin:kotlin-stdlib",
+        "org.jetbrains:annotations",
+        "org.tomlj:tomlj",
+        "org.antlr:antlr4-runtime",
+        "org.checkerframework:checker-qual",
+    )
+val resolvedIdeCoreRuntimeModules =
+    configurations.named("runtimeClasspath").map { runtimeClasspath ->
+        runtimeClasspath.incoming.resolutionResult.allComponents
+            .mapNotNull { component ->
+                (component.id as? ModuleComponentIdentifier)?.let { "${it.group}:${it.module}" }
+            }.sorted()
+    }
+
+val assertIdeCoreRuntime = tasks.register<AssertIdeCoreRuntime>("assertIdeCoreRuntime") {
+    group = "verification"
+    description = "Fails when dependencies outside ide-core's production runtime allowlist are resolved."
+    allowedRuntimeModules.set(allowedIdeCoreRuntimeModules)
+    runtimeModules.set(resolvedIdeCoreRuntimeModules)
+}
+
+tasks.check {
+    dependsOn(assertIdeCoreRuntime)
 }
