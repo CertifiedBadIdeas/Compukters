@@ -26,9 +26,13 @@ import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
+import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
+import ru.lazyhat.compukters.ide.analysis.SnapshotPresentationAcceptance
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.controller.AdmittedAnalysisSnapshot
+import ru.lazyhat.compukters.ide.analysis.controller.AnalysisClientResult
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisWorkerController
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisWorkerPolicy
 import ru.lazyhat.compukters.ide.analysis.controller.SnapshotOpenResult
@@ -48,6 +52,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class SnapshotAdmissionTest {
     @Test
@@ -136,6 +141,36 @@ class SnapshotAdmissionTest {
                 )
                 controller.closeSnapshot(admitted.identity).get(90, TimeUnit.SECONDS)
             }
+        }
+    }
+
+    @Test
+    fun `forked worker returns real presentation and expression results`() {
+        val main = "package demo\nval emoji = \"😀\"\nval broken: String = 42\nval inferred = \"ok\""
+        val admitted = snapshot(profileByte = 5, main = main.encodeToByteArray())
+        withController { controller ->
+            assertEquals(SnapshotOpenResult.Opened(admitted.identity), controller.open(admitted).get(90, TimeUnit.SECONDS))
+
+            val presentation =
+                assertIs<AnalysisClientResult.Success>(
+                    controller.query(AnalysisQuery.Presentation(admitted.identity)).get(90, TimeUnit.SECONDS),
+                ).result as AnalysisResult.Presentation
+            val active = assertIs<SnapshotPresentationAcceptance.Active>(presentation.value.accept(admitted.identity))
+            assertTrue(active.diagnostics.any { it.path?.value == "demo/Main.kt" })
+
+            val offset = main.lastIndexOf("\"ok\"") + 1
+            val expression =
+                assertIs<AnalysisClientResult.Success>(
+                    controller
+                        .query(
+                            AnalysisQuery.ExpressionInfo(
+                                admitted.identity,
+                                VirtualSourcePath.kotlin("demo/Main.kt"),
+                                offset,
+                            ),
+                        ).get(90, TimeUnit.SECONDS),
+                ).result as AnalysisResult.ExpressionInfo
+            assertEquals("kotlin.String", expression.value?.renderedType)
         }
     }
 

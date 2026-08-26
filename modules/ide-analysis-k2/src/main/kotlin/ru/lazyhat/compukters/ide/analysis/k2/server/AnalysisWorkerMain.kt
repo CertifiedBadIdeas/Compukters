@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.ide.analysis.k2.server
 
+import ru.lazyhat.compukters.ide.analysis.k2.query.K2AnalysisQueryHandler
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.SnapshotAdmission
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import java.io.BufferedInputStream
@@ -32,13 +33,15 @@ fun main() {
     TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
     try {
         val bootstrap = AnalysisWorkerBootstrap.load()
+        val limits = AnalysisLimits()
         val admission = SnapshotAdmission(bootstrap.temporaryRoot, bootstrap.standardLibrary, Path.of(System.getProperty("java.home")))
         AnalysisWorkerServer(
             bootstrap.identity,
-            AnalysisLimits(),
+            limits,
             BufferedInputStream(System.`in`),
             BufferedOutputStream(System.out),
             admission,
+            K2AnalysisQueryHandler(limits),
         ).use { server ->
             if (server.run() == AnalysisServerExit.ProtocolError) exitProcess(3)
         }
