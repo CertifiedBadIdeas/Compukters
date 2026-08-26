@@ -30,9 +30,18 @@ abstract class AssertIdeCoreRuntime : DefaultTask() {
     @get:Input
     abstract val runtimeModules: ListProperty<String>
 
+    @get:Input
+    abstract val forbiddenRuntimeModuleFragments: SetProperty<String>
+
     @TaskAction
     fun verify() {
-        val disallowed = runtimeModules.get().filterNot(allowedRuntimeModules.get()::contains)
+        val resolved = runtimeModules.get()
+        val forbidden =
+            resolved.filter { module ->
+                forbiddenRuntimeModuleFragments.get().any(module::contains)
+            }
+        check(forbidden.isEmpty()) { "ide-core runtimeClasspath contains forbidden platform dependencies: $forbidden" }
+        val disallowed = resolved.filterNot(allowedRuntimeModules.get()::contains)
         check(disallowed.isEmpty()) { "ide-core runtimeClasspath contains disallowed dependencies: $disallowed" }
     }
 }
@@ -68,6 +77,20 @@ val assertIdeCoreRuntime = tasks.register<AssertIdeCoreRuntime>("assertIdeCoreRu
     group = "verification"
     description = "Fails when dependencies outside ide-core's production runtime allowlist are resolved."
     allowedRuntimeModules.set(allowedIdeCoreRuntimeModules)
+    forbiddenRuntimeModuleFragments.set(
+        setOf(
+            "analysis-api",
+            "intellij",
+            "kotlin-compiler",
+            "kotlin-fir",
+            "kotlinx-coroutines",
+            "slf4j",
+            "log4j",
+            "minecraft",
+            "neoforge",
+            "architectury",
+        ),
+    )
     runtimeModules.set(resolvedIdeCoreRuntimeModules)
 }
 
