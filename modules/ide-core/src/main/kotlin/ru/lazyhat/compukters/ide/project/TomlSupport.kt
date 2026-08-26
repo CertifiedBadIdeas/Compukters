@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.ide.project
 
+import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
@@ -34,6 +35,14 @@ internal object TomlSupport {
                 .encode(CharBuffer.wrap(value))
         return ByteArray(encoded.remaining()).also(encoded::get)
     }
+
+    fun decodeStrictUtf8(value: ByteArray): String =
+        StandardCharsets.UTF_8
+            .newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(value))
+            .toString()
 
     fun quoted(value: String): String =
         buildString {
