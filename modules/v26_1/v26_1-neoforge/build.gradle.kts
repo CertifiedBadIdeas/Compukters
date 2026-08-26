@@ -20,6 +20,8 @@
 
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+import java.net.URLClassLoader
 import java.util.Locale
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
@@ -351,6 +353,9 @@ val verifyPackagedCompukterFfi =
                     "dev/architectury/",
                     "org/jetbrains/kotlin/analysis/",
                     "org/jetbrains/kotlin/fir/",
+                    "org/jetbrains/kotlin/idea/",
+                    "org/jetbrains/kotlin/psi/",
+                    "ru/lazyhat/compukters/ide/analysis/k2/",
                 )
             check(entries.none { entry -> forbiddenIdeClassPrefixes.any(entry::startsWith) || entry.contains("kotlin/compiler") }) {
                 "forbidden IDE/platform runtime classes leaked into ${archive.name}"
@@ -367,6 +372,9 @@ val verifyPackagedCompukterFfi =
                     "intellij-",
                     "kotlin-compiler",
                     "kotlin-fir",
+                    "kotlin-psi",
+                    "low-level-api-fir",
+                    "symbol-light-classes",
                     "tomlj-",
                 )
             check(
@@ -445,7 +453,7 @@ tasks.named("buildProductionUniversalJar") {
 
 val verifyNeoForgeRuntimeDependencies =
     tasks.register("verifyNeoForgeRuntimeDependencies") {
-        description = "Rejects Architectury mod runtime and embedded Kotlin compiler dependencies."
+        description = "Rejects Architectury mod runtime and in-process K2/IntelliJ dependencies."
         group = "verification"
         val runtimeClasspath = configurations.named("runtimeClasspath")
         inputs.files(runtimeClasspath)
@@ -456,19 +464,54 @@ val verifyNeoForgeRuntimeDependencies =
                     .incoming
                     .resolutionResult
                     .allComponents
-                    .mapNotNull { it.id as? ModuleComponentIdentifier }
-                    .filter { component ->
-                        (component.group.startsWith("dev.architectury") &&
-                            component.module != "architectury-transformer") ||
-                            component.module.contains("kotlin-compiler")
-                    }.map(ModuleComponentIdentifier::getDisplayName)
-                    .sorted()
+                    .mapNotNull { component ->
+                        when (val id = component.id) {
+                            is ModuleComponentIdentifier -> "${id.group}:${id.module}"
+                            is ProjectComponentIdentifier -> id.projectPath
+                            else -> null
+                        }
+                    }.filter { component ->
+                        val normalized = component.lowercase(Locale.ROOT)
+                        (normalized.startsWith("dev.architectury:") &&
+                            !normalized.contains("architectury-transformer")) ||
+                            listOf(
+                                ":ide-analysis-k2",
+                                "analysis-api",
+                                "intellij",
+                                "kotlin-compiler",
+                                "kotlin-fir",
+                                "kotlin-psi",
+                                "low-level-api-fir",
+                                "symbol-light-classes",
+                            ).any(normalized::contains)
+                    }.sorted()
             check(forbidden.isEmpty()) {
                 "forbidden NeoForge runtime dependencies: ${forbidden.joinToString()}"
             }
         }
     }
 
+val verifyAnalysisWorkerClassIsolation =
+    tasks.register("verifyAnalysisWorkerClassIsolation") {
+        description = "Checks that the K2 analysis entry point is not loadable from the Minecraft application classpath."
+        group = "verification"
+        dependsOn(tasks.classes)
+        val applicationClasspath = configurations.named("runtimeClasspath")
+        inputs.files(applicationClasspath, sourceSets.main.get().output)
+        doLast {
+            val urls =
+                (applicationClasspath.get().files + sourceSets.main.get().output.files)
+                    .map { it.toURI().toURL() }
+                    .toTypedArray()
+            URLClassLoader(urls, ClassLoader.getPlatformClassLoader()).use { loader ->
+                val analysisMainClass = "ru.lazyhat.compukters.ide.analysis.k2.server.AnalysisWorkerMainKt"
+                val loadable = runCatching { Class.forName(analysisMainClass, false, loader) }.isSuccess
+                check(!loadable) { "$analysisMainClass is loadable from the Minecraft application classpath" }
+            }
+        }
+    }
+
 tasks.named("check") {
     dependsOn(verifyNeoForgeRuntimeDependencies)
+    dependsOn(verifyAnalysisWorkerClassIsolation)
 }

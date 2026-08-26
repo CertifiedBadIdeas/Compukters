@@ -18,6 +18,7 @@
 
 import org.gradle.api.DefaultTask
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.SetProperty
 import org.gradle.api.tasks.Input
@@ -59,6 +60,8 @@ dependencies {
 
 val allowedIdeCoreRuntimeModules =
     setOf(
+        ":compiler-client",
+        ":worker-client",
         "org.jetbrains.kotlin:kotlin-stdlib",
         "org.jetbrains:annotations",
         "org.tomlj:tomlj",
@@ -69,7 +72,11 @@ val resolvedIdeCoreRuntimeModules =
     configurations.named("runtimeClasspath").map { runtimeClasspath ->
         runtimeClasspath.incoming.resolutionResult.allComponents
             .mapNotNull { component ->
-                (component.id as? ModuleComponentIdentifier)?.let { "${it.group}:${it.module}" }
+                when (val id = component.id) {
+                    is ModuleComponentIdentifier -> "${id.group}:${id.module}"
+                    is ProjectComponentIdentifier -> id.projectPath.takeUnless { it == project.path }
+                    else -> null
+                }
             }.sorted()
     }
 
@@ -83,6 +90,9 @@ val assertIdeCoreRuntime = tasks.register<AssertIdeCoreRuntime>("assertIdeCoreRu
             "intellij",
             "kotlin-compiler",
             "kotlin-fir",
+            "kotlin-psi",
+            "low-level-api-fir",
+            "symbol-light-classes",
             "kotlinx-coroutines",
             "slf4j",
             "log4j",

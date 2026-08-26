@@ -23,6 +23,8 @@ import java.nio.file.Path
 interface WorkerProcess : AutoCloseable {
     val isAlive: Boolean
     val exitCode: Int?
+    val processId: Long?
+        get() = null
 
     fun writeFrame(frame: ByteArray)
 

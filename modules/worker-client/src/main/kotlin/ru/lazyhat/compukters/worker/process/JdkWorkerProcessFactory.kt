@@ -71,6 +71,8 @@ private class JdkWorkerProcess(
     private val output: OutputStream = process.outputStream
     private val stderr = BoundedByteRing(maximumStderrBytes)
     private val terminated = AtomicBoolean()
+    private val readLock = Any()
+    private val writeLock = Any()
     private val reader =
         Executors.newSingleThreadExecutor { task ->
             Thread(task, "compukter-worker-stdout").apply { isDaemon = true }
@@ -101,33 +103,37 @@ private class JdkWorkerProcess(
     override val exitCode: Int?
         get() = runCatching(process::exitValue).getOrNull()
 
-    @Synchronized
+    override val processId: Long
+        get() = process.pid()
+
     override fun writeFrame(frame: ByteArray) {
-        output.write(frame)
-        output.flush()
+        synchronized(writeLock) {
+            output.write(frame)
+            output.flush()
+        }
     }
 
-    @Synchronized
-    override fun readFrame(deadlineNanos: Long): ByteArray? {
-        val future = reader.submit<ByteArray?> { readWireFrame() }
-        val remaining = if (deadlineNanos == Long.MAX_VALUE) Long.MAX_VALUE else deadlineNanos - System.nanoTime()
-        if (remaining <= 0) {
-            future.cancel(true)
-            throw WorkerDeadlineExceededException()
+    override fun readFrame(deadlineNanos: Long): ByteArray? =
+        synchronized(readLock) {
+            val future = reader.submit<ByteArray?> { readWireFrame() }
+            val remaining = if (deadlineNanos == Long.MAX_VALUE) Long.MAX_VALUE else deadlineNanos - System.nanoTime()
+            if (remaining <= 0) {
+                future.cancel(true)
+                throw WorkerDeadlineExceededException()
+            }
+            try {
+                future.get(remaining, TimeUnit.NANOSECONDS)
+            } catch (_: TimeoutException) {
+                future.cancel(true)
+                throw WorkerDeadlineExceededException()
+            } catch (exception: InterruptedException) {
+                future.cancel(true)
+                Thread.currentThread().interrupt()
+                throw IllegalStateException("worker read interrupted", exception)
+            } catch (exception: ExecutionException) {
+                throw IllegalStateException("worker read failed", exception.cause)
+            }
         }
-        return try {
-            future.get(remaining, TimeUnit.NANOSECONDS)
-        } catch (_: TimeoutException) {
-            future.cancel(true)
-            throw WorkerDeadlineExceededException()
-        } catch (exception: InterruptedException) {
-            future.cancel(true)
-            Thread.currentThread().interrupt()
-            throw IllegalStateException("worker read interrupted", exception)
-        } catch (exception: ExecutionException) {
-            throw IllegalStateException("worker read failed", exception.cause)
-        }
-    }
 
     override fun stderrSnapshot(): ByteArray {
         if (!process.isAlive) stderrThread.join(STDERR_DRAIN_MILLIS)
