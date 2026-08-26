@@ -18,11 +18,11 @@
 
 package ru.lazyhat.compukters.compiler.runtime
 
+import ru.lazyhat.compukters.compiler.cache.ArtifactVerifier
+import ru.lazyhat.compukters.compiler.cache.CompilationCachePolicy
+import ru.lazyhat.compukters.compiler.cache.PersistentCompilationCache
 import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
 import ru.lazyhat.compukters.compiler.project.ProjectSource
-import ru.lazyhat.compukters.compiler.runtime.cache.ArtifactVerifier
-import ru.lazyhat.compukters.compiler.runtime.cache.CompilationCachePolicy
-import ru.lazyhat.compukters.compiler.runtime.cache.PersistentCompilationCache
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompilationMetrics
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult

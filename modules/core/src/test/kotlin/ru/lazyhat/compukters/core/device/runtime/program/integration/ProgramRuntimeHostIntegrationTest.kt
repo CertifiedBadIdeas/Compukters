@@ -18,11 +18,11 @@
 
 package ru.lazyhat.compukters.core.device.runtime.program.integration
 
+import ru.lazyhat.compukters.compiler.cache.ArtifactVerifier
+import ru.lazyhat.compukters.compiler.cache.PersistentCompilationCache
 import ru.lazyhat.compukters.compiler.runtime.CompilerServiceConfiguration
 import ru.lazyhat.compukters.compiler.runtime.ServerCompilerService
 import ru.lazyhat.compukters.compiler.runtime.WorkerCompilerBackend
-import ru.lazyhat.compukters.compiler.runtime.cache.ArtifactVerifier
-import ru.lazyhat.compukters.compiler.runtime.cache.PersistentCompilationCache
 import ru.lazyhat.compukters.compiler.runtime.worker.PackagedWorkerPayload
 import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
 import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory

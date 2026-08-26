@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package ru.lazyhat.compukters.compiler.runtime.cache
+package ru.lazyhat.compukters.compiler.cache
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import java.io.IOException
