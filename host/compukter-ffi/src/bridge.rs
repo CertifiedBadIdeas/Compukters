@@ -514,6 +514,7 @@ fn copy_error(error: ComputerError) -> BridgeError {
         ComputerError::Resume(error) => BridgeError::Resume(error),
         ComputerError::InvalidRequestId => BridgeError::InvalidRequestId,
         ComputerError::InvalidTerminalRequest
+        | ComputerError::InvalidStdioRequest
         | ComputerError::InvalidFileSystemRequest
         | ComputerError::InvalidProcessRequest
         | ComputerError::InvalidCompilerRequest
@@ -522,7 +523,8 @@ fn copy_error(error: ComputerError) -> BridgeError {
         | ComputerError::InvalidCompilationToken
         | ComputerError::ActiveTerminalEvent
         | ComputerError::NoActiveTerminalEvent
-        | ComputerError::WrongTerminalEventKind => BridgeError::InvalidOperation,
+        | ComputerError::WrongTerminalEventKind
+        | ComputerError::TerminalInputBusy(_) => BridgeError::InvalidOperation,
     }
 }
 
@@ -561,6 +563,20 @@ mod tests {
     use sha2::{Digest, Sha256};
 
     use super::*;
+
+    #[test]
+    fn stdio_and_input_ownership_errors_are_invalid_bridge_operations() {
+        assert_eq!(
+            BridgeError::InvalidOperation,
+            copy_error(ComputerError::InvalidStdioRequest),
+        );
+        assert_eq!(
+            BridgeError::InvalidOperation,
+            copy_error(ComputerError::TerminalInputBusy(
+                compukter_vm::InputOwnershipError::CanonicalBusy,
+            )),
+        );
+    }
 
     #[test]
     fn closing_a_store_faults_an_existing_computer_lease_closed() {

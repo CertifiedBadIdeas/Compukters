@@ -77,6 +77,39 @@ class CompilationIdentityTest {
     }
 
     @Test
+    fun `worker payload bytes invalidate compilation cache without an ABI bump`() {
+        val identity = request().expectedIdentity.copy(payloadHash = Hash256.zero())
+        val firstPayload =
+            WorkerPayloadManifest.create(
+                identity,
+                "compukter.Worker",
+                mapOf("lib/worker.jar" to byteArrayOf(1, 2, 3)),
+            )
+        val samePayload =
+            WorkerPayloadManifest.create(
+                identity,
+                "compukter.Worker",
+                mapOf("lib/worker.jar" to byteArrayOf(1, 2, 3)),
+            )
+        val changedPayload =
+            WorkerPayloadManifest.create(
+                identity,
+                "compukter.Worker",
+                mapOf("lib/worker.jar" to byteArrayOf(1, 2, 4)),
+            )
+
+        val firstRequest = request().copy(expectedIdentity = firstPayload.identity)
+        val sameRequest = request().copy(expectedIdentity = samePayload.identity)
+        val changedRequest = request().copy(expectedIdentity = changedPayload.identity)
+
+        assertEquals(CompilationIdentity.compute(firstRequest), CompilationIdentity.compute(sameRequest))
+        assertNotEquals(CompilationIdentity.compute(firstRequest), CompilationIdentity.compute(changedRequest))
+        assertEquals(firstPayload.identity.codegenAbi, changedPayload.identity.codegenAbi)
+        assertEquals(firstPayload.identity.artifactWriterVersion, changedPayload.identity.artifactWriterVersion)
+        assertEquals(firstPayload.identity.standardLibraryAbi, changedPayload.identity.standardLibraryAbi)
+    }
+
+    @Test
     fun `every request limit that can change admission or a bounded result changes identity`() {
         val base = request()
         val baseKey = CompilationIdentity.compute(base)
