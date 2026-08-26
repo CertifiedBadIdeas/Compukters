@@ -68,6 +68,19 @@ class Hash256 private constructor(
             return Hash256(BinaryValue.of(bytes))
         }
 
+        fun fromHex(value: String): Hash256 {
+            require(value.length == 64) { "SHA-256 text must contain 64 lowercase hexadecimal digits" }
+            require(value.all { it in '0'..'9' || it in 'a'..'f' }) {
+                "SHA-256 text must contain 64 lowercase hexadecimal digits"
+            }
+            return of(
+                ByteArray(32) { index ->
+                    val offset = index * 2
+                    ((value[offset].digitToInt(16) shl 4) or value[offset + 1].digitToInt(16)).toByte()
+                },
+            )
+        }
+
         fun zero(): Hash256 = of(ByteArray(32))
     }
 }

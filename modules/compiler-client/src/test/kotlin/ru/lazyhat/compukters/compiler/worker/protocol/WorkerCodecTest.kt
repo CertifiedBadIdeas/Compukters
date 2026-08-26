@@ -26,6 +26,16 @@ import kotlin.test.assertFailsWith
 
 class WorkerCodecTest {
     @Test
+    fun `SHA-256 hashes have one strict lowercase text form`() {
+        val encoded = (0 until 32).joinToString("") { byte -> "%02x".format(byte) }
+
+        assertEquals(encoded, Hash256.fromHex(encoded).hex())
+        assertFailsWith<IllegalArgumentException> { Hash256.fromHex(encoded.uppercase()) }
+        assertFailsWith<IllegalArgumentException> { Hash256.fromHex(encoded.dropLast(1)) }
+        assertFailsWith<IllegalArgumentException> { Hash256.fromHex("g" + encoded.drop(1)) }
+    }
+
+    @Test
     fun `compile request frame has the canonical envelope`() {
         val encoded = WorkerCodec.encodeFrame(WorkerFrame(WorkerMessageType.COMPILE_REQUEST, byteArrayOf(1, 2, 3, 4, 5)))
 

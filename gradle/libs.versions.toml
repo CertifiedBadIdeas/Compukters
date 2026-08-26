@@ -28,6 +28,7 @@ coroutines = "1.11.0"
 kotlin-logging = "8.0.4"
 slf4j = "2.0.18"
 kotlinx-collections-immutable = "0.5.0"
+tomlj = "1.1.1"
 
 # 26.1
 minecraft-v261 = "26.1.2"
@@ -43,6 +44,7 @@ kotlin-scripting-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-s
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable-jvm", version.ref = "kotlinx-collections-immutable" }
+tomlj = { module = "org.tomlj:tomlj", version.ref = "tomlj" }
 
 # 26.1
 minecraft-v261 = { module = "net.minecraft:minecraft", version.ref = "minecraft-v261" }
