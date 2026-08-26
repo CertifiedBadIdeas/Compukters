@@ -62,6 +62,7 @@ include("compiler-client", modulesDir)
 include("compiler-runtime", modulesDir)
 include("compiler-k2", modulesDir)
 include("guest-api-core", modulesDir)
+include("ide-core", modulesDir)
 include("playground", modulesDir)
 include("core", modulesDir)
 

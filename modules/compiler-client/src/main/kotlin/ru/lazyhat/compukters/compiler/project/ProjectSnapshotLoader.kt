@@ -45,17 +45,36 @@ object ProjectSnapshotLoader {
     fun load(
         projectDirectory: Path,
         limits: WorkerLimits,
-    ): ProjectSnapshot = load(projectDirectory, limits) { _, open -> open() }
+    ): ProjectSnapshot = load(projectDirectory, null, Path.of(""), limits) { _, open -> open() }
+
+    fun loadSourceSet(
+        projectDirectory: Path,
+        limits: WorkerLimits,
+    ): ProjectSnapshot = load(projectDirectory, Path.of("src"), Path.of("src"), limits) { _, open -> open() }
 
     internal fun load(
         projectDirectory: Path,
+        limits: WorkerLimits,
+        aroundSourceOpen: (VirtualSourcePath, () -> ByteArray) -> ByteArray,
+    ): ProjectSnapshot = load(projectDirectory, null, Path.of(""), limits, aroundSourceOpen)
+
+    private fun load(
+        projectDirectory: Path,
+        sourceDirectory: Path?,
+        virtualDirectory: Path,
         limits: WorkerLimits,
         aroundSourceOpen: (VirtualSourcePath, () -> ByteArray) -> ByteArray,
     ): ProjectSnapshot {
         val state = LoadingState(limits, aroundSourceOpen)
         try {
             withSecureProjectDirectory(projectDirectory) { directory ->
-                walkSecure(directory, Path.of(""), state)
+                if (sourceDirectory == null) {
+                    walkSecure(directory, virtualDirectory, state)
+                } else {
+                    withSecureRelativeDirectory(directory, sourceDirectory) { source ->
+                        walkSecure(source, virtualDirectory, state)
+                    }
+                }
             }
         } catch (exception: ProjectSnapshotException) {
             throw exception
@@ -67,6 +86,29 @@ object ProjectSnapshotLoader {
             ProjectSnapshot.of(state.sources, limits)
         } catch (exception: IllegalArgumentException) {
             throw ProjectSnapshotException(exception.message ?: "invalid project snapshot", exception)
+        }
+    }
+
+    private fun <T> withSecureRelativeDirectory(
+        root: SecureDirectoryStream<Path>,
+        relativeDirectory: Path,
+        action: (SecureDirectoryStream<Path>) -> T,
+    ): T {
+        val opened = mutableListOf<SecureDirectoryStream<Path>>()
+        try {
+            var current = root
+            relativeDirectory.forEach { component ->
+                validateFilename(component)
+                val attrs = attributes(current, component)
+                if (attrs.isSymbolicLink || !attrs.isDirectory) {
+                    throw ProjectSnapshotException("project source root must be a real directory")
+                }
+                current = current.newDirectoryStream(component, LinkOption.NOFOLLOW_LINKS)
+                opened += current
+            }
+            return action(current)
+        } finally {
+            opened.asReversed().forEach { runCatching { it.close() } }
         }
     }
 

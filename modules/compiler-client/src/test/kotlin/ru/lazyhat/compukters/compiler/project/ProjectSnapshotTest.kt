@@ -38,6 +38,75 @@ import kotlin.test.assertTrue
 
 class ProjectSnapshotTest {
     @Test
+    fun `source-set loader includes only canonical Kotlin files below src`() {
+        val root = createTempDirectory("compukter-source-set-")
+        root.resolve("src/nested").createDirectories()
+        root.resolve("src/z.kt").writeText("val z = 2")
+        root.resolve("src/nested/a.kt").writeText("val a = 1")
+        root.resolve("src/notes.txt").writeText("ignored")
+        root.resolve("outside.kt").writeText("error(\"ignored\")")
+        root.resolve("generated/also.kt").apply {
+            parent.createDirectories()
+            writeText("error(\"ignored\")")
+        }
+
+        val snapshot = ProjectSnapshotLoader.loadSourceSet(root, WorkerLimits())
+
+        assertEquals(listOf("src/nested/a.kt", "src/z.kt"), snapshot.sources.map { it.path.value })
+        assertEquals(
+            listOf("val a = 1", "val z = 2"),
+            snapshot.sources.map { it.content.toByteArray().decodeToString() },
+        )
+    }
+
+    @Test
+    fun `source-set loader rejects a missing or empty source directory`() {
+        val missing = createTempDirectory("compukter-source-set-missing-")
+        val empty = createTempDirectory("compukter-source-set-empty-")
+        empty.resolve("src").createDirectories()
+        empty.resolve("src/README.md").writeText("ignored")
+
+        assertFailsWith<ProjectSnapshotException> { ProjectSnapshotLoader.loadSourceSet(missing, WorkerLimits()) }
+        assertFailsWith<ProjectSnapshotException> { ProjectSnapshotLoader.loadSourceSet(empty, WorkerLimits()) }
+    }
+
+    @Test
+    fun `source-set loader rejects invalid linked special and over-limit input`() {
+        val invalid = createTempDirectory("compukter-source-set-invalid-")
+        invalid.resolve("src").createDirectories()
+        invalid.resolve("src/bad.kt").writeBytes(byteArrayOf(0xc3.toByte(), 0x28))
+        assertFailsWith<ProjectSnapshotException> { ProjectSnapshotLoader.loadSourceSet(invalid, WorkerLimits()) }
+
+        val linked = createTempDirectory("compukter-source-set-linked-")
+        linked.resolve("src").createDirectories()
+        linked.resolve("src/main.kt").writeText("val main = 1")
+        Files.createSymbolicLink(linked.resolve("src/alias.kt"), linked.resolve("src/main.kt"))
+        assertFailsWith<ProjectSnapshotException> { ProjectSnapshotLoader.loadSourceSet(linked, WorkerLimits()) }
+
+        val special = createTempDirectory("compukter-source-set-special-")
+        special.resolve("src").createDirectories()
+        special.resolve("src/main.kt").writeText("val main = 1")
+        val fifo = special.resolve("src/events.kt")
+        val mkfifo = ProcessBuilder("mkfifo", fifo.toString()).start()
+        assertEquals(0, mkfifo.waitFor(), mkfifo.errorStream.bufferedReader().readText())
+        assertFailsWith<ProjectSnapshotException> { ProjectSnapshotLoader.loadSourceSet(special, WorkerLimits()) }
+
+        val bounded = createTempDirectory("compukter-source-set-bounded-")
+        bounded.resolve("src").createDirectories()
+        bounded.resolve("src/a.kt").writeText("aa")
+        bounded.resolve("src/b.kt").writeText("bb")
+        assertFailsWith<ProjectSnapshotException> {
+            ProjectSnapshotLoader.loadSourceSet(bounded, WorkerLimits(sourceFiles = 1))
+        }
+        assertFailsWith<ProjectSnapshotException> {
+            ProjectSnapshotLoader.loadSourceSet(bounded, WorkerLimits(sourceFileBytes = 1))
+        }
+        assertFailsWith<ProjectSnapshotException> {
+            ProjectSnapshotLoader.loadSourceSet(bounded, WorkerLimits(sourceBytes = 3))
+        }
+    }
+
+    @Test
     fun `loader returns strict UTF-8 Kotlin sources in canonical path order`() {
         val root = createTempDirectory("compukter-project-")
         root.resolve("z.kt").writeText("package sample\nval z = 2")
