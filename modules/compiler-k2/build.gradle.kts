@@ -206,6 +206,7 @@ tasks.named<KotlinCompile>("compileTestKotlin") {
     source(
         rootProject.file("system/programs/edit.kt"),
         rootProject.file("system/programs/kotlinc.kt"),
+        rootProject.file("system/programs/shell/Lexer.kt"),
         rootProject.file("system/programs/shell.kt"),
     )
 }

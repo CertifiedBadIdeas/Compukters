@@ -21,6 +21,8 @@ package ru.lazyhat.compukters.compiler.worker.k2
 import compukter.system.kotlinc.kotlincError
 import compukter.system.kotlinc.kotlincOutput
 import compukter.system.kotlinc.kotlincSource
+import compukter.system.shell.LexResult
+import compukter.system.shell.lex
 import compukter.system.shell.shellArgumentError
 import compukter.system.shell.shellArguments
 import compukter.system.shell.shellCommand
@@ -71,6 +73,32 @@ import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
     @Test
+    fun `shell lexer parses bounded POSIX-lite words`() {
+        assertLex(
+            "greet Ada \"Red Engineer\" '' pre\"fix value\"post",
+            arrayOf("greet", "Ada", "Red Engineer", "", "prefix valuepost"),
+        )
+        assertLex("a\\ b 'c\\d' \"e\\\"f\"", arrayOf("a b", "c\\d", "e\"f"))
+        assertLex("''\"\" a''b ''x \"\"y \\\\", arrayOf("", "ab", "x", "y", "\\"))
+        assertLex("one\ttwo\nthree\rfour", arrayOf("one", "two", "three", "four"))
+        assertLex("  ", emptyArray())
+
+        assertLex((1..17).joinToString(" ") { "w$it" }, Array(17) { "w${it + 1}" })
+        assertLex("x".repeat(256), arrayOf("x".repeat(256)))
+        assertLex("a".repeat(128) + " " + "b".repeat(128), arrayOf("a".repeat(128), "b".repeat(128)))
+
+        assertSyntaxError("unterminated '", "unterminated single quote")
+        assertSyntaxError("unterminated \"", "unterminated double quote")
+        assertSyntaxError("trailing\\", "trailing escape")
+        assertSyntaxError((1..18).joinToString(" ") { "w$it" }, "too many words (maximum 17)")
+        assertSyntaxError("x".repeat(257), "word too long (maximum 256 UTF-16 code units)")
+        assertSyntaxError(
+            "a".repeat(128) + " " + "b".repeat(129),
+            "arguments too long (maximum 256 UTF-16 code units)",
+        )
+    }
+
+    @Test
     fun `shell separates one executable name from structured arguments`() {
         assertEquals("kotlinc", shellCommand("kotlinc foo.kt -o hello"))
         assertContentEquals(arrayOf("foo.kt", "-o", "hello"), shellArguments("kotlinc foo.kt -o hello"))
@@ -85,6 +113,24 @@ class MinimalScriptLoweringTest {
             "too many arguments (maximum 16)",
             shellArgumentError("tool 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17"),
         )
+    }
+
+    private fun assertLex(
+        source: String,
+        expected: Array<String>,
+    ) {
+        val result = lex(source)
+        assertTrue(result is LexResult.Success, result.toString())
+        assertContentEquals(expected, result.words)
+    }
+
+    private fun assertSyntaxError(
+        source: String,
+        expected: String,
+    ) {
+        val result = lex(source)
+        assertTrue(result is LexResult.Error, result.toString())
+        assertEquals(expected, result.message)
     }
 
     @Test
