@@ -110,13 +110,13 @@ sealed interface SnapshotPresentationAcceptance {
 }
 
 class SnapshotPresentation private constructor(
-    val snapshotId: SourceSnapshotId,
+    val identity: AnalysisSnapshotIdentity,
     private val diagnostics: List<EditorDiagnostic>,
     private val semanticTokens: List<SemanticToken>,
     private val locations: List<SourceLocation>,
 ) {
-    fun accept(currentSnapshotId: SourceSnapshotId): SnapshotPresentationAcceptance =
-        if (currentSnapshotId == snapshotId) {
+    fun accept(currentIdentity: AnalysisSnapshotIdentity): SnapshotPresentationAcceptance =
+        if (currentIdentity == identity) {
             SnapshotPresentationAcceptance.Active(diagnostics, semanticTokens, locations)
         } else {
             SnapshotPresentationAcceptance.Stale
@@ -124,7 +124,7 @@ class SnapshotPresentation private constructor(
 
     companion object {
         fun create(
-            snapshotId: SourceSnapshotId,
+            identity: AnalysisSnapshotIdentity,
             sourceLengthsUtf16: Map<VirtualSourcePath, Int>,
             diagnostics: List<EditorDiagnostic> = emptyList(),
             semanticTokens: List<SemanticToken> = emptyList(),
@@ -148,7 +148,7 @@ class SnapshotPresentation private constructor(
             semanticTokens.forEach { token -> validateRange(sourceLengths, token.path, token.range) }
             locations.forEach { location -> validateRange(sourceLengths, location.path, location.range) }
             return SnapshotPresentation(
-                snapshotId,
+                identity,
                 immutableCopy(diagnostics),
                 immutableCopy(semanticTokens),
                 immutableCopy(locations),
@@ -168,7 +168,7 @@ class SnapshotPresentation private constructor(
     }
 }
 
-private fun strictUtf8Size(value: String): Int =
+internal fun strictUtf8Size(value: String): Int =
     try {
         StandardCharsets.UTF_8
             .newEncoder()
