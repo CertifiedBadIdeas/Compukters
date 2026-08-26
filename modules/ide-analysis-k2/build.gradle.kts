@@ -16,6 +16,10 @@
  * limitations under the License.
  */
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.file.Files
+import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 plugins {
@@ -33,6 +37,10 @@ repositories {
 }
 
 dependencies {
+    implementation(projects.ideAnalysisClient) { isTransitive = false }
+    implementation(projects.ideCore) { isTransitive = false }
+    implementation(projects.compilerClient) { isTransitive = false }
+    implementation(projects.workerClient) { isTransitive = false }
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlin.compiler) {
         exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core-jvm")
@@ -60,6 +68,8 @@ tasks.withType<Jar>().configureEach {
 }
 
 val analysisWorkerPayloadDirectory = layout.buildDirectory.dir("worker-payload/content")
+val analysisWorkerMainClass = "ru.lazyhat.compukters.ide.analysis.k2.server.AnalysisWorkerMainKt"
+val pinnedKotlinVersion = libs.versions.kotlin.asProvider().get()
 
 val prepareAnalysisWorkerPayload = tasks.register<Sync>("prepareAnalysisWorkerPayload") {
     dependsOn(tasks.jar)
@@ -90,6 +100,47 @@ val prepareAnalysisWorkerPayload = tasks.register<Sync>("prepareAnalysisWorkerPa
     }
     from(rootProject.layout.projectDirectory.file("licenses/distribution-components.tsv")) {
         into("META-INF/licenses")
+    }
+    doLast {
+        val root = analysisWorkerPayloadDirectory.get().asFile.toPath()
+        val files =
+            Files.list(root.resolve("lib")).use { paths ->
+                paths.sorted().map { path ->
+                    val bytes = Files.readAllBytes(path)
+                    Triple("lib/${path.fileName}", bytes.size.toLong(), MessageDigest.getInstance("SHA-256").digest(bytes))
+                }.toList()
+            }
+        val identities = sortedMapOf("compiler" to pinnedKotlinVersion, "language" to "2.4")
+        val digest = MessageDigest.getInstance("SHA-256")
+        fun field(value: String) {
+            val bytes = value.toByteArray()
+            digest.update(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(bytes.size).array())
+            digest.update(bytes)
+        }
+        digest.update("Compukters worker payload v1\u0000".toByteArray())
+        digest.update(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(1).array())
+        field("analysis")
+        identities.forEach { (name, value) -> field(name); field(value) }
+        field(analysisWorkerMainClass)
+        files.forEach { (path, size, hash) ->
+            field(path)
+            digest.update(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(size).array())
+            digest.update(hash)
+        }
+        val payloadHash = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        val manifest =
+            buildString {
+                appendLine("format=1")
+                appendLine("kind=analysis")
+                identities.forEach { (name, value) -> appendLine("identity.$name=$value") }
+                appendLine("mainClass=$analysisWorkerMainClass")
+                appendLine("payloadSha256=$payloadHash")
+                files.forEach { (path, size, hash) ->
+                    append("file=").append(path).append('\t').append(size).append('\t')
+                    appendLine(hash.joinToString("") { "%02x".format(it.toInt() and 0xff) })
+                }
+            }
+        Files.writeString(root.resolve("worker.payload"), manifest)
     }
 }
 
@@ -139,7 +190,10 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
             entries
                 .filter { it.startsWith("lib/") && it.endsWith(".jar") }
                 .map { it.removePrefix("lib/") }
-                .filterNot { it.startsWith("ide-analysis-k2-") }
+                .filterNot { name ->
+                    listOf("ide-analysis-k2-", "ide-analysis-client-", "ide-core-", "compiler-client-", "worker-client-")
+                        .any(name::startsWith)
+                }
                 .sorted()
         check(actualExternal == expectedExternal) {
             "analysis worker library inventory mismatch: expected $expectedExternal, found $actualExternal"

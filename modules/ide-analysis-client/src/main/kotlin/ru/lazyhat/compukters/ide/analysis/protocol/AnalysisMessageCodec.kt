@@ -104,6 +104,8 @@ class AnalysisProtocolContext private constructor(
 
         internal fun unchecked(limits: AnalysisLimits = AnalysisLimits()): AnalysisProtocolContext =
             AnalysisProtocolContext(null, limits, false, null)
+
+        fun unbound(limits: AnalysisLimits = AnalysisLimits()): AnalysisProtocolContext = AnalysisProtocolContext(null, limits, false, null)
     }
 }
 

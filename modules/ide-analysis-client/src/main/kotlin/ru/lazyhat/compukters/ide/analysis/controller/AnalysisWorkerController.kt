@@ -265,9 +265,15 @@ class AnalysisWorkerController(
             OpenSnapshotRequest(pending.requestId, pending.snapshot.identity, pending.snapshot.sources, pending.snapshot.profile, limits),
             context(pending.snapshot),
         )
-        val ready =
-            receive(child, policy.requestTimeoutNanos, context(pending.snapshot)) as? SnapshotReady
-                ?: throw ControllerFault(AnalysisFailureKind.Protocol, "expected snapshot-ready response")
+        val response = receive(child, policy.requestTimeoutNanos, context(pending.snapshot))
+        if (response is AnalysisFailure) {
+            if (response.requestId != pending.requestId || response.identity != pending.snapshot.identity) {
+                throw ControllerFault(AnalysisFailureKind.Protocol, "snapshot failure response mismatch")
+            }
+            pending.future.complete(SnapshotOpenResult.Failure(response.failure, response.detail))
+            return
+        }
+        val ready = response as? SnapshotReady ?: throw ControllerFault(AnalysisFailureKind.Protocol, "expected snapshot-ready response")
         if (ready.requestId != pending.requestId || ready.identity != pending.snapshot.identity) {
             throw ControllerFault(AnalysisFailureKind.Protocol, "snapshot-ready response mismatch")
         }
