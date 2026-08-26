@@ -19,252 +19,151 @@
 package compukter.system.shell
 
 import compukter.filesystem.FileSystem
+import compukter.io.Stderr
 import compukter.process.Process
 import compukter.process.ProcessFailureReason
 import compukter.process.ProcessResult
 import compukter.terminal.Terminal
 
 fun main() {
-    var line = ""
-    Terminal.write("> ")
     while (true) {
-        val event = Terminal.awaitEvent()
-        if (event == 1) {
-            val text = Terminal.eventText()
-            Terminal.finishEvent()
-            line = appendText(line, text)
-        } else if (event == 2) {
-            val key = Terminal.eventKey()
-            val action = Terminal.eventAction()
-            Terminal.finishEvent()
-            if (key == 13 && action == 1) {
-                Terminal.write("\n")
-                if (line != "") {
-                    when {
-                        line == "help" -> Terminal.write("help echo clear pwd ls stat kotlinc edit\n")
-                        line == "echo" -> Terminal.write("\n")
-                        line.length >= 5 && line.substring(0, 5) == "echo " -> {
-                            Terminal.write(line.substring(5, line.length) + "\n")
-                        }
+        print("> ")
+        dispatch(readln())
+    }
+}
 
-                        line == "clear" -> Terminal.clear()
-                        line == "pwd" -> Terminal.write("/home\n")
-                        line == "ls" -> writeList("/home")
-                        line.length >= 3 && line.substring(0, 3) == "ls " -> {
-                            val argument = line.substring(3, line.length)
-                            if (argument == "" || containsSpace(argument)) {
-                                Terminal.write("usage: ls [path]\n")
-                            } else {
-                                writeList(resolvePath(argument))
-                            }
-                        }
+private fun dispatch(line: String) {
+    when (val result = lex(line)) {
+        is LexResult.Error -> Stderr.write(result.message + "\n")
+        is LexResult.Success -> dispatchWords(result.words)
+    }
+}
 
-                        line == "stat" -> Terminal.write("usage: stat <path>\n")
-                        line.length >= 5 && line.substring(0, 5) == "stat " -> {
-                            val argument = line.substring(5, line.length)
-                            if (argument == "" || containsSpace(argument)) {
-                                Terminal.write("usage: stat <path>\n")
-                            } else {
-                                writeStat(resolvePath(argument))
-                            }
-                        }
-
-                        else -> {
-                            val argumentError = shellArgumentError(line)
-                            if (argumentError != "") {
-                                Terminal.write(argumentError + "\n")
-                            } else {
-                                val command = shellCommand(line)
-                                val arguments = shellArguments(line)
-                                val absolute = command[0] == '/'
-                                var path = if (absolute) command else "/home/" + command
-                                var result = Process.run(path, arguments)
-                                if (!absolute) {
-                                    if (result is ProcessResult.Failed && result.reason == ProcessFailureReason.NOT_FOUND) {
-                                        path = "/rom/" + command
-                                        result = Process.run(path, arguments)
-                                    }
-                                }
-                                writeProcessResult(result, path)
-                            }
-                        }
-                    }
-                }
-                line = ""
-                Terminal.write("> ")
-            } else if (
-                key == 8 &&
-                (action == 1 || action == 2) &&
-                line.length > 0
-            ) {
-                line = eraseLastScalar(line)
-                Terminal.erasePrevious()
-            }
+private fun dispatchWords(words: Array<String>) {
+    if (words.size == 0) return
+    val command = words[0]
+    if (command == "help") {
+        println("help echo clear pwd ls stat kotlinc edit")
+    } else if (command == "echo") {
+        var index = 1
+        while (index < words.size) {
+            if (index > 1) print(" ")
+            print(words[index])
+            index = index + 1
         }
+        println()
+    } else if (command == "clear") {
+        if (words.size == 1) Terminal.clear() else Stderr.write("usage: clear\n")
+    } else if (command == "pwd") {
+        if (words.size == 1) println("/home") else Stderr.write("usage: pwd\n")
+    } else if (command == "ls") {
+        if (words.size == 1) writeList("/home")
+        else if (words.size == 2 && words[1] != "") writeList(resolvePath(words[1]))
+        else Stderr.write("usage: ls [path]\n")
+    } else if (command == "stat") {
+        if (words.size == 2 && words[1] != "") writeStat(resolvePath(words[1]))
+        else Stderr.write("usage: stat <path>\n")
+    } else if (command == "") {
+        Stderr.write("empty command\n")
+    } else {
+        executeExternal(words)
     }
 }
 
-fun shellCommand(line: String): String {
-    var end = 0
-    while (end < line.length && line[end] != ' ') end = end + 1
-    return line.substring(0, end)
-}
-
-fun shellArguments(line: String): Array<String> {
-    val words = arrayOf("", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "")
-    var count = 0
-    var index = 0
-    while (index < line.length) {
-        while (index < line.length && line[index] == ' ') index = index + 1
-        val start = index
-        while (index < line.length && line[index] != ' ') index = index + 1
-        if (start != index) {
-            if (count > 0 && count <= words.size) words[count - 1] = line.substring(start, index)
-            count = count + 1
-        }
+private fun executeExternal(words: Array<String>) {
+    val command = words[0]
+    val arguments = words.copyOfRange(1, words.size)
+    var path = if (command[0] == '/') command else "/home/" + command
+    var result = Process.run(path, arguments)
+    val fallback = shellFallbackPath(command, result)
+    if (fallback != "") {
+        path = fallback
+        result = Process.run(path, arguments)
     }
-    if (count == 0) return emptyArray()
-    val argumentCount = if (count > words.size + 1) words.size else count - 1
-    return words.copyOfRange(0, argumentCount)
+    val diagnostic = shellProcessDiagnostic(result, path)
+    if (diagnostic != "") Stderr.write(diagnostic + "\n")
 }
 
-fun shellArgumentError(line: String): String =
-    if (shellWordCount(line) > 17) "too many arguments (maximum 16)" else ""
-
-private fun shellWordCount(line: String): Int {
-    var count = 0
-    var index = 0
-    while (index < line.length) {
-        while (index < line.length && line[index] == ' ') index = index + 1
-        val start = index
-        while (index < line.length && line[index] != ' ') index = index + 1
-        if (start != index) count = count + 1
+fun shellFallbackPath(
+    command: String,
+    result: ProcessResult,
+): String {
+    if (command == "" || command[0] == '/') return ""
+    if (result is ProcessResult.Failed && result.reason == ProcessFailureReason.NOT_FOUND) {
+        return "/rom/" + command
     }
-    return count
+    return ""
 }
 
-private fun containsSpace(value: String): Boolean {
-    var index = 0
-    var found = false
-    while (index < value.length && !found) {
-        if (value[index] == ' ') found = true
-        index = index + 1
-    }
-    return found
-}
-
-private fun resolvePath(path: String): String {
-    return if (path[0] == '/') path else "/home/" + path
-}
+private fun resolvePath(path: String): String = if (path[0] == '/') path else "/home/" + path
 
 private fun writeList(path: String) {
     val kind = FileSystem.stat(path)
     if (kind == 1) {
-        Terminal.write(path + "\n")
+        println(path)
     } else if (kind == 2) {
         val names = FileSystem.list(path)
         var start = 0
         while (start < names.length) {
             var end = start
             while (end < names.length && names[end] != '\u0000') end = end + 1
-            if (end != start) Terminal.write(names.substring(start, end) + "\n")
+            if (end != start) println(names.substring(start, end))
             start = end + 1
         }
     } else {
-        writeFileSystemFailure(kind, path)
+        Stderr.write(fileSystemDiagnostic(kind, path) + "\n")
     }
 }
 
 private fun writeStat(path: String) {
     val kind = FileSystem.stat(path)
-    if (kind == 1) Terminal.write("file: " + path + "\n")
-    else if (kind == 2) Terminal.write("directory: " + path + "\n")
-    else writeFileSystemFailure(kind, path)
+    if (kind == 1) println("file: " + path)
+    else if (kind == 2) println("directory: " + path)
+    else Stderr.write(fileSystemDiagnostic(kind, path) + "\n")
 }
 
-private fun writeFileSystemFailure(
+private fun fileSystemDiagnostic(
     result: Int,
     path: String,
-) {
-    if (result == -1) Terminal.write("invalid path: " + path)
-    else if (result == -2) Terminal.write("not found: " + path)
-    else if (result == -3) Terminal.write("already exists: " + path)
-    else if (result == -4) Terminal.write("not a directory: " + path)
-    else if (result == -5) Terminal.write("is a directory: " + path)
-    else if (result == -6) Terminal.write("directory not empty: " + path)
-    else if (result == -7) Terminal.write("read-only filesystem: " + path)
-    else if (result == -8) Terminal.write("permission denied: " + path)
-    else if (result == -9) Terminal.write("stale file handle: " + path)
-    else if (result == -10) Terminal.write("filesystem quota exceeded")
-    else if (result == -11) Terminal.write("filesystem busy")
-    else if (result == -12) Terminal.write("filesystem unavailable")
-    else if (result == -13) Terminal.write("filesystem closed")
-    else if (result == -14) Terminal.write("not executable: " + path)
-    else Terminal.write("filesystem error")
-    Terminal.write("\n")
-}
-
-private fun appendText(
-    current: String,
-    text: String,
 ): String {
-    var result = current
-    var index = 0
-    while (index < text.length) {
-        val character = text[index]
-        var width = 1
-        if (character >= '\uD800' && character <= '\uDBFF' && index + 1 < text.length) {
-            val next = text[index + 1]
-            if (next >= '\uDC00' && next <= '\uDFFF') width = 2
-        }
-        if (character >= ' ' && character != '\u007f' && result.length + width <= 256) {
-            val accepted = text.substring(index, index + width)
-            result = result + accepted
-            Terminal.write(accepted)
-        }
-        index = index + width
-    }
-    return result
+    if (result == -1) return "invalid path: " + path
+    if (result == -2) return "not found: " + path
+    if (result == -3) return "already exists: " + path
+    if (result == -4) return "not a directory: " + path
+    if (result == -5) return "is a directory: " + path
+    if (result == -6) return "directory not empty: " + path
+    if (result == -7) return "read-only filesystem: " + path
+    if (result == -8) return "permission denied: " + path
+    if (result == -9) return "stale file handle: " + path
+    if (result == -10) return "filesystem quota exceeded"
+    if (result == -11) return "filesystem busy"
+    if (result == -12) return "filesystem unavailable"
+    if (result == -13) return "filesystem closed"
+    if (result == -14) return "not executable: " + path
+    return "filesystem error"
 }
 
-private fun eraseLastScalar(line: String): String {
-    var width = 1
-    val last = line[line.length - 1]
-    if (last >= '\uDC00' && last <= '\uDFFF' && line.length >= 2) {
-        val previous = line[line.length - 2]
-        if (previous >= '\uD800' && previous <= '\uDBFF') width = 2
-    }
-    return line.substring(0, line.length - width)
-}
-
-private fun writeProcessResult(
+fun shellProcessDiagnostic(
     result: ProcessResult,
     path: String,
-) {
+): String {
     if (result is ProcessResult.Exited) {
-        if (result.code == 0) return
-        Terminal.write(path + ": exited with an error\n")
-        return
+        if (result.code == 0) return ""
+        return path + ": exited with an error"
     }
     if (result is ProcessResult.Failed) {
-        if (result.diagnostic != "") {
-            Terminal.write(result.diagnostic)
-            Terminal.write("\n")
-            return
-        }
-        when (result.reason) {
-            ProcessFailureReason.INVALID_PATH -> Terminal.write("invalid path: " + path)
-            ProcessFailureReason.NOT_FOUND -> Terminal.write("command not found: " + path)
-            ProcessFailureReason.ACCESS_DENIED -> Terminal.write("permission denied: " + path)
-            ProcessFailureReason.NOT_EXECUTABLE -> Terminal.write("not executable: " + path)
-            ProcessFailureReason.INVALID_PROGRAM -> Terminal.write("invalid executable: " + path)
-            ProcessFailureReason.INCOMPATIBLE -> Terminal.write("incompatible program: " + path)
-            ProcessFailureReason.LIMIT_EXCEEDED -> Terminal.write("process limit exceeded")
-            ProcessFailureReason.TRAPPED -> Terminal.write("program trapped: " + path)
-            ProcessFailureReason.VM_FAULT -> Terminal.write("virtual machine fault")
-            ProcessFailureReason.HOST_FAILURE -> Terminal.write("host capability failed")
-            ProcessFailureReason.IO_FAILURE -> Terminal.write("I/O error: " + path)
-        }
-        Terminal.write("\n")
+        if (result.diagnostic != "") return result.diagnostic
+        if (result.reason == ProcessFailureReason.INVALID_PATH) return "invalid path: " + path
+        if (result.reason == ProcessFailureReason.NOT_FOUND) return "command not found: " + path
+        if (result.reason == ProcessFailureReason.ACCESS_DENIED) return "permission denied: " + path
+        if (result.reason == ProcessFailureReason.NOT_EXECUTABLE) return "not executable: " + path
+        if (result.reason == ProcessFailureReason.INVALID_PROGRAM) return "invalid executable: " + path
+        if (result.reason == ProcessFailureReason.INCOMPATIBLE) return "incompatible program: " + path
+        if (result.reason == ProcessFailureReason.LIMIT_EXCEEDED) return "process limit exceeded"
+        if (result.reason == ProcessFailureReason.TRAPPED) return "program trapped: " + path
+        if (result.reason == ProcessFailureReason.VM_FAULT) return "virtual machine fault"
+        if (result.reason == ProcessFailureReason.HOST_FAILURE) return "host capability failed"
+        return "I/O error: " + path
     }
+    return "process failed"
 }

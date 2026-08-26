@@ -19,22 +19,22 @@
 package compukter.system.kotlinc
 
 import compukter.compiler.Compiler
-import compukter.terminal.Terminal
+import compukter.io.Stderr
 
-suspend fun main(args: Array<String>) {
+fun main(args: Array<String>) {
     val error = kotlincError(args)
     if (error != "") {
-        Terminal.write(error + "\n")
+        Stderr.write(error + "\n")
     } else {
         val source = kotlincSource(args)
         val output = kotlincOutput(args)
         val result = Compiler.compile(source, output)
         if (result == 0) {
-            Terminal.write("compiled: " + output + "\n")
+            println("compiled: " + output)
         } else {
             val diagnostics = Compiler.diagnostics()
-            if (diagnostics != "") Terminal.write(diagnostics + "\n")
-            else Terminal.write("compilation failed\n")
+            if (diagnostics != "") Stderr.write(diagnostics + "\n")
+            else Stderr.write("compilation failed\n")
         }
     }
 }

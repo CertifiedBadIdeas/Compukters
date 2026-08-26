@@ -218,7 +218,7 @@ private object CompilerIntrinsicProvider : TrustedIntrinsicProvider {
                         0u,
                         blocking = BlockingMode.VM_TASK,
                     ).takeIf {
-                        callable.suspending &&
+                        !callable.suspending &&
                             callable.parameters == listOf(TrustedValueType.STRING, TrustedValueType.STRING) &&
                             callable.result == TrustedValueType.INT
                     }
