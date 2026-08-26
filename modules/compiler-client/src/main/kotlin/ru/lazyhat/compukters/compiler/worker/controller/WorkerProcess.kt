@@ -21,27 +21,10 @@ package ru.lazyhat.compukters.compiler.worker.controller
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import java.nio.file.Path
 
-interface WorkerProcess : AutoCloseable {
-    val isAlive: Boolean
-    val exitCode: Int?
-
-    fun writeFrame(frame: ByteArray)
-
-    fun readFrame(deadlineNanos: Long): ByteArray?
-
-    fun stderrSnapshot(): ByteArray
-
-    fun terminate(graceMillis: Long)
-}
-
-class WorkerDeadlineExceededException : IllegalStateException("worker read deadline exceeded")
-
-fun interface WorkerProcessFactory {
-    fun start(
-        payload: PublishedWorkerPayload,
-        launch: WorkerLaunch,
-    ): WorkerProcess
-}
+typealias WorkerProcess = ru.lazyhat.compukters.worker.process.WorkerProcess
+typealias WorkerDeadlineExceededException = ru.lazyhat.compukters.worker.process.WorkerDeadlineExceededException
+typealias WorkerProcessFactory = ru.lazyhat.compukters.worker.process.WorkerProcessFactory
+typealias JdkWorkerProcessFactory = ru.lazyhat.compukters.worker.process.JdkWorkerProcessFactory
 
 data class WorkerLaunch(
     val javaExecutable: Path,
@@ -58,4 +41,16 @@ data class WorkerLaunch(
         require(maximumFrameBytes >= 0) { "maximum frame bytes must not be negative" }
         require(maximumStderrBytes >= 0) { "maximum stderr bytes must not be negative" }
     }
+
+    fun processLaunch(payload: PublishedWorkerPayload): ru.lazyhat.compukters.worker.process.WorkerLaunch =
+        ru.lazyhat.compukters.worker.process.WorkerLaunch(
+            javaExecutable = javaExecutable,
+            classpath = payload.classpath,
+            mainClass = payload.manifest.mainClass,
+            maximumHeapMiB = maximumHeapMiB,
+            maximumMetaspaceMiB = maximumMetaspaceMiB,
+            temporaryDirectory = temporaryDirectory,
+            maximumFrameBytes = maximumFrameBytes,
+            maximumStderrBytes = maximumStderrBytes,
+        )
 }

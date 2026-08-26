@@ -132,13 +132,7 @@ class ForkedWorkerRecoveryTest {
 
     private fun hostilePayload(): PublishedWorkerPayload {
         val classpath = checkNotNull(System.getProperty("compukters.worker.test-classpath")).split(File.pathSeparator).map(Path::of)
-        val manifest =
-            WorkerPayloadManifest(
-                hostileIdentity(),
-                "ru.lazyhat.compukters.compiler.worker.integration.HostileWorkerMainKt",
-                emptyList(),
-                hostileIdentity().payloadHash,
-            )
+        val manifest = hostileManifest()
         return PublishedWorkerPayload(Path.of("hostile-test-payload"), manifest, classpath)
     }
 }

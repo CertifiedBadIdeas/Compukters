@@ -25,18 +25,14 @@ import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerPolicy
 import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerLaunch
-import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadFile
-import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadManifest
+import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadLoader
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerProcessFactory
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
 import ru.lazyhat.compukters.compiler.worker.protocol.CompilerFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticCategory
-import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
-import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
-import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
@@ -76,7 +72,7 @@ class ForkedCompilerWorkerTest {
         val temporaryRoot = createTempDirectory("compukters-forked-worker-")
         var starts = 0
         val jdk = JdkWorkerProcessFactory()
-        val factory = WorkerProcessFactory { published, launch -> starts++.let { jdk.start(published, launch) } }
+        val factory = WorkerProcessFactory { launch -> starts++.let { jdk.start(launch) } }
         val limits = WorkerLimits()
         val launch =
             WorkerLaunch(
@@ -156,36 +152,5 @@ class ForkedCompilerWorkerTest {
         }
     }
 
-    private fun payload(root: Path): PublishedWorkerPayload {
-        val lines = Files.readAllLines(root.resolve("worker.payload"))
-        val properties =
-            lines.filterNot { it.startsWith("file=") }.associate { line ->
-                line.substringBefore('=') to
-                    line.substringAfter('=')
-            }
-        val records =
-            lines.filter { it.startsWith("file=") }.map { line ->
-                val fields = line.removePrefix("file=").split('\t')
-                WorkerPayloadFile(fields[0], fields[1].toLong(), Hash256.of(fields[2].decodeHex()))
-            }
-        val identity =
-            WorkerIdentity(
-                properties.getValue("compiler"),
-                properties.getValue("language"),
-                properties.getValue("codegenAbi").toUInt(),
-                properties.getValue("artifactWriter").toUInt(),
-                Hash256.of(properties.getValue("payloadSha256").decodeHex()),
-                Hash256.zero(),
-            )
-        val manifest =
-            WorkerPayloadManifest(
-                identity,
-                properties.getValue("mainClass"),
-                records,
-                identity.payloadHash,
-            )
-        return PublishedWorkerPayload(root, manifest, records.map { root.resolve(it.path) })
-    }
+    private fun payload(root: Path): PublishedWorkerPayload = WorkerPayloadLoader.load(root)
 }
-
-private fun String.decodeHex(): ByteArray = ByteArray(length / 2) { index -> substring(index * 2, index * 2 + 2).toInt(16).toByte() }

@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.compiler.worker.integration
 
+import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadManifest
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompilationMetrics
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
@@ -106,4 +107,11 @@ private fun readFrame(): ByteArray {
     return header + System.`in`.readNBytes(size)
 }
 
-internal fun hostileIdentity() = WorkerIdentity("2.4.10", "2.4", 1u, 1u, Hash256.zero(), Hash256.zero())
+internal fun hostileManifest() =
+    WorkerPayloadManifest.create(
+        WorkerIdentity("2.4.10", "2.4", 1u, 1u, Hash256.zero(), Hash256.zero()),
+        "ru.lazyhat.compukters.compiler.worker.integration.HostileWorkerMainKt",
+        emptyMap(),
+    )
+
+internal fun hostileIdentity() = hostileManifest().identity

@@ -218,7 +218,7 @@ class CompilerWorkerControllerTest {
         block: (CompilerWorkerController, FakeWorkerProcessFactory, List<FakeWorkerProcess>, WorkerIdentity, WorkerLimits) -> Unit,
     ) {
         val manifest = WorkerPayloadManifest.create(baseIdentity(), "example.WorkerMain", emptyMap())
-        val payload = PublishedWorkerPayload(Path.of("payload"), manifest, emptyList())
+        val payload = PublishedWorkerPayload(Path.of("payload"), manifest, listOf(Path.of("payload", "lib", "worker.jar")))
         val processes = List(processCount) { FakeWorkerProcess() }
         val factory = FakeWorkerProcessFactory(processes)
         val limits = WorkerLimits()

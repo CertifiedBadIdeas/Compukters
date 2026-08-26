@@ -102,12 +102,9 @@ internal class FakeWorkerProcessFactory(
     processes: List<FakeWorkerProcess>,
 ) : WorkerProcessFactory {
     private val available = ArrayDeque(processes)
-    val starts = mutableListOf<WorkerLaunch>()
+    val starts = mutableListOf<ru.lazyhat.compukters.worker.process.WorkerLaunch>()
 
-    override fun start(
-        payload: PublishedWorkerPayload,
-        launch: WorkerLaunch,
-    ): WorkerProcess {
+    override fun start(launch: ru.lazyhat.compukters.worker.process.WorkerLaunch): WorkerProcess {
         starts += launch
         return available.removeFirst()
     }

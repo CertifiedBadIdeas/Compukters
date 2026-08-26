@@ -24,12 +24,10 @@ import ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerLaunch
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerMeasurementReport
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerMetrics
-import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadFile
-import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadManifest
+import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadLoader
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
-import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
@@ -64,7 +62,7 @@ class WorkerMeasurementTest {
                 limits.stderrBytes,
             )
         val started = System.nanoTime()
-        val process = JdkWorkerProcessFactory().start(payload, launch)
+        val process = JdkWorkerProcessFactory().start(launch.processLaunch(payload))
         try {
             assertIs<WorkerHandshake>(read(process.readFrame(deadline())!!, limits))
             val startupMillis = elapsedMillis(started)
@@ -81,7 +79,7 @@ class WorkerMeasurementTest {
 
             val report =
                 WorkerMeasurementReport(
-                    payloadBytes = payload.manifest.files.sumOf(WorkerPayloadFile::bytes),
+                    payloadBytes = payload.manifest.files.sumOf { file -> file.bytes },
                     payloadSha256 = payload.manifest.payloadHash.hex(),
                     coldStartupMillis = startupMillis,
                     firstCompilationMillis = firstMillis,
@@ -143,28 +141,4 @@ class WorkerMeasurementTest {
     private fun elapsedMillis(started: Long) = (System.nanoTime() - started).coerceAtLeast(0) / 1_000_000
 }
 
-private fun measurementPayload(root: Path): PublishedWorkerPayload {
-    val lines = Files.readAllLines(root.resolve("worker.payload"))
-    val properties = lines.filterNot { it.startsWith("file=") }.associate { it.substringBefore('=') to it.substringAfter('=') }
-    val files =
-        lines.filter { it.startsWith("file=") }.map { line ->
-            val fields = line.removePrefix("file=").split('\t')
-            WorkerPayloadFile(fields[0], fields[1].toLong(), Hash256.of(fields[2].measurementHex()))
-        }
-    val identity =
-        WorkerIdentity(
-            properties.getValue("compiler"),
-            properties.getValue("language"),
-            properties.getValue("codegenAbi").toUInt(),
-            properties.getValue("artifactWriter").toUInt(),
-            Hash256.of(properties.getValue("payloadSha256").measurementHex()),
-            Hash256.zero(),
-        )
-    return PublishedWorkerPayload(
-        root,
-        WorkerPayloadManifest(identity, properties.getValue("mainClass"), files, identity.payloadHash),
-        files.map { root.resolve(it.path) },
-    )
-}
-
-private fun String.measurementHex() = ByteArray(length / 2) { substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+private fun measurementPayload(root: Path): PublishedWorkerPayload = WorkerPayloadLoader.load(root)
