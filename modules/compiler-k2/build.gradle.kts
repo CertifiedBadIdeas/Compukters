@@ -35,6 +35,7 @@ dependencies {
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlin.compiler.embeddable)
     implementation(libs.kotlin.scripting.compiler.embeddable)
+    testImplementation(projects.ideCore)
     testImplementation(kotlin("test"))
 }
 
