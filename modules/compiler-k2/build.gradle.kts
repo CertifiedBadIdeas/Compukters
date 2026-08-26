@@ -308,6 +308,7 @@ val generateShellArtifact = tasks.register<Test>("generateShellArtifact") {
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("*checked in shell compiles deterministically*")
     inputs.file(rootProject.file("system/programs/shell.kt"))
+    inputs.file(rootProject.file("system/programs/shell/Lexer.kt"))
     inputs.file(workerJar)
     outputs.file(shellArtifact)
     doFirst {

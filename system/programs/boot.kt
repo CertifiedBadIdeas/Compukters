@@ -16,21 +16,23 @@
  * limitations under the License.
  */
 
+import compukter.io.Stderr
 import compukter.process.Process
 import compukter.process.ProcessFailureReason
 import compukter.process.ProcessResult
-import compukter.terminal.Terminal
 
 fun main() {
-    when (val result = Process.run("/rom/shell")) {
-        is ProcessResult.Exited -> {
-            if (result.code != 0) Terminal.write("boot failed: shell exited with an error\n")
-        }
+    val diagnostic = bootDiagnostic(Process.run("/rom/shell"))
+    if (diagnostic != "") Stderr.write("boot failed: " + diagnostic + "\n")
+}
 
-        is ProcessResult.Failed -> {
-            Terminal.write("boot failed: " + processFailure(result.reason, result.diagnostic) + "\n")
-        }
+private fun bootDiagnostic(result: ProcessResult): String {
+    if (result is ProcessResult.Exited) {
+        if (result.code == 0) return ""
+        return "shell exited with an error"
     }
+    if (result is ProcessResult.Failed) return processFailure(result.reason, result.diagnostic)
+    return "shell failed"
 }
 
 private fun processFailure(

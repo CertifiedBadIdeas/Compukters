@@ -19,22 +19,23 @@
 package compukter.system.edit
 
 import compukter.filesystem.FileSystem
+import compukter.io.Stderr
 import compukter.terminal.Terminal
 
 fun main(args: Array<String>) {
-    if (args.size != 1) {
-        Terminal.write("usage: edit <path>\n")
+    val argumentError = editError(args)
+    if (argumentError != "") {
+        Stderr.write(argumentError + "\n")
         return
     }
-    val commandLine = args[0]
-    val path = if (commandLine[0] == '/') commandLine else "/home/" + commandLine
+    val path = editPath(args)
     val kind = FileSystem.stat(path)
     if (kind == 2) {
-        Terminal.write("edit: is a directory: " + path + "\n")
+        Stderr.write("edit: is a directory: " + path + "\n")
         return
     }
     if (kind != 1 && kind != 0 - 2) {
-        Terminal.write("edit: " + editFileSystemError(kind) + "\n")
+        Stderr.write("edit: " + editFileSystemError(kind) + "\n")
         return
     }
 
@@ -42,7 +43,7 @@ fun main(args: Array<String>) {
     val buffer = CharArray(4096)
     var state = editInsertDocument(buffer, editEmpty(buffer), source)
     if (state < 0) {
-        Terminal.write("edit: file exceeds 4096 UTF-16 units\n")
+        Stderr.write("edit: file exceeds 4096 UTF-16 units\n")
         return
     }
     var dirty = editContainsCrLf(source)
@@ -130,6 +131,13 @@ fun main(args: Array<String>) {
         }
         Terminal.finishEvent()
     }
+}
+
+fun editError(args: Array<String>): String = if (args.size == 1) "" else "usage: edit <path>"
+
+fun editPath(args: Array<String>): String {
+    val path = args[0]
+    return if (path != "" && path[0] == '/') path else "/home/" + path
 }
 
 fun editEmpty(buffer: CharArray): Int = editState(0, buffer.size)

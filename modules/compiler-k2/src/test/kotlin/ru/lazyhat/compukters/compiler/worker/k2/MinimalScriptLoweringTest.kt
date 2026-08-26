@@ -18,14 +18,15 @@
 
 package ru.lazyhat.compukters.compiler.worker.k2
 
+import compukter.process.ProcessFailureReason
+import compukter.process.ProcessResult
 import compukter.system.kotlinc.kotlincError
 import compukter.system.kotlinc.kotlincOutput
 import compukter.system.kotlinc.kotlincSource
 import compukter.system.shell.LexResult
 import compukter.system.shell.lex
-import compukter.system.shell.shellArgumentError
-import compukter.system.shell.shellArguments
-import compukter.system.shell.shellCommand
+import compukter.system.shell.shellFallbackPath
+import compukter.system.shell.shellProcessDiagnostic
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
@@ -99,19 +100,33 @@ class MinimalScriptLoweringTest {
     }
 
     @Test
-    fun `shell separates one executable name from structured arguments`() {
-        assertEquals("kotlinc", shellCommand("kotlinc foo.kt -o hello"))
-        assertContentEquals(arrayOf("foo.kt", "-o", "hello"), shellArguments("kotlinc foo.kt -o hello"))
-        assertEquals("hello", shellCommand("hello"))
-        assertContentEquals(emptyArray(), shellArguments("hello"))
-        assertEquals("/rom/hello", shellCommand("/rom/hello raw tail"))
-        assertContentEquals(arrayOf("raw", "tail"), shellArguments("/rom/hello raw tail"))
-        assertContentEquals(arrayOf("one", "two"), shellArguments("tool   one  two"))
-        assertContentEquals(emptyArray(), shellArguments(""))
-        assertEquals("", shellArgumentError("tool a b"))
+    fun `shell falls back to rom only for a missing bare home command`() {
         assertEquals(
-            "too many arguments (maximum 16)",
-            shellArgumentError("tool 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17"),
+            "/rom/hello",
+            shellFallbackPath("hello", ProcessResult.Failed(ProcessFailureReason.NOT_FOUND, "")),
+        )
+        assertEquals(
+            "",
+            shellFallbackPath("hello", ProcessResult.Failed(ProcessFailureReason.ACCESS_DENIED, "denied")),
+        )
+        assertEquals("", shellFallbackPath("hello", ProcessResult.Exited(0)))
+        assertEquals(
+            "",
+            shellFallbackPath("/home/hello", ProcessResult.Failed(ProcessFailureReason.NOT_FOUND, "")),
+        )
+    }
+
+    @Test
+    fun `shell reports typed process completion as one bounded diagnostic`() {
+        assertEquals("", shellProcessDiagnostic(ProcessResult.Exited(0), "/home/tool"))
+        assertEquals("/home/tool: exited with an error", shellProcessDiagnostic(ProcessResult.Exited(7), "/home/tool"))
+        assertEquals(
+            "worker detail",
+            shellProcessDiagnostic(ProcessResult.Failed(ProcessFailureReason.HOST_FAILURE, "worker detail"), "/home/tool"),
+        )
+        assertEquals(
+            "not executable: /home/tool",
+            shellProcessDiagnostic(ProcessResult.Failed(ProcessFailureReason.NOT_EXECUTABLE, ""), "/home/tool"),
         )
     }
 
@@ -791,11 +806,18 @@ class MinimalScriptLoweringTest {
     fun `checked in shell compiles deterministically`() =
         withAdapter { adapter ->
             val source = Path.of("../..", "system/programs/shell.kt").readText()
-            val first = adapter.compile(request("system/programs/shell.kt" to source))
-            val second = adapter.compile(request("system/programs/shell.kt" to source))
+            val lexer = Path.of("../..", "system/programs/shell/Lexer.kt").readText()
+            val sources =
+                arrayOf(
+                    "system/programs/shell.kt" to source,
+                    "system/programs/shell/Lexer.kt" to lexer,
+                )
+            val first = adapter.compile(request(*sources))
+            val second = adapter.compile(request(*sources))
 
             val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertOrdinaryEntry(artifact)
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             System.getProperty("compukters.shell.artifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
@@ -811,6 +833,7 @@ class MinimalScriptLoweringTest {
 
             val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertOrdinaryEntry(artifact)
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             System.getProperty("compukters.boot.artifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
@@ -826,6 +849,7 @@ class MinimalScriptLoweringTest {
 
             val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertOrdinaryEntry(artifact)
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             System.getProperty("compukters.kotlinc.artifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
@@ -841,6 +865,7 @@ class MinimalScriptLoweringTest {
 
             val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertOrdinaryEntry(artifact)
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             System.getProperty("compukters.edit.artifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
@@ -1013,6 +1038,12 @@ private fun applicationCodeOpcodes(artifact: ByteArray): List<Int> =
             }
         }
     }
+
+private fun assertOrdinaryEntry(artifact: ByteArray) {
+    val entryFunction = artifact.u32(44)
+    val flags = indexedSectionRecords(artifact, 0x0106)[entryFunction].u32(12)
+    assertEquals(0, flags and 1, "checked-in program entry must be an ordinary Kotlin function")
+}
 
 private fun indexedSectionRecords(
     artifact: ByteArray,

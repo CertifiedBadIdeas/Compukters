@@ -215,9 +215,7 @@ private class SourceDeclarationCollector : IrVisitorVoid() {
     }
 
     override fun visitClass(declaration: IrClass) {
-        if (declaration.startOffset >= 0 && declaration.parent is org.jetbrains.kotlin.ir.declarations.IrFile) {
-            classes += declaration
-        }
+        if (declaration.startOffset >= 0) classes += declaration
         super.visitClass(declaration)
     }
 }

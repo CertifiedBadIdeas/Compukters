@@ -21,7 +21,7 @@
 package compukter.compiler
 
 object Compiler {
-    suspend fun compile(
+    fun compile(
         source: String,
         output: String,
     ): Int = 0

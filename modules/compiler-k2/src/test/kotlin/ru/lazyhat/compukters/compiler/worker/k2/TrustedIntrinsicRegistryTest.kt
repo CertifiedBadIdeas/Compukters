@@ -127,7 +127,7 @@ class TrustedIntrinsicRegistryTest {
     }
 
     @Test
-    fun `compiler provider requires trusted bundle and exact async and sync signatures`() {
+    fun `compiler provider requires trusted bundle and exact vm-blocking and sync signatures`() {
         fun resolve(
             name: String,
             suspending: Boolean,
@@ -143,7 +143,7 @@ class TrustedIntrinsicRegistryTest {
             TrustedIntrinsic.CapabilityOperation(compiler, 0u, BlockingMode.VM_TASK),
             resolve(
                 "compukter.compiler.Compiler.compile",
-                suspending = true,
+                suspending = false,
                 parameters = listOf(TrustedValueType.STRING, TrustedValueType.STRING),
                 result = TrustedValueType.INT,
             ),
@@ -160,7 +160,7 @@ class TrustedIntrinsicRegistryTest {
         assertNull(
             resolve(
                 "compukter.compiler.Compiler.compile",
-                suspending = true,
+                suspending = false,
                 parameters = listOf(TrustedValueType.STRING, TrustedValueType.STRING),
                 result = TrustedValueType.INT,
                 bundle = null,
@@ -169,7 +169,7 @@ class TrustedIntrinsicRegistryTest {
         assertNull(
             resolve(
                 "compukter.compiler.Other.compile",
-                suspending = true,
+                suspending = false,
                 parameters = listOf(TrustedValueType.STRING, TrustedValueType.STRING),
                 result = TrustedValueType.INT,
             ),
@@ -177,7 +177,7 @@ class TrustedIntrinsicRegistryTest {
         assertNull(
             resolve(
                 "compukter.compiler.Compiler.compile",
-                suspending = false,
+                suspending = true,
                 parameters = listOf(TrustedValueType.STRING, TrustedValueType.STRING),
                 result = TrustedValueType.INT,
             ),
@@ -193,7 +193,7 @@ class TrustedIntrinsicRegistryTest {
         assertNull(
             resolve(
                 "compukter.compiler.Compiler.compile",
-                suspending = true,
+                suspending = false,
                 parameters = listOf(TrustedValueType.STRING),
                 result = TrustedValueType.INT,
             ),

@@ -23,6 +23,16 @@ import kotlin.test.assertEquals
 
 class EditProgramTest {
     @Test
+    fun `command arguments require exactly one resolved path`() {
+        assertEquals("usage: edit <path>", editError(emptyArray()))
+        assertEquals("usage: edit <path>", editError(arrayOf("one.kt", "two.kt")))
+        assertEquals("", editError(arrayOf("demo.kt")))
+        assertEquals("/home/demo.kt", editPath(arrayOf("demo.kt")))
+        assertEquals("/src/demo.kt", editPath(arrayOf("/src/demo.kt")))
+        assertEquals("/home/", editPath(arrayOf("")))
+    }
+
+    @Test
     fun `gap movement and deletion preserve supplementary scalars`() {
         val buffer = CharArray(16)
         var state = editEmpty(buffer)
