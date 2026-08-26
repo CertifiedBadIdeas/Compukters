@@ -57,6 +57,7 @@ import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.isNothing
 import org.jetbrains.kotlin.ir.util.constructors
 import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
@@ -147,9 +148,42 @@ internal object KotlinProjectLowering {
         session: CompilationSession,
     ): Artifact {
         val guestTypes = GuestTypeRegistry(pluginContext)
-        val userFunctions =
+        val playerFunctions =
             functions
+                .filter { it.parent is IrFile }
                 .filterNot { session.trustedApiIdentity(it.file.fileEntry.name) != null }
+        val processFacadeNames = setOf("compukter.process.Process.run", "compukter.process.Process.exit")
+        val usesProcessFacade =
+            playerFunctions.any { function ->
+                var used = false
+                function.accept(
+                    object : IrVisitorVoid() {
+                        override fun visitElement(element: IrElement) {
+                            element.acceptChildren(this, null)
+                        }
+
+                        override fun visitCall(expression: IrCall) {
+                            if (expression.symbol.owner.fqNameWhenAvailable?.asString() in processFacadeNames) used = true
+                            super.visitCall(expression)
+                        }
+                    },
+                    null,
+                )
+                used
+            }
+        val processSupportNames =
+            processFacadeNames + setOf("compukter.process.failureReason", "compukter.process.encodeArgs")
+        val processSupportFunctions =
+            if (usesProcessFacade) {
+                functions.filter { function ->
+                    session.trustedApiIdentity(function.file.fileEntry.name) == TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID &&
+                        function.fqNameWhenAvailable?.asString() in processSupportNames
+                }
+            } else {
+                emptyList()
+            }
+        val userFunctions =
+            (playerFunctions + processSupportFunctions)
                 .sortedWith(
                     compareBy<IrSimpleFunction>(
                         { if (it === entry) 0 else 1 },
@@ -194,7 +228,7 @@ internal object KotlinProjectLowering {
             stringArrayUsage.used ||
                 userFunctions.any { function ->
                     guestTypes.isStringArray(function.returnType) ||
-                        function.parameters.any { parameter -> guestTypes.isStringArray(parameter.type) }
+                        loweredParameters(function, session).any { parameter -> guestTypes.isStringArray(parameter.type) }
                 }
         val metadataValues =
             (
@@ -251,7 +285,7 @@ internal object KotlinProjectLowering {
                 nullable = false,
                 type = TypeRef.Local(TypeId.of((userFunctions.size + constructorClasses.size + userClasses.size).toUInt())),
             )
-        userFunctions.forEach { validateFunction(it, pluginContext, guestTypes, classTypeIds) }
+        userFunctions.forEach { validateFunction(it, pluginContext, guestTypes, classTypeIds, session) }
         val classLayouts =
             buildClassLayouts(
                 userClasses,
@@ -321,7 +355,7 @@ internal object KotlinProjectLowering {
                     function,
                 )
             val parameterTypes =
-                function.parameters.map {
+                loweredParameters(function, session).map {
                     valueType(it.type, pluginContext, guestTypes, stringType, charArrayType, stringArrayType, classTypeIds, it)
                 }
             val flags = setOfNotNull(FunctionFlag.STATIC, FunctionFlag.SUSPENDING.takeIf { function.isSuspend })
@@ -395,7 +429,7 @@ internal object KotlinProjectLowering {
                             function,
                         ),
                     parameters =
-                        function.parameters.map {
+                        loweredParameters(function, session).map {
                             valueType(it.type, pluginContext, guestTypes, stringType, charArrayType, stringArrayType, classTypeIds, it)
                         },
                 )
@@ -554,6 +588,7 @@ internal object KotlinProjectLowering {
         pluginContext: IrPluginContext,
         guestTypes: GuestTypeRegistry,
         classTypeIds: Map<IrClassSymbol, TypeId>,
+        session: CompilationSession,
     ) {
         val supported =
             setOf(
@@ -565,11 +600,11 @@ internal object KotlinProjectLowering {
             )
 
         fun isSupported(type: IrType): Boolean =
-            type in supported ||
+            type in supported || type.isNothing() ||
                 type.isExactClass(pluginContext.irBuiltIns.charArray) ||
                 guestTypes.isStringArray(type) ||
                 classTypeIds.containsKey((type as? IrSimpleType)?.classifier)
-        if (function.parameters.any { !isSupported(it.type) } ||
+        if (loweredParameters(function, session).any { !isSupported(it.type) } ||
             !isSupported(function.returnType)
         ) {
             throw UnsupportedKotlinIr(function, "unsupported function signature")
@@ -608,7 +643,9 @@ internal object KotlinProjectLowering {
             }
 
             else -> {
-                if (type.isExactClass(pluginContext.irBuiltIns.charArray)) {
+                if (type.isNothing()) {
+                    ValueType.Unit
+                } else if (type.isExactClass(pluginContext.irBuiltIns.charArray)) {
                     charArrayType
                 } else if (guestTypes.isStringArray(type)) {
                     stringArrayType
@@ -829,7 +866,9 @@ private class FunctionCompiler(
     private var currentBlock = 0
 
     fun compile(): CompiledFunction {
-        function.parameters.forEachIndexed { index, parameter -> values[parameter.symbol] = RegisterId.of(index.toUInt()) }
+        loweredParameters(function, session).forEachIndexed { index, parameter ->
+            values[parameter.symbol] = RegisterId.of(index.toUInt())
+        }
         entryEnumInitializers.forEach { entry ->
             prepareAllocationBlock()
             val value = allocate(ValueType.Ref(nullable = false, type = entry.ownerType))
@@ -865,9 +904,13 @@ private class FunctionCompiler(
             }
 
             is IrReturn -> {
-                val destination =
-                    if (function.returnType == unitType) Destination.Unit else Destination.Register(compileExpression(statement.value))
-                emit(Instruction.Return(destination))
+                if (function.returnType.isNothing()) {
+                    compileStatement(statement.value)
+                } else {
+                    val destination =
+                        if (function.returnType == unitType) Destination.Unit else Destination.Register(compileExpression(statement.value))
+                    emit(Instruction.Return(destination))
+                }
             }
 
             is IrWhen -> {
@@ -968,6 +1011,20 @@ private class FunctionCompiler(
                 emit(Instruction.NewArray(destination, (charArrayType as ValueType.Ref).type, length))
             }
         }
+        if (call.type == kotlinStringType &&
+            arguments.size == 3 &&
+            arguments[0].type.isExactClass(kotlinCharArrayClass) &&
+            arguments[1].type == intType &&
+            arguments[2].type == intType
+        ) {
+            val compiled = arguments.map(::compileExpression)
+            val end = allocate(ValueType.I32)
+            emit(Instruction.AddI32(end, compiled[1], compiled[2]))
+            prepareAllocationBlock()
+            return allocate(stringType).also { destination ->
+                emit(Instruction.StringFromCharArray(destination, compiled[0], compiled[1], end))
+            }
+        }
         val targetConstructor =
             constructorLayouts[call.symbol] ?: throw UnsupportedKotlinIr(call, "constructor is outside the project subset")
         val layout = targetConstructor.layout
@@ -1055,7 +1112,7 @@ private class FunctionCompiler(
                     .filter { (parameter, _) -> parameter.kind == IrParameterKind.Regular }
                     .map { (_, argument) -> compileExpression(requireNotNull(argument)) }
             val capability = requireNotNull(capabilityIds[intrinsic.capability])
-            val destination = destinationFor(call.type, call)
+            val destination = if (intrinsic.terminal) Destination.Unit else destinationFor(call.type, call)
             if (intrinsic.blocking == BlockingMode.VM_TASK) {
                 val resume = createBlock()
                 emit(
@@ -1071,6 +1128,7 @@ private class FunctionCompiler(
             } else {
                 emit(Instruction.CapabilityCallSync(destination, capability, intrinsic.operation, arguments))
             }
+            if (intrinsic.terminal) emit(Instruction.Unreachable)
             return (destination as? Destination.Register)?.id
         }
         compileCompareToPredicate(call, target.name.asString())?.let { return it }
@@ -1093,6 +1151,7 @@ private class FunctionCompiler(
         } else {
             emit(Instruction.Call(destination, FunctionRef.Local(targetId), arguments))
         }
+        if (target.returnType.isNothing()) emit(Instruction.Unreachable)
         return (destination as? Destination.Register)?.id
     }
 
@@ -1100,7 +1159,8 @@ private class FunctionCompiler(
         call: IrCall,
         target: IrSimpleFunction,
     ): List<IrExpression> =
-        target.parameters.mapIndexed { index, parameter ->
+        loweredParameters(target, session).map { parameter ->
+            val index = target.parameters.indexOf(parameter)
             call.arguments.getOrNull(index)
                 ?: parameter.defaultValue
                     ?.expression
@@ -1247,6 +1307,13 @@ private class FunctionCompiler(
             emit(Instruction.Const(falseRegister, requireNotNull(constantIds[Constant.Bool(false)])))
             return result(ValueType.Bool) { Instruction.Equal(ScalarValueType.BOOL, it, arguments[0], falseRegister) }
         }
+        if (arguments.size == 1 && argumentExpressions[0].type == intType && name == "unaryMinus") {
+            val zero = emitI32Constant(0, call)
+            return result(ValueType.I32) { Instruction.SubtractI32(it, zero, arguments[0]) }
+        }
+        if (arguments.size == 1 && argumentExpressions[0].type == intType && call.type == charType && name == "toChar") {
+            return result(ValueType.Char) { Instruction.Convert(it, arguments[0]) }
+        }
         comparison(call, name, argumentExpressions, arguments)?.let { return it }
         if (arguments.size == 1 && argumentExpressions[0].type == kotlinStringType && name == "<get-length>") {
             return result(ValueType.I32) { Instruction.StringLength(it, arguments[0]) }
@@ -1306,6 +1373,18 @@ private class FunctionCompiler(
         ) {
             prepareAllocationBlock()
             return result(stringType) { Instruction.StringFromCharArray(it, arguments[0], arguments[1], arguments[2]) }
+        }
+        if (arguments.size == 3 &&
+            call.type == kotlinStringType &&
+            argumentExpressions[0].type.isExactClass(kotlinCharArrayClass) &&
+            argumentExpressions[1].type == intType &&
+            argumentExpressions[2].type == intType &&
+            fqName == "kotlin.text.String"
+        ) {
+            val end = allocate(ValueType.I32)
+            emit(Instruction.AddI32(end, arguments[1], arguments[2]))
+            prepareAllocationBlock()
+            return result(stringType) { Instruction.StringFromCharArray(it, arguments[0], arguments[1], end) }
         }
         throw UnsupportedKotlinIr(call, "call target ${fqName.ifEmpty { name }} is outside the project subset")
     }
@@ -1408,7 +1487,11 @@ private class FunctionCompiler(
         expression.branches.forEachIndexed { index, branch ->
             val isElse = index == expression.branches.lastIndex && branch.condition.isTrueConstant()
             if (isElse) {
-                compileStatement(branch.result)
+                if (branch.result.isNoWhenBranchMatchedCall() && function.returnType == unitType) {
+                    emit(Instruction.Return(Destination.Unit))
+                } else {
+                    compileStatement(branch.result)
+                }
             } else {
                 val condition = compileExpression(branch.condition)
                 val body = createBlock()
@@ -1438,6 +1521,8 @@ private class FunctionCompiler(
             if (isElse) {
                 if (branch.result.isNoWhenBranchMatchedCall()) {
                     emitImpossibleWhenDefault(destination, resultType, branch.result)
+                } else if (branch.result.type.isNothing()) {
+                    compileStatement(branch.result)
                 } else {
                     emit(Instruction.Move(destination, compileExpression(branch.result)))
                 }
@@ -1447,8 +1532,12 @@ private class FunctionCompiler(
                 val otherwise = createBlock()
                 emit(Instruction.Branch(condition, blockId(body), blockId(otherwise)))
                 currentBlock = body
-                emit(Instruction.Move(destination, compileExpression(branch.result)))
-                exits += currentBlock
+                if (branch.result.type.isNothing()) {
+                    compileStatement(branch.result)
+                } else {
+                    emit(Instruction.Move(destination, compileExpression(branch.result)))
+                    exits += currentBlock
+                }
                 currentBlock = otherwise
             }
         }
@@ -1522,7 +1611,9 @@ private class FunctionCompiler(
             }
 
             else -> {
-                if (type.isExactClass(kotlinCharArrayClass)) {
+                if (type.isNothing()) {
+                    ValueType.Unit
+                } else if (type.isExactClass(kotlinCharArrayClass)) {
                     charArrayType
                 } else if (guestTypes.isStringArray(type)) {
                     stringArrayType
@@ -1542,7 +1633,8 @@ private class FunctionCompiler(
     private fun destinationFor(
         type: IrType,
         element: IrElement,
-    ): Destination = if (type == unitType) Destination.Unit else Destination.Register(allocate(valueType(type, element)))
+    ): Destination =
+        if (type == unitType || type.isNothing()) Destination.Unit else Destination.Register(allocate(valueType(type, element)))
 
     private fun scalarType(
         type: IrType,
@@ -1566,7 +1658,7 @@ private class FunctionCompiler(
         }
 
     private fun allocate(type: ValueType): RegisterId =
-        RegisterId.of((function.parameters.size + localTypes.size).toUInt()).also { localTypes += type }
+        RegisterId.of((loweredParameters(function, session).size + localTypes.size).toUInt()).also { localTypes += type }
 
     private fun emit(instruction: Instruction) {
         blocks[currentBlock].instructions += instruction
@@ -1597,6 +1689,7 @@ private class FunctionCompiler(
             this is Instruction.Branch ||
             this is Instruction.Return ||
             this is Instruction.Throw ||
+            this is Instruction.Unreachable ||
             this is Instruction.CallSuspend ||
             this is Instruction.CapabilityCallAsync
 
@@ -1607,6 +1700,16 @@ private class FunctionCompiler(
 }
 
 private fun IrType.isExactClass(symbol: IrClassSymbol): Boolean = (this as? IrSimpleType)?.classifier == symbol
+
+private fun loweredParameters(
+    function: IrSimpleFunction,
+    session: CompilationSession,
+) =
+    if (session.trustedApiIdentity(function.file.fileEntry.name) == TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID) {
+        function.parameters.filter { it.kind == IrParameterKind.Regular }
+    } else {
+        function.parameters
+    }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private class LiteralCollector : IrVisitorVoid() {
@@ -1693,7 +1796,7 @@ private fun resolveTrustedOperation(
             intType -> TrustedValueType.INT
             booleanType -> TrustedValueType.BOOL
             charType -> TrustedValueType.CHAR
-            else -> TrustedValueType.OTHER
+            else -> if (isNothing()) TrustedValueType.NOTHING else TrustedValueType.OTHER
         }
     val identity =
         TrustedCallableIdentity(

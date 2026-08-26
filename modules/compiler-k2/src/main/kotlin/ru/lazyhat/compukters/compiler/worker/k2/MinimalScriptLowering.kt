@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.compiler.worker.k2
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrClass
+import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.IrBlockBody
@@ -63,7 +64,7 @@ internal object MinimalScriptLowering {
         val declarations = SourceDeclarationCollector().also { module.accept(it, null) }
         val functions = declarations.functions
         val guestTypes = GuestTypeRegistry(pluginContext)
-        val namedMain = functions.filter { it.name.asString() == "main" }
+        val namedMain = functions.filter { it.name.asString() == "main" && it.parent is IrFile }
         if (namedMain.isNotEmpty()) {
             val validMain =
                 namedMain.filter { function ->
@@ -209,9 +210,7 @@ private class SourceDeclarationCollector : IrVisitorVoid() {
     }
 
     override fun visitSimpleFunction(declaration: IrSimpleFunction) {
-        if (declaration.startOffset >= 0 && declaration.parent is org.jetbrains.kotlin.ir.declarations.IrFile) {
-            functions += declaration
-        }
+        if (declaration.startOffset >= 0) functions += declaration
         super.visitSimpleFunction(declaration)
     }
 

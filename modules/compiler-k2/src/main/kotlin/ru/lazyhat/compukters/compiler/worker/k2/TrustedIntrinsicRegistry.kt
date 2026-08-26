@@ -24,6 +24,7 @@ internal enum class TrustedValueType {
     INT,
     BOOL,
     CHAR,
+    NOTHING,
     OTHER,
 }
 
@@ -56,6 +57,7 @@ internal sealed interface TrustedIntrinsic {
         val capability: TrustedCapabilityIdentity,
         val operation: UInt,
         val blocking: BlockingMode,
+        val terminal: Boolean = false,
     ) : TrustedIntrinsic
 }
 
@@ -71,7 +73,7 @@ internal data class TrustedApiSourceBundle(
 
 internal object TrustedIntrinsicRegistry {
     const val TERMINAL_BUNDLE_ID = "compukter.terminal-api@1"
-    const val PROCESS_BUNDLE_ID = "compukter.process-api@1"
+    const val PROCESS_BUNDLE_ID = "compukter.process-api@2"
     const val FILESYSTEM_BUNDLE_ID = "compukter.filesystem-api@1"
     const val COMPILER_BUNDLE_ID = "compukter.compiler-api@1"
     val CORE_SOURCE_BUNDLES =
@@ -98,7 +100,7 @@ internal object TrustedIntrinsicRegistry {
             ),
         )
     val TERMINAL_CAPABILITY = TrustedCapabilityIdentity("compukter", "terminal", 2u.toUShort(), 0u.toUShort(), 14u)
-    val PROCESS_CAPABILITY = TrustedCapabilityIdentity("compukter", "process", 1u.toUShort(), 1u.toUShort(), 3u)
+    val PROCESS_CAPABILITY = TrustedCapabilityIdentity("compukter", "process", 2u.toUShort(), 0u.toUShort(), 3u)
     val FILESYSTEM_CAPABILITY = TrustedCapabilityIdentity("compukter", "filesystem", 1u.toUShort(), 0u.toUShort(), 7u)
     val COMPILER_CAPABILITY = TrustedCapabilityIdentity("compukter", "compiler", 1u.toUShort(), 0u.toUShort(), 2u)
 
@@ -196,32 +198,40 @@ private object FilesystemIntrinsicProvider : TrustedIntrinsicProvider {
 
 private object ProcessIntrinsicProvider : TrustedIntrinsicProvider {
     override fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic? {
-        if (callable.bundleIdentity != TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID) return null
+        if (callable.bundleIdentity != TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID || callable.suspending) return null
         return when (callable.name) {
-            "compukter.process.Process.run" -> {
-                val operation =
-                    when (callable.parameters) {
-                        listOf(TrustedValueType.STRING, TrustedValueType.INT) -> 0u
-                        listOf(TrustedValueType.STRING, TrustedValueType.INT, TrustedValueType.STRING) -> 1u
-                        else -> return null
-                    }
+            "compukter.process.ProcessBindings.run" -> {
                 TrustedIntrinsic
                     .CapabilityOperation(
                         TrustedIntrinsicRegistry.PROCESS_CAPABILITY,
-                        operation,
+                        0u,
                         blocking = BlockingMode.VM_TASK,
-                    ).takeIf { callable.suspending && callable.result == TrustedValueType.INT }
+                    ).takeIf {
+                        callable.parameters == listOf(TrustedValueType.STRING, TrustedValueType.STRING) &&
+                            callable.result == TrustedValueType.INT
+                    }
             }
 
-            "compukter.process.Process.commandLine" -> {
+            "compukter.process.ProcessBindings.takeFailureDiagnostic" -> {
                 sync(
-                    2u,
+                    1u,
                     callable,
                     emptyList(),
                     TrustedValueType.STRING,
                     TrustedIntrinsicRegistry.PROCESS_CAPABILITY,
                 )
             }
+
+            "compukter.process.ProcessBindings.exit" ->
+                TrustedIntrinsic
+                    .CapabilityOperation(
+                        TrustedIntrinsicRegistry.PROCESS_CAPABILITY,
+                        2u,
+                        BlockingMode.NONE,
+                        terminal = true,
+                    ).takeIf {
+                        callable.parameters == listOf(TrustedValueType.INT) && callable.result == TrustedValueType.NOTHING
+                    }
 
             else -> {
                 null

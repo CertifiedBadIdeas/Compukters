@@ -19,10 +19,36 @@
 package ru.lazyhat.compukters.compiler.worker.k2
 
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class TrustedIntrinsicRegistryTest {
+    @Test
+    fun `process v2 encoder preserves exact length delimited utf16 arguments`() {
+        val method =
+            Class.forName("compukter.process.ProcessKt")
+                .getDeclaredMethod("encodeArgs", Array<String>::class.java)
+                .also { it.isAccessible = true }
+        val encoded = method.invoke(null, arrayOf("a\u0000😀", "")) as String
+
+        assertContentEquals(
+            charArrayOf(
+                '\u0002',
+                '\u0000',
+                '\u0004',
+                '\u0000',
+                'a',
+                '\u0000',
+                '\uD83D',
+                '\uDE00',
+                '\u0000',
+                '\u0000',
+            ),
+            encoded.toCharArray(),
+        )
+    }
+
     @Test
     fun `compiler provider requires trusted bundle and exact async and sync signatures`() {
         fun resolve(
@@ -174,17 +200,17 @@ class TrustedIntrinsicRegistryTest {
     }
 
     @Test
-    fun `process provider preserves ABI 1_0 and requires exact ABI 1_1 signatures`() {
+    fun `process v2 provider exposes only exact private binding signatures`() {
         val trustedRun =
             TrustedCallableIdentity(
                 bundleIdentity = TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID,
-                name = "compukter.process.Process.run",
-                suspending = true,
-                parameters = listOf(TrustedValueType.STRING, TrustedValueType.INT),
+                name = "compukter.process.ProcessBindings.run",
+                suspending = false,
+                parameters = listOf(TrustedValueType.STRING, TrustedValueType.STRING),
                 result = TrustedValueType.INT,
             )
 
-        val process = TrustedCapabilityIdentity("compukter", "process", 1u.toUShort(), 1u.toUShort(), 3u)
+        val process = TrustedCapabilityIdentity("compukter", "process", 2u.toUShort(), 0u.toUShort(), 3u)
         assertEquals(
             TrustedIntrinsic.CapabilityOperation(
                 capability = process,
@@ -194,33 +220,33 @@ class TrustedIntrinsicRegistryTest {
             TrustedIntrinsicRegistry.resolve(trustedRun),
         )
         assertEquals(
-            TrustedIntrinsic.CapabilityOperation(process, 1u, BlockingMode.VM_TASK),
-            TrustedIntrinsicRegistry.resolve(
-                trustedRun.copy(parameters = listOf(TrustedValueType.STRING, TrustedValueType.INT, TrustedValueType.STRING)),
-            ),
-        )
-        assertEquals(
-            TrustedIntrinsic.CapabilityOperation(process, 2u, BlockingMode.NONE),
+            TrustedIntrinsic.CapabilityOperation(process, 1u, BlockingMode.NONE),
             TrustedIntrinsicRegistry.resolve(
                 trustedRun.copy(
-                    name = "compukter.process.Process.commandLine",
-                    suspending = false,
+                    name = "compukter.process.ProcessBindings.takeFailureDiagnostic",
                     parameters = emptyList(),
                     result = TrustedValueType.STRING,
                 ),
             ),
         )
+        assertEquals(
+            TrustedIntrinsic.CapabilityOperation(process, 2u, BlockingMode.NONE, terminal = true),
+            TrustedIntrinsicRegistry.resolve(
+                trustedRun.copy(
+                    name = "compukter.process.ProcessBindings.exit",
+                    parameters = listOf(TrustedValueType.INT),
+                    result = TrustedValueType.NOTHING,
+                ),
+            ),
+        )
         assertNull(TrustedIntrinsicRegistry.resolve(trustedRun.copy(bundleIdentity = null)))
-        assertNull(TrustedIntrinsicRegistry.resolve(trustedRun.copy(suspending = false)))
+        assertNull(TrustedIntrinsicRegistry.resolve(trustedRun.copy(suspending = true)))
         assertNull(TrustedIntrinsicRegistry.resolve(trustedRun.copy(parameters = listOf(TrustedValueType.STRING))))
         assertNull(TrustedIntrinsicRegistry.resolve(trustedRun.copy(result = TrustedValueType.UNIT)))
         assertNull(
             TrustedIntrinsicRegistry.resolve(
                 trustedRun.copy(
-                    name = "compukter.process.Process.commandLine",
-                    suspending = true,
-                    parameters = emptyList(),
-                    result = TrustedValueType.STRING,
+                    name = "compukter.process.Process.run",
                 ),
             ),
         )

@@ -20,9 +20,11 @@ package compukter.system.shell
 
 import compukter.filesystem.FileSystem
 import compukter.process.Process
+import compukter.process.ProcessFailureReason
+import compukter.process.ProcessResult
 import compukter.terminal.Terminal
 
-suspend fun main() {
+fun main() {
     var line = ""
     Terminal.write("> ")
     while (true) {
@@ -68,21 +70,23 @@ suspend fun main() {
                         }
 
                         else -> {
-                            val command = shellCommand(line)
-                            val commandLine = shellCommandLine(line)
-                            var path = command
-                            var result = 0
-                            if (command[0] == '/') {
-                                result = if (commandLine == "") Process.run(path, 15) else Process.run(path, 15, commandLine)
+                            val argumentError = shellArgumentError(line)
+                            if (argumentError != "") {
+                                Terminal.write(argumentError + "\n")
                             } else {
-                                path = "/home/" + command
-                                result = if (commandLine == "") Process.run(path, 15) else Process.run(path, 15, commandLine)
-                                if (result == 5) {
-                                    path = "/rom/" + command
-                                    result = if (commandLine == "") Process.run(path, 15) else Process.run(path, 15, commandLine)
+                                val command = shellCommand(line)
+                                val arguments = shellArguments(line)
+                                val absolute = command[0] == '/'
+                                var path = if (absolute) command else "/home/" + command
+                                var result = Process.run(path, arguments)
+                                if (!absolute) {
+                                    if (result is ProcessResult.Failed && result.reason == ProcessFailureReason.NOT_FOUND) {
+                                        path = "/rom/" + command
+                                        result = Process.run(path, arguments)
+                                    }
                                 }
+                                writeProcessResult(result, path)
                             }
-                            if (result != 0) writeProcessFailure(result, path)
                         }
                     }
                 }
@@ -106,10 +110,37 @@ fun shellCommand(line: String): String {
     return line.substring(0, end)
 }
 
-fun shellCommandLine(line: String): String {
-    var end = 0
-    while (end < line.length && line[end] != ' ') end = end + 1
-    return if (end == line.length) "" else line.substring(end + 1, line.length)
+fun shellArguments(line: String): Array<String> {
+    val words = arrayOf("", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "")
+    var count = 0
+    var index = 0
+    while (index < line.length) {
+        while (index < line.length && line[index] == ' ') index = index + 1
+        val start = index
+        while (index < line.length && line[index] != ' ') index = index + 1
+        if (start != index) {
+            if (count > 0 && count <= words.size) words[count - 1] = line.substring(start, index)
+            count = count + 1
+        }
+    }
+    if (count == 0) return emptyArray()
+    val argumentCount = if (count > words.size + 1) words.size else count - 1
+    return words.copyOfRange(0, argumentCount)
+}
+
+fun shellArgumentError(line: String): String =
+    if (shellWordCount(line) > 17) "too many arguments (maximum 16)" else ""
+
+private fun shellWordCount(line: String): Int {
+    var count = 0
+    var index = 0
+    while (index < line.length) {
+        while (index < line.length && line[index] == ' ') index = index + 1
+        val start = index
+        while (index < line.length && line[index] != ' ') index = index + 1
+        if (start != index) count = count + 1
+    }
+    return count
 }
 
 private fun containsSpace(value: String): Boolean {
@@ -206,26 +237,34 @@ private fun eraseLastScalar(line: String): String {
     return line.substring(0, line.length - width)
 }
 
-private fun writeProcessFailure(
-    result: Int,
+private fun writeProcessResult(
+    result: ProcessResult,
     path: String,
 ) {
-    if (result == 1) Terminal.write("invalid child capabilities")
-    else if (result == 2) Terminal.write("process nesting limit reached")
-    else if (result == 3) Terminal.write("process start limit reached")
-    else if (result == 4) Terminal.write("invalid path: " + path)
-    else if (result == 5) Terminal.write("command not found: " + path)
-    else if (result == 6) Terminal.write("permission denied: " + path)
-    else if (result == 7) Terminal.write("not executable: " + path)
-    else if (result == 8) Terminal.write("invalid executable: " + path)
-    else if (result == 9) Terminal.write("incompatible program: " + path)
-    else if (result == 10) Terminal.write("failed to start: " + path)
-    else if (result == 11) Terminal.write("process allocation exhausted")
-    else if (result == 12) Terminal.write("process quota exceeded")
-    else if (result == 13) Terminal.write("program trapped: " + path)
-    else if (result == 14) Terminal.write("virtual machine fault")
-    else if (result == 15) Terminal.write("host capability failed")
-    else if (result == 16) Terminal.write("I/O error: " + path)
-    else Terminal.write("process failed: unknown status")
-    Terminal.write("\n")
+    if (result is ProcessResult.Exited) {
+        if (result.code == 0) return
+        Terminal.write(path + ": exited with an error\n")
+        return
+    }
+    if (result is ProcessResult.Failed) {
+        if (result.diagnostic != "") {
+            Terminal.write(result.diagnostic)
+            Terminal.write("\n")
+            return
+        }
+        when (result.reason) {
+            ProcessFailureReason.INVALID_PATH -> Terminal.write("invalid path: " + path)
+            ProcessFailureReason.NOT_FOUND -> Terminal.write("command not found: " + path)
+            ProcessFailureReason.ACCESS_DENIED -> Terminal.write("permission denied: " + path)
+            ProcessFailureReason.NOT_EXECUTABLE -> Terminal.write("not executable: " + path)
+            ProcessFailureReason.INVALID_PROGRAM -> Terminal.write("invalid executable: " + path)
+            ProcessFailureReason.INCOMPATIBLE -> Terminal.write("incompatible program: " + path)
+            ProcessFailureReason.LIMIT_EXCEEDED -> Terminal.write("process limit exceeded")
+            ProcessFailureReason.TRAPPED -> Terminal.write("program trapped: " + path)
+            ProcessFailureReason.VM_FAULT -> Terminal.write("virtual machine fault")
+            ProcessFailureReason.HOST_FAILURE -> Terminal.write("host capability failed")
+            ProcessFailureReason.IO_FAILURE -> Terminal.write("I/O error: " + path)
+        }
+        Terminal.write("\n")
+    }
 }

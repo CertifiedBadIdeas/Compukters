@@ -57,6 +57,12 @@ internal fun encodeInstruction(
             operands.writeRegister(instruction.destination)
         }
 
+        is Instruction.Convert -> {
+            opcode = 0x04u
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.source)
+        }
+
         is Instruction.AddI32 -> {
             opcode = 0x10u
             form = 1u
@@ -294,6 +300,10 @@ internal fun encodeInstruction(
             opcode = 0xe4u
             operands.writeRegister(instruction.exception)
         }
+
+        Instruction.Unreachable -> {
+            opcode = 0xffu
+        }
     }
 
     val operandBytes = operands.toByteArray()
@@ -369,6 +379,7 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
         is Instruction.Jump,
         is Instruction.Branch,
         is Instruction.Return,
+        Instruction.Unreachable,
         -> 1u
 
         is Instruction.MultiplyI32 -> 2u
@@ -379,6 +390,7 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
 
         is Instruction.ArrayLoad,
         is Instruction.ArrayStore,
+        is Instruction.Convert,
         is Instruction.ArrayLength,
         is Instruction.FieldGet,
         is Instruction.FieldSet,

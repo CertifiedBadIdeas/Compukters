@@ -17,17 +17,36 @@
  */
 
 import compukter.process.Process
+import compukter.process.ProcessFailureReason
+import compukter.process.ProcessResult
 import compukter.terminal.Terminal
 
-suspend fun main() {
-    val result = Process.run("/rom/shell", 15)
-    if (result != 0) Terminal.write("boot failed: " + processFailure(result) + "\n")
+fun main() {
+    when (val result = Process.run("/rom/shell")) {
+        is ProcessResult.Exited -> {
+            if (result.code != 0) Terminal.write("boot failed: shell exited with an error\n")
+        }
+
+        is ProcessResult.Failed -> {
+            Terminal.write("boot failed: " + processFailure(result.reason, result.diagnostic) + "\n")
+        }
+    }
 }
 
-private fun processFailure(result: Int): String {
-    if (result == 1) return "invalid child capabilities"
-    if (result == 8) return "invalid executable"
-    if (result == 9) return "incompatible program"
-    if (result == 10) return "failed to start"
-    return "process status"
+private fun processFailure(
+    reason: ProcessFailureReason,
+    diagnostic: String,
+): String {
+    if (diagnostic != "") return diagnostic
+    if (reason == ProcessFailureReason.INVALID_PATH) return "invalid path"
+    if (reason == ProcessFailureReason.NOT_FOUND) return "shell not found"
+    if (reason == ProcessFailureReason.ACCESS_DENIED) return "access denied"
+    if (reason == ProcessFailureReason.NOT_EXECUTABLE) return "shell is not executable"
+    if (reason == ProcessFailureReason.INVALID_PROGRAM) return "invalid executable"
+    if (reason == ProcessFailureReason.INCOMPATIBLE) return "incompatible program"
+    if (reason == ProcessFailureReason.LIMIT_EXCEEDED) return "process limit exceeded"
+    if (reason == ProcessFailureReason.TRAPPED) return "shell trapped"
+    if (reason == ProcessFailureReason.VM_FAULT) return "virtual machine fault"
+    if (reason == ProcessFailureReason.HOST_FAILURE) return "host failure"
+    return "I/O failure"
 }

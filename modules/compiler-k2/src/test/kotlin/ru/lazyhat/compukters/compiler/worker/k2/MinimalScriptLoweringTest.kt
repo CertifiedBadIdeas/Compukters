@@ -21,8 +21,9 @@ package ru.lazyhat.compukters.compiler.worker.k2
 import compukter.system.kotlinc.kotlincError
 import compukter.system.kotlinc.kotlincOutput
 import compukter.system.kotlinc.kotlincSource
+import compukter.system.shell.shellArgumentError
+import compukter.system.shell.shellArguments
 import compukter.system.shell.shellCommand
-import compukter.system.shell.shellCommandLine
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
@@ -70,34 +71,41 @@ import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
     @Test
-    fun `shell separates one executable name from its bounded raw tail`() {
+    fun `shell separates one executable name from structured arguments`() {
         assertEquals("kotlinc", shellCommand("kotlinc foo.kt -o hello"))
-        assertEquals("foo.kt -o hello", shellCommandLine("kotlinc foo.kt -o hello"))
+        assertContentEquals(arrayOf("foo.kt", "-o", "hello"), shellArguments("kotlinc foo.kt -o hello"))
         assertEquals("hello", shellCommand("hello"))
-        assertEquals("", shellCommandLine("hello"))
+        assertContentEquals(emptyArray(), shellArguments("hello"))
         assertEquals("/rom/hello", shellCommand("/rom/hello raw tail"))
-        assertEquals("raw tail", shellCommandLine("/rom/hello raw tail"))
+        assertContentEquals(arrayOf("raw", "tail"), shellArguments("/rom/hello raw tail"))
+        assertContentEquals(arrayOf("one", "two"), shellArguments("tool   one  two"))
+        assertContentEquals(emptyArray(), shellArguments(""))
+        assertEquals("", shellArgumentError("tool a b"))
+        assertEquals(
+            "too many arguments (maximum 16)",
+            shellArgumentError("tool 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17"),
+        )
     }
 
     @Test
     fun `kotlinc command line accepts one source and optional output`() {
-        assertEquals("usage: kotlinc <source.kt> [-o output]", kotlincError(""))
-        assertEquals("/home/foo.kt", kotlincSource("foo.kt"))
-        assertEquals("/home/foo", kotlincOutput("foo.kt"))
-        assertEquals("", kotlincError("foo.kt"))
-        assertEquals("/home/foo.kt", kotlincSource("foo.kt -o bin/hello"))
-        assertEquals("/home/bin/hello", kotlincOutput("foo.kt -o bin/hello"))
-        assertEquals("/src/foo.kt", kotlincSource("/src/foo.kt -o /bin/hello"))
-        assertEquals("/bin/hello", kotlincOutput("/src/foo.kt -o /bin/hello"))
+        assertEquals("usage: kotlinc <source.kt> [-o output]", kotlincError(emptyArray()))
+        assertEquals("/home/foo.kt", kotlincSource(arrayOf("foo.kt")))
+        assertEquals("/home/foo", kotlincOutput(arrayOf("foo.kt")))
+        assertEquals("", kotlincError(arrayOf("foo.kt")))
+        assertEquals("/home/foo.kt", kotlincSource(arrayOf("foo.kt", "-o", "bin/hello")))
+        assertEquals("/home/bin/hello", kotlincOutput(arrayOf("foo.kt", "-o", "bin/hello")))
+        assertEquals("/src/foo.kt", kotlincSource(arrayOf("/src/foo.kt", "-o", "/bin/hello")))
+        assertEquals("/bin/hello", kotlincOutput(arrayOf("/src/foo.kt", "-o", "/bin/hello")))
     }
 
     @Test
     fun `kotlinc command line rejects ambiguous or unsupported arguments`() {
-        assertTrue(kotlincError("foo.kt bar.kt").isNotEmpty())
-        assertTrue(kotlincError("foo.txt").contains(".kt"))
-        assertTrue(kotlincError("foo.kt -o").isNotEmpty())
-        assertTrue(kotlincError("foo.kt -o out -o other").contains("duplicate"))
-        assertTrue(kotlincError("-o out").isNotEmpty())
+        assertTrue(kotlincError(arrayOf("foo.kt", "bar.kt")).isNotEmpty())
+        assertTrue(kotlincError(arrayOf("foo.txt")).contains(".kt"))
+        assertTrue(kotlincError(arrayOf("foo.kt", "-o")).isNotEmpty())
+        assertTrue(kotlincError(arrayOf("foo.kt", "-o", "out", "-o", "other")).contains("duplicate"))
+        assertTrue(kotlincError(arrayOf("-o", "out")).isNotEmpty())
     }
 
     @Test
@@ -606,6 +614,40 @@ class MinimalScriptLoweringTest {
 
             assertNotNull(result.artifact, result.diagnostics.joinToString())
             assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+        }
+
+    @Test
+    fun `typed process v2 facade lowers without public capability masks or suspend calls`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.process.Process
+                import compukter.process.ProcessResult
+
+                fun main() {
+                    when (val result = Process.run("/rom/tool", arrayOf("a", ""))) {
+                        is ProcessResult.Exited -> if (result.code != 0) Process.exit(result.code)
+                        is ProcessResult.Failed -> Process.exit(1)
+                    }
+                }
+                """.trimIndent()
+
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+
+            listOf(
+                "import compukter.process.Process\nfun main() { Process.run(\"/rom/tool\", 1) }",
+                "import compukter.process.Process\nfun main() { Process.commandLine() }",
+                "import compukter.process.ProcessBindings\nfun main() { ProcessBindings.takeFailureDiagnostic() }",
+            ).forEach { forbiddenSource ->
+                val forbidden = adapter.compile(request(forbiddenSource))
+                assertNull(forbidden.artifact, forbiddenSource)
+                assertTrue(forbidden.hasErrors, forbiddenSource)
+            }
         }
 
     @Test
