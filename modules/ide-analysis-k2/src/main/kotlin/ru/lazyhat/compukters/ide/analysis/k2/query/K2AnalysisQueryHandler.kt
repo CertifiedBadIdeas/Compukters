@@ -34,6 +34,7 @@ internal class K2AnalysisQueryHandler(
         cancellation: ru.lazyhat.compukters.ide.analysis.k2.server.AnalysisCancellation,
     ) = when (request.query) {
         is AnalysisQuery.Presentation,
+        is AnalysisQuery.Completion,
         is AnalysisQuery.ExpressionInfo,
         is AnalysisQuery.Declaration,
         is AnalysisQuery.References,
@@ -48,15 +49,6 @@ internal class K2AnalysisQueryHandler(
                     "analysis output exceeds negotiated limit",
                 )
             }
-        }
-
-        else -> {
-            AnalysisFailure(
-                request.requestId,
-                request.query.identity,
-                AnalysisFailureKind.UnsupportedFeature,
-                "semantic query is not implemented",
-            )
         }
     }
 }
