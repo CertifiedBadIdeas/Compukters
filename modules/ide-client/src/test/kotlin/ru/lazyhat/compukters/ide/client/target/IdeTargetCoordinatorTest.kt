@@ -123,6 +123,7 @@ class IdeTargetCoordinatorTest {
             IdeTargetState.Deployed(target(), path, IdeExecutableRevision.Present(1)),
             fixture.coordinator.state(),
         )
+        assertEquals(0, fixture.port.submissions.size)
     }
 
     @Test
@@ -209,6 +210,65 @@ class IdeTargetCoordinatorTest {
         assertEquals(3, fixture.port.verifications.size)
     }
 
+    @Test
+    fun `run deploys then submits exactly the installed path`() {
+        val fixture = attachedFixture()
+        val artifact = artifact()
+        val path = IdeDeploymentPath.fromProgramName("hello")
+
+        fixture.coordinator.run(artifact, path)
+        fixture.port.verifications.single().future.complete(IdeVerifyResult.Verified(ticket(artifact = artifact)))
+        fixture.coordinator.tick()
+        fixture.port.revisions.single().future.complete(IdeRevisionResult.Observed(IdeExecutableRevision.Absent))
+        fixture.coordinator.tick()
+        fixture.port.deployments.single().future.complete(
+            IdeDeployResult.Deployed(IdeExecutableRevision.Present(7)),
+        )
+        fixture.coordinator.tick()
+        val submission = fixture.port.submissions.single()
+        assertEquals(path.value, submission.line.concatToString())
+        assertEquals(
+            IdeTargetState.Submitting(target(), path, IdeExecutableRevision.Present(7)),
+            fixture.coordinator.state(),
+        )
+
+        submission.future.complete(IdeSubmissionResult.Submitted)
+        fixture.coordinator.tick()
+        assertEquals(
+            IdeTargetState.CommandSubmitted(target(), path, IdeExecutableRevision.Present(7)),
+            fixture.coordinator.state(),
+        )
+    }
+
+    @Test
+    fun `submission failure preserves the successful deployed revision`() {
+        val fixture = attachedFixture()
+        val artifact = artifact()
+        val path = IdeDeploymentPath.fromProgramName("hello")
+        fixture.coordinator.run(artifact, path)
+        fixture.port.verifications.single().future.complete(IdeVerifyResult.Verified(ticket(artifact = artifact)))
+        fixture.coordinator.tick()
+        fixture.port.revisions.single().future.complete(IdeRevisionResult.Observed(IdeExecutableRevision.Absent))
+        fixture.coordinator.tick()
+        fixture.port.deployments.single().future.complete(
+            IdeDeployResult.Deployed(IdeExecutableRevision.Present(7)),
+        )
+        fixture.coordinator.tick()
+        fixture.port.submissions.single().future.complete(
+            IdeSubmissionResult.Failed(failure(IdeTargetFailureKind.InputBusy)),
+        )
+        fixture.coordinator.tick()
+
+        assertEquals(
+            IdeTargetState.Failed(
+                target(),
+                failure(IdeTargetFailureKind.InputBusy),
+                IdeTargetState.Deployed(target(), path, IdeExecutableRevision.Present(7)),
+            ),
+            fixture.coordinator.state(),
+        )
+    }
+
     private fun fixture(): Fixture {
         val port = ControlledTargetPort()
         val clock = TargetClock()
@@ -243,6 +303,7 @@ private class ControlledTargetPort : IdeTargetPort {
     val verifications = mutableListOf<VerificationCall>()
     val revisions = mutableListOf<RevisionCall>()
     val deployments = mutableListOf<DeploymentCall>()
+    val submissions = mutableListOf<SubmissionCall>()
 
     fun nextAttach(): CompletableFuture<IdeAttachResult> =
         CompletableFuture<IdeAttachResult>().also(attachFutures::addLast)
@@ -282,7 +343,10 @@ private class ControlledTargetPort : IdeTargetPort {
     override fun submitCanonicalLine(
         target: IdeAttachedTarget,
         line: CharArray,
-    ): CompletableFuture<IdeSubmissionResult> = error("not used")
+    ): CompletableFuture<IdeSubmissionResult> =
+        CompletableFuture<IdeSubmissionResult>().also {
+            submissions += SubmissionCall(target, line.copyOf(), it)
+        }
 
     data class VerificationCall(
         val target: IdeAttachedTarget,
@@ -302,6 +366,12 @@ private class ControlledTargetPort : IdeTargetPort {
         val path: IdeDeploymentPath,
         val expected: IdeExecutableRevision,
         val future: CompletableFuture<IdeDeployResult>,
+    )
+
+    data class SubmissionCall(
+        val target: IdeAttachedTarget,
+        val line: CharArray,
+        val future: CompletableFuture<IdeSubmissionResult>,
     )
 }
 
