@@ -33,6 +33,7 @@ class VmSession private constructor(
     private val terminalTransport: TerminalWireTransport,
 ) : AutoCloseable {
     private val handle = AtomicLong(handle)
+    private val deploymentOwner = Any()
 
     fun advance(
         guestBudget: Int,
@@ -117,6 +118,38 @@ class VmSession private constructor(
 
     fun filesystemGeneration(): Long = decodeNative { GenerationWireDecoder(bridge.filesystemGeneration(requireHandle())).generation() }
 
+    fun verifyForDeploy(artifact: ByteArray): VmDeploymentCandidate {
+        val candidateHandle = bridge.verifyForDeploy(requireHandle(), artifact.copyOf())
+        return VmDeploymentCandidate(candidateHandle, bridge, deploymentOwner)
+    }
+
+    fun executableRevision(path: String): VmExecutableRevision =
+        decodeNative {
+            ExecutableRevisionWireDecoder(bridge.executableRevision(requireHandle(), path.encodeToByteArray())).revision()
+        }
+
+    fun deploy(
+        path: String,
+        expected: VmExecutableRevision,
+        candidate: VmDeploymentCandidate,
+    ): VmExecutableRevision {
+        val activeHandle = requireHandle()
+        val pathUtf8 = path.encodeToByteArray()
+        val (expectedKind, expectedGeneration) =
+            when (expected) {
+                VmExecutableRevision.Absent -> 0 to 0L
+                is VmExecutableRevision.Present -> 1 to expected.generation
+            }
+        val result =
+            candidate.consume(deploymentOwner) { candidateHandle ->
+                bridge.deploy(activeHandle, candidateHandle, pathUtf8, expectedKind, expectedGeneration)
+            }
+        return decodeNative { ExecutableRevisionWireDecoder(result).revision() }
+    }
+
+    fun submitCanonicalLine(line: CharArray): Unit =
+        bridge.submitCanonicalLine(requireHandle(), line.copyOf())
+
     override fun close() {
         val closing = handle.getAndSet(CLOSED)
         if (closing != CLOSED) {
@@ -198,6 +231,37 @@ class VmSession private constructor(
     }
 }
 
+class VmDeploymentCandidate internal constructor(
+    handle: Long,
+    private val bridge: LowLevelVmBridge,
+    private val owner: Any,
+) : AutoCloseable {
+    private var handle = handle.also { require(it != CLOSED) { "deployment candidate handle must not be zero" } }
+
+    internal fun <T> consume(
+        expectedOwner: Any,
+        action: (Long) -> T,
+    ): T =
+        synchronized(this) {
+            require(owner === expectedOwner) { "deployment candidate belongs to another VM session" }
+            check(handle != CLOSED) { "deployment candidate is closed or consumed" }
+            action(handle).also { handle = CLOSED }
+        }
+
+    override fun close() {
+        synchronized(this) {
+            if (handle != CLOSED) {
+                bridge.deploymentCandidateClose(handle)
+                handle = CLOSED
+            }
+        }
+    }
+
+    private companion object {
+        const val CLOSED = 0L
+    }
+}
+
 private class GenerationWireDecoder(
     bytes: ByteArray,
 ) {
@@ -209,6 +273,24 @@ private class GenerationWireDecoder(
         require(generation >= 0) { "native filesystem generation exceeds the JVM range" }
         require(!buffer.hasRemaining()) { "native filesystem generation contains trailing bytes" }
         return generation
+    }
+}
+
+private class ExecutableRevisionWireDecoder(
+    bytes: ByteArray,
+) {
+    private val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+
+    fun revision(): VmExecutableRevision {
+        require(buffer.get().toInt() and 0xff == 1) { "unsupported executable revision wire version" }
+        val revision =
+            when (buffer.get().toInt() and 0xff) {
+                0 -> VmExecutableRevision.Absent
+                1 -> VmExecutableRevision.Present(buffer.long.also { require(it >= 0) })
+                else -> error("invalid executable revision wire kind")
+            }
+        require(!buffer.hasRemaining()) { "executable revision contains trailing bytes" }
+        return revision
     }
 }
 

@@ -30,6 +30,64 @@ import kotlin.test.assertFailsWith
 
 class VmSessionTest {
     @Test
+    fun `deployment candidate is retryable on failure and consumed only by success`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(7)))
+        val session = VmSession.open(byteArrayOf(1), bridge)
+        val artifact = byteArrayOf(4, 5, 6)
+        val candidate = session.verifyForDeploy(artifact)
+        artifact.fill(0)
+        bridge.revisionResult = bytes(1, 0)
+
+        assertEquals(VmExecutableRevision.Absent, session.executableRevision("/home/example"))
+        bridge.deployFailure = VmDeploymentConflictException()
+        assertFailsWith<VmDeploymentConflictException> {
+            session.deploy("/home/example", VmExecutableRevision.Absent, candidate)
+        }
+        bridge.deployFailure = null
+        bridge.deployResult = bytes(1, 1, long(9))
+        assertEquals(
+            VmExecutableRevision.Present(9),
+            session.deploy("/home/example", VmExecutableRevision.Absent, candidate),
+        )
+
+        assertEquals(listOf<Byte>(4, 5, 6), bridge.verifiedArtifacts.single())
+        assertEquals(2, bridge.deployments.size)
+        assertFailsWith<IllegalStateException> {
+            session.deploy("/home/example", VmExecutableRevision.Present(9), candidate)
+        }
+        candidate.close()
+        assertEquals(emptyList(), bridge.closedCandidates)
+    }
+
+    @Test
+    fun `deployment candidates are session bound and explicit close is idempotent`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(7)))
+        val first = VmSession.open(byteArrayOf(1), bridge)
+        val second = VmSession.open(byteArrayOf(1), bridge)
+        val candidate = first.verifyForDeploy(byteArrayOf(2))
+
+        assertFailsWith<IllegalArgumentException> {
+            second.deploy("/home/example", VmExecutableRevision.Absent, candidate)
+        }
+        candidate.close()
+        candidate.close()
+        assertEquals(listOf(41L), bridge.closedCandidates)
+        assertFailsWith<IllegalStateException> {
+            first.deploy("/home/example", VmExecutableRevision.Absent, candidate)
+        }
+    }
+
+    @Test
+    fun `canonical command submission preserves exact UTF16 code units`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(7)))
+        val session = VmSession.open(byteArrayOf(1), bridge)
+
+        session.submitCanonicalLine("run\ud800now".toCharArray())
+
+        assertEquals(listOf("run\ud800now".toList()), bridge.canonicalLines)
+        assertFailsWith<VmBridgeException> { session.executableRevision("/home/broken") }
+    }
+    @Test
     fun `boot session copies ROM and does not pass a separate artifact`() {
         val bridge = FakeBridge(createResult = bytes(0, long(19)))
         val store = WorldFileSystemStore.open(Path.of("/tmp/compukters-boot-store"), bridge)
@@ -341,11 +399,51 @@ class VmSessionTest {
         val compilationRequestCalls = mutableListOf<Pair<Long, Long>>()
         val compilationArtifacts = mutableListOf<CompilationArtifact>()
         val compilationFailures = mutableListOf<CompilationFailure>()
+        val verifiedArtifacts = mutableListOf<List<Byte>>()
+        val closedCandidates = mutableListOf<Long>()
+        val deployments = mutableListOf<Deployment>()
+        val canonicalLines = mutableListOf<List<Char>>()
+        var revisionResult: ByteArray = byteArrayOf(99)
+        var deployResult: ByteArray = byteArrayOf(99)
+        var deployFailure: RuntimeException? = null
 
         override fun openTerminalTransport(): TerminalWireTransport =
             terminalTransportFactory?.invoke() ?: super<LowLevelVmBridge>.openTerminalTransport()
 
         override fun filesystemGeneration(handle: Long): ByteArray = bytes(1, long(3))
+
+        override fun verifyForDeploy(
+            handle: Long,
+            artifact: ByteArray,
+        ): Long = 41L.also { verifiedArtifacts += artifact.toList() }
+
+        override fun deploymentCandidateClose(handle: Long) {
+            closedCandidates += handle
+        }
+
+        override fun executableRevision(
+            handle: Long,
+            pathUtf8: ByteArray,
+        ): ByteArray = revisionResult
+
+        override fun deploy(
+            handle: Long,
+            candidateHandle: Long,
+            pathUtf8: ByteArray,
+            expectedKind: Int,
+            expectedGeneration: Long,
+        ): ByteArray {
+            deployments += Deployment(handle, candidateHandle, pathUtf8.decodeToString(), expectedKind, expectedGeneration)
+            deployFailure?.let { throw it }
+            return deployResult
+        }
+
+        override fun submitCanonicalLine(
+            handle: Long,
+            line: CharArray,
+        ) {
+            canonicalLines += line.toList()
+        }
 
         override fun storeOpen(
             rootUtf8: ByteArray,
@@ -516,6 +614,14 @@ class VmSessionTest {
         val handle: Long,
         val token: Long,
         val diagnostics: String,
+    )
+
+    private data class Deployment(
+        val handle: Long,
+        val candidateHandle: Long,
+        val path: String,
+        val expectedKind: Int,
+        val expectedGeneration: Long,
     )
 }
 

@@ -194,6 +194,40 @@ class VmBootException(
     val code: Int,
 ) : IllegalStateException("native VM boot failed with process result $code")
 
+sealed interface VmExecutableRevision {
+    data object Absent : VmExecutableRevision
+
+    data class Present(
+        val generation: Long,
+    ) : VmExecutableRevision {
+        init {
+            require(generation >= 0) { "executable generation must not be negative" }
+        }
+    }
+}
+
+class VmDeploymentConflictException : IllegalStateException("deployment target changed")
+
+class VmDeploymentWrongMachineException : IllegalArgumentException("deployment candidate belongs to another VM")
+
+class VmDeploymentProfileChangedException : IllegalStateException("VM execution profile changed after verification")
+
+class VmDeploymentFileSystemException : IllegalStateException("deployment filesystem operation failed")
+
+enum class VmCanonicalLineFailure {
+    NO_PENDING_READ,
+    INPUT_BUSY,
+    PARTIAL_INPUT,
+    UNSUPPORTED_CODE_UNIT,
+    LINE_TOO_LONG,
+    TERMINAL,
+    RESUME,
+}
+
+class VmCanonicalLineException(
+    val failure: VmCanonicalLineFailure,
+) : IllegalStateException("canonical line submission failed: $failure")
+
 class VmBridgeException(
     message: String,
     cause: Throwable? = null,
