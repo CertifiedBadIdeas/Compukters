@@ -27,14 +27,33 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.exists
+import kotlin.io.path.isDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class DefaultIdeWorkspaceTest {
+    @Test
+    fun `workspace creates its missing project catalog root`() {
+        val parent = createTempDirectory("compukters-workspace-first-open-")
+        val projects = parent.resolve("projects")
+        assertFalse(projects.exists())
+
+        val workspace = DefaultIdeWorkspace(projects)
+        try {
+            assertTrue(projects.isDirectory())
+            assertTrue(workspace.projects().get(5, TimeUnit.SECONDS).isEmpty())
+        } finally {
+            workspace.close()
+            parent.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `workspace operations run serially in admission order off the caller`() {
         val observed = mutableListOf<Pair<String, String>>()
