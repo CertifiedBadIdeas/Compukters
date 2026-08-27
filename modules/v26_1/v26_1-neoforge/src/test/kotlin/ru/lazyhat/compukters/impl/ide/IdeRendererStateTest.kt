@@ -33,6 +33,8 @@ import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
+import ru.lazyhat.compukters.ide.client.state.IdeProblem
+import ru.lazyhat.compukters.ide.client.state.IdeProblemSeverity
 import ru.lazyhat.compukters.ide.client.state.IdeProjectSummary
 import ru.lazyhat.compukters.ide.client.state.IdeViewState
 import ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView
@@ -181,6 +183,38 @@ class IdeRendererStateTest {
     }
 
     @Test
+    fun `status renders an unavailable analysis message only once`() {
+        val source = "fun main() = Unit"
+        val document = EditorDocument(source)
+        val lexical = IncrementalKotlinHighlighter(document).use { it.snapshot() }
+        val path = ProjectPath.file("src/main.kt")
+        val message = "Analysis unavailable"
+        val editor =
+            IdeEditorView.Text(
+                path = path,
+                visibleLines = listOf(source),
+                visibleLineStartsUtf16 = listOf(0),
+                firstVisibleLine = 0,
+                firstVisibleColumn = 0,
+                totalLines = 1,
+                caretUtf16 = 0,
+                selectionStartUtf16 = null,
+                selectionEndUtf16 = null,
+                contentRevision = 0,
+                persistedContentRevision = 0,
+                dirty = false,
+                conflict = false,
+                lexical = lexical,
+                analysis = IdeAnalysisState.Unavailable(VirtualSourcePath.kotlin(path.value), 0, message, "worker stopped"),
+            )
+        val state = workspaceState(editor, IdeBuildState.Idle, IdeProblem(message, IdeProblemSeverity.Warning))
+
+        val status = IdeRenderer.extract(state, geometry()).text.single { it.kind == IdeTextKind.Status }.value
+
+        assertEquals(1, Regex(Regex.escape(message)).findAll(status).count())
+    }
+
+    @Test
     fun `local prompt replaces page actions with modal actions`() {
         val state = IdeViewState.startPage(emptyList())
 
@@ -201,6 +235,7 @@ class IdeRendererStateTest {
     private fun workspaceState(
         editor: IdeEditorView,
         build: IdeBuildState,
+        status: IdeProblem? = null,
     ): IdeViewState {
         val root = createTempDirectory("compukters-renderer-tree-")
         val descriptor = ProjectCatalog.open(root).create("demo")
@@ -219,7 +254,7 @@ class IdeRendererStateTest {
                                     IdeEditorView.Empty -> null
                                 },
                             editor = editor,
-                            status = null,
+                            status = status,
                             build = build,
                         ),
                     ),
