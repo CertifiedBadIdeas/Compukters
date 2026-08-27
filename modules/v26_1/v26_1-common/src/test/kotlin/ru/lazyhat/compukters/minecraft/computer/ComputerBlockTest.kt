@@ -20,8 +20,11 @@ package ru.lazyhat.compukters.minecraft.computer
 
 import net.minecraft.SharedConstants
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Direction
 import net.minecraft.server.Bootstrap
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.Mirror
+import net.minecraft.world.level.block.Rotation
 import net.minecraft.world.level.block.entity.BlockEntityType
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStateSink
@@ -36,6 +39,19 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class ComputerBlockTest {
+    @Test
+    fun `computer defaults north and placement faces its front toward the player`() {
+        assertEquals(Direction.NORTH, COMPUTER_DEFAULT_FACING)
+        assertEquals(Direction.SOUTH, placementFacing(Direction.NORTH))
+        assertEquals(Direction.WEST, placementFacing(Direction.EAST))
+    }
+
+    @Test
+    fun `computer rotation and mirror transform its horizontal facing`() {
+        assertEquals(Direction.SOUTH, rotateComputerFacing(Direction.EAST, Rotation.CLOCKWISE_90))
+        assertEquals(Direction.WEST, mirrorComputerFacing(Direction.EAST, Mirror.FRONT_BACK))
+    }
+
     @Test
     fun `ticker is absent on client and for a different block entity type`() {
         assertNull(computerTickerFor(isClientSide = true, actualType = TEST_TYPE, expectedType = TEST_TYPE))

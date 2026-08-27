@@ -19,7 +19,10 @@
 package ru.lazyhat.compukters.impl.registry
 
 import net.minecraft.core.registries.Registries
+import net.minecraft.network.chat.Component
 import net.minecraft.world.item.BlockItem
+import net.minecraft.world.item.CreativeModeTab
+import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.neoforge.registries.DeferredBlock
@@ -37,6 +40,7 @@ object CompuktersRegistry {
     private val blocks = DeferredRegister.createBlocks(MOD_ID)
     private val items = DeferredRegister.createItems(MOD_ID)
     private val blockEntities = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MOD_ID)
+    private val creativeTabs = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MOD_ID)
 
     val COMPUTER: DeferredBlock<ComputerBlock> =
         blocks.registerBlock(
@@ -54,6 +58,19 @@ object CompuktersRegistry {
 
     val COMPUTER_ITEM: DeferredItem<BlockItem> = items.registerSimpleBlockItem(COMPUTER)
 
+    val COMPUKTERS_TAB: DeferredHolder<CreativeModeTab, CreativeModeTab> =
+        creativeTabs.register(
+            "compukters",
+            Supplier {
+                CreativeModeTab
+                    .builder()
+                    .title(Component.translatable("itemGroup.compukters"))
+                    .icon { ItemStack(COMPUTER_ITEM.get()) }
+                    .displayItems { _, output -> output.accept(COMPUTER_ITEM.get()) }
+                    .build()
+            },
+        )
+
     val COMPUTER_BLOCK_ENTITY: DeferredHolder<BlockEntityType<*>, BlockEntityType<NeoForgeComputerBlockEntity>> =
         blockEntities.register(
             "compukter",
@@ -66,5 +83,6 @@ object CompuktersRegistry {
         blocks.register(eventBus)
         items.register(eventBus)
         blockEntities.register(eventBus)
+        creativeTabs.register(eventBus)
     }
 }
