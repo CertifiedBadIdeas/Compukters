@@ -454,7 +454,7 @@ object IdeRenderer {
         }
 
         private fun status(workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView) {
-            val parts = mutableListOf<String>()
+            val parts = linkedSetOf<String>()
             (workspace.editor as? IdeEditorView.Text)?.let { editor ->
                 parts +=
                     if (editor.conflict) {
