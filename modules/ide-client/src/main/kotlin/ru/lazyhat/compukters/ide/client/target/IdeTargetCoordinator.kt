@@ -315,6 +315,7 @@ class IdeTargetCoordinator(
     ) {
         val operation = nextOperationGeneration()
         confirmation = null
+        cachedTicket = null
         current = IdeTargetState.Uploading(target, artifact.hash)
         try {
             port.verify(target, artifact).whenComplete { result, failure ->

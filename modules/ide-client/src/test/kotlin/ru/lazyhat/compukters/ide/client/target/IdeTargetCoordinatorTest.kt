@@ -200,6 +200,12 @@ class IdeTargetCoordinatorTest {
 
         fixture.coordinator.deploy(artifact(2), IdeDeploymentPath.fromProgramName("other"))
         assertEquals(2, fixture.port.verifications.size)
+        fixture.port.verifications.last().future.complete(
+            IdeVerifyResult.Failed(failure(IdeTargetFailureKind.Verification)),
+        )
+        fixture.coordinator.tick()
+        fixture.coordinator.deploy(firstArtifact, IdeDeploymentPath.fromProgramName("hello"))
+        assertEquals(3, fixture.port.verifications.size)
 
         fixture.coordinator.detach()
         val attach = fixture.port.nextAttach()
@@ -207,7 +213,7 @@ class IdeTargetCoordinatorTest {
         attach.complete(IdeAttachResult.Attached(target(profileSeed = 2)))
         fixture.coordinator.tick()
         fixture.coordinator.deploy(firstArtifact, IdeDeploymentPath.fromProgramName("hello"))
-        assertEquals(3, fixture.port.verifications.size)
+        assertEquals(4, fixture.port.verifications.size)
     }
 
     @Test
