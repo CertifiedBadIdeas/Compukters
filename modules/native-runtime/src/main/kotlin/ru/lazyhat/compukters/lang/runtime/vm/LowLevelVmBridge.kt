@@ -70,6 +70,31 @@ internal interface LowLevelVmBridge {
 
     fun filesystemGeneration(handle: Long): ByteArray = error("filesystem generation is unavailable")
 
+    fun verifyForDeploy(
+        handle: Long,
+        artifact: ByteArray,
+    ): Long = error("deployment verification is unavailable")
+
+    fun deploymentCandidateClose(handle: Long): Unit = error("deployment candidate close is unavailable")
+
+    fun executableRevision(
+        handle: Long,
+        pathUtf8: ByteArray,
+    ): ByteArray = error("executable revision is unavailable")
+
+    fun deploy(
+        handle: Long,
+        candidateHandle: Long,
+        pathUtf8: ByteArray,
+        expectedKind: Int,
+        expectedGeneration: Long,
+    ): ByteArray = error("deployment is unavailable")
+
+    fun submitCanonicalLine(
+        handle: Long,
+        line: CharArray,
+    ): Unit = error("canonical line submission is unavailable")
+
     fun advance(
         handle: Long,
         guestBudget: Int,
