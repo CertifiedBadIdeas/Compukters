@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.ide.client
 
 data class IdeClientLimits(
     val eventQueueCapacity: Int = 256,
+    val workspaceQueue: Int = 128,
     val projectRows: Int = 4 * 1024,
     val visibleTreeRows: Int = 8 * 1024,
     val statusUtf8Bytes: Int = 4 * 1024,
@@ -27,6 +28,7 @@ data class IdeClientLimits(
 ) {
     init {
         require(eventQueueCapacity > 0) { "event queue capacity must be positive" }
+        require(workspaceQueue > 0) { "workspace queue capacity must be positive" }
         require(projectRows >= 0) { "project row limit must be non-negative" }
         require(visibleTreeRows >= 0) { "visible tree row limit must be non-negative" }
         require(statusUtf8Bytes >= 0) { "status byte limit must be non-negative" }
