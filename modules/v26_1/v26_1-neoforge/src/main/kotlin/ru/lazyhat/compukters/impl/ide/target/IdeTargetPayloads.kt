@@ -20,11 +20,21 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload
 import net.minecraft.resources.Identifier
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.core.MOD_ID
+import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
 import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
+import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFailure
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFailureKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
+import ru.lazyhat.compukters.ide.project.ApiMajor
+import ru.lazyhat.compukters.ide.project.ModuleId
+import ru.lazyhat.compukters.ide.project.ResolvedModule
+import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 
 internal data class IdeTargetReference(
     val id: IdeTargetId,
@@ -131,6 +141,68 @@ internal data class IdeTargetRequestPayload(
     }
 }
 
+internal sealed interface IdeTargetReply {
+    data class Attached(
+        val target: IdeAttachedTarget,
+    ) : IdeTargetReply
+
+    data object UploadAccepted : IdeTargetReply
+
+    data class Verified(
+        val ticket: BinaryValue,
+        val target: IdeTargetReference,
+        val artifactHash: Hash256,
+        val artifactBytes: Int,
+    ) : IdeTargetReply {
+        init {
+            require(artifactBytes > 0) { "ticket artifact size must be positive" }
+        }
+    }
+
+    data class RevisionObserved(
+        val revision: IdeExecutableRevision,
+    ) : IdeTargetReply
+
+    data class Deployed(
+        val revision: IdeExecutableRevision.Present,
+    ) : IdeTargetReply
+
+    data class StaleRevision(
+        val actual: IdeExecutableRevision,
+    ) : IdeTargetReply
+
+    data object Submitted : IdeTargetReply
+
+    data object Alive : IdeTargetReply
+
+    data object Detached : IdeTargetReply
+
+    data class Failed(
+        val failure: IdeTargetFailure,
+        val retryable: Boolean,
+    ) : IdeTargetReply
+}
+
+internal data class IdeTargetReplyPayload(
+    val requestId: Long,
+    val reply: IdeTargetReply,
+) : CustomPacketPayload {
+    init {
+        require(requestId > 0) { "request ID zero and negative IDs are reserved" }
+    }
+
+    override fun type(): CustomPacketPayload.Type<IdeTargetReplyPayload> = TYPE
+
+    companion object {
+        val TYPE = CustomPacketPayload.Type<IdeTargetReplyPayload>(Identifier.fromNamespaceAndPath(MOD_ID, "ide_target_reply"))
+        val STREAM_CODEC: StreamCodec<RegistryFriendlyByteBuf, IdeTargetReplyPayload> =
+            StreamCodec.of(
+                StreamEncoder { buffer, payload -> IdeTargetWireProtocol.writeReply(buffer, payload) },
+                StreamDecoder { buffer -> IdeTargetWireProtocol.readReply(buffer) },
+            )
+    }
+}
+
 internal object IdeTargetWireProtocol {
     const val MAXIMUM_CHUNK_BYTES = 32 * 1024
     const val MAXIMUM_CANONICAL_LINE_CODE_UNITS = 4_096
@@ -232,6 +304,75 @@ internal object IdeTargetWireProtocol {
         return IdeTargetRequestPayload(requestId, request)
     }
 
+    fun writeReply(
+        buffer: RegistryFriendlyByteBuf,
+        payload: IdeTargetReplyPayload,
+    ) {
+        buffer.writeVarLong(payload.requestId)
+        when (val reply = payload.reply) {
+            is IdeTargetReply.Attached -> {
+                buffer.writeByte(REPLY_ATTACHED)
+                buffer.writeAttachedTarget(reply.target)
+            }
+            IdeTargetReply.UploadAccepted -> buffer.writeByte(REPLY_UPLOAD_ACCEPTED)
+            is IdeTargetReply.Verified -> {
+                buffer.writeByte(REPLY_VERIFIED)
+                buffer.writeBounded(reply.ticket, MAXIMUM_TICKET_BYTES, "verification ticket")
+                buffer.writeTarget(reply.target)
+                buffer.writeHash(reply.artifactHash)
+                buffer.writeVarInt(reply.artifactBytes)
+            }
+            is IdeTargetReply.RevisionObserved -> {
+                buffer.writeByte(REPLY_REVISION)
+                buffer.writeRevision(reply.revision)
+            }
+            is IdeTargetReply.Deployed -> {
+                buffer.writeByte(REPLY_DEPLOYED)
+                buffer.writeRevision(reply.revision)
+            }
+            is IdeTargetReply.StaleRevision -> {
+                buffer.writeByte(REPLY_STALE_REVISION)
+                buffer.writeRevision(reply.actual)
+            }
+            IdeTargetReply.Submitted -> buffer.writeByte(REPLY_SUBMITTED)
+            IdeTargetReply.Alive -> buffer.writeByte(REPLY_ALIVE)
+            IdeTargetReply.Detached -> buffer.writeByte(REPLY_DETACHED)
+            is IdeTargetReply.Failed -> {
+                buffer.writeByte(REPLY_FAILED)
+                buffer.writeFailure(reply.failure)
+                buffer.writeBoolean(reply.retryable)
+            }
+        }
+    }
+
+    fun readReply(buffer: RegistryFriendlyByteBuf): IdeTargetReplyPayload {
+        val requestId = buffer.readVarLong()
+        val reply =
+            when (val kind = buffer.readUnsignedByte().toInt()) {
+                REPLY_ATTACHED -> IdeTargetReply.Attached(buffer.readAttachedTarget())
+                REPLY_UPLOAD_ACCEPTED -> IdeTargetReply.UploadAccepted
+                REPLY_VERIFIED -> IdeTargetReply.Verified(
+                    buffer.readBounded(MAXIMUM_TICKET_BYTES, "verification ticket"),
+                    buffer.readTarget(),
+                    buffer.readHash(),
+                    buffer.readVarInt(),
+                )
+                REPLY_REVISION -> IdeTargetReply.RevisionObserved(buffer.readRevision())
+                REPLY_DEPLOYED -> {
+                    val revision = buffer.readRevision()
+                    require(revision is IdeExecutableRevision.Present) { "deployed reply requires a present revision" }
+                    IdeTargetReply.Deployed(revision)
+                }
+                REPLY_STALE_REVISION -> IdeTargetReply.StaleRevision(buffer.readRevision())
+                REPLY_SUBMITTED -> IdeTargetReply.Submitted
+                REPLY_ALIVE -> IdeTargetReply.Alive
+                REPLY_DETACHED -> IdeTargetReply.Detached
+                REPLY_FAILED -> IdeTargetReply.Failed(buffer.readFailure(), buffer.readBoolean())
+                else -> throw IllegalArgumentException("unknown IDE target reply kind $kind")
+            }
+        return IdeTargetReplyPayload(requestId, reply)
+    }
+
     private const val ATTACH = 0
     private const val BEGIN_UPLOAD = 1
     private const val UPLOAD_CHUNK = 2
@@ -241,6 +382,16 @@ internal object IdeTargetWireProtocol {
     private const val SUBMIT_CANONICAL_LINE = 6
     private const val HEARTBEAT = 7
     private const val DETACH = 8
+    private const val REPLY_ATTACHED = 0
+    private const val REPLY_UPLOAD_ACCEPTED = 1
+    private const val REPLY_VERIFIED = 2
+    private const val REPLY_REVISION = 3
+    private const val REPLY_DEPLOYED = 4
+    private const val REPLY_STALE_REVISION = 5
+    private const val REPLY_SUBMITTED = 6
+    private const val REPLY_ALIVE = 7
+    private const val REPLY_DETACHED = 8
+    private const val REPLY_FAILED = 9
 }
 
 private fun RegistryFriendlyByteBuf.writeTarget(target: IdeTargetReference) {
@@ -315,4 +466,111 @@ private fun RegistryFriendlyByteBuf.readCanonicalLine(): IdeCanonicalLine {
     val size = readVarInt()
     require(size in 0..IdeTargetWireProtocol.MAXIMUM_CANONICAL_LINE_CODE_UNITS) { "canonical line is too long" }
     return IdeCanonicalLine.of(CharArray(size) { readUnsignedShort().toChar() })
+}
+
+private fun RegistryFriendlyByteBuf.writeAttachedTarget(target: IdeAttachedTarget) {
+    writeTarget(IdeTargetReference(target.id, target.profile))
+    writeProfile(target.compileProfile)
+    writeBoolean(target.capabilities.writableFileSystem)
+    writeBoolean(target.capabilities.canonicalInput)
+    writeUtf(target.displayName, 128)
+}
+
+private fun RegistryFriendlyByteBuf.readAttachedTarget(): IdeAttachedTarget {
+    val target = readTarget()
+    return IdeAttachedTarget(
+        target.id,
+        target.profile,
+        readProfile(),
+        IdeTargetCapabilities(readBoolean(), readBoolean()),
+        readUtf(128),
+    )
+}
+
+private fun RegistryFriendlyByteBuf.writeProfile(profile: TargetCompileProfile) {
+    writeToolchain(profile.toolchain)
+    require(profile.modules.size <= 128) { "target profile has too many modules" }
+    writeVarInt(profile.modules.size)
+    profile.modules.forEach { module ->
+        writeUtf(module.id.value, 129)
+        writeVarInt(module.major.value)
+        writeUtf(module.version, 128)
+        writeHash(module.contentHash)
+    }
+    writeLimits(profile.limits)
+}
+
+private fun RegistryFriendlyByteBuf.readProfile(): TargetCompileProfile {
+    val toolchain = readToolchain()
+    val count = readVarInt()
+    require(count in 0..128) { "target profile has too many modules" }
+    val modules =
+        List(count) {
+            ResolvedModule(
+                ModuleId.parse(readUtf(129)),
+                ApiMajor(readVarInt()),
+                readUtf(128),
+                readHash(),
+            )
+        }
+    return TargetCompileProfile(toolchain, modules, readLimits())
+}
+
+private fun RegistryFriendlyByteBuf.writeToolchain(toolchain: ToolchainLockIdentity) {
+    writeUtf(toolchain.compilerVersion, 128)
+    writeUtf(toolchain.languageVersion, 128)
+    writeInt(toolchain.codegenAbi.toInt())
+    writeInt(toolchain.artifactAbi.toInt())
+    writeInt(toolchain.artifactWriterVersion.toInt())
+    writeHash(toolchain.payloadHash)
+    writeHash(toolchain.standardLibraryAbi)
+}
+
+private fun RegistryFriendlyByteBuf.readToolchain(): ToolchainLockIdentity =
+    ToolchainLockIdentity(
+        readUtf(128),
+        readUtf(128),
+        readInt().toUInt(),
+        readInt().toUInt(),
+        readInt().toUInt(),
+        readHash(),
+        readHash(),
+    )
+
+private fun RegistryFriendlyByteBuf.writeLimits(limits: WorkerLimits) {
+    writeVarInt(limits.sourceFiles)
+    writeVarInt(limits.sourceFileBytes)
+    writeVarInt(limits.sourceBytes)
+    writeVarInt(limits.frameBytes)
+    writeVarInt(limits.artifactBytes)
+    writeVarInt(limits.diagnostics)
+    writeVarInt(limits.diagnosticTextBytes)
+    writeVarInt(limits.stderrBytes)
+    writeVarLong(limits.temporaryBytes)
+    writeVarInt(limits.temporaryFiles)
+}
+
+private fun RegistryFriendlyByteBuf.readLimits(): WorkerLimits =
+    WorkerLimits(
+        sourceFiles = readVarInt(),
+        sourceFileBytes = readVarInt(),
+        sourceBytes = readVarInt(),
+        frameBytes = readVarInt(),
+        artifactBytes = readVarInt(),
+        diagnostics = readVarInt(),
+        diagnosticTextBytes = readVarInt(),
+        stderrBytes = readVarInt(),
+        temporaryBytes = readVarLong(),
+        temporaryFiles = readVarInt(),
+    )
+
+private fun RegistryFriendlyByteBuf.writeFailure(failure: IdeTargetFailure) {
+    writeVarInt(failure.kind.ordinal)
+    writeUtf(failure.detail, 512)
+}
+
+private fun RegistryFriendlyByteBuf.readFailure(): IdeTargetFailure {
+    val kind = readVarInt()
+    require(kind in IdeTargetFailureKind.entries.indices) { "unknown IDE target failure kind" }
+    return IdeTargetFailure(IdeTargetFailureKind.entries[kind], readUtf(512))
 }
