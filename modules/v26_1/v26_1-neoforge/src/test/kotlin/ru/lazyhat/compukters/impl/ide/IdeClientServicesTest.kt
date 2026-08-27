@@ -39,6 +39,7 @@ class IdeClientServicesTest {
             assertEquals(expected.resolve("workers/analysis"), services.paths.analysisWorkers)
             assertEquals(expected.resolve("tmp/compiler"), services.paths.compilerTemporary)
             assertEquals(expected.resolve("tmp/analysis"), services.paths.analysisTemporary)
+            assertEquals(expected.resolve("session.preferences"), services.paths.preferences)
 
             val first = services.open()
             assertEquals(services.paths, first.application.paths)

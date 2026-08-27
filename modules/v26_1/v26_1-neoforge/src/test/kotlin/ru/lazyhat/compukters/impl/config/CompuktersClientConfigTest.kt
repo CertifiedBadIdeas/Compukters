@@ -37,4 +37,19 @@ class CompuktersClientConfigTest {
         assertFalse(specification.test(7))
         assertFalse(specification.test(null))
     }
+
+    @Test
+    fun `IDE layout config has strict ranges and invalid values recover through admission`() {
+        assertTrue(CompuktersClientConfig.idePadding.spec.test(0))
+        assertTrue(CompuktersClientConfig.idePadding.spec.test(256))
+        assertFalse(CompuktersClientConfig.idePadding.spec.test(-1))
+        assertFalse(CompuktersClientConfig.idePadding.spec.test(257))
+        assertFalse(CompuktersClientConfig.idePadding.spec.test("12"))
+
+        val recovered = CompuktersClientConfig.admitIdeLayout(-50, Int.MAX_VALUE, Int.MIN_VALUE, true)
+        assertEquals(0, recovered.padding)
+        assertEquals(4_096, recovered.treeWidth)
+        assertEquals(32, recovered.diagnosticsHeight)
+        assertTrue(recovered.diagnosticsExpanded)
+    }
 }
