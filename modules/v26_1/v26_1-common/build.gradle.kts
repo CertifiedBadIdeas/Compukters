@@ -30,6 +30,7 @@ val shellArtifact = project(":compiler-k2").layout.buildDirectory.file("generate
 val kotlincArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/kotlinc.cpkt")
 val editArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/edit.cpkt")
 val compilerWorkerPayload = project(":compiler-k2").tasks.named<Zip>("compilerWorkerPayload").flatMap { it.archiveFile }
+val analysisWorkerPayload = project(":ide-analysis-k2").tasks.named<Zip>("analysisWorkerPayload").flatMap { it.archiveFile }
 
 tasks.processResources {
     dependsOn(
@@ -38,6 +39,7 @@ tasks.processResources {
         ":compiler-k2:generateKotlincArtifact",
         ":compiler-k2:generateEditArtifact",
         ":compiler-k2:compilerWorkerPayload",
+        ":ide-analysis-k2:analysisWorkerPayload",
     )
     from(bootArtifact) {
         into("system/programs")
@@ -58,6 +60,10 @@ tasks.processResources {
     from(compilerWorkerPayload) {
         into("compiler/worker")
         rename { "compiler-k2-worker.zip" }
+    }
+    from(analysisWorkerPayload) {
+        into("analysis/worker")
+        rename { "ide-analysis-k2-worker.zip" }
     }
     from(rootProject.layout.projectDirectory.file("licenses/project/Apache-2.0.txt")) {
         into("META-INF/licenses")
