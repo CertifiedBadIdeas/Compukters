@@ -701,7 +701,7 @@ class IdeClientController(
     private fun acceptCatalog(event: IdeEvent.ProjectCatalogLoaded) {
         catalog = event.projects
         val summaries = catalog.take(limits.projectRows).map(::summary)
-        state = IdeViewState(generation, IdePageState.Start(summaries, null), null, emptySet())
+        state = IdeViewState(generation, IdePageState.Start(summaries, null), null, emptySet(), state.target)
         val remembered = restorePreferences?.lastProjectDirectory
         if (remembered != null && catalog.any { it.directoryName == remembered }) openProject(remembered)
     }
@@ -758,7 +758,10 @@ class IdeClientController(
 
     private fun acceptBuildState(event: IdeEvent.BuildStateChanged) {
         if (event.operationId != latestBuildOperation) {
-            if (event.state !is IdeBuildState.Compiling) buildJobs.remove(event.operationId)
+            if (event.state !is IdeBuildState.Compiling) {
+                buildJobs.remove(event.operationId)
+                targetBuildActions.remove(event.operationId)
+            }
             return
         }
         buildState = event.state
@@ -1277,6 +1280,7 @@ class IdeClientController(
                 IdePageState.Start(catalog.take(limits.projectRows).map(::summary), problem(message)),
                 null,
                 emptySet(),
+                state.target,
             )
     }
 
