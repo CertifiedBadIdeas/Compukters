@@ -158,6 +158,26 @@ class EditorDocumentTest {
         assertEquals("", editor.materializeLine(2))
     }
 
+    @Test
+    fun `range replacement is one undo entry and rejects non-caret UTF-16 boundaries`() {
+        val editor = EditorDocument("pri😀x")
+
+        assertEquals(
+            EditorEditResult.Rejected(EditorRejection.InvalidRange),
+            editor.replaceRange(EditorRange(0, 4), "println"),
+        )
+        assertEquals("pri😀x", editor.materialize())
+
+        assertIs<EditorEditResult.Applied>(editor.replaceRange(EditorRange(0, 5), "println"))
+        assertEquals("printlnx", editor.materialize())
+        assertEquals(7, editor.caretOffset)
+        assertEquals(1, editor.undoEntryCount)
+
+        assertIs<EditorEditResult.Applied>(editor.undo())
+        assertEquals("pri😀x", editor.materialize())
+        assertEquals(0, editor.undoEntryCount)
+    }
+
     private fun limits(
         maxCodeUnits: Int = 128,
         maxUtf8Bytes: Int = 256,

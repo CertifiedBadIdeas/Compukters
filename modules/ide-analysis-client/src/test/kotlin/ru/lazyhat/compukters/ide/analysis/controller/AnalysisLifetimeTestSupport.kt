@@ -70,13 +70,18 @@ internal class ManualAnalysisTaskScheduler : AnalysisTaskScheduler {
 internal class RecordingAnalysisClient : AnalysisClient {
     val opens = mutableListOf<AdmittedAnalysisSnapshot>()
     val queries = mutableListOf<AnalysisQuery>()
+    val queryFutures = mutableListOf<CompletableFuture<AnalysisClientResult>>()
     val cancelled = mutableListOf<CompletableFuture<AnalysisClientResult>>()
     var closeCount = 0
 
     override fun open(snapshot: AdmittedAnalysisSnapshot): CompletableFuture<SnapshotOpenResult> =
         CompletableFuture.completedFuture<SnapshotOpenResult>(SnapshotOpenResult.Opened(snapshot.identity)).also { opens += snapshot }
 
-    override fun query(query: AnalysisQuery) = CompletableFuture<AnalysisClientResult>().also { queries += query }
+    override fun query(query: AnalysisQuery) =
+        CompletableFuture<AnalysisClientResult>().also {
+            queries += query
+            queryFutures += it
+        }
 
     override fun cancel(future: CompletableFuture<AnalysisClientResult>): Boolean = cancelled.add(future)
 

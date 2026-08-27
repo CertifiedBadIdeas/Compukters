@@ -74,6 +74,8 @@ sealed interface IdeCommand {
 
     data object ManualCompletion : IdeCommand
 
+    data object EditorFocusLost : IdeCommand
+
     data object CloseRequested : IdeCommand
 
     data class ResolveConflict(

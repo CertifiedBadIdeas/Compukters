@@ -19,7 +19,9 @@
 package ru.lazyhat.compukters.ide.analysis.controller
 
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
+import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
+import ru.lazyhat.compukters.ide.analysis.SnapshotPresentation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -67,5 +69,59 @@ class AnalysisRequestCoordinatorTest {
         assertEquals(CompletionTrigger.Manual, manual.trigger)
         scheduler.advanceBy(10)
         assertEquals(2, client.queries.size)
+    }
+
+    @Test
+    fun `presentation and automatic completion publish only current results`() {
+        val scheduler = ManualAnalysisTaskScheduler()
+        val client = RecordingAnalysisClient()
+        val published = mutableListOf<AnalysisClientResult>()
+        val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 0, 0, AnalysisResultSink(published::add))
+        val first = admittedSnapshot("val first = 1")
+        val second = admittedSnapshot("val second = 2")
+
+        coordinator.sourceChanged(first)
+        scheduler.advanceBy(0)
+        val stalePresentation = client.queryFutures.single()
+        coordinator.sourceChanged(second)
+        stalePresentation.complete(AnalysisClientResult.Stale)
+        assertEquals(emptyList(), published)
+
+        scheduler.advanceBy(0)
+        val presentation: AnalysisClientResult =
+            AnalysisClientResult.Success(
+                AnalysisResult.Presentation(
+                    second.identity,
+                    SnapshotPresentation.create(second.identity, mapOf(testPath() to "val second = 2".length)),
+                ),
+            )
+        client.queryFutures.last().complete(presentation)
+        assertEquals(listOf(presentation), published)
+
+        coordinator.automaticCompletion(testPath(), 3)
+        scheduler.advanceBy(0)
+        client.queryFutures.last().complete(AnalysisClientResult.Stale)
+        assertEquals(listOf(presentation, AnalysisClientResult.Stale), published)
+    }
+
+    @Test
+    fun `manual completion preempts automatic work and close suppresses late publication`() {
+        val scheduler = ManualAnalysisTaskScheduler()
+        val client = RecordingAnalysisClient()
+        val published = mutableListOf<AnalysisClientResult>()
+        val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 30, 10, AnalysisResultSink(published::add))
+        coordinator.sourceChanged(admittedSnapshot("val answer = 42"))
+        coordinator.automaticCompletion(testPath(), 3)
+        scheduler.advanceBy(10)
+        val automatic = client.queryFutures.single()
+
+        val manual = coordinator.manualCompletion(testPath(), 4)
+        assertEquals(listOf(automatic), client.cancelled)
+        automatic.complete(AnalysisClientResult.Cancelled)
+        assertEquals(emptyList(), published)
+
+        coordinator.close()
+        manual.complete(AnalysisClientResult.Stale)
+        assertEquals(emptyList(), published)
     }
 }
