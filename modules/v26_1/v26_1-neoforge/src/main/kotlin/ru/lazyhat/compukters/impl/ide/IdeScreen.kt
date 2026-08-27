@@ -34,8 +34,10 @@ import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
 
 internal class IdeScreen(
-    private val application: IdeClientApplication,
+    private val session: IdeClientSession<IdeClientApplication>,
+    private val parent: Screen?,
 ) : Screen(Component.literal("Compukters IDE")) {
+    private val application = session.application
     private val prompt = IdePromptController()
     private val input =
         IdeInputAdapter(
@@ -47,6 +49,8 @@ internal class IdeScreen(
     private val splitters = IdeSplitterInteraction(application.preferences.layout(), application.preferences::saveLayout)
     private var focusArea = IdeFocusArea.None
     private var selectedTreePath: ProjectPath? = null
+    private var returningToParent = false
+    private var sessionClosed = false
 
     override fun setInitialFocus() = Unit
 
@@ -139,12 +143,17 @@ internal class IdeScreen(
 
     override fun removed() {
         splitters.focusLost()
-        application.controller.dispatch(ru.lazyhat.compukters.ide.client.state.IdeCommand.EditorFocusLost)
+        if (!sessionClosed) application.controller.dispatch(IdeCommand.EditorFocusLost)
+        if (!returningToParent) {
+            (parent as? ChildScreenParent)?.abandonChild()
+            closeSession()
+        }
         super.removed()
     }
 
     override fun tick() {
         application.controller.tick()
+        if (application.controller.isCloseReady()) restoreParent()
         super.tick()
     }
 
@@ -302,6 +311,23 @@ internal class IdeScreen(
         val command = prompt.confirm() ?: return true
         application.controller.dispatch(command)
         return true
+    }
+
+    private fun restoreParent() {
+        returningToParent = true
+        val target =
+            when (val lifecycle = parent as? ChildScreenParent) {
+                null -> parent
+                else -> parent.takeIf { lifecycle.resumeFromChild() }
+            }
+        closeSession()
+        minecraft.setScreen(target)
+    }
+
+    private fun closeSession() {
+        if (sessionClosed) return
+        sessionClosed = true
+        session.close()
     }
 
     private fun activeFile(): ProjectPath? = ((application.controller.viewState().page as? IdePageState.Workspace)?.value?.activeFile)
