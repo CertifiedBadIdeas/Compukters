@@ -19,17 +19,23 @@
 package ru.lazyhat.compukters.minecraft.computer
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.player.Player
+import net.minecraft.world.item.context.BlockPlaceContext
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.EntityBlock
+import net.minecraft.world.level.block.Mirror
+import net.minecraft.world.level.block.Rotation
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityTicker
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockBehaviour
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.block.state.StateDefinition
+import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.phys.BlockHitResult
 import java.util.function.Supplier
 
@@ -40,6 +46,27 @@ class ComputerBlock(
     private val terminalOpener: (ServerPlayer, ComputerBlockEntity) -> Unit,
 ) : Block(properties),
     EntityBlock {
+    init {
+        registerDefaultState(stateDefinition.any().setValue(FACING, COMPUTER_DEFAULT_FACING))
+    }
+
+    override fun createBlockStateDefinition(builder: StateDefinition.Builder<Block, BlockState>) {
+        builder.add(FACING)
+    }
+
+    override fun getStateForPlacement(context: BlockPlaceContext): BlockState =
+        defaultBlockState().setValue(FACING, placementFacing(context.horizontalDirection))
+
+    override fun rotate(
+        blockState: BlockState,
+        rotation: Rotation,
+    ): BlockState = blockState.setValue(FACING, rotateComputerFacing(blockState.getValue(FACING), rotation))
+
+    override fun mirror(
+        blockState: BlockState,
+        mirror: Mirror,
+    ): BlockState = blockState.setValue(FACING, mirrorComputerFacing(blockState.getValue(FACING), mirror))
+
     override fun newBlockEntity(
         position: BlockPos,
         blockState: BlockState,
@@ -76,7 +103,28 @@ class ComputerBlock(
         }
         return super.playerWillDestroy(level, position, blockState, player)
     }
+
+    companion object {
+        val FACING = BlockStateProperties.HORIZONTAL_FACING
+    }
 }
+
+internal fun placementFacing(playerFacing: Direction): Direction {
+    require(playerFacing.axis.isHorizontal) { "computer placement facing must be horizontal" }
+    return playerFacing.opposite
+}
+
+internal val COMPUTER_DEFAULT_FACING: Direction = Direction.NORTH
+
+internal fun rotateComputerFacing(
+    facing: Direction,
+    rotation: Rotation,
+): Direction = rotation.rotate(facing)
+
+internal fun mirrorComputerFacing(
+    facing: Direction,
+    mirror: Mirror,
+): Direction = mirror.getRotation(facing).rotate(facing)
 
 internal fun <T : BlockEntity> computerTickerFor(
     isClientSide: Boolean,
