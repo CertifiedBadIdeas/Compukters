@@ -214,6 +214,8 @@ class VmDeploymentProfileChangedException : IllegalStateException("VM execution 
 
 class VmDeploymentFileSystemException : IllegalStateException("deployment filesystem operation failed")
 
+class VmDeploymentAdmissionException : IllegalArgumentException("VM rejected deployment admission")
+
 enum class VmCanonicalLineFailure {
     NO_PENDING_READ,
     INPUT_BUSY,

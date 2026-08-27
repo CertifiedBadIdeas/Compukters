@@ -23,6 +23,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.FfmBridge
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
+import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentConflictException
+import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
 import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
 import java.nio.file.Path
@@ -36,7 +38,34 @@ class FfmBridgeIntegrationTest {
     @Test
     fun `JDK 25 FFM reads the native ABI version`() {
         FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
-            assertEquals(4, bridge.abiVersion())
+            assertEquals(5, bridge.abiVersion())
+        }
+    }
+
+    @Test
+    fun `verified deployment uses exact revisions and command submission remains explicit`() {
+        FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
+            val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
+            VmSession.open(artifact, bridge).use { session ->
+                val path = "/home/deployed"
+                assertEquals(VmExecutableRevision.Absent, session.executableRevision(path))
+
+                val first = session.verifyForDeploy(artifact)
+                val installed = assertIs<VmExecutableRevision.Present>(
+                    session.deploy(path, VmExecutableRevision.Absent, first),
+                )
+                assertEquals(installed, session.executableRevision(path))
+
+                val retry = session.verifyForDeploy(artifact)
+                assertFailsWith<VmDeploymentConflictException> {
+                    session.deploy(path, VmExecutableRevision.Absent, retry)
+                }
+                val replaced = assertIs<VmExecutableRevision.Present>(session.deploy(path, installed, retry))
+                assert(replaced.generation > installed.generation)
+
+                advanceUntilWaiting(session)
+                session.submitCanonicalLine(path.toCharArray())
+            }
         }
     }
 
