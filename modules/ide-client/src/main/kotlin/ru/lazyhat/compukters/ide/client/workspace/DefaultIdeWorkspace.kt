@@ -39,6 +39,7 @@ import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.io.path.createDirectories
 
 class DefaultIdeWorkspace internal constructor(
     private val catalog: ProjectCatalog,
@@ -64,7 +65,7 @@ class DefaultIdeWorkspace internal constructor(
         projectLimits: ProjectLimits = ProjectLimits(),
         workerLimits: WorkerLimits = WorkerLimits(),
         clientLimits: IdeClientLimits = IdeClientLimits(),
-    ) : this(ProjectCatalog.open(projectsRoot, projectLimits), projectLimits, workerLimits, clientLimits, {})
+    ) : this(ProjectCatalog.open(projectsRoot.createDirectories(), projectLimits), projectLimits, workerLimits, clientLimits, {})
 
     override fun projects() = submit("projects", catalog::projects)
 
