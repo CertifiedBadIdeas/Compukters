@@ -164,6 +164,24 @@ class IdeTargetCoordinatorTest {
     }
 
     @Test
+    fun `cancelling overwrite confirmation returns to the attached target`() {
+        val fixture = attachedFixture()
+        val artifact = artifact()
+        fixture.coordinator.deploy(artifact, IdeDeploymentPath.fromProgramName("hello"))
+        fixture.port.verifications.single().future.complete(IdeVerifyResult.Verified(ticket(artifact = artifact)))
+        fixture.coordinator.tick()
+        fixture.port.revisions.single().future.complete(
+            IdeRevisionResult.Observed(IdeExecutableRevision.Present(4)),
+        )
+        fixture.coordinator.tick()
+
+        fixture.coordinator.cancelDeployment()
+
+        assertEquals(IdeTargetState.Attached(target()), fixture.coordinator.state())
+        assertEquals(target(), fixture.coordinator.attachedTarget())
+    }
+
+    @Test
     fun `retryable deploy failure retains ticket while success consumes it`() {
         val fixture = attachedFixture()
         val artifact = artifact()

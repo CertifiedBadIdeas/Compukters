@@ -79,6 +79,16 @@ sealed interface IdeCommand {
 
     data object Build : IdeCommand
 
+    data object Verify : IdeCommand
+
+    data object Deploy : IdeCommand
+
+    data object Run : IdeCommand
+
+    data object ConfirmTargetDeployment : IdeCommand
+
+    data object CancelTargetDeployment : IdeCommand
+
     data object CancelBuild : IdeCommand
 
     data object ManualCompletion : IdeCommand
