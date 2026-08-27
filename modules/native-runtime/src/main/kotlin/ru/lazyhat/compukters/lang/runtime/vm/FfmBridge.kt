@@ -44,6 +44,11 @@ internal class FfmBridge private constructor(
     private val createInStoreHandle: MethodHandle,
     private val createBootInStoreHandle: MethodHandle,
     private val filesystemGenerationHandle: MethodHandle,
+    private val verifyForDeployHandle: MethodHandle,
+    private val deploymentCandidateCloseHandle: MethodHandle,
+    private val executableRevisionHandle: MethodHandle,
+    private val deployHandle: MethodHandle,
+    private val submitCanonicalLineHandle: MethodHandle,
     private val advanceHandle: MethodHandle,
     private val compilationRequestSizeHandle: MethodHandle,
     private val compilationRequestCopyHandle: MethodHandle,
@@ -238,6 +243,85 @@ internal class FfmBridge private constructor(
             ) as Int
         }
 
+    override fun verifyForDeploy(
+        handle: Long,
+        artifact: ByteArray,
+    ): Long =
+        Arena.ofConfined().use { callArena ->
+            val candidateOut = callArena.allocate(ValueLayout.JAVA_LONG)
+            when (
+                val status =
+                    verifyForDeployHandle.invokeExact(
+                        handle,
+                        callArena.nativeBytes(artifact),
+                        artifact.size.toLong(),
+                        candidateOut,
+                    ) as Int
+            ) {
+                STATUS_OK ->
+                    candidateOut
+                        .get(ValueLayout.JAVA_LONG, 0)
+                        .also { if (it == 0L) throw VmBridgeException("native deployment verification returned a zero handle") }
+                STATUS_VERIFICATION -> throw VmVerificationException()
+                STATUS_ADMISSION -> throw VmDeploymentAdmissionException()
+                else -> throw failure("deployment verification", status)
+            }
+        }
+
+    override fun deploymentCandidateClose(handle: Long) =
+        requireSuccess("deployment candidate close", deploymentCandidateCloseHandle.invokeExact(handle) as Int)
+
+    override fun executableRevision(
+        handle: Long,
+        pathUtf8: ByteArray,
+    ): ByteArray =
+        deploymentOutput("executable revision") { callArena, output, written ->
+            executableRevisionHandle.invokeExact(
+                handle,
+                callArena.nativeBytes(pathUtf8),
+                pathUtf8.size.toLong(),
+                output,
+                MAXIMUM_EXECUTABLE_REVISION_BYTES.toLong(),
+                written,
+            ) as Int
+        }
+
+    override fun deploy(
+        handle: Long,
+        candidateHandle: Long,
+        pathUtf8: ByteArray,
+        expectedKind: Int,
+        expectedGeneration: Long,
+    ): ByteArray =
+        deploymentOutput("deployment") { callArena, output, written ->
+            deployHandle.invokeExact(
+                handle,
+                candidateHandle,
+                callArena.nativeBytes(pathUtf8),
+                pathUtf8.size.toLong(),
+                expectedKind,
+                expectedGeneration,
+                output,
+                MAXIMUM_EXECUTABLE_REVISION_BYTES.toLong(),
+                written,
+            ) as Int
+        }
+
+    override fun submitCanonicalLine(
+        handle: Long,
+        line: CharArray,
+    ) {
+        Arena.ofConfined().use { callArena ->
+            val status =
+                submitCanonicalLineHandle.invokeExact(
+                    handle,
+                    callArena.nativeChars(line),
+                    line.size.toLong(),
+                ) as Int
+            if (status != STATUS_OK) throw canonicalLineFailure(status)
+        }
+    }
+
     override fun advance(
         handle: Long,
         guestBudget: Int,
@@ -411,6 +495,43 @@ internal class FfmBridge private constructor(
             copyResult(operation, output, written, maximum)
         }
 
+    private inline fun deploymentOutput(
+        operation: String,
+        call: (Arena, MemorySegment, MemorySegment) -> Int,
+    ): ByteArray =
+        Arena.ofConfined().use { callArena ->
+            val output = callArena.allocate(MAXIMUM_EXECUTABLE_REVISION_BYTES.toLong())
+            val written = callArena.allocate(ValueLayout.JAVA_LONG)
+            val status = call(callArena, output, written)
+            if (status != STATUS_OK) throw deploymentFailure(operation, status)
+            copyResult(operation, output, written, MAXIMUM_EXECUTABLE_REVISION_BYTES)
+        }
+
+    private fun deploymentFailure(
+        operation: String,
+        status: Int,
+    ): RuntimeException =
+        when (status) {
+            STATUS_DEPLOYMENT_CONFLICT -> VmDeploymentConflictException()
+            STATUS_DEPLOYMENT_WRONG_MACHINE -> VmDeploymentWrongMachineException()
+            STATUS_DEPLOYMENT_PROFILE_CHANGED -> VmDeploymentProfileChangedException()
+            STATUS_DEPLOYMENT_FILESYSTEM -> VmDeploymentFileSystemException()
+            else -> failure(operation, status)
+        }
+
+    private fun canonicalLineFailure(status: Int): RuntimeException =
+        when (status) {
+            STATUS_INPUT_NO_PENDING_READ -> VmCanonicalLineException(VmCanonicalLineFailure.NO_PENDING_READ)
+            STATUS_INPUT_BUSY -> VmCanonicalLineException(VmCanonicalLineFailure.INPUT_BUSY)
+            STATUS_INPUT_PARTIAL -> VmCanonicalLineException(VmCanonicalLineFailure.PARTIAL_INPUT)
+            STATUS_INPUT_UNSUPPORTED_CODE_UNIT ->
+                VmCanonicalLineException(VmCanonicalLineFailure.UNSUPPORTED_CODE_UNIT)
+            STATUS_INPUT_LINE_TOO_LONG -> VmCanonicalLineException(VmCanonicalLineFailure.LINE_TOO_LONG)
+            STATUS_INPUT_TERMINAL -> VmCanonicalLineException(VmCanonicalLineFailure.TERMINAL)
+            STATUS_INPUT_RESUME -> VmCanonicalLineException(VmCanonicalLineFailure.RESUME)
+            else -> failure("canonical line submission", status)
+        }
+
     private fun storeIdOperation(
         operation: String,
         method: MethodHandle,
@@ -463,11 +584,24 @@ internal class FfmBridge private constructor(
     companion object {
         private const val STATUS_OK = 0
         private const val STATUS_VERIFICATION = 2
+        private const val STATUS_ADMISSION = 3
+        private const val STATUS_DEPLOYMENT_CONFLICT = 19
+        private const val STATUS_DEPLOYMENT_WRONG_MACHINE = 20
+        private const val STATUS_DEPLOYMENT_PROFILE_CHANGED = 21
+        private const val STATUS_DEPLOYMENT_FILESYSTEM = 22
+        private const val STATUS_INPUT_NO_PENDING_READ = 23
+        private const val STATUS_INPUT_BUSY = 24
+        private const val STATUS_INPUT_PARTIAL = 25
+        private const val STATUS_INPUT_UNSUPPORTED_CODE_UNIT = 26
+        private const val STATUS_INPUT_LINE_TOO_LONG = 27
+        private const val STATUS_INPUT_TERMINAL = 28
+        private const val STATUS_INPUT_RESUME = 29
         private const val MAXIMUM_CREATE_BYTES = 1024
         private const val MAXIMUM_OUTCOME_BYTES = 1024 * 1024
         private const val MAXIMUM_STORE_OPEN_BYTES = 10
         private const val MAXIMUM_STORE_HEALTH_BYTES = 2
         private const val MAXIMUM_STORE_GENERATION_BYTES = 9
+        private const val MAXIMUM_EXECUTABLE_REVISION_BYTES = 10
         private const val MAXIMUM_COMPILATION_REQUEST_BYTES = 512 * 1024
         private const val COMPILATION_ARTIFACT = 0
         private const val COMPILATION_FAILURE = 1
@@ -614,6 +748,61 @@ internal class FfmBridge private constructor(
                                 ValueLayout.ADDRESS,
                             ),
                         ),
+                    verifyForDeployHandle =
+                        downcall(
+                            "compukter_verify_for_deploy",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    deploymentCandidateCloseHandle =
+                        downcall(
+                            "compukter_deployment_candidate_close",
+                            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG),
+                        ),
+                    executableRevisionHandle =
+                        downcall(
+                            "compukter_executable_revision",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    deployHandle =
+                        downcall(
+                            "compukter_deploy",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    submitCanonicalLineHandle =
+                        downcall(
+                            "compukter_submit_canonical_line",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                            ),
+                        ),
                     advanceHandle =
                         downcall(
                             "compukter_advance",
@@ -740,7 +929,7 @@ internal class FfmBridge private constructor(
                             ),
                         ),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 4) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 5) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()
