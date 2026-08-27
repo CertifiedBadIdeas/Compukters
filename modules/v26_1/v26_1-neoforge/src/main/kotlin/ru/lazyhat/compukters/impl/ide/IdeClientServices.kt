@@ -49,6 +49,7 @@ import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisSnapshotFactory
 import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
 import ru.lazyhat.compukters.ide.client.build.IdeBuildServices
 import ru.lazyhat.compukters.ide.client.controller.IdeClientController
+import ru.lazyhat.compukters.ide.client.controller.IdeClientTooling
 import ru.lazyhat.compukters.ide.client.controller.IdeControllerClock
 import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
 import ru.lazyhat.compukters.ide.client.target.IdeTargetCoordinator
@@ -73,6 +74,8 @@ import ru.lazyhat.compukters.worker.process.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.worker.process.WorkerLaunch
 import java.nio.file.Path
 import java.util.concurrent.Executors
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -118,6 +121,7 @@ internal class IdeClientSession<A : AutoCloseable> internal constructor(
 
 internal class IdeClientServices<A : AutoCloseable>(
     gameRoot: Path,
+    private val lifetime: AutoCloseable? = null,
     private val opener: (IdeClientPaths) -> A,
 ) : AutoCloseable {
     val paths: IdeClientPaths = IdeClientPaths.at(gameRoot)
@@ -146,13 +150,13 @@ internal class IdeClientServices<A : AutoCloseable>(
                 active.also { active = null }
             }
         session?.application?.close()
+        lifetime?.close()
     }
 }
 
 internal class IdeClientApplication(
     val controller: IdeClientController,
     val preferences: IdeClientPreferences,
-    private val analysisService: AnalysisServiceLifetime,
     private val targetPort: AutoCloseable,
 ) : AutoCloseable {
     private val closed = AtomicBoolean()
@@ -166,11 +170,6 @@ internal class IdeClientApplication(
             failure = error
         }
         try {
-            analysisService.close()
-        } catch (error: Throwable) {
-            failure?.addSuppressed(error) ?: run { failure = error }
-        }
-        try {
             targetPort.close()
         } catch (error: Throwable) {
             failure?.addSuppressed(error) ?: run { failure = error }
@@ -179,11 +178,42 @@ internal class IdeClientApplication(
     }
 }
 
-internal fun productionIdeClientServices(gameRoot: Path): IdeClientServices<IdeClientApplication> =
-    IdeClientServices(gameRoot, ProductionIdeApplicationFactory::open)
+internal fun productionIdeClientServices(gameRoot: Path): IdeClientServices<IdeClientApplication> {
+    val runtime = ProductionIdeRuntime(IdeClientPaths.at(gameRoot))
+    return IdeClientServices(gameRoot, lifetime = runtime, opener = runtime::open)
+}
+
+private class ProductionIdeRuntime(
+    paths: IdeClientPaths,
+) : AutoCloseable {
+    private val executor: ExecutorService =
+        Executors.newSingleThreadExecutor { task ->
+            Thread(task, "compukters-ide-tooling").apply { isDaemon = true }
+        }
+    private val prepared = CompletableFuture.supplyAsync({ ProductionIdeApplicationFactory.prepare(paths) }, executor)
+
+    fun open(paths: IdeClientPaths): IdeClientApplication =
+        ProductionIdeApplicationFactory.open(paths) { workspace ->
+            prepared.thenApplyAsync({ prepared ->
+                ProductionIdeApplicationFactory.createTooling(paths, workspace, prepared)
+            }, executor)
+        }
+
+    override fun close() {
+        executor.shutdownNow()
+    }
+}
 
 private object ProductionIdeApplicationFactory {
-    fun open(paths: IdeClientPaths): IdeClientApplication {
+    data class PreparedWorkers(
+        val compilerPayload: ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload,
+        val analysisPayload: ru.lazyhat.compukters.worker.payload.PublishedWorkerPayload,
+        val java: Path,
+        val workerLimits: WorkerLimits,
+        val analysisLimits: AnalysisLimits,
+    )
+
+    fun prepare(paths: IdeClientPaths): PreparedWorkers {
         check(Runtime.version().feature() >= 25) { "Compukters IDE workers require JDK 25" }
         val workerLimits = WorkerLimits()
         val analysisLimits = AnalysisLimits()
@@ -207,6 +237,20 @@ private object ProductionIdeApplicationFactory {
                 )
             }
         val java = javaExecutable()
+        return PreparedWorkers(compilerPayload, analysisPayload, java, workerLimits, analysisLimits)
+    }
+
+    fun createTooling(
+        paths: IdeClientPaths,
+        workspace: DefaultIdeWorkspace,
+        prepared: PreparedWorkers,
+    ): IdeClientTooling {
+        val compilerPayload = prepared.compilerPayload
+        val analysisPayload = prepared.analysisPayload
+        val java = prepared.java
+        val workerLimits = prepared.workerLimits
+        val analysisLimits = prepared.analysisLimits
+        val compilerIdentity = compilerPayload.manifest.identity
         val compilerController =
             CompilerWorkerController(
                 compilerPayload,
@@ -262,7 +306,8 @@ private object ProductionIdeApplicationFactory {
                 )
             }
         try {
-            return compose(paths, compilerIdentity, workerLimits, analysisLimits, compilation, analysisService)
+            val tooling = composeTooling(workspace, compilerIdentity, workerLimits, analysisLimits, compilation, analysisService)
+            return tooling
         } catch (error: Throwable) {
             runCatching(compilation::close)
             runCatching(analysisService::close)
@@ -270,16 +315,39 @@ private object ProductionIdeApplicationFactory {
         }
     }
 
-    private fun compose(
+    fun open(
         paths: IdeClientPaths,
+        tooling: (DefaultIdeWorkspace) -> CompletableFuture<IdeClientTooling>,
+    ): IdeClientApplication {
+        val clientLimits = IdeClientLimits()
+        val workspace = DefaultIdeWorkspace(paths.projects, clientLimits = clientLimits)
+        val clock = IdeControllerClock.System
+        val targetPort = IdeTargetClientNetwork.openPort()
+        val target = IdeTargetCoordinator(targetPort, clock, clientLimits)
+        val preferences = IdeClientPreferences(paths.preferences, CompuktersClientConfig.IdeLayout)
+        val controller =
+            IdeClientController(
+                workspace = workspace,
+                preferences = preferences,
+                clock = clock,
+                events = BoundedIdeEventQueue(clientLimits.eventQueueCapacity),
+                limits = clientLimits,
+                targetCoordinator = target,
+                tooling = tooling(workspace),
+            )
+        controller.start()
+        return IdeClientApplication(controller, preferences, targetPort)
+    }
+
+    private fun composeTooling(
+        workspace: DefaultIdeWorkspace,
         compilerIdentity: ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity,
         workerLimits: WorkerLimits,
         analysisLimits: AnalysisLimits,
         compilation: DefaultClientCompilationService,
         analysisService: AnalysisServiceLifetime,
-    ): IdeClientApplication {
+    ): IdeClientTooling {
         val clientLimits = IdeClientLimits()
-        val workspace = DefaultIdeWorkspace(paths.projects, workerLimits = workerLimits, clientLimits = clientLimits)
         val toolchain =
             ToolchainLockIdentity(
                 compilerVersion = compilerIdentity.compilerVersion,
@@ -293,8 +361,6 @@ private object ProductionIdeApplicationFactory {
         val bundles = GuestApiBundleCatalog.of(emptyList())
         val profileResolver = CompileProfileResolver(toolchain, bundles, workerLimits)
         val clock = IdeControllerClock.System
-        val targetPort = IdeTargetClientNetwork.openPort()
-        val target = IdeTargetCoordinator(targetPort, clock, clientLimits)
         val build =
             IdeBuildCoordinator(
                 IdeBuildServices(
@@ -329,20 +395,7 @@ private object ProductionIdeApplicationFactory {
                         ClosingAnalysisRequestCoordinator(delegate, session, scheduler)
                     },
             )
-        val preferences = IdeClientPreferences(paths.preferences, CompuktersClientConfig.IdeLayout)
-        val controller =
-            IdeClientController(
-                workspace = workspace,
-                preferences = preferences,
-                clock = clock,
-                events = BoundedIdeEventQueue(clientLimits.eventQueueCapacity),
-                limits = clientLimits,
-                buildCoordinator = build,
-                analysisCoordinator = analysis,
-                targetCoordinator = target,
-            )
-        controller.start()
-        return IdeClientApplication(controller, preferences, analysisService, targetPort)
+        return IdeClientTooling(build, analysis, analysisService)
     }
 
     private fun analysisSnapshot(
