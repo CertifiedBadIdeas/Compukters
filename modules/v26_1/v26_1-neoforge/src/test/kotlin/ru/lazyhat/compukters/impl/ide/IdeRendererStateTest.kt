@@ -30,6 +30,7 @@ import ru.lazyhat.compukters.ide.analysis.SourceSnapshotId
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisPresentation
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
+import ru.lazyhat.compukters.ide.client.build.IdeBuiltArtifact
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
@@ -38,6 +39,16 @@ import ru.lazyhat.compukters.ide.client.state.IdeProblemSeverity
 import ru.lazyhat.compukters.ide.client.state.IdeProjectSummary
 import ru.lazyhat.compukters.ide.client.state.IdeViewState
 import ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView
+import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
+import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
+import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
+import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
+import ru.lazyhat.compukters.ide.client.target.IdeTargetId
+import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
+import ru.lazyhat.compukters.ide.client.target.IdeTargetState
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
+import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.IncrementalKotlinHighlighter
@@ -169,7 +180,7 @@ class IdeRendererStateTest {
     @Test
     fun `toolbar reports artifact and leaves target actions visibly disabled`() {
         val editor = IdeEditorView.Binary(ProjectPath.file("image.bin"), 4_096)
-        val build = IdeBuildState.Succeeded(Hash256.zero(), Hash256.zero(), 321, true, 42)
+        val build = IdeBuildState.Succeeded(Hash256.zero(), IdeBuiltArtifact.of(Hash256.zero(), ByteArray(321)), "demo", true, 42)
 
         val model = IdeRenderer.extract(workspaceState(editor, build), geometry(TerminalFontProfile.COZETTE))
 
@@ -180,6 +191,26 @@ class IdeRendererStateTest {
             assertFalse(target.enabled)
             assertEquals("No target attached", target.tooltip)
         }
+    }
+
+    @Test
+    fun `attached target enables actions and reports honest submission state`() {
+        val target = target()
+        val path = IdeDeploymentPath.fromProgramName("demo")
+        val state =
+            workspaceState(
+                IdeEditorView.Empty,
+                IdeBuildState.Idle,
+                target = IdeTargetState.CommandSubmitted(target, path, IdeExecutableRevision.Present(3)),
+            )
+
+        val model = IdeRenderer.extract(state, geometry())
+
+        assertTrue(model.text.any { it.kind == IdeTextKind.Header && "Computer" in it.value })
+        listOf(IdeHitAction.Verify, IdeHitAction.Deploy, IdeHitAction.Run).forEach { action ->
+            assertTrue(model.hitTargets.single { it.action == action }.enabled)
+        }
+        assertTrue(model.text.any { it.kind == IdeTextKind.Status && "Command submitted" in it.value })
     }
 
     @Test
@@ -236,6 +267,7 @@ class IdeRendererStateTest {
         editor: IdeEditorView,
         build: IdeBuildState,
         status: IdeProblem? = null,
+        target: IdeTargetState = IdeTargetState.LocalOnly,
     ): IdeViewState {
         val root = createTempDirectory("compukters-renderer-tree-")
         val descriptor = ProjectCatalog.open(root).create("demo")
@@ -260,11 +292,25 @@ class IdeRendererStateTest {
                     ),
                 dialog = null,
                 busy = emptySet(),
+                target = target,
             )
         } finally {
             root.toFile().deleteRecursively()
         }
     }
+
+    private fun target() =
+        IdeAttachedTarget(
+            IdeTargetId("computer-1"),
+            IdeTargetProfileId(Hash256.zero()),
+            TargetCompileProfile(
+                ToolchainLockIdentity("2.4.10", "2.4", 1u, 1u, 1u, Hash256.zero(), Hash256.zero()),
+                emptyList(),
+                WorkerLimits(),
+            ),
+            IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true),
+            "Computer",
+        )
 
     private fun geometry(font: TerminalFontProfile = TerminalFontProfile.DINA) =
         IdeRenderGeometry.compute(960, 540, 24, 180, 120, true, true, font)
