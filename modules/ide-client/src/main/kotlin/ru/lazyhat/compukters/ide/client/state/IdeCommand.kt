@@ -21,6 +21,10 @@ package ru.lazyhat.compukters.ide.client.state
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 
 sealed interface IdeCommand {
+    data class CreateProject(
+        val name: String,
+    ) : IdeCommand
+
     data class OpenProject(
         val directoryName: String,
     ) : IdeCommand
@@ -56,6 +60,11 @@ sealed interface IdeCommand {
         val input: IdeEditorInput,
     ) : IdeCommand
 
+    data class ScrollEditor(
+        val lines: Int,
+        val columns: Int,
+    ) : IdeCommand
+
     data object Save : IdeCommand
 
     /** Requests an admitted external-change poll. */
@@ -73,6 +82,8 @@ sealed interface IdeCommand {
     data object CancelBuild : IdeCommand
 
     data object ManualCompletion : IdeCommand
+
+    data object DismissCompletion : IdeCommand
 
     data object EditorFocusLost : IdeCommand
 

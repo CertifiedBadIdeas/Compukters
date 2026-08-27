@@ -100,6 +100,7 @@ class IdeRendererStateTest {
                 visibleLines = listOf("val value = 1", "println(value)"),
                 visibleLineStartsUtf16 = listOf(secondStart, source.indexOf("println")),
                 firstVisibleLine = 1,
+                firstVisibleColumn = 0,
                 totalLines = 3,
                 caretUtf16 = document.caretOffset,
                 selectionStartUtf16 = valueStart,
@@ -137,6 +138,7 @@ class IdeRendererStateTest {
                 visibleLines = (0 until document.lineCount).map(document::materializeLine),
                 visibleLineStartsUtf16 = (0 until document.lineCount).map(document::lineStartOffset),
                 firstVisibleLine = 0,
+                firstVisibleColumn = 0,
                 totalLines = document.lineCount,
                 caretUtf16 = 0,
                 selectionStartUtf16 = null,
@@ -171,6 +173,24 @@ class IdeRendererStateTest {
             assertFalse(target.enabled)
             assertEquals("No target attached", target.tooltip)
         }
+    }
+
+    @Test
+    fun `local prompt replaces page actions with modal actions`() {
+        val state = IdeViewState.startPage(emptyList())
+
+        val model =
+            IdeRenderer.extract(
+                state,
+                geometry(),
+                prompt = IdePromptState(IdePromptKind.CreateProject, "demo", "Example error"),
+            )
+
+        assertTrue(model.text.any { it.kind == IdeTextKind.Dialog && it.value == "demo_" })
+        assertTrue(model.text.any { it.kind == IdeTextKind.Dialog && it.value == "Example error" })
+        assertTrue(model.hitTargets.any { it.action == IdeHitAction.Confirm && it.enabled })
+        assertTrue(model.hitTargets.any { it.action == IdeHitAction.Dismiss && it.enabled })
+        assertTrue(model.hitTargets.filter { it.focusGroup == IdeFocusGroup.Page }.all { !it.enabled })
     }
 
     private fun workspaceState(

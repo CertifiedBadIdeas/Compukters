@@ -31,6 +31,7 @@ sealed interface IdeEditorView {
         visibleLines: List<String>,
         visibleLineStartsUtf16: List<Int>,
         val firstVisibleLine: Int,
+        val firstVisibleColumn: Int,
         val totalLines: Int,
         val caretUtf16: Int,
         val selectionStartUtf16: Int?,
@@ -52,6 +53,7 @@ sealed interface IdeEditorView {
                 "visible line offsets must be strictly increasing"
             }
             require(firstVisibleLine >= 0) { "first visible line must be non-negative" }
+            require(firstVisibleColumn >= 0) { "first visible column must be non-negative" }
             require(totalLines > 0) { "text editor must contain at least one line" }
             require(caretUtf16 >= 0) { "caret must be non-negative" }
             require(contentRevision >= 0) { "content revision must be non-negative" }
