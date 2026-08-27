@@ -26,6 +26,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.moveTo
 import kotlin.io.path.readText
+import kotlin.io.path.writeBytes
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -34,6 +35,46 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ProjectDocumentStoreTest {
+    @Test
+    fun `any strict UTF-8 project file opens and saves with revisions`() {
+        val project = project()
+        val path = ProjectPath.file("compukter.lock")
+        project.handle.canonicalPath
+            .resolve(path.value)
+            .writeText("old\n")
+        val store = ProjectDocumentStore(project.handle, ProjectLimits())
+
+        val opened = store.open(path)
+        val saved = store.save(path, opened.revision, "edited\n")
+
+        assertEquals("edited\n", assertIs<DocumentSaveResult.Saved>(saved).snapshot.text)
+    }
+
+    @Test
+    fun `binary project files are rejected without replacement decoding`() {
+        val project = project()
+        val path = ProjectPath.file("blob.bin")
+        project.handle.canonicalPath
+            .resolve(path.value)
+            .writeBytes(byteArrayOf(0xC3.toByte(), 0x28))
+
+        val failure = assertFailsWith<ProjectDocumentException> { ProjectDocumentStore(project.handle).open(path) }
+
+        assertEquals("project file is binary: blob.bin", failure.message)
+    }
+
+    @Test
+    fun `ordinary documents use project limits while compiler sources retain source limits`() {
+        val project = project()
+        val ordinary = ProjectPath.file("notes.txt")
+        val source = ProjectPath.file("src/large.kt")
+        val limits = ProjectLimits(sourceFileBytes = 4, sourceBytes = 4, projectFileBytes = 1_024, projectBytes = 4_096)
+        val store = ProjectDocumentStore(project.handle, limits)
+
+        assertIs<DocumentSaveResult.Saved>(store.save(ordinary, FileRevision.Absent, "12345678"))
+        assertFailsWith<ProjectDocumentException> { store.save(source, FileRevision.Absent, "12345678") }
+    }
+
     @Test
     fun `store opens and atomically replaces strict UTF-8 source`() {
         val project = project()

@@ -53,7 +53,11 @@ class ProjectDocumentSession private constructor(
             try {
                 store.open(snapshot.path)
             } catch (exception: ProjectDocumentException) {
-                return if (!handle.isValid()) invalidate() else failure(exception)
+                return if (!handle.isValid() || exception.reason == ProjectDocumentFailure.MISSING) {
+                    invalidate()
+                } else {
+                    failure(exception)
+                }
             }
         if (disk.revision != snapshot.revision) {
             if (dirty) {
@@ -73,6 +77,17 @@ class ProjectDocumentSession private constructor(
 
     fun activeFileChanging(): ProjectSessionEvent =
         if (isOpen) saveIfRequested(autosave.activeFileChanging()) else ProjectSessionEvent.NoAction
+
+    fun fileRenamed(
+        previous: ProjectPath,
+        current: ProjectPath,
+    ) {
+        if (!isOpen || snapshot.path != previous) return
+        snapshot = snapshot.copy(path = current)
+    }
+
+    fun fileDeleted(path: ProjectPath): ProjectSessionEvent =
+        if (isOpen && snapshot.path == path) invalidate() else ProjectSessionEvent.NoAction
 
     fun prepareBuild(): ProjectSessionEvent {
         if (!isOpen) return ProjectSessionEvent.Closed(null)
@@ -202,11 +217,11 @@ class ProjectDocumentSession private constructor(
             val store = ProjectDocumentStore(handle, limits)
             val editorLimits =
                 EditorLimits(
-                    maxCodeUnits = limits.sourceFileBytes,
-                    maxUtf8Bytes = limits.sourceFileBytes,
-                    initialGapCodeUnits = minOf(4 * 1024, limits.sourceFileBytes),
+                    maxCodeUnits = limits.projectFileBytes,
+                    maxUtf8Bytes = limits.projectFileBytes,
+                    initialGapCodeUnits = minOf(4 * 1024, limits.projectFileBytes),
                     maxUndoEntries = 256,
-                    maxUndoCodeUnits = limits.sourceFileBytes,
+                    maxUndoCodeUnits = limits.projectFileBytes,
                     tabWidth = 4,
                 )
             return ProjectDocumentSession(handle, store, AutosaveController(clockNanos), store.open(path), editorLimits)

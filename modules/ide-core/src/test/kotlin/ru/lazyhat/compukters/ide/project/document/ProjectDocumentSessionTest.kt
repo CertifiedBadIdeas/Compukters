@@ -21,7 +21,11 @@ package ru.lazyhat.compukters.ide.project.document
 import ru.lazyhat.compukters.ide.editor.EditorEditResult
 import ru.lazyhat.compukters.ide.editor.EditorRejection
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
+import ru.lazyhat.compukters.ide.project.ProjectLimits
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
+import ru.lazyhat.compukters.ide.project.tree.ProjectMutationResult
+import ru.lazyhat.compukters.ide.project.tree.ProjectTreeStore
+import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.moveTo
 import kotlin.io.path.readText
@@ -33,6 +37,67 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class ProjectDocumentSessionTest {
+    @Test
+    fun `session edits an ordinary text file with project-sized editor bounds`() {
+        val project = ProjectCatalog.open(createTempDirectory("compukters-session-text-")).create("hello")
+        val path = ProjectPath.file("notes.txt")
+        project.handle.canonicalPath
+            .resolve(path.value)
+            .writeText("12345")
+        val limits = ProjectLimits(sourceFileBytes = 4, projectFileBytes = 1_024)
+        val session = ProjectDocumentSession.open(project.handle, path, { 0L }, limits)
+
+        session.replaceText("12345678")
+
+        assertIs<ProjectSessionEvent.Saved>(session.mouseActivity())
+        assertEquals(
+            "12345678",
+            project.handle.canonicalPath
+                .resolve(path.value)
+                .readText(),
+        )
+    }
+
+    @Test
+    fun `successful active-file rename updates the session before its next save`() {
+        val fixture = fixture()
+        fixture.session.replaceText("renamed\n")
+        val renamed = ProjectPath.file("src/renamed.kt")
+        assertIs<ProjectMutationResult.Changed>(
+            ProjectTreeStore(fixture.project.handle).rename(ProjectPath.file("src/main.kt"), renamed),
+        )
+
+        fixture.session.fileRenamed(ProjectPath.file("src/main.kt"), renamed)
+
+        assertIs<ProjectSessionEvent.Saved>(fixture.session.mouseActivity())
+        assertEquals(
+            "renamed\n",
+            fixture.project.handle.canonicalPath
+                .resolve(renamed.value)
+                .readText(),
+        )
+    }
+
+    @Test
+    fun `deleted or externally missing active file closes with dirty recovery`() {
+        val explicit = fixture()
+        explicit.session.replaceText("recover explicit\n")
+        val path = ProjectPath.file("src/main.kt")
+        val tree = ProjectTreeStore(explicit.project.handle)
+        assertIs<ProjectMutationResult.Changed>(tree.delete(tree.admitDelete(path)))
+
+        val explicitClosed = explicit.session.fileDeleted(path)
+
+        assertEquals("recover explicit\n", assertIs<ProjectSessionEvent.Closed>(explicitClosed).recovery?.text)
+
+        val external = fixture()
+        external.session.replaceText("recover external\n")
+        Files.delete(external.source)
+
+        val externalClosed = assertIs<ProjectSessionEvent.Closed>(external.session.poll())
+        assertEquals("recover external\n", externalClosed.recovery?.text)
+    }
+
     @Test
     fun `edit autosaves after delay and build observes persisted state`() {
         val fixture = fixture()
