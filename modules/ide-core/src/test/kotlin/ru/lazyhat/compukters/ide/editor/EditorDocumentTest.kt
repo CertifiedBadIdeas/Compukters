@@ -148,6 +148,16 @@ class EditorDocumentTest {
         assertEquals("one\ntwo\nthxree", editor.materialize())
     }
 
+    @Test
+    fun `visible lines can be copied without their separators`() {
+        val editor = EditorDocument("one\r\ntwo\n")
+
+        assertEquals(3, editor.lineCount)
+        assertEquals("one", editor.materializeLine(0))
+        assertEquals("two", editor.materializeLine(1))
+        assertEquals("", editor.materializeLine(2))
+    }
+
     private fun limits(
         maxCodeUnits: Int = 128,
         maxUtf8Bytes: Int = 256,

@@ -58,6 +58,7 @@ data class IdeWorkspaceView(
     val project: IdeProjectSummary,
     val tree: ProjectTree,
     val activeFile: ProjectPath?,
+    val editor: IdeEditorView,
     val status: IdeProblem?,
     val build: IdeBuildSummary?,
 )
@@ -84,6 +85,11 @@ sealed interface IdeDialogState {
         val title: String,
         val message: String,
         val actionId: Long,
+    ) : IdeDialogState
+
+    data class FileConflict(
+        val path: ProjectPath,
+        val closing: Boolean,
     ) : IdeDialogState
 }
 

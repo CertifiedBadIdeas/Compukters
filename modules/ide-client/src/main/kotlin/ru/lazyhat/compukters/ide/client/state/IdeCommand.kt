@@ -29,11 +29,40 @@ sealed interface IdeCommand {
         val path: ProjectPath,
     ) : IdeCommand
 
+    data class CreateText(
+        val path: ProjectPath,
+    ) : IdeCommand
+
+    data class CreateDirectory(
+        val path: ProjectPath,
+    ) : IdeCommand
+
+    data class Rename(
+        val source: ProjectPath,
+        val target: ProjectPath,
+    ) : IdeCommand
+
+    data class RequestDelete(
+        val path: ProjectPath,
+    ) : IdeCommand
+
+    data class ConfirmDialog(
+        val actionId: Long,
+    ) : IdeCommand
+
+    data object CancelDialog : IdeCommand
+
     data class Edit(
         val input: IdeEditorInput,
     ) : IdeCommand
 
     data object Save : IdeCommand
+
+    /** Requests an admitted external-change poll. */
+    data object Poll : IdeCommand
+
+    /** Flushes a pending autosave after an ordinary pointer interaction. */
+    data object PointerActivity : IdeCommand
 
     data object Resolve : IdeCommand
 
@@ -44,4 +73,20 @@ sealed interface IdeCommand {
     data object ManualCompletion : IdeCommand
 
     data object CloseRequested : IdeCommand
+
+    data class ResolveConflict(
+        val action: IdeConflictAction,
+    ) : IdeCommand
+}
+
+sealed interface IdeConflictAction {
+    data object ReloadFromDisk : IdeConflictAction
+
+    data class SaveAs(
+        val path: ProjectPath,
+    ) : IdeConflictAction
+
+    data object DiscardAndClose : IdeConflictAction
+
+    data object Cancel : IdeConflictAction
 }
