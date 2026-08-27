@@ -307,6 +307,53 @@ class IdeRendererStateTest {
     }
 
     @Test
+    fun `completion popup renders the viewport containing keyboard selection`() {
+        val source = "fun main() { item }"
+        val document = EditorDocument(source)
+        document.setCaret(source.indexOf("item") + "item".length)
+        val lexical = IncrementalKotlinHighlighter(document).use { it.snapshot() }
+        val identity = AnalysisSnapshotIdentity(SourceSnapshotId(Hash256.zero()), AnalysisProfileIdentity(Hash256.zero()))
+        val path = ProjectPath.file("src/main.kt")
+        val virtualPath = VirtualSourcePath.kotlin(path.value)
+        val items = (0 until 12).map { CompletionItem("item$it", "item$it", CompletionKind.Function) }
+        val completion =
+            IdeCompletionState
+                .create(
+                    identity,
+                    virtualPath,
+                    EditorRange(source.indexOf("item"), document.caretOffset),
+                    items,
+                ).move(8)
+        val editor =
+            IdeEditorView.Text(
+                path = path,
+                visibleLines = listOf(source),
+                visibleLineStartsUtf16 = listOf(0),
+                firstVisibleLine = 0,
+                firstVisibleColumn = 0,
+                totalLines = 1,
+                caretUtf16 = document.caretOffset,
+                selectionStartUtf16 = null,
+                selectionEndUtf16 = null,
+                contentRevision = 0,
+                persistedContentRevision = 0,
+                dirty = false,
+                conflict = false,
+                lexical = lexical,
+                analysis = IdeAnalysisState.Active(identity, virtualPath, 0, IdeAnalysisPresentation.Empty, completion),
+            )
+
+        val completionText =
+            IdeRenderer
+                .extract(workspaceState(editor, IdeBuildState.Idle), geometry())
+                .text
+                .filter { it.kind == IdeTextKind.Completion }
+
+        assertEquals((1..8).map { "item$it" }, completionText.map { it.value })
+        assertEquals(IdeColors.ACCENT, completionText.last().color)
+    }
+
+    @Test
     fun `local prompt replaces page actions with modal actions`() {
         val state = IdeViewState.startPage(emptyList())
 
