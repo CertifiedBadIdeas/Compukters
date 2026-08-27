@@ -27,6 +27,8 @@ import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
 import ru.lazyhat.compukters.ide.client.state.IdeViewState
+import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
+import ru.lazyhat.compukters.ide.client.target.IdeTargetState
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
@@ -139,8 +141,8 @@ object IdeRenderer {
             return output.build()
         }
         when (val page = state.page) {
-            is IdePageState.Start -> output.start(page)
-            is IdePageState.Workspace -> output.workspace(page.value, caretVisible)
+            is IdePageState.Start -> output.start(page, state.target)
+            is IdePageState.Workspace -> output.workspace(page.value, state.target, caretVisible)
         }
         if (prompt != null) {
             output.prompt(prompt)
@@ -177,8 +179,11 @@ object IdeRenderer {
             geometry.diagnosticsSplitter?.let { fills += IdeFillDraw(IdeFillKind.Splitter, it, IdeColors.BORDER, Z_CONTENT) }
         }
 
-        fun start(page: IdePageState.Start) {
-            ui(IdeTextKind.Header, "Compukters IDE · Local only", geometry.header.left + 6, geometry.header.top + 7)
+        fun start(
+            page: IdePageState.Start,
+            targetState: IdeTargetState,
+        ) {
+            ui(IdeTextKind.Header, "Compukters IDE · ${targetLabel(targetState)}", geometry.header.left + 6, geometry.header.top + 7)
             val create =
                 IdeRect(
                     geometry.toolbar.left + 6,
@@ -213,16 +218,17 @@ object IdeRenderer {
 
         fun workspace(
             workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView,
+            targetState: IdeTargetState,
             caretVisible: Boolean,
         ) {
             val active = workspace.activeFile?.value ?: "No file"
             ui(
                 IdeTextKind.Header,
-                "${workspace.project.displayName} · $active · Local only",
+                "${workspace.project.displayName} · $active · ${targetLabel(targetState)}",
                 geometry.header.left + 6,
                 geometry.header.top + 7,
             )
-            toolbar(workspace.build, workspace.activeFile != null || selectedTreePath != null)
+            toolbar(workspace.build, targetState, workspace.activeFile != null || selectedTreePath != null)
             tree(workspace)
             when (val editor = workspace.editor) {
                 IdeEditorView.Empty -> {
@@ -244,11 +250,12 @@ object IdeRenderer {
                 }
             }
             diagnostics(workspace)
-            status(workspace)
+            status(workspace, targetState)
         }
 
         private fun toolbar(
             build: IdeBuildState,
+            targetState: IdeTargetState,
             hasActiveEntry: Boolean,
         ) {
             var left = geometry.toolbar.left + 6
@@ -271,9 +278,11 @@ object IdeRenderer {
             } else {
                 action("Build", IdeHitAction.Build)
             }
-            action("Verify", IdeHitAction.Verify, false, NO_TARGET)
-            action("Deploy", IdeHitAction.Deploy, false, NO_TARGET)
-            action("Run", IdeHitAction.Run, false, NO_TARGET)
+            val targetReady = targetState.isReadyForAction && build !is IdeBuildState.Compiling && build !is IdeBuildState.Saving
+            val targetTooltip = if (targetState.attachedTarget == null) NO_TARGET else if (!targetReady) "Target operation in progress" else null
+            action("Verify", IdeHitAction.Verify, targetReady, targetTooltip)
+            action("Deploy", IdeHitAction.Deploy, targetReady, targetTooltip)
+            action("Run", IdeHitAction.Run, targetReady, targetTooltip)
             action("+File", IdeHitAction.CreateText)
             action("+Dir", IdeHitAction.CreateDirectory)
             action("Rename", IdeHitAction.Rename, hasActiveEntry)
@@ -453,7 +462,10 @@ object IdeRenderer {
             }
         }
 
-        private fun status(workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView) {
+        private fun status(
+            workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView,
+            targetState: IdeTargetState,
+        ) {
             val parts = linkedSetOf<String>()
             (workspace.editor as? IdeEditorView.Text)?.let { editor ->
                 parts +=
@@ -478,6 +490,7 @@ object IdeRenderer {
                 is IdeBuildState.Saving -> parts += "Saving…"
                 else -> Unit
             }
+            targetStatus(targetState)?.let(parts::add)
             workspace.status?.let { parts += it.message }
             ui(
                 IdeTextKind.Status,
@@ -503,6 +516,8 @@ object IdeRenderer {
                     is IdeDialogState.Confirmation -> dialog.title to dialog.message
                     is IdeDialogState.FileConflict -> "File conflict" to dialog.path.value
                     is IdeDialogState.LockUpdate -> "Update lock" to dialog.projectDirectory
+                    is IdeDialogState.TargetOverwrite ->
+                        "Replace target executable?" to "${dialog.path.value} changed at revision ${dialog.revision.generation}"
                 }
             ui(IdeTextKind.Dialog, title, bounds.left + 10, bounds.top + 10, IdeColors.TEXT, bounds, Z_DIALOG_TEXT)
             ui(IdeTextKind.Dialog, message, bounds.left + 10, bounds.top + 30, IdeColors.MUTED, bounds, Z_DIALOG_TEXT)
@@ -630,6 +645,60 @@ object IdeRenderer {
             return columns
         }
     }
+
+    private fun targetLabel(state: IdeTargetState): String =
+        when (state) {
+            IdeTargetState.LocalOnly -> "Local only"
+            is IdeTargetState.Attaching -> "Attaching…"
+            is IdeTargetState.Detached -> "Target detached"
+            is IdeTargetState.Failed -> state.target?.displayName ?: "Target unavailable"
+            else -> checkNotNull(state.attachedTarget).displayName
+        }
+
+    private fun targetStatus(state: IdeTargetState): String? =
+        when (state) {
+            IdeTargetState.LocalOnly,
+            is IdeTargetState.Attached,
+            -> null
+            is IdeTargetState.Attaching -> "Attaching target…"
+            is IdeTargetState.Uploading -> "Verifying…"
+            is IdeTargetState.Verified -> "Verified"
+            is IdeTargetState.Observing -> "Checking destination…"
+            is IdeTargetState.ConfirmationRequired -> "Overwrite confirmation required"
+            is IdeTargetState.Deploying -> "Deploying…"
+            is IdeTargetState.Deployed -> "Deployed ${state.path.value}"
+            is IdeTargetState.Submitting -> "Submitting command…"
+            is IdeTargetState.CommandSubmitted -> state.message
+            is IdeTargetState.Detached -> state.failure.detail
+            is IdeTargetState.Failed -> state.failure.detail
+        }
+
+    private val IdeTargetState.attachedTarget: IdeAttachedTarget?
+        get() =
+            when (this) {
+                IdeTargetState.LocalOnly,
+                is IdeTargetState.Attaching,
+                is IdeTargetState.Detached,
+                -> null
+                is IdeTargetState.Attached -> target
+                is IdeTargetState.Uploading -> target
+                is IdeTargetState.Verified -> target
+                is IdeTargetState.Observing -> target
+                is IdeTargetState.ConfirmationRequired -> target
+                is IdeTargetState.Deploying -> target
+                is IdeTargetState.Deployed -> target
+                is IdeTargetState.Submitting -> target
+                is IdeTargetState.CommandSubmitted -> target
+                is IdeTargetState.Failed -> target
+            }
+
+    private val IdeTargetState.isReadyForAction: Boolean
+        get() =
+            this is IdeTargetState.Attached ||
+                this is IdeTargetState.Verified ||
+                this is IdeTargetState.Deployed ||
+                this is IdeTargetState.CommandSubmitted ||
+                (this is IdeTargetState.Failed && target != null)
 
     private fun expand(
         bounds: IdeRect,

@@ -193,17 +193,22 @@ class IdeInputAdapter(
                     is IdeDialogState.Confirmation -> dispatch(IdeCommand.ConfirmDialog(dialog.actionId))
                     is IdeDialogState.LockUpdate -> dispatch(IdeCommand.ConfirmLockUpdate)
                     is IdeDialogState.FileConflict -> dispatch(IdeCommand.ResolveConflict(dialog.confirmAction()))
+                    is IdeDialogState.TargetOverwrite -> dispatch(IdeCommand.ConfirmTargetDeployment)
                     else -> uiActions.activate(action)
                 }
             }
 
             IdeHitAction.Dismiss -> {
-                if (dialog == null) uiActions.activate(action) else dispatch(IdeCommand.CancelDialog)
+                when (dialog) {
+                    null -> uiActions.activate(action)
+                    is IdeDialogState.TargetOverwrite -> dispatch(IdeCommand.CancelTargetDeployment)
+                    else -> dispatch(IdeCommand.CancelDialog)
+                }
             }
 
-            IdeHitAction.Verify, IdeHitAction.Deploy, IdeHitAction.Run -> {
-                false
-            }
+            IdeHitAction.Verify -> dispatch(IdeCommand.Verify)
+            IdeHitAction.Deploy -> dispatch(IdeCommand.Deploy)
+            IdeHitAction.Run -> dispatch(IdeCommand.Run)
         }
 
     fun scroll(
@@ -244,10 +249,10 @@ class IdeInputAdapter(
     ): Boolean {
         if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
             val command =
-                if (dialog is IdeDialogState.FileConflict) {
-                    IdeCommand.ResolveConflict(IdeConflictAction.Cancel)
-                } else {
-                    IdeCommand.CancelDialog
+                when (dialog) {
+                    is IdeDialogState.FileConflict -> IdeCommand.ResolveConflict(IdeConflictAction.Cancel)
+                    is IdeDialogState.TargetOverwrite -> IdeCommand.CancelTargetDeployment
+                    else -> IdeCommand.CancelDialog
                 }
             return dispatch(command)
         }
@@ -256,6 +261,7 @@ class IdeInputAdapter(
             is IdeDialogState.Confirmation -> dispatch(IdeCommand.ConfirmDialog(dialog.actionId))
             is IdeDialogState.LockUpdate -> dispatch(IdeCommand.ConfirmLockUpdate)
             is IdeDialogState.FileConflict -> dispatch(IdeCommand.ResolveConflict(dialog.confirmAction()))
+            is IdeDialogState.TargetOverwrite -> dispatch(IdeCommand.ConfirmTargetDeployment)
         }
     }
 

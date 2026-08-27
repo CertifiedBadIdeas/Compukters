@@ -18,10 +18,13 @@ import org.lwjgl.glfw.GLFW
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
+import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdeMoveDirection
 import ru.lazyhat.compukters.ide.client.state.IdeProjectSummary
+import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
+import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalSnapshot
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectFileKind
@@ -186,6 +189,38 @@ class IdeInputAdapterTest {
 
         assertEquals(6, fixture.adapter.treeFirstRow)
         assertFalse(fixture.commands.any { it is IdeCommand.ScrollEditor })
+    }
+
+    @Test
+    fun `target toolbar actions dispatch controller commands`() {
+        val fixture = fixture()
+        val geometry = IdeRenderGeometry.compute(960, 540, 24, 180, 120, true, true, TerminalFontProfile.DINA)
+        val actions = listOf(IdeHitAction.Verify, IdeHitAction.Deploy, IdeHitAction.Run)
+        actions.forEachIndexed { index, action ->
+            val bounds = IdeRect(index * 20, 0, index * 20 + 18, 18)
+            fixture.adapter.pointerClicked(
+                bounds.left + 1.0,
+                bounds.top + 1.0,
+                0,
+                IdePointerContext(
+                    geometry,
+                    hitTargets = listOf(IdeHitTarget(action, bounds, true, null, IdeFocusGroup.Page, 1)),
+                ),
+            )
+        }
+
+        assertTrue(fixture.commands.containsAll(listOf(IdeCommand.Verify, IdeCommand.Deploy, IdeCommand.Run)))
+    }
+
+    @Test
+    fun `overwrite dialog maps enter and escape to exact target decisions`() {
+        val fixture = fixture()
+        val dialog = IdeDialogState.TargetOverwrite(IdeDeploymentPath.fromProgramName("demo"), IdeExecutableRevision.Present(2))
+
+        fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_ENTER), IdeFocusState(IdeFocusArea.Panel, dialog = dialog))
+        fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_ESCAPE), IdeFocusState(IdeFocusArea.Panel, dialog = dialog))
+
+        assertEquals(listOf(IdeCommand.ConfirmTargetDeployment, IdeCommand.CancelTargetDeployment), fixture.commands)
     }
 
     private fun fixture(
