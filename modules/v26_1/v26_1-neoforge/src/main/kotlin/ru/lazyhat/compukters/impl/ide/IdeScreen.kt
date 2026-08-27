@@ -190,13 +190,18 @@ internal class IdeScreen(
             operations +=
                 RenderOperation(draw.zIndex) {
                     draw.clip?.let { graphics.enableScissor(it.left, it.top, it.right, it.bottom) }
-                    val value =
-                        if (draw.codeFont == null) {
-                            Component.literal(draw.value)
-                        } else {
-                            Component.literal(draw.value).withStyle { style -> style.withFont(draw.codeFont.fontDescription) }
+                    val codeFont = draw.codeFont
+                    if (codeFont == null) {
+                        graphics.text(font, Component.literal(draw.value), draw.x, draw.y, draw.color, false)
+                    } else {
+                        IdeCodeGlyphLayout.layout(draw.value, draw.x, codeFont).forEach { glyph ->
+                            val value =
+                                Component
+                                    .literal(glyph.value)
+                                    .withStyle { style -> style.withFont(codeFont.fontDescription) }
+                            graphics.text(font, value, glyph.x, draw.y, draw.color, false)
                         }
-                    graphics.text(font, value, draw.x, draw.y, draw.color, false)
+                    }
                     if (draw.clip != null) graphics.disableScissor()
                 }
         }
