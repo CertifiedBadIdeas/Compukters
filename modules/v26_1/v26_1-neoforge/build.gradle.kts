@@ -131,6 +131,9 @@ dependencies {
     common(project(path = projects.v261Common.path)) { isTransitive = false }
     shadowBundle(project(path = projects.v261Common.path, configuration = "transformProductionNeoForge"))
     testImplementation(project(path = projects.v261Common.path))
+    implementation(projects.ideClient)
+    implementation(projects.ideAnalysisClient)
+    implementation(projects.workerClient)
 
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
     add(gameTest.implementationConfigurationName, project(path = projects.v261Common.path))
@@ -316,6 +319,21 @@ val verifyPackagedCompukterFfi =
                         }
                     }
                 }
+            val nestedAnalysisWorkerEntries =
+                ZipFile(archive).use { zip ->
+                    val worker = checkNotNull(zip.getEntry("analysis/worker/ide-analysis-k2-worker.zip")) {
+                        "analysis worker is missing from ${archive.name}"
+                    }
+                    ZipInputStream(zip.getInputStream(worker)).use { nested ->
+                        buildList {
+                            while (true) {
+                                val entry = nested.nextEntry ?: break
+                                if (!entry.isDirectory) add(entry.name)
+                                nested.closeEntry()
+                            }
+                        }
+                    }
+                }
             listOf(
                 "META-INF/licenses/Compukters-Apache-2.0.txt",
                 "META-INF/NOTICE.txt",
@@ -324,6 +342,15 @@ val verifyPackagedCompukterFfi =
                 check(nestedWorkerEntries.count { it == required } == 1) {
                     "expected exactly one $required in packaged compiler worker"
                 }
+                check(nestedAnalysisWorkerEntries.count { it == required } == 1) {
+                    "expected exactly one $required in packaged analysis worker"
+                }
+            }
+            check(nestedWorkerEntries.count { it == "worker.payload" } == 1) {
+                "compiler worker payload manifest is missing or duplicated"
+            }
+            check(nestedAnalysisWorkerEntries.count { it == "worker.payload" } == 1) {
+                "analysis worker payload manifest is missing or duplicated"
             }
             val inventory = rootProject.file("licenses/distribution-components.tsv")
             check(inventory.isFile) { "distribution component inventory is missing: $inventory" }
