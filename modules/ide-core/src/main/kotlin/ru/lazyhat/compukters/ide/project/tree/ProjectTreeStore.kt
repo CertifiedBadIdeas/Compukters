@@ -27,7 +27,9 @@ import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.fs.SecureProjectFileException
 import ru.lazyhat.compukters.ide.project.fs.SecureProjectFiles
 import java.nio.charset.CharacterCodingException
+import java.nio.file.FileAlreadyExistsException
 import java.nio.file.LinkOption
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.nio.file.SecureDirectoryStream
 import java.security.MessageDigest
@@ -44,6 +46,89 @@ class ProjectTreeStore(
                 throw SecureProjectFileException("project root was invalidated while scanning")
             }
             ProjectTree.of(state.entries)
+        }
+
+    fun createText(path: ProjectPath): ProjectMutationResult =
+        mutate(path) {
+            val current = scan()
+            if (current.find(path) != null) return@mutate ProjectMutationResult.Conflict(path)
+            validateCreate(current, path)
+            if (!SecureProjectFiles.createFile(handle.identity, path)) return@mutate ProjectMutationResult.Conflict(path)
+            ProjectMutationResult.Changed(scan())
+        }
+
+    fun createDirectory(path: ProjectPath): ProjectMutationResult =
+        mutate(path) {
+            val current = scan()
+            if (current.find(path) != null) return@mutate ProjectMutationResult.Conflict(path)
+            validateCreate(current, path)
+            if (!SecureProjectFiles.createDirectory(handle.identity, path)) return@mutate ProjectMutationResult.Conflict(path)
+            ProjectMutationResult.Changed(scan())
+        }
+
+    fun rename(
+        source: ProjectPath,
+        target: ProjectPath,
+    ): ProjectMutationResult =
+        mutate(source) {
+            val current = scan()
+            val sourceEntry = current.find(source) ?: return@mutate ProjectMutationResult.Conflict(source)
+            if (current.find(target) != null) return@mutate ProjectMutationResult.Conflict(target)
+            if (target.value.startsWith("${source.value}/")) return@mutate ProjectMutationResult.Conflict(target)
+            requireParentDirectory(current, target)
+            validateRename(current, sourceEntry, target)
+            if (!SecureProjectFiles.move(handle.identity, source, target)) {
+                return@mutate ProjectMutationResult.Conflict(target)
+            }
+            ProjectMutationResult.Changed(scan())
+        }
+
+    fun admitDelete(path: ProjectPath): AdmittedProjectDelete =
+        synchronized(handle.identity) {
+            val tree = scan()
+            if (tree.find(path) == null) throw SecureProjectFileException("project entry does not exist: $path")
+            val revisions =
+                tree
+                    .flatten()
+                    .filter { it.path == path || it.path.value.startsWith("${path.value}/") }
+                    .associateTo(linkedMapOf()) { it.path to it.revision }
+            AdmittedProjectDelete.create(path, handle.identity, revisions)
+        }
+
+    fun delete(admitted: AdmittedProjectDelete): ProjectMutationResult =
+        synchronized(handle.identity) {
+            if (!handle.isValid() || admitted.rootIdentity != handle.identity) {
+                return@synchronized ProjectMutationResult.ProjectInvalidated
+            }
+            val current =
+                try {
+                    scan()
+                } catch (_: SecureProjectFileException) {
+                    if (handle.isValid()) {
+                        return@synchronized ProjectMutationResult.Conflict(admitted.path)
+                    }
+                    return@synchronized ProjectMutationResult.ProjectInvalidated
+                }
+            val currentRevisions =
+                current
+                    .flatten()
+                    .filter { it.path == admitted.path || it.path.value.startsWith("${admitted.path.value}/") }
+                    .associateTo(linkedMapOf()) { it.path to it.revision }
+            val conflict = firstDeleteConflict(admitted.revisions, currentRevisions)
+            if (conflict != null) return@synchronized ProjectMutationResult.Conflict(conflict)
+
+            admitted.revisions.entries
+                .sortedByDescending { it.key.components.size }
+                .forEach { (path, revision) ->
+                    val deleted =
+                        if (revision == null) {
+                            SecureProjectFiles.deleteEmptyDirectory(handle.identity, path)
+                        } else {
+                            SecureProjectFiles.deleteFile(handle.identity, path, revision as FileRevision.Present, limits.projectFileBytes)
+                        }
+                    if (!deleted) return@synchronized ProjectMutationResult.Conflict(path)
+                }
+            ProjectMutationResult.Changed(scan())
         }
 
     private fun scanDirectory(
@@ -108,6 +193,75 @@ class ProjectTreeStore(
         }
     }
 
+    private fun validateCreate(
+        tree: ProjectTree,
+        path: ProjectPath,
+    ) {
+        requireParentDirectory(tree, path)
+        validateProjectedPaths(tree.flatten().map { it.path } + path)
+    }
+
+    private fun validateRename(
+        tree: ProjectTree,
+        source: ProjectTreeEntry,
+        target: ProjectPath,
+    ) {
+        val sourcePrefix = "${source.path.value}/"
+        val moved = tree.flatten().filter { it.path == source.path || it.path.value.startsWith(sourcePrefix) }
+        val untouched = tree.flatten().filterNot(moved::contains).map { it.path }
+        val projected =
+            moved.map { entry ->
+                val suffix = entry.path.value.removePrefix(source.path.value)
+                ProjectPath.file(target.value + suffix)
+            }
+        if (projected.any { candidate -> untouched.any { it == candidate } }) {
+            throw SecureProjectFileException("renamed subtree would overwrite an existing entry")
+        }
+        validateProjectedPaths(untouched + projected)
+    }
+
+    private fun validateProjectedPaths(paths: List<ProjectPath>) {
+        if (paths.size > limits.treeEntries) throw SecureProjectFileException("project tree exceeds entry limit")
+        var metadataBytes = 0L
+        paths.forEach { path ->
+            if (path.components.size > limits.treeDepth) throw SecureProjectFileException("project tree exceeds depth limit")
+            val pathBytes = TomlSupport.strictUtf8(path.value).size
+            if (pathBytes > limits.pathUtf8Bytes) throw SecureProjectFileException("project path exceeds byte limit")
+            metadataBytes = Math.addExact(metadataBytes, pathBytes.toLong() + PROJECT_TREE_ENTRY_METADATA_BYTES)
+        }
+        if (metadataBytes > limits.treeMetadataBytes.toLong()) {
+            throw SecureProjectFileException("project tree exceeds metadata byte limit")
+        }
+    }
+
+    private fun requireParentDirectory(
+        tree: ProjectTree,
+        path: ProjectPath,
+    ) {
+        if (path.components.size == 1) return
+        val parent = ProjectPath.file(path.components.dropLast(1).joinToString("/"))
+        if (tree.find(parent)?.kind != ProjectFileKind.Directory) {
+            throw SecureProjectFileException("project entry parent is not a directory: $parent")
+        }
+    }
+
+    private fun mutate(
+        conflictPath: ProjectPath,
+        operation: () -> ProjectMutationResult,
+    ): ProjectMutationResult =
+        synchronized(handle.identity) {
+            if (!handle.isValid()) return@synchronized ProjectMutationResult.ProjectInvalidated
+            try {
+                operation()
+            } catch (_: FileAlreadyExistsException) {
+                ProjectMutationResult.Conflict(conflictPath)
+            } catch (_: NoSuchFileException) {
+                if (handle.isValid()) ProjectMutationResult.Conflict(conflictPath) else ProjectMutationResult.ProjectInvalidated
+            } catch (exception: SecureProjectFileException) {
+                if (handle.isValid()) throw exception else ProjectMutationResult.ProjectInvalidated
+            }
+        }
+
     private inner class ScanState {
         val entries = mutableListOf<ProjectTreeEntry>()
         private var metadataBytes = 0L
@@ -115,7 +269,7 @@ class ProjectTreeStore(
 
         fun admitMetadata(pathBytes: Int) {
             if (entries.size >= limits.treeEntries) throw SecureProjectFileException("project tree exceeds entry limit")
-            metadataBytes = Math.addExact(metadataBytes, pathBytes.toLong() + ENTRY_METADATA_BYTES)
+            metadataBytes = Math.addExact(metadataBytes, pathBytes.toLong() + PROJECT_TREE_ENTRY_METADATA_BYTES)
             if (metadataBytes > limits.treeMetadataBytes.toLong()) {
                 throw SecureProjectFileException("project tree exceeds metadata byte limit")
             }
@@ -134,8 +288,21 @@ class ProjectTreeStore(
     }
 
     private companion object {
-        const val ENTRY_METADATA_BYTES = 48L
-
         fun hash(content: ByteArray): Hash256 = Hash256.of(MessageDigest.getInstance("SHA-256").digest(content))
     }
+}
+
+internal const val PROJECT_TREE_ENTRY_METADATA_BYTES = 48L
+
+private fun ProjectTree.find(path: ProjectPath): ProjectTreeEntry? = flatten().singleOrNull { it.path == path }
+
+private fun firstDeleteConflict(
+    expected: Map<ProjectPath, FileRevision?>,
+    actual: Map<ProjectPath, FileRevision?>,
+): ProjectPath? {
+    expected.forEach { (path, revision) ->
+        if (!actual.containsKey(path) || actual[path] != revision) return path
+    }
+    if (actual.size != expected.size) return expected.keys.minByOrNull { it.components.size }
+    return null
 }

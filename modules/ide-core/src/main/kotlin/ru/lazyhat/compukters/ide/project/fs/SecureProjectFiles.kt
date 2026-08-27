@@ -66,7 +66,7 @@ internal object SecureProjectFiles {
         maximumBytes: Int,
     ): String = TomlSupport.decodeStrictUtf8(readBytes(directory, Path.of(name), maximumBytes))
 
-    fun readSource(
+    fun readFile(
         identity: ProjectRootIdentity,
         path: ProjectPath,
         maximumBytes: Int,
@@ -77,7 +77,13 @@ internal object SecureProjectFiles {
             }
         }
 
-    fun writeSource(
+    fun readSource(
+        identity: ProjectRootIdentity,
+        path: ProjectPath,
+        maximumBytes: Int,
+    ): ByteArray? = readFile(identity, path, maximumBytes)
+
+    fun writeFile(
         identity: ProjectRootIdentity,
         path: ProjectPath,
         expected: FileRevision,
@@ -124,6 +130,118 @@ internal object SecureProjectFiles {
                     } finally {
                         runCatching { parent.deleteFile(temporary) }
                     }
+                }
+            }
+        }
+
+    fun writeSource(
+        identity: ProjectRootIdentity,
+        path: ProjectPath,
+        expected: FileRevision,
+        content: ByteArray,
+        maximumBytes: Int,
+        hook: (ProjectWriteStep) -> Unit,
+    ): SecureWriteResult = writeFile(identity, path, expected, content, maximumBytes, hook)
+
+    internal fun createFile(
+        identity: ProjectRootIdentity,
+        path: ProjectPath,
+    ): Boolean =
+        synchronized(identity) {
+            withValidProject(identity) { root ->
+                withParentDirectory(root, path) { parent, target ->
+                    if (attributesOrNull(parent, target) != null) return@withParentDirectory false
+                    parent.newByteChannel(target, WRITE_NEW_OPTIONS).use { channel ->
+                        (channel as? FileChannel)?.force(true)
+                    }
+                    true
+                }
+            }
+        }
+
+    internal fun createDirectory(
+        identity: ProjectRootIdentity,
+        path: ProjectPath,
+    ): Boolean =
+        synchronized(identity) {
+            withValidProject(identity) { root ->
+                withParentDirectory(root, path) { parent, target ->
+                    if (attributesOrNull(parent, target) != null) return@withParentDirectory false
+                    val absolute = identity.canonicalPath.resolve(path.value)
+                    Files.createDirectory(absolute)
+                    val created = attributes(parent, target)
+                    if (created.isSymbolicLink || !created.isDirectory) {
+                        throw SecureProjectFileException("created project entry is not a real directory")
+                    }
+                    if (!isValid(identity)) throw SecureProjectFileException("project root was invalidated")
+                    true
+                }
+            }
+        }
+
+    internal fun move(
+        identity: ProjectRootIdentity,
+        source: ProjectPath,
+        target: ProjectPath,
+    ): Boolean =
+        synchronized(identity) {
+            withValidProject(identity) { root ->
+                val opened = mutableListOf<SecureDirectoryStream<Path>>()
+                try {
+                    val sourceParent = openParentDirectory(root, source, opened)
+                    val targetParent =
+                        if (source.components.dropLast(1) == target.components.dropLast(1)) {
+                            sourceParent
+                        } else {
+                            openParentDirectory(root, target, opened)
+                        }
+                    val sourceName = Path.of(source.components.last())
+                    val targetName = Path.of(target.components.last())
+                    val sourceAttributes = attributesOrNull(sourceParent, sourceName) ?: return@withValidProject false
+                    if (sourceAttributes.isSymbolicLink || (!sourceAttributes.isDirectory && !sourceAttributes.isRegularFile)) {
+                        throw SecureProjectFileException("project move source must be a real file or directory")
+                    }
+                    if (attributesOrNull(targetParent, targetName) != null) return@withValidProject false
+                    sourceParent.move(sourceName, targetParent, targetName)
+                    true
+                } finally {
+                    opened.asReversed().forEach { runCatching { it.close() } }
+                }
+            }
+        }
+
+    internal fun deleteFile(
+        identity: ProjectRootIdentity,
+        path: ProjectPath,
+        expected: FileRevision.Present,
+        maximumBytes: Int,
+    ): Boolean =
+        synchronized(identity) {
+            withValidProject(identity) { root ->
+                withParentDirectory(root, path) { parent, target ->
+                    val attributes = attributesOrNull(parent, target) ?: return@withParentDirectory false
+                    if (attributes.isSymbolicLink || !attributes.isRegularFile) return@withParentDirectory false
+                    if (revision(parent, target, maximumBytes) != expected) return@withParentDirectory false
+                    parent.deleteFile(target)
+                    true
+                }
+            }
+        }
+
+    internal fun deleteEmptyDirectory(
+        identity: ProjectRootIdentity,
+        path: ProjectPath,
+    ): Boolean =
+        synchronized(identity) {
+            withValidProject(identity) { root ->
+                withParentDirectory(root, path) { parent, target ->
+                    val attributes = attributesOrNull(parent, target) ?: return@withParentDirectory false
+                    if (attributes.isSymbolicLink || !attributes.isDirectory) return@withParentDirectory false
+                    parent.newDirectoryStream(target, LinkOption.NOFOLLOW_LINKS).use { child ->
+                        if (child.iterator().hasNext()) return@withParentDirectory false
+                    }
+                    parent.deleteDirectory(target)
+                    true
                 }
             }
         }
@@ -175,27 +293,36 @@ internal object SecureProjectFiles {
             action(directory)
         }
 
-    private fun <T> withParentDirectory(
+    internal fun <T> withParentDirectory(
         root: SecureDirectoryStream<Path>,
         path: ProjectPath,
         action: (SecureDirectoryStream<Path>, Path) -> T,
     ): T {
         val opened = mutableListOf<SecureDirectoryStream<Path>>()
         try {
-            var current = root
-            path.components.dropLast(1).forEach { component ->
-                val name = Path.of(component)
-                val attributes = attributes(current, name)
-                if (attributes.isSymbolicLink || !attributes.isDirectory) {
-                    throw SecureProjectFileException("source parent must be a real directory")
-                }
-                current = current.newDirectoryStream(name, LinkOption.NOFOLLOW_LINKS)
-                opened += current
-            }
+            val current = openParentDirectory(root, path, opened)
             return action(current, Path.of(path.components.last()))
         } finally {
             opened.asReversed().forEach { runCatching { it.close() } }
         }
+    }
+
+    private fun openParentDirectory(
+        root: SecureDirectoryStream<Path>,
+        path: ProjectPath,
+        opened: MutableList<SecureDirectoryStream<Path>>,
+    ): SecureDirectoryStream<Path> {
+        var current = root
+        path.components.dropLast(1).forEach { component ->
+            val name = Path.of(component)
+            val attributes = attributes(current, name)
+            if (attributes.isSymbolicLink || !attributes.isDirectory) {
+                throw SecureProjectFileException("project file parent must be a real directory")
+            }
+            current = current.newDirectoryStream(name, LinkOption.NOFOLLOW_LINKS)
+            opened += current
+        }
+        return current
     }
 
     fun attributes(

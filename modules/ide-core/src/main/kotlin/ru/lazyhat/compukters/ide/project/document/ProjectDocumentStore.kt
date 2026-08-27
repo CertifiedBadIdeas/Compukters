@@ -27,12 +27,23 @@ import ru.lazyhat.compukters.ide.project.TomlSupport
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.fs.SecureProjectFiles
 import ru.lazyhat.compukters.ide.project.fs.SecureWriteResult
+import ru.lazyhat.compukters.ide.project.tree.PROJECT_TREE_ENTRY_METADATA_BYTES
+import ru.lazyhat.compukters.ide.project.tree.ProjectFileKind
+import ru.lazyhat.compukters.ide.project.tree.ProjectTreeStore
+import java.nio.charset.CharacterCodingException
 import java.security.MessageDigest
 
 class ProjectDocumentException(
     message: String,
     cause: Throwable? = null,
+    val reason: ProjectDocumentFailure = ProjectDocumentFailure.IO,
 ) : IllegalStateException(message, cause)
+
+enum class ProjectDocumentFailure {
+    MISSING,
+    BINARY,
+    IO,
+}
 
 class ProjectDocumentStore internal constructor(
     private val handle: ProjectHandle,
@@ -47,14 +58,26 @@ class ProjectDocumentStore internal constructor(
     fun open(path: ProjectPath): DocumentSnapshot =
         try {
             val content =
-                SecureProjectFiles.readSource(handle.identity, path, limits.sourceFileBytes)
-                    ?: throw ProjectDocumentException("source file does not exist: ${path.value}")
-            val text = TomlSupport.decodeStrictUtf8(content)
+                SecureProjectFiles.readFile(handle.identity, path, limits.projectFileBytes)
+                    ?: throw ProjectDocumentException(
+                        "project file does not exist: ${path.value}",
+                        reason = ProjectDocumentFailure.MISSING,
+                    )
+            val text =
+                try {
+                    TomlSupport.decodeStrictUtf8(content)
+                } catch (exception: CharacterCodingException) {
+                    throw ProjectDocumentException(
+                        "project file is binary: ${path.value}",
+                        exception,
+                        ProjectDocumentFailure.BINARY,
+                    )
+                }
             DocumentSnapshot(path, text, FileRevision.Present(hash(content)))
         } catch (exception: ProjectDocumentException) {
             throw exception
         } catch (exception: Exception) {
-            throw ProjectDocumentException("failed to open source: ${path.value}", exception)
+            throw ProjectDocumentException("failed to open project file: ${path.value}", exception)
         }
 
     fun save(
@@ -68,23 +91,26 @@ class ProjectDocumentStore internal constructor(
                 try {
                     TomlSupport.strictUtf8(text)
                 } catch (exception: Exception) {
-                    throw ProjectDocumentException("source text must be strict UTF-8", exception)
+                    throw ProjectDocumentException("project text must be strict UTF-8", exception)
                 }
-            if (content.size > limits.sourceFileBytes) throw ProjectDocumentException("source exceeds per-file byte limit")
+            if (content.size > limits.projectFileBytes) throw ProjectDocumentException("project file exceeds byte limit")
+            if (path.isKotlinSource && content.size > limits.sourceFileBytes) {
+                throw ProjectDocumentException("source exceeds per-file byte limit")
+            }
 
-            val currentBytes = SecureProjectFiles.readSource(handle.identity, path, limits.sourceFileBytes)
+            val currentBytes = SecureProjectFiles.readFile(handle.identity, path, limits.projectFileBytes)
             val currentRevision = currentBytes?.let { FileRevision.Present(hash(it)) } ?: FileRevision.Absent
             if (currentRevision != expected) return DocumentSaveResult.Conflict(expected, currentRevision)
             validateProjectBounds(path, content.size, currentBytes?.size)
 
             when (
                 val result =
-                    SecureProjectFiles.writeSource(
+                    SecureProjectFiles.writeFile(
                         handle.identity,
                         path,
                         expected,
                         content,
-                        limits.sourceFileBytes,
+                        limits.projectFileBytes,
                         writeHook,
                     )
             ) {
@@ -102,7 +128,7 @@ class ProjectDocumentStore internal constructor(
             if (!handle.isValid()) {
                 DocumentSaveResult.ProjectInvalidated
             } else {
-                throw ProjectDocumentException("failed to save source: ${path.value}", exception)
+                throw ProjectDocumentException("failed to save project file: ${path.value}", exception)
             }
         }
     }
@@ -112,6 +138,41 @@ class ProjectDocumentStore internal constructor(
         newBytes: Int,
         oldBytes: Int?,
     ) {
+        val tree = ProjectTreeStore(handle, limits).scan()
+        val existingEntry = tree.flatten().singleOrNull { it.path == path }
+        if (existingEntry?.kind == ProjectFileKind.Directory) {
+            throw ProjectDocumentException("project file path names a directory: ${path.value}")
+        }
+        check((oldBytes == null) == (existingEntry == null)) { "project tree changed during save admission" }
+        val entryCount = tree.flatten().size + if (existingEntry == null) 1 else 0
+        if (entryCount > limits.treeEntries) throw ProjectDocumentException("project tree exceeds entry limit")
+        if (path.components.size > limits.treeDepth) throw ProjectDocumentException("project path exceeds depth limit")
+        val pathBytes = TomlSupport.strictUtf8(path.value).size
+        if (pathBytes > limits.pathUtf8Bytes) throw ProjectDocumentException("project path exceeds byte limit")
+        val metadataBytes =
+            tree.flatten().sumOf {
+                TomlSupport.strictUtf8(it.path.value).size.toLong() + PROJECT_TREE_ENTRY_METADATA_BYTES
+            } +
+                if (existingEntry == null) {
+                    pathBytes.toLong() + PROJECT_TREE_ENTRY_METADATA_BYTES
+                } else {
+                    0L
+                }
+        if (metadataBytes > limits.treeMetadataBytes.toLong()) {
+            throw ProjectDocumentException("project tree exceeds metadata byte limit")
+        }
+        val currentProjectBytes =
+            tree.flatten().sumOf { entry ->
+                when (val kind = entry.kind) {
+                    ProjectFileKind.Directory -> 0L
+                    is ProjectFileKind.Text -> kind.utf8Bytes.toLong()
+                    is ProjectFileKind.Binary -> kind.bytes
+                }
+            }
+        val projectBytes = Math.addExact(currentProjectBytes - (oldBytes ?: 0), newBytes.toLong())
+        if (projectBytes > limits.projectBytes) throw ProjectDocumentException("project exceeds total byte limit")
+
+        if (!path.isKotlinSource) return
         val snapshot =
             ProjectSnapshotLoader.loadSourceSet(
                 handle.canonicalPath,
@@ -121,9 +182,9 @@ class ProjectDocumentStore internal constructor(
                     sourceBytes = limits.sourceBytes,
                 ),
             )
-        val existing = snapshot.sources.singleOrNull { it.path.value == path.value }
-        check((oldBytes == null) == (existing == null)) { "source set changed during save admission" }
-        val newCount = snapshot.sources.size + if (existing == null) 1 else 0
+        val existingSource = snapshot.sources.singleOrNull { it.path.value == path.value }
+        check((oldBytes == null) == (existingSource == null)) { "source set changed during save admission" }
+        val newCount = snapshot.sources.size + if (existingSource == null) 1 else 0
         if (newCount > limits.sourceFiles) throw ProjectDocumentException("project source count exceeds limit")
         val total = Math.addExact(snapshot.totalSourceBytes - (oldBytes ?: 0), newBytes.toLong())
         if (total > limits.sourceBytes.toLong()) throw ProjectDocumentException("project source bytes exceed limit")
