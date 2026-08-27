@@ -588,7 +588,7 @@ object IdeRenderer {
                     IdePanelKind.Control,
                     bounds,
                     if (enabled) IdeColors.BORDER else IdeColors.PANEL_ALT,
-                    z - 1,
+                    z - CONTROL_BACKGROUND_OFFSET,
                 )
             hitTargets += IdeHitTarget(action, bounds, enabled, tooltip, focusGroup, z)
         }
@@ -699,6 +699,7 @@ object IdeRenderer {
     private const val TAB_WIDTH = 4
     private const val UI_LINE_HEIGHT = 12
     private const val NO_TARGET = "No target attached"
+    private const val CONTROL_BACKGROUND_OFFSET = 20
     private const val Z_BACKGROUND = 0
     private const val Z_PANEL = 10
     private const val Z_CONTENT = 20
