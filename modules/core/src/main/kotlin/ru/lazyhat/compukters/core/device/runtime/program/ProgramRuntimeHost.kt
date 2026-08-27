@@ -35,6 +35,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmAdmissionException
 import ru.lazyhat.compukters.lang.runtime.vm.VmBootException
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmCompilationRequest
+import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmStartException
@@ -269,6 +270,23 @@ class ProgramRuntimeHost internal constructor(
 
     fun filesystemGeneration(): Long? = session?.filesystemGeneration()
 
+    fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate? =
+        deploymentOperation { verifyForDeploy(artifact.copyOf()) }
+
+    fun executableRevision(path: String): VmExecutableRevision? = deploymentOperation { executableRevision(path) }
+
+    fun deploy(
+        path: String,
+        expected: VmExecutableRevision,
+        candidate: ProgramDeploymentCandidate,
+    ): VmExecutableRevision? = deploymentOperation { deploy(path, expected, candidate) }
+
+    fun submitCanonicalLine(line: CharArray): Boolean {
+        val activeSession = session ?: return false
+        deploymentOperation(activeSession) { submitCanonicalLine(line.copyOf()) }
+        return session === activeSession
+    }
+
     fun shutdown() {
         if (state == ProgramRuntimeState.Closed) return
         releaseSession()
@@ -321,6 +339,22 @@ class ProgramRuntimeHost internal constructor(
             false
         }
     }
+
+    private fun <T> deploymentOperation(operation: ProgramVmSession.() -> T): T? {
+        val activeSession = session ?: return null
+        return deploymentOperation(activeSession, operation)
+    }
+
+    private fun <T> deploymentOperation(
+        activeSession: ProgramVmSession,
+        operation: ProgramVmSession.() -> T,
+    ): T =
+        try {
+            activeSession.operation()
+        } catch (error: VmBridgeException) {
+            finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))
+            throw error
+        }
 
     private fun rejectStart(failure: ProgramFailure): ProgramStartResult.Rejected {
         state = ProgramRuntimeState.Failed(failure)

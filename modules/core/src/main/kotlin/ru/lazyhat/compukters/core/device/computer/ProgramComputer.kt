@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.core.device.computer
 
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
@@ -30,6 +31,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
+import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 
 class ProgramComputer internal constructor(
     private val deviceId: Int,
@@ -84,6 +86,18 @@ class ProgramComputer internal constructor(
     fun sendTerminalText(value: String): Boolean = state.isPoweredOn() && host.sendTerminalText(value)
 
     fun filesystemGeneration(): Long? = host.filesystemGeneration()
+
+    fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate? = host.verifyForDeploy(artifact)
+
+    fun executableRevision(path: String): VmExecutableRevision? = host.executableRevision(path)
+
+    fun deploy(
+        path: String,
+        expected: VmExecutableRevision,
+        candidate: ProgramDeploymentCandidate,
+    ): VmExecutableRevision? = host.deploy(path, expected, candidate)
+
+    fun submitCanonicalLine(line: CharArray): Boolean = host.submitCanonicalLine(line)
 
     fun shutdown() {
         if (state == ProgramComputerState.Closed || state == SHUTDOWN_STATE) return
