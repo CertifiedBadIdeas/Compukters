@@ -93,6 +93,11 @@ class DefaultIdeWorkspace internal constructor(
             )
         }
 
+    override fun admitDelete(
+        project: ProjectHandle,
+        path: ProjectPath,
+    ) = submit("admitDelete") { ProjectTreeStore(project, projectLimits).admitDelete(path) }
+
     override fun mutate(request: IdeMutationRequest) =
         submit("mutate") {
             val store = ProjectTreeStore(request.project, projectLimits)

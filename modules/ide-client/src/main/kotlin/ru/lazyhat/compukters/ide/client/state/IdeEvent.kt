@@ -18,10 +18,58 @@
 
 package ru.lazyhat.compukters.ide.client.state
 
+import ru.lazyhat.compukters.ide.client.workspace.IdeMutationRequest
+import ru.lazyhat.compukters.ide.client.workspace.IdeSaveResult
+import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
+import ru.lazyhat.compukters.ide.project.ProjectDescriptor
+import ru.lazyhat.compukters.ide.project.fs.ProjectPath
+import ru.lazyhat.compukters.ide.project.tree.AdmittedProjectDelete
+import ru.lazyhat.compukters.ide.project.tree.ProjectMutationResult
 import ru.lazyhat.compukters.ide.project.tree.ProjectTree
 import java.util.Collections
 
 sealed interface IdeEvent {
+    data class ProjectCatalogLoaded(
+        val generation: Long,
+        val projects: List<ProjectDescriptor>,
+    ) : IdeEvent
+
+    data class ProjectOpened(
+        val generation: Long,
+        val operationId: Long,
+        val project: ProjectDescriptor,
+        val tree: ProjectTree,
+    ) : IdeEvent
+
+    data class FileOpened(
+        val generation: Long,
+        val operationId: Long,
+        val path: ProjectPath,
+        val result: ProjectFileOpenResult,
+    ) : IdeEvent
+
+    data class SaveCompleted(
+        val generation: Long,
+        val operationId: Long,
+        val path: ProjectPath,
+        val editorRevision: Long,
+        val result: IdeSaveResult,
+    ) : IdeEvent
+
+    data class DeleteAdmitted(
+        val generation: Long,
+        val operationId: Long,
+        val actionId: Long,
+        val admitted: AdmittedProjectDelete,
+    ) : IdeEvent
+
+    data class MutationCompleted(
+        val generation: Long,
+        val operationId: Long,
+        val request: IdeMutationRequest,
+        val result: ProjectMutationResult,
+    ) : IdeEvent
+
     data class CatalogLoaded(
         val generation: Long,
         val projects: List<IdeProjectSummary>,
@@ -66,8 +114,15 @@ interface ReplaceableIdeEvent {
 
 internal fun IdeEvent.copyForQueue(): IdeEvent =
     when (this) {
+        is IdeEvent.ProjectCatalogLoaded -> copy(projects = Collections.unmodifiableList(projects.toList()))
+
         is IdeEvent.CatalogLoaded -> copy(projects = Collections.unmodifiableList(projects.toList()))
 
+        is IdeEvent.ProjectOpened,
+        is IdeEvent.FileOpened,
+        is IdeEvent.SaveCompleted,
+        is IdeEvent.DeleteAdmitted,
+        is IdeEvent.MutationCompleted,
         is IdeEvent.PollCompleted,
         is IdeEvent.BuildCompleted,
         is IdeEvent.Failed,

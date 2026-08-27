@@ -44,6 +44,11 @@ interface IdeWorkspace : AutoCloseable {
 
     fun save(request: IdeSaveRequest): CompletableFuture<IdeSaveResult>
 
+    fun admitDelete(
+        project: ProjectHandle,
+        path: ProjectPath,
+    ): CompletableFuture<AdmittedProjectDelete>
+
     fun mutate(request: IdeMutationRequest): CompletableFuture<ProjectMutationResult>
 
     fun buildInput(project: ProjectHandle): CompletableFuture<IdeBuildInput>

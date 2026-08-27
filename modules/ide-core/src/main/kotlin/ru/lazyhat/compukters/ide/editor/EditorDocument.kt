@@ -57,6 +57,12 @@ class EditorDocument(
 
     fun materialize(): String = buffer.materialize()
 
+    /** Copies one logical line without its line separator. */
+    fun materializeLine(index: Int): String {
+        val line = lines.line(index)
+        return buffer.copyRange(line.startUtf16, line.contentEndUtf16).concatToString()
+    }
+
     fun contentEquals(value: String): Boolean = buffer.contentEquals(value)
 
     fun charAt(offset: Int): Char = buffer.charAt(offset)
