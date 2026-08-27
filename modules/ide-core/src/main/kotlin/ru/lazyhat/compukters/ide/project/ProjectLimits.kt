@@ -27,6 +27,12 @@ data class ProjectLimits(
     val sourceFiles: Int = 64,
     val sourceFileBytes: Int = 256 * 1024,
     val sourceBytes: Int = 256 * 1024,
+    val treeEntries: Int = 4 * 1024,
+    val treeDepth: Int = 32,
+    val pathUtf8Bytes: Int = 4 * 1024,
+    val treeMetadataBytes: Int = 2 * 1024 * 1024,
+    val projectFileBytes: Int = 16 * 1024 * 1024,
+    val projectBytes: Long = 64L * 1024 * 1024,
 ) {
     init {
         require(manifestBytes >= 0) { "manifest byte limit must be non-negative" }
@@ -37,5 +43,11 @@ data class ProjectLimits(
         require(sourceFiles >= 0) { "source file count limit must be non-negative" }
         require(sourceFileBytes >= 0) { "source file byte limit must be non-negative" }
         require(sourceBytes >= 0) { "source byte limit must be non-negative" }
+        require(treeEntries >= 0) { "tree entry limit must be non-negative" }
+        require(treeDepth >= 0) { "tree depth limit must be non-negative" }
+        require(pathUtf8Bytes >= 0) { "path byte limit must be non-negative" }
+        require(treeMetadataBytes >= 0) { "tree metadata byte limit must be non-negative" }
+        require(projectFileBytes >= 0) { "project file byte limit must be non-negative" }
+        require(projectBytes >= 0) { "project byte limit must be non-negative" }
     }
 }

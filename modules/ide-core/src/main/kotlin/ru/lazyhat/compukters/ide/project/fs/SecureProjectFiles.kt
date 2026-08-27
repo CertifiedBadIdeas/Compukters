@@ -166,7 +166,7 @@ internal object SecureProjectFiles {
         }
     }
 
-    private fun <T> withValidProject(
+    internal fun <T> withValidProject(
         identity: ProjectRootIdentity,
         action: (SecureDirectoryStream<Path>) -> T,
     ): T =
@@ -274,7 +274,7 @@ internal object SecureProjectFiles {
         }
     }
 
-    private fun readBytes(
+    internal fun readBytes(
         directory: SecureDirectoryStream<Path>,
         name: Path,
         maximumBytes: Int,
@@ -288,10 +288,12 @@ internal object SecureProjectFiles {
             .newInputStream(directory.newByteChannel(name, READ_OPTIONS))
             .use { input ->
                 val output = ByteArrayOutputStream(minOf(maximumBytes, 8192))
-                val buffer = ByteArray(minOf(maximumBytes.coerceAtLeast(1), 8192))
+                val buffer = ByteArray(minOf(maximumBytes.toLong() + 1L, 8192L).toInt().coerceAtLeast(1))
                 var total = 0
                 while (true) {
-                    val count = input.read(buffer)
+                    val remainingThroughLimit = maximumBytes.toLong() - total.toLong() + 1L
+                    val requested = minOf(buffer.size.toLong(), remainingThroughLimit).toInt().coerceAtLeast(1)
+                    val count = input.read(buffer, 0, requested)
                     if (count < 0) break
                     total = Math.addExact(total, count)
                     if (total > maximumBytes) throw SecureProjectFileException("project entry grew beyond byte limit")
