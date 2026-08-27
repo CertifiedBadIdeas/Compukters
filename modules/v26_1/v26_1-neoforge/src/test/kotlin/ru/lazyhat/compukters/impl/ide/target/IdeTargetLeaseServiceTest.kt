@@ -110,6 +110,7 @@ class IdeTargetLeaseServiceTest {
             capabilities = IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true),
             displayName = "Computer",
             alive = alive,
+            deployment = IdeTargetDeploymentOperations(verifyForDeploy = { null }),
         )
     }
 

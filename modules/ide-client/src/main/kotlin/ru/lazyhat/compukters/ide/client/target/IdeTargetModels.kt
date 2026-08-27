@@ -103,9 +103,17 @@ class IdeVerificationTicket private constructor(
             bytes: ByteArray,
             target: IdeAttachedTarget,
             artifact: IdeTargetArtifact,
+        ): IdeVerificationTicket = of(bytes, target, artifact.hash, artifact.size)
+
+        fun of(
+            bytes: ByteArray,
+            target: IdeAttachedTarget,
+            artifactHash: Hash256,
+            artifactBytes: Int,
         ): IdeVerificationTicket {
             require(bytes.isNotEmpty() && bytes.size <= 256) { "verification ticket must contain 1..256 bytes" }
-            return IdeVerificationTicket(BinaryValue.of(bytes), target.id, target.profile, artifact.hash, artifact.size)
+            require(artifactBytes > 0) { "verification ticket artifact size must be positive" }
+            return IdeVerificationTicket(BinaryValue.of(bytes), target.id, target.profile, artifactHash, artifactBytes)
         }
     }
 }

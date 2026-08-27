@@ -52,6 +52,17 @@ class IdeTargetModelsTest {
     }
 
     @Test
+    fun `verification ticket can be reconstructed from bounded transport metadata`() {
+        val target = target()
+        val ticket = IdeVerificationTicket.of(byteArrayOf(7), target, hash(8), artifactBytes = 42)
+
+        assertEquals(target.id, ticket.targetId)
+        assertEquals(target.profile, ticket.profileId)
+        assertEquals(hash(8), ticket.artifactHash)
+        assertEquals(42, ticket.artifactBytes)
+    }
+
+    @Test
     fun `deployment path is derived from one safe manifest name`() {
         assertEquals("/home/demo", IdeDeploymentPath.fromProgramName("demo").value)
         listOf("", ".", "..", "a/b", "a\\b", "a\n").forEach { invalid ->
