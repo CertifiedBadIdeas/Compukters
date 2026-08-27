@@ -29,6 +29,7 @@ sealed interface IdeEditorView {
     class Text(
         val path: ProjectPath,
         visibleLines: List<String>,
+        visibleLineStartsUtf16: List<Int>,
         val firstVisibleLine: Int,
         val totalLines: Int,
         val caretUtf16: Int,
@@ -42,8 +43,14 @@ sealed interface IdeEditorView {
         val analysis: IdeAnalysisState,
     ) : IdeEditorView {
         val visibleLines: List<String> = Collections.unmodifiableList(visibleLines.toList())
+        val visibleLineStartsUtf16: List<Int> = Collections.unmodifiableList(visibleLineStartsUtf16.toList())
 
         init {
+            require(visibleLines.size == visibleLineStartsUtf16.size) { "visible editor lines and offsets must align" }
+            require(visibleLineStartsUtf16.all { it >= 0 }) { "visible line offsets must be non-negative" }
+            require(visibleLineStartsUtf16.zipWithNext().all { (left, right) -> left < right }) {
+                "visible line offsets must be strictly increasing"
+            }
             require(firstVisibleLine >= 0) { "first visible line must be non-negative" }
             require(totalLines > 0) { "text editor must contain at least one line" }
             require(caretUtf16 >= 0) { "caret must be non-negative" }

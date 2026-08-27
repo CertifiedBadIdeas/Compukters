@@ -995,10 +995,12 @@ class IdeClientController(
         val first = firstVisibleLine.coerceIn(0, document.lineCount - 1)
         val lastExclusive = minOf(document.lineCount, first + limits.visibleEditorLines)
         val visible = (first until lastExclusive).map(document::materializeLine)
+        val visibleStarts = (first until lastExclusive).map(document::lineStartOffset)
         val selection = document.selectionRange
         return IdeEditorView.Text(
             path,
             visible,
+            visibleStarts,
             first,
             document.lineCount,
             document.caretOffset,
