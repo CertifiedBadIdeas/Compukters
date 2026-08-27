@@ -18,6 +18,10 @@
 
 package ru.lazyhat.compukters.impl.compiler
 
+import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfileIdentity
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
@@ -27,6 +31,25 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 
 class NeoForgeCompilerServicesTest {
+    @Test
+    fun `server publishes the exact packaged toolchain and limits as its target profile`() {
+        val identity = WorkerIdentity("2.4.0", "2.4", 3u, 4u, hash(5), hash(6))
+        val limits = WorkerLimits(sourceFiles = 7, artifactBytes = 8)
+
+        val profile = serverTargetProfile(identity, limits)
+
+        assertEquals(identity.compilerVersion, profile.toolchain.compilerVersion)
+        assertEquals(identity.languageVersion, profile.toolchain.languageVersion)
+        assertEquals(identity.codegenAbi, profile.toolchain.codegenAbi)
+        assertEquals(2u, profile.toolchain.artifactAbi)
+        assertEquals(identity.artifactWriterVersion, profile.toolchain.artifactWriterVersion)
+        assertEquals(identity.payloadHash, profile.toolchain.payloadHash)
+        assertEquals(identity.standardLibraryAbi, profile.toolchain.standardLibraryAbi)
+        assertEquals(limits, profile.limits)
+        assertEquals(emptyList(), profile.modules)
+        assertEquals(TargetCompileProfileIdentity.of(profile), TargetCompileProfileIdentity.of(serverTargetProfile(identity, limits)))
+    }
+
     @Test
     fun `canonical world root owns one shared service until stop`() {
         val root = createTempDirectory("compukters-compiler-services-").toRealPath()
@@ -75,4 +98,6 @@ class NeoForgeCompilerServicesTest {
             closes++
         }
     }
+
+    private fun hash(value: Int) = Hash256.of(ByteArray(32) { value.toByte() })
 }
