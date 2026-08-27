@@ -2,20 +2,22 @@ use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
 use compukter_vm::{
-    verify_artifact, AdmissionError, ArtifactLimits, CompilationRequest, ComputerAdvanceOutcome,
-    ComputerError, ComputerId, ComputerMachine, ComputerStartError, ComputerValue,
-    EntryArgumentLimits, ExecutionProfile, FileCapability, FileRights, FileSystemLimits, GuestTrap,
-    HostFailure, HostResponse, HostValueInput, ManagedAllocationFailure, ProcessFailureReason,
-    ProcessLimits, QuotaExhaustion, ResumeError, RomImage, RunError, StoreError, StoreHealth,
-    StoreOpenError, TerminalDevice, TerminalInputError, TerminalKey, TerminalKeyAction,
-    TerminalKeyEvent, TerminalModifiers, TerminalUpdate, VirtualPath, VmFault,
-    WorldFileSystemStore,
+    verify_artifact, AdmissionError, ArtifactLimits, CanonicalLineSubmissionError,
+    CompilationRequest, ComputerAdvanceOutcome, ComputerError, ComputerId, ComputerMachine,
+    ComputerStartError, ComputerValue, DeploymentCandidate, EntryArgumentLimits,
+    ExecutableRevision, ExecutionProfile, FileCapability, FileRights, FileSystemError,
+    FileSystemLimits, GuestTrap, HostDeployError, HostFailure, HostResponse, HostValueInput,
+    HostVerifyError, ManagedAllocationFailure, ProcessFailureReason, ProcessLimits,
+    QuotaExhaustion, ResumeError, RomImage, RunError, StoreError, StoreHealth, StoreOpenError,
+    TerminalDevice, TerminalInputError, TerminalKey, TerminalKeyAction, TerminalKeyEvent,
+    TerminalModifiers, TerminalUpdate, VirtualPath, VmFault, WorldFileSystemStore,
 };
 
 use crate::handle_table::{HandleError, HandleTable};
 
 static SESSIONS: OnceLock<HandleTable<BridgeSession>> = OnceLock::new();
 static STORES: OnceLock<HandleTable<Arc<WorldFileSystemStore>>> = OnceLock::new();
+static DEPLOYMENT_CANDIDATES: OnceLock<HandleTable<Box<DeploymentCandidate>>> = OnceLock::new();
 
 #[derive(Debug)]
 pub(crate) enum CreateError {
@@ -73,15 +75,40 @@ pub(crate) enum OwnedOutcome {
 struct BridgeSession {
     computer: ComputerMachine,
     compilation: Option<CompilationRequest>,
+    filesystem_limits: FileSystemLimits,
 }
 
 impl BridgeSession {
-    fn new(computer: ComputerMachine) -> Self {
+    fn new(computer: ComputerMachine, filesystem_limits: FileSystemLimits) -> Self {
         Self {
             computer,
             compilation: None,
+            filesystem_limits,
         }
     }
+}
+
+#[derive(Debug)]
+pub(crate) enum DeploymentVerifyBridgeError {
+    Session(HandleError),
+    Verification,
+    Admission,
+    Candidate(HandleError),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DeploymentBridgeError {
+    Session(HandleError),
+    Candidate(HandleError),
+    WrongMachine,
+    ProfileChanged,
+    FileSystem(FileSystemError),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RevisionBridgeError {
+    Session(HandleError),
+    FileSystem(FileSystemError),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -122,7 +149,7 @@ pub(crate) fn create(artifact_bytes: Vec<u8>) -> Result<u64, CreateError> {
             ComputerStartError::Process(error) => CreateError::Process(error),
         })?;
     sessions()
-        .insert(BridgeSession::new(computer))
+        .insert(BridgeSession::new(computer, FileSystemLimits::default()))
         .map_err(CreateError::Handle)
 }
 
@@ -169,8 +196,11 @@ pub(crate) fn create_in_store(
             })
         })
         .map_err(|error| CreateInStoreError::Store(StoreBridgeError::Handle(error)))??;
+    let limits = stores()
+        .with(store_handle, |store| *store.limits())
+        .map_err(|error| CreateInStoreError::Store(StoreBridgeError::Handle(error)))?;
     sessions()
-        .insert(BridgeSession::new(computer))
+        .insert(BridgeSession::new(computer, limits))
         .map_err(|error| CreateInStoreError::Create(CreateError::Handle(error)))
 }
 
@@ -209,8 +239,11 @@ pub(crate) fn create_boot_in_store(
             })
         })
         .map_err(|error| CreateInStoreError::Store(StoreBridgeError::Handle(error)))??;
+    let limits = stores()
+        .with(store_handle, |store| *store.limits())
+        .map_err(|error| CreateInStoreError::Store(StoreBridgeError::Handle(error)))?;
     sessions()
-        .insert(BridgeSession::new(computer))
+        .insert(BridgeSession::new(computer, limits))
         .map_err(|error| CreateInStoreError::Create(CreateError::Handle(error)))
 }
 
@@ -270,6 +303,91 @@ pub(crate) fn filesystem_generation(handle: u64) -> Result<u64, BridgeError> {
     sessions()
         .with(handle, |session| session.computer.filesystem_generation())
         .map_err(BridgeError::Handle)
+}
+
+pub(crate) fn verify_for_deploy(
+    handle: u64,
+    artifact: Arc<[u8]>,
+) -> Result<u64, DeploymentVerifyBridgeError> {
+    let candidate = sessions()
+        .with(handle, |session| {
+            session.computer.verify_for_deploy(artifact)
+        })
+        .map_err(DeploymentVerifyBridgeError::Session)?
+        .map_err(|error| match error {
+            HostVerifyError::Artifact(_) => DeploymentVerifyBridgeError::Verification,
+            HostVerifyError::Admission(_) => DeploymentVerifyBridgeError::Admission,
+        })?;
+    deployment_candidates()
+        .insert(Box::new(candidate))
+        .map_err(DeploymentVerifyBridgeError::Candidate)
+}
+
+pub(crate) fn executable_revision(
+    handle: u64,
+    path: &str,
+) -> Result<ExecutableRevision, RevisionBridgeError> {
+    sessions()
+        .with(handle, |session| {
+            let path = VirtualPath::parse_utf8(path, &session.filesystem_limits)
+                .map_err(RevisionBridgeError::FileSystem)?;
+            session
+                .computer
+                .executable_revision(&path)
+                .map_err(RevisionBridgeError::FileSystem)
+        })
+        .map_err(RevisionBridgeError::Session)?
+}
+
+pub(crate) fn deploy(
+    handle: u64,
+    candidate_handle: u64,
+    path: &str,
+    expected: ExecutableRevision,
+) -> Result<ExecutableRevision, DeploymentBridgeError> {
+    sessions()
+        .with(handle, |session| {
+            let path = VirtualPath::parse_utf8(path, &session.filesystem_limits)
+                .map_err(DeploymentBridgeError::FileSystem)?;
+            deployment_candidates()
+                .consume_if(candidate_handle, |candidate| {
+                    match session.computer.deploy(&path, expected, *candidate) {
+                        Ok(revision) => Ok(revision),
+                        Err(failure) => {
+                            let error = match failure.error() {
+                                HostDeployError::WrongMachine => {
+                                    DeploymentBridgeError::WrongMachine
+                                }
+                                HostDeployError::ProfileChanged => {
+                                    DeploymentBridgeError::ProfileChanged
+                                }
+                                HostDeployError::FileSystem(error) => {
+                                    DeploymentBridgeError::FileSystem(error)
+                                }
+                            };
+                            Err((error, Box::new(failure.into_candidate())))
+                        }
+                    }
+                })
+                .map_err(DeploymentBridgeError::Candidate)?
+        })
+        .map_err(DeploymentBridgeError::Session)?
+}
+
+pub(crate) fn close_deployment_candidate(handle: u64) -> Result<(), HandleError> {
+    deployment_candidates().close(handle)
+}
+
+pub(crate) fn submit_canonical_line(
+    handle: u64,
+    line: &[u16],
+) -> Result<(), Result<HandleError, CanonicalLineSubmissionError>> {
+    sessions()
+        .with(handle, |session| {
+            session.computer.submit_canonical_line(line)
+        })
+        .map_err(Ok)?
+        .map_err(Err)
 }
 
 pub(crate) fn with_terminal<R>(
@@ -462,6 +580,10 @@ fn sessions() -> &'static HandleTable<BridgeSession> {
 
 fn stores() -> &'static HandleTable<Arc<WorldFileSystemStore>> {
     STORES.get_or_init(HandleTable::default)
+}
+
+fn deployment_candidates() -> &'static HandleTable<Box<DeploymentCandidate>> {
+    DEPLOYMENT_CANDIDATES.get_or_init(HandleTable::default)
 }
 
 fn copy_outcome(outcome: ComputerAdvanceOutcome) -> OwnedOutcome {

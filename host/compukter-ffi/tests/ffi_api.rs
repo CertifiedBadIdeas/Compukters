@@ -23,12 +23,14 @@ mod support;
 use compukter_ffi::{
     compukter_abi_version, compukter_advance, compukter_close, compukter_compilation_complete,
     compukter_compilation_request_copy, compukter_compilation_request_size, compukter_create,
-    compukter_create_boot_in_store, compukter_create_in_store, compukter_filesystem_generation,
-    compukter_max_create_bytes, compukter_max_outcome_bytes, compukter_store_close,
-    compukter_store_durable_generation, compukter_store_flush, compukter_store_health,
-    compukter_store_open, compukter_store_recover, compukter_store_tombstone,
-    compukter_terminal_changes_since, compukter_terminal_commit, compukter_terminal_full_state,
-    compukter_terminal_key, compukter_terminal_text, compukter_verify_artifact, FfiStatus,
+    compukter_create_boot_in_store, compukter_create_in_store, compukter_deploy,
+    compukter_deployment_candidate_close, compukter_executable_revision,
+    compukter_filesystem_generation, compukter_max_create_bytes, compukter_max_outcome_bytes,
+    compukter_store_close, compukter_store_durable_generation, compukter_store_flush,
+    compukter_store_health, compukter_store_open, compukter_store_recover,
+    compukter_store_tombstone, compukter_submit_canonical_line, compukter_terminal_changes_since,
+    compukter_terminal_commit, compukter_terminal_full_state, compukter_terminal_key,
+    compukter_terminal_text, compukter_verify_artifact, compukter_verify_for_deploy, FfiStatus,
 };
 use compukter_vm::ProcessFailureReason;
 use std::path::{Path, PathBuf};
@@ -36,7 +38,68 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 #[test]
 fn c_abi_publishes_its_exact_version() {
-    assert_eq!(4, compukter_abi_version());
+    assert_eq!(5, compukter_abi_version());
+}
+
+#[test]
+fn deployment_candidates_are_machine_bound_retryable_and_consumed_by_success() {
+    let artifact = terminal_artifact();
+    let machine = create_machine(&artifact);
+    let other = create_machine(&artifact);
+    let path = b"/home/example";
+
+    assert_eq!(vec![1, 0], executable_revision(machine, path));
+    let candidate = verify_for_deploy(machine, &artifact);
+    assert_eq!(
+        FfiStatus::DeploymentWrongMachine,
+        deploy(other, candidate, path, 0, 0,).0
+    );
+    let (status, installed) = deploy(machine, candidate, path, 0, 0);
+    assert_eq!(FfiStatus::Ok, status);
+    assert_eq!(1, installed[0]);
+    assert_eq!(1, installed[1]);
+    let first_generation = u64::from_le_bytes(installed[2..10].try_into().unwrap());
+    assert_eq!(installed, executable_revision(machine, path));
+    assert_eq!(
+        FfiStatus::StaleHandle,
+        compukter_deployment_candidate_close(candidate)
+    );
+
+    let retry = verify_for_deploy(machine, &artifact);
+    assert_eq!(
+        FfiStatus::DeploymentConflict,
+        deploy(machine, retry, path, 0, 0).0
+    );
+    let (status, replaced) = deploy(machine, retry, path, 1, first_generation);
+    assert_eq!(FfiStatus::Ok, status);
+    assert!(u64::from_le_bytes(replaced[2..10].try_into().unwrap()) > first_generation);
+
+    assert_eq!(FfiStatus::InputNoPendingRead, unsafe {
+        compukter_submit_canonical_line(machine, core::ptr::null(), 0)
+    });
+    assert_eq!(FfiStatus::Ok, compukter_close(machine));
+    assert_eq!(FfiStatus::Ok, compukter_close(other));
+}
+
+#[test]
+fn deployment_verification_and_candidate_close_reject_invalid_state() {
+    let artifact = terminal_artifact();
+    let machine = create_machine(&artifact);
+    let mut candidate = 0_u64;
+    assert_eq!(FfiStatus::Verification, unsafe {
+        compukter_verify_for_deploy(machine, [0_u8].as_ptr(), 1, &mut candidate)
+    });
+    assert_eq!(0, candidate);
+    let candidate = verify_for_deploy(machine, &artifact);
+    assert_eq!(
+        FfiStatus::Ok,
+        compukter_deployment_candidate_close(candidate)
+    );
+    assert_eq!(
+        FfiStatus::StaleHandle,
+        compukter_deployment_candidate_close(candidate)
+    );
+    assert_eq!(FfiStatus::Ok, compukter_close(machine));
 }
 
 #[test]
@@ -437,6 +500,56 @@ fn create_machine(artifact: &[u8]) -> u64 {
     assert_eq!(9, written);
     assert_eq!(0, output[0]);
     u64::from_le_bytes(output[1..9].try_into().unwrap())
+}
+
+fn verify_for_deploy(machine: u64, artifact: &[u8]) -> u64 {
+    let mut candidate = 0_u64;
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_verify_for_deploy(machine, artifact.as_ptr(), artifact.len(), &mut candidate)
+    });
+    assert_ne!(0, candidate);
+    candidate
+}
+
+fn executable_revision(machine: u64, path: &[u8]) -> Vec<u8> {
+    let mut output = [0_u8; 10];
+    let mut written = 0_usize;
+    assert_eq!(FfiStatus::Ok, unsafe {
+        compukter_executable_revision(
+            machine,
+            path.as_ptr(),
+            path.len(),
+            output.as_mut_ptr(),
+            output.len(),
+            &mut written,
+        )
+    });
+    output[..written].to_vec()
+}
+
+fn deploy(
+    machine: u64,
+    candidate: u64,
+    path: &[u8],
+    expected_kind: u32,
+    expected_generation: u64,
+) -> (FfiStatus, Vec<u8>) {
+    let mut output = [0_u8; 10];
+    let mut written = 0_usize;
+    let status = unsafe {
+        compukter_deploy(
+            machine,
+            candidate,
+            path.as_ptr(),
+            path.len(),
+            expected_kind,
+            expected_generation,
+            output.as_mut_ptr(),
+            output.len(),
+            &mut written,
+        )
+    };
+    (status, output[..written].to_vec())
 }
 
 fn terminal_full_state(handle: u64) -> Vec<u8> {
