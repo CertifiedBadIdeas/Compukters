@@ -31,6 +31,7 @@ import net.minecraft.world.level.storage.TagValueOutput
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStateSink
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
@@ -38,6 +39,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
+import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import java.util.stream.Stream
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -46,6 +48,27 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ComputerBlockEntityTest {
+    @Test
+    fun `deployment adapters address the current carrier without exposing it`() {
+        val fixture = fixture()
+        fixture.entity.serverTick()
+        val carrier = fixture.carriers.single()
+
+        val candidate = fixture.entity.verifyForDeploy(byteArrayOf(3, 4))
+        assertEquals(carrier.deploymentCandidate, candidate)
+        assertEquals(VmExecutableRevision.Absent, fixture.entity.executableRevision("/home/demo"))
+        assertEquals(
+            VmExecutableRevision.Present(1),
+            fixture.entity.deploy("/home/demo", VmExecutableRevision.Absent, requireNotNull(candidate)),
+        )
+        assertTrue(fixture.entity.submitCanonicalLine("/home/demo".toCharArray()))
+
+        assertEquals(listOf<Byte>(3, 4), carrier.verifiedArtifact)
+        assertEquals(listOf("/home/demo"), carrier.revisionPaths)
+        assertEquals(listOf("/home/demo"), carrier.deploymentPaths)
+        assertEquals(listOf("/home/demo"), carrier.canonicalLines)
+    }
+
     @Test
     fun `server tick boots once and then advances once per tick`() {
         val fixture = fixture()
@@ -189,6 +212,14 @@ class ComputerBlockEntityTest {
         var terminal: TerminalState = terminalState("", 0)
         var update: TerminalUpdate = TerminalUpdate.Unchanged(0)
         val texts = mutableListOf<String>()
+        val deploymentCandidate =
+            object : ProgramDeploymentCandidate {
+                override fun close() = Unit
+            }
+        var verifiedArtifact = emptyList<Byte>()
+        val revisionPaths = mutableListOf<String>()
+        val deploymentPaths = mutableListOf<String>()
+        val canonicalLines = mutableListOf<String>()
 
         override fun turnOn(): ProgramComputerState {
             turnOnCalls++
@@ -226,6 +257,31 @@ class ComputerBlockEntityTest {
         }
 
         override fun filesystemGeneration(): Long? = null
+
+        override fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate {
+            verifiedArtifact = artifact.toList()
+            return deploymentCandidate
+        }
+
+        override fun executableRevision(path: String): VmExecutableRevision {
+            revisionPaths += path
+            return VmExecutableRevision.Absent
+        }
+
+        override fun deploy(
+            path: String,
+            expected: VmExecutableRevision,
+            candidate: ProgramDeploymentCandidate,
+        ): VmExecutableRevision {
+            deploymentPaths += path
+            assertEquals(deploymentCandidate, candidate)
+            return VmExecutableRevision.Present(1)
+        }
+
+        override fun submitCanonicalLine(line: CharArray): Boolean {
+            canonicalLines += line.concatToString()
+            return true
+        }
 
         override fun close() {
             closeCalls++

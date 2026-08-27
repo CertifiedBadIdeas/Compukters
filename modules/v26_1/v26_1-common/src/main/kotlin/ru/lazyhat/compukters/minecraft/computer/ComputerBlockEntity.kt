@@ -27,11 +27,13 @@ import net.minecraft.world.level.storage.ValueInput
 import net.minecraft.world.level.storage.ValueOutput
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
+import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 
 open class ComputerBlockEntity internal constructor(
     type: BlockEntityType<*>,
@@ -94,6 +96,18 @@ open class ComputerBlockEntity internal constructor(
     ): Boolean = carrier?.sendTerminalKey(key, action, modifiers) == true
 
     fun submitTerminalText(value: String): Boolean = carrier?.sendTerminalText(value) == true
+
+    fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate? = carrier?.verifyForDeploy(artifact)
+
+    fun executableRevision(path: String): VmExecutableRevision? = carrier?.executableRevision(path)
+
+    fun deploy(
+        path: String,
+        expected: VmExecutableRevision,
+        candidate: ProgramDeploymentCandidate,
+    ): VmExecutableRevision? = carrier?.deploy(path, expected, candidate)
+
+    fun submitCanonicalLine(line: CharArray): Boolean = carrier?.submitCanonicalLine(line) == true
 
     internal fun serverTick() {
         val current = carrier ?: createCarrier().also { carrier = it }

@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.core.device.computer
 
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
@@ -26,6 +27,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
+import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 
 internal interface ProgramHost : AutoCloseable {
     val state: ProgramRuntimeState
@@ -47,6 +49,18 @@ internal interface ProgramHost : AutoCloseable {
     fun sendTerminalText(value: String): Boolean
 
     fun filesystemGeneration(): Long?
+
+    fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate?
+
+    fun executableRevision(path: String): VmExecutableRevision?
+
+    fun deploy(
+        path: String,
+        expected: VmExecutableRevision,
+        candidate: ProgramDeploymentCandidate,
+    ): VmExecutableRevision?
+
+    fun submitCanonicalLine(line: CharArray): Boolean
 
     fun shutdown()
 }
@@ -74,6 +88,18 @@ internal class RuntimeProgramHost(
     override fun sendTerminalText(value: String): Boolean = delegate.sendTerminalText(value)
 
     override fun filesystemGeneration(): Long? = delegate.filesystemGeneration()
+
+    override fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate? = delegate.verifyForDeploy(artifact)
+
+    override fun executableRevision(path: String): VmExecutableRevision? = delegate.executableRevision(path)
+
+    override fun deploy(
+        path: String,
+        expected: VmExecutableRevision,
+        candidate: ProgramDeploymentCandidate,
+    ): VmExecutableRevision? = delegate.deploy(path, expected, candidate)
+
+    override fun submitCanonicalLine(line: CharArray): Boolean = delegate.submitCanonicalLine(line)
 
     override fun shutdown() = delegate.shutdown()
 

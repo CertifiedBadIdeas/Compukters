@@ -21,11 +21,13 @@ package ru.lazyhat.compukters.minecraft.computer
 import ru.lazyhat.compukters.core.device.computer.ProgramComputer
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStateSink
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
+import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 
 internal interface ComputerCarrier : AutoCloseable {
     val state: ProgramComputerState
@@ -47,6 +49,18 @@ internal interface ComputerCarrier : AutoCloseable {
     fun sendTerminalText(value: String): Boolean
 
     fun filesystemGeneration(): Long?
+
+    fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate? = null
+
+    fun executableRevision(path: String): VmExecutableRevision? = null
+
+    fun deploy(
+        path: String,
+        expected: VmExecutableRevision,
+        candidate: ProgramDeploymentCandidate,
+    ): VmExecutableRevision? = null
+
+    fun submitCanonicalLine(line: CharArray): Boolean = false
 
     fun reboot(): ProgramComputerState
 
@@ -104,6 +118,18 @@ private class ProgramComputerCarrier(
     override fun sendTerminalText(value: String): Boolean = delegate.sendTerminalText(value)
 
     override fun filesystemGeneration(): Long? = delegate.filesystemGeneration()
+
+    override fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate? = delegate.verifyForDeploy(artifact)
+
+    override fun executableRevision(path: String): VmExecutableRevision? = delegate.executableRevision(path)
+
+    override fun deploy(
+        path: String,
+        expected: VmExecutableRevision,
+        candidate: ProgramDeploymentCandidate,
+    ): VmExecutableRevision? = delegate.deploy(path, expected, candidate)
+
+    override fun submitCanonicalLine(line: CharArray): Boolean = delegate.submitCanonicalLine(line)
 
     override fun reboot(): ProgramComputerState = delegate.reboot()
 

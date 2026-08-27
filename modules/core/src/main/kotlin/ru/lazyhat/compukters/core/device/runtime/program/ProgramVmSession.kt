@@ -27,6 +27,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
+import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentCandidate
+import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
 
@@ -66,6 +68,26 @@ internal interface ProgramVmSession : AutoCloseable {
     fun sendTerminalText(value: String)
 
     fun filesystemGeneration(): Long
+
+    fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate
+
+    fun executableRevision(path: String): VmExecutableRevision
+
+    fun deploy(
+        path: String,
+        expected: VmExecutableRevision,
+        candidate: ProgramDeploymentCandidate,
+    ): VmExecutableRevision
+
+    fun submitCanonicalLine(line: CharArray)
+}
+
+interface ProgramDeploymentCandidate : AutoCloseable
+
+private class NativeProgramDeploymentCandidate(
+    val delegate: VmDeploymentCandidate,
+) : ProgramDeploymentCandidate {
+    override fun close() = delegate.close()
 }
 
 internal fun interface ProgramVmSessionFactory {
@@ -136,6 +158,22 @@ private class NativeProgramVmSession(
     override fun sendTerminalText(value: String) = session.sendTerminalText(value)
 
     override fun filesystemGeneration(): Long = session.filesystemGeneration()
+
+    override fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate =
+        NativeProgramDeploymentCandidate(session.verifyForDeploy(artifact))
+
+    override fun executableRevision(path: String): VmExecutableRevision = session.executableRevision(path)
+
+    override fun deploy(
+        path: String,
+        expected: VmExecutableRevision,
+        candidate: ProgramDeploymentCandidate,
+    ): VmExecutableRevision {
+        require(candidate is NativeProgramDeploymentCandidate) { "deployment candidate was not produced by the native VM" }
+        return session.deploy(path, expected, candidate.delegate)
+    }
+
+    override fun submitCanonicalLine(line: CharArray) = session.submitCanonicalLine(line)
 
     override fun close() = session.close()
 }

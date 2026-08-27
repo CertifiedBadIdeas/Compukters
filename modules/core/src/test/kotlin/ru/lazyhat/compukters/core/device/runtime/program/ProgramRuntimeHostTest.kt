@@ -54,9 +54,61 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class ProgramRuntimeHostTest {
+    @Test
+    fun `deployment facade delegates to the active VM session without exposing its handle`() {
+        val candidate = fakeDeploymentCandidate()
+        val session =
+            ScriptedSession(
+                defaultOutcome = VmOutcome.SliceExhausted,
+                deploymentCandidate = candidate,
+                executableRevision = ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision.Present(4),
+                deployedRevision = ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision.Present(5),
+            )
+        val host = host(session)
+        host.start(byteArrayOf(1))
+        val artifact = byteArrayOf(7, 8, 9)
+
+        assertSame(candidate, host.verifyForDeploy(artifact))
+        artifact[0] = 0
+        assertEquals(listOf<Byte>(7, 8, 9), session.verifiedArtifacts.single())
+        assertEquals(
+            ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision.Present(4),
+            host.executableRevision("/home/demo"),
+        )
+        assertEquals(
+            ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision.Present(5),
+            host.deploy(
+                "/home/demo",
+                ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision.Present(4),
+                candidate,
+            ),
+        )
+        val line = "/home/demo".toCharArray()
+        assertTrue(host.submitCanonicalLine(line))
+        line[0] = 'X'
+
+        assertEquals(listOf("/home/demo"), session.revisionPaths)
+        assertEquals(listOf("/home/demo"), session.deploymentPaths)
+        assertEquals(listOf("/home/demo"), session.canonicalLines)
+    }
+
+    @Test
+    fun `deployment facade is unavailable before boot and after shutdown`() {
+        val host = host(ScriptedSession(defaultOutcome = VmOutcome.SliceExhausted))
+
+        assertNull(host.verifyForDeploy(byteArrayOf(1)))
+        assertNull(host.executableRevision("/home/demo"))
+        assertFalse(host.submitCanonicalLine("/home/demo".toCharArray()))
+
+        host.start(byteArrayOf(1))
+        host.shutdown()
+        assertNull(host.verifyForDeploy(byteArrayOf(1)))
+    }
+
     @Test
     fun `compilation waits without advancing and applies completion on a tick before resuming`() {
         val sourceBytes = "fun main() {}".encodeToByteArray()
@@ -511,6 +563,11 @@ class ProgramRuntimeHostTest {
         val terminalState: TerminalState = terminalState(0),
         val terminalUpdate: TerminalUpdate = TerminalUpdate.Unchanged(0),
         private val filesystemGeneration: Long = 0,
+        private val deploymentCandidate: ProgramDeploymentCandidate = fakeDeploymentCandidate(),
+        private val executableRevision: ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision =
+            ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision.Absent,
+        private val deployedRevision: ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision =
+            ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision.Present(1),
         private val completionError: VmBridgeException? = null,
         private val closeEvent: (() -> Unit)? = null,
     ) : ProgramVmSession {
@@ -523,6 +580,10 @@ class ProgramRuntimeHostTest {
         val terminalTexts = mutableListOf<String>()
         val compilationArtifacts = mutableListOf<Pair<Long, List<Byte>>>()
         val compilationFailures = mutableListOf<Pair<Long, String>>()
+        val verifiedArtifacts = mutableListOf<List<Byte>>()
+        val revisionPaths = mutableListOf<String>()
+        val deploymentPaths = mutableListOf<String>()
+        val canonicalLines = mutableListOf<String>()
 
         override fun advance(
             guestBudget: Int,
@@ -582,6 +643,30 @@ class ProgramRuntimeHostTest {
         }
 
         override fun filesystemGeneration(): Long = filesystemGeneration
+
+        override fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate {
+            verifiedArtifacts += artifact.toList()
+            return deploymentCandidate
+        }
+
+        override fun executableRevision(path: String): ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision {
+            revisionPaths += path
+            return executableRevision
+        }
+
+        override fun deploy(
+            path: String,
+            expected: ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision,
+            candidate: ProgramDeploymentCandidate,
+        ): ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision {
+            deploymentPaths += path
+            assertEquals(deploymentCandidate, candidate)
+            return deployedRevision
+        }
+
+        override fun submitCanonicalLine(line: CharArray) {
+            canonicalLines += line.concatToString()
+        }
     }
 
     private class FakeComputerCompiler(
@@ -612,6 +697,11 @@ class ProgramRuntimeHostTest {
     ): Pair<Long, HostResponse> = requestId to response
 
     private companion object {
+        fun fakeDeploymentCandidate(): ProgramDeploymentCandidate =
+            object : ProgramDeploymentCandidate {
+                override fun close() = Unit
+            }
+
         fun compilationRequest(token: Long): VmOutcome.CompilationRequested =
             VmOutcome.CompilationRequested(
                 VmCompilationRequest(token, listOf(VmCompilationSource("/home/main.kt", byteArrayOf(1)))),

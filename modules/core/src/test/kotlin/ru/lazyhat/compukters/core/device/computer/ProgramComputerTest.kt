@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.core.device.computer
 
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFailure
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.lang.runtime.vm.GuestTrap
@@ -30,12 +31,34 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
+import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class ProgramComputerTest {
+    @Test
+    fun `deployment facade delegates opaque candidates and exact revisions`() {
+        val candidate = fakeDeploymentCandidate()
+        val host = FakeProgramHost(deploymentCandidate = candidate)
+        val fixture = fixture(host)
+        fixture.computer.turnOn()
+
+        assertEquals(candidate, fixture.computer.verifyForDeploy(byteArrayOf(1, 2)))
+        assertEquals(VmExecutableRevision.Absent, fixture.computer.executableRevision("/home/demo"))
+        assertEquals(
+            VmExecutableRevision.Present(1),
+            fixture.computer.deploy("/home/demo", VmExecutableRevision.Absent, candidate),
+        )
+        assertTrue(fixture.computer.submitCanonicalLine("/home/demo".toCharArray()))
+
+        assertEquals(listOf<Byte>(1, 2), host.verifiedArtifact)
+        assertEquals(listOf("/home/demo"), host.revisionPaths)
+        assertEquals(listOf("/home/demo"), host.deploymentPaths)
+        assertEquals(listOf("/home/demo"), host.canonicalLines)
+    }
+
     @Test
     fun `construction is powered off without publishing or booting`() {
         val fixture = fixture()
@@ -198,6 +221,7 @@ class ProgramComputerTest {
         private val terminalState: TerminalState = terminalState(0),
         private val terminalUpdate: TerminalUpdate = TerminalUpdate.Unchanged(0),
         private val startResult: ProgramStartResult = ProgramStartResult.Started,
+        private val deploymentCandidate: ProgramDeploymentCandidate = fakeDeploymentCandidate(),
     ) : ProgramHost {
         private val tickStates = ArrayDeque(tickStates)
         override var state: ProgramRuntimeState = ProgramRuntimeState.Idle
@@ -207,6 +231,10 @@ class ProgramComputerTest {
         var closeCalls = 0
         val keys = mutableListOf<Triple<TerminalKey, TerminalKeyAction, Set<TerminalModifier>>>()
         val texts = mutableListOf<String>()
+        var verifiedArtifact = emptyList<Byte>()
+        val revisionPaths = mutableListOf<String>()
+        val deploymentPaths = mutableListOf<String>()
+        val canonicalLines = mutableListOf<String>()
 
         override fun startBoot(): ProgramStartResult {
             bootCalls++
@@ -245,6 +273,31 @@ class ProgramComputerTest {
 
         override fun filesystemGeneration(): Long? = null
 
+        override fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate? {
+            verifiedArtifact = artifact.toList()
+            return deploymentCandidate
+        }
+
+        override fun executableRevision(path: String): VmExecutableRevision? {
+            revisionPaths += path
+            return VmExecutableRevision.Absent
+        }
+
+        override fun deploy(
+            path: String,
+            expected: VmExecutableRevision,
+            candidate: ProgramDeploymentCandidate,
+        ): VmExecutableRevision? {
+            deploymentPaths += path
+            assertEquals(deploymentCandidate, candidate)
+            return VmExecutableRevision.Present(1)
+        }
+
+        override fun submitCanonicalLine(line: CharArray): Boolean {
+            canonicalLines += line.concatToString()
+            return true
+        }
+
         override fun shutdown() {
             shutdownCalls++
             state = ProgramRuntimeState.Idle
@@ -257,6 +310,11 @@ class ProgramComputerTest {
     }
 
     private companion object {
+        fun fakeDeploymentCandidate(): ProgramDeploymentCandidate =
+            object : ProgramDeploymentCandidate {
+                override fun close() = Unit
+            }
+
         fun terminalState(revision: Long): TerminalState =
             TerminalState(
                 revision,
