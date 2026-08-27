@@ -32,9 +32,20 @@ import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class SecureProjectFilesTest {
+    @Test
+    fun `canonical project paths classify sources without restricting ordinary files`() {
+        assertEquals("notes/readme.txt", ProjectPath.file("notes/readme.txt").value)
+        assertFalse(ProjectPath.file("notes/readme.txt").isKotlinSource)
+        assertTrue(ProjectPath.file("src/main.kt").isKotlinSource)
+        assertFalse(ProjectPath.file("main.kt").isKotlinSource)
+        assertFailsWith<IllegalArgumentException> { ProjectPath.file("../escape.kt") }
+        assertFailsWith<IllegalArgumentException> { ProjectPath.file("src\\main.kt") }
+    }
+
     @Test
     fun `project source paths cannot escape or address non-Kotlin files`() {
         assertEquals("src/main.kt", ProjectPath.source("src/main.kt").value)

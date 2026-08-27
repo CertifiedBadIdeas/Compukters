@@ -24,6 +24,9 @@ class ProjectPath private constructor(
     val value: String,
     internal val components: List<String>,
 ) {
+    val isKotlinSource: Boolean
+        get() = components.size >= 2 && components.first() == "src" && components.last().endsWith(".kt")
+
     override fun equals(other: Any?): Boolean = other is ProjectPath && value == other.value
 
     override fun hashCode(): Int = value.hashCode()
@@ -31,15 +34,15 @@ class ProjectPath private constructor(
     override fun toString(): String = value
 
     companion object {
-        fun source(value: String): ProjectPath {
-            val path = parse(value)
-            require(path.components.size >= 2 && path.components.first() == "src") { "source path must be below src" }
-            require(path.components.last().endsWith(".kt")) { "source path must name a Kotlin file" }
-            return path
-        }
+        fun file(value: String): ProjectPath = parse(value)
+
+        fun source(value: String): ProjectPath =
+            file(value).also { path ->
+                require(path.isKotlinSource) { "source path must name a Kotlin file below src" }
+            }
 
         internal fun direct(value: String): ProjectPath {
-            val path = parse(value)
+            val path = file(value)
             require(path.components.size == 1) { "path must contain exactly one component" }
             return path
         }
