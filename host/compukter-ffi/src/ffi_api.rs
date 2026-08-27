@@ -17,7 +17,10 @@
  */
 
 use crate::{
-    bridge::{self, BridgeError, CreateInStoreError, OwnedResponse, StoreBridgeError},
+    bridge::{
+        self, BridgeError, CreateInStoreError, DeploymentBridgeError, DeploymentVerifyBridgeError,
+        OwnedResponse, RevisionBridgeError, StoreBridgeError,
+    },
     handle_table::HandleError,
 };
 
@@ -43,6 +46,17 @@ pub enum FfiStatus {
     StoreClosed = 16,
     StoreInvalidGeneration = 17,
     StoreIo = 18,
+    DeploymentConflict = 19,
+    DeploymentWrongMachine = 20,
+    DeploymentProfileChanged = 21,
+    DeploymentFileSystem = 22,
+    InputNoPendingRead = 23,
+    InputBusy = 24,
+    InputPartial = 25,
+    InputUnsupportedCodeUnit = 26,
+    InputLineTooLong = 27,
+    InputTerminal = 28,
+    InputResume = 29,
 }
 
 const MAXIMUM_OUTCOME_BYTES: usize = 64 * 1024;
@@ -56,10 +70,12 @@ const MAXIMUM_ROM_BYTES: usize = 16 * 1_024 * 1_024;
 const MAXIMUM_FILESYSTEM_LIMITS_BYTES: usize = 1 + 17 * 8;
 const MAXIMUM_COMPILATION_ARTIFACT_BYTES: usize = 16 * 1024 * 1024;
 const MAXIMUM_COMPILATION_DIAGNOSTIC_BYTES: usize = 64 * 1024;
+const MAXIMUM_EXECUTABLE_REVISION_BYTES: usize = 10;
+const MAXIMUM_DEPLOYMENT_PATH_BYTES: usize = 4 * 1024;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn compukter_abi_version() -> u32 {
-    4
+    5
 }
 
 #[unsafe(no_mangle)]
@@ -471,6 +487,218 @@ pub extern "C" fn compukter_close(handle: u64) -> FfiStatus {
         Err(BridgeError::Handle(error)) => handle_status(error),
         Err(_) => FfiStatus::Internal,
     })
+}
+
+#[unsafe(no_mangle)]
+/// Dry-verifies an artifact for one existing VM and publishes an opaque candidate handle.
+///
+/// # Safety
+///
+/// Non-empty artifact input must name `artifact_len` readable bytes and
+/// `candidate_out` must name one writable `u64`.
+pub unsafe extern "C" fn compukter_verify_for_deploy(
+    handle: u64,
+    artifact: *const u8,
+    artifact_len: usize,
+    candidate_out: *mut u64,
+) -> FfiStatus {
+    ffi_status(|| {
+        if candidate_out.is_null()
+            || artifact_len > MAXIMUM_COMPILATION_ARTIFACT_BYTES
+            || (artifact_len != 0 && artifact.is_null())
+        {
+            return FfiStatus::InvalidArgument;
+        }
+        let bytes = if artifact_len == 0 {
+            Vec::new()
+        } else {
+            // SAFETY: The validated ABI contract provides readable artifact bytes.
+            unsafe { core::slice::from_raw_parts(artifact, artifact_len) }.to_vec()
+        };
+        let candidate = match bridge::verify_for_deploy(handle, std::sync::Arc::from(bytes)) {
+            Ok(candidate) => candidate,
+            Err(
+                DeploymentVerifyBridgeError::Session(error)
+                | DeploymentVerifyBridgeError::Candidate(error),
+            ) => return handle_status(error),
+            Err(DeploymentVerifyBridgeError::Verification) => return FfiStatus::Verification,
+            Err(DeploymentVerifyBridgeError::Admission) => return FfiStatus::Admission,
+        };
+        // SAFETY: The validated ABI contract provides one writable u64.
+        unsafe { candidate_out.write(candidate) };
+        FfiStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn compukter_deployment_candidate_close(handle: u64) -> FfiStatus {
+    ffi_status(|| match bridge::close_deployment_candidate(handle) {
+        Ok(()) => FfiStatus::Ok,
+        Err(error) => handle_status(error),
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Writes the exact executable revision for one canonical UTF-8 guest path.
+///
+/// # Safety
+///
+/// Non-empty path and output buffers must name readable or writable regions of
+/// their declared lengths. `written_out` must name one writable `usize`.
+pub unsafe extern "C" fn compukter_executable_revision(
+    handle: u64,
+    path_utf8: *const u8,
+    path_len: usize,
+    output: *mut u8,
+    output_capacity: usize,
+    written_out: *mut usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if written_out.is_null()
+            || path_len == 0
+            || path_len > MAXIMUM_DEPLOYMENT_PATH_BYTES
+            || path_utf8.is_null()
+            || (output_capacity != 0 && output.is_null())
+        {
+            return FfiStatus::InvalidArgument;
+        }
+        if output_capacity < MAXIMUM_EXECUTABLE_REVISION_BYTES {
+            // SAFETY: The validated ABI contract provides one writable usize.
+            unsafe { written_out.write(MAXIMUM_EXECUTABLE_REVISION_BYTES) };
+            return FfiStatus::BufferTooSmall;
+        }
+        // SAFETY: The validated ABI contract provides readable path bytes.
+        let path = unsafe { core::slice::from_raw_parts(path_utf8, path_len) };
+        let path = match core::str::from_utf8(path) {
+            Ok(path) => path,
+            Err(_) => return FfiStatus::InvalidArgument,
+        };
+        let revision = match bridge::executable_revision(handle, path) {
+            Ok(revision) => revision,
+            Err(RevisionBridgeError::Session(error)) => return handle_status(error),
+            Err(RevisionBridgeError::FileSystem(_)) => return FfiStatus::DeploymentFileSystem,
+        };
+        write_revision(revision, output, written_out)
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Atomically installs a verified candidate at an exact executable revision.
+///
+/// # Safety
+///
+/// Non-empty path and output buffers must name readable or writable regions of
+/// their declared lengths. `written_out` must name one writable `usize`.
+pub unsafe extern "C" fn compukter_deploy(
+    handle: u64,
+    candidate_handle: u64,
+    path_utf8: *const u8,
+    path_len: usize,
+    expected_kind: u32,
+    expected_generation: u64,
+    output: *mut u8,
+    output_capacity: usize,
+    written_out: *mut usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if written_out.is_null()
+            || path_len == 0
+            || path_len > MAXIMUM_DEPLOYMENT_PATH_BYTES
+            || path_utf8.is_null()
+            || (output_capacity != 0 && output.is_null())
+        {
+            return FfiStatus::InvalidArgument;
+        }
+        let expected = match expected_kind {
+            0 if expected_generation == 0 => compukter_vm::ExecutableRevision::Absent,
+            1 => compukter_vm::ExecutableRevision::Present(expected_generation),
+            _ => return FfiStatus::InvalidArgument,
+        };
+        if output_capacity < MAXIMUM_EXECUTABLE_REVISION_BYTES {
+            // SAFETY: The validated ABI contract provides one writable usize.
+            unsafe { written_out.write(MAXIMUM_EXECUTABLE_REVISION_BYTES) };
+            return FfiStatus::BufferTooSmall;
+        }
+        // SAFETY: The validated ABI contract provides readable path bytes.
+        let path = unsafe { core::slice::from_raw_parts(path_utf8, path_len) };
+        let path = match core::str::from_utf8(path) {
+            Ok(path) => path,
+            Err(_) => return FfiStatus::InvalidArgument,
+        };
+        let revision = match bridge::deploy(handle, candidate_handle, path, expected) {
+            Ok(revision) => revision,
+            Err(
+                DeploymentBridgeError::Session(error) | DeploymentBridgeError::Candidate(error),
+            ) => return handle_status(error),
+            Err(DeploymentBridgeError::WrongMachine) => return FfiStatus::DeploymentWrongMachine,
+            Err(DeploymentBridgeError::ProfileChanged) => {
+                return FfiStatus::DeploymentProfileChanged
+            }
+            Err(DeploymentBridgeError::FileSystem(compukter_vm::FileSystemError::Busy)) => {
+                return FfiStatus::DeploymentConflict
+            }
+            Err(DeploymentBridgeError::FileSystem(_)) => return FfiStatus::DeploymentFileSystem,
+        };
+        write_revision(revision, output, written_out)
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Atomically submits one complete UTF-16 canonical input line.
+///
+/// # Safety
+///
+/// Non-empty input must name `line_len` readable `u16` code units.
+pub unsafe extern "C" fn compukter_submit_canonical_line(
+    handle: u64,
+    line: *const u16,
+    line_len: usize,
+) -> FfiStatus {
+    ffi_status(|| {
+        if line_len > MAXIMUM_INBOUND_UTF16_CODE_UNITS || (line_len != 0 && line.is_null()) {
+            return FfiStatus::InvalidArgument;
+        }
+        let line = if line_len == 0 {
+            &[][..]
+        } else {
+            // SAFETY: The validated ABI contract provides readable UTF-16 code units.
+            unsafe { core::slice::from_raw_parts(line, line_len) }
+        };
+        match bridge::submit_canonical_line(handle, line) {
+            Ok(()) => FfiStatus::Ok,
+            Err(Ok(error)) => handle_status(error),
+            Err(Err(compukter_vm::CanonicalLineSubmissionError::NoPendingRead)) => {
+                FfiStatus::InputNoPendingRead
+            }
+            Err(Err(compukter_vm::CanonicalLineSubmissionError::InputBusy)) => FfiStatus::InputBusy,
+            Err(Err(compukter_vm::CanonicalLineSubmissionError::PartialInput)) => {
+                FfiStatus::InputPartial
+            }
+            Err(Err(compukter_vm::CanonicalLineSubmissionError::UnsupportedCodeUnit)) => {
+                FfiStatus::InputUnsupportedCodeUnit
+            }
+            Err(Err(compukter_vm::CanonicalLineSubmissionError::LineTooLong)) => {
+                FfiStatus::InputLineTooLong
+            }
+            Err(Err(compukter_vm::CanonicalLineSubmissionError::Terminal)) => {
+                FfiStatus::InputTerminal
+            }
+            Err(Err(compukter_vm::CanonicalLineSubmissionError::Resume)) => FfiStatus::InputResume,
+        }
+    })
+}
+
+fn write_revision(
+    revision: compukter_vm::ExecutableRevision,
+    output: *mut u8,
+    written_out: *mut usize,
+) -> FfiStatus {
+    let encoded = crate::wire::encode_executable_revision(revision);
+    // SAFETY: Callers validate capacity and both writable pointers before use.
+    unsafe { core::ptr::copy_nonoverlapping(encoded.as_ptr(), output, encoded.len()) };
+    // SAFETY: Callers validate one writable usize before use.
+    unsafe { written_out.write(encoded.len()) };
+    FfiStatus::Ok
 }
 
 #[unsafe(no_mangle)]

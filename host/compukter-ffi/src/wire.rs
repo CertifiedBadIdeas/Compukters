@@ -1,8 +1,20 @@
 use compukter_vm::{
-    AdmissionError, CompilationRequest, EntryArgumentLimit, FileSystemLimits, HostFailureKind,
-    QuotaKind, RunError, StoreHealth, StoreOpenError, TerminalCell, TerminalChange, TerminalDevice,
-    TerminalSnapshot, TerminalUpdate,
+    AdmissionError, CompilationRequest, EntryArgumentLimit, ExecutableRevision, FileSystemLimits,
+    HostFailureKind, QuotaKind, RunError, StoreHealth, StoreOpenError, TerminalCell,
+    TerminalChange, TerminalDevice, TerminalSnapshot, TerminalUpdate,
 };
+
+pub(crate) fn encode_executable_revision(revision: ExecutableRevision) -> Vec<u8> {
+    let mut encoder = Encoder::new(1);
+    match revision {
+        ExecutableRevision::Absent => encoder.u8(0),
+        ExecutableRevision::Present(generation) => {
+            encoder.u8(1);
+            encoder.u64(generation);
+        }
+    }
+    encoder.finish()
+}
 
 use crate::bridge::{CreateError, OwnedOutcome, OwnedRequest, OwnedValue, StoreCreateError};
 use crate::handle_table::HandleError;

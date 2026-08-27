@@ -87,6 +87,42 @@ impl<T> HandleTable<T> {
         Ok(())
     }
 
+    pub(crate) fn consume_if<R, E>(
+        &self,
+        handle: u64,
+        action: impl FnOnce(T) -> Result<R, (E, T)>,
+    ) -> Result<Result<R, E>, HandleError> {
+        let (index, generation) = decode_handle(handle)?;
+        let cell = self.resolve(handle)?;
+        let mut value = match cell.try_lock() {
+            Ok(value) => value,
+            Err(TryLockError::WouldBlock) => return Err(HandleError::Busy),
+            Err(TryLockError::Poisoned(_)) => return Err(HandleError::Poisoned),
+        };
+        let owned = value.take().ok_or(HandleError::Stale)?;
+        match action(owned) {
+            Err((error, restored)) => {
+                *value = Some(restored);
+                Ok(Err(error))
+            }
+            Ok(result) => {
+                let mut slots = self.slots.lock().map_err(|_| HandleError::Poisoned)?;
+                let slot = slots.get_mut(index).ok_or(HandleError::Invalid)?;
+                if slot.generation != generation
+                    || slot
+                        .value
+                        .as_ref()
+                        .is_none_or(|stored| !Arc::ptr_eq(stored, &cell))
+                {
+                    return Err(HandleError::Stale);
+                }
+                slot.value = None;
+                slot.generation = next_generation(slot.generation);
+                Ok(Ok(result))
+            }
+        }
+    }
+
     fn resolve(&self, handle: u64) -> Result<Arc<Mutex<Option<T>>>, HandleError> {
         let (index, generation) = decode_handle(handle)?;
         let slots = self.slots.lock().map_err(|_| HandleError::Poisoned)?;
@@ -171,5 +207,22 @@ mod tests {
         release_tx.send(()).unwrap();
         worker.join().unwrap();
         assert_eq!(2, table.with(handle, |value| *value).unwrap());
+    }
+
+    #[test]
+    fn conditional_consumption_restores_on_failure_and_invalidates_on_success() {
+        let table = HandleTable::default();
+        let handle = table.insert(7_u32).unwrap();
+
+        assert_eq!(
+            Ok(Err("retry")),
+            table.consume_if(handle, |value| Err::<(), _>(("retry", value + 1)))
+        );
+        assert_eq!(8, table.with(handle, |value| *value).unwrap());
+        assert_eq!(
+            Ok(Ok(9)),
+            table.consume_if(handle, |value| Ok::<_, (&str, u32)>(value + 1))
+        );
+        assert_eq!(Err(HandleError::Stale), table.with(handle, |_| ()));
     }
 }
