@@ -29,6 +29,7 @@ import ru.lazyhat.compukters.ide.client.state.IdePageState
 import ru.lazyhat.compukters.ide.client.state.IdeViewState
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
+import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 
 enum class IdePanelKind { Main, Header, Toolbar, Tree, Editor, Diagnostics, Status, Control, Dialog }
@@ -39,7 +40,22 @@ enum class IdeFillKind { Background, Border, Selection, Caret, Splitter, DialogS
 
 enum class IdeScissorKind { Tree, Editor, Diagnostics, Completion }
 
-enum class IdeHitAction { CreateProject, OpenProject, Resolve, Build, Cancel, Verify, Deploy, Run, Confirm, Dismiss }
+enum class IdeHitAction {
+    CreateProject,
+    OpenProject,
+    CreateText,
+    CreateDirectory,
+    Rename,
+    Delete,
+    Resolve,
+    Build,
+    Cancel,
+    Verify,
+    Deploy,
+    Run,
+    Confirm,
+    Dismiss,
+}
 
 enum class IdeFocusGroup { Page, Dialog }
 
@@ -112,8 +128,11 @@ object IdeRenderer {
         state: IdeViewState,
         geometry: IdeRenderGeometry,
         caretVisible: Boolean = true,
+        prompt: IdePromptState? = null,
+        treeFirstRow: Int = 0,
+        selectedTreePath: ProjectPath? = null,
     ): IdeDrawModel {
-        val output = Builder(geometry, geometry.font)
+        val output = Builder(geometry, geometry.font, treeFirstRow, selectedTreePath)
         output.base()
         if (!geometry.supported) {
             output.ui(IdeTextKind.Status, geometry.unsupportedMessage, 8, 8, IdeColors.ERROR)
@@ -123,13 +142,19 @@ object IdeRenderer {
             is IdePageState.Start -> output.start(page)
             is IdePageState.Workspace -> output.workspace(page.value, caretVisible)
         }
-        state.dialog?.let(output::dialog)
+        if (prompt != null) {
+            output.prompt(prompt)
+        } else {
+            state.dialog?.let(output::dialog)
+        }
         return output.build()
     }
 
     private class Builder(
         private val geometry: IdeRenderGeometry,
         private val font: TerminalFontProfile,
+        private val treeFirstRow: Int,
+        private val selectedTreePath: ProjectPath?,
     ) {
         private val panels = mutableListOf<IdePanelDraw>()
         private val text = mutableListOf<IdeTextDraw>()
@@ -197,7 +222,7 @@ object IdeRenderer {
                 geometry.header.left + 6,
                 geometry.header.top + 7,
             )
-            toolbar(workspace.build)
+            toolbar(workspace.build, workspace.activeFile != null || selectedTreePath != null)
             tree(workspace)
             when (val editor = workspace.editor) {
                 IdeEditorView.Empty -> {
@@ -222,7 +247,10 @@ object IdeRenderer {
             status(workspace)
         }
 
-        private fun toolbar(build: IdeBuildState) {
+        private fun toolbar(
+            build: IdeBuildState,
+            hasActiveEntry: Boolean,
+        ) {
             var left = geometry.toolbar.left + 6
 
             fun action(
@@ -246,13 +274,17 @@ object IdeRenderer {
             action("Verify", IdeHitAction.Verify, false, NO_TARGET)
             action("Deploy", IdeHitAction.Deploy, false, NO_TARGET)
             action("Run", IdeHitAction.Run, false, NO_TARGET)
+            action("+File", IdeHitAction.CreateText)
+            action("+Dir", IdeHitAction.CreateDirectory)
+            action("Rename", IdeHitAction.Rename, hasActiveEntry)
+            action("Delete", IdeHitAction.Delete, hasActiveEntry)
         }
 
         private fun tree(workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView) {
             val bounds = geometry.tree ?: return
             scissors += IdeScissorDraw(IdeScissorKind.Tree, bounds, Z_CLIP)
             val rows = bounds.height / UI_LINE_HEIGHT
-            workspace.tree.flatten().take(rows).forEachIndexed { index, entry ->
+            workspace.tree.flatten().drop(treeFirstRow).take(rows).forEachIndexed { index, entry ->
                 val components = entry.path.value.split('/')
                 val depth = components.size - 1
                 val marker = if (entry.kind is ru.lazyhat.compukters.ide.project.tree.ProjectFileKind.Directory) "▸ " else "  "
@@ -261,7 +293,7 @@ object IdeRenderer {
                     marker + components.last(),
                     bounds.left + 5 + depth * 8,
                     bounds.top + 4 + index * UI_LINE_HEIGHT,
-                    if (entry.path == workspace.activeFile) IdeColors.ACCENT else IdeColors.TEXT,
+                    if (entry.path == selectedTreePath || entry.path == workspace.activeFile) IdeColors.ACCENT else IdeColors.TEXT,
                     bounds,
                 )
             }
@@ -294,7 +326,7 @@ object IdeRenderer {
                         (nextLineStart?.let { editor.caretUtf16 < it } ?: (editor.caretUtf16 <= lineStart + line.length))
                 if (caretVisible && caretBelongsToLine) {
                     val local = (editor.caretUtf16 - lineStart).coerceAtMost(line.length)
-                    val x = codeLeft + visualColumns(line.substring(0, local)) * font.cellWidth
+                    val x = codeLeft + (visualColumns(line.substring(0, local)) - editor.firstVisibleColumn) * font.cellWidth
                     fills += IdeFillDraw(IdeFillKind.Caret, IdeRect(x, y, x + 1, y + font.cellHeight), IdeColors.CARET, Z_CARET)
                 }
             }
@@ -313,8 +345,8 @@ object IdeRenderer {
             val localStart = (start - lineStart).coerceIn(0, line.length)
             val localEnd = (end - lineStart).coerceIn(0, line.length)
             if (localEnd <= localStart) return
-            val left = codeLeft + visualColumns(line.substring(0, localStart)) * font.cellWidth
-            val right = codeLeft + visualColumns(line.substring(0, localEnd)) * font.cellWidth
+            val left = codeLeft + (visualColumns(line.substring(0, localStart)) - editor.firstVisibleColumn) * font.cellWidth
+            val right = codeLeft + (visualColumns(line.substring(0, localEnd)) - editor.firstVisibleColumn) * font.cellWidth
             fills += IdeFillDraw(IdeFillKind.Selection, IdeRect(left, y, right, y + font.cellHeight), IdeColors.SELECTION, Z_SELECTION)
         }
 
@@ -355,7 +387,7 @@ object IdeRenderer {
                     semanticCategory?.let(IdeTextStyle::Semantic)
                         ?: lexicalKind?.let(IdeTextStyle::Lexical)
                         ?: IdeTextStyle.Plain
-                val x = codeLeft + visualColumns(line.substring(0, start)) * font.cellWidth
+                val x = codeLeft + (visualColumns(line.substring(0, start)) - editor.firstVisibleColumn) * font.cellWidth
                 code(
                     IdeTextKind.Source,
                     projectGlyphs(line.substring(start, end)),
@@ -380,9 +412,9 @@ object IdeRenderer {
             val local = (editor.caretUtf16 - editor.visibleLineStartsUtf16[visibleIndex]).coerceIn(0, line.length)
             val caret =
                 IdeRect(
-                    codeLeft + visualColumns(line.substring(0, local)) * font.cellWidth,
+                    codeLeft + (visualColumns(line.substring(0, local)) - editor.firstVisibleColumn) * font.cellWidth,
                     geometry.editor.top + visibleIndex * font.cellHeight,
-                    codeLeft + visualColumns(line.substring(0, local)) * font.cellWidth + font.cellWidth,
+                    codeLeft + (visualColumns(line.substring(0, local)) - editor.firstVisibleColumn) * font.cellWidth + font.cellWidth,
                     geometry.editor.top + (visibleIndex + 1) * font.cellHeight,
                 )
             val popup = geometry.completionPopup(caret, 220, minOf(8, completion.items.size) * UI_LINE_HEIGHT + 4)
@@ -474,6 +506,33 @@ object IdeRenderer {
                 }
             ui(IdeTextKind.Dialog, title, bounds.left + 10, bounds.top + 10, IdeColors.TEXT, bounds, Z_DIALOG_TEXT)
             ui(IdeTextKind.Dialog, message, bounds.left + 10, bounds.top + 30, IdeColors.MUTED, bounds, Z_DIALOG_TEXT)
+            val dismiss = IdeRect(bounds.right - 78, bounds.bottom - 26, bounds.right - 10, bounds.bottom - 8)
+            val confirm = IdeRect(dismiss.left - 76, dismiss.top, dismiss.left - 8, dismiss.bottom)
+            target(IdeHitAction.Confirm, confirm, true, focusGroup = IdeFocusGroup.Dialog, z = Z_DIALOG_TARGET)
+            target(IdeHitAction.Dismiss, dismiss, true, focusGroup = IdeFocusGroup.Dialog, z = Z_DIALOG_TARGET)
+            ui(IdeTextKind.Dialog, "Confirm", confirm.left + 9, confirm.top + 5, z = Z_DIALOG_TEXT)
+            ui(IdeTextKind.Dialog, "Cancel", dismiss.left + 12, dismiss.top + 5, z = Z_DIALOG_TEXT)
+        }
+
+        fun prompt(prompt: IdePromptState) {
+            for (index in hitTargets.indices) hitTargets[index] = hitTargets[index].copy(enabled = false)
+            fills += IdeFillDraw(IdeFillKind.DialogScrim, geometry.panel, IdeColors.DIM, Z_DIALOG_SCRIM)
+            val width = minOf(420, geometry.panel.width - 24)
+            val height = minOf(132, geometry.panel.height - 24)
+            val left = geometry.panel.left + (geometry.panel.width - width) / 2
+            val top = geometry.panel.top + (geometry.panel.height - height) / 2
+            val bounds = IdeRect(left, top, left + width, top + height)
+            panel(IdePanelKind.Dialog, bounds, IdeColors.PANEL_ALT, Z_DIALOG)
+            val title =
+                when (prompt.kind) {
+                    IdePromptKind.CreateProject -> "Create project"
+                    IdePromptKind.CreateText -> "Create text file"
+                    IdePromptKind.CreateDirectory -> "Create directory"
+                    is IdePromptKind.Rename -> "Rename ${prompt.kind.source.value}"
+                }
+            ui(IdeTextKind.Dialog, title, bounds.left + 10, bounds.top + 10, clip = bounds, z = Z_DIALOG_TEXT)
+            ui(IdeTextKind.Dialog, prompt.value + "_", bounds.left + 10, bounds.top + 34, clip = bounds, z = Z_DIALOG_TEXT)
+            prompt.error?.let { ui(IdeTextKind.Dialog, it, bounds.left + 10, bounds.top + 54, IdeColors.ERROR, bounds, Z_DIALOG_TEXT) }
             val dismiss = IdeRect(bounds.right - 78, bounds.bottom - 26, bounds.right - 10, bounds.bottom - 8)
             val confirm = IdeRect(dismiss.left - 76, dismiss.top, dismiss.left - 8, dismiss.bottom)
             target(IdeHitAction.Confirm, confirm, true, focusGroup = IdeFocusGroup.Dialog, z = Z_DIALOG_TARGET)

@@ -126,6 +126,10 @@ class IdeClientController(
         checkOwner()
         check(started && !closed) { "IDE controller is not active" }
         when (command) {
+            is IdeCommand.CreateProject -> {
+                createProject(command.name)
+            }
+
             is IdeCommand.OpenProject -> {
                 requestProjectSwitch(command.directoryName)
             }
@@ -161,6 +165,10 @@ class IdeClientController(
 
             is IdeCommand.Edit -> {
                 edit(command.input)
+            }
+
+            is IdeCommand.ScrollEditor -> {
+                scrollEditor(command.lines, command.columns)
             }
 
             IdeCommand.Save -> {
@@ -211,6 +219,12 @@ class IdeClientController(
             IdeCommand.ManualCompletion -> {
                 analysisCoordinator?.manualCompletion()
                 refreshAnalysisState()
+            }
+
+            IdeCommand.DismissCompletion -> {
+                analysisCoordinator?.dismissCompletion()
+                refreshAnalysisState()
+                publishWorkspace()
             }
 
             IdeCommand.EditorFocusLost -> {
@@ -294,6 +308,25 @@ class IdeClientController(
                 enqueueFailure(requestGeneration, IdeBusyOperation.Project, failure)
             }
         }
+    }
+
+    private fun createProject(name: String) {
+        generation = Math.incrementExact(generation)
+        val operationId = nextOperationId++
+        latestProjectOperation = operationId
+        pendingFile = ProjectPath.file("src/main.kt")
+        state = state.copy(generation = generation, busy = setOf(IdeBusyOperation.Project), dialog = null)
+        val requestGeneration = generation
+        workspace
+            .createProject(name)
+            .thenCompose { created -> workspace.tree(created.handle).thenApply { created to it } }
+            .whenComplete { result, failure ->
+                if (failure == null && result != null) {
+                    enqueue(IdeEvent.ProjectOpened(requestGeneration, operationId, result.first, result.second))
+                } else {
+                    enqueueFailure(requestGeneration, IdeBusyOperation.Project, failure ?: IllegalStateException("project creation failed"))
+                }
+            }
     }
 
     private fun requestProjectSwitch(directoryName: String) {
@@ -412,6 +445,23 @@ class IdeClientController(
             refreshAnalysisState()
         }
         publishWorkspace()
+    }
+
+    private fun scrollEditor(
+        lines: Int,
+        columns: Int,
+    ) {
+        val active = editor ?: return
+        active.firstVisibleLine =
+            (active.firstVisibleLine.toLong() + lines)
+                .coerceIn(0, (active.document.lineCount - 1).toLong())
+                .toInt()
+        active.firstVisibleColumn =
+            (active.firstVisibleColumn.toLong() + columns)
+                .coerceIn(0, active.document.maximumVisualWidth().toLong())
+                .toInt()
+        publishWorkspace()
+        persistPreferences(active.path)
     }
 
     private fun requestSave() {
@@ -686,8 +736,9 @@ class IdeClientController(
         tree = event.tree
         state = state.copy(busy = state.busy - IdeBusyOperation.Project)
         publishWorkspace()
-        val restore = rememberedFile
+        val restore = rememberedFile ?: pendingFile
         rememberedFile = null
+        pendingFile = null
         if (restore != null && event.tree.flatten().any { it.path == restore }) openFile(restore)
         persistPreferences(restore)
     }
@@ -710,6 +761,7 @@ class IdeClientController(
                     ?.let { remembered ->
                         restoreCaret(document, remembered.caretUtf16)
                         session.firstVisibleLine = remembered.firstVisibleLine
+                        session.firstVisibleColumn = remembered.firstVisibleColumn
                     }
                 editor = session
                 openAnalysis(session)
@@ -1002,6 +1054,7 @@ class IdeClientController(
             visible,
             visibleStarts,
             first,
+            firstVisibleColumn,
             document.lineCount,
             document.caretOffset,
             selection?.startUtf16,
@@ -1090,7 +1143,7 @@ class IdeClientController(
                 file?.value,
                 active?.document?.caretOffset ?: 0,
                 active?.firstVisibleLine ?: 0,
-                0,
+                active?.firstVisibleColumn ?: 0,
                 DEFAULT_TREE_WIDTH,
                 DEFAULT_DIAGNOSTICS_HEIGHT,
                 true,
@@ -1186,6 +1239,7 @@ class IdeClientController(
         var conflict = false
         var lastEditMillis = 0L
         var firstVisibleLine = 0
+        var firstVisibleColumn = 0
         val dirty: Boolean get() = document.revision != persistedRevision
 
         fun close() {

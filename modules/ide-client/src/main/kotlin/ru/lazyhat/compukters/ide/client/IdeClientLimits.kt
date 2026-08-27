@@ -25,6 +25,8 @@ data class IdeClientLimits(
     val projectRows: Int = 4 * 1024,
     val visibleTreeRows: Int = 8 * 1024,
     val visibleEditorLines: Int = 512,
+    val clipboardCodeUnits: Int = 256 * 1024,
+    val clipboardUtf8Bytes: Int = 256 * 1024,
     val statusUtf8Bytes: Int = 4 * 1024,
     val dialogUtf8Bytes: Int = 16 * 1024,
 ) {
@@ -35,6 +37,8 @@ data class IdeClientLimits(
         require(projectRows >= 0) { "project row limit must be non-negative" }
         require(visibleTreeRows >= 0) { "visible tree row limit must be non-negative" }
         require(visibleEditorLines > 0) { "visible editor line limit must be positive" }
+        require(clipboardCodeUnits >= 0) { "clipboard code-unit limit must be non-negative" }
+        require(clipboardUtf8Bytes >= 0) { "clipboard byte limit must be non-negative" }
         require(statusUtf8Bytes >= 0) { "status byte limit must be non-negative" }
         require(dialogUtf8Bytes >= 0) { "dialog byte limit must be non-negative" }
     }

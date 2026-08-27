@@ -84,6 +84,21 @@ class IdeClientControllerTest {
     }
 
     @Test
+    fun `create project opens its generated main file`() {
+        val fixture = ControllerFixture()
+        fixture.startAndTick()
+
+        fixture.controller.dispatch(IdeCommand.CreateProject("created"))
+        fixture.controller.tick()
+        fixture.controller.tick()
+
+        val workspace = fixture.workspaceView()
+        assertEquals("created", workspace.project.directoryName)
+        assertEquals(ProjectPath.file("src/main.kt"), workspace.activeFile)
+        assertIs<IdeEditorView.Text>(workspace.editor)
+    }
+
+    @Test
     fun `binary files are shown honestly and cannot be edited`() {
         val fixture = ControllerFixture()
         val binary = ProjectPath.file("asset.bin")
@@ -323,14 +338,19 @@ internal class ControlledWorkspace : IdeWorkspace {
 
     override fun projects(): CompletableFuture<List<ProjectDescriptor>> = completed(listOf(descriptor))
 
-    override fun createProject(name: String): CompletableFuture<ProjectDescriptor> = error("unused")
+    override fun createProject(name: String): CompletableFuture<ProjectDescriptor> = completeCall { ProjectCatalog.open(root).create(name) }
 
-    override fun tree(project: ProjectHandle): CompletableFuture<ProjectTree> = completeCall { ProjectTreeStore(descriptor.handle).scan() }
+    override fun tree(project: ProjectHandle): CompletableFuture<ProjectTree> = completeCall { ProjectTreeStore(project).scan() }
 
     override fun open(
         project: ProjectHandle,
         path: ProjectPath,
-    ): CompletableFuture<ProjectFileOpenResult> = completed(requireNotNull(openResults[path]) { "missing fake result for $path" })
+    ): CompletableFuture<ProjectFileOpenResult> =
+        if (project == descriptor.handle) {
+            completed(requireNotNull(openResults[path]) { "missing fake result for $path" })
+        } else {
+            completeCall { ProjectFileOpenResult.Text(ProjectDocumentStore(project).open(path)) }
+        }
 
     override fun save(request: IdeSaveRequest): CompletableFuture<IdeSaveResult> {
         saveRequests += request
