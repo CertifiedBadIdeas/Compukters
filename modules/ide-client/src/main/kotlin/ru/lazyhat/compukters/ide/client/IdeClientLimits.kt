@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.ide.client
 data class IdeClientLimits(
     val eventQueueCapacity: Int = 256,
     val workspaceQueue: Int = 128,
+    val buildPreparationQueue: Int = 2,
     val projectRows: Int = 4 * 1024,
     val visibleTreeRows: Int = 8 * 1024,
     val visibleEditorLines: Int = 512,
@@ -30,6 +31,7 @@ data class IdeClientLimits(
     init {
         require(eventQueueCapacity > 0) { "event queue capacity must be positive" }
         require(workspaceQueue > 0) { "workspace queue capacity must be positive" }
+        require(buildPreparationQueue > 0) { "build preparation queue capacity must be positive" }
         require(projectRows >= 0) { "project row limit must be non-negative" }
         require(visibleTreeRows >= 0) { "visible tree row limit must be non-negative" }
         require(visibleEditorLines > 0) { "visible editor line limit must be positive" }

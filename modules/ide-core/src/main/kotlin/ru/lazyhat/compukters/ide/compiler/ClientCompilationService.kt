@@ -46,6 +46,7 @@ sealed interface ClientBuildResult {
         override val identity: Hash256,
         val artifact: BinaryValue,
         val artifactHash: Hash256,
+        val cacheHit: Boolean,
     ) : ClientBuildResult
 
     data class Diagnostics(
@@ -179,7 +180,7 @@ class DefaultClientCompilationService(
             val cached = cache.get(build.prepared.identity)
             if (cached != null) {
                 val hash = Hash256.of(MessageDigest.getInstance("SHA-256").digest(cached))
-                finish(build, ClientBuildResult.Success(build.prepared.identity, BinaryValue.of(cached), hash))
+                finish(build, ClientBuildResult.Success(build.prepared.identity, BinaryValue.of(cached), hash, cacheHit = true))
                 return
             }
             val worker = backend.compile(build.prepared.request)
@@ -232,7 +233,12 @@ class DefaultClientCompilationService(
                     )
                 } else {
                     val stored = cache.put(build.prepared.identity, admitted.artifact.toByteArray())
-                    ClientBuildResult.Success(build.prepared.identity, BinaryValue.of(stored), admitted.artifactHash)
+                    ClientBuildResult.Success(
+                        build.prepared.identity,
+                        BinaryValue.of(stored),
+                        admitted.artifactHash,
+                        cacheHit = false,
+                    )
                 }
             }
 

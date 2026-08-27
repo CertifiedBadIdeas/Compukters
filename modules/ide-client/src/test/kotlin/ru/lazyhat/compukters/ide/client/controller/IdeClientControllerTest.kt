@@ -18,7 +18,13 @@
 
 package ru.lazyhat.compukters.ide.client.controller
 
+import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
+import ru.lazyhat.compukters.compiler.project.ProjectSource
+import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferences
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferencesStore
 import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
@@ -249,16 +255,19 @@ class IdeClientControllerTest {
 
 internal class ControllerFixture(
     preferences: IdePreferences? = null,
+    buildCoordinatorFactory: ((ControlledWorkspace, MutableClock) -> IdeBuildCoordinator)? = null,
 ) {
     val clock = MutableClock()
     val preferences = MemoryPreferences(preferences)
     val workspace = ControlledWorkspace()
+    val buildCoordinator = buildCoordinatorFactory?.invoke(workspace, clock)
     val controller =
         IdeClientController(
             workspace,
             this.preferences,
             clock,
             BoundedIdeEventQueue(64),
+            buildCoordinator = buildCoordinator,
         )
 
     fun startAndTick() {
@@ -291,11 +300,12 @@ internal class MemoryPreferences(
 
 internal class ControlledWorkspace : IdeWorkspace {
     private val root = createTempDirectory("compukters-controller-")
-    private val descriptor = ProjectCatalog.open(root).create("demo")
+    val descriptor = ProjectCatalog.open(root).create("demo")
     private val main = ProjectPath.file("src/main.kt")
     private val notes = ProjectPath.file("notes.txt")
     val openResults = mutableMapOf<ProjectPath, ProjectFileOpenResult>()
     val saveRequests = mutableListOf<IdeSaveRequest>()
+    var buildInputRequests = 0
     private val pendingSaves = ArrayDeque<CompletableFuture<IdeSaveResult>>()
 
     init {
@@ -335,6 +345,18 @@ internal class ControlledWorkspace : IdeWorkspace {
         pendingSaves.removeFirst().complete(DocumentSaveResult.Saved(snapshot))
     }
 
+    fun completeSaveConflict() {
+        val request = saveRequests.last()
+        pendingSaves.removeFirst().complete(DocumentSaveResult.Conflict(request.expected, FileRevision.Absent))
+    }
+
+    fun installLock(bytes: ByteArray) {
+        descriptor.handle.canonicalPath
+            .resolve("compukter.lock")
+            .toFile()
+            .writeBytes(bytes)
+    }
+
     fun replaceMainExternally(text: String) {
         descriptor.handle.canonicalPath
             .resolve(main.value)
@@ -363,7 +385,26 @@ internal class ControlledWorkspace : IdeWorkspace {
             }
         }
 
-    override fun buildInput(project: ProjectHandle): CompletableFuture<IdeBuildInput> = error("unused")
+    override fun buildInput(project: ProjectHandle): CompletableFuture<IdeBuildInput> {
+        buildInputRequests++
+        val root = descriptor.handle.canonicalPath
+        val source = saveRequests.lastOrNull()?.text ?: assertIs<ProjectFileOpenResult.Text>(openResults.getValue(main)).snapshot.text
+        return completed(
+            IdeBuildInput(
+                descriptor.handle,
+                root.resolve("compukter.toml").toFile().readBytes(),
+                root
+                    .resolve("compukter.lock")
+                    .toFile()
+                    .takeIf { it.exists() }
+                    ?.readBytes(),
+                ProjectSnapshot.of(
+                    listOf(ProjectSource(VirtualSourcePath.kotlin(main.value), BinaryValue.of(source.encodeToByteArray()))),
+                    WorkerLimits(sourceFiles = 8, sourceFileBytes = 4096, sourceBytes = 8192),
+                ),
+            ),
+        )
+    }
 
     override fun close() = Unit
 

@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.ide.client.state
 
+import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectTree
 import java.util.Collections
@@ -60,7 +61,7 @@ data class IdeWorkspaceView(
     val activeFile: ProjectPath?,
     val editor: IdeEditorView,
     val status: IdeProblem?,
-    val build: IdeBuildSummary?,
+    val build: IdeBuildState,
 )
 
 sealed interface IdePageState {
@@ -90,6 +91,10 @@ sealed interface IdeDialogState {
     data class FileConflict(
         val path: ProjectPath,
         val closing: Boolean,
+    ) : IdeDialogState
+
+    data class LockUpdate(
+        val projectDirectory: String,
     ) : IdeDialogState
 }
 
