@@ -48,6 +48,11 @@ class IdeTargetCoordinator(
         return current
     }
 
+    fun attachedTarget(): IdeAttachedTarget? {
+        checkOwner()
+        return attached
+    }
+
     fun attach(claim: IdeTargetClaim) {
         checkActive()
         releaseAttached()
@@ -118,6 +123,14 @@ class IdeTargetCoordinator(
         check(current is IdeTargetState.ConfirmationRequired) { "no deployment confirmation is pending" }
         confirmation = null
         beginDeployment(pending, pending.expected, nextOperationGeneration())
+    }
+
+    fun cancelDeployment() {
+        checkActive()
+        check(current is IdeTargetState.ConfirmationRequired && confirmation != null) { "no deployment confirmation is pending" }
+        confirmation = null
+        nextOperationGeneration()
+        current = IdeTargetState.Attached(checkNotNull(attached))
     }
 
     fun tick() {

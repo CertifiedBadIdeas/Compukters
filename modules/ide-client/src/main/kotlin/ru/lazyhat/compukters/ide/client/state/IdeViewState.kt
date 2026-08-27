@@ -19,6 +19,9 @@
 package ru.lazyhat.compukters.ide.client.state
 
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
+import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
+import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
+import ru.lazyhat.compukters.ide.client.target.IdeTargetState
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectTree
 import java.util.Collections
@@ -96,6 +99,11 @@ sealed interface IdeDialogState {
     data class LockUpdate(
         val projectDirectory: String,
     ) : IdeDialogState
+
+    data class TargetOverwrite(
+        val path: IdeDeploymentPath,
+        val revision: IdeExecutableRevision.Present,
+    ) : IdeDialogState
 }
 
 enum class IdeBusyOperation {
@@ -112,6 +120,7 @@ class IdeViewState(
     val page: IdePageState,
     val dialog: IdeDialogState?,
     busy: Set<IdeBusyOperation>,
+    val target: IdeTargetState = IdeTargetState.LocalOnly,
 ) {
     val busy: Set<IdeBusyOperation> = Collections.unmodifiableSet(busy.toSet())
 
@@ -124,7 +133,8 @@ class IdeViewState(
         page: IdePageState = this.page,
         dialog: IdeDialogState? = this.dialog,
         busy: Set<IdeBusyOperation> = this.busy,
-    ): IdeViewState = IdeViewState(generation, page, dialog, busy)
+        target: IdeTargetState = this.target,
+    ): IdeViewState = IdeViewState(generation, page, dialog, busy, target)
 
     companion object {
         fun startPage(projects: List<IdeProjectSummary>): IdeViewState =

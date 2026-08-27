@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.ide.client.state
 
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.build.IdeResolveResult
+import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
 import ru.lazyhat.compukters.ide.client.workspace.IdeMutationRequest
 import ru.lazyhat.compukters.ide.client.workspace.IdeSaveResult
@@ -37,6 +38,7 @@ sealed interface IdeEvent {
         val operationId: Long,
         val action: IdeBuildAction,
         val input: IdeBuildInput,
+        val target: IdeAttachedTarget?,
     ) : IdeEvent
 
     data class BuildStateChanged(
@@ -156,6 +158,9 @@ internal fun IdeEvent.copyForQueue(): IdeEvent =
 
 enum class IdeBuildAction {
     Build,
+    Verify,
+    Deploy,
+    Run,
     Resolve,
     UpdateLock,
 }
