@@ -18,7 +18,11 @@
 
 package ru.lazyhat.compukters.ide.client.controller
 
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
+import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator
+import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
+import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionAcceptance
 import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
 import ru.lazyhat.compukters.ide.client.build.IdeBuildFailureKind
 import ru.lazyhat.compukters.ide.client.build.IdeBuildJob
@@ -48,6 +52,7 @@ import ru.lazyhat.compukters.ide.client.workspace.IdeWorkspace
 import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
 import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorEditResult
+import ru.lazyhat.compukters.ide.highlight.IncrementalKotlinHighlighter
 import ru.lazyhat.compukters.ide.project.ProjectDescriptor
 import ru.lazyhat.compukters.ide.project.document.DocumentSaveResult
 import ru.lazyhat.compukters.ide.project.document.FileRevision
@@ -65,6 +70,7 @@ class IdeClientController(
     private val events: BoundedIdeEventQueue,
     private val limits: IdeClientLimits = IdeClientLimits(),
     private val buildCoordinator: IdeBuildCoordinator? = null,
+    private val analysisCoordinator: IdeAnalysisCoordinator? = null,
 ) : AutoCloseable {
     private val owner = Thread.currentThread()
     private var state = IdeViewState.startPage(emptyList())
@@ -95,6 +101,7 @@ class IdeClientController(
     private var latestBuildOperation = 0L
     private var activeBuild: IdeBuildJob? = null
     private val buildJobs = mutableMapOf<Long, IdeBuildJob>()
+    private var observedAnalysisState: IdeAnalysisState = IdeAnalysisState.Idle
 
     fun start() {
         checkOwner()
@@ -201,8 +208,15 @@ class IdeClientController(
                 activeBuild?.cancel()
             }
 
-            IdeCommand.ManualCompletion,
-            -> {}
+            IdeCommand.ManualCompletion -> {
+                analysisCoordinator?.manualCompletion()
+                refreshAnalysisState()
+            }
+
+            IdeCommand.EditorFocusLost -> {
+                analysisCoordinator?.focusLost()
+                refreshAnalysisState()
+            }
         }
     }
 
@@ -223,6 +237,7 @@ class IdeClientController(
         ) {
             requestSave()
         }
+        refreshAnalysisState()
     }
 
     fun viewState(): IdeViewState {
@@ -241,11 +256,13 @@ class IdeClientController(
         closed = true
         generation = Math.incrementExact(generation)
         project?.let { persistPreferences(editor?.path ?: binary?.path) }
-        editor?.document?.close()
+        editor?.close()
         editor = null
+        analysisCoordinator?.closeFile()
         workspace.close()
         cancelBuildJobs()
         buildCoordinator?.close()
+        analysisCoordinator?.close()
     }
 
     private fun openProject(directoryName: String) {
@@ -259,8 +276,10 @@ class IdeClientController(
         cancelBuildJobs()
         pendingBuildAction = null
         buildState = IdeBuildState.Idle
-        editor?.document?.close()
+        editor?.close()
         editor = null
+        analysisCoordinator?.closeFile()
+        observedAnalysisState = IdeAnalysisState.Idle
         binary = null
         project = null
         tree = null
@@ -314,6 +333,25 @@ class IdeClientController(
 
     private fun edit(input: IdeEditorInput) {
         val active = editor ?: return
+        if ((input == IdeEditorInput.Tab || input == IdeEditorInput.Enter) && active.path.isKotlinSource) {
+            val accepted = analysisCoordinator?.acceptCompletion(active.document, VirtualSourcePath.kotlin(active.path.value))
+            if (accepted is IdeCompletionAcceptance.Applied) {
+                active.lastEditMillis = clock.nowMillis()
+                refreshAnalysisState()
+                publishWorkspace()
+                return
+            }
+            if (accepted != null) analysisCoordinator.dismissCompletion()
+        }
+        if (input is IdeEditorInput.Move && (input.direction == IdeMoveDirection.Up || input.direction == IdeMoveDirection.Down)) {
+            val completion = (analysisCoordinator?.state() as? IdeAnalysisState.Active)?.completion
+            if (completion != null) {
+                analysisCoordinator.moveCompletion(if (input.direction == IdeMoveDirection.Up) -1 else 1)
+                refreshAnalysisState()
+                publishWorkspace()
+                return
+            }
+        }
         val result =
             when (input) {
                 is IdeEditorInput.Type -> {
@@ -366,7 +404,13 @@ class IdeClientController(
                     null
                 }
             }
-        if (result is EditorEditResult.Applied) active.lastEditMillis = clock.nowMillis()
+        if (result is EditorEditResult.Applied) {
+            active.lastEditMillis = clock.nowMillis()
+            updateAnalysis(active, (input as? IdeEditorInput.Type)?.text)
+        } else if (input is IdeEditorInput.SetCaret || input is IdeEditorInput.Move) {
+            analysisCoordinator?.dismissCompletion()
+            refreshAnalysisState()
+        }
         publishWorkspace()
     }
 
@@ -611,11 +655,13 @@ class IdeClientController(
             IdeResolveResult.Created -> {
                 publishStatus("Created compukter.lock", IdeProblemSeverity.Info)
                 requestPoll()
+                analysisCoordinator?.reload()
             }
 
             IdeResolveResult.Updated -> {
                 publishStatus("Updated compukter.lock", IdeProblemSeverity.Info)
                 requestPoll()
+                analysisCoordinator?.reload()
             }
 
             IdeResolveResult.UpToDate -> {
@@ -648,9 +694,11 @@ class IdeClientController(
 
     private fun acceptFile(event: IdeEvent.FileOpened) {
         if (event.operationId != latestOpenOperation) return
-        editor?.document?.close()
+        editor?.close()
         editor = null
         binary = null
+        analysisCoordinator?.closeFile()
+        observedAnalysisState = IdeAnalysisState.Idle
         when (val result = event.result) {
             is ProjectFileOpenResult.Text -> {
                 val document = EditorDocument(result.snapshot.text)
@@ -664,6 +712,7 @@ class IdeClientController(
                         session.firstVisibleLine = remembered.firstVisibleLine
                     }
                 editor = session
+                openAnalysis(session)
             }
 
             is ProjectFileOpenResult.Binary -> {
@@ -723,8 +772,9 @@ class IdeClientController(
                     active.conflict = true
                     showConflictDialog(closeRequested)
                 } else if (diskRevision == null) {
-                    active.document.close()
+                    active.close()
                     editor = null
+                    analysisCoordinator?.closeFile()
                     publishProblem("Active file was removed outside the IDE")
                 } else {
                     openFile(active.path)
@@ -788,6 +838,7 @@ class IdeClientController(
     ) {
         editor?.takeIf { it.path.isWithin(source) }?.let { active ->
             active.path = active.path.rebase(source, target)
+            openAnalysis(active)
         }
         binary?.takeIf { it.path.isWithin(source) }?.let { active ->
             binary = IdeEditorView.Binary(active.path.rebase(source, target), active.bytes)
@@ -802,8 +853,9 @@ class IdeClientController(
                 publishProblem("Active file was deleted; use Save As to keep local edits")
                 showConflictDialog(closing = false)
             } else {
-                active.document.close()
+                active.close()
                 editor = null
+                analysisCoordinator?.closeFile()
             }
         }
         if (binary?.path?.isWithin(deleted) == true) binary = null
@@ -956,7 +1008,75 @@ class IdeClientController(
             persistedRevision,
             dirty,
             conflict,
+            highlighter.snapshot(),
+            admittedAnalysisState(this),
         )
+    }
+
+    private fun openAnalysis(active: EditorSession) {
+        val selected = project ?: return
+        if (!active.path.isKotlinSource) {
+            analysisCoordinator?.closeFile()
+            observedAnalysisState = IdeAnalysisState.Idle
+            return
+        }
+        analysisCoordinator?.open(
+            selected.handle,
+            VirtualSourcePath.kotlin(active.path.value),
+            active.document.materialize(),
+            active.document.revision,
+        )
+        refreshAnalysisState()
+    }
+
+    private fun updateAnalysis(
+        active: EditorSession,
+        insertedText: String?,
+    ) {
+        val selected = project ?: return
+        if (!active.path.isKotlinSource) return
+        analysisCoordinator?.sourceChanged(
+            selected.handle,
+            VirtualSourcePath.kotlin(active.path.value),
+            active.document.materialize(),
+            active.document.revision,
+            insertedText,
+            active.document.caretOffset,
+        )
+        refreshAnalysisState()
+    }
+
+    private fun refreshAnalysisState() {
+        val current = analysisCoordinator?.state() ?: IdeAnalysisState.Idle
+        if (current === observedAnalysisState) return
+        observedAnalysisState = current
+        if (current is IdeAnalysisState.Unavailable) {
+            publishStatus(current.status, IdeProblemSeverity.Warning)
+        }
+        publishWorkspace()
+    }
+
+    private fun admittedAnalysisState(active: EditorSession): IdeAnalysisState {
+        if (!active.path.isKotlinSource) return IdeAnalysisState.Idle
+        val current = observedAnalysisState
+        val path = VirtualSourcePath.kotlin(active.path.value)
+        return when (current) {
+            is IdeAnalysisState.Active -> {
+                current.takeIf { it.path == path && it.documentRevision == active.document.revision } ?: IdeAnalysisState.Idle
+            }
+
+            is IdeAnalysisState.Loading -> {
+                current.takeIf { it.path == path && it.documentRevision == active.document.revision } ?: IdeAnalysisState.Idle
+            }
+
+            is IdeAnalysisState.Unavailable -> {
+                current.takeIf { it.path == path && it.documentRevision == active.document.revision } ?: IdeAnalysisState.Idle
+            }
+
+            IdeAnalysisState.Idle -> {
+                IdeAnalysisState.Idle
+            }
+        }
     }
 
     private fun persistPreferences(file: ProjectPath?) {
@@ -980,8 +1100,10 @@ class IdeClientController(
         cancelBuildJobs()
         pendingBuildAction = null
         buildState = IdeBuildState.Idle
-        editor?.document?.close()
+        editor?.close()
         editor = null
+        analysisCoordinator?.closeFile()
+        observedAnalysisState = IdeAnalysisState.Idle
         binary = null
         project = null
         tree = null
@@ -1056,12 +1178,18 @@ class IdeClientController(
         val document: EditorDocument,
         var diskRevision: FileRevision,
     ) {
+        val highlighter = IncrementalKotlinHighlighter(document)
         var persistedRevision = document.revision
         var saveInFlight: Long? = null
         var conflict = false
         var lastEditMillis = 0L
         var firstVisibleLine = 0
         val dirty: Boolean get() = document.revision != persistedRevision
+
+        fun close() {
+            highlighter.close()
+            document.close()
+        }
     }
 
     private data class PendingBuildAction(

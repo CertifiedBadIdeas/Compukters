@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.ide.client.state
 
+import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
+import ru.lazyhat.compukters.ide.highlight.KotlinLexicalSnapshot
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import java.util.Collections
 
@@ -36,6 +38,8 @@ sealed interface IdeEditorView {
         val persistedContentRevision: Long,
         val dirty: Boolean,
         val conflict: Boolean,
+        val lexical: KotlinLexicalSnapshot,
+        val analysis: IdeAnalysisState,
     ) : IdeEditorView {
         val visibleLines: List<String> = Collections.unmodifiableList(visibleLines.toList())
 

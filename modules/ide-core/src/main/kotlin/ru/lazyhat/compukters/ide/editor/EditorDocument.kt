@@ -150,6 +150,11 @@ class EditorDocument(
 
     fun paste(text: String): EditorEditResult = replaceSelection(text, EditorHistoryKind.Atomic)
 
+    fun replaceRange(
+        range: EditorRange,
+        text: String,
+    ): EditorEditResult = replace(range, text, EditorHistoryKind.Atomic, EditorChangeOrigin.User)
+
     fun cut(): EditorEditResult {
         val range = selectionRange ?: return EditorEditResult.NoChange
         return replace(range, "", EditorHistoryKind.Atomic, EditorChangeOrigin.User)

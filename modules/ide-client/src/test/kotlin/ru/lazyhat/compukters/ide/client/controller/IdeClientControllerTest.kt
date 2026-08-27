@@ -255,12 +255,14 @@ class IdeClientControllerTest {
 
 internal class ControllerFixture(
     preferences: IdePreferences? = null,
+    analysisCoordinatorFactory: ((ControlledWorkspace) -> ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator)? = null,
     buildCoordinatorFactory: ((ControlledWorkspace, MutableClock) -> IdeBuildCoordinator)? = null,
 ) {
     val clock = MutableClock()
     val preferences = MemoryPreferences(preferences)
     val workspace = ControlledWorkspace()
     val buildCoordinator = buildCoordinatorFactory?.invoke(workspace, clock)
+    val analysisCoordinator = analysisCoordinatorFactory?.invoke(workspace)
     val controller =
         IdeClientController(
             workspace,
@@ -268,6 +270,7 @@ internal class ControllerFixture(
             clock,
             BoundedIdeEventQueue(64),
             buildCoordinator = buildCoordinator,
+            analysisCoordinator = analysisCoordinator,
         )
 
     fun startAndTick() {

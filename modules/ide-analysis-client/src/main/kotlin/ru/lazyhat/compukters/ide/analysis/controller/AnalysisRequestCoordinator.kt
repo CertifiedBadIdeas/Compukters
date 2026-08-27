@@ -37,11 +37,16 @@ interface AnalysisRequestCoordinator : AutoCloseable {
     ): CompletableFuture<AnalysisClientResult>
 }
 
+fun interface AnalysisResultSink {
+    fun publish(result: AnalysisClientResult)
+}
+
 class DefaultAnalysisRequestCoordinator(
     private val client: AnalysisClient,
     private val scheduler: AnalysisTaskScheduler,
     private val presentationDebounceNanos: Long,
     private val automaticCompletionDebounceNanos: Long,
+    private val resultSink: AnalysisResultSink = AnalysisResultSink {},
 ) : AnalysisRequestCoordinator {
     private val lock = Any()
     private var snapshot: AdmittedAnalysisSnapshot? = null
@@ -103,16 +108,19 @@ class DefaultAnalysisRequestCoordinator(
     ): CompletableFuture<AnalysisClientResult> {
         val current: AdmittedAnalysisSnapshot
         val oldCompletion: CompletableFuture<AnalysisClientResult>?
+        val future: CompletableFuture<AnalysisClientResult>
         synchronized(lock) {
             check(!closed) { "analysis request coordinator is closed" }
             current = checkNotNull(snapshot) { "analysis snapshot is not open" }
             completionTask?.cancel()
             completionTask = null
             oldCompletion = completionFuture
-            completionFuture = null
+            future = client.query(AnalysisQuery.Completion(current.identity, path, offsetUtf16, CompletionTrigger.Manual))
+            completionFuture = future
         }
         oldCompletion?.let(client::cancel)
-        return client.query(AnalysisQuery.Completion(current.identity, path, offsetUtf16, CompletionTrigger.Manual))
+        publishCompletion(current, future)
+        return future
     }
 
     override fun close() {
@@ -133,10 +141,14 @@ class DefaultAnalysisRequestCoordinator(
     }
 
     private fun dispatchPresentation(expected: AdmittedAnalysisSnapshot) {
-        synchronized(lock) {
-            if (closed || snapshot !== expected) return
-            presentationTask = null
-            presentationFuture = client.query(AnalysisQuery.Presentation(expected.identity))
+        val future =
+            synchronized(lock) {
+                if (closed || snapshot !== expected) return
+                presentationTask = null
+                client.query(AnalysisQuery.Presentation(expected.identity)).also { presentationFuture = it }
+            }
+        future.whenComplete { result, failure ->
+            if (failure == null && result != null && admitPresentation(expected, future)) resultSink.publish(result)
         }
     }
 
@@ -144,10 +156,41 @@ class DefaultAnalysisRequestCoordinator(
         expected: AdmittedAnalysisSnapshot,
         query: AnalysisQuery.Completion,
     ) {
-        synchronized(lock) {
-            if (closed || snapshot !== expected) return
-            completionTask = null
-            completionFuture = client.query(query)
+        val future =
+            synchronized(lock) {
+                if (closed || snapshot !== expected) return
+                completionTask = null
+                client.query(query).also { completionFuture = it }
+            }
+        publishCompletion(expected, future)
+    }
+
+    private fun publishCompletion(
+        expected: AdmittedAnalysisSnapshot,
+        future: CompletableFuture<AnalysisClientResult>,
+    ) {
+        future.whenComplete { result, failure ->
+            if (failure == null && result != null && admitCompletion(expected, future)) resultSink.publish(result)
         }
     }
+
+    private fun admitPresentation(
+        expected: AdmittedAnalysisSnapshot,
+        future: CompletableFuture<AnalysisClientResult>,
+    ): Boolean =
+        synchronized(lock) {
+            if (closed || snapshot !== expected || presentationFuture !== future) return@synchronized false
+            presentationFuture = null
+            true
+        }
+
+    private fun admitCompletion(
+        expected: AdmittedAnalysisSnapshot,
+        future: CompletableFuture<AnalysisClientResult>,
+    ): Boolean =
+        synchronized(lock) {
+            if (closed || snapshot !== expected || completionFuture !== future) return@synchronized false
+            completionFuture = null
+            true
+        }
 }
