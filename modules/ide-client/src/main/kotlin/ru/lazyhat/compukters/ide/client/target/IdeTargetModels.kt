@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.ide.client.target
 
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 
 @JvmInline
 value class IdeTargetId(
@@ -43,6 +44,7 @@ data class IdeTargetCapabilities(
 data class IdeAttachedTarget(
     val id: IdeTargetId,
     val profile: IdeTargetProfileId,
+    val compileProfile: TargetCompileProfile,
     val capabilities: IdeTargetCapabilities,
     val displayName: String,
 ) {

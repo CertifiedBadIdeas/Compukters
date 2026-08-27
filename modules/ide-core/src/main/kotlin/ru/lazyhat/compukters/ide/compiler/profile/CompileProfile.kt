@@ -61,6 +61,11 @@ class TargetCompileProfile(
     init {
         require(this.modules.zipWithNext().none { (left, right) -> left.id == right.id }) { "target module IDs must be unique" }
     }
+
+    override fun equals(other: Any?): Boolean =
+        other is TargetCompileProfile && toolchain == other.toolchain && modules == other.modules && limits == other.limits
+
+    override fun hashCode(): Int = 31 * (31 * toolchain.hashCode() + modules.hashCode()) + limits.hashCode()
 }
 
 sealed interface ProfileResolution {

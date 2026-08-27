@@ -35,6 +35,7 @@ import ru.lazyhat.compukters.ide.compiler.ClientCompileRequestFactory
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
 import ru.lazyhat.compukters.ide.compiler.profile.GuestApiBundleCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.project.ProjectHandle
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
@@ -97,22 +98,24 @@ class IdeBuildCoordinator(
     fun resolve(
         input: IdeBuildInput,
         updateExisting: Boolean,
+        target: TargetCompileProfile? = null,
     ): CompletableFuture<IdeResolveResult> =
         submit(
-            action = { resolveNow(input, updateExisting) },
+            action = { resolveNow(input, updateExisting, target) },
             rejected = IdeResolveResult.Failed(if (closed.get()) "build coordinator is closed" else "build queue is full"),
         )
 
     fun build(
         operationId: Long,
         input: IdeBuildInput,
+        target: TargetCompileProfile? = null,
     ): IdeBuildJob {
         require(operationId >= 0) { "build operation ID must be non-negative" }
         val control = BuildControl()
         synchronized(builds) { builds += control }
         val task =
             try {
-                executor.submit { beginBuild(operationId, input, control) }
+                executor.submit { beginBuild(operationId, input, target, control) }
             } catch (_: RejectedExecutionException) {
                 control.result.complete(
                     IdeBuildState.Failed(
@@ -143,12 +146,19 @@ class IdeBuildCoordinator(
     private fun resolveNow(
         input: IdeBuildInput,
         updateExisting: Boolean,
+        target: TargetCompileProfile?,
     ): IdeResolveResult =
         try {
             val manifest = ProjectManifestCodec.decode(decodeStrict(input.manifestBytes))
             val resolution = localResolution(manifest)
             val lockService = services.lockServices.create(input.project)
             val proposed = lockService.resolve(manifest, resolution)
+            if (target != null) {
+                val admitted = services.profileResolver.resolveTarget(proposed, target)
+                if (admitted !is ProfileResolution.Resolved) {
+                    return IdeResolveResult.Failed("target compile profile is unsatisfied: ${admitted::class.simpleName}")
+                }
+            }
             val proposedBytes = ProjectLockCodec.encode(proposed).encodeToByteArray()
             val current = input.lockBytes
             when {
@@ -177,12 +187,13 @@ class IdeBuildCoordinator(
     private fun beginBuild(
         operationId: Long,
         input: IdeBuildInput,
+        target: TargetCompileProfile?,
         control: BuildControl,
     ) {
         if (control.cancelled.get()) return
         val prepared =
             try {
-                prepare(input)
+                prepare(input, target)
             } catch (failure: BuildPreparationFailure) {
                 control.result.complete(IdeBuildState.Failed(failure.kind, detail(failure)))
                 return
@@ -217,7 +228,10 @@ class IdeBuildCoordinator(
         }
     }
 
-    private fun prepare(input: IdeBuildInput): PreparedBuild {
+    private fun prepare(
+        input: IdeBuildInput,
+        target: TargetCompileProfile?,
+    ): PreparedBuild {
         val manifest =
             try {
                 ProjectManifestCodec.decode(decodeStrict(input.manifestBytes))
@@ -242,7 +256,7 @@ class IdeBuildCoordinator(
             throw BuildPreparationFailure(IdeBuildFailureKind.UnsatisfiedProfile, "project lock does not match the local profile")
         }
         val profile =
-            when (val resolved = services.profileResolver.resolveLocal(lock)) {
+            when (val resolved = target?.let { services.profileResolver.resolveTarget(lock, it) } ?: services.profileResolver.resolveLocal(lock)) {
                 is ProfileResolution.Resolved -> {
                     resolved.profile
                 }
@@ -262,7 +276,7 @@ class IdeBuildCoordinator(
                 profile,
             )
         val prepared = ClientCompileRequestFactory.prepare(snapshot)
-        return PreparedBuild(snapshot, prepared.identity, prepared.sourceSnapshotId)
+        return PreparedBuild(snapshot, prepared.identity, prepared.sourceSnapshotId, manifest.name)
     }
 
     private fun localResolution(manifest: ProjectManifest): ProjectResolution {
@@ -288,8 +302,8 @@ class IdeBuildCoordinator(
                 } else {
                     IdeBuildState.Succeeded(
                         result.identity,
-                        result.artifactHash,
-                        result.artifact.size,
+                        IdeBuiltArtifact.admit(result.artifactHash, result.artifact),
+                        prepared.programName,
                         result.cacheHit,
                         clock.nowMillis().coerceAtLeast(0),
                     )
@@ -406,6 +420,7 @@ class IdeBuildCoordinator(
         val snapshot: ClientBuildSnapshot,
         val identity: ru.lazyhat.compukters.compiler.worker.protocol.Hash256,
         val sourceSnapshotId: ru.lazyhat.compukters.ide.analysis.SourceSnapshotId,
+        val programName: String,
     )
 
     private class BuildPreparationFailure(

@@ -19,6 +19,9 @@
 package ru.lazyhat.compukters.ide.client.target
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
+import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -71,9 +74,12 @@ class IdeTargetModelsTest {
         IdeAttachedTarget(
             IdeTargetId("computer-1"),
             IdeTargetProfileId(hash(1)),
+            TargetCompileProfile(toolchain(), emptyList(), WorkerLimits()),
             IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true),
             "Computer",
         )
 
     private fun hash(seed: Int): Hash256 = Hash256.of(ByteArray(32) { seed.toByte() })
+
+    private fun toolchain() = ToolchainLockIdentity("2.4.10", "2.4", 1u, 1u, 1u, hash(2), hash(3))
 }

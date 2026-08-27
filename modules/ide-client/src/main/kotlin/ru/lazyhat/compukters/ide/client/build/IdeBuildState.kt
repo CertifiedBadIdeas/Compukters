@@ -18,10 +18,36 @@
 
 package ru.lazyhat.compukters.ide.client.build
 
+import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnostic
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotId
 import java.util.Collections
+
+class IdeBuiltArtifact private constructor(
+    val hash: Hash256,
+    private val value: BinaryValue,
+) {
+    val size: Int get() = value.size
+
+    fun bytes(): ByteArray = value.toByteArray()
+
+    override fun equals(other: Any?): Boolean = other is IdeBuiltArtifact && hash == other.hash && value == other.value
+
+    override fun hashCode(): Int = 31 * hash.hashCode() + value.hashCode()
+
+    companion object {
+        fun of(
+            hash: Hash256,
+            bytes: ByteArray,
+        ): IdeBuiltArtifact = IdeBuiltArtifact(hash, BinaryValue.of(bytes))
+
+        internal fun admit(
+            hash: Hash256,
+            value: BinaryValue,
+        ): IdeBuiltArtifact = IdeBuiltArtifact(hash, value)
+    }
+}
 
 sealed interface IdeBuildState {
     data object Idle : IdeBuildState
@@ -38,13 +64,16 @@ sealed interface IdeBuildState {
 
     data class Succeeded(
         val identity: Hash256,
-        val artifactHash: Hash256,
-        val bytes: Int,
+        val artifact: IdeBuiltArtifact,
+        val programName: String,
         val cacheHit: Boolean,
         val completedAtMillis: Long,
     ) : IdeBuildState {
+        val artifactHash: Hash256 get() = artifact.hash
+        val bytes: Int get() = artifact.size
+
         init {
-            require(bytes >= 0) { "artifact size must be non-negative" }
+            require(programName.isNotBlank()) { "program name must not be blank" }
             require(completedAtMillis >= 0) { "completion time must be non-negative" }
         }
     }
