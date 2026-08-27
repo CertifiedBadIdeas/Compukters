@@ -19,7 +19,10 @@
 package ru.lazyhat.compukters.ide.client.target
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.client.controller.IdeControllerClock
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
+import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import java.util.concurrent.CompletableFuture
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -387,6 +390,7 @@ private fun target(profileSeed: Byte = 1) =
     IdeAttachedTarget(
         IdeTargetId("computer-1"),
         IdeTargetProfileId(Hash256.of(ByteArray(32) { profileSeed })),
+        TargetCompileProfile(targetToolchain(), emptyList(), WorkerLimits()),
         IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true),
         "Computer",
     )
@@ -399,3 +403,14 @@ private fun ticket(
     target: IdeAttachedTarget = target(),
     artifact: IdeTargetArtifact = artifact(),
 ) = IdeVerificationTicket.of(byteArrayOf(9), target, artifact)
+
+private fun targetToolchain() =
+    ToolchainLockIdentity(
+        "2.4.10",
+        "2.4",
+        1u,
+        1u,
+        1u,
+        Hash256.of(ByteArray(32) { 3 }),
+        Hash256.of(ByteArray(32) { 4 }),
+    )

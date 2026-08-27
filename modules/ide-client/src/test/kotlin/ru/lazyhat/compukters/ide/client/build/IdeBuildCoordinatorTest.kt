@@ -35,6 +35,7 @@ import ru.lazyhat.compukters.ide.compiler.ClientBuildSnapshot
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationService
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
 import ru.lazyhat.compukters.ide.compiler.profile.GuestApiBundleCatalog
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ProjectDescriptor
 import ru.lazyhat.compukters.ide.project.ProjectLock
@@ -108,7 +109,7 @@ class IdeBuildCoordinatorTest {
     }
 
     @Test
-    fun `build publishes identity and maps cache hit artifact without exposing bytes`() {
+    fun `build publishes immutable target-ready artifact and canonical program name`() {
         val lock = fixture.canonicalLock()
         val job = fixture.coordinator.build(7, fixture.input(lock))
         val compiling = job.started.get(5, TimeUnit.SECONDS)
@@ -128,9 +129,39 @@ class IdeBuildCoordinatorTest {
         assertEquals(compiling.identity, success.identity)
         assertEquals(hash(9), success.artifactHash)
         assertEquals(artifact.size, success.bytes)
+        assertContentEquals(artifact, success.artifact.bytes())
+        success.artifact.bytes().fill(0)
+        assertContentEquals(artifact, success.artifact.bytes())
+        assertEquals("demo", success.programName)
         assertTrue(success.cacheHit)
         assertEquals(1234, success.completedAtMillis)
         assertEquals(listOf("src/main.kt"), submitted.sources.sources.map { it.path.value })
+    }
+
+    @Test
+    fun `target profile is admitted before resolve or compilation`() {
+        val mismatched =
+            TargetCompileProfile(
+                fixture.toolchain.copy(languageVersion = "old"),
+                emptyList(),
+                fixture.limits,
+            )
+
+        val resolve = fixture.coordinator.resolve(fixture.input(lock = null), updateExisting = false, target = mismatched).get(5, TimeUnit.SECONDS)
+        assertIs<IdeResolveResult.Failed>(resolve)
+        assertFalse(fixture.lockPath.toFile().exists())
+
+        val build = fixture.coordinator.build(8, fixture.input(fixture.canonicalLock()), target = mismatched)
+        val failed = assertIs<IdeBuildState.Failed>(build.result.get(5, TimeUnit.SECONDS))
+        assertEquals(IdeBuildFailureKind.UnsatisfiedProfile, failed.kind)
+        assertTrue(fixture.compilation.inputs.isEmpty())
+
+        val matching = TargetCompileProfile(fixture.toolchain, emptyList(), fixture.limits)
+        val admitted = fixture.coordinator.build(9, fixture.input(fixture.canonicalLock()), target = matching)
+        admitted.started.get(5, TimeUnit.SECONDS)
+        val submitted = fixture.compilation.awaitInput()
+        assertEquals(fixture.limits, submitted.profile.limits)
+        admitted.cancel()
     }
 
     @Test
