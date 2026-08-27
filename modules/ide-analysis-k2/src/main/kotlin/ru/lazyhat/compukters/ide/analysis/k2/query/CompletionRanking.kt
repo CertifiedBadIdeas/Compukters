@@ -36,19 +36,33 @@ internal val completionRankComparator: Comparator<CompletionRank> =
             ?: compareUnsigned(left.signatureUtf8, right.signatureUtf8)
     }
 
-internal class BoundedBest<T>(
+internal class BoundedUniqueBest<K, T>(
     private val capacity: Int,
     private val comparator: Comparator<T>,
+    private val keyOf: (T) -> K,
 ) {
     private val worstFirst = PriorityQueue(comparator.reversed())
+    private val byKey = mutableMapOf<K, T>()
 
     fun offer(value: T) {
         if (capacity == 0) return
+        val key = keyOf(value)
+        val existing = byKey[key]
+        if (existing != null) {
+            if (comparator.compare(value, existing) >= 0) return
+            check(worstFirst.remove(existing)) { "indexed completion candidate is missing from the ranking queue" }
+            worstFirst += value
+            byKey[key] = value
+            return
+        }
         if (worstFirst.size < capacity) {
             worstFirst += value
+            byKey[key] = value
         } else if (comparator.compare(value, worstFirst.element()) < 0) {
-            worstFirst.remove()
+            val removed = worstFirst.remove()
+            check(byKey.remove(keyOf(removed)) === removed) { "ranking queue and completion index disagree" }
             worstFirst += value
+            byKey[key] = value
         }
     }
 

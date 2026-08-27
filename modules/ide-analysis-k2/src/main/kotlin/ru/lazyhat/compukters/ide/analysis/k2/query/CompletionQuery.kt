@@ -76,7 +76,7 @@ internal object CompletionQuery {
         if (limits.completionItems == 0) return emptyList()
         val visibility = createUseSiteVisibilityChecker(file.symbol, context.receiver, context.position)
         val rankedComparator = Comparator<RankedCompletion> { left, right -> completionRankComparator.compare(left.rank, right.rank) }
-        val ranked = BoundedBest(limits.completionItems, rankedComparator)
+        val ranked = BoundedUniqueBest(limits.completionItems, rankedComparator, RankedCompletion::item)
         val nameMatches: (org.jetbrains.kotlin.name.Name) -> Boolean = { name ->
             name.asString().startsWith(context.prefix)
         }
