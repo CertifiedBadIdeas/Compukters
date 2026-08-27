@@ -27,12 +27,24 @@ import ru.lazyhat.compukters.core.MOD_ID
 
 @EventBusSubscriber(modid = MOD_ID, value = [Dist.CLIENT])
 object TerminalClientNetwork {
+    private var retained: TerminalScreen? = null
+
+    internal fun retain(screen: TerminalScreen) {
+        retained = screen
+    }
+
+    internal fun release(screen: TerminalScreen) {
+        if (retained === screen) retained = null
+    }
+
+    private fun currentTerminal(): TerminalScreen? = (Minecraft.getInstance().screen as? TerminalScreen) ?: retained
+
     @JvmStatic
     @SubscribeEvent
     fun register(event: RegisterClientPayloadHandlersEvent) {
         event.register(TerminalFullPayload.TYPE) { payload, _ ->
             val minecraft = Minecraft.getInstance()
-            val current = minecraft.screen
+            val current = currentTerminal()
             if (current is TerminalScreen && current.position == payload.position) {
                 current.update(payload)
             } else if (payload.openScreen) {
@@ -40,7 +52,7 @@ object TerminalClientNetwork {
             }
         }
         event.register(TerminalDeltaPayload.TYPE) deltaHandler@{ payload, _ ->
-            val current = Minecraft.getInstance().screen as? TerminalScreen ?: return@deltaHandler
+            val current = currentTerminal() ?: return@deltaHandler
             if (current.position != payload.position || !current.update(payload)) {
                 current.requestResync()
             }

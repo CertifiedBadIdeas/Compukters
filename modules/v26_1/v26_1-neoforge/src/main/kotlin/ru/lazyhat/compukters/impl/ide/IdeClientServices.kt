@@ -18,9 +18,6 @@
 
 package ru.lazyhat.compukters.impl.ide
 
-import net.neoforged.bus.api.IEventBus
-import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent
-import net.neoforged.fml.loading.FMLPaths
 import ru.lazyhat.compukters.compiler.cache.ArtifactVerifier
 import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
 import ru.lazyhat.compukters.compiler.project.ProjectSource
@@ -175,22 +172,6 @@ internal class IdeClientApplication(
 
 internal fun productionIdeClientServices(gameRoot: Path): IdeClientServices<IdeClientApplication> =
     IdeClientServices(gameRoot, ProductionIdeApplicationFactory::open)
-
-internal object IdeClientBootstrap {
-    private var services: IdeClientServices<IdeClientApplication>? = null
-
-    fun register(eventBus: IEventBus) {
-        eventBus.addListener(::onClientSetup)
-    }
-
-    fun services(): IdeClientServices<IdeClientApplication> = checkNotNull(services) { "IDE client services are not initialized" }
-
-    private fun onClientSetup(event: FMLClientSetupEvent) {
-        event.enqueueWork {
-            if (services == null) services = productionIdeClientServices(FMLPaths.GAMEDIR.get())
-        }
-    }
-}
 
 private object ProductionIdeApplicationFactory {
     fun open(paths: IdeClientPaths): IdeClientApplication {

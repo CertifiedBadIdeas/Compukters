@@ -1,3 +1,5 @@
 {
-  "block.compukters.compukter": "Compukter"
+  "block.compukters.compukter": "Compukter",
+  "key.category.compukters.ide": "Compukters",
+  "key.compukters.open_ide": "Open IDE"
 }

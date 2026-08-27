@@ -25,23 +25,35 @@ import net.minecraft.client.input.CharacterEvent
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.network.chat.Component
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload
 import net.neoforged.neoforge.client.network.ClientPacketDistributor
 import org.lwjgl.glfw.GLFW
 import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
+import ru.lazyhat.compukters.impl.ide.ChildScreenParent
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 
-class TerminalScreen(
+internal class TerminalScreen(
     initial: TerminalFullPayload,
-) : Screen(Component.literal("Compukters terminal")) {
+    private val transport: TerminalScreenTransport = ProductionTerminalScreenTransport,
+) : Screen(Component.literal("Compukters terminal")),
+    ChildScreenParent {
     val position = initial.position
 
     private val replica = TerminalReplica(initial)
     private val pressedKeys = mutableSetOf<Int>()
     private var fontProfile = CompuktersClientConfig.selectedFont()
     private lateinit var fontButton: Button
+    private val childLifecycle =
+        TerminalChildLifecycle(
+            transport::connectionIdentity,
+            transport::connected,
+            ::requestResync,
+            { TerminalClientNetwork.retain(this) },
+            { TerminalClientNetwork.release(this) },
+        )
 
     override fun init() {
         super.init()
@@ -71,16 +83,32 @@ class TerminalScreen(
     fun update(payload: TerminalDeltaPayload): Boolean = replica.apply(payload)
 
     fun requestResync() {
-        ClientPacketDistributor.sendToServer(TerminalResyncPayload(position, replica.machineId, replica.state.revision))
+        transport.send(TerminalResyncPayload(position, replica.machineId, replica.state.revision))
+    }
+
+    override fun suspendForChild(): Screen {
+        childLifecycle.suspend()
+        pressedKeys.clear()
+        return this
+    }
+
+    override fun resumeFromChild(): Boolean = childLifecycle.resume()
+
+    override fun abandonChild() {
+        val close = childLifecycle.sameConnection() && transport.connected()
+        childLifecycle.abandon()
+        pressedKeys.clear()
+        if (close) transport.send(TerminalClosePayload(position, replica.machineId))
     }
 
     override fun removed() {
-        ClientPacketDistributor.sendToServer(TerminalClosePayload(position, replica.machineId))
+        if (!childLifecycle.suspended) transport.send(TerminalClosePayload(position, replica.machineId))
         pressedKeys.clear()
         super.removed()
     }
 
     override fun keyPressed(event: KeyEvent): Boolean {
+        if (childLifecycle.suspended) return true
         if (event.isPaste) {
             val pasted = boundedText(minecraft.keyboardHandler.clipboard)
             if (pasted.isNotEmpty()) {
@@ -93,19 +121,21 @@ class TerminalScreen(
                 ?: CONTROL_KEY_MAP[event.key()]?.takeIf { event.modifiers() and GLFW.GLFW_MOD_CONTROL != 0 }
                 ?: return super.keyPressed(event)
         val action = if (pressedKeys.add(event.key())) TerminalKeyAction.PRESS else TerminalKeyAction.REPEAT
-        ClientPacketDistributor.sendToServer(
+        transport.send(
             TerminalKeyPayload(position, replica.machineId, key, action, modifiers(event.modifiers())),
         )
         return if (key == TerminalKey.ESCAPE) super.keyPressed(event) else true
     }
 
     override fun keyReleased(event: KeyEvent): Boolean {
+        if (childLifecycle.suspended) return true
         val mapped = KEY_MAP.containsKey(event.key()) || CONTROL_KEY_MAP.containsKey(event.key())
         pressedKeys.remove(event.key())
         return mapped || super.keyReleased(event)
     }
 
     override fun charTyped(event: CharacterEvent): Boolean {
+        if (childLifecycle.suspended) return true
         val text = event.codepointAsString()
         sendText(text)
         return true
@@ -229,7 +259,7 @@ class TerminalScreen(
     ): TerminalCell = replica.state.cells[y * replica.state.width + x]
 
     private fun sendText(text: String) {
-        ClientPacketDistributor.sendToServer(TerminalTextPayload(position, replica.machineId, text))
+        transport.send(TerminalTextPayload(position, replica.machineId, text))
     }
 
     private fun boundedText(
@@ -309,4 +339,71 @@ class TerminalScreen(
                 GLFW.GLFW_KEY_X to TerminalKey.X,
             )
     }
+}
+
+internal interface TerminalScreenTransport {
+    fun send(payload: CustomPacketPayload)
+
+    fun connectionIdentity(): Any?
+
+    fun connected(): Boolean
+}
+
+internal class TerminalChildLifecycle(
+    private val connectionIdentity: () -> Any?,
+    private val connected: () -> Boolean,
+    private val resync: () -> Unit,
+    private val retain: () -> Unit,
+    private val release: () -> Unit,
+) {
+    var suspended: Boolean = false
+        private set
+    private var capturedConnection: Any? = null
+
+    fun suspend() {
+        if (suspended) return
+        suspended = true
+        capturedConnection = connectionIdentity()
+        retain()
+    }
+
+    fun resume(): Boolean {
+        if (!suspended) return false
+        if (capturedConnection == null || capturedConnection !== connectionIdentity() || !connected()) {
+            abandon()
+            return false
+        }
+        resync()
+        suspended = false
+        capturedConnection = null
+        release()
+        return true
+    }
+
+    fun abandon() {
+        if (!suspended) return
+        suspended = false
+        capturedConnection = null
+        release()
+    }
+
+    fun sameConnection(): Boolean = suspended && capturedConnection != null && capturedConnection === connectionIdentity()
+}
+
+private object ProductionTerminalScreenTransport : TerminalScreenTransport {
+    override fun send(payload: CustomPacketPayload) {
+        ClientPacketDistributor.sendToServer(payload)
+    }
+
+    override fun connectionIdentity(): Any? =
+        net.minecraft.client.Minecraft
+            .getInstance()
+            .connection
+
+    override fun connected(): Boolean =
+        net.minecraft.client.Minecraft
+            .getInstance()
+            .connection != null && net.minecraft.client.Minecraft
+            .getInstance()
+            .level != null
 }
