@@ -12,10 +12,13 @@
 
 package ru.lazyhat.compukters.impl.ide
 
+import net.minecraft.client.input.KeyEvent
 import net.neoforged.neoforge.client.settings.KeyModifier
 import org.lwjgl.glfw.GLFW
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class IdeClientBootstrapTest {
     @Test
@@ -25,5 +28,15 @@ class IdeClientBootstrapTest {
         assertEquals(GLFW.GLFW_KEY_I, mapping.defaultKey.value)
         assertEquals(KeyModifier.CONTROL, mapping.defaultKeyModifier)
         assertEquals("key.compukters.open_ide", mapping.name)
+    }
+
+    @Test
+    fun `screen shortcut requires the configured key and active modifier`() {
+        val controlI = KeyEvent(GLFW.GLFW_KEY_I, 0, GLFW.GLFW_MOD_CONTROL)
+        val controlK = KeyEvent(GLFW.GLFW_KEY_K, 0, GLFW.GLFW_MOD_CONTROL)
+
+        assertTrue(IdeClientBootstrap.matchesScreenShortcut(controlI, modifierActive = true))
+        assertFalse(IdeClientBootstrap.matchesScreenShortcut(controlI, modifierActive = false))
+        assertFalse(IdeClientBootstrap.matchesScreenShortcut(controlK, modifierActive = true))
     }
 }

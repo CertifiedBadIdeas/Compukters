@@ -16,12 +16,14 @@ import com.mojang.blaze3d.platform.InputConstants
 import net.minecraft.client.KeyMapping
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.Screen
+import net.minecraft.client.input.KeyEvent
 import net.minecraft.resources.Identifier
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent
 import net.neoforged.fml.loading.FMLPaths
 import net.neoforged.neoforge.client.event.ClientTickEvent
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent
+import net.neoforged.neoforge.client.event.ScreenEvent
 import net.neoforged.neoforge.client.settings.KeyConflictContext
 import net.neoforged.neoforge.client.settings.KeyModifier
 import net.neoforged.neoforge.common.NeoForge
@@ -53,6 +55,7 @@ internal object IdeClientBootstrap {
         eventBus.addListener(::onClientSetup)
         eventBus.addListener(::onRegisterKeys)
         NeoForge.EVENT_BUS.addListener(::onClientTick)
+        NeoForge.EVENT_BUS.addListener(::onScreenKeyPressed)
     }
 
     fun services(): IdeClientServices<IdeClientApplication> = checkNotNull(services) { "IDE client services are not initialized" }
@@ -72,6 +75,18 @@ internal object IdeClientBootstrap {
         val minecraft = Minecraft.getInstance()
         while (openIde.consumeClick()) open(minecraft)
     }
+
+    private fun onScreenKeyPressed(event: ScreenEvent.KeyPressed.Pre) {
+        val modifierActive = openIde.keyModifier.isActive(openIde.keyConflictContext)
+        if (matchesScreenShortcut(event.keyEvent, modifierActive) && open(Minecraft.getInstance())) {
+            event.isCanceled = true
+        }
+    }
+
+    internal fun matchesScreenShortcut(
+        event: KeyEvent,
+        modifierActive: Boolean,
+    ): Boolean = openIde.keyConflictContext.isActive && modifierActive && openIde.matches(event)
 
     internal fun open(minecraft: Minecraft): Boolean {
         if (minecraft.screen is IdeScreen) return false
