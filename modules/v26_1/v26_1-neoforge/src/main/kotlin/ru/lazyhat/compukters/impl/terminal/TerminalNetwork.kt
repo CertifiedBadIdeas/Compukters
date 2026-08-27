@@ -60,6 +60,18 @@ object TerminalNetwork {
         PacketDistributor.sendToPlayer(player, TerminalFullPayload(entity.blockPos, machineId, state, openScreen = true))
     }
 
+    internal fun isViewing(
+        player: ServerPlayer,
+        position: BlockPos,
+        machineId: Long,
+    ): Boolean {
+        val viewer = viewers[player.uuid] ?: return false
+        return viewer.dimension == player.level().dimension() &&
+            viewer.position == position &&
+            viewer.machineId == machineId &&
+            player.isValidViewer(player.level(), position)
+    }
+
     @JvmStatic
     @SubscribeEvent
     fun afterServerTick(event: ServerTickEvent.Post) {

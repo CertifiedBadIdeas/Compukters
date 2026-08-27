@@ -32,4 +32,21 @@ class IdeTargetClaimCodecTest {
         assertNull(IdeTargetClaimCodec.decodeBytes(valid + 0))
         assertNull(IdeTargetClaimCodec.decodeBytes(byteArrayOf(1, 2, 0, 0)))
     }
+
+    @Test
+    fun `opening origin prefers terminal then crosshair and otherwise stays local`() {
+        val terminal = IdeTerminalTargetIdentity(BlockPos(1, 2, 3), machineId = 7)
+        val hit = BlockPos(4, 5, 6)
+
+        assertEquals(
+            IdeTargetClaimOrigin.Terminal("minecraft:overworld", terminal.position, terminal.machineId),
+            IdeTargetClaimCodec.decode(checkNotNull(IdeTargetOpeningClaim.create("minecraft:overworld", terminal, hit))),
+        )
+        assertEquals(
+            IdeTargetClaimOrigin.Crosshair("minecraft:overworld", hit),
+            IdeTargetClaimCodec.decode(checkNotNull(IdeTargetOpeningClaim.create("minecraft:overworld", null, hit))),
+        )
+        assertNull(IdeTargetOpeningClaim.create("minecraft:overworld", null, null))
+        assertNull(IdeTargetOpeningClaim.create(null, terminal, hit))
+    }
 }
