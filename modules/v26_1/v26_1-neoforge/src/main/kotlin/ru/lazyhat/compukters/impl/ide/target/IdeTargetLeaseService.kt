@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.ide.client.target.IdeTargetFailureKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
 import java.util.UUID
 
 internal fun interface IdeTargetClaimResolver {
@@ -48,11 +49,20 @@ internal data class IdeResolvedTarget(
     val capabilities: IdeTargetCapabilities,
     val displayName: String,
     val alive: () -> Boolean,
+    val deployment: IdeTargetDeploymentOperations,
 ) {
     init {
         require(machineIdentity.isNotBlank()) { "machine identity must not be blank" }
     }
 }
+
+internal class IdeTargetDeploymentOperations(
+    val verifyForDeploy: (ByteArray) -> ProgramDeploymentCandidate?,
+    val executableRevision: (String) -> ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision? = { null },
+    val deploy: (String, ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision, ProgramDeploymentCandidate) ->
+        ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision? = { _, _, _ -> null },
+    val submitCanonicalLine: (CharArray) -> Boolean = { false },
+)
 
 internal class IdeTargetLeaseService(
     private val resolver: IdeTargetClaimResolver,
@@ -60,6 +70,7 @@ internal class IdeTargetLeaseService(
     private val leaseTicks: Long = DEFAULT_LEASE_TICKS,
 ) : AutoCloseable {
     private val leases = mutableMapOf<UUID, Lease>()
+    private val removalListeners = mutableSetOf<(UUID, IdeAttachedTarget) -> Unit>()
     private var closed = false
 
     init {
@@ -87,6 +98,7 @@ internal class IdeTargetLeaseService(
                 capabilities = resolved.capabilities,
                 displayName = resolved.displayName,
             )
+        removeLease(player)
         leases[player] = Lease(attached, resolved, expiresAt(tick))
         return IdeAttachResult.Attached(attached)
     }
@@ -116,19 +128,29 @@ internal class IdeTargetLeaseService(
         target: IdeAttachedTarget,
     ) {
         checkOpen()
-        if (leases[player]?.target == target) leases.remove(player)
+        if (leases[player]?.target == target) removeLease(player)
+    }
+
+    fun observeRemovals(listener: (UUID, IdeAttachedTarget) -> Unit): AutoCloseable {
+        checkOpen()
+        removalListeners += listener
+        return AutoCloseable { removalListeners -= listener }
     }
 
     fun expire(tick: Long) {
         checkOpen()
         require(tick >= 0) { "server tick must not be negative" }
-        leases.entries.removeIf { (_, lease) -> tick >= lease.expiresAt || !lease.resolved.alive() }
+        leases.entries
+            .filter { (_, lease) -> tick >= lease.expiresAt || !lease.resolved.alive() }
+            .map { it.key }
+            .forEach(::removeLease)
     }
 
     override fun close() {
         if (closed) return
+        leases.keys.toList().forEach(::removeLease)
         closed = true
-        leases.clear()
+        removalListeners.clear()
     }
 
     private fun liveLease(
@@ -140,7 +162,7 @@ internal class IdeTargetLeaseService(
         val lease = leases[player] ?: return null
         if (lease.target != target) return null
         if (tick >= lease.expiresAt || !lease.resolved.alive()) {
-            leases.remove(player)
+            removeLease(player)
             return null
         }
         return lease
@@ -154,6 +176,11 @@ internal class IdeTargetLeaseService(
         }
 
     private fun checkOpen() = check(!closed) { "target lease service is closed" }
+
+    private fun removeLease(player: UUID) {
+        val removed = leases.remove(player) ?: return
+        removalListeners.toList().forEach { listener -> listener(player, removed.target) }
+    }
 
     private data class Lease(
         val target: IdeAttachedTarget,
