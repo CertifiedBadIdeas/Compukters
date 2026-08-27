@@ -63,6 +63,9 @@ class EditorDocument(
         return buffer.copyRange(line.startUtf16, line.contentEndUtf16).concatToString()
     }
 
+    /** Returns the exact UTF-16 offset of a logical line, preserving LF versus CRLF accounting. */
+    fun lineStartOffset(index: Int): Int = lines.line(index).startUtf16
+
     fun contentEquals(value: String): Boolean = buffer.contentEquals(value)
 
     fun charAt(offset: Int): Char = buffer.charAt(offset)

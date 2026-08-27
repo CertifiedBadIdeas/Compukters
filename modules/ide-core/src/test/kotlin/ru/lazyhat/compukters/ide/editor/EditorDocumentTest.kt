@@ -156,6 +156,7 @@ class EditorDocumentTest {
         assertEquals("one", editor.materializeLine(0))
         assertEquals("two", editor.materializeLine(1))
         assertEquals("", editor.materializeLine(2))
+        assertEquals(listOf(0, 5, 9), (0 until editor.lineCount).map(editor::lineStartOffset))
     }
 
     @Test
