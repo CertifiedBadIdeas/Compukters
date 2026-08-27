@@ -115,12 +115,23 @@ enum class IdeBusyOperation {
     Analysis,
 }
 
+sealed interface IdeToolingState {
+    data object Preparing : IdeToolingState
+
+    data object Ready : IdeToolingState
+
+    data class Unavailable(
+        val detail: String,
+    ) : IdeToolingState
+}
+
 class IdeViewState(
     val generation: Long,
     val page: IdePageState,
     val dialog: IdeDialogState?,
     busy: Set<IdeBusyOperation>,
     val target: IdeTargetState = IdeTargetState.LocalOnly,
+    val tooling: IdeToolingState = IdeToolingState.Unavailable("Kotlin tooling is unavailable"),
 ) {
     val busy: Set<IdeBusyOperation> = Collections.unmodifiableSet(busy.toSet())
 
@@ -134,7 +145,8 @@ class IdeViewState(
         dialog: IdeDialogState? = this.dialog,
         busy: Set<IdeBusyOperation> = this.busy,
         target: IdeTargetState = this.target,
-    ): IdeViewState = IdeViewState(generation, page, dialog, busy, target)
+        tooling: IdeToolingState = this.tooling,
+    ): IdeViewState = IdeViewState(generation, page, dialog, busy, target, tooling)
 
     companion object {
         fun startPage(projects: List<IdeProjectSummary>): IdeViewState =

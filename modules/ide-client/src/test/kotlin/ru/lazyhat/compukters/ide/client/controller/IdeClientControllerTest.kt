@@ -34,6 +34,8 @@ import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
+import ru.lazyhat.compukters.ide.client.state.IdeProblemSeverity
+import ru.lazyhat.compukters.ide.client.state.IdeToolingState
 import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
 import ru.lazyhat.compukters.ide.client.workspace.IdeMutationRequest
 import ru.lazyhat.compukters.ide.client.workspace.IdeSaveRequest
@@ -61,6 +63,26 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
+    @Test
+    fun `failed background tooling leaves the editor open and reports its state`() {
+        val tooling = CompletableFuture<IdeClientTooling>()
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"), tooling = tooling)
+
+        fixture.startAndTick()
+        assertEquals(IdeToolingState.Preparing, fixture.controller.viewState().tooling)
+        assertIs<IdeEditorView.Text>(fixture.workspaceView().editor)
+
+        tooling.completeExceptionally(IllegalStateException("worker payload is broken"))
+        fixture.controller.tick()
+
+        assertEquals(
+            IdeToolingState.Unavailable("Kotlin tooling unavailable: worker payload is broken"),
+            fixture.controller.viewState().tooling,
+        )
+        assertEquals(IdeProblemSeverity.Warning, requireNotNull(fixture.workspaceView().status).severity)
+        assertIs<IdeEditorView.Text>(fixture.workspaceView().editor)
+    }
+
     @Test
     fun `start restores remembered project and file`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
@@ -272,6 +294,7 @@ internal class ControllerFixture(
     preferences: IdePreferences? = null,
     analysisCoordinatorFactory: ((ControlledWorkspace) -> ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator)? = null,
     targetCoordinatorFactory: ((MutableClock) -> ru.lazyhat.compukters.ide.client.target.IdeTargetCoordinator)? = null,
+    tooling: CompletableFuture<IdeClientTooling>? = null,
     buildCoordinatorFactory: ((ControlledWorkspace, MutableClock) -> IdeBuildCoordinator)? = null,
 ) {
     val clock = MutableClock()
@@ -289,6 +312,7 @@ internal class ControllerFixture(
             buildCoordinator = buildCoordinator,
             analysisCoordinator = analysisCoordinator,
             targetCoordinator = targetCoordinator,
+            tooling = tooling,
         )
 
     fun startAndTick() {

@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.ide.client.state
 
+import ru.lazyhat.compukters.ide.client.controller.IdeClientTooling
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.build.IdeResolveResult
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
@@ -33,6 +34,14 @@ import ru.lazyhat.compukters.ide.project.tree.ProjectTree
 import java.util.Collections
 
 sealed interface IdeEvent {
+    data class ToolingReady(
+        val tooling: IdeClientTooling,
+    ) : IdeEvent
+
+    data class ToolingFailed(
+        val detail: String,
+    ) : IdeEvent
+
     data class BuildInputLoaded(
         val generation: Long,
         val operationId: Long,
@@ -143,6 +152,8 @@ internal fun IdeEvent.copyForQueue(): IdeEvent =
         is IdeEvent.CatalogLoaded -> copy(projects = Collections.unmodifiableList(projects.toList()))
 
         is IdeEvent.BuildInputLoaded,
+        is IdeEvent.ToolingReady,
+        is IdeEvent.ToolingFailed,
         is IdeEvent.BuildStateChanged,
         is IdeEvent.ResolveCompleted,
         is IdeEvent.ProjectOpened,
