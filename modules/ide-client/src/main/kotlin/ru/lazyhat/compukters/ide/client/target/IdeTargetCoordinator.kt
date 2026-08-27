@@ -32,11 +32,15 @@ class IdeTargetCoordinator(
     private val events = ArrayBlockingQueue<TargetEvent>(limits.eventQueueCapacity)
     private val overflow = AtomicBoolean()
     private var generation = 0L
+    private var operationGeneration = 0L
     private var nextOperationId = 1L
     private var current: IdeTargetState = IdeTargetState.LocalOnly
     private var attached: IdeAttachedTarget? = null
     private var heartbeatPending = false
     private var lastHeartbeatMillis = 0L
+    private var cachedTicket: IdeVerificationTicket? = null
+    private val approvedRevisions = mutableMapOf<IdeDeploymentPath, IdeExecutableRevision.Present>()
+    private var confirmation: PendingDeployment? = null
     private var closed = false
 
     fun state(): IdeTargetState {
@@ -65,6 +69,36 @@ class IdeTargetCoordinator(
         advanceGeneration()
         releaseAttached()
         current = IdeTargetState.LocalOnly
+    }
+
+    fun verify(artifact: IdeTargetArtifact) {
+        val target = requireTarget()
+        beginVerification(target, artifact, VerificationIntent.VerifyOnly)
+    }
+
+    fun deploy(
+        artifact: IdeTargetArtifact,
+        path: IdeDeploymentPath,
+    ) {
+        val target = requireTarget()
+        if (!target.capabilities.writableFileSystem) {
+            current = IdeTargetState.Failed(target, unsupportedFailure("Target file system is not writable"))
+            return
+        }
+        val ticket = cachedTicket?.takeIf { it.matches(target, artifact) }
+        if (ticket == null) {
+            beginVerification(target, artifact, VerificationIntent.Deploy(path))
+        } else {
+            beginObservation(target, artifact, ticket, path, nextOperationGeneration())
+        }
+    }
+
+    fun confirmDeployment() {
+        checkActive()
+        val pending = confirmation ?: error("no deployment confirmation is pending")
+        check(current is IdeTargetState.ConfirmationRequired) { "no deployment confirmation is pending" }
+        confirmation = null
+        beginDeployment(pending, pending.expected, nextOperationGeneration())
     }
 
     fun tick() {
@@ -107,6 +141,9 @@ class IdeTargetCoordinator(
         when (event) {
             is TargetEvent.Attach -> acceptAttach(event)
             is TargetEvent.Heartbeat -> acceptHeartbeat(event)
+            is TargetEvent.Verify -> if (event.operationGeneration == operationGeneration) acceptVerify(event)
+            is TargetEvent.Revision -> if (event.operationGeneration == operationGeneration) acceptRevision(event)
+            is TargetEvent.Deploy -> if (event.operationGeneration == operationGeneration) acceptDeploy(event)
         }
     }
 
@@ -141,6 +178,144 @@ class IdeTargetCoordinator(
         if (attached != target) heartbeatPending = false
     }
 
+    private fun acceptVerify(event: TargetEvent.Verify) {
+        val result = event.result
+        if (event.failure != null || result == null) {
+            current = IdeTargetState.Failed(event.target, operationFailure())
+            return
+        }
+        when (result) {
+            is IdeVerifyResult.Failed -> current = IdeTargetState.Failed(event.target, result.failure)
+            is IdeVerifyResult.Verified -> {
+                if (!result.ticket.matches(event.target, event.artifact)) {
+                    cachedTicket = null
+                    current = IdeTargetState.Failed(event.target, protocolFailure("Verification ticket scope mismatch"))
+                    return
+                }
+                cachedTicket = result.ticket
+                when (val intent = event.intent) {
+                    VerificationIntent.VerifyOnly ->
+                        current = IdeTargetState.Verified(event.target, event.artifact.hash)
+                    is VerificationIntent.Deploy ->
+                        beginObservation(
+                            event.target,
+                            event.artifact,
+                            result.ticket,
+                            intent.path,
+                            event.operationGeneration,
+                        )
+                }
+            }
+        }
+    }
+
+    private fun acceptRevision(event: TargetEvent.Revision) {
+        val result = event.result
+        if (event.failure != null || result == null) {
+            current = IdeTargetState.Failed(event.pending.target, operationFailure())
+            return
+        }
+        when (result) {
+            is IdeRevisionResult.Failed -> current = IdeTargetState.Failed(event.pending.target, result.failure)
+            is IdeRevisionResult.Observed -> {
+                val revision = result.revision
+                if (revision is IdeExecutableRevision.Present && approvedRevisions[event.pending.path] != revision) {
+                    val pending = event.pending.copy(expected = revision)
+                    confirmation = pending
+                    current = IdeTargetState.ConfirmationRequired(pending.target, pending.path, revision)
+                } else {
+                    beginDeployment(event.pending, revision, event.operationGeneration)
+                }
+            }
+        }
+    }
+
+    private fun acceptDeploy(event: TargetEvent.Deploy) {
+        val result = event.result
+        if (event.failure != null || result == null) {
+            current = IdeTargetState.Failed(event.pending.target, operationFailure())
+            return
+        }
+        when (result) {
+            is IdeDeployResult.Deployed -> {
+                cachedTicket = null
+                confirmation = null
+                approvedRevisions[event.pending.path] = result.revision
+                current = IdeTargetState.Deployed(event.pending.target, event.pending.path, result.revision)
+            }
+            is IdeDeployResult.Failed -> {
+                if (!result.retryable) cachedTicket = null
+                current = IdeTargetState.Failed(event.pending.target, result.failure)
+            }
+            is IdeDeployResult.StaleRevision -> {
+                val actual = result.actual
+                if (actual is IdeExecutableRevision.Present) {
+                    val pending = event.pending.copy(expected = actual)
+                    confirmation = pending
+                    current = IdeTargetState.ConfirmationRequired(pending.target, pending.path, actual)
+                } else {
+                    current =
+                        IdeTargetState.Failed(
+                            event.pending.target,
+                            IdeTargetFailure(IdeTargetFailureKind.Conflict, "Executable revision changed; retry deployment"),
+                        )
+                }
+            }
+        }
+    }
+
+    private fun beginVerification(
+        target: IdeAttachedTarget,
+        artifact: IdeTargetArtifact,
+        intent: VerificationIntent,
+    ) {
+        val operation = nextOperationGeneration()
+        confirmation = null
+        current = IdeTargetState.Uploading(target, artifact.hash)
+        try {
+            port.verify(target, artifact).whenComplete { result, failure ->
+                enqueue(TargetEvent.Verify(generation, operation, target, artifact, intent, result, failure))
+            }
+        } catch (failure: Throwable) {
+            enqueue(TargetEvent.Verify(generation, operation, target, artifact, intent, null, failure))
+        }
+    }
+
+    private fun beginObservation(
+        target: IdeAttachedTarget,
+        artifact: IdeTargetArtifact,
+        ticket: IdeVerificationTicket,
+        path: IdeDeploymentPath,
+        operation: Long,
+    ) {
+        confirmation = null
+        val pending = PendingDeployment(target, artifact, ticket, path, IdeExecutableRevision.Absent)
+        current = IdeTargetState.Observing(target, path)
+        try {
+            port.executableRevision(target, path).whenComplete { result, failure ->
+                enqueue(TargetEvent.Revision(generation, operation, pending, result, failure))
+            }
+        } catch (failure: Throwable) {
+            enqueue(TargetEvent.Revision(generation, operation, pending, null, failure))
+        }
+    }
+
+    private fun beginDeployment(
+        pending: PendingDeployment,
+        expected: IdeExecutableRevision,
+        operation: Long,
+    ) {
+        val exact = pending.copy(expected = expected)
+        current = IdeTargetState.Deploying(exact.target, exact.path)
+        try {
+            port.deploy(exact.target, exact.ticket, exact.path, expected).whenComplete { result, failure ->
+                enqueue(TargetEvent.Deploy(generation, operation, exact, result, failure))
+            }
+        } catch (failure: Throwable) {
+            enqueue(TargetEvent.Deploy(generation, operation, exact, null, failure))
+        }
+    }
+
     private fun requestHeartbeatIfDue() {
         val target = attached ?: return
         if (heartbeatPending) return
@@ -167,12 +342,21 @@ class IdeTargetCoordinator(
         val target = attached
         attached = null
         heartbeatPending = false
+        nextOperationGeneration()
+        cachedTicket = null
+        approvedRevisions.clear()
+        confirmation = null
         if (target != null) runCatching { port.detach(target) }
     }
 
     private fun advanceGeneration(): Long {
         generation = if (generation == Long.MAX_VALUE) 1 else generation + 1
         return generation
+    }
+
+    private fun nextOperationGeneration(): Long {
+        operationGeneration = if (operationGeneration == Long.MAX_VALUE) 1 else operationGeneration + 1
+        return operationGeneration
     }
 
     private fun enqueue(event: TargetEvent) {
@@ -184,11 +368,36 @@ class IdeTargetCoordinator(
         check(!closed) { "target coordinator is closed" }
     }
 
+    private fun requireTarget(): IdeAttachedTarget {
+        checkActive()
+        return checkNotNull(attached) { "no target is attached" }
+    }
+
     private fun checkOwner() = check(Thread.currentThread() === owner) { "target coordinator must run on its owner thread" }
 
     private fun operationFailure(): IdeTargetFailure = IdeTargetFailure(IdeTargetFailureKind.Other, "Target operation failed")
 
-    private fun protocolFailure(): IdeTargetFailure = IdeTargetFailure(IdeTargetFailureKind.Protocol, "Target event queue overflow")
+    private fun protocolFailure(detail: String = "Target event queue overflow"): IdeTargetFailure =
+        IdeTargetFailure(IdeTargetFailureKind.Protocol, detail)
+
+    private fun unsupportedFailure(detail: String): IdeTargetFailure =
+        IdeTargetFailure(IdeTargetFailureKind.Unsupported, detail)
+
+    private data class PendingDeployment(
+        val target: IdeAttachedTarget,
+        val artifact: IdeTargetArtifact,
+        val ticket: IdeVerificationTicket,
+        val path: IdeDeploymentPath,
+        val expected: IdeExecutableRevision,
+    )
+
+    private sealed interface VerificationIntent {
+        data object VerifyOnly : VerificationIntent
+
+        data class Deploy(
+            val path: IdeDeploymentPath,
+        ) : VerificationIntent
+    }
 
     private sealed interface TargetEvent {
         val generation: Long
@@ -202,6 +411,32 @@ class IdeTargetCoordinator(
         data class Heartbeat(
             override val generation: Long,
             val result: IdeHeartbeatResult?,
+            val failure: Throwable?,
+        ) : TargetEvent
+
+        data class Verify(
+            override val generation: Long,
+            val operationGeneration: Long,
+            val target: IdeAttachedTarget,
+            val artifact: IdeTargetArtifact,
+            val intent: VerificationIntent,
+            val result: IdeVerifyResult?,
+            val failure: Throwable?,
+        ) : TargetEvent
+
+        data class Revision(
+            override val generation: Long,
+            val operationGeneration: Long,
+            val pending: PendingDeployment,
+            val result: IdeRevisionResult?,
+            val failure: Throwable?,
+        ) : TargetEvent
+
+        data class Deploy(
+            override val generation: Long,
+            val operationGeneration: Long,
+            val pending: PendingDeployment,
+            val result: IdeDeployResult?,
             val failure: Throwable?,
         ) : TargetEvent
     }
