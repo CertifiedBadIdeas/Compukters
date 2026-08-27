@@ -30,8 +30,9 @@ class IdeClientServicesTest {
     fun `uses distinct bounded client roots and opens only one session`() {
         val gameRoot = createTempDirectory("compukters-ide-services-").toAbsolutePath().normalize()
         val opened = mutableListOf<RecordingApplication>()
+        val lifetime = RecordingLifetime()
         try {
-            val services = IdeClientServices(gameRoot) { paths -> RecordingApplication(paths).also(opened::add) }
+            val services = IdeClientServices(gameRoot, lifetime) { paths -> RecordingApplication(paths).also(opened::add) }
             val expected = gameRoot.resolve("compukters/ide")
             assertEquals(expected.resolve("projects"), services.paths.projects)
             assertEquals(expected.resolve("cache/compiler"), services.paths.compilerCache)
@@ -52,10 +53,20 @@ class IdeClientServicesTest {
             assertFalse(opened.last().closed)
             services.close()
             assertTrue(opened.last().closed)
+            assertTrue(lifetime.closed)
             second.close()
         } finally {
             gameRoot.toFile().deleteRecursively()
         }
+    }
+}
+
+private class RecordingLifetime : AutoCloseable {
+    var closed = false
+
+    override fun close() {
+        check(!closed)
+        closed = true
     }
 }
 

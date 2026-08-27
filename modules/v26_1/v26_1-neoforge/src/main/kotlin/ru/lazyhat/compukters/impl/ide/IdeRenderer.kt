@@ -27,6 +27,7 @@ import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
 import ru.lazyhat.compukters.ide.client.state.IdeViewState
+import ru.lazyhat.compukters.ide.client.state.IdeToolingState
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
 import ru.lazyhat.compukters.ide.editor.EditorRange
@@ -142,7 +143,7 @@ object IdeRenderer {
         }
         when (val page = state.page) {
             is IdePageState.Start -> output.start(page, state.target)
-            is IdePageState.Workspace -> output.workspace(page.value, state.target, caretVisible)
+            is IdePageState.Workspace -> output.workspace(page.value, state.target, state.tooling, caretVisible)
         }
         if (prompt != null) {
             output.prompt(prompt)
@@ -219,6 +220,7 @@ object IdeRenderer {
         fun workspace(
             workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView,
             targetState: IdeTargetState,
+            toolingState: IdeToolingState,
             caretVisible: Boolean,
         ) {
             val active = workspace.activeFile?.value ?: "No file"
@@ -228,7 +230,7 @@ object IdeRenderer {
                 geometry.header.left + 6,
                 geometry.header.top + 7,
             )
-            toolbar(workspace.build, targetState, workspace.activeFile != null || selectedTreePath != null)
+            toolbar(workspace.build, targetState, toolingState, workspace.activeFile != null || selectedTreePath != null)
             tree(workspace)
             when (val editor = workspace.editor) {
                 IdeEditorView.Empty -> {
@@ -250,12 +252,13 @@ object IdeRenderer {
                 }
             }
             diagnostics(workspace)
-            status(workspace, targetState)
+            status(workspace, targetState, toolingState)
         }
 
         private fun toolbar(
             build: IdeBuildState,
             targetState: IdeTargetState,
+            toolingState: IdeToolingState,
             hasActiveEntry: Boolean,
         ) {
             var left = geometry.toolbar.left + 6
@@ -272,14 +275,22 @@ object IdeRenderer {
                 ui(IdeTextKind.Toolbar, label, bounds.left + 4, bounds.top + 4, if (enabled) IdeColors.TEXT else IdeColors.DISABLED)
                 left = bounds.right + 4
             }
-            action("Resolve", IdeHitAction.Resolve)
+            val toolingReady = toolingState == IdeToolingState.Ready
+            val toolingTooltip = if (toolingReady) null else "Kotlin tooling is not ready"
+            action("Resolve", IdeHitAction.Resolve, toolingReady, toolingTooltip)
             if (build is IdeBuildState.Compiling || build is IdeBuildState.Saving) {
                 action("Cancel", IdeHitAction.Cancel)
             } else {
-                action("Build", IdeHitAction.Build)
+                action("Build", IdeHitAction.Build, toolingReady, toolingTooltip)
             }
-            val targetReady = targetState.isReadyForAction && build !is IdeBuildState.Compiling && build !is IdeBuildState.Saving
-            val targetTooltip = if (targetState.attachedTarget == null) NO_TARGET else if (!targetReady) "Target operation in progress" else null
+            val targetReady = toolingReady && targetState.isReadyForAction && build !is IdeBuildState.Compiling && build !is IdeBuildState.Saving
+            val targetTooltip =
+                when {
+                    !toolingReady -> toolingTooltip
+                    targetState.attachedTarget == null -> NO_TARGET
+                    !targetReady -> "Target operation in progress"
+                    else -> null
+                }
             action("Verify", IdeHitAction.Verify, targetReady, targetTooltip)
             action("Deploy", IdeHitAction.Deploy, targetReady, targetTooltip)
             action("Run", IdeHitAction.Run, targetReady, targetTooltip)
@@ -465,6 +476,7 @@ object IdeRenderer {
         private fun status(
             workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView,
             targetState: IdeTargetState,
+            toolingState: IdeToolingState,
         ) {
             val parts = linkedSetOf<String>()
             (workspace.editor as? IdeEditorView.Text)?.let { editor ->
@@ -491,6 +503,11 @@ object IdeRenderer {
                 else -> Unit
             }
             targetStatus(targetState)?.let(parts::add)
+            when (toolingState) {
+                IdeToolingState.Preparing -> parts += "Kotlin tooling is starting…"
+                is IdeToolingState.Unavailable -> parts += toolingState.detail
+                IdeToolingState.Ready -> Unit
+            }
             workspace.status?.let { parts += it.message }
             ui(
                 IdeTextKind.Status,

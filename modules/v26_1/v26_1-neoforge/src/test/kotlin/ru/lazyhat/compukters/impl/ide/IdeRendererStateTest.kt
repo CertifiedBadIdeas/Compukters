@@ -38,6 +38,7 @@ import ru.lazyhat.compukters.ide.client.state.IdeProblem
 import ru.lazyhat.compukters.ide.client.state.IdeProblemSeverity
 import ru.lazyhat.compukters.ide.client.state.IdeProjectSummary
 import ru.lazyhat.compukters.ide.client.state.IdeViewState
+import ru.lazyhat.compukters.ide.client.state.IdeToolingState
 import ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
@@ -194,6 +195,18 @@ class IdeRendererStateTest {
     }
 
     @Test
+    fun `preparing tooling keeps editing visible and disables tooling actions`() {
+        val state = workspaceState(IdeEditorView.Empty, IdeBuildState.Idle, tooling = IdeToolingState.Preparing)
+
+        val model = IdeRenderer.extract(state, geometry())
+
+        listOf(IdeHitAction.Resolve, IdeHitAction.Build, IdeHitAction.Verify, IdeHitAction.Deploy, IdeHitAction.Run).forEach { action ->
+            assertFalse(model.hitTargets.single { it.action == action }.enabled)
+        }
+        assertTrue(model.text.single { it.kind == IdeTextKind.Status }.value.contains("Kotlin tooling is starting"))
+    }
+
+    @Test
     fun `attached target enables actions and reports honest submission state`() {
         val target = target()
         val path = IdeDeploymentPath.fromProgramName("demo")
@@ -268,6 +281,7 @@ class IdeRendererStateTest {
         build: IdeBuildState,
         status: IdeProblem? = null,
         target: IdeTargetState = IdeTargetState.LocalOnly,
+        tooling: IdeToolingState = IdeToolingState.Ready,
     ): IdeViewState {
         val root = createTempDirectory("compukters-renderer-tree-")
         val descriptor = ProjectCatalog.open(root).create("demo")
@@ -293,6 +307,7 @@ class IdeRendererStateTest {
                 dialog = null,
                 busy = emptySet(),
                 target = target,
+                tooling = tooling,
             )
         } finally {
             root.toFile().deleteRecursively()
