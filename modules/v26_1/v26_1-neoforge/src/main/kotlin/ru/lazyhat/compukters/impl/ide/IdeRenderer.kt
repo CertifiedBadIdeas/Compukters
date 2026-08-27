@@ -437,10 +437,17 @@ object IdeRenderer {
                     codeLeft + (visualColumns(line.substring(0, local)) - editor.firstVisibleColumn) * font.cellWidth + font.cellWidth,
                     geometry.editor.top + (visibleIndex + 1) * font.cellHeight,
                 )
-            val popup = geometry.completionPopup(caret, 220, minOf(8, completion.items.size) * UI_LINE_HEIGHT + 4)
+            val visibleItems = completion.items.take(COMPLETION_VISIBLE_ITEMS)
+            val contentWidth = visibleItems.maxOf { visualColumns(it.label) } * font.cellWidth + COMPLETION_HORIZONTAL_PADDING
+            val popup =
+                geometry.completionPopup(
+                    caret,
+                    maxOf(COMPLETION_MINIMUM_WIDTH, contentWidth),
+                    visibleItems.size * UI_LINE_HEIGHT + 4,
+                )
             panel(IdePanelKind.Dialog, popup.bounds, IdeColors.PANEL_ALT, Z_POPUP)
             scissors += IdeScissorDraw(IdeScissorKind.Completion, popup.bounds, Z_POPUP)
-            completion.items.take(8).forEachIndexed { index, item ->
+            visibleItems.forEachIndexed { index, item ->
                 ui(
                     IdeTextKind.Completion,
                     item.label,
@@ -784,6 +791,9 @@ object IdeRenderer {
 
     private const val TAB_WIDTH = 4
     private const val UI_LINE_HEIGHT = 12
+    private const val COMPLETION_VISIBLE_ITEMS = 8
+    private const val COMPLETION_MINIMUM_WIDTH = 220
+    private const val COMPLETION_HORIZONTAL_PADDING = 8
     private const val NO_TARGET = "No target attached"
     private const val CONTROL_BACKGROUND_OFFSET = 20
     private const val Z_BACKGROUND = 0

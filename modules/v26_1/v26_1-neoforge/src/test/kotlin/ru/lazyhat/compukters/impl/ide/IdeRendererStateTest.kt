@@ -22,6 +22,8 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
+import ru.lazyhat.compukters.ide.analysis.CompletionItem
+import ru.lazyhat.compukters.ide.analysis.CompletionKind
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnostic
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
@@ -29,6 +31,7 @@ import ru.lazyhat.compukters.ide.analysis.SemanticToken
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotId
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisPresentation
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
+import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionState
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.build.IdeBuiltArtifact
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
@@ -256,6 +259,51 @@ class IdeRendererStateTest {
         val status = IdeRenderer.extract(state, geometry()).text.single { it.kind == IdeTextKind.Status }.value
 
         assertEquals(1, Regex(Regex.escape(message)).findAll(status).count())
+    }
+
+    @Test
+    fun `completion popup expands for visible overload signatures within editor bounds`() {
+        val source = "fun main() { printl }"
+        val document = EditorDocument(source)
+        document.setCaret(source.indexOf("printl") + "printl".length)
+        val lexical = IncrementalKotlinHighlighter(document).use { it.snapshot() }
+        val identity = AnalysisSnapshotIdentity(SourceSnapshotId(Hash256.zero()), AnalysisProfileIdentity(Hash256.zero()))
+        val path = ProjectPath.file("src/main.kt")
+        val virtualPath = VirtualSourcePath.kotlin(path.value)
+        val label = "println(message: SomeVeryLongApplicationSpecificType)"
+        val completion =
+            IdeCompletionState.create(
+                identity,
+                virtualPath,
+                EditorRange(source.indexOf("printl"), document.caretOffset),
+                listOf(CompletionItem(label, "println", CompletionKind.Function)),
+            )
+        val editor =
+            IdeEditorView.Text(
+                path = path,
+                visibleLines = listOf(source),
+                visibleLineStartsUtf16 = listOf(0),
+                firstVisibleLine = 0,
+                firstVisibleColumn = 0,
+                totalLines = 1,
+                caretUtf16 = document.caretOffset,
+                selectionStartUtf16 = null,
+                selectionEndUtf16 = null,
+                contentRevision = 0,
+                persistedContentRevision = 0,
+                dirty = false,
+                conflict = false,
+                lexical = lexical,
+                analysis = IdeAnalysisState.Active(identity, virtualPath, 0, IdeAnalysisPresentation.Empty, completion),
+            )
+        val geometry = geometry()
+
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry)
+        val popup = model.panels.single { it.kind == IdePanelKind.Dialog }.bounds
+
+        assertTrue(model.text.any { it.kind == IdeTextKind.Completion && it.value == label })
+        assertTrue(popup.width > 220, popup.toString())
+        assertTrue(popup.width <= geometry.editor.width, popup.toString())
     }
 
     @Test
