@@ -1,0 +1,127 @@
+/*
+ * The Compukters Developers
+ *
+ * Copyright 2026 Vsevolod Petrov (lazyhat)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package ru.lazyhat.compukters.ide.client.state
+
+import ru.lazyhat.compukters.ide.project.fs.ProjectPath
+import ru.lazyhat.compukters.ide.project.tree.ProjectTree
+import java.util.Collections
+
+data class IdeProjectSummary(
+    val directoryName: String,
+    val displayName: String,
+) {
+    init {
+        require(directoryName.isNotBlank()) { "project directory name must not be blank" }
+        require(displayName.isNotBlank()) { "project display name must not be blank" }
+    }
+}
+
+enum class IdeProblemSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
+data class IdeProblem(
+    val message: String,
+    val severity: IdeProblemSeverity,
+)
+
+data class IdeBuildSummary(
+    val artifactHash: String,
+    val artifactBytes: Long,
+    val cacheHit: Boolean,
+) {
+    init {
+        require(artifactHash.isNotEmpty()) { "artifact hash must not be empty" }
+        require(artifactBytes >= 0) { "artifact size must be non-negative" }
+    }
+}
+
+data class IdeWorkspaceView(
+    val project: IdeProjectSummary,
+    val tree: ProjectTree,
+    val activeFile: ProjectPath?,
+    val status: IdeProblem?,
+    val build: IdeBuildSummary?,
+)
+
+sealed interface IdePageState {
+    class Start(
+        projects: List<IdeProjectSummary>,
+        val error: IdeProblem?,
+    ) : IdePageState {
+        val projects: List<IdeProjectSummary> = Collections.unmodifiableList(projects.toList())
+
+        override fun equals(other: Any?): Boolean = other is Start && projects == other.projects && error == other.error
+
+        override fun hashCode(): Int = 31 * projects.hashCode() + (error?.hashCode() ?: 0)
+    }
+
+    data class Workspace(
+        val value: IdeWorkspaceView,
+    ) : IdePageState
+}
+
+sealed interface IdeDialogState {
+    data class Confirmation(
+        val title: String,
+        val message: String,
+        val actionId: Long,
+    ) : IdeDialogState
+}
+
+enum class IdeBusyOperation {
+    Catalog,
+    Project,
+    Save,
+    Resolve,
+    Build,
+    Analysis,
+}
+
+class IdeViewState(
+    val generation: Long,
+    val page: IdePageState,
+    val dialog: IdeDialogState?,
+    busy: Set<IdeBusyOperation>,
+) {
+    val busy: Set<IdeBusyOperation> = Collections.unmodifiableSet(busy.toSet())
+
+    init {
+        require(generation >= 0) { "IDE generation must be non-negative" }
+    }
+
+    fun copy(
+        generation: Long = this.generation,
+        page: IdePageState = this.page,
+        dialog: IdeDialogState? = this.dialog,
+        busy: Set<IdeBusyOperation> = this.busy,
+    ): IdeViewState = IdeViewState(generation, page, dialog, busy)
+
+    companion object {
+        fun startPage(projects: List<IdeProjectSummary>): IdeViewState =
+            IdeViewState(
+                generation = 0,
+                page = IdePageState.Start(projects, error = null),
+                dialog = null,
+                busy = emptySet(),
+            )
+    }
+}

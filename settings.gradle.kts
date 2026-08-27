@@ -66,6 +66,7 @@ include("guest-api-core", modulesDir)
 include("ide-core", modulesDir)
 include("ide-analysis-client", modulesDir)
 include("ide-analysis-k2", modulesDir)
+include("ide-client", modulesDir)
 include("playground", modulesDir)
 include("core", modulesDir)
 
