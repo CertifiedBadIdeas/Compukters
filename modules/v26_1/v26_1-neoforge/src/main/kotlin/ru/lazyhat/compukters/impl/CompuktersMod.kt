@@ -31,6 +31,7 @@ import ru.lazyhat.compukters.impl.compiler.NeoForgeCompilerServices
 import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
 import ru.lazyhat.compukters.impl.fs.NeoForgeWorldFileSystemStores
 import ru.lazyhat.compukters.impl.ide.IdeClientBootstrap
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetNetwork
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.impl.terminal.TerminalNetwork
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
@@ -44,6 +45,7 @@ class CompuktersMod(
         val native = requireNativeRuntime()
         CompuktersRegistry.register(eventBus)
         eventBus.addListener(TerminalNetwork::register)
+        eventBus.addListener(IdeTargetNetwork::register)
         if (FMLEnvironment.getDist() == Dist.CLIENT) IdeClientBootstrap.register(eventBus)
         NeoForge.EVENT_BUS.addListener(NeoForgeWorldFileSystemStores::onLevelSave)
         NeoForge.EVENT_BUS.addListener(NeoForgeWorldFileSystemStores::onServerStopping)

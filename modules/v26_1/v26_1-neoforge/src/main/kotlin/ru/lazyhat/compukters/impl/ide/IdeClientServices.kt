@@ -51,6 +51,7 @@ import ru.lazyhat.compukters.ide.client.build.IdeBuildServices
 import ru.lazyhat.compukters.ide.client.controller.IdeClientController
 import ru.lazyhat.compukters.ide.client.controller.IdeControllerClock
 import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
+import ru.lazyhat.compukters.ide.client.target.IdeTargetCoordinator
 import ru.lazyhat.compukters.ide.client.workspace.DefaultIdeWorkspace
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationCache
 import ru.lazyhat.compukters.ide.compiler.ControllerClientCompilerBackend
@@ -64,6 +65,7 @@ import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectLockService
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetClientNetwork
 import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
 import ru.lazyhat.compukters.worker.payload.PackagedWorkerPayload
 import ru.lazyhat.compukters.worker.payload.WorkerPayloadExpectation
@@ -151,6 +153,7 @@ internal class IdeClientApplication(
     val controller: IdeClientController,
     val preferences: IdeClientPreferences,
     private val analysisService: AnalysisServiceLifetime,
+    private val targetPort: AutoCloseable,
 ) : AutoCloseable {
     private val closed = AtomicBoolean()
 
@@ -164,6 +167,11 @@ internal class IdeClientApplication(
         }
         try {
             analysisService.close()
+        } catch (error: Throwable) {
+            failure?.addSuppressed(error) ?: run { failure = error }
+        }
+        try {
+            targetPort.close()
         } catch (error: Throwable) {
             failure?.addSuppressed(error) ?: run { failure = error }
         }
@@ -285,6 +293,8 @@ private object ProductionIdeApplicationFactory {
         val bundles = GuestApiBundleCatalog.of(emptyList())
         val profileResolver = CompileProfileResolver(toolchain, bundles, workerLimits)
         val clock = IdeControllerClock.System
+        val targetPort = IdeTargetClientNetwork.openPort()
+        val target = IdeTargetCoordinator(targetPort, clock, clientLimits)
         val build =
             IdeBuildCoordinator(
                 IdeBuildServices(
@@ -329,9 +339,10 @@ private object ProductionIdeApplicationFactory {
                 limits = clientLimits,
                 buildCoordinator = build,
                 analysisCoordinator = analysis,
+                targetCoordinator = target,
             )
         controller.start()
-        return IdeClientApplication(controller, preferences, analysisService)
+        return IdeClientApplication(controller, preferences, analysisService, targetPort)
     }
 
     private fun analysisSnapshot(

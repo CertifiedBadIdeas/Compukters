@@ -123,6 +123,16 @@ internal class IdeTargetLeaseService(
         return liveLease(player, target, tick)?.resolved
     }
 
+    fun attached(
+        player: UUID,
+        reference: IdeTargetReference,
+        tick: Long,
+    ): IdeAttachedTarget? {
+        checkOpen()
+        val lease = liveLease(player, reference, tick) ?: return null
+        return lease.target
+    }
+
     fun detach(
         player: UUID,
         target: IdeAttachedTarget,
@@ -161,6 +171,21 @@ internal class IdeTargetLeaseService(
         require(tick >= 0) { "server tick must not be negative" }
         val lease = leases[player] ?: return null
         if (lease.target != target) return null
+        if (tick >= lease.expiresAt || !lease.resolved.alive()) {
+            removeLease(player)
+            return null
+        }
+        return lease
+    }
+
+    private fun liveLease(
+        player: UUID,
+        reference: IdeTargetReference,
+        tick: Long,
+    ): Lease? {
+        require(tick >= 0) { "server tick must not be negative" }
+        val lease = leases[player] ?: return null
+        if (lease.target.id != reference.id || lease.target.profile != reference.profile) return null
         if (tick >= lease.expiresAt || !lease.resolved.alive()) {
             removeLease(player)
             return null

@@ -93,3 +93,29 @@ internal object IdeTargetClaimCodec {
     private const val POSITION_BYTES = Int.SIZE_BYTES * 3
     private const val MAXIMUM_DIMENSION_BYTES = 128
 }
+
+internal data class IdeTerminalTargetIdentity(
+    val position: BlockPos,
+    val machineId: Long,
+) {
+    init {
+        require(machineId > 0) { "terminal machine ID must be positive" }
+    }
+}
+
+internal object IdeTargetOpeningClaim {
+    fun create(
+        dimension: String?,
+        terminal: IdeTerminalTargetIdentity?,
+        crosshair: BlockPos?,
+    ): IdeTargetClaim? {
+        dimension ?: return null
+        val origin =
+            when {
+                terminal != null -> IdeTargetClaimOrigin.Terminal(dimension, terminal.position, terminal.machineId)
+                crosshair != null -> IdeTargetClaimOrigin.Crosshair(dimension, crosshair)
+                else -> return null
+            }
+        return IdeTargetClaimCodec.encode(origin)
+    }
+}

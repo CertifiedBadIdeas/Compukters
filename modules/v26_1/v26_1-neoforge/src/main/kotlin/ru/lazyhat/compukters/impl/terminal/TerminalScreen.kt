@@ -42,6 +42,9 @@ internal class TerminalScreen(
     ChildScreenParent {
     val position = initial.position
 
+    internal val machineId: Long
+        get() = replica.machineId
+
     private val replica = TerminalReplica(initial)
     private val pressedKeys = mutableSetOf<Int>()
     private var fontProfile = CompuktersClientConfig.selectedFont()

@@ -14,10 +14,16 @@ package ru.lazyhat.compukters.impl.ide.target
 
 import java.util.concurrent.CompletableFuture
 
+internal interface IdeTargetRequestChannel {
+    fun request(request: IdeTargetRequest): CompletableFuture<IdeTargetReply>
+
+    fun disconnect()
+}
+
 internal class IdeTargetRequestBroker(
     private val send: (IdeTargetRequestPayload) -> Unit,
     private val maximumPendingRequests: Int = DEFAULT_MAXIMUM_PENDING_REQUESTS,
-) {
+) : IdeTargetRequestChannel {
     private val lock = Any()
     private val pending = mutableMapOf<Long, CompletableFuture<IdeTargetReply>>()
     private var nextRequestId = 1L
@@ -27,7 +33,7 @@ internal class IdeTargetRequestBroker(
         require(maximumPendingRequests > 0) { "maximum pending request count must be positive" }
     }
 
-    fun request(request: IdeTargetRequest): CompletableFuture<IdeTargetReply> {
+    override fun request(request: IdeTargetRequest): CompletableFuture<IdeTargetReply> {
         val registration =
             synchronized(lock) {
                 if (closed) return failed("IDE target connection is closed")
@@ -51,7 +57,7 @@ internal class IdeTargetRequestBroker(
         future.complete(payload.reply)
     }
 
-    fun disconnect() {
+    override fun disconnect() {
         val abandoned =
             synchronized(lock) {
                 if (closed) return

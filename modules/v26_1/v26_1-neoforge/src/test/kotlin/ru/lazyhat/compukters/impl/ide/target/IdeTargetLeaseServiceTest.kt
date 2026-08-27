@@ -74,6 +74,31 @@ class IdeTargetLeaseServiceTest {
     }
 
     @Test
+    fun `wire reference restores only the server owned attached target`() {
+        val service =
+            IdeTargetLeaseService(
+                resolver = IdeTargetClaimResolver { _, _ -> IdeClaimResolution.Resolved(resolvedTarget()) },
+                targetIds = { IdeTargetId("lease-1") },
+                leaseTicks = 5,
+            )
+        val owner = UUID.fromString("00000000-0000-0000-0000-000000000001")
+        val attacker = UUID.fromString("00000000-0000-0000-0000-000000000002")
+        val attached = assertIs<IdeAttachResult.Attached>(service.attach(owner, claim(), tick = 1)).target
+        val reference = IdeTargetReference(attached.id, attached.profile)
+
+        assertEquals(attached, service.attached(owner, reference, tick = 2))
+        assertNull(service.attached(attacker, reference, tick = 2))
+        assertNull(
+            service.attached(
+                owner,
+                reference.copy(profile = IdeTargetProfileId(Hash256.of(ByteArray(32) { 1 }))),
+                tick = 2,
+            ),
+        )
+        assertNull(service.attached(owner, reference, tick = 6))
+    }
+
+    @Test
     fun `rejected claim remains typed and replacing attachment invalidates the old lease`() {
         var attempts = 0
         val permission = IdeTargetFailure(IdeTargetFailureKind.Permission, "Computer is not interactable")

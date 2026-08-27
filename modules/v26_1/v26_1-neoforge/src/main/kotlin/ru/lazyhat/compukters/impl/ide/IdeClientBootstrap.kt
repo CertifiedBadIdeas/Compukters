@@ -18,6 +18,8 @@ import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.resources.Identifier
+import net.minecraft.world.phys.BlockHitResult
+import net.minecraft.world.phys.HitResult
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent
 import net.neoforged.fml.loading.FMLPaths
@@ -29,6 +31,10 @@ import net.neoforged.neoforge.client.settings.KeyModifier
 import net.neoforged.neoforge.common.NeoForge
 import org.lwjgl.glfw.GLFW
 import ru.lazyhat.compukters.core.MOD_ID
+import ru.lazyhat.compukters.ide.client.target.IdeTargetClaim
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetOpeningClaim
+import ru.lazyhat.compukters.impl.ide.target.IdeTerminalTargetIdentity
+import ru.lazyhat.compukters.impl.terminal.TerminalScreen
 
 internal interface ChildScreenParent {
     fun suspendForChild(): Screen
@@ -91,6 +97,7 @@ internal object IdeClientBootstrap {
     internal fun open(minecraft: Minecraft): Boolean {
         if (minecraft.screen is IdeScreen) return false
         val original = minecraft.screen
+        val targetClaim = targetClaim(minecraft, original)
         val parent = (original as? ChildScreenParent)?.suspendForChild() ?: original
         val session =
             try {
@@ -99,7 +106,22 @@ internal object IdeClientBootstrap {
                 (original as? ChildScreenParent)?.resumeFromChild()
                 throw failure
             }
+        targetClaim?.let(session.application.controller::attachTarget)
         minecraft.setScreen(IdeScreen(session, parent))
         return true
+    }
+
+    private fun targetClaim(
+        minecraft: Minecraft,
+        original: Screen?,
+    ): IdeTargetClaim? {
+        val terminal =
+            (original as? TerminalScreen)?.let { screen ->
+                IdeTerminalTargetIdentity(screen.position, screen.machineId)
+            }
+        val hit = minecraft.hitResult as? BlockHitResult
+        val crosshair = hit?.takeIf { it.type == HitResult.Type.BLOCK }?.blockPos
+        val dimension = minecraft.level?.dimension()?.identifier()?.toString()
+        return IdeTargetOpeningClaim.create(dimension, terminal, crosshair)
     }
 }
