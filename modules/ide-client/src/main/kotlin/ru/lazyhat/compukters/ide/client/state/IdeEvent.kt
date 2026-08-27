@@ -18,6 +18,9 @@
 
 package ru.lazyhat.compukters.ide.client.state
 
+import ru.lazyhat.compukters.ide.client.build.IdeBuildState
+import ru.lazyhat.compukters.ide.client.build.IdeResolveResult
+import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
 import ru.lazyhat.compukters.ide.client.workspace.IdeMutationRequest
 import ru.lazyhat.compukters.ide.client.workspace.IdeSaveResult
 import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
@@ -29,6 +32,25 @@ import ru.lazyhat.compukters.ide.project.tree.ProjectTree
 import java.util.Collections
 
 sealed interface IdeEvent {
+    data class BuildInputLoaded(
+        val generation: Long,
+        val operationId: Long,
+        val action: IdeBuildAction,
+        val input: IdeBuildInput,
+    ) : IdeEvent
+
+    data class BuildStateChanged(
+        val generation: Long,
+        val operationId: Long,
+        val state: IdeBuildState,
+    ) : IdeEvent
+
+    data class ResolveCompleted(
+        val generation: Long,
+        val operationId: Long,
+        val result: IdeResolveResult,
+    ) : IdeEvent
+
     data class ProjectCatalogLoaded(
         val generation: Long,
         val projects: List<ProjectDescriptor>,
@@ -118,6 +140,9 @@ internal fun IdeEvent.copyForQueue(): IdeEvent =
 
         is IdeEvent.CatalogLoaded -> copy(projects = Collections.unmodifiableList(projects.toList()))
 
+        is IdeEvent.BuildInputLoaded,
+        is IdeEvent.BuildStateChanged,
+        is IdeEvent.ResolveCompleted,
         is IdeEvent.ProjectOpened,
         is IdeEvent.FileOpened,
         is IdeEvent.SaveCompleted,
@@ -128,3 +153,9 @@ internal fun IdeEvent.copyForQueue(): IdeEvent =
         is IdeEvent.Failed,
         -> this
     }
+
+enum class IdeBuildAction {
+    Build,
+    Resolve,
+    UpdateLock,
+}

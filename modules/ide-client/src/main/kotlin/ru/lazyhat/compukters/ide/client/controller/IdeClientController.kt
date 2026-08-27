@@ -19,9 +19,15 @@
 package ru.lazyhat.compukters.ide.client.controller
 
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
+import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
+import ru.lazyhat.compukters.ide.client.build.IdeBuildFailureKind
+import ru.lazyhat.compukters.ide.client.build.IdeBuildJob
+import ru.lazyhat.compukters.ide.client.build.IdeBuildState
+import ru.lazyhat.compukters.ide.client.build.IdeResolveResult
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferences
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferencesStore
 import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
+import ru.lazyhat.compukters.ide.client.state.IdeBuildAction
 import ru.lazyhat.compukters.ide.client.state.IdeBusyOperation
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeConflictAction
@@ -58,6 +64,7 @@ class IdeClientController(
     private val clock: IdeControllerClock,
     private val events: BoundedIdeEventQueue,
     private val limits: IdeClientLimits = IdeClientLimits(),
+    private val buildCoordinator: IdeBuildCoordinator? = null,
 ) : AutoCloseable {
     private val owner = Thread.currentThread()
     private var state = IdeViewState.startPage(emptyList())
@@ -83,6 +90,11 @@ class IdeClientController(
     private var admittedDelete: AdmittedProjectDelete? = null
     private var restorePreferences: IdePreferences? = null
     private val eventOverflow = AtomicBoolean()
+    private var buildState: IdeBuildState = IdeBuildState.Idle
+    private var pendingBuildAction: PendingBuildAction? = null
+    private var latestBuildOperation = 0L
+    private var activeBuild: IdeBuildJob? = null
+    private val buildJobs = mutableMapOf<Long, IdeBuildJob>()
 
     fun start() {
         checkOwner()
@@ -170,9 +182,25 @@ class IdeClientController(
                 resolveConflict(command.action)
             }
 
-            IdeCommand.Resolve,
-            IdeCommand.Build,
-            IdeCommand.CancelBuild,
+            IdeCommand.Resolve -> {
+                requestBuildAction(IdeBuildAction.Resolve)
+            }
+
+            IdeCommand.ConfirmLockUpdate -> {
+                if (state.dialog is IdeDialogState.LockUpdate) {
+                    state = state.copy(dialog = null)
+                    requestBuildAction(IdeBuildAction.UpdateLock)
+                }
+            }
+
+            IdeCommand.Build -> {
+                requestBuildAction(IdeBuildAction.Build)
+            }
+
+            IdeCommand.CancelBuild -> {
+                activeBuild?.cancel()
+            }
+
             IdeCommand.ManualCompletion,
             -> {}
         }
@@ -216,6 +244,8 @@ class IdeClientController(
         editor?.document?.close()
         editor = null
         workspace.close()
+        cancelBuildJobs()
+        buildCoordinator?.close()
     }
 
     private fun openProject(directoryName: String) {
@@ -226,6 +256,9 @@ class IdeClientController(
         }
         generation = Math.incrementExact(generation)
         project?.let { persistPreferences(editor?.path ?: binary?.path) }
+        cancelBuildJobs()
+        pendingBuildAction = null
+        buildState = IdeBuildState.Idle
         editor?.document?.close()
         editor = null
         binary = null
@@ -381,6 +414,64 @@ class IdeClientController(
         }
     }
 
+    private fun requestBuildAction(action: IdeBuildAction) {
+        val selected = project ?: return
+        if (buildCoordinator == null) {
+            buildState = IdeBuildState.Failed(IdeBuildFailureKind.Platform, "local compiler is unavailable")
+            publishWorkspace()
+            return
+        }
+        val operationId = nextOperationId++
+        latestBuildOperation = operationId
+        pendingBuildAction = PendingBuildAction(operationId, action)
+        buildState = IdeBuildState.Saving(operationId)
+        val busy = if (action == IdeBuildAction.Build) IdeBusyOperation.Build else IdeBusyOperation.Resolve
+        state = state.copy(busy = state.busy + busy)
+        publishWorkspace()
+        val active = editor
+        if (active != null && active.dirty) {
+            if (active.conflict) {
+                failPendingBuild(IdeBuildFailureKind.Conflict, "save conflict must be resolved before build")
+            } else {
+                requestSave()
+            }
+            return
+        }
+        loadBuildInput(selected, operationId, action)
+    }
+
+    private fun loadBuildInput(
+        selected: ProjectDescriptor,
+        operationId: Long,
+        action: IdeBuildAction,
+    ) {
+        val requestGeneration = generation
+        workspace.buildInput(selected.handle).whenComplete { input, failure ->
+            if (failure == null) {
+                enqueue(IdeEvent.BuildInputLoaded(requestGeneration, operationId, action, input))
+            } else {
+                val detail = failure.message ?: "failed to load build input"
+                if (action == IdeBuildAction.Build) {
+                    enqueue(
+                        IdeEvent.BuildStateChanged(
+                            requestGeneration,
+                            operationId,
+                            IdeBuildState.Failed(IdeBuildFailureKind.Platform, detail),
+                        ),
+                    )
+                } else {
+                    enqueue(
+                        IdeEvent.ResolveCompleted(
+                            requestGeneration,
+                            operationId,
+                            IdeResolveResult.Failed(detail),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
     private fun requestDelete(path: ProjectPath) {
         val selected = project ?: return
         val operationId = nextOperationId++
@@ -425,6 +516,12 @@ class IdeClientController(
         when (event) {
             is IdeEvent.ProjectCatalogLoaded -> acceptCatalog(event)
 
+            is IdeEvent.BuildInputLoaded -> acceptBuildInput(event)
+
+            is IdeEvent.BuildStateChanged -> acceptBuildState(event)
+
+            is IdeEvent.ResolveCompleted -> acceptResolve(event)
+
             is IdeEvent.ProjectOpened -> acceptProject(event)
 
             is IdeEvent.FileOpened -> acceptFile(event)
@@ -451,6 +548,90 @@ class IdeClientController(
         state = IdeViewState(generation, IdePageState.Start(summaries, null), null, emptySet())
         val remembered = restorePreferences?.lastProjectDirectory
         if (remembered != null && catalog.any { it.directoryName == remembered }) openProject(remembered)
+    }
+
+    private fun acceptBuildInput(event: IdeEvent.BuildInputLoaded) {
+        if (event.operationId != latestBuildOperation) return
+        val coordinator = buildCoordinator ?: return
+        pendingBuildAction = null
+        when (event.action) {
+            IdeBuildAction.Build -> {
+                val job = coordinator.build(event.operationId, event.input)
+                activeBuild = job
+                buildJobs[event.operationId] = job
+                job.started.whenComplete { compiling, failure ->
+                    if (failure == null) {
+                        enqueue(IdeEvent.BuildStateChanged(event.generation, event.operationId, compiling))
+                    }
+                }
+                job.result.whenComplete { result, failure ->
+                    val mapped =
+                        if (failure == null) {
+                            result
+                        } else {
+                            IdeBuildState.Failed(IdeBuildFailureKind.Platform, failure.message ?: "build failed")
+                        }
+                    enqueue(IdeEvent.BuildStateChanged(event.generation, event.operationId, mapped))
+                }
+            }
+
+            IdeBuildAction.Resolve,
+            IdeBuildAction.UpdateLock,
+            -> {
+                coordinator.resolve(event.input, updateExisting = event.action == IdeBuildAction.UpdateLock).whenComplete {
+                    result,
+                    failure,
+                    ->
+                    val mapped = if (failure == null) result else IdeResolveResult.Failed(failure.message ?: "resolve failed")
+                    enqueue(IdeEvent.ResolveCompleted(event.generation, event.operationId, mapped))
+                }
+            }
+        }
+    }
+
+    private fun acceptBuildState(event: IdeEvent.BuildStateChanged) {
+        if (event.operationId != latestBuildOperation) {
+            if (event.state !is IdeBuildState.Compiling) buildJobs.remove(event.operationId)
+            return
+        }
+        buildState = event.state
+        if (event.state !is IdeBuildState.Compiling) {
+            state = state.copy(busy = state.busy - IdeBusyOperation.Build)
+            val finishedBuild = buildJobs.remove(event.operationId)
+            if (activeBuild === finishedBuild) activeBuild = null
+        }
+        publishWorkspace()
+    }
+
+    private fun acceptResolve(event: IdeEvent.ResolveCompleted) {
+        if (event.operationId != latestBuildOperation) return
+        state = state.copy(busy = state.busy - IdeBusyOperation.Resolve)
+        buildState = IdeBuildState.Idle
+        when (val result = event.result) {
+            IdeResolveResult.Created -> {
+                publishStatus("Created compukter.lock", IdeProblemSeverity.Info)
+                requestPoll()
+            }
+
+            IdeResolveResult.Updated -> {
+                publishStatus("Updated compukter.lock", IdeProblemSeverity.Info)
+                requestPoll()
+            }
+
+            IdeResolveResult.UpToDate -> {
+                publishStatus("Dependencies are up to date", IdeProblemSeverity.Info)
+            }
+
+            IdeResolveResult.ConfirmationRequired -> {
+                val selected = project ?: return
+                state = state.copy(dialog = IdeDialogState.LockUpdate(selected.directoryName))
+            }
+
+            is IdeResolveResult.Failed -> {
+                publishStatus(result.detail, IdeProblemSeverity.Error)
+            }
+        }
+        publishWorkspace()
     }
 
     private fun acceptProject(event: IdeEvent.ProjectOpened) {
@@ -512,6 +693,9 @@ class IdeClientController(
 
             is DocumentSaveResult.Conflict -> {
                 active.conflict = true
+                if (pendingBuildAction != null) {
+                    failPendingBuild(IdeBuildFailureKind.Conflict, "save conflict must be resolved before build")
+                }
             }
 
             DocumentSaveResult.ProjectInvalidated -> {
@@ -522,6 +706,7 @@ class IdeClientController(
         if (active.conflict) showConflictDialog(closeRequested)
         if (closeRequested && !active.dirty) closeReady = true
         continuePendingNavigation()
+        continuePendingBuild()
     }
 
     private fun acceptPoll(event: IdeEvent.PollCompleted) {
@@ -634,6 +819,11 @@ class IdeClientController(
             return
         }
         state = state.copy(busy = state.busy - event.operation, page = pageWithProblem(event.problem))
+        if (event.operation == IdeBusyOperation.Build || event.operation == IdeBusyOperation.Resolve) {
+            pendingBuildAction = null
+            buildState = IdeBuildState.Failed(IdeBuildFailureKind.Platform, event.problem.message)
+            publishWorkspace()
+        }
         if (event.operation == IdeBusyOperation.Project) continuePendingSave()
     }
 
@@ -705,6 +895,30 @@ class IdeClientController(
         requestSave()
     }
 
+    private fun continuePendingBuild() {
+        val pending = pendingBuildAction ?: return
+        val active = editor
+        if (active?.conflict == true) {
+            failPendingBuild(IdeBuildFailureKind.Conflict, "save conflict must be resolved before build")
+            return
+        }
+        if (active?.dirty == true || active?.saveInFlight != null) return
+        val selected = project ?: return
+        loadBuildInput(selected, pending.operationId, pending.action)
+    }
+
+    private fun failPendingBuild(
+        kind: IdeBuildFailureKind,
+        detail: String,
+    ) {
+        val pending = pendingBuildAction ?: return
+        pendingBuildAction = null
+        buildState = IdeBuildState.Failed(kind, detail)
+        val busy = if (pending.action == IdeBuildAction.Build) IdeBusyOperation.Build else IdeBusyOperation.Resolve
+        state = state.copy(busy = state.busy - busy)
+        publishWorkspace()
+    }
+
     private fun publishWorkspace() {
         val selected = project ?: return
         val selectedTree = tree ?: return
@@ -719,7 +933,7 @@ class IdeClientController(
                             editor?.path ?: binary?.path,
                             editorView,
                             (state.page as? IdePageState.Workspace)?.value?.status,
-                            (state.page as? IdePageState.Workspace)?.value?.build,
+                            buildState,
                         ),
                     ),
             )
@@ -763,6 +977,9 @@ class IdeClientController(
     }
 
     private fun recoverToStart(message: String) {
+        cancelBuildJobs()
+        pendingBuildAction = null
+        buildState = IdeBuildState.Idle
         editor?.document?.close()
         editor = null
         binary = null
@@ -779,6 +996,14 @@ class IdeClientController(
 
     private fun publishProblem(message: String) {
         state = state.copy(page = pageWithProblem(problem(message)))
+    }
+
+    private fun publishStatus(
+        message: String,
+        severity: IdeProblemSeverity,
+    ) {
+        val status = IdeProblem(message.boundedUtf8(limits.statusUtf8Bytes), severity)
+        state = state.copy(page = pageWithProblem(status))
     }
 
     private fun pageWithProblem(problem: IdeProblem): IdePageState =
@@ -798,6 +1023,12 @@ class IdeClientController(
 
     private fun enqueue(event: IdeEvent) {
         if (!events.offer(event)) eventOverflow.set(true)
+    }
+
+    private fun cancelBuildJobs() {
+        buildJobs.values.forEach(IdeBuildJob::cancel)
+        buildJobs.clear()
+        activeBuild = null
     }
 
     private fun restoreCaret(
@@ -833,6 +1064,11 @@ class IdeClientController(
         val dirty: Boolean get() = document.revision != persistedRevision
     }
 
+    private data class PendingBuildAction(
+        val operationId: Long,
+        val action: IdeBuildAction,
+    )
+
     private companion object {
         const val AUTOSAVE_DELAY_MILLIS = 500L
         const val DEFAULT_TREE_WIDTH = 240
@@ -843,6 +1079,9 @@ class IdeClientController(
 private fun IdeEvent.generationOrNull(): Long? =
     when (this) {
         is IdeEvent.ProjectCatalogLoaded -> generation
+        is IdeEvent.BuildInputLoaded -> generation
+        is IdeEvent.BuildStateChanged -> generation
+        is IdeEvent.ResolveCompleted -> generation
         is IdeEvent.ProjectOpened -> generation
         is IdeEvent.FileOpened -> generation
         is IdeEvent.SaveCompleted -> generation
@@ -868,7 +1107,39 @@ private fun ProjectPath.rebase(
 
 private fun String.boundedUtf8(maxBytes: Int): String {
     if (maxBytes == 0) return ""
-    var bounded = take(maxBytes)
-    while (bounded.encodeToByteArray().size > maxBytes) bounded = bounded.dropLast(1)
-    return bounded
+    val admitted = takeIf(String::isWellFormedUtf16) ?: return "Invalid error text".boundedUtf8(maxBytes)
+    val result = StringBuilder()
+    var offset = 0
+    var bytes = 0
+    while (offset < admitted.length) {
+        val codePoint = admitted.codePointAt(offset)
+        val scalar = String(Character.toChars(codePoint))
+        val scalarBytes = scalar.encodeToByteArray().size
+        if (bytes + scalarBytes > maxBytes) break
+        result.append(scalar)
+        bytes += scalarBytes
+        offset += Character.charCount(codePoint)
+    }
+    return result.toString()
+}
+
+private fun String.isWellFormedUtf16(): Boolean {
+    var index = 0
+    while (index < length) {
+        when {
+            Character.isHighSurrogate(this[index]) -> {
+                if (index + 1 >= length || !Character.isLowSurrogate(this[index + 1])) return false
+                index += 2
+            }
+
+            Character.isLowSurrogate(this[index]) -> {
+                return false
+            }
+
+            else -> {
+                index++
+            }
+        }
+    }
+    return true
 }

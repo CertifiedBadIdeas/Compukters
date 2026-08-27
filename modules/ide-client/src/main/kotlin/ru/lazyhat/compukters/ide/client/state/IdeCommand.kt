@@ -66,6 +66,8 @@ sealed interface IdeCommand {
 
     data object Resolve : IdeCommand
 
+    data object ConfirmLockUpdate : IdeCommand
+
     data object Build : IdeCommand
 
     data object CancelBuild : IdeCommand

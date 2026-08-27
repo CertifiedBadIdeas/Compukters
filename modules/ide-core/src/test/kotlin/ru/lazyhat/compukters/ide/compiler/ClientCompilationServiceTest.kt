@@ -43,6 +43,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -72,9 +73,10 @@ class ClientCompilationServiceTest {
             val first = service.build(input)
             backend.awaitCalls(1)
             backend.complete(0, success(backend.requests[0], byteArrayOf(4, 5)))
-            assertIs<ClientBuildResult.Success>(first.get(5, TimeUnit.SECONDS))
+            assertFalse(assertIs<ClientBuildResult.Success>(first.get(5, TimeUnit.SECONDS)).cacheHit)
 
             val hit = assertIs<ClientBuildResult.Success>(service.build(input).get(5, TimeUnit.SECONDS))
+            assertTrue(hit.cacheHit)
             assertContentEquals(byteArrayOf(4, 5), hit.artifact.toByteArray())
             assertEquals(1, backend.requests.size)
             assertTrue(backend.threads.all { name -> name.startsWith("compukters-client-compilation-") })
