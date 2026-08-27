@@ -16,6 +16,7 @@ import net.minecraft.client.input.CharacterEvent
 import net.minecraft.client.input.KeyEvent
 import org.lwjgl.glfw.GLFW
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
+import ru.lazyhat.compukters.ide.client.analysis.IDE_COMPLETION_VISIBLE_ROWS
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeConflictAction
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
@@ -275,8 +276,8 @@ class IdeInputAdapter(
             GLFW.GLFW_KEY_TAB -> IdeCommand.Edit(IdeEditorInput.Tab)
             GLFW.GLFW_KEY_UP -> IdeCommand.Edit(IdeEditorInput.Move(IdeMoveDirection.Up, false))
             GLFW.GLFW_KEY_DOWN -> IdeCommand.Edit(IdeEditorInput.Move(IdeMoveDirection.Down, false))
-            GLFW.GLFW_KEY_PAGE_UP -> repeatMove(IdeMoveDirection.Up, COMPLETION_PAGE_ROWS)
-            GLFW.GLFW_KEY_PAGE_DOWN -> repeatMove(IdeMoveDirection.Down, COMPLETION_PAGE_ROWS)
+            GLFW.GLFW_KEY_PAGE_UP -> repeatMove(IdeMoveDirection.Up, IDE_COMPLETION_VISIBLE_ROWS)
+            GLFW.GLFW_KEY_PAGE_DOWN -> repeatMove(IdeMoveDirection.Down, IDE_COMPLETION_VISIBLE_ROWS)
             else -> null
         }
 
@@ -390,7 +391,6 @@ class IdeInputAdapter(
     ): Boolean = x >= left && x < right && y >= top && y < bottom
 
     private companion object {
-        const val COMPLETION_PAGE_ROWS = 8
         const val UI_LINE_HEIGHT = 12
         const val START_ROWS_TOP = 6
         const val TREE_ROWS_TOP = 4

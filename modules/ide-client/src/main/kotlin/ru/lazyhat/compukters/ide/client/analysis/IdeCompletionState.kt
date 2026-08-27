@@ -26,6 +26,8 @@ import ru.lazyhat.compukters.ide.editor.EditorEditResult
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import java.util.Collections
 
+const val IDE_COMPLETION_VISIBLE_ROWS = 8
+
 @ConsistentCopyVisibility
 data class IdeCompletionState private constructor(
     val identity: AnalysisSnapshotIdentity,
@@ -33,9 +35,13 @@ data class IdeCompletionState private constructor(
     val replacement: EditorRange,
     val items: List<CompletionItem>,
     val selectedIndex: Int,
+    val firstVisibleIndex: Int,
 ) {
     val selectedItem: CompletionItem
         get() = items[selectedIndex]
+
+    val visibleItems: List<CompletionItem>
+        get() = items.subList(firstVisibleIndex, minOf(items.size, firstVisibleIndex + IDE_COMPLETION_VISIBLE_ROWS))
 
     fun move(delta: Int): IdeCompletionState = withSelection(selectedIndex.toLong() + delta)
 
@@ -62,7 +68,17 @@ data class IdeCompletionState private constructor(
         }
     }
 
-    private fun withSelection(index: Long): IdeCompletionState = copy(selectedIndex = index.coerceIn(0, items.lastIndex.toLong()).toInt())
+    private fun withSelection(index: Long): IdeCompletionState {
+        val selected = index.coerceIn(0, items.lastIndex.toLong()).toInt()
+        val first =
+            when {
+                selected < firstVisibleIndex -> selected
+                selected >= firstVisibleIndex + IDE_COMPLETION_VISIBLE_ROWS ->
+                    selected - IDE_COMPLETION_VISIBLE_ROWS + 1
+                else -> firstVisibleIndex
+            }
+        return copy(selectedIndex = selected, firstVisibleIndex = first)
+    }
 
     companion object {
         fun create(
@@ -80,6 +96,7 @@ data class IdeCompletionState private constructor(
                 replacement,
                 Collections.unmodifiableList(items.toList()),
                 selectedIndex,
+                (selectedIndex - IDE_COMPLETION_VISIBLE_ROWS + 1).coerceAtLeast(0),
             )
         }
     }

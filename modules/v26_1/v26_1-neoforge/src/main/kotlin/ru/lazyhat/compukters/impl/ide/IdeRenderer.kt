@@ -437,7 +437,7 @@ object IdeRenderer {
                     codeLeft + (visualColumns(line.substring(0, local)) - editor.firstVisibleColumn) * font.cellWidth + font.cellWidth,
                     geometry.editor.top + (visibleIndex + 1) * font.cellHeight,
                 )
-            val visibleItems = completion.items.take(COMPLETION_VISIBLE_ITEMS)
+            val visibleItems = completion.visibleItems
             val contentWidth = visibleItems.maxOf { visualColumns(it.label) } * font.cellWidth + COMPLETION_HORIZONTAL_PADDING
             val popup =
                 geometry.completionPopup(
@@ -453,7 +453,7 @@ object IdeRenderer {
                     item.label,
                     popup.bounds.left + 4,
                     popup.bounds.top + 3 + index * UI_LINE_HEIGHT,
-                    if (index == completion.selectedIndex) IdeColors.ACCENT else IdeColors.TEXT,
+                    if (completion.firstVisibleIndex + index == completion.selectedIndex) IdeColors.ACCENT else IdeColors.TEXT,
                     popup.bounds,
                     Z_POPUP_TEXT,
                 )
@@ -791,7 +791,6 @@ object IdeRenderer {
 
     private const val TAB_WIDTH = 4
     private const val UI_LINE_HEIGHT = 12
-    private const val COMPLETION_VISIBLE_ITEMS = 8
     private const val COMPLETION_MINIMUM_WIDTH = 220
     private const val COMPLETION_HORIZONTAL_PADDING = 8
     private const val NO_TARGET = "No target attached"

@@ -47,6 +47,46 @@ class IdeCompletionStateTest {
     }
 
     @Test
+    fun `viewport moves only when selection crosses a visible boundary`() {
+        val items = (0 until 12).map { item("item$it") }
+        var state = IdeCompletionState.create(identity(1, 2), path(), EditorRange(0, 2), items)
+
+        repeat(7) { state = state.move(1) }
+        assertEquals(7, state.selectedIndex)
+        assertEquals(0, state.firstVisibleIndex)
+        assertEquals((0..7).map { "item$it" }, state.visibleItems.map { it.label })
+
+        state = state.move(1)
+        assertEquals(8, state.selectedIndex)
+        assertEquals(1, state.firstVisibleIndex)
+        assertEquals((1..8).map { "item$it" }, state.visibleItems.map { it.label })
+
+        state = state.move(-1)
+        assertEquals(7, state.selectedIndex)
+        assertEquals(1, state.firstVisibleIndex)
+
+        repeat(7) { state = state.move(-1) }
+        assertEquals(0, state.selectedIndex)
+        assertEquals(0, state.firstVisibleIndex)
+    }
+
+    @Test
+    fun `viewport remains valid when page movement clamps at list boundaries`() {
+        val items = (0 until 12).map { item("item$it") }
+        val initial = IdeCompletionState.create(identity(1, 2), path(), EditorRange(0, 2), items)
+
+        val last = initial.movePage(20, 8)
+        assertEquals(11, last.selectedIndex)
+        assertEquals(4, last.firstVisibleIndex)
+        assertEquals((4..11).map { "item$it" }, last.visibleItems.map { it.label })
+
+        val first = last.movePage(-20, 8)
+        assertEquals(0, first.selectedIndex)
+        assertEquals(0, first.firstVisibleIndex)
+        assertEquals((0..7).map { "item$it" }, first.visibleItems.map { it.label })
+    }
+
+    @Test
     fun `acceptance rejects stale identity and path then replaces atomically`() {
         val document = EditorDocument("pr value")
         val state = IdeCompletionState.create(identity(1, 2), path(), EditorRange(0, 2), listOf(item("println")))
