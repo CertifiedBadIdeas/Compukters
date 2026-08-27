@@ -295,6 +295,18 @@ val verifyPackagedCompukterFfi =
             check(entries.count { it == "META-INF/neoforge.mods.toml" } == 1) {
                 "expected exactly one META-INF/neoforge.mods.toml in ${archive.name}"
             }
+            val workerPayloads =
+                entries
+                    .filter { it.startsWith("compiler/worker/") || it.startsWith("analysis/worker/") }
+                    .sorted()
+            val expectedWorkerPayloads =
+                listOf(
+                    "analysis/worker/ide-analysis-k2-worker.zip",
+                    "compiler/worker/compiler-k2-worker.zip",
+                )
+            check(workerPayloads == expectedWorkerPayloads) {
+                "expected exactly $expectedWorkerPayloads in ${archive.name}, found $workerPayloads"
+            }
             listOf(
                 "META-INF/licenses/Compukters-Apache-2.0.txt",
                 "META-INF/NOTICE.txt",
@@ -386,6 +398,22 @@ val verifyPackagedCompukterFfi =
                 )
             check(entries.none { entry -> forbiddenIdeClassPrefixes.any(entry::startsWith) || entry.contains("kotlin/compiler") }) {
                 "forbidden IDE/platform runtime classes leaked into ${archive.name}"
+            }
+            ZipFile(archive).use { outer ->
+                entries
+                    .filter { it.startsWith("META-INF/jars/") && it.endsWith(".jar") }
+                    .forEach { nestedName ->
+                        val nestedEntry = checkNotNull(outer.getEntry(nestedName))
+                        ZipInputStream(outer.getInputStream(nestedEntry)).use { nested ->
+                            while (true) {
+                                val entry = nested.nextEntry ?: break
+                                check(forbiddenIdeClassPrefixes.none(entry.name::startsWith) && !entry.name.contains("kotlin/compiler")) {
+                                    "forbidden IDE/platform class ${entry.name} leaked through $nestedName"
+                                }
+                                nested.closeEntry()
+                            }
+                        }
+                    }
             }
             check(entries.none { it.startsWith("ru/lazyhat/compukters/ide/") }) {
                 "ide-core classes leaked into ${archive.name} before the IDE is packaged"
@@ -518,9 +546,9 @@ val verifyNeoForgeRuntimeDependencies =
         }
     }
 
-val verifyAnalysisWorkerClassIsolation =
-    tasks.register("verifyAnalysisWorkerClassIsolation") {
-        description = "Checks that the K2 analysis entry point is not loadable from the Minecraft application classpath."
+val verifyIdeWorkerClassIsolation =
+    tasks.register("verifyIdeWorkerClassIsolation") {
+        description = "Checks that K2 worker entry points are not loadable from the Minecraft application classpath."
         group = "verification"
         dependsOn(tasks.classes)
         val applicationClasspath = configurations.named("runtimeClasspath")
@@ -531,14 +559,18 @@ val verifyAnalysisWorkerClassIsolation =
                     .map { it.toURI().toURL() }
                     .toTypedArray()
             URLClassLoader(urls, ClassLoader.getPlatformClassLoader()).use { loader ->
-                val analysisMainClass = "ru.lazyhat.compukters.ide.analysis.k2.server.AnalysisWorkerMainKt"
-                val loadable = runCatching { Class.forName(analysisMainClass, false, loader) }.isSuccess
-                check(!loadable) { "$analysisMainClass is loadable from the Minecraft application classpath" }
+                listOf(
+                    "ru.lazyhat.compukters.compiler.worker.server.CompilerWorkerMainKt",
+                    "ru.lazyhat.compukters.ide.analysis.k2.server.AnalysisWorkerMainKt",
+                ).forEach { mainClass ->
+                    val loadable = runCatching { Class.forName(mainClass, false, loader) }.isSuccess
+                    check(!loadable) { "$mainClass is loadable from the Minecraft application classpath" }
+                }
             }
         }
     }
 
 tasks.named("check") {
     dependsOn(verifyNeoForgeRuntimeDependencies)
-    dependsOn(verifyAnalysisWorkerClassIsolation)
+    dependsOn(verifyIdeWorkerClassIsolation)
 }

@@ -58,6 +58,23 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
+tasks.test {
+    val compilerPayload = project(":compiler-k2").tasks.named("prepareCompilerWorkerPayload")
+    dependsOn(compilerPayload)
+    doFirst {
+        systemProperty(
+            "compukters.ide.compilerPayload",
+            project(":compiler-k2").layout.buildDirectory.dir("worker-payload/content").get().asFile.absolutePath,
+        )
+        systemProperty(
+            "compukters.ide.java",
+            javaToolchains.launcherFor {
+                languageVersion = JavaLanguageVersion.of(25)
+            }.get().executablePath.asFile.absolutePath,
+        )
+    }
+}
+
 val allowedIdeClientRuntimeModules =
     setOf(
         ":ide-core",
