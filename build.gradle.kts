@@ -18,6 +18,7 @@
 
 plugins {
     base
+    id("media-license-convention")
     alias(libs.plugins.kotlin) apply false
     alias(libs.plugins.releaseConvention)
 }

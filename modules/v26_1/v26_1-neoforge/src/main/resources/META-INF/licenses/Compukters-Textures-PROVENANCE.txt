@@ -1,0 +1,24 @@
+Compukters computer block textures
+
+Assets:
+- assets/compukters/textures/block/compukter/back.png
+- assets/compukters/textures/block/compukter/front.png
+- assets/compukters/textures/block/compukter/side.png
+
+Creator and copyright holder: Vsevolod Petrov (lazyhat)
+Copyright: 2026 Vsevolod Petrov (lazyhat)
+Origin: original work created for Compukters; no upstream asset
+Repository: https://github.com/CertifiedBadIdeas/Compukters
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+License URL: https://creativecommons.org/licenses/by/4.0/
+
+Preferred attribution:
+“Compukters computer block textures” by Vsevolod Petrov (lazyhat), licensed
+under CC BY 4.0.
+
+If you modify these textures and distribute the result, identify that changes
+were made as required by CC BY 4.0.
+
+The front texture is also the current Compukters project logo. The copyright
+license does not grant trademark rights or permission to imply official origin,
+sponsorship, or endorsement.
