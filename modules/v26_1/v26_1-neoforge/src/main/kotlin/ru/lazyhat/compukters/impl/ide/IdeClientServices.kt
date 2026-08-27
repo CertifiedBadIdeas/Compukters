@@ -53,8 +53,6 @@ import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
 import ru.lazyhat.compukters.ide.client.build.IdeBuildServices
 import ru.lazyhat.compukters.ide.client.controller.IdeClientController
 import ru.lazyhat.compukters.ide.client.controller.IdeControllerClock
-import ru.lazyhat.compukters.ide.client.preferences.IdePreferences
-import ru.lazyhat.compukters.ide.client.preferences.IdePreferencesStore
 import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
 import ru.lazyhat.compukters.ide.client.workspace.DefaultIdeWorkspace
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationCache
@@ -67,6 +65,7 @@ import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectLockService
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
+import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
 import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
 import ru.lazyhat.compukters.worker.payload.PackagedWorkerPayload
 import ru.lazyhat.compukters.worker.payload.WorkerPayloadExpectation
@@ -88,6 +87,7 @@ internal data class IdeClientPaths(
     val analysisWorkers: Path,
     val compilerTemporary: Path,
     val analysisTemporary: Path,
+    val preferences: Path,
 ) {
     companion object {
         fun at(gameRoot: Path): IdeClientPaths {
@@ -99,6 +99,7 @@ internal data class IdeClientPaths(
                 analysisWorkers = root.resolve("workers/analysis"),
                 compilerTemporary = root.resolve("tmp/compiler"),
                 analysisTemporary = root.resolve("tmp/analysis"),
+                preferences = root.resolve("session.preferences"),
             )
         }
     }
@@ -150,6 +151,7 @@ internal class IdeClientServices<A : AutoCloseable>(
 
 internal class IdeClientApplication(
     val controller: IdeClientController,
+    val preferences: IdeClientPreferences,
     private val analysisService: AnalysisServiceLifetime,
 ) : AutoCloseable {
     private val closed = AtomicBoolean()
@@ -335,10 +337,11 @@ private object ProductionIdeApplicationFactory {
                         ClosingAnalysisRequestCoordinator(delegate, session, scheduler)
                     },
             )
+        val preferences = IdeClientPreferences(paths.preferences, CompuktersClientConfig.IdeLayout)
         val controller =
             IdeClientController(
                 workspace = workspace,
-                preferences = MemoryIdePreferencesStore(),
+                preferences = preferences,
                 clock = clock,
                 events = BoundedIdeEventQueue(clientLimits.eventQueueCapacity),
                 limits = clientLimits,
@@ -346,7 +349,7 @@ private object ProductionIdeApplicationFactory {
                 analysisCoordinator = analysis,
             )
         controller.start()
-        return IdeClientApplication(controller, analysisService)
+        return IdeClientApplication(controller, preferences, analysisService)
     }
 
     private fun analysisSnapshot(
@@ -419,16 +422,6 @@ private object ProductionIdeApplicationFactory {
     private const val PRESENTATION_DEBOUNCE_NANOS = 150_000_000L
     private const val COMPLETION_DEBOUNCE_NANOS = 120_000_000L
     private const val ARTIFACT_ABI = 2u
-}
-
-private class MemoryIdePreferencesStore : IdePreferencesStore {
-    private var current: IdePreferences? = null
-
-    override fun load(): IdePreferences? = current
-
-    override fun save(preferences: IdePreferences) {
-        current = preferences
-    }
 }
 
 private class IdeAnalysisTaskScheduler : AnalysisTaskScheduler {
