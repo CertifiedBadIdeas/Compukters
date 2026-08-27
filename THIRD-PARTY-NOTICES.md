@@ -6,6 +6,10 @@ third-party license. The complete Apache License 2.0 text is available at
 `licenses/project/Apache-2.0.txt` and is packaged as
 `META-INF/licenses/Compukters-Apache-2.0.txt`.
 
+Apache-2.0 is the default for original Compukters software and source material,
+not a blanket media license. Original media exceptions and the machine-readable
+media inventory are documented in [MEDIA-LICENSES.md](MEDIA-LICENSES.md).
+
 `licenses/distribution-components.tsv` is the machine-readable inventory used
 by archive verification. Dependency version changes must update both files.
 

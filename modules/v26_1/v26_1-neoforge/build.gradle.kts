@@ -309,6 +309,8 @@ val verifyPackagedCompukterFfi =
             }
             listOf(
                 "META-INF/licenses/Compukters-Apache-2.0.txt",
+                "META-INF/licenses/Compukters-Textures-CC-BY-4.0.txt",
+                "META-INF/licenses/Compukters-Textures-PROVENANCE.txt",
                 "META-INF/NOTICE.txt",
                 "META-INF/THIRD-PARTY-NOTICES.md",
             ).forEach { required ->

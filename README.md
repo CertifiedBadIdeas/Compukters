@@ -1,6 +1,6 @@
 # Compukters
 
-![Mod logo (AI generated)](logo_1.png)
+<img src="modules/v26_1/v26_1-neoforge/src/main/resources/assets/compukters/textures/block/compukter/front.png" width="128" alt="Compukters logo">
 
 **Programmable computers for Minecraft with deterministic, resource-bounded Kotlin execution.**
 
@@ -104,14 +104,21 @@ or native platform failure.
 
 ## Licensing
 
-The current original Compukters and Compukter VM work is licensed under
-[Apache-2.0](LICENSE.md). Third-party material remains under the licenses listed
-in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Copies and releases made
-available before the Apache-2.0 migration remain available under the license
-which accompanied them; this migration does not revoke earlier license grants.
+Original Compukters software and source material is licensed under
+[Apache-2.0](LICENSE.md) unless stated otherwise. Media assets have their own
+path-by-path [license inventory](MEDIA-LICENSES.md), including the CC BY 4.0
+computer textures and MIT terminal fonts. Third-party material remains under
+the licenses listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Use of
+the Compukters name and front-texture logo is described in
+[TRADEMARKS.md](TRADEMARKS.md).
+
+Copies and releases made available before the Apache-2.0 migration remain
+available under the license which accompanied them; this migration does not
+revoke earlier license grants.
 
 ## Links and credits
 
 - Devlog (in Russian): https://t.me/lazyhatdev
 - Source: https://github.com/CertifiedBadIdeas/Compukters
-- License: [Apache-2.0](LICENSE.md)
+- Licenses: [software](LICENSE.md), [media](MEDIA-LICENSES.md),
+  [name and logo](TRADEMARKS.md)
