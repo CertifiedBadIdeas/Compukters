@@ -27,6 +27,7 @@ import org.jetbrains.kotlin.analysis.api.components.expressionType
 import org.jetbrains.kotlin.analysis.api.components.render
 import org.jetbrains.kotlin.analysis.api.components.scopeContext
 import org.jetbrains.kotlin.analysis.api.renderer.declarations.impl.KaDeclarationRendererForSource
+import org.jetbrains.kotlin.analysis.api.renderer.types.impl.KaTypeRendererForSource
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassKind
 import org.jetbrains.kotlin.analysis.api.symbols.KaDeclarationSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaFunctionSymbol
@@ -37,6 +38,7 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaTypeParameterSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.symbol
+import org.jetbrains.kotlin.types.Variance
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisResultLimits
@@ -100,7 +102,7 @@ internal object CompletionQuery {
                     is MappedDeclaration.BundleTarget -> DeclarationOrigin.Bundle(mapped.identity)
                     null -> null
                 }
-            val item = CompletionItem(name, name, symbol.completionKind(), detail, origin)
+            val item = CompletionItem(completionLabel(symbol, name), name, symbol.completionKind(), detail, origin)
             ranked.offer(
                 RankedCompletion(
                     item,
@@ -145,6 +147,25 @@ internal object CompletionQuery {
             .sorted()
             .map { it.item }
     }
+
+    @OptIn(KaExperimentalApi::class)
+    private fun KaSession.completionLabel(
+        symbol: KaDeclarationSymbol,
+        name: String,
+    ): String =
+        if (symbol is KaFunctionSymbol) {
+            symbol.valueParameters.joinToString(prefix = "$name(", postfix = ")") { parameter ->
+                buildString {
+                    if (parameter.isVararg) append("vararg ")
+                    append(parameter.name.asString())
+                    append(": ")
+                    append(parameter.returnType.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT))
+                    if (parameter.hasDefaultValue) append(" = …")
+                }
+            }
+        } else {
+            name
+        }
 }
 
 private data class RankedCompletion(

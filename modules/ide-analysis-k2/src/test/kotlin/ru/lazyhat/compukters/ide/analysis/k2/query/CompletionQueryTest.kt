@@ -41,8 +41,8 @@ class CompletionQueryTest {
             assertEquals("localValue", result.items.first().label)
             assertEquals("localValue", result.items.first().insertText)
             assertEquals(CompletionKind.LocalVariable, result.items.first().kind)
-            assertTrue(result.items.any { it.label == "localPackageFunction" })
-            assertTrue(result.items.none { it.label == "parameter" })
+            assertTrue(result.items.any { it.insertText == "localPackageFunction" })
+            assertTrue(result.items.none { it.insertText == "parameter" })
         }
     }
 
@@ -61,7 +61,7 @@ class CompletionQueryTest {
             """.trimIndent()
         K2QueryFixture.source("main.kt" to source).use { fixture ->
             val result = fixture.complete("main.kt", source.indexOf("inferred.") + "inferred.".length, CompletionTrigger.Manual)
-            val labels = result.items.map { it.label }
+            val labels = result.items.map { it.insertText }
 
             assertTrue("length" in labels, labels.toString())
             assertTrue("stringExtension" in labels, labels.toString())
@@ -89,7 +89,7 @@ class CompletionQueryTest {
             """.trimIndent()
         K2QueryFixture.source("library.kt" to library, "main.kt" to source).use { fixture ->
             val result = fixture.complete("main.kt", source.lastIndexOf("imp") + 3)
-            val labels = result.items.map { it.label }
+            val labels = result.items.map { it.insertText }
 
             assertTrue("implicitMember" in labels, labels.toString())
             assertTrue("importedFunction" in labels, labels.toString())
@@ -106,7 +106,7 @@ class CompletionQueryTest {
             """.trimIndent()
         K2QueryFixture.source("main.kt" to source).use { fixture ->
             val result = fixture.complete("main.kt", source.lastIndexOf("ext") + 3)
-            val labels = result.items.map { it.label }
+            val labels = result.items.map { it.insertText }
 
             assertTrue("extensionForString" in labels, labels.toString())
             assertTrue("extensionForInt" !in labels, labels.toString())
@@ -120,7 +120,7 @@ class CompletionQueryTest {
         K2QueryFixture.source("hidden.kt" to hidden, "main.kt" to source).use { fixture ->
             val result = fixture.complete("main.kt", source.indexOf("hid") + 3)
 
-            assertTrue(result.items.none { it.label == "hiddenFunction" }, result.items.toString())
+            assertTrue(result.items.none { it.insertText == "hiddenFunction" }, result.items.toString())
         }
     }
 
@@ -136,10 +136,26 @@ class CompletionQueryTest {
             val first = fixture.complete("main.kt", source.lastIndexOf("cho") + 3).items
             val second = fixture.complete("main.kt", source.lastIndexOf("cho") + 3).items
 
-            assertEquals(2, first.count { it.label == "choose" })
+            assertEquals(2, first.count { it.insertText == "choose" })
+            assertEquals(setOf("choose(value: Int)", "choose(value: String)"), first.map { it.label }.toSet())
             assertEquals(first, second)
             val details = first.map { requireNotNull(it.detail) }
             assertEquals(details.sorted(), details)
+        }
+    }
+
+    @Test
+    fun `completion gives standard library overloads distinct argument labels`() {
+        val source = "fun main() { printl }"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val items = fixture.complete("main.kt", source.indexOf("printl") + "printl".length).items
+            val printlnItems = items.filter { it.insertText == "println" }
+
+            assertTrue(printlnItems.size > 1, printlnItems.toString())
+            assertEquals(printlnItems.size, printlnItems.map { it.label }.distinct().size, printlnItems.joinToString("\n"))
+            assertTrue(printlnItems.any { it.label == "println()" }, printlnItems.toString())
+            assertTrue(printlnItems.any { it.label == "println(message: Int)" }, printlnItems.toString())
+            assertTrue(printlnItems.all { it.insertText == "println" }, printlnItems.toString())
         }
     }
 
@@ -170,7 +186,7 @@ class CompletionQueryTest {
             val result = fixture.complete("main.kt", prefixStart + "при".length)
 
             assertEquals(EditorRange(prefixStart, prefixStart + "при".length), result.replacement)
-            assertTrue(result.items.any { it.label == "приветствие" }, result.items.toString())
+            assertTrue(result.items.any { it.insertText == "приветствие" }, result.items.toString())
         }
     }
 
@@ -184,7 +200,7 @@ class CompletionQueryTest {
             val result = fixture.complete("main.kt", prefixStart + prefix.length)
 
             assertEquals(EditorRange(prefixStart, prefixStart + prefix.length), result.replacement)
-            assertTrue(result.items.any { it.label == name }, result.items.toString())
+            assertTrue(result.items.any { it.insertText == name }, result.items.toString())
         }
     }
 
@@ -198,7 +214,7 @@ class CompletionQueryTest {
 
             assertEquals(EditorRange(offset, offset), result.replacement)
             assertEquals(256, result.items.size)
-            assertEquals((0 until 256).map { "candidate%03d".format(it) }, result.items.map { it.label })
+            assertEquals((0 until 256).map { "candidate%03d".format(it) }, result.items.map { it.insertText })
         }
     }
 
