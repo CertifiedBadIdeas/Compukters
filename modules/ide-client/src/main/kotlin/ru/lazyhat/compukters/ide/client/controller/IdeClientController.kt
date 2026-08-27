@@ -45,6 +45,7 @@ import ru.lazyhat.compukters.ide.client.state.IdeProblem
 import ru.lazyhat.compukters.ide.client.state.IdeProblemSeverity
 import ru.lazyhat.compukters.ide.client.state.IdeProjectSummary
 import ru.lazyhat.compukters.ide.client.state.IdeViewState
+import ru.lazyhat.compukters.ide.client.state.IdeToolingState
 import ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
@@ -67,6 +68,7 @@ import ru.lazyhat.compukters.ide.project.tree.AdmittedProjectDelete
 import ru.lazyhat.compukters.ide.project.tree.ProjectMutationResult
 import ru.lazyhat.compukters.ide.project.tree.ProjectTree
 import java.util.concurrent.CompletionException
+import java.util.concurrent.CompletionStage
 import java.util.concurrent.atomic.AtomicBoolean
 
 class IdeClientController(
@@ -75,12 +77,25 @@ class IdeClientController(
     private val clock: IdeControllerClock,
     private val events: BoundedIdeEventQueue,
     private val limits: IdeClientLimits = IdeClientLimits(),
-    private val buildCoordinator: IdeBuildCoordinator? = null,
-    private val analysisCoordinator: IdeAnalysisCoordinator? = null,
+    buildCoordinator: IdeBuildCoordinator? = null,
+    analysisCoordinator: IdeAnalysisCoordinator? = null,
     private val targetCoordinator: IdeTargetCoordinator? = null,
+    tooling: CompletionStage<IdeClientTooling>? = null,
 ) : AutoCloseable {
     private val owner = Thread.currentThread()
-    private var state = IdeViewState.startPage(emptyList())
+    private var state =
+        IdeViewState.startPage(emptyList()).copy(
+            tooling =
+                when {
+                    tooling != null -> IdeToolingState.Preparing
+                    buildCoordinator != null && analysisCoordinator != null -> IdeToolingState.Ready
+                    else -> IdeToolingState.Unavailable("Kotlin tooling is unavailable")
+                },
+        )
+    private var buildCoordinator = buildCoordinator
+    private var analysisCoordinator = analysisCoordinator
+    private var installedTooling: IdeClientTooling? = null
+    private val acceptsTooling = AtomicBoolean(true)
     private var generation = 0L
     private var nextOperationId = 1L
     private var started = false
@@ -110,6 +125,19 @@ class IdeClientController(
     private val buildJobs = mutableMapOf<Long, IdeBuildJob>()
     private var observedAnalysisState: IdeAnalysisState = IdeAnalysisState.Idle
     private val targetBuildActions = mutableMapOf<Long, PendingBuildAction>()
+
+    init {
+        tooling?.whenComplete { ready, failure ->
+            if (!acceptsTooling.get()) {
+                ready?.close()
+            } else if (failure == null && ready != null) {
+                if (!events.offer(IdeEvent.ToolingReady(ready))) ready.close()
+            } else {
+                val actual = (failure as? CompletionException)?.cause ?: failure
+                events.offer(IdeEvent.ToolingFailed(actual?.message ?: "Kotlin tooling failed to start"))
+            }
+        }
+    }
 
     fun start() {
         checkOwner()
@@ -323,6 +351,10 @@ class IdeClientController(
         checkOwner()
         if (closed) return
         closed = true
+        acceptsTooling.set(false)
+        events.drain().forEach { event ->
+            if (event is IdeEvent.ToolingReady) event.tooling.close()
+        }
         generation = Math.incrementExact(generation)
         project?.let { persistPreferences(editor?.path ?: binary?.path) }
         editor?.close()
@@ -330,8 +362,11 @@ class IdeClientController(
         analysisCoordinator?.closeFile()
         workspace.close()
         cancelBuildJobs()
-        buildCoordinator?.close()
-        analysisCoordinator?.close()
+        installedTooling?.close()
+        if (installedTooling == null) {
+            buildCoordinator?.close()
+            analysisCoordinator?.close()
+        }
         targetCoordinator?.close()
     }
 
@@ -423,19 +458,21 @@ class IdeClientController(
     private fun edit(input: IdeEditorInput) {
         val active = editor ?: return
         if ((input == IdeEditorInput.Tab || input == IdeEditorInput.Enter) && active.path.isKotlinSource) {
-            val accepted = analysisCoordinator?.acceptCompletion(active.document, VirtualSourcePath.kotlin(active.path.value))
+            val analysis = analysisCoordinator
+            val accepted = analysis?.acceptCompletion(active.document, VirtualSourcePath.kotlin(active.path.value))
             if (accepted is IdeCompletionAcceptance.Applied) {
                 active.lastEditMillis = clock.nowMillis()
                 refreshAnalysisState()
                 publishWorkspace()
                 return
             }
-            if (accepted != null) analysisCoordinator.dismissCompletion()
+            if (accepted != null) analysis.dismissCompletion()
         }
         if (input is IdeEditorInput.Move && (input.direction == IdeMoveDirection.Up || input.direction == IdeMoveDirection.Down)) {
-            val completion = (analysisCoordinator?.state() as? IdeAnalysisState.Active)?.completion
+            val analysis = analysisCoordinator
+            val completion = (analysis?.state() as? IdeAnalysisState.Active)?.completion
             if (completion != null) {
-                analysisCoordinator.moveCompletion(if (input.direction == IdeMoveDirection.Up) -1 else 1)
+                analysis.moveCompletion(if (input.direction == IdeMoveDirection.Up) -1 else 1)
                 refreshAnalysisState()
                 publishWorkspace()
                 return
@@ -670,6 +707,10 @@ class IdeClientController(
     private fun accept(event: IdeEvent) {
         if (event.generationOrNull() != null && event.generationOrNull() != generation) return
         when (event) {
+            is IdeEvent.ToolingReady -> acceptTooling(event.tooling)
+
+            is IdeEvent.ToolingFailed -> acceptToolingFailure(event.detail)
+
             is IdeEvent.ProjectCatalogLoaded -> acceptCatalog(event)
 
             is IdeEvent.BuildInputLoaded -> acceptBuildInput(event)
@@ -698,10 +739,29 @@ class IdeClientController(
         }
     }
 
+    private fun acceptTooling(tooling: IdeClientTooling) {
+        if (installedTooling != null || closed) {
+            tooling.close()
+            return
+        }
+        installedTooling = tooling
+        buildCoordinator = tooling.build
+        analysisCoordinator = tooling.analysis
+        state = state.copy(tooling = IdeToolingState.Ready)
+        editor?.let(::openAnalysis)
+        publishWorkspace()
+    }
+
+    private fun acceptToolingFailure(detail: String) {
+        val message = "Kotlin tooling unavailable: $detail".boundedUtf8(limits.statusUtf8Bytes)
+        state = state.copy(tooling = IdeToolingState.Unavailable(message))
+        publishStatus(message, IdeProblemSeverity.Warning)
+    }
+
     private fun acceptCatalog(event: IdeEvent.ProjectCatalogLoaded) {
         catalog = event.projects
         val summaries = catalog.take(limits.projectRows).map(::summary)
-        state = IdeViewState(generation, IdePageState.Start(summaries, null), null, emptySet(), state.target)
+        state = IdeViewState(generation, IdePageState.Start(summaries, null), null, emptySet(), state.target, state.tooling)
         val remembered = restorePreferences?.lastProjectDirectory
         if (remembered != null && catalog.any { it.directoryName == remembered }) openProject(remembered)
     }
@@ -1281,6 +1341,7 @@ class IdeClientController(
                 null,
                 emptySet(),
                 state.target,
+                state.tooling,
             )
     }
 
@@ -1383,6 +1444,10 @@ private val IdeBuildAction.isTargetAction: Boolean
 
 private fun IdeEvent.generationOrNull(): Long? =
     when (this) {
+        is IdeEvent.ToolingReady,
+        is IdeEvent.ToolingFailed,
+        -> null
+
         is IdeEvent.ProjectCatalogLoaded -> generation
         is IdeEvent.BuildInputLoaded -> generation
         is IdeEvent.BuildStateChanged -> generation
