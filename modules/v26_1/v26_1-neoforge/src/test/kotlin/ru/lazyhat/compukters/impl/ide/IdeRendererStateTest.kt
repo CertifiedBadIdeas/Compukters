@@ -66,6 +66,11 @@ class IdeRendererStateTest {
         assertEquals(listOf("Alpha", "Beta"), model.text.filter { it.kind == IdeTextKind.StartProject }.map { it.value })
         assertTrue(model.hitTargets.any { it.action == IdeHitAction.CreateProject && it.enabled })
         assertTrue(model.hitTargets.any { it.action == IdeHitAction.OpenProject && it.enabled })
+        assertEquals(listOf("Create project", "Open project"), model.text.filter { it.kind == IdeTextKind.Toolbar }.map { it.value })
+        assertTrue(
+            model.text.filter { it.kind == IdeTextKind.Toolbar }.minOf { it.zIndex } >
+                model.panels.filter { it.kind == IdePanelKind.Control }.maxOf { it.zIndex },
+        )
         assertTrue(model.zOrdered())
     }
 
