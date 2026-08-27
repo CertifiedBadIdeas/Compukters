@@ -79,6 +79,25 @@ class IdeTargetCoordinator(
     fun deploy(
         artifact: IdeTargetArtifact,
         path: IdeDeploymentPath,
+    ) = startDeployment(artifact, path, null)
+
+    fun run(
+        artifact: IdeTargetArtifact,
+        path: IdeDeploymentPath,
+        strategy: IdeLaunchStrategy = IdeLaunchStrategy.CanonicalInput,
+    ) {
+        val target = requireTarget()
+        if (strategy == IdeLaunchStrategy.CanonicalInput && !target.capabilities.canonicalInput) {
+            current = IdeTargetState.Failed(target, unsupportedFailure("Target canonical input is unavailable"))
+            return
+        }
+        startDeployment(artifact, path, strategy)
+    }
+
+    private fun startDeployment(
+        artifact: IdeTargetArtifact,
+        path: IdeDeploymentPath,
+        launch: IdeLaunchStrategy?,
     ) {
         val target = requireTarget()
         if (!target.capabilities.writableFileSystem) {
@@ -87,9 +106,9 @@ class IdeTargetCoordinator(
         }
         val ticket = cachedTicket?.takeIf { it.matches(target, artifact) }
         if (ticket == null) {
-            beginVerification(target, artifact, VerificationIntent.Deploy(path))
+            beginVerification(target, artifact, VerificationIntent.Deploy(path, launch))
         } else {
-            beginObservation(target, artifact, ticket, path, nextOperationGeneration())
+            beginObservation(target, artifact, ticket, path, launch, nextOperationGeneration())
         }
     }
 
@@ -144,6 +163,7 @@ class IdeTargetCoordinator(
             is TargetEvent.Verify -> if (event.operationGeneration == operationGeneration) acceptVerify(event)
             is TargetEvent.Revision -> if (event.operationGeneration == operationGeneration) acceptRevision(event)
             is TargetEvent.Deploy -> if (event.operationGeneration == operationGeneration) acceptDeploy(event)
+            is TargetEvent.Submission -> if (event.operationGeneration == operationGeneration) acceptSubmission(event)
         }
     }
 
@@ -202,6 +222,7 @@ class IdeTargetCoordinator(
                             event.artifact,
                             result.ticket,
                             intent.path,
+                            intent.launch,
                             event.operationGeneration,
                         )
                 }
@@ -241,7 +262,11 @@ class IdeTargetCoordinator(
                 cachedTicket = null
                 confirmation = null
                 approvedRevisions[event.pending.path] = result.revision
-                current = IdeTargetState.Deployed(event.pending.target, event.pending.path, result.revision)
+                val deployed = IdeTargetState.Deployed(event.pending.target, event.pending.path, result.revision)
+                when (event.pending.launch) {
+                    null -> current = deployed
+                    IdeLaunchStrategy.CanonicalInput -> beginSubmission(deployed, event.operationGeneration)
+                }
             }
             is IdeDeployResult.Failed -> {
                 if (!result.retryable) cachedTicket = null
@@ -262,6 +287,25 @@ class IdeTargetCoordinator(
                 }
             }
         }
+    }
+
+    private fun acceptSubmission(event: TargetEvent.Submission) {
+        val result = event.result
+        if (event.failure != null || result == null) {
+            current = IdeTargetState.Failed(event.deployed.target, operationFailure(), event.deployed)
+            return
+        }
+        current =
+            when (result) {
+                IdeSubmissionResult.Submitted ->
+                    IdeTargetState.CommandSubmitted(
+                        event.deployed.target,
+                        event.deployed.path,
+                        event.deployed.revision,
+                    )
+                is IdeSubmissionResult.Failed ->
+                    IdeTargetState.Failed(event.deployed.target, result.failure, event.deployed)
+            }
     }
 
     private fun beginVerification(
@@ -286,10 +330,11 @@ class IdeTargetCoordinator(
         artifact: IdeTargetArtifact,
         ticket: IdeVerificationTicket,
         path: IdeDeploymentPath,
+        launch: IdeLaunchStrategy?,
         operation: Long,
     ) {
         confirmation = null
-        val pending = PendingDeployment(target, artifact, ticket, path, IdeExecutableRevision.Absent)
+        val pending = PendingDeployment(target, artifact, ticket, path, IdeExecutableRevision.Absent, launch)
         current = IdeTargetState.Observing(target, path)
         try {
             port.executableRevision(target, path).whenComplete { result, failure ->
@@ -313,6 +358,20 @@ class IdeTargetCoordinator(
             }
         } catch (failure: Throwable) {
             enqueue(TargetEvent.Deploy(generation, operation, exact, null, failure))
+        }
+    }
+
+    private fun beginSubmission(
+        deployed: IdeTargetState.Deployed,
+        operation: Long,
+    ) {
+        current = IdeTargetState.Submitting(deployed.target, deployed.path, deployed.revision)
+        try {
+            port.submitCanonicalLine(deployed.target, deployed.path.value.toCharArray()).whenComplete { result, failure ->
+                enqueue(TargetEvent.Submission(generation, operation, deployed, result, failure))
+            }
+        } catch (failure: Throwable) {
+            enqueue(TargetEvent.Submission(generation, operation, deployed, null, failure))
         }
     }
 
@@ -389,6 +448,7 @@ class IdeTargetCoordinator(
         val ticket: IdeVerificationTicket,
         val path: IdeDeploymentPath,
         val expected: IdeExecutableRevision,
+        val launch: IdeLaunchStrategy?,
     )
 
     private sealed interface VerificationIntent {
@@ -396,6 +456,7 @@ class IdeTargetCoordinator(
 
         data class Deploy(
             val path: IdeDeploymentPath,
+            val launch: IdeLaunchStrategy?,
         ) : VerificationIntent
     }
 
@@ -437,6 +498,14 @@ class IdeTargetCoordinator(
             val operationGeneration: Long,
             val pending: PendingDeployment,
             val result: IdeDeployResult?,
+            val failure: Throwable?,
+        ) : TargetEvent
+
+        data class Submission(
+            override val generation: Long,
+            val operationGeneration: Long,
+            val deployed: IdeTargetState.Deployed,
+            val result: IdeSubmissionResult?,
             val failure: Throwable?,
         ) : TargetEvent
     }
