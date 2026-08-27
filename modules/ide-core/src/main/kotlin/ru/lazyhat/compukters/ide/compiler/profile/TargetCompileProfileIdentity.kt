@@ -11,6 +11,8 @@ package ru.lazyhat.compukters.ide.compiler.profile
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import java.security.MessageDigest
 
+const val COMPUKTER_ARTIFACT_ABI: UInt = 2u
+
 data class TargetCompileProfileIdentity(
     val hash: Hash256,
 ) {

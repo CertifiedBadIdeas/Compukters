@@ -57,6 +57,7 @@ import ru.lazyhat.compukters.ide.compiler.ControllerClientCompilerBackend
 import ru.lazyhat.compukters.ide.compiler.DefaultClientCompilationService
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
+import ru.lazyhat.compukters.ide.compiler.profile.COMPUKTER_ARTIFACT_ABI
 import ru.lazyhat.compukters.ide.compiler.profile.GuestApiBundleCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
@@ -276,7 +277,7 @@ private object ProductionIdeApplicationFactory {
                 compilerVersion = compilerIdentity.compilerVersion,
                 languageVersion = compilerIdentity.languageVersion,
                 codegenAbi = compilerIdentity.codegenAbi,
-                artifactAbi = ARTIFACT_ABI,
+                artifactAbi = COMPUKTER_ARTIFACT_ABI,
                 artifactWriterVersion = compilerIdentity.artifactWriterVersion,
                 payloadHash = compilerIdentity.payloadHash,
                 standardLibraryAbi = compilerIdentity.standardLibraryAbi,
@@ -402,7 +403,6 @@ private object ProductionIdeApplicationFactory {
     private const val ANALYSIS_IDLE_SECONDS = 30L
     private const val PRESENTATION_DEBOUNCE_NANOS = 150_000_000L
     private const val COMPLETION_DEBOUNCE_NANOS = 120_000_000L
-    private const val ARTIFACT_ABI = 2u
 }
 
 private class IdeAnalysisTaskScheduler : AnalysisTaskScheduler {

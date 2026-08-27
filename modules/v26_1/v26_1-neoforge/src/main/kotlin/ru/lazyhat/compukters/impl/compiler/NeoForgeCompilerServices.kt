@@ -31,9 +31,13 @@ import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
 import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerLaunch
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.compiler.ServerComputerCompiler
 import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
+import ru.lazyhat.compukters.ide.compiler.profile.COMPUKTER_ARTIFACT_ABI
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
+import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ExecutorService
@@ -75,6 +79,7 @@ internal data class CompilerServicePaths(
 
 internal class NeoForgeCompilerService private constructor(
     val router: CompilerCompletionRouter,
+    val targetProfile: TargetCompileProfile,
     private val service: ServerCompilerService,
     private val executor: ExecutorService,
 ) : AutoCloseable {
@@ -130,7 +135,12 @@ internal class NeoForgeCompilerService private constructor(
                         executor = executor,
                     )
                 val compiler = ServerComputerCompiler(service, limits)
-                return NeoForgeCompilerService(CompilerCompletionRouter(compiler), service, executor)
+                return NeoForgeCompilerService(
+                    CompilerCompletionRouter(compiler),
+                    serverTargetProfile(packaged.manifest.identity, limits),
+                    service,
+                    executor,
+                )
             } catch (error: Throwable) {
                 executor.shutdownNow()
                 runCatching(backend::close)
@@ -153,9 +163,29 @@ object NeoForgeCompilerServices {
 
     fun router(server: MinecraftServer): CompilerCompletionRouter = registry.service(worldRoot(server)).router
 
+    fun targetProfile(server: MinecraftServer): TargetCompileProfile = registry.service(worldRoot(server)).targetProfile
+
     fun onServerStopping(event: ServerStoppingEvent) {
         registry.stop(worldRoot(event.server))
     }
 
     private fun worldRoot(server: MinecraftServer): Path = server.getWorldPath(LevelResource.ROOT)
 }
+
+internal fun serverTargetProfile(
+    identity: WorkerIdentity,
+    limits: WorkerLimits,
+): TargetCompileProfile =
+    TargetCompileProfile(
+        ToolchainLockIdentity(
+            compilerVersion = identity.compilerVersion,
+            languageVersion = identity.languageVersion,
+            codegenAbi = identity.codegenAbi,
+            artifactAbi = COMPUKTER_ARTIFACT_ABI,
+            artifactWriterVersion = identity.artifactWriterVersion,
+            payloadHash = identity.payloadHash,
+            standardLibraryAbi = identity.standardLibraryAbi,
+        ),
+        modules = emptyList(),
+        limits = limits,
+    )
