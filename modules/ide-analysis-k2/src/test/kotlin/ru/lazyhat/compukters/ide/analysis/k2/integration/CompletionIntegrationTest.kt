@@ -72,7 +72,9 @@ class CompletionIntegrationTest {
                         ).get(90, TimeUnit.SECONDS),
                 ).result as AnalysisResult.Completion
 
-            assertEquals(listOf("candidate"), completion.items.map { it.label })
+            val candidate = completion.items.single { it.insertText == "candidate" }
+            assertEquals("candidate()", candidate.label)
+            assertEquals("candidate", candidate.insertText)
         }
     }
 
