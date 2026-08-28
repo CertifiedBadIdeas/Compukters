@@ -33,6 +33,42 @@ data class TerminalRect(
         get() = bottom - top
 }
 
+class TerminalGridGeometry(
+    originX: Int,
+    originY: Int,
+    private val fontProfile: TerminalFontProfile,
+) {
+    val columns: Int = TerminalRenderGeometry.COLUMNS
+    val rows: Int = TerminalRenderGeometry.ROWS
+    val bounds =
+        TerminalRect(
+            originX,
+            originY,
+            originX + columns * fontProfile.cellWidth,
+            originY + rows * fontProfile.cellHeight,
+        )
+
+    fun cell(
+        x: Int,
+        y: Int,
+    ): TerminalRect {
+        require(x in 0 until columns && y in 0 until rows) { "terminal cell is outside the grid" }
+        val left = bounds.left + x * fontProfile.cellWidth
+        val top = bounds.top + y * fontProfile.cellHeight
+        return TerminalRect(left, top, left + fontProfile.cellWidth, top + fontProfile.cellHeight)
+    }
+
+    fun glyphClip(
+        x: Int,
+        y: Int,
+    ): TerminalRect = cell(x, y)
+
+    fun cursor(position: TerminalPosition): TerminalRect {
+        val cell = cell(position.x, position.y)
+        return TerminalRect(cell.left, cell.bottom - 1, cell.right, cell.bottom)
+    }
+}
+
 class TerminalRenderGeometry(
     viewportWidth: Int,
     viewportHeight: Int,
@@ -62,6 +98,7 @@ class TerminalRenderGeometry(
             panel.right - PANEL_PADDING,
             panel.bottom - PANEL_PADDING,
         )
+    val gridGeometry = TerminalGridGeometry(grid.left, grid.top, fontProfile)
     val originX: Int = grid.left
     val originY: Int = grid.top
     val titleX: Int = panel.left + PANEL_PADDING
@@ -85,20 +122,16 @@ class TerminalRenderGeometry(
         x: Int,
         y: Int,
     ): TerminalRect {
-        require(x in 0 until columns && y in 0 until rows) { "terminal cell is outside the grid" }
-        val left = originX + x * fontProfile.cellWidth
-        val top = originY + y * fontProfile.cellHeight
-        return TerminalRect(left, top, left + fontProfile.cellWidth, top + fontProfile.cellHeight)
+        return gridGeometry.cell(x, y)
     }
 
     fun glyphClip(
         x: Int,
         y: Int,
-    ): TerminalRect = cell(x, y)
+    ): TerminalRect = gridGeometry.glyphClip(x, y)
 
     fun cursor(position: TerminalPosition): TerminalRect {
-        val cell = cell(position.x, position.y)
-        return TerminalRect(cell.left, cell.bottom - CURSOR_HEIGHT, cell.right, cell.bottom)
+        return gridGeometry.cursor(position)
     }
 
     companion object {
@@ -111,7 +144,6 @@ class TerminalRenderGeometry(
         private const val FONT_BUTTON_HEIGHT = 14
         private const val IDE_BUTTON_WIDTH = 76
         private const val TITLE_BUTTON_GAP = 4
-        private const val CURSOR_HEIGHT = 1
         private const val CURSOR_HALF_PERIOD_MILLISECONDS = 500L
         private val PALETTE =
             intArrayOf(
