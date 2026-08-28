@@ -74,7 +74,12 @@ class IdeTargetModelsTest {
     @Test
     fun `target capabilities describe host integration without claiming a shell`() {
         val capabilities = IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true)
-        val submitted = IdeTargetState.CommandSubmitted(target(), IdeDeploymentPath.fromProgramName("demo"), IdeExecutableRevision.Present(9))
+        val submitted =
+            IdeTargetState.CommandSubmitted(
+                target(),
+                IdeDeploymentPath.fromProgramName("demo"),
+                IdeExecutableRevision.Present(9),
+            )
 
         assertEquals(true, capabilities.writableFileSystem)
         assertEquals(true, capabilities.canonicalInput)

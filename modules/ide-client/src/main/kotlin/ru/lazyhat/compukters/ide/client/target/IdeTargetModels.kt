@@ -324,8 +324,14 @@ private fun String.isWellFormedUtf16(): Boolean {
                 if (index + 1 >= length || !this[index + 1].isLowSurrogate()) return false
                 index += 2
             }
-            current.isLowSurrogate() -> return false
-            else -> index++
+
+            current.isLowSurrogate() -> {
+                return false
+            }
+
+            else -> {
+                index++
+            }
         }
     }
     return true
