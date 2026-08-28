@@ -57,6 +57,7 @@ import ru.lazyhat.compukters.ide.client.workspace.IdeMutationRequest
 import ru.lazyhat.compukters.ide.client.workspace.IdeSaveRequest
 import ru.lazyhat.compukters.ide.client.workspace.IdeWorkspace
 import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
+import ru.lazyhat.compukters.ide.editor.EditorChange
 import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorEditResult
 import ru.lazyhat.compukters.ide.highlight.IncrementalKotlinHighlighter
@@ -538,7 +539,7 @@ class IdeClientController(
             }
         if (result is EditorEditResult.Applied) {
             active.lastEditMillis = clock.nowMillis()
-            updateAnalysis(active, (input as? IdeEditorInput.Type)?.text)
+            updateAnalysis(active, (input as? IdeEditorInput.Type)?.text, result.change)
         } else if (input is IdeEditorInput.SetCaret || input is IdeEditorInput.Move) {
             analysisCoordinator?.dismissCompletion()
             refreshAnalysisState()
@@ -1232,6 +1233,7 @@ class IdeClientController(
     private fun updateAnalysis(
         active: EditorSession,
         insertedText: String?,
+        change: EditorChange,
     ) {
         val selected = project ?: return
         if (!active.path.isKotlinSource) return
@@ -1242,6 +1244,7 @@ class IdeClientController(
             active.document.revision,
             insertedText,
             active.document.caretOffset,
+            change,
         )
         refreshAnalysisState()
     }

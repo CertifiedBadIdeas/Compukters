@@ -43,6 +43,8 @@ import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFailureKind
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
+import ru.lazyhat.compukters.ide.editor.EditorChange
+import ru.lazyhat.compukters.ide.editor.EditorChangeOrigin
 import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
@@ -58,6 +60,39 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class IdeAnalysisCoordinatorTest {
+    @Test
+    fun `presentation rebases compatible semantic tokens and drops transient diagnostics`() {
+        val otherPath = VirtualSourcePath.kotlin("src/other.kt")
+        val before = SemanticToken(path(), EditorRange(0, 3), SemanticCategory.Property)
+        val intersecting = SemanticToken(path(), EditorRange(9, 11), SemanticCategory.LocalVariable)
+        val after = SemanticToken(path(), EditorRange(12, 16), SemanticCategory.Function)
+        val other = SemanticToken(otherPath, EditorRange(10, 12), SemanticCategory.Class)
+        val diagnostic = EditorDiagnostic(EditorDiagnosticSeverity.Warning, "pending", path(), EditorRange(0, 3))
+        val presentation = IdeAnalysisPresentation.of(listOf(diagnostic), listOf(before, intersecting, after, other))
+        val change =
+            EditorChange(
+                oldRevision = 0,
+                newRevision = 1,
+                oldRange = EditorRange(10, 12),
+                insertedCodeUnits = 5,
+                oldAffectedLines = 0..0,
+                newAffectedLines = 0..0,
+                origin = EditorChangeOrigin.User,
+            )
+
+        val rebased = presentation.rebase(path(), change)
+
+        assertTrue(rebased.diagnostics.isEmpty())
+        assertEquals(
+            listOf(
+                before,
+                SemanticToken(path(), EditorRange(15, 19), SemanticCategory.Function),
+                other,
+            ),
+            rebased.semanticTokens,
+        )
+    }
+
     @Test
     fun `current presentation overrides lexical style and admits diagnostics`() {
         val fixture = fixture("val answer = 42")
@@ -87,6 +122,82 @@ class IdeAnalysisCoordinatorTest {
         assertEquals(
             IdeHighlightStyle.Lexical(KotlinLexicalKind.Keyword),
             state.presentation.styleAt(path(), 0, KotlinLexicalKind.Keyword),
+        )
+    }
+
+    @Test
+    fun `pending analysis preserves rebased semantic tokens across repeated edits`() {
+        val fixture = fixture("val answer = 42")
+        val initial = fixture.open()
+        val token = SemanticToken(path(), EditorRange(4, 10), SemanticCategory.LocalVariable)
+        val diagnostic = EditorDiagnostic(EditorDiagnosticSeverity.Warning, "unused", path(), token.range)
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Presentation(
+                    initial.identity,
+                    SnapshotPresentation.create(
+                        initial.identity,
+                        mapOf(path() to fixture.text.length),
+                        diagnostics = listOf(diagnostic),
+                        semanticTokens = listOf(token),
+                    ),
+                ),
+            ),
+        )
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Completion.create(
+                    initial.identity,
+                    EditorRange(4, 10),
+                    listOf(CompletionItem("answer", "answer", CompletionKind.Property)),
+                ),
+            ),
+        )
+
+        fixture.coordinator.sourceChanged(
+            fixture.project,
+            path(),
+            "xval answer = 42",
+            documentRevision = 1,
+            insertedText = "x",
+            change = insertion(0, 0, 1),
+        )
+
+        val firstPending = assertIs<IdeAnalysisState.Active>(fixture.coordinator.state())
+        assertEquals(listOf(token.copy(range = EditorRange(5, 11))), firstPending.presentation.semanticTokens)
+        assertTrue(firstPending.presentation.diagnostics.isEmpty())
+        assertNull(firstPending.completion)
+
+        fixture.coordinator.sourceChanged(
+            fixture.project,
+            path(),
+            "yxval answer = 42",
+            documentRevision = 2,
+            insertedText = "y",
+            change = insertion(0, 1, 2),
+        )
+
+        val secondPending = assertIs<IdeAnalysisState.Active>(fixture.coordinator.state())
+        assertEquals(listOf(token.copy(range = EditorRange(6, 12))), secondPending.presentation.semanticTokens)
+
+        val fresh = fixture.requests.snapshots.last()
+        val freshToken = SemanticToken(path(), EditorRange(6, 12), SemanticCategory.Property)
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Presentation(
+                    fresh.identity,
+                    SnapshotPresentation.create(
+                        fresh.identity,
+                        mapOf(path() to fixture.text.length),
+                        semanticTokens = listOf(freshToken),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf(freshToken),
+            assertIs<IdeAnalysisState.Active>(fixture.coordinator.state()).presentation.semanticTokens,
         )
     }
 
@@ -232,6 +343,20 @@ class IdeAnalysisCoordinatorTest {
 
     private fun source(text: String) =
         ProjectSnapshot.of(listOf(ProjectSource(path(), BinaryValue.of(text.encodeToByteArray()))), ANALYSIS_LIMITS)
+
+    private fun insertion(
+        offset: Int,
+        oldRevision: Long,
+        newRevision: Long,
+    ) = EditorChange(
+        oldRevision,
+        newRevision,
+        EditorRange(offset, offset),
+        insertedCodeUnits = 1,
+        oldAffectedLines = 0..0,
+        newAffectedLines = 0..0,
+        origin = EditorChangeOrigin.User,
+    )
 }
 
 private class AnalysisFixture(
