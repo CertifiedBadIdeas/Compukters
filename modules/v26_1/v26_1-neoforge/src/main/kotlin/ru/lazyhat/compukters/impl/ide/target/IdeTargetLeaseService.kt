@@ -23,6 +23,11 @@ import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import java.util.UUID
 
 internal fun interface IdeTargetClaimResolver {
@@ -50,11 +55,20 @@ internal data class IdeResolvedTarget(
     val displayName: String,
     val alive: () -> Boolean,
     val deployment: IdeTargetDeploymentOperations,
+    val terminal: IdeTargetTerminalOperations? = null,
 ) {
     init {
         require(machineIdentity.isNotBlank()) { "machine identity must not be blank" }
     }
 }
+
+internal class IdeTargetTerminalOperations(
+    val machineId: () -> Long?,
+    val fullState: () -> TerminalState?,
+    val changesSince: (Long) -> TerminalUpdate?,
+    val submitKey: (TerminalKey, TerminalKeyAction, Set<TerminalModifier>) -> Boolean,
+    val submitText: (String) -> Boolean,
+)
 
 internal class IdeTargetDeploymentOperations(
     val verifyForDeploy: (ByteArray) -> ProgramDeploymentCandidate?,

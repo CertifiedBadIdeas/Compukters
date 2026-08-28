@@ -37,7 +37,6 @@ import java.util.WeakHashMap
 
 @EventBusSubscriber(modid = MOD_ID)
 object TerminalNetwork {
-    private val inputRateLimiter = TerminalInputRateLimiter(MAXIMUM_INPUT_EVENTS_PER_TICK)
     private val viewers = mutableMapOf<UUID, Viewer>()
 
     fun register(event: RegisterPayloadHandlersEvent) {
@@ -197,7 +196,7 @@ object TerminalNetwork {
         val player = context.player() as? ServerPlayer ?: return
         val viewer = viewers[player.uuid] ?: return
         if (viewer.position != position || viewer.machineId != machineId) return
-        if (!inputRateLimiter.accept(player.uuid, player.level().gameTime)) return
+        if (!TerminalInputAdmission.accept(player.uuid, player.level().server.tickCount.toLong())) return
         val entity = player.computerAt(position) ?: return
         if (entity.terminalMachineId != machineId) return
         input(entity)
@@ -224,6 +223,16 @@ object TerminalNetwork {
     )
 
     private const val MAXIMUM_DISTANCE_SQUARED = 64.0
+}
+
+internal object TerminalInputAdmission {
+    private val limiter = TerminalInputRateLimiter(MAXIMUM_INPUT_EVENTS_PER_TICK)
+
+    fun accept(
+        player: UUID,
+        tick: Long,
+    ): Boolean = limiter.accept(player, tick)
+
     private const val MAXIMUM_INPUT_EVENTS_PER_TICK = 64
 }
 
