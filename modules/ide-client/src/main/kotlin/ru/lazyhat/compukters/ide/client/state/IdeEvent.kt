@@ -18,9 +18,9 @@
 
 package ru.lazyhat.compukters.ide.client.state
 
-import ru.lazyhat.compukters.ide.client.controller.IdeClientTooling
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.build.IdeResolveResult
+import ru.lazyhat.compukters.ide.client.controller.IdeClientTooling
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
 import ru.lazyhat.compukters.ide.client.workspace.IdeMutationRequest

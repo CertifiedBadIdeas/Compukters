@@ -192,7 +192,10 @@ class IdeTargetCoordinator(
                 lastHeartbeatMillis = clock.nowMillis().coerceAtLeast(0)
                 current = IdeTargetState.Attached(result.target)
             }
-            is IdeAttachResult.Rejected -> current = IdeTargetState.Failed(null, result.failure)
+
+            is IdeAttachResult.Rejected -> {
+                current = IdeTargetState.Failed(null, result.failure)
+            }
         }
     }
 
@@ -218,7 +221,10 @@ class IdeTargetCoordinator(
             return
         }
         when (result) {
-            is IdeVerifyResult.Failed -> current = IdeTargetState.Failed(event.target, result.failure)
+            is IdeVerifyResult.Failed -> {
+                current = IdeTargetState.Failed(event.target, result.failure)
+            }
+
             is IdeVerifyResult.Verified -> {
                 if (!result.ticket.matches(event.target, event.artifact)) {
                     cachedTicket = null
@@ -227,9 +233,11 @@ class IdeTargetCoordinator(
                 }
                 cachedTicket = result.ticket
                 when (val intent = event.intent) {
-                    VerificationIntent.VerifyOnly ->
+                    VerificationIntent.VerifyOnly -> {
                         current = IdeTargetState.Verified(event.target, event.artifact.hash)
-                    is VerificationIntent.Deploy ->
+                    }
+
+                    is VerificationIntent.Deploy -> {
                         beginObservation(
                             event.target,
                             event.artifact,
@@ -238,6 +246,7 @@ class IdeTargetCoordinator(
                             intent.launch,
                             event.operationGeneration,
                         )
+                    }
                 }
             }
         }
@@ -250,7 +259,10 @@ class IdeTargetCoordinator(
             return
         }
         when (result) {
-            is IdeRevisionResult.Failed -> current = IdeTargetState.Failed(event.pending.target, result.failure)
+            is IdeRevisionResult.Failed -> {
+                current = IdeTargetState.Failed(event.pending.target, result.failure)
+            }
+
             is IdeRevisionResult.Observed -> {
                 val revision = result.revision
                 if (revision is IdeExecutableRevision.Present && approvedRevisions[event.pending.path] != revision) {
@@ -281,10 +293,12 @@ class IdeTargetCoordinator(
                     IdeLaunchStrategy.CanonicalInput -> beginSubmission(deployed, event.operationGeneration)
                 }
             }
+
             is IdeDeployResult.Failed -> {
                 if (!result.retryable) cachedTicket = null
                 current = IdeTargetState.Failed(event.pending.target, result.failure)
             }
+
             is IdeDeployResult.StaleRevision -> {
                 val actual = result.actual
                 if (actual is IdeExecutableRevision.Present) {
@@ -310,14 +324,17 @@ class IdeTargetCoordinator(
         }
         current =
             when (result) {
-                IdeSubmissionResult.Submitted ->
+                IdeSubmissionResult.Submitted -> {
                     IdeTargetState.CommandSubmitted(
                         event.deployed.target,
                         event.deployed.path,
                         event.deployed.revision,
                     )
-                is IdeSubmissionResult.Failed ->
+                }
+
+                is IdeSubmissionResult.Failed -> {
                     IdeTargetState.Failed(event.deployed.target, result.failure, event.deployed)
+                }
             }
     }
 
@@ -453,8 +470,7 @@ class IdeTargetCoordinator(
     private fun protocolFailure(detail: String = "Target event queue overflow"): IdeTargetFailure =
         IdeTargetFailure(IdeTargetFailureKind.Protocol, detail)
 
-    private fun unsupportedFailure(detail: String): IdeTargetFailure =
-        IdeTargetFailure(IdeTargetFailureKind.Unsupported, detail)
+    private fun unsupportedFailure(detail: String): IdeTargetFailure = IdeTargetFailure(IdeTargetFailureKind.Unsupported, detail)
 
     private data class PendingDeployment(
         val target: IdeAttachedTarget,

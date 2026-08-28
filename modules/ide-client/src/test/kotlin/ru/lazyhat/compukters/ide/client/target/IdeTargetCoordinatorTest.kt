@@ -107,7 +107,10 @@ class IdeTargetCoordinatorTest {
 
         fixture.coordinator.verify(artifact)
         assertIs<IdeTargetState.Uploading>(fixture.coordinator.state())
-        fixture.port.verifications.single().future.complete(IdeVerifyResult.Verified(ticket))
+        fixture.port.verifications
+            .single()
+            .future
+            .complete(IdeVerifyResult.Verified(ticket))
         fixture.coordinator.tick()
         assertEquals(IdeTargetState.Verified(target(), artifact.hash), fixture.coordinator.state())
         assertEquals(0, fixture.port.revisions.size)
@@ -115,7 +118,10 @@ class IdeTargetCoordinatorTest {
 
         fixture.coordinator.deploy(artifact, path)
         assertEquals(1, fixture.port.verifications.size)
-        fixture.port.revisions.single().future.complete(IdeRevisionResult.Observed(IdeExecutableRevision.Absent))
+        fixture.port.revisions
+            .single()
+            .future
+            .complete(IdeRevisionResult.Observed(IdeExecutableRevision.Absent))
         fixture.coordinator.tick()
         val deployment = fixture.port.deployments.single()
         assertSame(ticket, deployment.ticket)
@@ -136,7 +142,10 @@ class IdeTargetCoordinatorTest {
         val path = IdeDeploymentPath.fromProgramName("hello")
 
         fixture.coordinator.deploy(artifact, path)
-        fixture.port.verifications.single().future.complete(IdeVerifyResult.Verified(ticket(artifact = artifact)))
+        fixture.port.verifications
+            .single()
+            .future
+            .complete(IdeVerifyResult.Verified(ticket(artifact = artifact)))
         fixture.coordinator.tick()
         fixture.port.revisions.single().future.complete(
             IdeRevisionResult.Observed(IdeExecutableRevision.Present(4)),
@@ -149,7 +158,12 @@ class IdeTargetCoordinatorTest {
         assertEquals(0, fixture.port.deployments.size)
 
         fixture.coordinator.confirmDeployment()
-        assertEquals(IdeExecutableRevision.Present(4), fixture.port.deployments.single().expected)
+        assertEquals(
+            IdeExecutableRevision.Present(4),
+            fixture.port.deployments
+                .single()
+                .expected,
+        )
         fixture.port.deployments.single().future.complete(
             IdeDeployResult.StaleRevision(IdeExecutableRevision.Present(5)),
         )
@@ -160,7 +174,12 @@ class IdeTargetCoordinatorTest {
         )
 
         fixture.coordinator.confirmDeployment()
-        assertEquals(IdeExecutableRevision.Present(5), fixture.port.deployments.last().expected)
+        assertEquals(
+            IdeExecutableRevision.Present(5),
+            fixture.port.deployments
+                .last()
+                .expected,
+        )
     }
 
     @Test
@@ -168,7 +187,10 @@ class IdeTargetCoordinatorTest {
         val fixture = attachedFixture()
         val artifact = artifact()
         fixture.coordinator.deploy(artifact, IdeDeploymentPath.fromProgramName("hello"))
-        fixture.port.verifications.single().future.complete(IdeVerifyResult.Verified(ticket(artifact = artifact)))
+        fixture.port.verifications
+            .single()
+            .future
+            .complete(IdeVerifyResult.Verified(ticket(artifact = artifact)))
         fixture.coordinator.tick()
         fixture.port.revisions.single().future.complete(
             IdeRevisionResult.Observed(IdeExecutableRevision.Present(4)),
@@ -187,9 +209,15 @@ class IdeTargetCoordinatorTest {
         val artifact = artifact()
         val path = IdeDeploymentPath.fromProgramName("hello")
         fixture.coordinator.deploy(artifact, path)
-        fixture.port.verifications.single().future.complete(IdeVerifyResult.Verified(ticket(artifact = artifact)))
+        fixture.port.verifications
+            .single()
+            .future
+            .complete(IdeVerifyResult.Verified(ticket(artifact = artifact)))
         fixture.coordinator.tick()
-        fixture.port.revisions.single().future.complete(IdeRevisionResult.Observed(IdeExecutableRevision.Absent))
+        fixture.port.revisions
+            .single()
+            .future
+            .complete(IdeRevisionResult.Observed(IdeExecutableRevision.Absent))
         fixture.coordinator.tick()
         fixture.port.deployments.single().future.complete(
             IdeDeployResult.Failed(failure(IdeTargetFailureKind.Timeout), retryable = true),
@@ -198,7 +226,10 @@ class IdeTargetCoordinatorTest {
 
         fixture.coordinator.deploy(artifact, path)
         assertEquals(1, fixture.port.verifications.size)
-        fixture.port.revisions.last().future.complete(IdeRevisionResult.Observed(IdeExecutableRevision.Absent))
+        fixture.port.revisions
+            .last()
+            .future
+            .complete(IdeRevisionResult.Observed(IdeExecutableRevision.Absent))
         fixture.coordinator.tick()
         fixture.port.deployments.last().future.complete(
             IdeDeployResult.Deployed(IdeExecutableRevision.Present(1)),
@@ -244,9 +275,15 @@ class IdeTargetCoordinatorTest {
         val path = IdeDeploymentPath.fromProgramName("hello")
 
         fixture.coordinator.run(artifact, path)
-        fixture.port.verifications.single().future.complete(IdeVerifyResult.Verified(ticket(artifact = artifact)))
+        fixture.port.verifications
+            .single()
+            .future
+            .complete(IdeVerifyResult.Verified(ticket(artifact = artifact)))
         fixture.coordinator.tick()
-        fixture.port.revisions.single().future.complete(IdeRevisionResult.Observed(IdeExecutableRevision.Absent))
+        fixture.port.revisions
+            .single()
+            .future
+            .complete(IdeRevisionResult.Observed(IdeExecutableRevision.Absent))
         fixture.coordinator.tick()
         fixture.port.deployments.single().future.complete(
             IdeDeployResult.Deployed(IdeExecutableRevision.Present(7)),
@@ -273,9 +310,15 @@ class IdeTargetCoordinatorTest {
         val artifact = artifact()
         val path = IdeDeploymentPath.fromProgramName("hello")
         fixture.coordinator.run(artifact, path)
-        fixture.port.verifications.single().future.complete(IdeVerifyResult.Verified(ticket(artifact = artifact)))
+        fixture.port.verifications
+            .single()
+            .future
+            .complete(IdeVerifyResult.Verified(ticket(artifact = artifact)))
         fixture.coordinator.tick()
-        fixture.port.revisions.single().future.complete(IdeRevisionResult.Observed(IdeExecutableRevision.Absent))
+        fixture.port.revisions
+            .single()
+            .future
+            .complete(IdeRevisionResult.Observed(IdeExecutableRevision.Absent))
         fixture.coordinator.tick()
         fixture.port.deployments.single().future.complete(
             IdeDeployResult.Deployed(IdeExecutableRevision.Present(7)),
@@ -332,8 +375,7 @@ private class ControlledTargetPort : IdeTargetPort {
     val deployments = mutableListOf<DeploymentCall>()
     val submissions = mutableListOf<SubmissionCall>()
 
-    fun nextAttach(): CompletableFuture<IdeAttachResult> =
-        CompletableFuture<IdeAttachResult>().also(attachFutures::addLast)
+    fun nextAttach(): CompletableFuture<IdeAttachResult> = CompletableFuture<IdeAttachResult>().also(attachFutures::addLast)
 
     override fun attach(claim: IdeTargetClaim): CompletableFuture<IdeAttachResult> = attachFutures.removeFirst()
 
@@ -354,8 +396,7 @@ private class ControlledTargetPort : IdeTargetPort {
     override fun executableRevision(
         target: IdeAttachedTarget,
         path: IdeDeploymentPath,
-    ): CompletableFuture<IdeRevisionResult> =
-        CompletableFuture<IdeRevisionResult>().also { revisions += RevisionCall(target, path, it) }
+    ): CompletableFuture<IdeRevisionResult> = CompletableFuture<IdeRevisionResult>().also { revisions += RevisionCall(target, path, it) }
 
     override fun deploy(
         target: IdeAttachedTarget,

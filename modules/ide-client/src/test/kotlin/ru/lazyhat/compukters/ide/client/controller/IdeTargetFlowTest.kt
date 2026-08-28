@@ -77,9 +77,21 @@ class IdeTargetFlowTest {
             ClientBuildResult.Success(compiling.identity, BinaryValue.of(byteArrayOf(7, 8)), hash(8), cacheHit = false),
         )
         fixture.tickUntil { fixture.port.verifications.size == 1 }
-        assertContentEquals(byteArrayOf(7, 8), fixture.port.verifications.single().artifact.bytes())
+        assertContentEquals(
+            byteArrayOf(7, 8),
+            fixture.port.verifications
+                .single()
+                .artifact
+                .bytes(),
+        )
         fixture.port.verifications.single().future.complete(
-            IdeVerifyResult.Verified(ticket(fixture.port.verifications.single().artifact)),
+            IdeVerifyResult.Verified(
+                ticket(
+                    fixture.port.verifications
+                        .single()
+                        .artifact,
+                ),
+            ),
         )
         fixture.controller.tick()
 
@@ -102,16 +114,42 @@ class IdeTargetFlowTest {
             ClientBuildResult.Success(compiling.identity, BinaryValue.of(byteArrayOf(3)), hash(3), cacheHit = false),
         )
         fixture.tickUntil { fixture.port.verifications.size == 1 }
-        val artifact = fixture.port.verifications.single().artifact
-        fixture.port.verifications.single().future.complete(IdeVerifyResult.Verified(ticket(artifact)))
+        val artifact =
+            fixture.port.verifications
+                .single()
+                .artifact
+        fixture.port.verifications
+            .single()
+            .future
+            .complete(IdeVerifyResult.Verified(ticket(artifact)))
         fixture.controller.tick()
-        fixture.port.revisions.single().future.complete(IdeRevisionResult.Observed(IdeExecutableRevision.Absent))
+        fixture.port.revisions
+            .single()
+            .future
+            .complete(IdeRevisionResult.Observed(IdeExecutableRevision.Absent))
         fixture.controller.tick()
-        assertEquals("/home/demo", fixture.port.deployments.single().path.value)
-        fixture.port.deployments.single().future.complete(IdeDeployResult.Deployed(IdeExecutableRevision.Present(1)))
+        assertEquals(
+            "/home/demo",
+            fixture.port.deployments
+                .single()
+                .path.value,
+        )
+        fixture.port.deployments
+            .single()
+            .future
+            .complete(IdeDeployResult.Deployed(IdeExecutableRevision.Present(1)))
         fixture.controller.tick()
-        assertEquals("/home/demo", fixture.port.submissions.single().line.concatToString())
-        fixture.port.submissions.single().future.complete(IdeSubmissionResult.Submitted)
+        assertEquals(
+            "/home/demo",
+            fixture.port.submissions
+                .single()
+                .line
+                .concatToString(),
+        )
+        fixture.port.submissions
+            .single()
+            .future
+            .complete(IdeSubmissionResult.Submitted)
         fixture.controller.tick()
 
         assertIs<IdeTargetState.CommandSubmitted>(fixture.controller.viewState().target)
@@ -148,8 +186,14 @@ class IdeTargetFlowTest {
             ClientBuildResult.Success(compiling.identity, BinaryValue.of(byteArrayOf(1)), hash(1), cacheHit = false),
         )
         fixture.tickUntil { fixture.port.verifications.size == 1 }
-        val artifact = fixture.port.verifications.single().artifact
-        fixture.port.verifications.single().future.complete(IdeVerifyResult.Verified(ticket(artifact)))
+        val artifact =
+            fixture.port.verifications
+                .single()
+                .artifact
+        fixture.port.verifications
+            .single()
+            .future
+            .complete(IdeVerifyResult.Verified(ticket(artifact)))
         fixture.controller.tick()
         fixture.port.revisions.single().future.complete(
             IdeRevisionResult.Observed(IdeExecutableRevision.Present(2)),
@@ -266,10 +310,25 @@ private class TargetPort : IdeTargetPort {
 
     override fun detach(target: IdeAttachedTarget) = CompletableFuture.completedFuture(Unit)
 
-    data class Verification(val artifact: IdeTargetArtifact, val future: CompletableFuture<IdeVerifyResult>)
-    data class Revision(val path: IdeDeploymentPath, val future: CompletableFuture<IdeRevisionResult>)
-    data class Deployment(val path: IdeDeploymentPath, val future: CompletableFuture<IdeDeployResult>)
-    data class Submission(val line: CharArray, val future: CompletableFuture<IdeSubmissionResult>)
+    data class Verification(
+        val artifact: IdeTargetArtifact,
+        val future: CompletableFuture<IdeVerifyResult>,
+    )
+
+    data class Revision(
+        val path: IdeDeploymentPath,
+        val future: CompletableFuture<IdeRevisionResult>,
+    )
+
+    data class Deployment(
+        val path: IdeDeploymentPath,
+        val future: CompletableFuture<IdeDeployResult>,
+    )
+
+    data class Submission(
+        val line: CharArray,
+        val future: CompletableFuture<IdeSubmissionResult>,
+    )
 }
 
 private fun buildCoordinator(

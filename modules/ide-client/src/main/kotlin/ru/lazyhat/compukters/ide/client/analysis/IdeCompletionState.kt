@@ -72,10 +72,17 @@ data class IdeCompletionState private constructor(
         val selected = index.coerceIn(0, items.lastIndex.toLong()).toInt()
         val first =
             when {
-                selected < firstVisibleIndex -> selected
-                selected >= firstVisibleIndex + IDE_COMPLETION_VISIBLE_ROWS ->
+                selected < firstVisibleIndex -> {
+                    selected
+                }
+
+                selected >= firstVisibleIndex + IDE_COMPLETION_VISIBLE_ROWS -> {
                     selected - IDE_COMPLETION_VISIBLE_ROWS + 1
-                else -> firstVisibleIndex
+                }
+
+                else -> {
+                    firstVisibleIndex
+                }
             }
         return copy(selectedIndex = selected, firstVisibleIndex = first)
     }

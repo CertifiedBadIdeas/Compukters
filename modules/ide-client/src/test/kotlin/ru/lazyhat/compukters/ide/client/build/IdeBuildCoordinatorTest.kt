@@ -147,7 +147,13 @@ class IdeBuildCoordinatorTest {
                 fixture.limits,
             )
 
-        val resolve = fixture.coordinator.resolve(fixture.input(lock = null), updateExisting = false, target = mismatched).get(5, TimeUnit.SECONDS)
+        val resolve =
+            fixture.coordinator
+                .resolve(
+                    fixture.input(lock = null),
+                    updateExisting = false,
+                    target = mismatched,
+                ).get(5, TimeUnit.SECONDS)
         assertIs<IdeResolveResult.Failed>(resolve)
         assertFalse(fixture.lockPath.toFile().exists())
 

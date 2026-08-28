@@ -44,8 +44,8 @@ import ru.lazyhat.compukters.ide.client.state.IdePageState
 import ru.lazyhat.compukters.ide.client.state.IdeProblem
 import ru.lazyhat.compukters.ide.client.state.IdeProblemSeverity
 import ru.lazyhat.compukters.ide.client.state.IdeProjectSummary
-import ru.lazyhat.compukters.ide.client.state.IdeViewState
 import ru.lazyhat.compukters.ide.client.state.IdeToolingState
+import ru.lazyhat.compukters.ide.client.state.IdeViewState
 import ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
@@ -253,11 +253,17 @@ class IdeClientController(
                 requestBuildAction(IdeBuildAction.Build)
             }
 
-            IdeCommand.Verify -> requestBuildAction(IdeBuildAction.Verify)
+            IdeCommand.Verify -> {
+                requestBuildAction(IdeBuildAction.Verify)
+            }
 
-            IdeCommand.Deploy -> requestBuildAction(IdeBuildAction.Deploy)
+            IdeCommand.Deploy -> {
+                requestBuildAction(IdeBuildAction.Deploy)
+            }
 
-            IdeCommand.Run -> requestBuildAction(IdeBuildAction.Run)
+            IdeCommand.Run -> {
+                requestBuildAction(IdeBuildAction.Run)
+            }
 
             IdeCommand.ConfirmTargetDeployment -> {
                 if (state.dialog is IdeDialogState.TargetOverwrite) {
@@ -801,17 +807,18 @@ class IdeClientController(
             IdeBuildAction.Resolve,
             IdeBuildAction.UpdateLock,
             -> {
-                coordinator.resolve(
-                    event.input,
-                    updateExisting = event.action == IdeBuildAction.UpdateLock,
-                    target = event.target?.compileProfile,
-                ).whenComplete {
-                    result,
-                    failure,
-                    ->
-                    val mapped = if (failure == null) result else IdeResolveResult.Failed(failure.message ?: "resolve failed")
-                    enqueue(IdeEvent.ResolveCompleted(event.generation, event.operationId, mapped))
-                }
+                coordinator
+                    .resolve(
+                        event.input,
+                        updateExisting = event.action == IdeBuildAction.UpdateLock,
+                        target = event.target?.compileProfile,
+                    ).whenComplete {
+                        result,
+                        failure,
+                        ->
+                        val mapped = if (failure == null) result else IdeResolveResult.Failed(failure.message ?: "resolve failed")
+                        enqueue(IdeEvent.ResolveCompleted(event.generation, event.operationId, mapped))
+                    }
             }
         }
     }
@@ -1277,8 +1284,14 @@ class IdeClientController(
                     (state.dialog == null || state.dialog is IdeDialogState.TargetOverwrite) -> {
                     IdeDialogState.TargetOverwrite(current.path, current.revision)
                 }
-                current !is IdeTargetState.ConfirmationRequired && state.dialog is IdeDialogState.TargetOverwrite -> null
-                else -> state.dialog
+
+                current !is IdeTargetState.ConfirmationRequired && state.dialog is IdeDialogState.TargetOverwrite -> {
+                    null
+                }
+
+                else -> {
+                    state.dialog
+                }
             }
         if (state.target != current || state.dialog != dialog) state = state.copy(dialog = dialog, target = current)
     }
@@ -1449,17 +1462,29 @@ private fun IdeEvent.generationOrNull(): Long? =
         -> null
 
         is IdeEvent.ProjectCatalogLoaded -> generation
+
         is IdeEvent.BuildInputLoaded -> generation
+
         is IdeEvent.BuildStateChanged -> generation
+
         is IdeEvent.ResolveCompleted -> generation
+
         is IdeEvent.ProjectOpened -> generation
+
         is IdeEvent.FileOpened -> generation
+
         is IdeEvent.SaveCompleted -> generation
+
         is IdeEvent.DeleteAdmitted -> generation
+
         is IdeEvent.MutationCompleted -> generation
+
         is IdeEvent.CatalogLoaded -> generation
+
         is IdeEvent.PollCompleted -> generation
+
         is IdeEvent.BuildCompleted -> generation
+
         is IdeEvent.Failed -> generation
     }
 

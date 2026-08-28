@@ -256,7 +256,10 @@ class IdeBuildCoordinator(
             throw BuildPreparationFailure(IdeBuildFailureKind.UnsatisfiedProfile, "project lock does not match the local profile")
         }
         val profile =
-            when (val resolved = target?.let { services.profileResolver.resolveTarget(lock, it) } ?: services.profileResolver.resolveLocal(lock)) {
+            when (
+                val resolved =
+                    target?.let { services.profileResolver.resolveTarget(lock, it) } ?: services.profileResolver.resolveLocal(lock)
+            ) {
                 is ProfileResolution.Resolved -> {
                     resolved.profile
                 }

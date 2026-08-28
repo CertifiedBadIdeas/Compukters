@@ -19,8 +19,8 @@
 package ru.lazyhat.compukters.ide.client.state
 
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
-import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
+import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectTree
