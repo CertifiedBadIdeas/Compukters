@@ -12,8 +12,15 @@
 
 package ru.lazyhat.compukters.impl.ide
 
+import net.minecraft.client.input.CharacterEvent
+import net.minecraft.client.input.KeyEvent
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetReference
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalClient
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState
 import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
+import ru.lazyhat.compukters.impl.terminal.TerminalInput
 import ru.lazyhat.compukters.impl.terminal.TerminalProtocol
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 
 internal data class IdeTerminalOverlayGeometry(
     val panel: IdeRect,
@@ -96,5 +103,87 @@ internal data class IdeTerminalOverlayGeometry(
         private const val SHADOW_WIDTH = 2
         private const val MESSAGE_PADDING = 8
         private const val UNSUPPORTED_MESSAGE = "Viewport is too small for the target terminal"
+    }
+}
+
+internal class IdeTerminalOverlayController(
+    private val client: IdeTargetTerminalClient,
+) {
+    private val pressedKeys = mutableSetOf<Int>()
+
+    var visible: Boolean = false
+        private set
+
+    var focused: Boolean = false
+        private set
+
+    fun state(): IdeTargetTerminalState = client.state()
+
+    fun setTarget(target: IdeTargetReference?) {
+        client.setTarget(target)
+        if (target == null) hide()
+    }
+
+    fun toggle() {
+        if (visible) hide() else show()
+    }
+
+    fun show() {
+        visible = true
+        focused = true
+        client.setVisible(true)
+    }
+
+    fun hide() {
+        visible = false
+        focused = false
+        pressedKeys.clear()
+        client.setVisible(false)
+    }
+
+    fun focus() {
+        if (!visible) return
+        focused = true
+    }
+
+    fun focusLost() {
+        focused = false
+        pressedKeys.clear()
+    }
+
+    fun retry(): Boolean {
+        val failed = client.state() as? IdeTargetTerminalState.Failed ?: return false
+        if (!failed.retryable) return false
+        client.setVisible(true)
+        focused = true
+        return true
+    }
+
+    fun keyPressed(
+        event: KeyEvent,
+        clipboard: String,
+    ): Boolean {
+        if (!visible || !focused) return false
+        if (event.isPaste) {
+            val text = TerminalInput.boundedText(clipboard)
+            if (text.isNotEmpty()) client.sendText(text)
+            return true
+        }
+        val key = TerminalInput.key(event.key(), event.modifiers()) ?: return false
+        val action = if (pressedKeys.add(event.key())) TerminalKeyAction.PRESS else TerminalKeyAction.REPEAT
+        client.sendKey(key, action, TerminalInput.modifiers(event.modifiers()))
+        return true
+    }
+
+    fun keyReleased(keyCode: Int): Boolean {
+        if (!visible || !focused) return false
+        return pressedKeys.remove(keyCode) || TerminalInput.isMappedKeyCode(keyCode)
+    }
+
+    fun charTyped(event: CharacterEvent): Boolean {
+        if (!visible || !focused) return false
+        val text = TerminalInput.boundedText(event.codepointAsString())
+        if (text.isNotEmpty()) client.sendText(text)
+        return true
     }
 }

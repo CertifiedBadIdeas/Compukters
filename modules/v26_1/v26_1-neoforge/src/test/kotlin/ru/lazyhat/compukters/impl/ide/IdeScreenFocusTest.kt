@@ -19,19 +19,72 @@
 package ru.lazyhat.compukters.impl.ide
 
 import net.minecraft.client.input.CharacterEvent
+import net.minecraft.client.input.KeyEvent
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload
+import org.lwjgl.glfw.GLFW
+import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
 import ru.lazyhat.compukters.ide.client.state.IdeProjectSummary
 import ru.lazyhat.compukters.ide.client.state.IdeViewState
+import ru.lazyhat.compukters.ide.client.target.IdeTargetId
+import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetReference
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalClient
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalTransport
+import ru.lazyhat.compukters.impl.ide.target.IdeTerminalKeyPayload
+import ru.lazyhat.compukters.impl.ide.target.IdeTerminalOpenedPayload
 import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class IdeScreenFocusTest {
+    @Test
+    fun `terminal focus captures control shortcuts while editor focus keeps IDE commands`() {
+        val transport = RecordingTerminalTransport()
+        val terminal = IdeTargetTerminalClient(transport)
+        val overlay = IdeTerminalOverlayController(terminal)
+        val commands = mutableListOf<IdeCommand>()
+        val input = IdeInputAdapter(commands::add, IdeClipboard { "" }, IdeClientLimits())
+        overlay.setTarget(IdeTargetReference(IdeTargetId("target"), IdeTargetProfileId(Hash256.zero())))
+        overlay.show()
+        terminal.accept(IdeTerminalOpenedPayload(1, TOKEN, 7, terminalState()))
+
+        assertTrue(overlay.keyPressed(KeyEvent(GLFW.GLFW_KEY_S, 0, GLFW.GLFW_MOD_CONTROL), ""))
+        assertEquals(TerminalKey.S, (transport.sent.last() as IdeTerminalKeyPayload).key)
+        assertTrue(commands.isEmpty())
+
+        overlay.focusLost()
+        assertTrue(input.keyPressed(KeyEvent(GLFW.GLFW_KEY_S, 0, GLFW.GLFW_MOD_CONTROL), IdeFocusState.Editor))
+        assertEquals(listOf<IdeCommand>(IdeCommand.Save), commands)
+    }
+
+    @Test
+    fun `escape text and paste stay inside a focused visible terminal`() {
+        val transport = RecordingTerminalTransport()
+        val terminal = IdeTargetTerminalClient(transport)
+        val overlay = IdeTerminalOverlayController(terminal)
+        overlay.setTarget(IdeTargetReference(IdeTargetId("target"), IdeTargetProfileId(Hash256.zero())))
+        overlay.show()
+        terminal.accept(IdeTerminalOpenedPayload(1, TOKEN, 7, terminalState()))
+
+        assertTrue(overlay.keyPressed(KeyEvent(GLFW.GLFW_KEY_ESCAPE, 0, 0), ""))
+        assertTrue(overlay.charTyped(CharacterEvent('x'.code)))
+        assertTrue(overlay.keyPressed(KeyEvent(GLFW.GLFW_KEY_V, 0, GLFW.GLFW_MOD_CONTROL), "paste"))
+        assertTrue(overlay.visible)
+
+        overlay.hide()
+        assertTrue(!overlay.charTyped(CharacterEvent('y'.code)))
+    }
     @Test
     fun `initial IDE focus routes character input to the editor`() {
         val commands = mutableListOf<IdeCommand>()
@@ -60,5 +113,27 @@ class IdeScreenFocusTest {
         assertTrue(ordinaryTargets.all { !it.enabled })
         assertTrue(dialogTargets.minOf { it.zIndex } > ordinaryTargets.maxOf { it.zIndex })
         assertTrue(model.text.filter { it.kind == IdeTextKind.Dialog }.any { it.value == "Permanent" })
+    }
+
+    private class RecordingTerminalTransport : IdeTargetTerminalTransport {
+        val sent = mutableListOf<CustomPacketPayload>()
+
+        override fun send(payload: CustomPacketPayload) {
+            sent += payload
+        }
+    }
+
+    private companion object {
+        val TOKEN: UUID = UUID.fromString("d3354610-5460-4546-8546-000000000001")
+
+        fun terminalState() =
+            TerminalState(
+                1,
+                51,
+                19,
+                List(51 * 19) { TerminalCell(' '.code, 15, 0) },
+                TerminalPosition(0, 0),
+                true,
+            )
     }
 }
