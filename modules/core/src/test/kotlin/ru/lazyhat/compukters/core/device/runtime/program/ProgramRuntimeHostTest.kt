@@ -345,6 +345,21 @@ class ProgramRuntimeHostTest {
     }
 
     @Test
+    fun `canonical line wakes a runtime waiting for input`() {
+        val session =
+            ScriptedSession(
+                outcomes = listOf(VmOutcome.WaitingForTerminalEvent, VmOutcome.Halted(VmValue.I32(0))),
+            )
+        val host = host(session, ProgramTickBudget(8, 4, 1))
+        host.start(byteArrayOf(1))
+
+        assertEquals(ProgramRuntimeState.WaitingForInput, host.serverTick())
+        assertTrue(host.submitCanonicalLine("/home/demo".toCharArray()))
+        assertEquals(ProgramRuntimeState.Halted(VmValue.I32(0)), host.serverTick())
+        assertEquals(listOf("/home/demo"), session.canonicalLines)
+    }
+
+    @Test
     fun `typed creation failures never publish running`() {
         val cases =
             listOf(

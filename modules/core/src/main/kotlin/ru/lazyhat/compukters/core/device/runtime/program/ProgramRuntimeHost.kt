@@ -284,7 +284,9 @@ class ProgramRuntimeHost internal constructor(
     fun submitCanonicalLine(line: CharArray): Boolean {
         val activeSession = session ?: return false
         deploymentOperation(activeSession) { submitCanonicalLine(line.copyOf()) }
-        return session === activeSession
+        if (session !== activeSession) return false
+        if (state == ProgramRuntimeState.WaitingForInput) state = ProgramRuntimeState.Running
+        return true
     }
 
     fun shutdown() {
