@@ -18,18 +18,31 @@
 
 package ru.lazyhat.compukters.impl.ide
 
+import net.minecraft.client.input.CharacterEvent
+import ru.lazyhat.compukters.ide.client.IdeClientLimits
+import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
+import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
 import ru.lazyhat.compukters.ide.client.state.IdeProjectSummary
 import ru.lazyhat.compukters.ide.client.state.IdeViewState
 import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class IdeScreenFocusTest {
     @Test
-    fun `IDE screen owns initial and mouse focus policy`() {
-        assertNotNull(IdeScreen::class.java.declaredMethods.singleOrNull { it.name == "setInitialFocus" && it.parameterCount == 0 })
+    fun `initial IDE focus routes character input to the editor`() {
+        val commands = mutableListOf<IdeCommand>()
+        val input = IdeInputAdapter(commands::add, IdeClipboard { "" }, IdeClientLimits())
+
+        assertTrue(input.charTyped(CharacterEvent('x'.code), IdeFocusState.Initial))
+        assertEquals(listOf<IdeCommand>(IdeCommand.Edit(IdeEditorInput.Type("x"))), commands)
+    }
+
+    @Test
+    fun `IDE screen owns mouse focus policy`() {
         assertNotNull(IdeScreen::class.java.declaredMethods.singleOrNull { it.name == "mouseClicked" && it.parameterCount == 2 })
     }
 
