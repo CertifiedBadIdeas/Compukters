@@ -76,6 +76,7 @@ class LegacyImplementationRemovalTest {
                 "modules/v26_1/v26_1-neoforge/src/main/resources/assets/compukters/textures/item/terminal_side.png",
                 "modules/v26_1/v26_1-neoforge/src/main/resources/" + "compukter" + "craft.mixins.json",
                 "vendor/ui-dsl",
+                "host/compukter-ffi",
                 "host/compukter-jni",
             )
 
@@ -191,9 +192,11 @@ class LegacyImplementationRemovalTest {
                 val relative = path.relativize(candidate).invariantSeparatorsPathString
                 !(
                     relative.startsWith("build/") ||
+                        relative.startsWith("target/") ||
                         relative.startsWith(".gradle/") ||
                         relative.startsWith(".gradle-sandbox/") ||
                         relative.contains("/build/") ||
+                        relative.contains("/target/") ||
                         relative.contains("/.gradle/") ||
                         relative.contains("/.gradle-sandbox/")
                 )

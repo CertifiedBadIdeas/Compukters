@@ -12,8 +12,7 @@ Compukters product code uses the root package `ru.lazyhat.compukters`. New code 
 - `playground` owns the standalone compiler-and-VM executable used outside Minecraft.
 - `v26_1-common` owns loader-independent Minecraft 26.1 adapters.
 - `v26_1-neoforge` owns NeoForge 26.1 bootstrap, registration, resources, and loader-specific adapters.
-- `host/compukter-vm` owns verification, interpretation, memory management, quotas, and VM execution.
-- `host/compukter-ffi` owns the versioned C ABI and opaque machine-handle adapter.
+- `host/compukter-vm` owns verification, interpretation, memory management, quotas, VM execution, and the versioned C ABI in its `ffi` workspace member.
 
 ## Placement rules
 
