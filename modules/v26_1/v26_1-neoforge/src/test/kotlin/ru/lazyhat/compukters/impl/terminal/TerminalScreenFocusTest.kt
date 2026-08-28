@@ -41,4 +41,14 @@ class TerminalScreenFocusTest {
 
         assertNotNull(mouseClicked, "TerminalScreen must clear widget focus after mouse interaction")
     }
+
+    @Test
+    fun `terminal screen owns IDE opening action`() {
+        val openIde =
+            TerminalScreen::class.java.declaredMethods.singleOrNull {
+                it.name == "openIde" && it.parameterCount == 0
+            }
+
+        assertNotNull(openIde, "TerminalScreen must expose the IDE button through its own action")
+    }
 }

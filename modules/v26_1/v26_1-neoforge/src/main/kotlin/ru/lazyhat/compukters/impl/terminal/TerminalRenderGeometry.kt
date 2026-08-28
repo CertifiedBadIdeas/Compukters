@@ -73,6 +73,13 @@ class TerminalRenderGeometry(
             panel.right - PANEL_PADDING,
             panel.top + (TITLE_HEIGHT - FONT_BUTTON_HEIGHT) / 2 + FONT_BUTTON_HEIGHT,
         )
+    val ideButton: TerminalRect =
+        TerminalRect(
+            fontButton.left - TITLE_BUTTON_GAP - IDE_BUTTON_WIDTH,
+            fontButton.top,
+            fontButton.left - TITLE_BUTTON_GAP,
+            fontButton.bottom,
+        )
 
     fun cell(
         x: Int,
@@ -102,6 +109,8 @@ class TerminalRenderGeometry(
         const val TITLE_TOP = 5
         private const val FONT_BUTTON_WIDTH = 96
         private const val FONT_BUTTON_HEIGHT = 14
+        private const val IDE_BUTTON_WIDTH = 76
+        private const val TITLE_BUTTON_GAP = 4
         private const val CURSOR_HEIGHT = 1
         private const val CURSOR_HALF_PERIOD_MILLISECONDS = 500L
         private val PALETTE =

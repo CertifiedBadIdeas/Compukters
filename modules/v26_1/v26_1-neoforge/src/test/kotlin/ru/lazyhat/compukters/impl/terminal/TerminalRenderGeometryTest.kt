@@ -59,7 +59,7 @@ class TerminalRenderGeometryTest {
     }
 
     @Test
-    fun `compact font reduces panel height and keeps selector inside title row`() {
+    fun `compact font reduces panel height and keeps toolbar inside title row`() {
         val cozette = TerminalRenderGeometry(640, 360, TerminalFontProfile.COZETTE)
         val dina = TerminalRenderGeometry(640, 360, TerminalFontProfile.DINA)
 
@@ -67,7 +67,13 @@ class TerminalRenderGeometryTest {
         assertEquals(cozette.rows, dina.rows)
         assertEquals(57, cozette.panel.height - dina.panel.height)
         assertEquals(TerminalRect(159, 72, 481, 288), dina.panel)
+        assertEquals(TerminalRect(297, 74, 373, 88), dina.ideButton)
         assertEquals(TerminalRect(377, 74, 473, 88), dina.fontButton)
+        assertEquals(4, dina.fontButton.left - dina.ideButton.right)
+        assertTrue(dina.ideButton.left >= dina.panel.left)
+        assertTrue(dina.ideButton.right <= dina.panel.right)
+        assertTrue(dina.ideButton.top >= dina.panel.top)
+        assertTrue(dina.ideButton.bottom <= dina.grid.top)
         assertTrue(dina.fontButton.left >= dina.panel.left)
         assertTrue(dina.fontButton.right <= dina.panel.right)
         assertTrue(dina.fontButton.top >= dina.panel.top)

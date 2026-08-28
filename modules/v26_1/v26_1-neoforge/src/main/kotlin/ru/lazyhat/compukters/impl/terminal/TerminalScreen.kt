@@ -30,6 +30,7 @@ import net.neoforged.neoforge.client.network.ClientPacketDistributor
 import org.lwjgl.glfw.GLFW
 import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
 import ru.lazyhat.compukters.impl.ide.ChildScreenParent
+import ru.lazyhat.compukters.impl.ide.IdeClientBootstrap
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
@@ -60,7 +61,15 @@ internal class TerminalScreen(
 
     override fun init() {
         super.init()
-        val bounds = TerminalRenderGeometry(width, height, fontProfile).fontButton
+        val geometry = TerminalRenderGeometry(width, height, fontProfile)
+        val ideBounds = geometry.ideButton
+        addRenderableWidget(
+            Button
+                .builder(Component.literal("IDE  Ctrl+I")) { openIde() }
+                .bounds(ideBounds.left, ideBounds.top, ideBounds.width, ideBounds.height)
+                .build(),
+        )
+        val bounds = geometry.fontButton
         fontButton =
             addRenderableWidget(
                 Button
@@ -207,6 +216,10 @@ internal class TerminalScreen(
     }
 
     private fun fontButtonLabel(): Component = Component.literal("Font: ${fontProfile.displayName}")
+
+    private fun openIde() {
+        IdeClientBootstrap.open(minecraft)
+    }
 
     private fun drawBackgroundRuns(
         graphics: GuiGraphicsExtractor,
