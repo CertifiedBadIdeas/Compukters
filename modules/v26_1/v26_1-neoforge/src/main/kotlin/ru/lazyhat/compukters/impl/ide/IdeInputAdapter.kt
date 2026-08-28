@@ -47,6 +47,7 @@ data class IdeFocusState(
     val dialog: IdeDialogState? = null,
 ) {
     companion object {
+        val Initial = IdeFocusState(IdeFocusArea.Editor)
         val Editor = IdeFocusState(IdeFocusArea.Editor)
         val Tree = IdeFocusState(IdeFocusArea.Tree)
         val Panel = IdeFocusState(IdeFocusArea.Panel)

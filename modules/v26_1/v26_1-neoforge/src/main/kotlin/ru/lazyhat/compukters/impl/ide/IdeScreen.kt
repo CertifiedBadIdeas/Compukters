@@ -47,7 +47,7 @@ internal class IdeScreen(
             IdeUiActionSink(::activateUiAction),
         )
     private val splitters = IdeSplitterInteraction(application.preferences.layout(), application.preferences::saveLayout)
-    private var focusArea = IdeFocusArea.None
+    private var focusArea = IdeFocusState.Initial.area
     private var selectedTreePath: ProjectPath? = null
     private var returningToParent = false
     private var sessionClosed = false
