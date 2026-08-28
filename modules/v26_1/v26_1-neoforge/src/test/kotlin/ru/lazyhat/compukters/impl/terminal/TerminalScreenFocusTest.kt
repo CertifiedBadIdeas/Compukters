@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.impl.terminal
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
 class TerminalScreenFocusTest {
@@ -50,5 +51,21 @@ class TerminalScreenFocusTest {
             }
 
         assertNotNull(openIde, "TerminalScreen must expose the IDE button through its own action")
+    }
+
+    @Test
+    fun `terminal screen repositions the complete toolbar after a font change`() {
+        val buttonFields =
+            TerminalScreen::class.java.declaredFields
+                .filter { it.type.name == "net.minecraft.client.gui.components.Button" }
+                .map { it.name }
+                .toSet()
+        val positionToolbarButtons =
+            TerminalScreen::class.java.declaredMethods.singleOrNull {
+                it.name == "positionToolbarButtons" && it.parameterCount == 0
+            }
+
+        assertEquals(setOf("ideButton", "fontButton"), buttonFields)
+        assertNotNull(positionToolbarButtons, "TerminalScreen must reposition both title-row buttons together")
     }
 }

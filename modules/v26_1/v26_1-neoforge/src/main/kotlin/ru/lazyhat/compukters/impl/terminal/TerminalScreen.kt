@@ -49,6 +49,7 @@ internal class TerminalScreen(
     private val replica = TerminalReplica(initial)
     private val pressedKeys = mutableSetOf<Int>()
     private var fontProfile = CompuktersClientConfig.selectedFont()
+    private lateinit var ideButton: Button
     private lateinit var fontButton: Button
     private val childLifecycle =
         TerminalChildLifecycle(
@@ -63,12 +64,13 @@ internal class TerminalScreen(
         super.init()
         val geometry = TerminalRenderGeometry(width, height, fontProfile)
         val ideBounds = geometry.ideButton
-        addRenderableWidget(
-            Button
-                .builder(Component.literal("IDE  Ctrl+I")) { openIde() }
-                .bounds(ideBounds.left, ideBounds.top, ideBounds.width, ideBounds.height)
-                .build(),
-        )
+        ideButton =
+            addRenderableWidget(
+                Button
+                    .builder(Component.literal("IDE  Ctrl+I")) { openIde() }
+                    .bounds(ideBounds.left, ideBounds.top, ideBounds.width, ideBounds.height)
+                    .build(),
+            )
         val bounds = geometry.fontButton
         fontButton =
             addRenderableWidget(
@@ -206,13 +208,15 @@ internal class TerminalScreen(
         fontProfile = fontProfile.next()
         CompuktersClientConfig.selectFont(fontProfile)
         fontButton.message = fontButtonLabel()
-        positionFontButton()
+        positionToolbarButtons()
     }
 
-    private fun positionFontButton() {
-        val bounds = TerminalRenderGeometry(width, height, fontProfile).fontButton
-        fontButton.x = bounds.left
-        fontButton.y = bounds.top
+    private fun positionToolbarButtons() {
+        val geometry = TerminalRenderGeometry(width, height, fontProfile)
+        ideButton.x = geometry.ideButton.left
+        ideButton.y = geometry.ideButton.top
+        fontButton.x = geometry.fontButton.left
+        fontButton.y = geometry.fontButton.top
     }
 
     private fun fontButtonLabel(): Component = Component.literal("Font: ${fontProfile.displayName}")
