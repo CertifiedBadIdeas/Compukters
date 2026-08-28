@@ -61,7 +61,15 @@ val nativeFilename =
     }
 val nativeResourcePath = "META-INF/natives/$nativeOs/$nativeArch/$nativeFilename"
 val compukterFfiLibrary = rootProject.file(".toolchain/build/cargo/compukter-ffi/release/$nativeFilename")
-val generatedNativeResources = layout.buildDirectory.dir("generated/native-resources")
+val generatedDevelopmentNativeResources = layout.buildDirectory.dir("generated/native-resources")
+val generatedReleaseNativeResources = layout.buildDirectory.dir("generated/release-native-resources")
+val runtimeBundleDirectory = providers.gradleProperty("compukterRuntimeBundleDir").map(rootProject::file)
+val compukterVmRoot = rootProject.file("host/compukter-vm")
+val compukterVmCommit =
+    providers.exec {
+        workingDir(compukterVmRoot)
+        commandLine("git", "rev-parse", "HEAD")
+    }.standardOutput.asText.map(String::trim)
 val shellArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/shell.cpkt")
 val blockingCallArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/blocking-call.cpkt")
 
@@ -72,18 +80,45 @@ val preparePackagedCompukterFfi =
         inputs.property("nativeOs", nativeOs)
         inputs.property("nativeArch", nativeArch)
         inputs.file(compukterFfiLibrary)
-        into(generatedNativeResources)
+        into(generatedDevelopmentNativeResources)
         from(compukterFfiLibrary) {
             into("META-INF/natives/$nativeOs/$nativeArch")
         }
     }
 
+val preparePackagedReleaseRuntime =
+    tasks.register("preparePackagedReleaseRuntime") {
+        description = "Validates and stages the pinned Linux and Windows Runtime bundles without network access."
+        group = "build"
+        inputs.dir(runtimeBundleDirectory)
+        inputs.property("compukterVmCommit", compukterVmCommit)
+        outputs.dir(generatedReleaseNativeResources)
+        doLast {
+            check(runtimeBundleDirectory.isPresent) {
+                "preparePackagedReleaseRuntime requires -PcompukterRuntimeBundleDir=<directory>"
+            }
+            val output = generatedReleaseNativeResources.get().asFile.toPath()
+            delete(output)
+            RuntimeBundleSupport.validateAndStage(
+                runtimeBundleDirectory.get().toPath(),
+                output,
+                runtime5BundleContract(compukterVmCommit.get()),
+            )
+        }
+    }
+
+val releaseRuntimeMode = runtimeBundleDirectory.isPresent
+val selectedNativeResources =
+    if (releaseRuntimeMode) generatedReleaseNativeResources else generatedDevelopmentNativeResources
+val selectedNativePreparation =
+    if (releaseRuntimeMode) preparePackagedReleaseRuntime else preparePackagedCompukterFfi
+
 sourceSets.main {
-    resources.srcDir(generatedNativeResources)
+    resources.srcDir(selectedNativeResources)
 }
 
 tasks.processResources {
-    dependsOn(preparePackagedCompukterFfi)
+    dependsOn(selectedNativePreparation)
 }
 
 val nativeIntegrationTest =
@@ -110,7 +145,7 @@ val packagedNativeIntegrationTest =
     tasks.register<Test>("packagedNativeIntegrationTest") {
         description = "Extracts the packaged current-host FFM library and runs the terminal fixture in a fresh JVM."
         group = "verification"
-        dependsOn(rootProject.tasks.named("cargoBuildCompukterFfi"), ":compiler-k2:generateShellArtifact")
+        dependsOn(selectedNativePreparation, ":compiler-k2:generateShellArtifact")
         useJUnitPlatform()
         testClassesDirs = sourceSets.test.get().output.classesDirs
         classpath = sourceSets.test.get().runtimeClasspath
@@ -125,11 +160,20 @@ val packagedNativeIntegrationTest =
 val runtimeJar = tasks.named<Jar>("jar")
 val verifyNativeRuntimeJarResource =
     tasks.register("verifyNativeRuntimeJarResource") {
-        description = "Checks that native-runtime.jar contains exactly one current-host FFM resource."
+        description = "Checks that native-runtime.jar contains exactly the selected FFM resources."
         group = "verification"
         dependsOn(runtimeJar)
         inputs.file(runtimeJar.flatMap { it.archiveFile })
-        inputs.property("nativeResourcePath", nativeResourcePath)
+        val expectedNativeResources =
+            if (releaseRuntimeMode) {
+                listOf(
+                    "META-INF/natives/linux/x86_64/libcompukter_ffi.so",
+                    "META-INF/natives/windows/x86_64/compukter_ffi.dll",
+                )
+            } else {
+                listOf(nativeResourcePath)
+            }
+        inputs.property("expectedNativeResources", expectedNativeResources)
         doLast {
             val archive = runtimeJar.get().archiveFile.get().asFile
             val nativeEntries =
@@ -142,8 +186,8 @@ val verifyNativeRuntimeJarResource =
                         .filter { it.startsWith("META-INF/natives/") }
                         .toList()
                 }
-            check(nativeEntries == listOf(nativeResourcePath)) {
-                "expected only $nativeResourcePath in ${archive.name}, found $nativeEntries"
+            check(nativeEntries.sorted() == expectedNativeResources) {
+                "expected $expectedNativeResources in ${archive.name}, found $nativeEntries"
             }
         }
     }
