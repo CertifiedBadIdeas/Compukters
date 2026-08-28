@@ -66,6 +66,14 @@ internal class NeoForgeIdeTargetResolver(
                         deploy = entity::deploy,
                         submitCanonicalLine = entity::submitCanonicalLine,
                     ),
+                terminal =
+                    IdeTargetTerminalOperations(
+                        machineId = { entity.terminalMachineId },
+                        fullState = entity::terminalFullState,
+                        changesSince = entity::terminalChangesSince,
+                        submitKey = entity::submitTerminalKey,
+                        submitText = entity::submitTerminalText,
+                    ),
             ),
         )
     }
