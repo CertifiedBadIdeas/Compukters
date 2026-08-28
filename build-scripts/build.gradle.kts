@@ -35,6 +35,8 @@ dependencies {
     implementation(plugin(libs.plugins.architectury.loom.no.remap))
     implementation(plugin(libs.plugins.architectury.plugin))
     implementation(plugin(libs.plugins.shadow))
+    implementation("org.apache.commons:commons-compress:1.28.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.7.3")
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.1")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:6.1.1")

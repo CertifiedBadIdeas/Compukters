@@ -49,13 +49,35 @@ class CompukterVmBuildConventionTest {
         assertFalse(rootBuildScript.contains("host/compukter-ffi"))
     }
 
+    @Test
+    fun releaseRuntimeBundlesAreAnExplicitOfflineResourceMode() {
+        val nativeBuildScript = repoRoot().resolve("modules/native-runtime/build.gradle.kts").readText()
+        val support = repoRoot().resolve("build-scripts/src/main/kotlin/RuntimeBundleSupport.kt").readText()
+
+        assertTrue(nativeBuildScript.contains("compukterRuntimeBundleDir"))
+        assertTrue(nativeBuildScript.contains("preparePackagedReleaseRuntime"))
+        assertTrue(nativeBuildScript.contains("RuntimeBundleSupport.validateAndStage"))
+        assertTrue(
+            nativeBuildScript.contains(
+                "if (releaseRuntimeMode) preparePackagedReleaseRuntime else preparePackagedCompukterFfi",
+            ),
+        )
+        assertFalse(support.contains("java.net"))
+        assertFalse(support.contains("HttpClient"))
+        assertFalse(support.contains("URL("))
+    }
+
     private fun rootBuildSource(): Path {
+        return repoRoot().resolve("build.gradle.kts")
+    }
+
+    private fun repoRoot(): Path {
         val candidates =
             listOf(
-                Path.of(System.getProperty("user.dir"), "..", "build.gradle.kts").normalize(),
-                Path.of(System.getProperty("user.dir"), "build.gradle.kts"),
+                Path.of(System.getProperty("user.dir"), "..").normalize(),
+                Path.of(System.getProperty("user.dir")),
             )
-        return candidates.firstOrNull(Files::exists)
-            ?: error("Could not locate root build.gradle.kts from ${System.getProperty("user.dir")}")
+        return candidates.firstOrNull { Files.exists(it.resolve("build.gradle.kts")) }
+            ?: error("Could not locate repository root from ${System.getProperty("user.dir")}")
     }
 }
