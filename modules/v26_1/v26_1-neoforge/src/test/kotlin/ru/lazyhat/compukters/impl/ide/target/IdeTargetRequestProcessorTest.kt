@@ -143,7 +143,7 @@ class IdeTargetRequestProcessorTest {
                 machineIdentity = "overworld:1,2,3:7",
                 profileId = IdeTargetProfileId(hash(1)),
                 profile = profile,
-                capabilities = IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true),
+                capabilities = IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true, terminal = false),
                 displayName = "Computer",
                 alive = { true },
                 deployment = operations,

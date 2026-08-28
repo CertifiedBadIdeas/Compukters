@@ -450,7 +450,7 @@ private fun target(profileSeed: Byte = 1) =
         IdeTargetId("computer-1"),
         IdeTargetProfileId(Hash256.of(ByteArray(32) { profileSeed })),
         TargetCompileProfile(targetToolchain(), emptyList(), WorkerLimits()),
-        IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true),
+        IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true, terminal = false),
         "Computer",
     )
 

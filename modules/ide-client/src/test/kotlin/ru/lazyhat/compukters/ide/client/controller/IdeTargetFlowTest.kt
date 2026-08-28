@@ -353,7 +353,7 @@ private fun target() =
         IdeTargetId("computer-1"),
         IdeTargetProfileId(hash(7)),
         TargetCompileProfile(toolchain(), emptyList(), TARGET_LIMITS),
-        IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true),
+        IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true, terminal = false),
         "Computer",
     )
 

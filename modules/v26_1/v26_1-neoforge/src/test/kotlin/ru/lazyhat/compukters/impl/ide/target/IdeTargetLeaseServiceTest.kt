@@ -132,7 +132,7 @@ class IdeTargetLeaseServiceTest {
             machineIdentity = "overworld:1,2,3:7",
             profileId = IdeTargetProfileId(Hash256.zero()),
             profile = profile,
-            capabilities = IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true),
+            capabilities = IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true, terminal = false),
             displayName = "Computer",
             alive = alive,
             deployment = IdeTargetDeploymentOperations(verifyForDeploy = { null }),
