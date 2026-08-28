@@ -79,7 +79,8 @@ class IdeScreenAnalysisIntegrationTest {
                             ).get(90, TimeUnit.SECONDS),
                     ).result,
                 )
-            val candidate = completion.items.single { it.label == "candidate" }
+            val candidate = completion.items.single { it.insertText == "candidate" }
+            assertEquals("candidate()", candidate.label)
             val completed = source.replaceRange(completion.replacement.startUtf16, completion.replacement.endUtf16, candidate.insertText)
             assertTrue("candidate" in completed)
         }
