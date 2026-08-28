@@ -167,12 +167,12 @@ internal class IdeClientApplication(
         if (!closed.compareAndSet(false, true)) return
         var failure: Throwable? = null
         try {
-            controller.close()
+            IdeTargetClientNetwork.release(targetTerminal)
         } catch (error: Throwable) {
             failure = error
         }
         try {
-            IdeTargetClientNetwork.release(targetTerminal)
+            controller.close()
         } catch (error: Throwable) {
             failure?.addSuppressed(error) ?: run { failure = error }
         }

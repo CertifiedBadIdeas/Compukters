@@ -93,6 +93,21 @@ class IdeRendererStateTest {
     }
 
     @Test
+    fun `start page terminal action follows the attached target capability`() {
+        val capable = IdeViewState.startPage(emptyList()).copy(target = IdeTargetState.Attached(target(terminal = true)))
+        val unsupported = IdeViewState.startPage(emptyList()).copy(target = IdeTargetState.Attached(target(terminal = false)))
+
+        val capableModel = IdeRenderer.extract(capable, geometry(), terminalVisible = true)
+        val terminal = capableModel.hitTargets.single { it.action == IdeHitAction.Terminal }
+        assertTrue(terminal.enabled)
+        assertTrue(terminal.selected)
+        assertTrue(capableModel.text.any { it.kind == IdeTextKind.Toolbar && it.value == "Terminal" })
+
+        val unsupportedModel = IdeRenderer.extract(unsupported, geometry())
+        assertTrue(unsupportedModel.hitTargets.none { it.action == IdeHitAction.Terminal })
+    }
+
+    @Test
     fun `workspace clips rows and gives semantic spans precedence over lexical spans`() {
         val source = "fun main()\r\nval value = 1\r\nprintln(value)"
         val secondStart = source.indexOf("val value")
