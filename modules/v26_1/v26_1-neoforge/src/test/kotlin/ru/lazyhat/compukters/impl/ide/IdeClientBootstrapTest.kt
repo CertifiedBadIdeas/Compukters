@@ -39,4 +39,33 @@ class IdeClientBootstrapTest {
         assertFalse(IdeClientBootstrap.matchesScreenShortcut(controlI, modifierActive = false))
         assertFalse(IdeClientBootstrap.matchesScreenShortcut(controlK, modifierActive = true))
     }
+
+    @Test
+    fun `terminal target attaches before the parent observation is suspended`() {
+        val events = mutableListOf<String>()
+
+        IdeOpeningHandoff.open(
+            createSession = {
+                events += "open"
+                "session"
+            },
+            attachTarget = { session ->
+                assertEquals("session", session)
+                events += "attach"
+            },
+            suspendParent = {
+                events += "suspend"
+                "parent"
+            },
+            installScreen = { session, parent ->
+                assertEquals("session", session)
+                assertEquals("parent", parent)
+                events += "install"
+            },
+            closeSession = { events += "close" },
+            resumeParent = { events += "resume" },
+        )
+
+        assertEquals(listOf("open", "attach", "suspend", "install"), events)
+    }
 }

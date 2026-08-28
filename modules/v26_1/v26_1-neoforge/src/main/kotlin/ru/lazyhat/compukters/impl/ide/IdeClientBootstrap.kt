@@ -44,6 +44,32 @@ internal interface ChildScreenParent {
     fun abandonChild()
 }
 
+internal object IdeOpeningHandoff {
+    fun <S, P> open(
+        createSession: () -> S,
+        attachTarget: (S) -> Unit,
+        suspendParent: () -> P,
+        installScreen: (S, P) -> Unit,
+        closeSession: (S) -> Unit,
+        resumeParent: () -> Unit,
+    ) {
+        val session = createSession()
+        var parentSuspensionStarted = false
+        try {
+            attachTarget(session)
+            parentSuspensionStarted = true
+            val parent = suspendParent()
+            installScreen(session, parent)
+        } catch (failure: Throwable) {
+            runCatching { closeSession(session) }.exceptionOrNull()?.let(failure::addSuppressed)
+            if (parentSuspensionStarted) {
+                runCatching(resumeParent).exceptionOrNull()?.let(failure::addSuppressed)
+            }
+            throw failure
+        }
+    }
+}
+
 internal object IdeClientBootstrap {
     private val category = KeyMapping.Category(Identifier.fromNamespaceAndPath(MOD_ID, "ide"))
     internal val openIde =
@@ -98,16 +124,15 @@ internal object IdeClientBootstrap {
         if (minecraft.screen is IdeScreen) return false
         val original = minecraft.screen
         val targetClaim = targetClaim(minecraft, original)
-        val parent = (original as? ChildScreenParent)?.suspendForChild() ?: original
-        val session =
-            try {
-                services().open()
-            } catch (failure: Throwable) {
-                (original as? ChildScreenParent)?.resumeFromChild()
-                throw failure
-            }
-        targetClaim?.let(session.application.controller::attachTarget)
-        minecraft.setScreen(IdeScreen(session, parent))
+        val childParent = original as? ChildScreenParent
+        IdeOpeningHandoff.open(
+            createSession = services()::open,
+            attachTarget = { session -> targetClaim?.let(session.application.controller::attachTarget) },
+            suspendParent = { childParent?.suspendForChild() ?: original },
+            installScreen = { session, parent -> minecraft.setScreen(IdeScreen(session, parent)) },
+            closeSession = IdeClientSession<IdeClientApplication>::close,
+            resumeParent = { childParent?.resumeFromChild() },
+        )
         return true
     }
 
