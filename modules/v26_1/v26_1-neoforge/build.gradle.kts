@@ -131,9 +131,6 @@ dependencies {
     common(project(path = projects.v261Common.path)) { isTransitive = false }
     shadowBundle(project(path = projects.v261Common.path, configuration = "transformProductionNeoForge"))
     testImplementation(project(path = projects.v261Common.path))
-    implementation(projects.ideClient)
-    implementation(projects.ideAnalysisClient)
-    implementation(projects.workerClient)
 
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
     add(gameTest.implementationConfigurationName, project(path = projects.v261Common.path))
@@ -311,6 +308,8 @@ val verifyPackagedCompukterFfi =
                 "META-INF/licenses/Compukters-Apache-2.0.txt",
                 "META-INF/licenses/Compukters-Textures-CC-BY-4.0.txt",
                 "META-INF/licenses/Compukters-Textures-PROVENANCE.txt",
+                "META-INF/licenses/jvm/antlr4-runtime-4.11.1-BSD-3-Clause.txt",
+                "META-INF/licenses/jvm/checker-qual-3.21.2-MIT.txt",
                 "META-INF/NOTICE.txt",
                 "META-INF/THIRD-PARTY-NOTICES.md",
             ).forEach { required ->
@@ -417,22 +416,26 @@ val verifyPackagedCompukterFfi =
                         }
                     }
             }
-            check(entries.none { it.startsWith("ru/lazyhat/compukters/ide/") }) {
-                "ide-core classes leaked into ${archive.name} before the IDE is packaged"
+            listOf(
+                "ru/lazyhat/compukters/ide/client/target/IdeTargetPort.class",
+                "ru/lazyhat/compukters/ide/project/ProjectCatalog.class",
+                "ru/lazyhat/compukters/ide/analysis/controller/AnalysisClient.class",
+                "ru/lazyhat/compukters/worker/payload/PackagedWorkerPayload.class",
+            ).forEach { required ->
+                check(entries.count { it == required } == 1) {
+                    "expected exactly one $required in ${archive.name}"
+                }
             }
             val forbiddenIdeLibraries =
                 listOf(
                     "analysis-api",
-                    "antlr4-runtime-",
                     "architectury-",
-                    "checker-qual-",
                     "intellij-",
                     "kotlin-compiler",
                     "kotlin-fir",
                     "kotlin-psi",
                     "low-level-api-fir",
                     "symbol-light-classes",
-                    "tomlj-",
                 )
             check(
                 entries.none { entry ->
@@ -440,7 +443,7 @@ val verifyPackagedCompukterFfi =
                         forbiddenIdeLibraries.any(entry.substringAfterLast('/')::startsWith)
                 },
             ) {
-                "IDE/platform dependencies leaked into ${archive.name} before the IDE is packaged"
+                "IDE implementation/platform dependencies leaked into ${archive.name}"
             }
             check(entries.none { it.contains("ComputerBlockGameTest") }) {
                 "GameTest classes leaked into ${archive.name}"

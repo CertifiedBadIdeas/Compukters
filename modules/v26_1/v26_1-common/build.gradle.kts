@@ -82,6 +82,12 @@ tasks.processResources {
     from(rootProject.layout.projectDirectory.file("licenses/rust/generic-array-0.14.7-LICENSE.txt")) {
         into("META-INF/licenses/rust")
     }
+    from(rootProject.layout.projectDirectory.file("licenses/jvm/antlr4-runtime-4.11.1-BSD-3-Clause.txt")) {
+        into("META-INF/licenses/jvm")
+    }
+    from(rootProject.layout.projectDirectory.file("licenses/jvm/checker-qual-3.21.2-MIT.txt")) {
+        into("META-INF/licenses/jvm")
+    }
     from(rootProject.layout.projectDirectory.file("licenses/distribution-components.tsv")) {
         into("META-INF/licenses")
     }
