@@ -186,6 +186,7 @@ class IdeInputAdapter(
             IdeHitAction.CreateText,
             IdeHitAction.CreateDirectory,
             IdeHitAction.Rename,
+            IdeHitAction.Terminal,
             -> {
                 uiActions.activate(action)
             }
