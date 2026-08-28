@@ -38,9 +38,9 @@ enum class LoaderKind(
     NEOFORGE("neoforge"),
 }
 
-private const val BUILD_CONTEXT_KEY = "ck.buildContext"
-private const val LOADER_KIND_KEY = "ck.loaderKind"
-private const val EFFECTIVE_BUILD_VERSION_KEY = "ck.effectiveBuildVersion"
+private const val BUILD_CONTEXT_KEY = "compukters.buildContext"
+private const val LOADER_KIND_KEY = "compukters.loaderKind"
+private const val EFFECTIVE_BUILD_VERSION_KEY = "compukters.effectiveBuildVersion"
 
 fun ExtensionAware.libsCatalog(): VersionCatalog = extensions.getByType<VersionCatalogsExtension>().named("libs")
 

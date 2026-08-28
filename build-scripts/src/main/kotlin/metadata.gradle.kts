@@ -34,43 +34,6 @@ val modProperties =
 
 base.archivesName = modProperties.getValue("mod_id").replace(" ", "")
 
-val generateCklResourceIndexes =
-    tasks.register("generateCklResourceIndexes") {
-        val resourcesRoot = layout.projectDirectory.dir("src/main/resources")
-        val outputRoot = layout.buildDirectory.dir("generated/ckl-resource-indexes")
-        val indexedRoots = listOf("rom")
-
-        inputs.files(
-            indexedRoots.map { rootName -> fileTree(resourcesRoot.dir(rootName)) },
-        )
-        outputs.dir(outputRoot)
-
-        doLast {
-            delete(outputRoot)
-            for (rootName in indexedRoots) {
-                val sourceRoot = resourcesRoot.dir(rootName).asFile
-                val files =
-                    if (sourceRoot.isDirectory) {
-                        fileTree(sourceRoot)
-                            .files
-                            .filter { it.extension == "ck" }
-                            .map {
-                                sourceRoot
-                                    .toPath()
-                                    .relativize(it.toPath())
-                                    .toString()
-                                    .replace(File.separatorChar, '/')
-                            }.sorted()
-                    } else {
-                        emptyList()
-                    }
-                val indexFile = outputRoot.get().file("$rootName/$rootName.index").asFile
-                indexFile.parentFile.mkdirs()
-                indexFile.writeText(files.joinToString(separator = "\n", postfix = if (files.isEmpty()) "" else "\n"))
-            }
-        }
-    }
-
 val generateModMetadata =
     tasks.register("generateModMetadata", ProcessResources::class) {
         val replaceProperties = modProperties.toMap()
@@ -86,11 +49,6 @@ val generateModMetadata =
             include("META-INF/neoforge.mods.toml", "fabric.mod.json")
             expand(replaceProperties)
         }
-        from(from) {
-            include("**/*.ck")
-        }
-        from(generateCklResourceIndexes)
-
         into(intoDir)
     }
 
@@ -98,7 +56,6 @@ tasks.named<ProcessResources>("processResources") {
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 
     dependsOn(generateModMetadata)
-    dependsOn(generateCklResourceIndexes)
 }
 
 sourceSets.main {

@@ -34,9 +34,6 @@ dependencies {
 
 tasks.test {
     filter.excludeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.*")
-    System.getProperty("ckl.low.image.golden.path")?.takeIf { it.isNotBlank() }?.let { path ->
-        systemProperty("ckl.low.image.golden.path", path)
-    }
 }
 
 val nativeOs =
