@@ -68,14 +68,14 @@ Ohad Shai and contributors and is licensed under Apache-2.0:
 
 The packaged native `compukter_ffi` library statically links the crates below.
 For crates offered under `MIT OR Apache-2.0`, this distribution selects
-Apache-2.0. Versions are pinned by `host/compukter-ffi/Cargo.lock`.
+Apache-2.0. Versions are pinned by the single VM workspace lock at
+`host/compukter-vm/Cargo.lock`.
 
 - `block-buffer` 0.10.4 — Apache-2.0
 - `cfg-if` 1.0.4 — Apache-2.0
 - `cpufeatures` 0.2.17 — Apache-2.0
 - `crypto-common` 0.1.7 — Apache-2.0
 - `digest` 0.10.7 — Apache-2.0
-- `libc` 0.2.189 — Apache-2.0
 - `sha2` 0.10.9 — Apache-2.0
 - `typenum` 1.20.1 — Apache-2.0
 - `version_check` 0.9.5 — Apache-2.0

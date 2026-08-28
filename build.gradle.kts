@@ -37,11 +37,12 @@ val compukterVmBuildJobs =
         .orElse(Runtime.getRuntime().availableProcessors().toString())
         .get()
 val compukterVmTargetRoot = rootProject.file(".toolchain/build/cargo/compukter-vm")
-val compukterFfiRoot = rootProject.file("host/compukter-ffi")
+val compukterVmRoot = rootProject.file("host/compukter-vm")
+val compukterFfiRoot = compukterVmRoot.resolve("ffi")
 val compukterFfiTargetRoot = rootProject.file(".toolchain/build/cargo/compukter-ffi")
 val compukterFfiLibrary = compukterFfiTargetRoot.resolve("release/${System.mapLibraryName("compukter_ffi")}")
-val compukterVmManifest = rootProject.file("host/compukter-vm/Cargo.toml")
-val compukterVmLock = rootProject.file("host/compukter-vm/Cargo.lock")
+val compukterVmManifest = compukterVmRoot.resolve("Cargo.toml")
+val compukterVmLock = compukterVmRoot.resolve("Cargo.lock")
 
 fun cleanWorkspaceTargets(): List<File> {
     val repositoryRoot = rootProject.projectDir
@@ -78,13 +79,12 @@ val testCompukterVmRust =
     tasks.register<Exec>("testCompukterVmRust") {
         description = "Runs Compukter-VM submodule Rust tests."
         group = "verification"
-        val vmRoot = rootProject.file("host/compukter-vm")
-        val vmManifest = vmRoot.resolve("Cargo.toml")
-        workingDir(vmRoot)
+        val vmManifest = compukterVmRoot.resolve("Cargo.toml")
+        workingDir(compukterVmRoot)
         inputs.file(vmManifest)
-        inputs.file(vmRoot.resolve("Cargo.lock"))
-        inputs.dir(vmRoot.resolve("src"))
-        inputs.dir(vmRoot.resolve("tests"))
+        inputs.file(compukterVmRoot.resolve("Cargo.lock"))
+        inputs.dir(compukterVmRoot.resolve("src"))
+        inputs.dir(compukterVmRoot.resolve("tests"))
         inputs.property("compukterVmBuildJobs", compukterVmBuildJobs)
         doFirst {
             check(vmManifest.isFile) {
@@ -99,14 +99,15 @@ val testCompukterFfiRust =
     tasks.register<Exec>("testCompukterFfiRust") {
         description = "Runs Compukter FFM adapter Rust tests."
         group = "verification"
-        workingDir(compukterFfiRoot)
-        inputs.file(compukterFfiRoot.resolve("Cargo.toml"))
-        inputs.file(compukterFfiRoot.resolve("Cargo.lock"))
-        inputs.dir(compukterFfiRoot.resolve("src"))
+        workingDir(compukterVmRoot)
         inputs.file(compukterVmManifest)
         inputs.file(compukterVmLock)
-        inputs.dir(rootProject.file("host/compukter-vm/src"))
-        commandLine("cargo", "test", "--locked", "--offline", "-j", compukterVmBuildJobs)
+        inputs.file(compukterFfiRoot.resolve("Cargo.toml"))
+        inputs.dir(compukterFfiRoot.resolve("src"))
+        inputs.dir(compukterFfiRoot.resolve("tests"))
+        inputs.dir(compukterVmRoot.resolve("src"))
+        inputs.dir(compukterVmRoot.resolve("tests"))
+        commandLine("cargo", "test", "-p", "compukter-ffi", "--locked", "--offline", "-j", compukterVmBuildJobs)
         environment("CARGO_TARGET_DIR", compukterFfiTargetRoot.absolutePath)
     }
 
@@ -114,14 +115,15 @@ val testCompukterFfiRustRelease =
     tasks.register<Exec>("testCompukterFfiRustRelease") {
         description = "Runs optimized Compukter FFM adapter Rust tests."
         group = "verification"
-        workingDir(compukterFfiRoot)
-        inputs.file(compukterFfiRoot.resolve("Cargo.toml"))
-        inputs.file(compukterFfiRoot.resolve("Cargo.lock"))
-        inputs.dir(compukterFfiRoot.resolve("src"))
+        workingDir(compukterVmRoot)
         inputs.file(compukterVmManifest)
         inputs.file(compukterVmLock)
-        inputs.dir(rootProject.file("host/compukter-vm/src"))
-        commandLine("cargo", "test", "--release", "--locked", "--offline", "-j", compukterVmBuildJobs)
+        inputs.file(compukterFfiRoot.resolve("Cargo.toml"))
+        inputs.dir(compukterFfiRoot.resolve("src"))
+        inputs.dir(compukterFfiRoot.resolve("tests"))
+        inputs.dir(compukterVmRoot.resolve("src"))
+        inputs.dir(compukterVmRoot.resolve("tests"))
+        commandLine("cargo", "test", "-p", "compukter-ffi", "--release", "--locked", "--offline", "-j", compukterVmBuildJobs)
         environment("CARGO_TARGET_DIR", compukterFfiTargetRoot.absolutePath)
     }
 
@@ -129,24 +131,26 @@ val fmtCompukterFfiRust =
     tasks.register<Exec>("fmtCompukterFfiRust") {
         description = "Checks Rust formatting for the Compukter FFM adapter."
         group = "verification"
-        workingDir(compukterFfiRoot)
+        workingDir(compukterVmRoot)
+        inputs.file(compukterVmManifest)
         inputs.file(compukterFfiRoot.resolve("Cargo.toml"))
         inputs.dir(compukterFfiRoot.resolve("src"))
-        commandLine("cargo", "fmt", "--check")
+        commandLine("cargo", "fmt", "--package", "compukter-ffi", "--", "--check")
     }
 
 val clippyCompukterFfiRust =
     tasks.register<Exec>("clippyCompukterFfiRust") {
         description = "Runs warning-free Clippy checks for the Compukter FFM adapter."
         group = "verification"
-        workingDir(compukterFfiRoot)
-        inputs.file(compukterFfiRoot.resolve("Cargo.toml"))
-        inputs.file(compukterFfiRoot.resolve("Cargo.lock"))
-        inputs.dir(compukterFfiRoot.resolve("src"))
+        workingDir(compukterVmRoot)
         inputs.file(compukterVmManifest)
         inputs.file(compukterVmLock)
-        inputs.dir(rootProject.file("host/compukter-vm/src"))
-        commandLine("cargo", "clippy", "--locked", "--offline", "--all-targets", "--", "-D", "warnings")
+        inputs.file(compukterFfiRoot.resolve("Cargo.toml"))
+        inputs.dir(compukterFfiRoot.resolve("src"))
+        inputs.dir(compukterFfiRoot.resolve("tests"))
+        inputs.dir(compukterVmRoot.resolve("src"))
+        inputs.dir(compukterVmRoot.resolve("tests"))
+        commandLine("cargo", "clippy", "-p", "compukter-ffi", "--locked", "--offline", "--all-targets", "--", "-D", "warnings")
         environment("CARGO_TARGET_DIR", compukterFfiTargetRoot.absolutePath)
     }
 
@@ -154,15 +158,14 @@ val cargoBuildCompukterFfi =
     tasks.register<Exec>("cargoBuildCompukterFfi") {
         description = "Builds the release Compukter FFM platform library."
         group = "build"
-        workingDir(compukterFfiRoot)
-        inputs.file(compukterFfiRoot.resolve("Cargo.toml"))
-        inputs.file(compukterFfiRoot.resolve("Cargo.lock"))
-        inputs.dir(compukterFfiRoot.resolve("src"))
+        workingDir(compukterVmRoot)
         inputs.file(compukterVmManifest)
         inputs.file(compukterVmLock)
-        inputs.dir(rootProject.file("host/compukter-vm/src"))
+        inputs.file(compukterFfiRoot.resolve("Cargo.toml"))
+        inputs.dir(compukterFfiRoot.resolve("src"))
+        inputs.dir(compukterVmRoot.resolve("src"))
         outputs.file(compukterFfiLibrary)
-        commandLine("cargo", "build", "--release", "--locked", "--offline", "-j", compukterVmBuildJobs)
+        commandLine("cargo", "build", "-p", "compukter-ffi", "--release", "--locked", "--offline", "-j", compukterVmBuildJobs)
         environment("CARGO_TARGET_DIR", compukterFfiTargetRoot.absolutePath)
     }
 
@@ -374,10 +377,28 @@ val verifyLicensePolicy =
         val canonicalLicense = rootProject.file("licenses/project/Apache-2.0.txt")
         val rootLicense = rootProject.file("LICENSE.md")
         val modProperties = rootProject.file("config/mod.properties")
-        val ffiManifest = rootProject.file("host/compukter-ffi/Cargo.toml")
-        val ffiLock = rootProject.file("host/compukter-ffi/Cargo.lock")
-        val vmManifest = rootProject.file("host/compukter-vm/Cargo.toml")
+        val ffiManifest = compukterFfiRoot.resolve("Cargo.toml")
+        val ffiLock = compukterVmLock
+        val vmManifest = compukterVmManifest
         val componentInventory = rootProject.file("licenses/distribution-components.tsv")
+        val packagedRustDependencyTree =
+            providers.exec {
+                workingDir(compukterVmRoot)
+                commandLine(
+                    "cargo",
+                    "tree",
+                    "--locked",
+                    "--offline",
+                    "-p",
+                    "compukter-ffi",
+                    "--edges",
+                    "normal,build",
+                    "--prefix",
+                    "none",
+                    "--format",
+                    "{p}",
+                )
+            }.standardOutput.asText
 
         inputs.files(eligibleFiles)
         inputs.files(rootLicense, canonicalLicense, modProperties, ffiManifest, ffiLock, vmManifest, componentInventory)
@@ -414,10 +435,15 @@ val verifyLicensePolicy =
                     .map { (_, component, version, _) -> component to version }
                     .sortedWith(compareBy<Pair<String, String>>({ it.first }, { it.second }))
             val actualRust =
-                Regex("""(?ms)\[\[package]]\s+name = "([^"]+)"\s+version = "([^"]+)"""")
-                    .findAll(ffiLock.readText())
-                    .map { match -> match.groupValues[1] to match.groupValues[2] }
+                packagedRustDependencyTree
+                    .get()
+                    .lineSequence()
+                    .map(String::trim)
+                    .filter(String::isNotEmpty)
+                    .map { line -> line.substringBefore(" (*)").substringBefore(" (") }
+                    .map { identity -> identity.substringBeforeLast(' ') to identity.substringAfterLast(' ').removePrefix("v") }
                     .filterNot { (component, _) -> component == "compukter-ffi" || component == "compukter-vm" }
+                    .distinct()
                     .sortedWith(compareBy<Pair<String, String>>({ it.first }, { it.second }))
                     .toList()
             check(actualRust == expectedRust) {

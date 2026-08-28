@@ -31,11 +31,22 @@ class CompukterVmBuildConventionTest {
         assertTrue(rootBuildScript.contains("testCompukterVmRust"))
         assertTrue(rootBuildScript.contains("host/compukter-vm"))
         assertTrue(rootBuildScript.contains("Compukter-VM submodule"))
-        assertTrue(rootBuildScript.contains("inputs.dir(vmRoot.resolve(\"src\"))"))
-        assertTrue(rootBuildScript.contains("inputs.dir(vmRoot.resolve(\"tests\"))"))
+        assertTrue(rootBuildScript.contains("inputs.dir(compukterVmRoot.resolve(\"src\"))"))
+        assertTrue(rootBuildScript.contains("inputs.dir(compukterVmRoot.resolve(\"tests\"))"))
         assertTrue(rootBuildScript.contains("dependsOn(testCompukterVmRust)"))
         assertFalse(rootBuildScript.contains("libcompukter_vm"))
         assertFalse(rootBuildScript.contains("buildCompukterVmNativeLibrary"))
+    }
+
+    @Test
+    fun ffiBuildUsesTheVmWorkspaceAsItsSingleRustSource() {
+        val rootBuildScript = rootBuildSource().readText()
+
+        assertTrue(rootBuildScript.contains("val compukterVmRoot = rootProject.file(\"host/compukter-vm\")"))
+        assertTrue(rootBuildScript.contains("val compukterFfiRoot = compukterVmRoot.resolve(\"ffi\")"))
+        assertTrue(rootBuildScript.contains("inputs.file(compukterVmRoot.resolve(\"Cargo.lock\"))"))
+        assertTrue(rootBuildScript.contains("\"-p\", \"compukter-ffi\""))
+        assertFalse(rootBuildScript.contains("host/compukter-ffi"))
     }
 
     private fun rootBuildSource(): Path {

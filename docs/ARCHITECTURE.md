@@ -57,8 +57,7 @@ Terminal, process, filesystem, and compiler declarations live in the `guest-api-
 | `playground` | Standalone compile-and-run entry point with stdin/stdout |
 | `v26_1-common` | Loader-independent Minecraft 26.1 adapters and computer carrier |
 | `v26_1-neoforge` | NeoForge 26.1 registration, resources, GameTest, and production archive |
-| `host/compukter-vm` | Artifact verification and managed Rust execution runtime |
-| `host/compukter-ffi` | Versioned C ABI and opaque machine-handle adapter |
+| `host/compukter-vm` | Artifact verification, managed Rust execution runtime, and VM-owned versioned C ABI in its `ffi` workspace member |
 
 Ownership rules:
 
