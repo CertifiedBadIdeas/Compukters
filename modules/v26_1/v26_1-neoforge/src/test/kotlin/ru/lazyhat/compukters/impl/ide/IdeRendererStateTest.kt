@@ -61,6 +61,7 @@ import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectTreeStore
 import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -227,6 +228,41 @@ class IdeRendererStateTest {
             assertTrue(model.hitTargets.single { it.action == action }.enabled)
         }
         assertTrue(model.text.any { it.kind == IdeTextKind.Status && "Command submitted" in it.value })
+    }
+
+    @Test
+    fun `terminal toolbar action exists only for capable targets and reflects overlay state`() {
+        val capable = IdeTargetState.Attached(target(terminal = true))
+        val opening =
+            IdeRenderer.extract(
+                workspaceState(IdeEditorView.Empty, IdeBuildState.Idle, target = capable),
+                geometry(),
+                terminalState = IdeTargetTerminalState.Opening(1),
+                terminalVisible = true,
+            )
+
+        val openingTarget = opening.hitTargets.single { it.action == IdeHitAction.Terminal }
+        assertTrue(openingTarget.enabled)
+        assertTrue(openingTarget.selected)
+        assertEquals("Opening target terminal…", openingTarget.tooltip)
+
+        val failed =
+            IdeRenderer.extract(
+                workspaceState(IdeEditorView.Empty, IdeBuildState.Idle, target = capable),
+                geometry(),
+                terminalState = IdeTargetTerminalState.Failed("Target stopped", retryable = true),
+                terminalVisible = false,
+            )
+        val failedTarget = failed.hitTargets.single { it.action == IdeHitAction.Terminal }
+        assertFalse(failedTarget.selected)
+        assertEquals("Target stopped", failedTarget.tooltip)
+
+        val unsupported =
+            IdeRenderer.extract(
+                workspaceState(IdeEditorView.Empty, IdeBuildState.Idle, target = IdeTargetState.Attached(target())),
+                geometry(),
+            )
+        assertTrue(unsupported.hitTargets.none { it.action == IdeHitAction.Terminal })
     }
 
     @Test
@@ -409,7 +445,7 @@ class IdeRendererStateTest {
         }
     }
 
-    private fun target() =
+    private fun target(terminal: Boolean = false) =
         IdeAttachedTarget(
             IdeTargetId("computer-1"),
             IdeTargetProfileId(Hash256.zero()),
@@ -418,7 +454,7 @@ class IdeRendererStateTest {
                 emptyList(),
                 WorkerLimits(),
             ),
-            IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true, terminal = false),
+            IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true, terminal = terminal),
             "Computer",
         )
 

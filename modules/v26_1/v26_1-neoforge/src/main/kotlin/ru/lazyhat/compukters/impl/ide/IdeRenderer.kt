@@ -33,6 +33,7 @@ import ru.lazyhat.compukters.ide.client.target.IdeTargetState
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState
 import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 
 enum class IdePanelKind { Main, Header, Toolbar, Tree, Editor, Diagnostics, Status, Control, Dialog }
@@ -56,6 +57,7 @@ enum class IdeHitAction {
     Verify,
     Deploy,
     Run,
+    Terminal,
     Confirm,
     Dismiss,
 }
@@ -116,6 +118,7 @@ data class IdeHitTarget(
     val tooltip: String?,
     val focusGroup: IdeFocusGroup,
     val zIndex: Int,
+    val selected: Boolean = false,
 )
 
 data class IdeDrawModel(
@@ -126,7 +129,7 @@ data class IdeDrawModel(
     val hitTargets: List<IdeHitTarget>,
 )
 
-object IdeRenderer {
+internal object IdeRenderer {
     fun extract(
         state: IdeViewState,
         geometry: IdeRenderGeometry,
@@ -134,8 +137,10 @@ object IdeRenderer {
         prompt: IdePromptState? = null,
         treeFirstRow: Int = 0,
         selectedTreePath: ProjectPath? = null,
+        terminalState: IdeTargetTerminalState = IdeTargetTerminalState.Closed,
+        terminalVisible: Boolean = false,
     ): IdeDrawModel {
-        val output = Builder(geometry, geometry.font, treeFirstRow, selectedTreePath)
+        val output = Builder(geometry, geometry.font, treeFirstRow, selectedTreePath, terminalState, terminalVisible)
         output.base()
         if (!geometry.supported) {
             output.ui(IdeTextKind.Status, geometry.unsupportedMessage, 8, 8, IdeColors.ERROR)
@@ -158,6 +163,8 @@ object IdeRenderer {
         private val font: TerminalFontProfile,
         private val treeFirstRow: Int,
         private val selectedTreePath: ProjectPath?,
+        private val terminalState: IdeTargetTerminalState,
+        private val terminalVisible: Boolean,
     ) {
         private val panels = mutableListOf<IdePanelDraw>()
         private val text = mutableListOf<IdeTextDraw>()
@@ -268,10 +275,11 @@ object IdeRenderer {
                 action: IdeHitAction,
                 enabled: Boolean = true,
                 tooltip: String? = null,
+                selected: Boolean = false,
             ) {
                 val width = maxOf(44, label.length * 6 + 10)
                 val bounds = IdeRect(left, geometry.toolbar.top + 3, left + width, geometry.toolbar.bottom - 3)
-                target(action, bounds, enabled, tooltip)
+                target(action, bounds, enabled, tooltip, selected = selected)
                 ui(IdeTextKind.Toolbar, label, bounds.left + 4, bounds.top + 4, if (enabled) IdeColors.TEXT else IdeColors.DISABLED)
                 left = bounds.right + 4
             }
@@ -294,6 +302,17 @@ object IdeRenderer {
             action("Verify", IdeHitAction.Verify, targetReady, targetTooltip)
             action("Deploy", IdeHitAction.Deploy, targetReady, targetTooltip)
             action("Run", IdeHitAction.Run, targetReady, targetTooltip)
+            targetState.attachedTarget
+                ?.takeIf { it.capabilities.terminal }
+                ?.let {
+                    val tooltip =
+                        when (val state = terminalState) {
+                            is IdeTargetTerminalState.Opening -> "Opening target terminal…"
+                            is IdeTargetTerminalState.Failed -> state.detail
+                            else -> null
+                        }
+                    action("Terminal", IdeHitAction.Terminal, tooltip = tooltip, selected = terminalVisible)
+                }
             action("+File", IdeHitAction.CreateText)
             action("+Dir", IdeHitAction.CreateDirectory)
             action("Rename", IdeHitAction.Rename, hasActiveEntry)
@@ -621,15 +640,20 @@ object IdeRenderer {
             tooltip: String? = null,
             focusGroup: IdeFocusGroup = IdeFocusGroup.Page,
             z: Int = Z_TARGET,
+            selected: Boolean = false,
         ) {
             panels +=
                 IdePanelDraw(
                     IdePanelKind.Control,
                     bounds,
-                    if (enabled) IdeColors.BORDER else IdeColors.PANEL_ALT,
+                    when {
+                        selected -> IdeColors.ACCENT
+                        enabled -> IdeColors.BORDER
+                        else -> IdeColors.PANEL_ALT
+                    },
                     z - CONTROL_BACKGROUND_OFFSET,
                 )
-            hitTargets += IdeHitTarget(action, bounds, enabled, tooltip, focusGroup, z)
+            hitTargets += IdeHitTarget(action, bounds, enabled, tooltip, focusGroup, z, selected)
         }
 
         fun build(): IdeDrawModel = IdeDrawModel(panels.toList(), text.toList(), fills.toList(), scissors.toList(), hitTargets.toList())
