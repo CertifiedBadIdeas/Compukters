@@ -394,12 +394,12 @@ internal object IdeTargetWireProtocol {
     private const val REPLY_FAILED = 9
 }
 
-private fun RegistryFriendlyByteBuf.writeTarget(target: IdeTargetReference) {
+internal fun RegistryFriendlyByteBuf.writeTarget(target: IdeTargetReference) {
     writeUtf(target.id.value, IdeTargetWireProtocol.MAXIMUM_TARGET_ID_CODE_UNITS)
     writeHash(target.profile.value)
 }
 
-private fun RegistryFriendlyByteBuf.readTarget(): IdeTargetReference =
+internal fun RegistryFriendlyByteBuf.readTarget(): IdeTargetReference =
     IdeTargetReference(
         IdeTargetId(readUtf(IdeTargetWireProtocol.MAXIMUM_TARGET_ID_CODE_UNITS)),
         IdeTargetProfileId(readHash()),
