@@ -26,6 +26,16 @@ import kotlin.test.assertTrue
 
 class TerminalRenderGeometryTest {
     @Test
+    fun `grid geometry can be positioned independently from terminal screen chrome`() {
+        val grid = TerminalGridGeometry(17, 23, TerminalFontProfile.DINA)
+
+        assertEquals(TerminalRect(17, 23, 323, 213), grid.bounds)
+        assertEquals(TerminalRect(17, 23, 23, 33), grid.cell(0, 0))
+        assertEquals(TerminalRect(317, 203, 323, 213), grid.cell(50, 18))
+        assertEquals(TerminalRect(29, 62, 35, 63), grid.cursor(TerminalPosition(2, 3)))
+    }
+
+    @Test
     fun `compact panel keeps one fixed 51 by 19 grid centered after resize`() {
         val small = TerminalRenderGeometry(640, 360, TerminalFontProfile.DEFAULT)
         val large = TerminalRenderGeometry(1_280, 720, TerminalFontProfile.DEFAULT)
