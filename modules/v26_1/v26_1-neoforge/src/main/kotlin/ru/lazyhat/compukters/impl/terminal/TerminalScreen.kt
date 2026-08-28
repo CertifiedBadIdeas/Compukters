@@ -43,10 +43,10 @@ internal class TerminalScreen(
     ChildScreenParent {
     val position = initial.position
 
-    internal val machineId: Long
-        get() = replica.machineId
+    internal var machineId: Long = initial.machineId
+        private set
 
-    private val replica = TerminalReplica(initial)
+    private val replica = TerminalReplica(initial.state)
     private val pressedKeys = mutableSetOf<Int>()
     private var fontProfile = CompuktersClientConfig.selectedFont()
     private lateinit var ideButton: Button
@@ -92,12 +92,18 @@ internal class TerminalScreen(
         return handled
     }
 
-    fun update(payload: TerminalFullPayload): Boolean = replica.replace(payload)
+    fun update(payload: TerminalFullPayload): Boolean {
+        if (payload.position != position || payload.machineId <= 0) return false
+        if (!replica.replace(payload.state)) return false
+        machineId = payload.machineId
+        return true
+    }
 
-    fun update(payload: TerminalDeltaPayload): Boolean = replica.apply(payload)
+    fun update(payload: TerminalDeltaPayload): Boolean =
+        payload.position == position && payload.machineId == machineId && replica.apply(payload.delta)
 
     fun requestResync() {
-        transport.send(TerminalResyncPayload(position, replica.machineId, replica.state.revision))
+        transport.send(TerminalResyncPayload(position, machineId, replica.state.revision))
     }
 
     override fun suspendForChild(): Screen {
@@ -112,11 +118,11 @@ internal class TerminalScreen(
         val close = childLifecycle.sameConnection() && transport.connected()
         childLifecycle.abandon()
         pressedKeys.clear()
-        if (close) transport.send(TerminalClosePayload(position, replica.machineId))
+        if (close) transport.send(TerminalClosePayload(position, machineId))
     }
 
     override fun removed() {
-        if (!childLifecycle.suspended) transport.send(TerminalClosePayload(position, replica.machineId))
+        if (!childLifecycle.suspended) transport.send(TerminalClosePayload(position, machineId))
         pressedKeys.clear()
         super.removed()
     }
@@ -136,7 +142,7 @@ internal class TerminalScreen(
                 ?: return super.keyPressed(event)
         val action = if (pressedKeys.add(event.key())) TerminalKeyAction.PRESS else TerminalKeyAction.REPEAT
         transport.send(
-            TerminalKeyPayload(position, replica.machineId, key, action, modifiers(event.modifiers())),
+            TerminalKeyPayload(position, machineId, key, action, modifiers(event.modifiers())),
         )
         return if (key == TerminalKey.ESCAPE) super.keyPressed(event) else true
     }
@@ -279,7 +285,7 @@ internal class TerminalScreen(
     ): TerminalCell = replica.state.cells[y * replica.state.width + x]
 
     private fun sendText(text: String) {
-        transport.send(TerminalTextPayload(position, replica.machineId, text))
+        transport.send(TerminalTextPayload(position, machineId, text))
     }
 
     private fun boundedText(

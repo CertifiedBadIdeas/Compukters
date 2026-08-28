@@ -18,52 +18,40 @@
 
 package ru.lazyhat.compukters.impl.terminal
 
-import net.minecraft.core.BlockPos
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalChange
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 
 class TerminalReplica(
-    initial: TerminalFullPayload,
+    initial: TerminalState,
 ) {
-    init {
-        require(initial.machineId > 0) { "terminal machine id must be positive" }
-    }
-
-    val position: BlockPos = initial.position
-
-    var machineId: Long = initial.machineId
+    var state: TerminalState = validatedCopy(initial)
         private set
 
-    var state: TerminalState = validatedCopy(initial.state)
-        private set
-
-    fun replace(payload: TerminalFullPayload): Boolean {
-        if (payload.position != position || payload.machineId <= 0) return false
-        val replacement = runCatching { validatedCopy(payload.state) }.getOrNull() ?: return false
-        machineId = payload.machineId
-        state = replacement
+    fun replace(state: TerminalState): Boolean {
+        val replacement = runCatching { validatedCopy(state) }.getOrNull() ?: return false
+        this.state = replacement
         return true
     }
 
-    fun apply(payload: TerminalDeltaPayload): Boolean {
-        if (payload.position != position || payload.machineId != machineId) return false
-        if (payload.delta.baseRevision != state.revision) return false
-        val next = runCatching { applyAtomically(state, payload) }.getOrNull() ?: return false
+    fun apply(delta: TerminalUpdate.Delta): Boolean {
+        if (delta.baseRevision != state.revision) return false
+        val next = runCatching { applyAtomically(state, delta) }.getOrNull() ?: return false
         state = next
         return true
     }
 
     private fun applyAtomically(
         current: TerminalState,
-        payload: TerminalDeltaPayload,
+        delta: TerminalUpdate.Delta,
     ): TerminalState {
-        TerminalProtocol.validateDelta(payload.delta)
+        TerminalProtocol.validateDelta(delta)
         val cells = current.cells.toMutableList()
         var cursor = current.cursor
         var cursorVisible = current.cursorVisible
-        payload.delta.changes.forEach { change ->
+        delta.changes.forEach { change ->
             when (change) {
                 is TerminalChange.Patch -> {
                     change.cells.forEachIndexed { offset, cell -> cells[change.start + offset] = cell }
@@ -99,7 +87,7 @@ class TerminalReplica(
         }
         return current
             .copy(
-                revision = payload.delta.targetRevision,
+                revision = delta.targetRevision,
                 cells = cells.toList(),
                 cursor = cursor,
                 cursorVisible = cursorVisible,
