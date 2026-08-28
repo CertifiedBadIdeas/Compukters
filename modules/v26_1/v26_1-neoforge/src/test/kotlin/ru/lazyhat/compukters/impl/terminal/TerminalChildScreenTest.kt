@@ -19,49 +19,76 @@ import kotlin.test.assertTrue
 
 class TerminalChildScreenTest {
     @Test
-    fun `suspended terminal retains hidden state and resyncs before resuming`() {
+    fun `suspended terminal closes observation and requests a fresh one before resuming`() {
         var connection: Any? = Any()
-        var revision = 1L
-        var retained = false
-        val resyncs = mutableListOf<Long>()
+        var closes = 0
+        var freshObservations = 0
         val lifecycle =
             TerminalChildLifecycle(
                 { connection },
                 { connection != null },
-                { resyncs += revision },
-                { retained = true },
-                { retained = false },
+                { closes++ },
+                { freshObservations++ },
             )
 
         lifecycle.suspend()
-        revision = 2
         assertTrue(lifecycle.suspended)
         assertTrue(lifecycle.sameConnection())
-        assertTrue(retained)
+        assertEquals(1, closes)
+        assertEquals(0, freshObservations)
 
         assertTrue(lifecycle.resume())
-        assertEquals(listOf(2L), resyncs)
-        assertFalse(retained)
+        assertEquals(1, freshObservations)
+        assertFalse(lifecycle.suspended)
     }
 
     @Test
     fun `changed connection abandons suspended terminal without resync`() {
         var connection: Any? = Any()
-        var released = false
-        var resynced = false
+        var closes = 0
+        var freshObservations = 0
         val lifecycle =
             TerminalChildLifecycle(
                 { connection },
                 { true },
-                { resynced = true },
-                {},
-                { released = true },
+                { closes++ },
+                { freshObservations++ },
             )
         lifecycle.suspend()
         connection = Any()
 
         assertFalse(lifecycle.resume())
-        assertFalse(resynced)
-        assertTrue(released)
+        assertEquals(1, closes)
+        assertEquals(0, freshObservations)
+        assertFalse(lifecycle.suspended)
+    }
+
+    @Test
+    fun `abandoned child never reopens the standalone observation`() {
+        var freshObservations = 0
+        val lifecycle =
+            TerminalChildLifecycle(
+                { CONNECTION },
+                { true },
+                {},
+                { freshObservations++ },
+            )
+
+        lifecycle.suspend()
+        lifecycle.abandon()
+
+        assertFalse(lifecycle.suspended)
+        assertEquals(0, freshObservations)
+    }
+
+    @Test
+    fun `delayed standalone open cannot replace an active child screen`() {
+        assertTrue(shouldOpenStandaloneTerminal(hasOpenScreen = false, requestedOpen = true))
+        assertFalse(shouldOpenStandaloneTerminal(hasOpenScreen = true, requestedOpen = true))
+        assertFalse(shouldOpenStandaloneTerminal(hasOpenScreen = false, requestedOpen = false))
+    }
+
+    private companion object {
+        val CONNECTION = Any()
     }
 }

@@ -27,17 +27,7 @@ import ru.lazyhat.compukters.core.MOD_ID
 
 @EventBusSubscriber(modid = MOD_ID, value = [Dist.CLIENT])
 object TerminalClientNetwork {
-    private var retained: TerminalScreen? = null
-
-    internal fun retain(screen: TerminalScreen) {
-        retained = screen
-    }
-
-    internal fun release(screen: TerminalScreen) {
-        if (retained === screen) retained = null
-    }
-
-    private fun currentTerminal(): TerminalScreen? = (Minecraft.getInstance().screen as? TerminalScreen) ?: retained
+    private fun currentTerminal(): TerminalScreen? = Minecraft.getInstance().screen as? TerminalScreen
 
     @JvmStatic
     @SubscribeEvent
@@ -47,7 +37,7 @@ object TerminalClientNetwork {
             val current = currentTerminal()
             if (current is TerminalScreen && current.position == payload.position) {
                 current.update(payload)
-            } else if (payload.openScreen) {
+            } else if (shouldOpenStandaloneTerminal(minecraft.screen != null, payload.openScreen)) {
                 minecraft.setScreen(TerminalScreen(payload))
             }
         }
@@ -59,3 +49,8 @@ object TerminalClientNetwork {
         }
     }
 }
+
+internal fun shouldOpenStandaloneTerminal(
+    hasOpenScreen: Boolean,
+    requestedOpen: Boolean,
+): Boolean = requestedOpen && !hasOpenScreen

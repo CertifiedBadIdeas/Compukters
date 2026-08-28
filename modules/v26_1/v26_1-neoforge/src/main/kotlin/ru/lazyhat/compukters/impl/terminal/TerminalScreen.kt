@@ -52,9 +52,8 @@ internal class TerminalScreen(
         TerminalChildLifecycle(
             transport::connectionIdentity,
             transport::connected,
+            { transport.send(TerminalClosePayload(position, machineId)) },
             ::requestResync,
-            { TerminalClientNetwork.retain(this) },
-            { TerminalClientNetwork.release(this) },
         )
 
     override fun init() {
@@ -112,10 +111,8 @@ internal class TerminalScreen(
     override fun resumeFromChild(): Boolean = childLifecycle.resume()
 
     override fun abandonChild() {
-        val close = childLifecycle.sameConnection() && transport.connected()
         childLifecycle.abandon()
         pressedKeys.clear()
-        if (close) transport.send(TerminalClosePayload(position, machineId))
     }
 
     override fun removed() {
@@ -251,9 +248,8 @@ internal interface TerminalScreenTransport {
 internal class TerminalChildLifecycle(
     private val connectionIdentity: () -> Any?,
     private val connected: () -> Boolean,
-    private val resync: () -> Unit,
-    private val retain: () -> Unit,
-    private val release: () -> Unit,
+    private val closeObservation: () -> Unit,
+    private val requestFreshObservation: () -> Unit,
 ) {
     var suspended: Boolean = false
         private set
@@ -263,7 +259,7 @@ internal class TerminalChildLifecycle(
         if (suspended) return
         suspended = true
         capturedConnection = connectionIdentity()
-        retain()
+        closeObservation()
     }
 
     fun resume(): Boolean {
@@ -272,10 +268,9 @@ internal class TerminalChildLifecycle(
             abandon()
             return false
         }
-        resync()
+        requestFreshObservation()
         suspended = false
         capturedConnection = null
-        release()
         return true
     }
 
@@ -283,7 +278,6 @@ internal class TerminalChildLifecycle(
         if (!suspended) return
         suspended = false
         capturedConnection = null
-        release()
     }
 
     fun sameConnection(): Boolean = suspended && capturedConnection != null && capturedConnection === connectionIdentity()
