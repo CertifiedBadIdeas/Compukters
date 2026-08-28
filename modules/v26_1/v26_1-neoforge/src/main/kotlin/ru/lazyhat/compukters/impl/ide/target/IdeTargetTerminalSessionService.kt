@@ -31,6 +31,7 @@ internal class IdeTargetTerminalSessionService(
 ) : AutoCloseable {
     private val sessionsByPlayer = mutableMapOf<UUID, Session>()
     private val playersByToken = mutableMapOf<UUID, UUID>()
+    private val pendingDeliveries = mutableListOf<IdeTerminalDelivery>()
     private val removalObservation = leases.observeRemovals(::targetRemoved)
     private var closed = false
 
@@ -69,7 +70,8 @@ internal class IdeTargetTerminalSessionService(
 
     fun publish(tick: Long): List<IdeTerminalDelivery> {
         checkOpen()
-        val deliveries = mutableListOf<IdeTerminalDelivery>()
+        val deliveries = pendingDeliveries.toMutableList()
+        pendingDeliveries.clear()
         sessionsByPlayer.keys.toList().forEach { player ->
             val session = sessionsByPlayer[player] ?: return@forEach
             if (!isLive(player, session, tick) || session.terminal.machineId() != session.machineId) {
@@ -165,6 +167,7 @@ internal class IdeTargetTerminalSessionService(
         removalObservation.close()
         sessionsByPlayer.clear()
         playersByToken.clear()
+        pendingDeliveries.clear()
         closed = true
     }
 
@@ -197,7 +200,10 @@ internal class IdeTargetTerminalSessionService(
         player: UUID,
         attached: IdeAttachedTarget,
     ) {
-        if (sessionsByPlayer[player]?.attached == attached) remove(player)
+        val session = sessionsByPlayer[player] ?: return
+        if (session.attached != attached) return
+        pendingDeliveries += IdeTerminalDelivery(player, lost(session))
+        remove(player)
     }
 
     private fun remove(player: UUID) {

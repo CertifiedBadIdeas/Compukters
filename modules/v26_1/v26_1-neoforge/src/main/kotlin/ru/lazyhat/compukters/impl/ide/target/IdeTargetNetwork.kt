@@ -18,6 +18,7 @@ import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.neoforge.event.server.ServerStoppingEvent
 import net.neoforged.neoforge.event.tick.ServerTickEvent
+import net.neoforged.neoforge.network.PacketDistributor
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent
 import net.neoforged.neoforge.network.handling.IPayloadContext
 import ru.lazyhat.compukters.core.MOD_ID
@@ -31,6 +32,68 @@ internal object IdeTargetNetwork {
         val registrar = event.registrar("1")
         registrar.playToServer(IdeTargetRequestPayload.TYPE, IdeTargetRequestPayload.STREAM_CODEC, ::handle)
         registrar.playToClient(IdeTargetReplyPayload.TYPE, IdeTargetReplyPayload.STREAM_CODEC)
+        registrar.playToServer(IdeTerminalOpenPayload.TYPE, IdeTerminalOpenPayload.STREAM_CODEC, ::handleTerminalOpen)
+        registrar.playToServer(IdeTerminalResyncPayload.TYPE, IdeTerminalResyncPayload.STREAM_CODEC, ::handleTerminalResync)
+        registrar.playToServer(IdeTerminalKeyPayload.TYPE, IdeTerminalKeyPayload.STREAM_CODEC, ::handleTerminalKey)
+        registrar.playToServer(IdeTerminalTextPayload.TYPE, IdeTerminalTextPayload.STREAM_CODEC, ::handleTerminalText)
+        registrar.playToServer(IdeTerminalClosePayload.TYPE, IdeTerminalClosePayload.STREAM_CODEC, ::handleTerminalClose)
+        registrar.playToClient(IdeTerminalOpenedPayload.TYPE, IdeTerminalOpenedPayload.STREAM_CODEC)
+        registrar.playToClient(IdeTerminalFullPayload.TYPE, IdeTerminalFullPayload.STREAM_CODEC)
+        registrar.playToClient(IdeTerminalDeltaPayload.TYPE, IdeTerminalDeltaPayload.STREAM_CODEC)
+        registrar.playToClient(IdeTerminalFailedPayload.TYPE, IdeTerminalFailedPayload.STREAM_CODEC)
+    }
+
+    private fun handleTerminalOpen(
+        payload: IdeTerminalOpenPayload,
+        context: IPayloadContext,
+    ) {
+        val player = context.player() as? ServerPlayer ?: return
+        val transport = transport(player)
+        context.reply(
+            transport.terminals.open(
+                player.uuid,
+                payload.generation,
+                payload.target,
+                player.level().server.tickCount.toLong(),
+            ),
+        )
+    }
+
+    private fun handleTerminalResync(
+        payload: IdeTerminalResyncPayload,
+        context: IPayloadContext,
+    ) {
+        val player = context.player() as? ServerPlayer ?: return
+        transport(player).terminals.resync(player.uuid, payload, player.level().server.tickCount.toLong())?.let(context::reply)
+    }
+
+    private fun handleTerminalKey(
+        payload: IdeTerminalKeyPayload,
+        context: IPayloadContext,
+    ) {
+        val player = context.player() as? ServerPlayer ?: return
+        transport(player).terminals.key(player.uuid, payload, player.level().server.tickCount.toLong())
+    }
+
+    private fun handleTerminalText(
+        payload: IdeTerminalTextPayload,
+        context: IPayloadContext,
+    ) {
+        val player = context.player() as? ServerPlayer ?: return
+        transport(player).terminals.text(player.uuid, payload, player.level().server.tickCount.toLong())
+    }
+
+    private fun handleTerminalClose(
+        payload: IdeTerminalClosePayload,
+        context: IPayloadContext,
+    ) {
+        val player = context.player() as? ServerPlayer ?: return
+        transport(player).terminals.close(player.uuid, payload)
+    }
+
+    private fun transport(player: ServerPlayer): ServerTransport {
+        val server = player.level().server
+        return servers.getOrPut(server) { ServerTransport(server) }
     }
 
     private fun handle(
@@ -63,14 +126,22 @@ internal object IdeTargetNetwork {
     private class ServerTransport(server: MinecraftServer) : AutoCloseable {
         private val leases = IdeTargetLeaseService(NeoForgeIdeTargetResolver(server))
         private val deployments = IdeTargetDeploymentService(leases)
+        val terminals = IdeTargetTerminalSessionService(leases)
         val processor = IdeTargetRequestProcessor(leases, deployments)
+        private val server = server
 
         fun expire(tick: Long) {
             leases.expire(tick)
             deployments.expire(tick)
+            terminals.publish(tick).forEach { delivery ->
+                server.playerList.getPlayer(delivery.player)?.let { player ->
+                    PacketDistributor.sendToPlayer(player, delivery.payload)
+                }
+            }
         }
 
         override fun close() {
+            terminals.close()
             deployments.close()
             leases.close()
         }
