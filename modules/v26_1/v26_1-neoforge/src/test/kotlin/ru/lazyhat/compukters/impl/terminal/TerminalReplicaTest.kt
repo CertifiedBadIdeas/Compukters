@@ -18,7 +18,6 @@
 
 package ru.lazyhat.compukters.impl.terminal
 
-import net.minecraft.core.BlockPos
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalChange
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
@@ -32,13 +31,23 @@ import kotlin.test.assertTrue
 
 class TerminalReplicaTest {
     @Test
-    fun `revision or machine mismatch requests resync without mutation`() {
-        val replica = TerminalReplica(TerminalFullPayload(POSITION, 7, state(3), true))
+    fun `revision mismatch rejects delta without mutation`() {
+        val replica = TerminalReplica(state(3))
         val before = replica.state
 
-        assertFalse(replica.apply(TerminalDeltaPayload(POSITION, 7, delta(2, 4, TerminalChange.Reset))))
-        assertFalse(replica.apply(TerminalDeltaPayload(POSITION, 8, delta(3, 4, TerminalChange.Reset))))
+        assertFalse(replica.apply(delta(2, 4, TerminalChange.Reset)))
         assertEquals(before, replica.state)
+    }
+
+    @Test
+    fun `valid replacement copies and publishes the complete state`() {
+        val replica = TerminalReplica(state(3))
+        val replacement = state(9).copy(cursor = TerminalPosition(4, 5), cursorVisible = false)
+
+        assertTrue(replica.replace(replacement))
+        assertEquals(replacement, replica.state)
+        assertFalse(replica.state === replacement)
+        assertFalse(replica.state.cells === replacement.cells)
     }
 
     @Test
@@ -46,7 +55,7 @@ class TerminalReplicaTest {
         val cells = MutableList(CELL_COUNT) { cell(' ') }
         cells[0] = cell('A')
         cells[WIDTH] = cell('B')
-        val replica = TerminalReplica(TerminalFullPayload(POSITION, 7, state(1, cells), true))
+        val replica = TerminalReplica(state(1, cells))
         val update =
             delta(
                 1,
@@ -55,7 +64,7 @@ class TerminalReplicaTest {
                 TerminalChange.Patch(0, listOf(cell('X'))),
             )
 
-        assertTrue(replica.apply(TerminalDeltaPayload(POSITION, 7, update)))
+        assertTrue(replica.apply(update))
         assertEquals(cell('X'), replica.state.cells[0])
         assertEquals(cell('.'), replica.state.cells[(HEIGHT - 1) * WIDTH])
         assertEquals(2, replica.state.revision)
@@ -63,7 +72,7 @@ class TerminalReplicaTest {
 
     @Test
     fun `invalid later change rejects the whole delta atomically`() {
-        val replica = TerminalReplica(TerminalFullPayload(POSITION, 7, state(1), true))
+        val replica = TerminalReplica(state(1))
         val before = replica.state
         val update =
             delta(
@@ -73,7 +82,7 @@ class TerminalReplicaTest {
                 TerminalChange.Fill(50, 18, 2, 1, cell('Y')),
             )
 
-        assertFalse(replica.apply(TerminalDeltaPayload(POSITION, 7, update)))
+        assertFalse(replica.apply(update))
         assertEquals(before, replica.state)
     }
 
@@ -81,7 +90,7 @@ class TerminalReplicaTest {
     fun `invalid full state is rejected`() {
         val invalid = state(0).copy(cells = listOf(cell('x')))
         assertFailsWith<IllegalArgumentException> {
-            TerminalReplica(TerminalFullPayload(POSITION, 1, invalid, true))
+            TerminalReplica(invalid)
         }
     }
 
@@ -89,8 +98,6 @@ class TerminalReplicaTest {
         const val WIDTH = 51
         const val HEIGHT = 19
         const val CELL_COUNT = WIDTH * HEIGHT
-        val POSITION = BlockPos(2, 3, 4)
-
         fun cell(value: Char): TerminalCell = TerminalCell(value.code, 15, 0)
 
         fun state(
