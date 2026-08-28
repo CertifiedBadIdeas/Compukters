@@ -115,6 +115,32 @@ class IdeTargetTerminalClientTest {
         assertTrue(transport.sent.last() !is IdeTerminalClosePayload)
     }
 
+    @Test
+    fun `machine loss invalidates the token once and remains retryable`() {
+        val transport = RecordingTransport()
+        val client = activeClient(transport)
+
+        client.accept(IdeTerminalFailedPayload(1, TOKEN, IdeTargetFailureKind.TargetLost, "rebooted", true))
+        val failed = assertIs<IdeTargetTerminalState.Failed>(client.state())
+        assertEquals("rebooted", failed.detail)
+        assertTrue(failed.retryable)
+
+        client.close()
+        assertEquals(1, transport.sent.filterIsInstance<IdeTerminalOpenPayload>().size)
+        assertTrue(transport.sent.none { it is IdeTerminalClosePayload })
+    }
+
+    @Test
+    fun `closing an active client is idempotent and closes its token exactly once`() {
+        val transport = RecordingTransport()
+        val client = activeClient(transport)
+
+        client.close()
+        client.close()
+
+        assertEquals(listOf(IdeTerminalClosePayload(TOKEN)), transport.sent.filterIsInstance<IdeTerminalClosePayload>())
+    }
+
     private fun activeClient(transport: RecordingTransport): IdeTargetTerminalClient =
         IdeTargetTerminalClient(transport).also { client ->
             client.setTarget(TARGET)
