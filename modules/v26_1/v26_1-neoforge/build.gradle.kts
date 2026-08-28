@@ -269,6 +269,8 @@ val nativeFilename =
         else -> error("unreachable native build operating system: $nativeOs")
     }
 val nativeResourcePath = "META-INF/natives/$nativeOs/$nativeArch/$nativeFilename"
+val releaseRuntimeMode = providers.gradleProperty("compukterRuntimeBundleDir").isPresent
+val expectedPackagedNativeResources = expectedNativeResources(releaseRuntimeMode, nativeResourcePath)
 val productionJar = tasks.named<ShadowJar>("shadowJar")
 val verifyPackagedCompukterFfi =
     tasks.register("verifyPackagedCompukterFfi") {
@@ -276,7 +278,7 @@ val verifyPackagedCompukterFfi =
         group = "verification"
         dependsOn(productionJar)
         inputs.file(productionJar.flatMap { it.archiveFile })
-        inputs.property("nativeResourcePath", nativeResourcePath)
+        inputs.property("expectedNativeResources", expectedPackagedNativeResources)
         doLast {
             val archive = productionJar.get().archiveFile.get().asFile
             val entries =
@@ -289,9 +291,7 @@ val verifyPackagedCompukterFfi =
                         .toList()
                 }
             val nativeEntries = entries.filter { it.startsWith("META-INF/natives/") }
-            check(nativeEntries == listOf(nativeResourcePath)) {
-                "expected only $nativeResourcePath in ${archive.name}, found $nativeEntries"
-            }
+            validateNativeResources(nativeEntries, expectedPackagedNativeResources)
             check(entries.count { it == "META-INF/neoforge.mods.toml" } == 1) {
                 "expected exactly one META-INF/neoforge.mods.toml in ${archive.name}"
             }
@@ -506,6 +506,48 @@ tasks.named("check") {
 
 tasks.named("buildProductionUniversalJar") {
     dependsOn(verifyPackagedCompukterFfi)
+}
+
+fun captureReleaseGit(vararg arguments: String): String {
+    val process =
+        ProcessBuilder("git", *arguments)
+            .directory(rootProject.projectDir)
+            .redirectErrorStream(true)
+            .start()
+    val output = process.inputStream.bufferedReader().readText().trimEnd()
+    check(process.waitFor() == 0) { "git ${arguments.toList()} failed: $output" }
+    return output
+}
+
+val verifyUniversalReleaseState =
+    tasks.register("verifyUniversalReleaseState") {
+        description = "Requires the exact clean tagged state used to assemble a universal release."
+        group = "verification"
+        doLast {
+            validateUniversalReleaseState(
+                UniversalReleaseState(
+                    version = rootProject.version.toString(),
+                    runtimeBundlesConfigured = releaseRuntimeMode,
+                    headTags =
+                        captureReleaseGit("tag", "--points-at", "HEAD")
+                            .lineSequence()
+                            .filter(String::isNotBlank)
+                            .toSet(),
+                    worktreeStatus = captureReleaseGit("status", "--porcelain"),
+                    submoduleStatus = captureReleaseGit("submodule", "status", "--recursive"),
+                ),
+            )
+        }
+    }
+
+tasks.register("buildReleaseUniversalJar") {
+    description = "Builds and verifies the clean tagged NeoForge release with Linux and Windows Runtime natives."
+    group = "build"
+    dependsOn(
+        verifyUniversalReleaseState,
+        verifyPackagedCompukterFfi,
+        ":native-runtime:packagedNativeIntegrationTest",
+    )
 }
 
 val verifyNeoForgeRuntimeDependencies =
