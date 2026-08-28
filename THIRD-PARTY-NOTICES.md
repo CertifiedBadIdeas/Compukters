@@ -64,6 +64,18 @@ The outer archive nests `kotlin-logging-jvm` 8.0.4. Kotlin Logging is copyright
 Ohad Shai and contributors and is licensed under Apache-2.0:
 <https://github.com/oshai/kotlin-logging>.
 
+## IDE project metadata
+
+The outer archive nests the lightweight libraries used to read local IDE
+project manifests and lock files:
+
+- Tomlj 1.1.1 — Apache-2.0. The complete Apache License 2.0 text is packaged
+  at `META-INF/licenses/Compukters-Apache-2.0.txt`.
+- ANTLR 4 Runtime 4.11.1 — BSD-3-Clause; complete text at
+  `licenses/jvm/antlr4-runtime-4.11.1-BSD-3-Clause.txt`.
+- Checker Qual 3.21.2 — MIT; complete text at
+  `licenses/jvm/checker-qual-3.21.2-MIT.txt`.
+
 ## Statically linked Rust crates
 
 The packaged native `compukter_ffi` library statically links the crates below.

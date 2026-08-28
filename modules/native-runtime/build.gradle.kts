@@ -125,7 +125,11 @@ val nativeIntegrationTest =
     tasks.register<Test>("nativeIntegrationTest") {
         description = "Runs Kotlin-to-FFM-to-Rust Compukter VM integration tests."
         group = "verification"
-        dependsOn(rootProject.tasks.named("cargoBuildCompukterFfi"), ":compiler-k2:generateBlockingCallConformanceArtifact")
+        dependsOn(
+            rootProject.tasks.named("cargoBuildCompukterFfi"),
+            ":compiler-k2:generateShellArtifact",
+            ":compiler-k2:generateBlockingCallConformanceArtifact",
+        )
         useJUnitPlatform()
         testClassesDirs = sourceSets.test.get().output.classesDirs
         classpath = sourceSets.test.get().runtimeClasspath

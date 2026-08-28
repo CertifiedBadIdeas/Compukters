@@ -59,9 +59,24 @@ dependencies {
     implementation(project(":compiler-runtime"))
     shadowBundle(project(":compiler-runtime")) { isTransitive = false }
 
+    implementation(project(":worker-client"))
+    shadowBundle(project(":worker-client")) { isTransitive = false }
+
+    implementation(project(":ide-core"))
+    shadowBundle(project(":ide-core")) { isTransitive = false }
+
+    implementation(project(":ide-analysis-client"))
+    shadowBundle(project(":ide-analysis-client")) { isTransitive = false }
+
+    implementation(project(":ide-client"))
+    shadowBundle(project(":ide-client")) { isTransitive = false }
+
     neoForgeImplementation(libs.findLibrary("kotlin-stdlib").get())
     neoForgeImplementation(libs.findLibrary("kotlin-logging").get())
     neoForgeImplementation(libs.findLibrary("kotlinx-coroutines-core").get())
+    neoForgeImplementation(libs.findLibrary("tomlj").get())
+    neoForgeImplementation(libs.findLibrary("antlr4-runtime").get())
+    neoForgeImplementation(libs.findLibrary("checker-qual").get())
 }
 
 tasks.named<Jar>("jar") {
