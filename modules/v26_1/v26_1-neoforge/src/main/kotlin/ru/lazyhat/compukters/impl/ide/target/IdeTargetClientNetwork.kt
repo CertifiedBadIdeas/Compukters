@@ -24,6 +24,7 @@ import java.util.concurrent.CompletableFuture
 @EventBusSubscriber(modid = MOD_ID, value = [Dist.CLIENT])
 internal object IdeTargetClientNetwork {
     private var current: IdeTargetRequestBroker? = null
+    private var currentTerminal: IdeTargetTerminalClient? = null
 
     fun openPort(): NeoForgeIdeTargetPort {
         disconnect()
@@ -32,10 +33,19 @@ internal object IdeTargetClientNetwork {
         return NeoForgeIdeTargetPort(OwnedChannel(broker))
     }
 
+    fun openTerminal(): IdeTargetTerminalClient {
+        currentTerminal?.close()
+        return IdeTargetTerminalClient(ClientPacketDistributor::sendToServer).also { currentTerminal = it }
+    }
+
     @JvmStatic
     @SubscribeEvent
     fun register(event: RegisterClientPayloadHandlersEvent) {
         event.register(IdeTargetReplyPayload.TYPE) { payload, _ -> current?.receive(payload) }
+        event.register(IdeTerminalOpenedPayload.TYPE) { payload, _ -> currentTerminal?.accept(payload) }
+        event.register(IdeTerminalFullPayload.TYPE) { payload, _ -> currentTerminal?.accept(payload) }
+        event.register(IdeTerminalDeltaPayload.TYPE) { payload, _ -> currentTerminal?.accept(payload) }
+        event.register(IdeTerminalFailedPayload.TYPE) { payload, _ -> currentTerminal?.accept(payload) }
     }
 
     @JvmStatic
@@ -47,6 +57,13 @@ internal object IdeTargetClientNetwork {
     private fun disconnect() {
         current?.disconnect()
         current = null
+        currentTerminal?.connectionLost()
+        currentTerminal = null
+    }
+
+    fun release(terminal: IdeTargetTerminalClient) {
+        terminal.close()
+        if (currentTerminal === terminal) currentTerminal = null
     }
 
     private class OwnedChannel(

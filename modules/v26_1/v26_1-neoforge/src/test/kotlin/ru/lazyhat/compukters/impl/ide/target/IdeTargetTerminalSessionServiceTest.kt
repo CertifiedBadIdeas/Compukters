@@ -108,6 +108,7 @@ class IdeTargetTerminalSessionServiceTest {
         fixture.service.open(OWNER, 9, fixture.reference, tick = 3)
         fixture.leases.detach(OWNER, fixture.attached)
         assertFalse(fixture.service.close(OWNER, IdeTerminalClosePayload(TOKEN)))
+        assertIs<IdeTerminalFailedPayload>(fixture.service.publish(tick = 4).single().payload)
     }
 
     @Test

@@ -67,6 +67,7 @@ import ru.lazyhat.compukters.ide.project.ProjectLockService
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetClientNetwork
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalClient
 import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
 import ru.lazyhat.compukters.worker.payload.PackagedWorkerPayload
 import ru.lazyhat.compukters.worker.payload.WorkerPayloadExpectation
@@ -157,6 +158,7 @@ internal class IdeClientServices<A : AutoCloseable>(
 internal class IdeClientApplication(
     val controller: IdeClientController,
     val preferences: IdeClientPreferences,
+    val targetTerminal: IdeTargetTerminalClient,
     private val targetPort: AutoCloseable,
 ) : AutoCloseable {
     private val closed = AtomicBoolean()
@@ -168,6 +170,11 @@ internal class IdeClientApplication(
             controller.close()
         } catch (error: Throwable) {
             failure = error
+        }
+        try {
+            IdeTargetClientNetwork.release(targetTerminal)
+        } catch (error: Throwable) {
+            failure?.addSuppressed(error) ?: run { failure = error }
         }
         try {
             targetPort.close()
@@ -323,6 +330,7 @@ private object ProductionIdeApplicationFactory {
         val workspace = DefaultIdeWorkspace(paths.projects, clientLimits = clientLimits)
         val clock = IdeControllerClock.System
         val targetPort = IdeTargetClientNetwork.openPort()
+        val targetTerminal = IdeTargetClientNetwork.openTerminal()
         val target = IdeTargetCoordinator(targetPort, clock, clientLimits)
         val preferences = IdeClientPreferences(paths.preferences, CompuktersClientConfig.IdeLayout)
         val controller =
@@ -336,7 +344,7 @@ private object ProductionIdeApplicationFactory {
                 tooling = tooling(workspace),
             )
         controller.start()
-        return IdeClientApplication(controller, preferences, targetPort)
+        return IdeClientApplication(controller, preferences, targetTerminal, targetPort)
     }
 
     private fun composeTooling(
