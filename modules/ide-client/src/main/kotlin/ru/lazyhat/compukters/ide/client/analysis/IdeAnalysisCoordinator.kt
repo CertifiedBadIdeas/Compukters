@@ -30,7 +30,9 @@ import ru.lazyhat.compukters.ide.analysis.controller.AnalysisClientResult
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisRequestCoordinator
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisResultSink
 import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
+import ru.lazyhat.compukters.ide.editor.EditorChange
 import ru.lazyhat.compukters.ide.editor.EditorDocument
+import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
 import ru.lazyhat.compukters.ide.project.ProjectHandle
 import java.util.Collections
@@ -80,6 +82,34 @@ class IdeAnalysisPresentation private constructor(
                 token.path == path && offsetUtf16 >= token.range.startUtf16 && offsetUtf16 < token.range.endUtf16
             }?.let { IdeHighlightStyle.Semantic(it.category) }
             ?: IdeHighlightStyle.Lexical(lexicalFallback)
+
+    fun rebase(
+        activePath: VirtualSourcePath,
+        change: EditorChange,
+    ): IdeAnalysisPresentation {
+        val delta = Math.subtractExact(change.insertedCodeUnits, change.oldRange.length)
+        val rebased =
+            semanticTokens.mapNotNull { token ->
+                if (token.path != activePath) return@mapNotNull token
+                val range = token.range
+                when {
+                    range.endUtf16 <= change.oldRange.startUtf16 -> {
+                        token
+                    }
+
+                    range.startUtf16 >= change.oldRange.endUtf16 -> {
+                        val start = Math.addExact(range.startUtf16, delta)
+                        val end = Math.addExact(range.endUtf16, delta)
+                        token.copy(range = EditorRange(start, end))
+                    }
+
+                    else -> {
+                        null
+                    }
+                }
+            }
+        return IdeAnalysisPresentation(emptyList(), rebased)
+    }
 
     companion object {
         val Empty = IdeAnalysisPresentation(emptyList(), emptyList())
@@ -162,6 +192,7 @@ class IdeAnalysisCoordinator(
         documentRevision: Long,
         insertedText: String?,
         caretOffsetUtf16: Int = text.length,
+        change: EditorChange? = null,
     ) {
         require(documentRevision >= 0) { "document revision must not be negative" }
         require(caretOffsetUtf16 in 0..text.length) { "analysis caret exceeds current source" }
@@ -175,6 +206,12 @@ class IdeAnalysisCoordinator(
                 return
             }
             if (current.input != null) version = Math.incrementExact(version)
+            val presentation =
+                change?.let { exactChange ->
+                    (publishedState.get() as? IdeAnalysisState.Active)
+                        ?.presentation
+                        ?.rebase(current.path, exactChange)
+                } ?: IdeAnalysisPresentation.Empty
             val updated =
                 current.copy(
                     text = text,
@@ -182,6 +219,7 @@ class IdeAnalysisCoordinator(
                     caretOffsetUtf16 = caretOffsetUtf16,
                     snapshot = null,
                     pendingCompletion = if (trigger) PendingCompletion.Automatic else null,
+                    provisionalPresentation = presentation,
                 )
             session = updated
             publishedState.set(IdeAnalysisState.Loading(updated.path, documentRevision))
@@ -257,6 +295,7 @@ class IdeAnalysisCoordinator(
                 document.revision,
                 insertedText = null,
                 caretOffsetUtf16 = document.caretOffset,
+                change = result.edit.change,
             )
         }
         return result
@@ -350,7 +389,7 @@ class IdeAnalysisCoordinator(
                     snapshot.identity,
                     latest.path,
                     latest.documentRevision,
-                    IdeAnalysisPresentation.Empty,
+                    latest.provisionalPresentation,
                     null,
                 ),
             )
@@ -453,6 +492,7 @@ class IdeAnalysisCoordinator(
         val input: IdeBuildInput?,
         val snapshot: AdmittedAnalysisSnapshot?,
         val pendingCompletion: PendingCompletion? = null,
+        val provisionalPresentation: IdeAnalysisPresentation = IdeAnalysisPresentation.Empty,
     )
 
     private data class Rebuild(
