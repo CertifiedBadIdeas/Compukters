@@ -68,7 +68,7 @@ fun gitCapture(
         process.inputStream
             .bufferedReader()
             .readText()
-            .trim()
+            .trimEnd()
     require(process.waitFor() == 0) { "git ${args.toList()} failed: $output" }
     return output
 }
@@ -126,21 +126,58 @@ tasks.register("currentVersion") {
     doLast { println("Project version: ${project.version}") }
 }
 
+val tagRelease =
+    tasks.register("tagRelease") {
+        group = "release"
+        description = "Validate and tag the current stable version without changing the worktree"
+        doLast {
+            val currentVersion = project.version.toString()
+            val releaseVersion = ReleaseVersion.parse(currentVersion)
+            validateTagReleaseState(
+                TagReleaseState(
+                    version = currentVersion,
+                    branch = currentBranch(projectDir),
+                    existingTags =
+                        gitCapture(projectDir, "tag", "--list")
+                            .lineSequence()
+                            .filter(String::isNotBlank)
+                            .toSet(),
+                    worktreeStatus = gitCapture(projectDir, "status", "--porcelain"),
+                    submoduleStatus = gitCapture(projectDir, "submodule", "status", "--recursive"),
+                ),
+            )
+            git(projectDir, "tag", "-a", releaseVersion.tag, "-m", "Compukters ${releaseVersion.value}")
+            println("Tagged ${releaseVersion.tag}; gradle.properties was not changed.")
+            println("Run the release assembly gate before publishing the tag.")
+        }
+    }
+
 tasks.register("release") {
     group = "release"
-    description = "Tag current version (${project.version} -> v${project.version}) and bump minor"
+    description = "Alias for tagRelease; never bumps the version automatically"
+    dependsOn(tagRelease)
+}
+
+tasks.register("bumpAfterRelease") {
+    group = "release"
+    description = "After publication, bump a tagged stable release to the next development minor"
     doLast {
         val currentVersion = project.version.toString()
-        parseVersion(currentVersion)
-        val branch = currentBranch(projectDir)
-        require(!branch.startsWith("fix/")) {
-            "':release' is for the main line. You are on '$branch' — use ':releaseFix' instead."
-        }
-        git(projectDir, "tag", "v$currentVersion")
-        println("Tagged v$currentVersion")
-        println("Run 'git push --tags' to publish.")
+        val nextVersion =
+            validateBumpAfterReleaseState(
+                BumpAfterReleaseState(
+                    version = currentVersion,
+                    headTags =
+                        gitCapture(projectDir, "tag", "--points-at", "HEAD")
+                            .lineSequence()
+                            .filter(String::isNotBlank)
+                            .toSet(),
+                    worktreeStatus = gitCapture(projectDir, "status", "--porcelain"),
+                    submoduleStatus = gitCapture(projectDir, "submodule", "status", "--recursive"),
+                ),
+            )
+        doVersionBump(project, nextVersion)
     }
-    finalizedBy("bumpMinor")
 }
 
 tasks.register("startFixBranch") {
@@ -179,7 +216,7 @@ tasks.register("startFixBranch") {
 
 tasks.register("releaseFix") {
     group = "release"
-    description = "Tag current fix version on the active fix/X.Y.x branch and bump patch"
+    description = "Tag current fix version on the active fix/X.Y.x branch without bumping"
     doLast {
         val currentVersion = project.version.toString()
         val sv = parseVersion(currentVersion)
@@ -200,7 +237,6 @@ tasks.register("releaseFix") {
         println("Tagged v$currentVersion on $branch")
         println("Run 'git push --tags' to publish.")
     }
-    finalizedBy("bumpPatch")
 }
 
 tasks.register("bumpPatch") {
