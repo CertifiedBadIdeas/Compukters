@@ -30,8 +30,14 @@ import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
+import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
+import ru.lazyhat.compukters.ide.client.target.IdeTargetState
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetReference
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState
+import ru.lazyhat.compukters.impl.terminal.TerminalGridGeometry
+import ru.lazyhat.compukters.impl.terminal.TerminalGridRenderer
 
 internal class IdeScreen(
     private val session: IdeClientSession<IdeClientApplication>,
@@ -47,6 +53,7 @@ internal class IdeScreen(
             IdeUiActionSink(::activateUiAction),
         )
     private val splitters = IdeSplitterInteraction(application.preferences.layout(), application.preferences::saveLayout)
+    private val terminalOverlay = IdeTerminalOverlayController(application.targetTerminal)
     private var focusArea = IdeFocusState.Initial.area
     private var selectedTreePath: ProjectPath? = null
     private var returningToParent = false
@@ -65,19 +72,36 @@ internal class IdeScreen(
             clearFocus()
             return true
         }
+        val overlay = terminalOverlayGeometry(geometry)
+        if (terminalOverlay.visible && overlay.panel.contains(event.x(), event.y())) {
+            focusArea = IdeFocusArea.Terminal
+            terminalOverlay.focus()
+            if (overlay.status.contains(event.x(), event.y())) terminalOverlay.retry()
+            clearFocus()
+            input.pointerActivity()
+            return true
+        }
         selectTreeRow(event.x(), event.y(), geometry)
         if (splitters.press(event.x().toInt(), event.y().toInt(), geometry)) {
             input.pointerActivity()
             return true
         }
-        if (input.pointerClicked(event.x(), event.y(), event.modifiers(), pointerContext(geometry))) {
+        val pointerContext = pointerContext(geometry)
+        val hitAction =
+            pointerContext.hitTargets
+                .asReversed()
+                .firstOrNull { it.enabled && it.bounds.contains(event.x(), event.y()) }
+                ?.action
+        if (input.pointerClicked(event.x(), event.y(), event.modifiers(), pointerContext)) {
             focusArea =
-                if (geometry.editor.contains(event.x(), event.y())) {
-                    IdeFocusArea.Editor
-                } else {
-                    IdeFocusArea.Tree
+                when {
+                    hitAction == IdeHitAction.Terminal && terminalOverlay.visible -> IdeFocusArea.Terminal
+                    geometry.editor.contains(event.x(), event.y()) -> IdeFocusArea.Editor
+                    geometry.tree?.contains(event.x(), event.y()) == true -> IdeFocusArea.Tree
+                    else -> IdeFocusArea.Panel
                 }
             clearFocus()
+            if (focusArea == IdeFocusArea.Terminal) terminalOverlay.focus() else terminalOverlay.focusLost()
             return true
         }
         val handled = super.mouseClicked(event, doubleClick)
@@ -89,6 +113,7 @@ internal class IdeScreen(
                 geometry.panel.contains(event.x(), event.y()) -> IdeFocusArea.Panel
                 else -> IdeFocusArea.None
             }
+        terminalOverlay.focusLost()
         input.pointerActivity()
         return handled || focusArea != IdeFocusArea.None
     }
@@ -99,6 +124,7 @@ internal class IdeScreen(
         dragY: Double,
     ): Boolean {
         val geometry = geometry()
+        if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(event.x(), event.y())) return true
         if (splitters.drag(event.x().toInt(), event.y().toInt(), geometry)) return true
         if (focusArea == IdeFocusArea.Editor) {
             return input.pointerClicked(
@@ -118,8 +144,12 @@ internal class IdeScreen(
         mouseY: Double,
         scrollX: Double,
         scrollY: Double,
-    ): Boolean =
-        input.scroll(mouseX, mouseY, scrollX, scrollY, pointerContext(geometry())) || super.mouseScrolled(mouseX, mouseY, scrollX, scrollY)
+    ): Boolean {
+        val geometry = geometry()
+        if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(mouseX, mouseY)) return true
+        return input.scroll(mouseX, mouseY, scrollX, scrollY, pointerContext(geometry)) ||
+            super.mouseScrolled(mouseX, mouseY, scrollX, scrollY)
+    }
 
     override fun keyPressed(event: KeyEvent): Boolean {
         if (prompt.state != null) {
@@ -133,16 +163,24 @@ internal class IdeScreen(
         }
         if (application.controller.viewState().dialog != null) return input.keyPressed(event, focusState())
         if (splitters.captured) return true
+        if (focusArea == IdeFocusArea.Terminal && terminalOverlay.keyPressed(event, minecraft.keyboardHandler.clipboard)) return true
         return input.keyPressed(event, focusState()) || super.keyPressed(event)
+    }
+
+    override fun keyReleased(event: KeyEvent): Boolean {
+        if (focusArea == IdeFocusArea.Terminal && terminalOverlay.keyReleased(event.key())) return true
+        return super.keyReleased(event)
     }
 
     override fun charTyped(event: CharacterEvent): Boolean {
         if (prompt.state != null) return prompt.type(event.codepointAsString())
+        if (focusArea == IdeFocusArea.Terminal && terminalOverlay.charTyped(event)) return true
         return input.charTyped(event, focusState()) || super.charTyped(event)
     }
 
     override fun removed() {
         splitters.focusLost()
+        terminalOverlay.focusLost()
         if (!sessionClosed) application.controller.dispatch(IdeCommand.EditorFocusLost)
         if (!returningToParent) {
             (parent as? ChildScreenParent)?.abandonChild()
@@ -153,6 +191,7 @@ internal class IdeScreen(
 
     override fun tick() {
         application.controller.tick()
+        terminalOverlay.setTarget(application.controller.viewState().target.terminalReference())
         if (application.controller.isCloseReady()) restoreParent()
         super.tick()
     }
@@ -182,6 +221,8 @@ internal class IdeScreen(
                 prompt = prompt.state,
                 treeFirstRow = treeFirstRow,
                 selectedTreePath = selectedTreePath,
+                terminalState = terminalOverlay.state(),
+                terminalVisible = terminalOverlay.visible,
             )
         val operations = mutableListOf<RenderOperation>()
         model.panels.forEach { draw -> operations += RenderOperation(draw.zIndex) { graphics.fill(draw.bounds, draw.color) } }
@@ -206,6 +247,7 @@ internal class IdeScreen(
                 }
         }
         operations.sortedBy(RenderOperation::zIndex).forEach { it.draw() }
+        if (terminalOverlay.visible) renderTerminalOverlay(graphics, terminalOverlayGeometry(geometry), profile)
         super.extractRenderState(graphics, mouseX, mouseY, partialTick)
     }
 
@@ -244,6 +286,8 @@ internal class IdeScreen(
                 prompt = prompt.state,
                 treeFirstRow = treeFirstRow,
                 selectedTreePath = selectedTreePath,
+                terminalState = terminalOverlay.state(),
+                terminalVisible = terminalOverlay.visible,
             )
         return when (val page = state.page) {
             is IdePageState.Start -> {
@@ -296,6 +340,11 @@ internal class IdeScreen(
                 application.controller.dispatch(IdeCommand.RequestDelete(path))
             }
 
+            IdeHitAction.Terminal -> {
+                terminalOverlay.toggle()
+                focusArea = if (terminalOverlay.visible) IdeFocusArea.Terminal else IdeFocusArea.Editor
+            }
+
             IdeHitAction.Confirm -> {
                 return confirmPrompt()
             }
@@ -311,6 +360,97 @@ internal class IdeScreen(
         clearFocus()
         return true
     }
+
+    private fun terminalOverlayGeometry(geometry: IdeRenderGeometry): IdeTerminalOverlayGeometry =
+        IdeTerminalOverlayGeometry.compute(geometry.content, geometry.font)
+
+    private fun renderTerminalOverlay(
+        graphics: GuiGraphicsExtractor,
+        overlay: IdeTerminalOverlayGeometry,
+        profile: ru.lazyhat.compukters.impl.terminal.TerminalFontProfile,
+    ) {
+        graphics.fill(overlay.shadow, TERMINAL_SHADOW)
+        graphics.fill(overlay.panel, TERMINAL_BORDER)
+        val inner = IdeRect(overlay.panel.left + 1, overlay.panel.top + 1, overlay.panel.right - 1, overlay.panel.bottom - 1)
+        graphics.fill(inner, TERMINAL_PANEL)
+        if (!overlay.supported) {
+            graphics.enableScissor(
+                overlay.messageBounds.left,
+                overlay.messageBounds.top,
+                overlay.messageBounds.right,
+                overlay.messageBounds.bottom,
+            )
+            graphics.text(
+                font,
+                Component.literal(overlay.unsupportedMessage),
+                overlay.messageBounds.left,
+                overlay.messageBounds.top,
+                TERMINAL_ERROR,
+                false,
+            )
+            graphics.disableScissor()
+            return
+        }
+        graphics.text(
+            font,
+            Component.literal("Target terminal"),
+            overlay.title.left + 5,
+            overlay.title.top + 5,
+            if (terminalOverlay.focused) TERMINAL_ACCENT else TERMINAL_TEXT,
+            false,
+        )
+        val status =
+            when (val state = terminalOverlay.state()) {
+                IdeTargetTerminalState.Closed -> "Terminal unavailable"
+                is IdeTargetTerminalState.Opening -> "Opening…"
+                is IdeTargetTerminalState.Active -> "Revision ${state.replica.state.revision}"
+                is IdeTargetTerminalState.Resyncing -> "Resynchronizing…"
+                is IdeTargetTerminalState.Failed -> if (state.retryable) "${state.detail} · Click to retry" else state.detail
+            }
+        val session =
+            when (val state = terminalOverlay.state()) {
+                is IdeTargetTerminalState.Active -> state.replica
+                is IdeTargetTerminalState.Resyncing -> state.replica
+                else -> null
+            }
+        overlay.grid?.let { grid ->
+            graphics.fill(grid, TERMINAL_GRID)
+            session?.let { replica ->
+                TerminalGridRenderer.draw(
+                    graphics,
+                    font,
+                    replica.state,
+                    profile,
+                    TerminalGridGeometry(grid.left, grid.top, profile),
+                    System.nanoTime() / 1_000_000L,
+                )
+            }
+        }
+        graphics.enableScissor(overlay.status.left, overlay.status.top, overlay.status.right, overlay.status.bottom)
+        graphics.text(font, Component.literal(status), overlay.status.left + 5, overlay.status.top + 3, TERMINAL_TEXT, false)
+        graphics.disableScissor()
+    }
+
+    private fun IdeTargetState.terminalReference(): IdeTargetReference? =
+        attachedTarget()?.takeIf { it.capabilities.terminal }?.let { IdeTargetReference(it.id, it.profile) }
+
+    private fun IdeTargetState.attachedTarget(): IdeAttachedTarget? =
+        when (this) {
+            IdeTargetState.LocalOnly,
+            is IdeTargetState.Attaching,
+            is IdeTargetState.Detached,
+            -> null
+            is IdeTargetState.Attached -> target
+            is IdeTargetState.Uploading -> target
+            is IdeTargetState.Verified -> target
+            is IdeTargetState.Observing -> target
+            is IdeTargetState.ConfirmationRequired -> target
+            is IdeTargetState.Deploying -> target
+            is IdeTargetState.Deployed -> target
+            is IdeTargetState.Submitting -> target
+            is IdeTargetState.CommandSubmitted -> target
+            is IdeTargetState.Failed -> target
+        }
 
     private fun confirmPrompt(): Boolean {
         val command = prompt.confirm() ?: return true
@@ -383,5 +523,12 @@ internal class IdeScreen(
     private companion object {
         const val UI_LINE_HEIGHT = 12
         const val TREE_ROWS_TOP = 4
+        val TERMINAL_SHADOW = 0x66000000
+        val TERMINAL_PANEL = 0xFF101418.toInt()
+        val TERMINAL_BORDER = 0xFF27323A.toInt()
+        val TERMINAL_GRID = 0xFF000000.toInt()
+        val TERMINAL_TEXT = 0xFFF2F4F8.toInt()
+        val TERMINAL_ACCENT = 0xFF38D6B4.toInt()
+        val TERMINAL_ERROR = 0xFFFF6B6B.toInt()
     }
 }

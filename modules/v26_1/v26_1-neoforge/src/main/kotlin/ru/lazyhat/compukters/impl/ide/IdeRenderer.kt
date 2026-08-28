@@ -204,6 +204,19 @@ internal object IdeRenderer {
             target(IdeHitAction.OpenProject, open, true)
             ui(IdeTextKind.Toolbar, "Create project", create.left + 4, create.top + 4)
             ui(IdeTextKind.Toolbar, "Open project", open.left + 4, open.top + 4)
+            targetState.attachedTarget
+                ?.takeIf { it.capabilities.terminal }
+                ?.let {
+                    val terminal = IdeRect(open.right + 4, open.top, open.right + 68, open.bottom)
+                    target(
+                        IdeHitAction.Terminal,
+                        terminal,
+                        true,
+                        terminalTooltip(),
+                        selected = terminalVisible,
+                    )
+                    ui(IdeTextKind.Toolbar, "Terminal", terminal.left + 4, terminal.top + 4)
+                }
             val maximumRows = geometry.editor.height / UI_LINE_HEIGHT
             page.projects.take(maximumRows).forEachIndexed { index, project ->
                 ui(
@@ -305,13 +318,7 @@ internal object IdeRenderer {
             targetState.attachedTarget
                 ?.takeIf { it.capabilities.terminal }
                 ?.let {
-                    val tooltip =
-                        when (val state = terminalState) {
-                            is IdeTargetTerminalState.Opening -> "Opening target terminal…"
-                            is IdeTargetTerminalState.Failed -> state.detail
-                            else -> null
-                        }
-                    action("Terminal", IdeHitAction.Terminal, tooltip = tooltip, selected = terminalVisible)
+                    action("Terminal", IdeHitAction.Terminal, tooltip = terminalTooltip(), selected = terminalVisible)
                 }
             action("+File", IdeHitAction.CreateText)
             action("+Dir", IdeHitAction.CreateDirectory)
@@ -337,6 +344,13 @@ internal object IdeRenderer {
                 )
             }
         }
+
+        private fun terminalTooltip(): String? =
+            when (val state = terminalState) {
+                is IdeTargetTerminalState.Opening -> "Opening target terminal…"
+                is IdeTargetTerminalState.Failed -> state.detail
+                else -> null
+            }
 
         private fun editor(
             editor: IdeEditorView.Text,

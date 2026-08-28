@@ -39,7 +39,7 @@ fun interface IdeUiActionSink {
     fun activate(action: IdeHitAction): Boolean
 }
 
-enum class IdeFocusArea { Editor, Tree, Panel, None }
+enum class IdeFocusArea { Editor, Tree, Panel, Terminal, None }
 
 data class IdeFocusState(
     val area: IdeFocusArea,
