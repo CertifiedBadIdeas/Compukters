@@ -473,6 +473,7 @@ private fun RegistryFriendlyByteBuf.writeAttachedTarget(target: IdeAttachedTarge
     writeProfile(target.compileProfile)
     writeBoolean(target.capabilities.writableFileSystem)
     writeBoolean(target.capabilities.canonicalInput)
+    writeBoolean(target.capabilities.terminal)
     writeUtf(target.displayName, 128)
 }
 
@@ -482,7 +483,7 @@ private fun RegistryFriendlyByteBuf.readAttachedTarget(): IdeAttachedTarget {
         target.id,
         target.profile,
         readProfile(),
-        IdeTargetCapabilities(readBoolean(), readBoolean()),
+        IdeTargetCapabilities(readBoolean(), readBoolean(), readBoolean()),
         readUtf(128),
     )
 }

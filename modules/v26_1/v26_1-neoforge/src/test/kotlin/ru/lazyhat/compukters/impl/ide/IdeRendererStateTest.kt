@@ -418,7 +418,7 @@ class IdeRendererStateTest {
                 emptyList(),
                 WorkerLimits(),
             ),
-            IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true),
+            IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true, terminal = false),
             "Computer",
         )
 

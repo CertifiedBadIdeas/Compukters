@@ -152,7 +152,7 @@ class NeoForgeIdeTargetPortTest {
             IdeTargetId("lease-1"),
             IdeTargetProfileId(hash(1)),
             TargetCompileProfile(toolchain(), emptyList(), WorkerLimits()),
-            IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true),
+            IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true, terminal = false),
             "Computer",
         )
 

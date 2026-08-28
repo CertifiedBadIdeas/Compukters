@@ -52,7 +52,7 @@ internal class NeoForgeIdeTargetResolver(
                 machineIdentity = "$dimension:${position.x},${position.y},${position.z}:$machineId",
                 profileId = IdeTargetProfileId(TargetCompileProfileIdentity.of(profile).hash),
                 profile = profile,
-                capabilities = IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true),
+                capabilities = IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true, terminal = true),
                 displayName = "Computer ${position.x}, ${position.y}, ${position.z}",
                 alive = {
                     !entity.isRemoved &&

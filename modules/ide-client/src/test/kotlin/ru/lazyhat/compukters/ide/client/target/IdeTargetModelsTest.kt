@@ -26,6 +26,8 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class IdeTargetModelsTest {
     @Test
@@ -72,8 +74,13 @@ class IdeTargetModelsTest {
     }
 
     @Test
-    fun `target capabilities describe host integration without claiming a shell`() {
-        val capabilities = IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true)
+    fun `target capabilities advertise terminal independently from filesystem and canonical input`() {
+        val capabilities =
+            IdeTargetCapabilities(
+                writableFileSystem = false,
+                canonicalInput = false,
+                terminal = true,
+            )
         val submitted =
             IdeTargetState.CommandSubmitted(
                 target(),
@@ -81,8 +88,9 @@ class IdeTargetModelsTest {
                 IdeExecutableRevision.Present(9),
             )
 
-        assertEquals(true, capabilities.writableFileSystem)
-        assertEquals(true, capabilities.canonicalInput)
+        assertFalse(capabilities.writableFileSystem)
+        assertFalse(capabilities.canonicalInput)
+        assertTrue(capabilities.terminal)
         assertEquals("Command submitted", submitted.message)
     }
 
@@ -91,7 +99,7 @@ class IdeTargetModelsTest {
             IdeTargetId("computer-1"),
             IdeTargetProfileId(hash(1)),
             TargetCompileProfile(toolchain(), emptyList(), WorkerLimits()),
-            IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true),
+            IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true, terminal = false),
             "Computer",
         )
 

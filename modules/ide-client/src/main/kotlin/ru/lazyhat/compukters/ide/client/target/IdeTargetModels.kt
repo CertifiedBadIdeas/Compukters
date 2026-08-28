@@ -39,6 +39,7 @@ value class IdeTargetProfileId(
 data class IdeTargetCapabilities(
     val writableFileSystem: Boolean,
     val canonicalInput: Boolean,
+    val terminal: Boolean,
 )
 
 data class IdeAttachedTarget(

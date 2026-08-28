@@ -78,7 +78,7 @@ class IdeTargetReplyPayloadTest {
                     temporaryFiles = 11,
                 ),
             ),
-            IdeTargetCapabilities(writableFileSystem = true, canonicalInput = false),
+            IdeTargetCapabilities(writableFileSystem = true, canonicalInput = false, terminal = true),
             "Computer 7",
         )
 
