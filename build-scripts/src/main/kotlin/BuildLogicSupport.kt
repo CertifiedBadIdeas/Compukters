@@ -102,13 +102,12 @@ fun Project.computeModVersion(): String = "${buildContext().minecraftVersion}-${
 fun computeEffectiveBuildVersion(
     baseVersion: String,
     headTags: Iterable<String>,
-    shortHash: String,
 ): String {
     val releaseTags = setOf(baseVersion, "v$baseVersion")
     return if (headTags.any { it in releaseTags }) {
         baseVersion
     } else {
-        "$baseVersion-S-$shortHash"
+        "$baseVersion-S"
     }
 }
 
@@ -123,11 +122,7 @@ fun Project.effectiveBuildVersion(): String {
             ?.filter(String::isNotEmpty)
             ?.toList()
             ?: emptyList()
-    val shortHash =
-        gitCaptureOrNull(rootProject.projectDir, "rev-parse", "--short", "HEAD")
-            ?.takeIf { it.isNotBlank() }
-            ?: "unknown"
-    val effective = computeEffectiveBuildVersion(baseVersion, headTags, shortHash)
+    val effective = computeEffectiveBuildVersion(baseVersion, headTags)
     extra[EFFECTIVE_BUILD_VERSION_KEY] = effective
     return effective
 }

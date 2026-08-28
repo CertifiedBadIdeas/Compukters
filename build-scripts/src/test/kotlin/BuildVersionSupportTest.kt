@@ -27,7 +27,6 @@ class BuildVersionSupportTest {
             computeEffectiveBuildVersion(
                 baseVersion = "0.2.0",
                 headTags = listOf("v0.2.0", "other"),
-                shortHash = "abc1234",
             ),
         )
     }
@@ -39,31 +38,28 @@ class BuildVersionSupportTest {
             computeEffectiveBuildVersion(
                 baseVersion = "0.2.0",
                 headTags = listOf("0.2.0"),
-                shortHash = "abc1234",
             ),
         )
     }
 
     @Test
-    fun marksUntaggedHeadAsShortSnapshot() {
+    fun marksUntaggedHeadAsSnapshot() {
         assertEquals(
-            "0.2.0-S-abc1234",
+            "0.2.0-S",
             computeEffectiveBuildVersion(
                 baseVersion = "0.2.0",
                 headTags = emptyList(),
-                shortHash = "abc1234",
             ),
         )
     }
 
     @Test
-    fun marksMismatchedTagAsShortSnapshot() {
+    fun marksMismatchedTagAsSnapshot() {
         assertEquals(
-            "0.2.0-S-abc1234",
+            "0.2.0-S",
             computeEffectiveBuildVersion(
                 baseVersion = "0.2.0",
                 headTags = listOf("v0.1.0"),
-                shortHash = "abc1234",
             ),
         )
     }
