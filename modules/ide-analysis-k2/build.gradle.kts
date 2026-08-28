@@ -234,6 +234,14 @@ val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
     }
 }
 
+// Both suites initialize the heavyweight standalone K2/IntelliJ environment.
+// Keep their Gradle test workers disjoint in time: concurrent execution can
+// terminate the ordinary test worker while Gradle is still finalizing its
+// binary results.
+forkedWorkerTest.configure {
+    mustRunAfter(tasks.test)
+}
+
 tasks.named("check") {
     dependsOn(verifyAnalysisWorkerLicenses)
     dependsOn(forkedWorkerTest)
