@@ -23,9 +23,37 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class IdeClientServicesTest {
+    @Test
+    fun `prepares distinct compiler and analysis workers from one shared bundle`() {
+        val gameRoot = createTempDirectory("compukters-ide-tooling-").toAbsolutePath().normalize()
+        try {
+            val paths = IdeClientPaths.at(gameRoot)
+            val prepared = ProductionIdeApplicationFactory.prepare(paths)
+            val compiler = prepared.compilerPayload
+            val analysis = prepared.analysisPayload
+
+            assertEquals(compiler.root, analysis.root)
+            assertNotEquals(compiler.classpath, analysis.classpath)
+            assertNotEquals(compiler.manifest.mainClass, analysis.manifest.mainClass)
+
+            val compilerLaunch = ProductionIdeApplicationFactory.compilerLaunch(paths, prepared)
+            val analysisLaunch = ProductionIdeApplicationFactory.analysisLaunch(paths, prepared)
+            assertEquals(paths.compilerTemporary, compilerLaunch.temporaryDirectory)
+            assertEquals(paths.analysisTemporary, analysisLaunch.temporaryDirectory)
+            assertNotEquals(compilerLaunch.maximumHeapMiB, analysisLaunch.maximumHeapMiB)
+            assertNotEquals(compilerLaunch.maximumMetaspaceMiB, analysisLaunch.maximumMetaspaceMiB)
+            assertEquals(compiler.classpath, compilerLaunch.processLaunch(compiler).classpath)
+            assertEquals(analysis.classpath, analysisLaunch.classpath)
+            assertNotEquals(compilerLaunch.processLaunch(compiler).mainClass, analysisLaunch.mainClass)
+        } finally {
+            gameRoot.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `uses distinct bounded client roots and opens only one session`() {
         val gameRoot = createTempDirectory("compukters-ide-services-").toAbsolutePath().normalize()
@@ -36,8 +64,7 @@ class IdeClientServicesTest {
             val expected = gameRoot.resolve("compukters/ide")
             assertEquals(expected.resolve("projects"), services.paths.projects)
             assertEquals(expected.resolve("cache/compiler"), services.paths.compilerCache)
-            assertEquals(expected.resolve("workers/compiler"), services.paths.compilerWorkers)
-            assertEquals(expected.resolve("workers/analysis"), services.paths.analysisWorkers)
+            assertEquals(expected.resolve("workers/tooling"), services.paths.toolingWorkers)
             assertEquals(expected.resolve("tmp/compiler"), services.paths.compilerTemporary)
             assertEquals(expected.resolve("tmp/analysis"), services.paths.analysisTemporary)
             assertEquals(expected.resolve("session.preferences"), services.paths.preferences)
