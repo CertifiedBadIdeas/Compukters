@@ -31,6 +31,10 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentCandidate
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
+import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryListing
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileChunk
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileStat
+import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 
 internal interface ProgramVmSession : AutoCloseable {
     fun advance(
@@ -68,6 +72,12 @@ internal interface ProgramVmSession : AutoCloseable {
     fun sendTerminalText(value: String)
 
     fun filesystemGeneration(): Long
+
+    fun fileStat(path: VmVirtualPath): VmFileStat
+
+    fun fileList(path: VmVirtualPath, startAfter: String?, maximumEntries: Int): VmDirectoryListing
+
+    fun fileRead(path: VmVirtualPath, offset: Long, maximumBytes: Int, expectedGeneration: Long): VmFileChunk
 
     fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate
 
@@ -158,6 +168,14 @@ private class NativeProgramVmSession(
     override fun sendTerminalText(value: String) = session.sendTerminalText(value)
 
     override fun filesystemGeneration(): Long = session.filesystemGeneration()
+
+    override fun fileStat(path: VmVirtualPath): VmFileStat = session.fileStat(path)
+
+    override fun fileList(path: VmVirtualPath, startAfter: String?, maximumEntries: Int): VmDirectoryListing =
+        session.fileList(path, startAfter, maximumEntries)
+
+    override fun fileRead(path: VmVirtualPath, offset: Long, maximumBytes: Int, expectedGeneration: Long): VmFileChunk =
+        session.fileRead(path, offset, maximumBytes, expectedGeneration)
 
     override fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate =
         NativeProgramDeploymentCandidate(session.verifyForDeploy(artifact))

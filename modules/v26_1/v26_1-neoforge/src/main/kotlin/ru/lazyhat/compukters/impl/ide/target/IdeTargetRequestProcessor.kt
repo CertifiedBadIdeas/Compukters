@@ -16,6 +16,9 @@ import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.ide.client.target.IdeAttachResult
 import ru.lazyhat.compukters.ide.client.target.IdeDeployResult
 import ru.lazyhat.compukters.ide.client.target.IdeHeartbeatResult
+import ru.lazyhat.compukters.ide.client.target.IdeFileListResult
+import ru.lazyhat.compukters.ide.client.target.IdeFileReadResult
+import ru.lazyhat.compukters.ide.client.target.IdeFileStatResult
 import ru.lazyhat.compukters.ide.client.target.IdeRevisionResult
 import ru.lazyhat.compukters.ide.client.target.IdeSubmissionResult
 import ru.lazyhat.compukters.ide.client.target.IdeTargetClaim
@@ -28,6 +31,7 @@ import java.util.UUID
 internal class IdeTargetRequestProcessor(
     private val leases: IdeTargetLeaseService,
     private val deployments: IdeTargetDeploymentService,
+    private val files: IdeTargetFileSystemService = IdeTargetFileSystemService(leases),
 ) {
     fun handle(
         player: UUID,
@@ -105,6 +109,37 @@ internal class IdeTargetRequestProcessor(
                 withTarget(player, request.target, tick) { target ->
                     leases.detach(player, target)
                     IdeTargetReply.Detached
+                }
+            is IdeTargetRequest.FileStat ->
+                withTarget(player, request.target, tick) { target ->
+                    when (val result = files.stat(player, target, request.path, tick)) {
+                        is IdeFileStatResult.Observed -> IdeTargetReply.FileStatObserved(result.stat)
+                        is IdeFileStatResult.Failed -> result.failure.failed()
+                    }
+                }
+            is IdeTargetRequest.FileList ->
+                withTarget(player, request.target, tick) { target ->
+                    when (val result = files.list(player, target, request.path, request.startAfter, request.maximumEntries, tick)) {
+                        is IdeFileListResult.Listed -> IdeTargetReply.FileListed(result.listing)
+                        is IdeFileListResult.Failed -> result.failure.failed()
+                    }
+                }
+            is IdeTargetRequest.FileRead ->
+                withTarget(player, request.target, tick) { target ->
+                    when (
+                        val result = files.read(
+                            player,
+                            target,
+                            request.path,
+                            request.offset,
+                            request.maximumBytes,
+                            request.expectedGeneration,
+                            tick,
+                        )
+                    ) {
+                        is IdeFileReadResult.Read -> IdeTargetReply.FileRead(result.chunk)
+                        is IdeFileReadResult.Failed -> result.failure.failed()
+                    }
                 }
         }
 

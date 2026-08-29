@@ -19,6 +19,9 @@ import ru.lazyhat.compukters.ide.client.target.IdeDeployResult
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
 import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
 import ru.lazyhat.compukters.ide.client.target.IdeHeartbeatResult
+import ru.lazyhat.compukters.ide.client.target.IdeFileListResult
+import ru.lazyhat.compukters.ide.client.target.IdeFileReadResult
+import ru.lazyhat.compukters.ide.client.target.IdeFileStatResult
 import ru.lazyhat.compukters.ide.client.target.IdeRevisionResult
 import ru.lazyhat.compukters.ide.client.target.IdeSubmissionResult
 import ru.lazyhat.compukters.ide.client.target.IdeTargetArtifact
@@ -26,6 +29,7 @@ import ru.lazyhat.compukters.ide.client.target.IdeTargetClaim
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFailure
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFailureKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetPort
+import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
 import ru.lazyhat.compukters.ide.client.target.IdeVerificationTicket
 import ru.lazyhat.compukters.ide.client.target.IdeVerifyResult
 import java.util.concurrent.CompletableFuture
@@ -88,6 +92,56 @@ internal class NeoForgeIdeTargetPort(
                 else -> IdeRevisionResult.Failed(protocolFailure("Unexpected executable revision reply"))
             }
         }
+
+    override fun fileStat(
+        target: IdeAttachedTarget,
+        path: IdeTargetVirtualPath,
+    ): CompletableFuture<IdeFileStatResult> =
+        channel.request(IdeTargetRequest.FileStat(target.reference(), path)).thenApply { reply ->
+            when (reply) {
+                is IdeTargetReply.FileStatObserved -> IdeFileStatResult.Observed(reply.stat)
+                is IdeTargetReply.Failed -> IdeFileStatResult.Failed(reply.failure)
+                else -> IdeFileStatResult.Failed(protocolFailure("Unexpected filesystem stat reply"))
+            }
+        }
+
+    override fun fileList(
+        target: IdeAttachedTarget,
+        path: IdeTargetVirtualPath,
+        startAfter: String?,
+        maximumEntries: Int,
+    ): CompletableFuture<IdeFileListResult> =
+        channel.request(IdeTargetRequest.FileList(target.reference(), path, startAfter, maximumEntries)).thenApply { reply ->
+            when (reply) {
+                is IdeTargetReply.FileListed -> IdeFileListResult.Listed(reply.listing)
+                is IdeTargetReply.Failed -> IdeFileListResult.Failed(reply.failure)
+                else -> IdeFileListResult.Failed(protocolFailure("Unexpected filesystem list reply"))
+            }
+        }
+
+    override fun fileRead(
+        target: IdeAttachedTarget,
+        path: IdeTargetVirtualPath,
+        offset: Long,
+        maximumBytes: Int,
+        expectedGeneration: Long,
+    ): CompletableFuture<IdeFileReadResult> =
+        channel
+            .request(
+                IdeTargetRequest.FileRead(
+                    target.reference(),
+                    path,
+                    offset,
+                    maximumBytes,
+                    expectedGeneration,
+                ),
+            ).thenApply { reply ->
+                when (reply) {
+                    is IdeTargetReply.FileRead -> IdeFileReadResult.Read(reply.chunk)
+                    is IdeTargetReply.Failed -> IdeFileReadResult.Failed(reply.failure)
+                    else -> IdeFileReadResult.Failed(protocolFailure("Unexpected filesystem read reply"))
+                }
+            }
 
     override fun deploy(
         target: IdeAttachedTarget,
