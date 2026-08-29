@@ -31,7 +31,7 @@ class IdeClientPreferencesTest {
     fun `session state round trips separately from persistent layout`() {
         val root = createTempDirectory("compukters-ide-preferences-").toAbsolutePath().normalize()
         try {
-            val layout = RecordingIdeLayoutStore(IdeLayoutSettings.admit(24, 180, 120, true))
+            val layout = RecordingIdeLayoutStore(IdeLayoutSettings.admit(180, 120, true))
             val preferences = IdeClientPreferences(root.resolve("session.preferences"), layout)
             preferences.save(IdePreferences.admit("проект", "src/главная.kt", 12, 4, 5, 999, 888, false))
 
@@ -46,8 +46,8 @@ class IdeClientPreferencesTest {
             assertEquals(120, restored.diagnosticsHeight)
             assertEquals(true, restored.diagnosticsExpanded)
 
-            preferences.saveLayout(IdeLayoutSettings.admit(7, 233, 151, false))
-            assertEquals(listOf(IdeLayoutSettings.admit(7, 233, 151, false)), layout.saves)
+            preferences.saveLayout(IdeLayoutSettings.admit(233, 151, false))
+            assertEquals(listOf(IdeLayoutSettings.admit(233, 151, false)), layout.saves)
         } finally {
             root.toFile().deleteRecursively()
         }

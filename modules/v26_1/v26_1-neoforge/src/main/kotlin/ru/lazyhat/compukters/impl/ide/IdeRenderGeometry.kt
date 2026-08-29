@@ -37,8 +37,6 @@ data class IdeRect(
 sealed interface IdeGeometryFallback {
     data object Configured : IdeGeometryFallback
 
-    data object ZeroPadding : IdeGeometryFallback
-
     data object DiagnosticsCollapsed : IdeGeometryFallback
 
     data object TreeHidden : IdeGeometryFallback
@@ -56,6 +54,7 @@ data class CompletionPopupGeometry(
 class IdeRenderGeometry private constructor(
     val viewport: IdeRect,
     val panel: IdeRect,
+    val toolStripe: IdeRect,
     val header: IdeRect,
     val toolbar: IdeRect,
     val content: IdeRect,
@@ -65,7 +64,6 @@ class IdeRenderGeometry private constructor(
     val editor: IdeRect,
     val diagnosticsSplitter: IdeRect?,
     val diagnostics: IdeRect?,
-    val effectivePadding: Int,
     val treeVisible: Boolean,
     val diagnosticsExpanded: Boolean,
     val font: TerminalFontProfile,
@@ -124,12 +122,12 @@ class IdeRenderGeometry private constructor(
         const val HEADER_HEIGHT = 24
         const val TOOLBAR_HEIGHT = 22
         const val STATUS_HEIGHT = 18
+        const val TOOL_STRIPE_WIDTH = 20
         private const val UNSUPPORTED_MESSAGE = "Viewport is too small for the Compukters IDE"
 
         fun compute(
             viewportWidth: Int,
             viewportHeight: Int,
-            padding: Int,
             treeWidth: Int,
             diagnosticsHeight: Int,
             diagnosticsExpanded: Boolean,
@@ -137,23 +135,20 @@ class IdeRenderGeometry private constructor(
             font: TerminalFontProfile,
         ): IdeRenderGeometry {
             require(viewportWidth >= 0 && viewportHeight >= 0) { "IDE viewport must not be negative" }
-            require(padding >= 0) { "IDE padding must not be negative" }
             val candidates = mutableListOf<Candidate>()
 
             fun candidate(
-                appliedPadding: Int,
                 appliedDiagnostics: Boolean,
                 appliedTree: Boolean,
                 fallback: IdeGeometryFallback,
             ) {
-                val value = Candidate(appliedPadding, appliedDiagnostics, appliedTree, fallback)
+                val value = Candidate(appliedDiagnostics, appliedTree, fallback)
                 if (value !in candidates) candidates += value
             }
 
-            candidate(padding, diagnosticsExpanded, treeVisible, IdeGeometryFallback.Configured)
-            candidate(0, diagnosticsExpanded, treeVisible, IdeGeometryFallback.ZeroPadding)
-            if (diagnosticsExpanded) candidate(0, false, treeVisible, IdeGeometryFallback.DiagnosticsCollapsed)
-            if (treeVisible) candidate(0, false, false, IdeGeometryFallback.TreeHidden)
+            candidate(diagnosticsExpanded, treeVisible, IdeGeometryFallback.Configured)
+            if (diagnosticsExpanded) candidate(false, treeVisible, IdeGeometryFallback.DiagnosticsCollapsed)
+            if (treeVisible) candidate(false, false, IdeGeometryFallback.TreeHidden)
             val viewport = IdeRect(0, 0, viewportWidth, viewportHeight)
             candidates.firstOrNull { it.fits(viewportWidth, viewportHeight) }?.let { selected ->
                 return build(viewport, selected, treeWidth, diagnosticsHeight, font)
@@ -165,8 +160,8 @@ class IdeRenderGeometry private constructor(
             viewportWidth: Int,
             viewportHeight: Int,
         ): Boolean {
-            val panelWidth = viewportWidth - padding * 2L
-            val panelHeight = viewportHeight - padding * 2L
+            val panelWidth = viewportWidth - TOOL_STRIPE_WIDTH.toLong()
+            val panelHeight = viewportHeight.toLong()
             val contentHeight = panelHeight - HEADER_HEIGHT - TOOLBAR_HEIGHT - STATUS_HEIGHT
             val requiredWidth = MINIMUM_EDITOR_WIDTH + if (tree) MINIMUM_TREE_WIDTH + SPLITTER_SIZE else 0
             val requiredHeight = MINIMUM_EDITOR_HEIGHT + if (diagnostics) MINIMUM_DIAGNOSTICS_HEIGHT + SPLITTER_SIZE else 0
@@ -180,17 +175,12 @@ class IdeRenderGeometry private constructor(
             requestedDiagnosticsHeight: Int,
             font: TerminalFontProfile,
         ): IdeRenderGeometry {
-            val panel =
-                IdeRect(
-                    candidate.padding,
-                    candidate.padding,
-                    viewport.right - candidate.padding,
-                    viewport.bottom - candidate.padding,
-                )
-            val header = IdeRect(panel.left, panel.top, panel.right, panel.top + HEADER_HEIGHT)
-            val toolbar = IdeRect(panel.left, header.bottom, panel.right, header.bottom + TOOLBAR_HEIGHT)
-            val status = IdeRect(panel.left, panel.bottom - STATUS_HEIGHT, panel.right, panel.bottom)
-            val content = IdeRect(panel.left, toolbar.bottom, panel.right, status.top)
+            val panel = viewport
+            val toolStripe = IdeRect(panel.right - TOOL_STRIPE_WIDTH, panel.top, panel.right, panel.bottom)
+            val header = IdeRect(panel.left, panel.top, toolStripe.left, panel.top + HEADER_HEIGHT)
+            val toolbar = IdeRect(panel.left, header.bottom, toolStripe.left, header.bottom + TOOLBAR_HEIGHT)
+            val status = IdeRect(panel.left, panel.bottom - STATUS_HEIGHT, toolStripe.left, panel.bottom)
+            val content = IdeRect(panel.left, toolbar.bottom, toolStripe.left, status.top)
             val treeWidth =
                 if (candidate.tree) {
                     requestedTreeWidth.coerceIn(
@@ -226,6 +216,7 @@ class IdeRenderGeometry private constructor(
             return IdeRenderGeometry(
                 viewport,
                 panel,
+                toolStripe,
                 header,
                 toolbar,
                 content,
@@ -235,7 +226,6 @@ class IdeRenderGeometry private constructor(
                 editor,
                 diagnosticsSplitter,
                 diagnostics,
-                candidate.padding,
                 candidate.tree,
                 candidate.diagnostics,
                 font,
@@ -256,12 +246,12 @@ class IdeRenderGeometry private constructor(
                 empty,
                 empty,
                 empty,
+                empty,
                 null,
                 null,
                 empty,
                 null,
                 null,
-                0,
                 false,
                 false,
                 font,
@@ -273,7 +263,6 @@ class IdeRenderGeometry private constructor(
 }
 
 private data class Candidate(
-    val padding: Int,
     val diagnostics: Boolean,
     val tree: Boolean,
     val fallback: IdeGeometryFallback,

@@ -95,7 +95,7 @@ class IdeInputAdapterTest {
     @Test
     fun `mouse maps code cells tree rows and start rows to commands`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 24, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
         val path = ProjectPath.file("src/main.kt")
         val editor =
             IdeEditorView.Text(
@@ -147,7 +147,7 @@ class IdeInputAdapterTest {
     @Test
     fun `wheel routes editor scroll through controller command`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 24, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
         val editor =
             IdeEditorView.Text(
                 ProjectPath.file("main.kt"),
@@ -175,7 +175,7 @@ class IdeInputAdapterTest {
     @Test
     fun `wheel scrolls project tree without sending an editor command`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 24, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
         val entries =
             (0 until 80).map { index ->
                 ProjectTreeEntry(ProjectPath.file("src/file$index.kt"), ProjectFileKind.Text(1), null)
@@ -198,7 +198,7 @@ class IdeInputAdapterTest {
     @Test
     fun `wheel scroll includes computer explorer rows`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 24, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
         val metadata = IdeTargetFileMetadata(IdeTargetFileKind.File, 1, 1, false)
         val rows =
             (0 until 80).map { index ->
@@ -219,7 +219,7 @@ class IdeInputAdapterTest {
     @Test
     fun `target toolbar actions dispatch controller commands`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 24, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
         val actions = listOf(IdeHitAction.Verify, IdeHitAction.Deploy, IdeHitAction.Run)
         actions.forEachIndexed { index, action ->
             val bounds = IdeRect(index * 20, 0, index * 20 + 18, 18)
@@ -251,7 +251,7 @@ class IdeInputAdapterTest {
     @Test
     fun `computer drag waits four pixels and drops only on project directories`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 24, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
         val directory = ProjectTreeEntry(ProjectPath.file("src"), ProjectFileKind.Directory, null)
         val source =
             IdeComputerNode.File(

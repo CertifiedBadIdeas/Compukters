@@ -30,42 +30,41 @@ class IdeRenderGeometryTest {
     fun `normal scaled viewport produces exact half-open panels and code cells`() {
         val geometry = geometry()
 
-        assertEquals(IdeRect(24, 24, 936, 516), geometry.panel)
-        assertEquals(IdeRect(24, 24, 936, 48), geometry.header)
-        assertEquals(IdeRect(24, 48, 936, 70), geometry.toolbar)
-        assertEquals(IdeRect(24, 498, 936, 516), geometry.status)
-        assertEquals(IdeRect(24, 70, 204, 498), geometry.tree)
-        assertEquals(IdeRect(204, 70, 205, 498), geometry.treeSplitter)
-        assertEquals(IdeRect(205, 70, 936, 377), geometry.editor)
-        assertEquals(IdeRect(205, 377, 936, 378), geometry.diagnosticsSplitter)
-        assertEquals(IdeRect(205, 378, 936, 498), geometry.diagnostics)
-        assertEquals(121, geometry.codeColumns)
-        assertEquals(30, geometry.codeRows)
+        assertEquals(IdeRect(0, 0, 960, 540), geometry.panel)
+        assertEquals(IdeRect(940, 0, 960, 540), geometry.toolStripe)
+        assertEquals(IdeRect(0, 0, 940, 24), geometry.header)
+        assertEquals(IdeRect(0, 24, 940, 46), geometry.toolbar)
+        assertEquals(IdeRect(0, 522, 940, 540), geometry.status)
+        assertEquals(IdeRect(0, 46, 180, 522), geometry.tree)
+        assertEquals(IdeRect(180, 46, 181, 522), geometry.treeSplitter)
+        assertEquals(IdeRect(181, 46, 940, 401), geometry.editor)
+        assertEquals(IdeRect(181, 401, 940, 402), geometry.diagnosticsSplitter)
+        assertEquals(IdeRect(181, 402, 940, 522), geometry.diagnostics)
+        assertEquals(126, geometry.codeColumns)
+        assertEquals(35, geometry.codeRows)
         assertEquals(0, geometry.panel.left % 2, "1920 physical pixels at GUI scale 2 maps deterministically to 960 GUI pixels")
     }
 
     @Test
-    fun `small viewport reduces padding then collapses diagnostics then hides tree`() {
+    fun `small viewport collapses diagnostics then hides tree`() {
         val collapsed =
-            IdeRenderGeometry.compute(500, 240, 24, 96, 64, diagnosticsExpanded = true, treeVisible = true, TerminalFontProfile.DINA)
+            IdeRenderGeometry.compute(500, 240, 96, 64, diagnosticsExpanded = true, treeVisible = true, font = TerminalFontProfile.DINA)
         assertTrue(collapsed.supported)
-        assertEquals(0, collapsed.effectivePadding)
         assertFalse(collapsed.diagnosticsExpanded)
         assertTrue(collapsed.treeVisible)
         assertTrue(collapsed.editor.width >= IdeRenderGeometry.MINIMUM_EDITOR_WIDTH)
         assertTrue(collapsed.editor.height >= IdeRenderGeometry.MINIMUM_EDITOR_HEIGHT)
 
         val hidden =
-            IdeRenderGeometry.compute(300, 200, 24, 96, 64, diagnosticsExpanded = true, treeVisible = true, TerminalFontProfile.DINA)
+            IdeRenderGeometry.compute(300, 200, 96, 64, diagnosticsExpanded = true, treeVisible = true, font = TerminalFontProfile.DINA)
         assertTrue(hidden.supported)
-        assertEquals(0, hidden.effectivePadding)
         assertFalse(hidden.diagnosticsExpanded)
         assertFalse(hidden.treeVisible)
         assertEquals(null, hidden.tree)
         assertEquals(null, hidden.treeSplitter)
 
         val unsupported =
-            IdeRenderGeometry.compute(200, 170, 24, 96, 64, diagnosticsExpanded = true, treeVisible = true, TerminalFontProfile.DINA)
+            IdeRenderGeometry.compute(200, 170, 96, 64, diagnosticsExpanded = true, treeVisible = true, font = TerminalFontProfile.DINA)
         assertFalse(unsupported.supported)
         assertIs<IdeGeometryFallback.Unsupported>(unsupported.fallback)
         assertTrue(unsupported.unsupportedMessage.isNotBlank())
@@ -75,7 +74,7 @@ class IdeRenderGeometryTest {
     fun `explicitly hidden panels remain hidden and all fonts derive their own row count`() {
         TerminalFontProfile.ALL.forEach { font ->
             val geometry =
-                IdeRenderGeometry.compute(960, 540, 12, 180, 120, diagnosticsExpanded = false, treeVisible = false, font)
+                IdeRenderGeometry.compute(960, 540, 180, 120, diagnosticsExpanded = false, treeVisible = false, font = font)
             assertFalse(geometry.treeVisible)
             assertFalse(geometry.diagnosticsExpanded)
             assertEquals(geometry.editor.width / font.cellWidth, geometry.codeColumns)
@@ -88,9 +87,9 @@ class IdeRenderGeometryTest {
         val geometry = geometry()
 
         assertEquals(IdeRenderGeometry.MINIMUM_TREE_WIDTH, geometry.treeWidthAt(-10_000))
-        assertEquals(671, geometry.treeWidthAt(10_000))
+        assertEquals(699, geometry.treeWidthAt(10_000))
         assertEquals(IdeRenderGeometry.MINIMUM_DIAGNOSTICS_HEIGHT, geometry.diagnosticsHeightAt(10_000))
-        assertEquals(307, geometry.diagnosticsHeightAt(-10_000))
+        assertEquals(355, geometry.diagnosticsHeightAt(-10_000))
         assertEquals(233, geometry.treeWidthAt(geometry.content.left + 233))
         assertEquals(151, geometry.diagnosticsHeightAt(geometry.content.bottom - 151))
     }
@@ -104,14 +103,13 @@ class IdeRenderGeometryTest {
 
         val above = geometry.completionPopup(IdeRect(900, 350, 906, 360), 260, 100)
         assertEquals(CompletionPopupPlacement.Above, above.placement)
-        assertEquals(IdeRect(676, 250, 936, 350), above.bounds)
+        assertEquals(IdeRect(680, 250, 940, 350), above.bounds)
     }
 
     private fun geometry() =
         IdeRenderGeometry.compute(
             viewportWidth = 960,
             viewportHeight = 540,
-            padding = 24,
             treeWidth = 180,
             diagnosticsHeight = 120,
             diagnosticsExpanded = true,
