@@ -279,7 +279,11 @@ class IdeInputAdapterTest {
         assertEquals(listOf(IdeCommand.DropComputerEntry(source.path, directory.path), IdeCommand.PointerActivity), fixture.commands)
 
         val projectFile = ProjectTreeEntry(ProjectPath.file("main.kt"), ProjectFileKind.Text(0), null)
-        val fileContext = IdePointerContext(geometry, explorer = listOf(IdeExplorerRow.ProjectEntry(projectFile), IdeExplorerRow.ComputerEntry(source, 1)))
+        val fileContext =
+            IdePointerContext(
+                geometry,
+                explorer = listOf(IdeExplorerRow.ProjectEntry(projectFile), IdeExplorerRow.ComputerEntry(source, 1)),
+            )
         fixture.commands.clear()
         fixture.adapter.explorerPressed(sourceX, sourceY, 0, fileContext)
         fixture.adapter.explorerDragged(sourceX, destinationY, fileContext)

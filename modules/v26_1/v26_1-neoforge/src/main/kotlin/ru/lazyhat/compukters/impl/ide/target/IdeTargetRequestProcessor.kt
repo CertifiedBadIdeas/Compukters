@@ -15,10 +15,10 @@ package ru.lazyhat.compukters.impl.ide.target
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.ide.client.target.IdeAttachResult
 import ru.lazyhat.compukters.ide.client.target.IdeDeployResult
-import ru.lazyhat.compukters.ide.client.target.IdeHeartbeatResult
 import ru.lazyhat.compukters.ide.client.target.IdeFileListResult
 import ru.lazyhat.compukters.ide.client.target.IdeFileReadResult
 import ru.lazyhat.compukters.ide.client.target.IdeFileStatResult
+import ru.lazyhat.compukters.ide.client.target.IdeHeartbeatResult
 import ru.lazyhat.compukters.ide.client.target.IdeRevisionResult
 import ru.lazyhat.compukters.ide.client.target.IdeSubmissionResult
 import ru.lazyhat.compukters.ide.client.target.IdeTargetClaim
@@ -39,22 +39,29 @@ internal class IdeTargetRequestProcessor(
         tick: Long,
     ): IdeTargetReply =
         when (request) {
-            is IdeTargetRequest.Attach -> attach(player, request, tick)
-            is IdeTargetRequest.BeginUpload ->
+            is IdeTargetRequest.Attach -> {
+                attach(player, request, tick)
+            }
+
+            is IdeTargetRequest.BeginUpload -> {
                 withTarget(player, request.target, tick) { target ->
                     when (val result = deployments.beginUpload(player, target, request.artifactHash, request.bytes, tick)) {
                         IdeUploadResult.Accepted -> IdeTargetReply.UploadAccepted
                         is IdeUploadResult.Failed -> result.failure.failed()
                     }
                 }
-            is IdeTargetRequest.UploadChunk ->
+            }
+
+            is IdeTargetRequest.UploadChunk -> {
                 withTarget(player, request.target, tick) { target ->
                     when (val result = deployments.appendUpload(player, target, request.offset, request.bytes.toByteArray(), tick)) {
                         IdeUploadResult.Accepted -> IdeTargetReply.UploadAccepted
                         is IdeUploadResult.Failed -> result.failure.failed()
                     }
                 }
-            is IdeTargetRequest.Verify ->
+            }
+
+            is IdeTargetRequest.Verify -> {
                 withTarget(player, request.target, tick) { target ->
                     when (val result = deployments.verify(player, target, tick)) {
                         is IdeVerifyResult.Verified -> {
@@ -66,17 +73,24 @@ internal class IdeTargetRequestProcessor(
                                 ticket.artifactBytes,
                             )
                         }
-                        is IdeVerifyResult.Failed -> result.failure.failed()
+
+                        is IdeVerifyResult.Failed -> {
+                            result.failure.failed()
+                        }
                     }
                 }
-            is IdeTargetRequest.ExecutableRevision ->
+            }
+
+            is IdeTargetRequest.ExecutableRevision -> {
                 withTarget(player, request.target, tick) { target ->
                     when (val result = deployments.executableRevision(player, target, request.path, tick)) {
                         is IdeRevisionResult.Observed -> IdeTargetReply.RevisionObserved(result.revision)
                         is IdeRevisionResult.Failed -> result.failure.failed()
                     }
                 }
-            is IdeTargetRequest.Deploy ->
+            }
+
+            is IdeTargetRequest.Deploy -> {
                 withTarget(player, request.target, tick) { target ->
                     val ticket =
                         IdeVerificationTicket.of(
@@ -91,56 +105,70 @@ internal class IdeTargetRequestProcessor(
                         is IdeDeployResult.Failed -> IdeTargetReply.Failed(result.failure, result.retryable)
                     }
                 }
-            is IdeTargetRequest.SubmitCanonicalLine ->
+            }
+
+            is IdeTargetRequest.SubmitCanonicalLine -> {
                 withTarget(player, request.target, tick) { target ->
                     when (val result = deployments.submitCanonicalLine(player, target, request.line.chars(), tick)) {
                         IdeSubmissionResult.Submitted -> IdeTargetReply.Submitted
                         is IdeSubmissionResult.Failed -> result.failure.failed()
                     }
                 }
-            is IdeTargetRequest.Heartbeat ->
+            }
+
+            is IdeTargetRequest.Heartbeat -> {
                 withTarget(player, request.target, tick) { target ->
                     when (val result = leases.heartbeat(player, target, tick)) {
                         IdeHeartbeatResult.Alive -> IdeTargetReply.Alive
                         is IdeHeartbeatResult.Lost -> result.failure.failed()
                     }
                 }
-            is IdeTargetRequest.Detach ->
+            }
+
+            is IdeTargetRequest.Detach -> {
                 withTarget(player, request.target, tick) { target ->
                     leases.detach(player, target)
                     IdeTargetReply.Detached
                 }
-            is IdeTargetRequest.FileStat ->
+            }
+
+            is IdeTargetRequest.FileStat -> {
                 withTarget(player, request.target, tick) { target ->
                     when (val result = files.stat(player, target, request.path, tick)) {
                         is IdeFileStatResult.Observed -> IdeTargetReply.FileStatObserved(result.stat)
                         is IdeFileStatResult.Failed -> result.failure.failed()
                     }
                 }
-            is IdeTargetRequest.FileList ->
+            }
+
+            is IdeTargetRequest.FileList -> {
                 withTarget(player, request.target, tick) { target ->
                     when (val result = files.list(player, target, request.path, request.startAfter, request.maximumEntries, tick)) {
                         is IdeFileListResult.Listed -> IdeTargetReply.FileListed(result.listing)
                         is IdeFileListResult.Failed -> result.failure.failed()
                     }
                 }
-            is IdeTargetRequest.FileRead ->
+            }
+
+            is IdeTargetRequest.FileRead -> {
                 withTarget(player, request.target, tick) { target ->
                     when (
-                        val result = files.read(
-                            player,
-                            target,
-                            request.path,
-                            request.offset,
-                            request.maximumBytes,
-                            request.expectedGeneration,
-                            tick,
-                        )
+                        val result =
+                            files.read(
+                                player,
+                                target,
+                                request.path,
+                                request.offset,
+                                request.maximumBytes,
+                                request.expectedGeneration,
+                                tick,
+                            )
                     ) {
                         is IdeFileReadResult.Read -> IdeTargetReply.FileRead(result.chunk)
                         is IdeFileReadResult.Failed -> result.failure.failed()
                     }
                 }
+            }
         }
 
     private fun attach(

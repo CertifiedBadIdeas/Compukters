@@ -24,19 +24,19 @@ import ru.lazyhat.compukters.ide.client.target.IdeTargetFailure
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFailureKind
 import ru.lazyhat.compukters.ide.client.target.IdeVerificationTicket
 import ru.lazyhat.compukters.ide.client.target.IdeVerifyResult
-import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentAdmissionException
 import ru.lazyhat.compukters.lang.runtime.vm.VmCanonicalLineException
 import ru.lazyhat.compukters.lang.runtime.vm.VmCanonicalLineFailure
+import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentAdmissionException
 import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentConflictException
 import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentFileSystemException
 import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentProfileChangedException
 import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentWrongMachineException
-import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision as NativeExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
 import java.util.UUID
+import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision as NativeExecutableRevision
 
 internal sealed interface IdeUploadResult {
     data object Accepted : IdeUploadResult
@@ -79,7 +79,8 @@ internal class IdeTargetDeploymentService(
         checkOpen()
         requireTick(tick)
         expire(tick)
-        val resolved = leases.access(player, target, tick) ?: return failed(IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable")
+        val resolved =
+            leases.access(player, target, tick) ?: return failed(IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable")
         if (bytes <= 0 || bytes > resolved.profile.limits.artifactBytes) {
             return failed(IdeTargetFailureKind.Upload, "Artifact exceeds the target upload limit")
         }
@@ -147,7 +148,9 @@ internal class IdeTargetDeploymentService(
         checkOpen()
         requireTick(tick)
         expire(tick)
-        val resolved = leases.access(player, target, tick) ?: return verifyFailed(IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable")
+        val resolved =
+            leases.access(player, target, tick)
+                ?: return verifyFailed(IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable")
         val upload = uploads[player] ?: return verifyFailed(IdeTargetFailureKind.Upload, "No complete artifact upload is active")
         if (upload.target != target || upload.received != upload.bytes.size) {
             return verifyFailed(IdeTargetFailureKind.Upload, "Artifact upload is incomplete")
@@ -196,12 +199,15 @@ internal class IdeTargetDeploymentService(
         checkOpen()
         requireTick(tick)
         expire(tick)
-        val resolved = leases.access(player, target, tick) ?: return revisionFailed(IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable")
+        val resolved =
+            leases.access(player, target, tick)
+                ?: return revisionFailed(IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable")
         if (!target.capabilities.writableFileSystem) {
             return revisionFailed(IdeTargetFailureKind.Unsupported, "Target has no writable filesystem")
         }
-        val revision = resolved.deployment.executableRevision(path.value)
-            ?: return revisionFailed(IdeTargetFailureKind.TargetLost, "Target VM is unavailable")
+        val revision =
+            resolved.deployment.executableRevision(path.value)
+                ?: return revisionFailed(IdeTargetFailureKind.TargetLost, "Target VM is unavailable")
         return IdeRevisionResult.Observed(revision.toIde())
     }
 
@@ -216,7 +222,9 @@ internal class IdeTargetDeploymentService(
         checkOpen()
         requireTick(tick)
         expire(tick)
-        val resolved = leases.access(player, target, tick) ?: return deployFailed(IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable")
+        val resolved =
+            leases.access(player, target, tick)
+                ?: return deployFailed(IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable")
         if (!target.capabilities.writableFileSystem) {
             return deployFailed(IdeTargetFailureKind.Unsupported, "Target has no writable filesystem")
         }
@@ -236,15 +244,17 @@ internal class IdeTargetDeploymentService(
         }
         tickets.remove(key)
         return try {
-            val revision = resolved.deployment.deploy(path.value, expected.toVm(), stored.candidate)
-                ?: return deployFailed(IdeTargetFailureKind.TargetLost, "Target VM is unavailable")
+            val revision =
+                resolved.deployment.deploy(path.value, expected.toVm(), stored.candidate)
+                    ?: return deployFailed(IdeTargetFailureKind.TargetLost, "Target VM is unavailable")
             when (val value = revision.toIde()) {
                 is IdeExecutableRevision.Present -> IdeDeployResult.Deployed(value)
                 IdeExecutableRevision.Absent -> deployFailed(IdeTargetFailureKind.FileSystem, "Deployment did not create an executable")
             }
         } catch (_: VmDeploymentConflictException) {
-            val actual = resolved.deployment.executableRevision(path.value)?.toIde()
-                ?: return deployFailed(IdeTargetFailureKind.TargetLost, "Target VM is unavailable")
+            val actual =
+                resolved.deployment.executableRevision(path.value)?.toIde()
+                    ?: return deployFailed(IdeTargetFailureKind.TargetLost, "Target VM is unavailable")
             IdeDeployResult.StaleRevision(actual)
         } catch (_: VmDeploymentWrongMachineException) {
             deployFailed(IdeTargetFailureKind.Verification, "Verification ticket belongs to another VM")
@@ -268,7 +278,9 @@ internal class IdeTargetDeploymentService(
         checkOpen()
         requireTick(tick)
         expire(tick)
-        val resolved = leases.access(player, target, tick) ?: return submissionFailed(IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable")
+        val resolved =
+            leases.access(player, target, tick)
+                ?: return submissionFailed(IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable")
         if (!target.capabilities.canonicalInput) {
             return submissionFailed(IdeTargetFailureKind.Unsupported, "Target has no canonical input")
         }
@@ -415,9 +427,13 @@ private fun IdeExecutableRevision.toVm(): NativeExecutableRevision =
 private fun VmCanonicalLineFailure.toIdeFailure(): IdeTargetFailureKind =
     when (this) {
         VmCanonicalLineFailure.NO_PENDING_READ -> IdeTargetFailureKind.InputUnavailable
+
         VmCanonicalLineFailure.INPUT_BUSY -> IdeTargetFailureKind.InputBusy
+
         VmCanonicalLineFailure.PARTIAL_INPUT -> IdeTargetFailureKind.InputPartial
+
         VmCanonicalLineFailure.LINE_TOO_LONG -> IdeTargetFailureKind.InputTooLong
+
         VmCanonicalLineFailure.UNSUPPORTED_CODE_UNIT,
         VmCanonicalLineFailure.TERMINAL,
         VmCanonicalLineFailure.RESUME,

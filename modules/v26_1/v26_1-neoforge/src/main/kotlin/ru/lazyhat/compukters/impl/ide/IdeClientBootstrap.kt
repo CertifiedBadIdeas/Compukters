@@ -146,7 +146,11 @@ internal object IdeClientBootstrap {
             }
         val hit = minecraft.hitResult as? BlockHitResult
         val crosshair = hit?.takeIf { it.type == HitResult.Type.BLOCK }?.blockPos
-        val dimension = minecraft.level?.dimension()?.identifier()?.toString()
+        val dimension =
+            minecraft.level
+                ?.dimension()
+                ?.identifier()
+                ?.toString()
         return IdeTargetOpeningClaim.create(dimension, terminal, crosshair)
     }
 }

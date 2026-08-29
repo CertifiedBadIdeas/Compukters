@@ -98,6 +98,7 @@ class TerminalReplicaTest {
         const val WIDTH = 51
         const val HEIGHT = 19
         const val CELL_COUNT = WIDTH * HEIGHT
+
         fun cell(value: Char): TerminalCell = TerminalCell(value.code, 15, 0)
 
         fun state(

@@ -18,10 +18,10 @@ import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeDeployResult
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
 import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
-import ru.lazyhat.compukters.ide.client.target.IdeHeartbeatResult
 import ru.lazyhat.compukters.ide.client.target.IdeFileListResult
 import ru.lazyhat.compukters.ide.client.target.IdeFileReadResult
 import ru.lazyhat.compukters.ide.client.target.IdeFileStatResult
+import ru.lazyhat.compukters.ide.client.target.IdeHeartbeatResult
 import ru.lazyhat.compukters.ide.client.target.IdeRevisionResult
 import ru.lazyhat.compukters.ide.client.target.IdeSubmissionResult
 import ru.lazyhat.compukters.ide.client.target.IdeTargetArtifact
@@ -36,7 +36,8 @@ import java.util.concurrent.CompletableFuture
 
 internal class NeoForgeIdeTargetPort(
     private val channel: IdeTargetRequestChannel,
-) : IdeTargetPort, AutoCloseable {
+) : IdeTargetPort,
+    AutoCloseable {
     override fun attach(claim: IdeTargetClaim): CompletableFuture<IdeAttachResult> =
         channel.request(IdeTargetRequest.Attach(BinaryValue.of(claim.bytes()))).thenApply { reply ->
             when (reply) {
@@ -226,8 +227,14 @@ internal class NeoForgeIdeTargetPort(
                     )
                 }
             }
-            is IdeTargetReply.Failed -> IdeVerifyResult.Failed(reply.failure)
-            else -> IdeVerifyResult.Failed(protocolFailure("Unexpected artifact upload reply"))
+
+            is IdeTargetReply.Failed -> {
+                IdeVerifyResult.Failed(reply.failure)
+            }
+
+            else -> {
+                IdeVerifyResult.Failed(protocolFailure("Unexpected artifact upload reply"))
+            }
         }
 
     private fun IdeAttachedTarget.reference() = IdeTargetReference(id, profile)

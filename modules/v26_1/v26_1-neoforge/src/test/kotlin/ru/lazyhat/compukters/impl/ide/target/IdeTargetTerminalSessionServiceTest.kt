@@ -98,7 +98,13 @@ class IdeTargetTerminalSessionServiceTest {
         fixture.service.open(OWNER, 8, fixture.reference, tick = 1)
         fixture.machineId = 9
 
-        val failed = assertIs<IdeTerminalFailedPayload>(fixture.service.publish(tick = 2).single().payload)
+        val failed =
+            assertIs<IdeTerminalFailedPayload>(
+                fixture.service
+                    .publish(tick = 2)
+                    .single()
+                    .payload,
+            )
         assertEquals(8, failed.generation)
         assertEquals(TOKEN, failed.token)
         assertEquals(IdeTargetFailureKind.TargetLost, failed.kind)
@@ -108,7 +114,12 @@ class IdeTargetTerminalSessionServiceTest {
         fixture.service.open(OWNER, 9, fixture.reference, tick = 3)
         fixture.leases.detach(OWNER, fixture.attached)
         assertFalse(fixture.service.close(OWNER, IdeTerminalClosePayload(TOKEN)))
-        assertIs<IdeTerminalFailedPayload>(fixture.service.publish(tick = 4).single().payload)
+        assertIs<IdeTerminalFailedPayload>(
+            fixture.service
+                .publish(tick = 4)
+                .single()
+                .payload,
+        )
     }
 
     @Test

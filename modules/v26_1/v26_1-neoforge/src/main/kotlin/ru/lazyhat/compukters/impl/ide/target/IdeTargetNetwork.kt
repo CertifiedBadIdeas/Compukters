@@ -54,7 +54,10 @@ internal object IdeTargetNetwork {
                 player.uuid,
                 payload.generation,
                 payload.target,
-                player.level().server.tickCount.toLong(),
+                player
+                    .level()
+                    .server.tickCount
+                    .toLong(),
             ),
         )
     }
@@ -64,7 +67,16 @@ internal object IdeTargetNetwork {
         context: IPayloadContext,
     ) {
         val player = context.player() as? ServerPlayer ?: return
-        transport(player).terminals.resync(player.uuid, payload, player.level().server.tickCount.toLong())?.let(context::reply)
+        transport(player)
+            .terminals
+            .resync(
+                player.uuid,
+                payload,
+                player
+                    .level()
+                    .server.tickCount
+                    .toLong(),
+            )?.let(context::reply)
     }
 
     private fun handleTerminalKey(
@@ -72,7 +84,14 @@ internal object IdeTargetNetwork {
         context: IPayloadContext,
     ) {
         val player = context.player() as? ServerPlayer ?: return
-        transport(player).terminals.key(player.uuid, payload, player.level().server.tickCount.toLong())
+        transport(player).terminals.key(
+            player.uuid,
+            payload,
+            player
+                .level()
+                .server.tickCount
+                .toLong(),
+        )
     }
 
     private fun handleTerminalText(
@@ -80,7 +99,14 @@ internal object IdeTargetNetwork {
         context: IPayloadContext,
     ) {
         val player = context.player() as? ServerPlayer ?: return
-        transport(player).terminals.text(player.uuid, payload, player.level().server.tickCount.toLong())
+        transport(player).terminals.text(
+            player.uuid,
+            payload,
+            player
+                .level()
+                .server.tickCount
+                .toLong(),
+        )
     }
 
     private fun handleTerminalClose(
@@ -123,7 +149,9 @@ internal object IdeTargetNetwork {
         servers.remove(event.server)?.close()
     }
 
-    private class ServerTransport(server: MinecraftServer) : AutoCloseable {
+    private class ServerTransport(
+        server: MinecraftServer,
+    ) : AutoCloseable {
         private val leases = IdeTargetLeaseService(NeoForgeIdeTargetResolver(server))
         private val deployments = IdeTargetDeploymentService(leases)
         val terminals = IdeTargetTerminalSessionService(leases)

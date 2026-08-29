@@ -377,7 +377,9 @@ object ComputerBlockGameTest {
         ProgramComputer(31, { _, _ -> }, context.store, computerId, rom).use { computer ->
             helper.assertTrue(computer.turnOn() == ProgramComputerState.Running, "IDE filesystem computer did not boot")
             advanceUntilInput(computer)
-            val profile = ru.lazyhat.compukters.impl.compiler.NeoForgeCompilerServices.targetProfile(helper.level.server)
+            val profile =
+                ru.lazyhat.compukters.impl.compiler.NeoForgeCompilerServices
+                    .targetProfile(helper.level.server)
             val resolved =
                 IdeResolvedTarget(
                     machineIdentity = "gametest:$computerId",
@@ -419,7 +421,11 @@ object ComputerBlockGameTest {
                     DefaultIdeWorkspace(root).use { workspace ->
                         val project = workspace.createProject("target-copy").get(5, TimeUnit.SECONDS)
                         workspace.importTree(project.handle, transfer.import).get(5, TimeUnit.SECONDS)
-                        val imported = project.handle.canonicalPath.resolve("src/project/main.kt").toFile().readBytes()
+                        val imported =
+                            project.handle.canonicalPath
+                                .resolve("src/project/main.kt")
+                                .toFile()
+                                .readBytes()
                         helper.assertTrue(imported.contentEquals(FIRST_MARKER.encodeToByteArray()), "IDE target copy changed file bytes")
 
                         attachWithoutReadableFileSystem(profile, owner).use { unavailable ->

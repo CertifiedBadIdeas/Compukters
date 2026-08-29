@@ -74,9 +74,10 @@ class IdeTargetRequestProcessorTest {
                 tick = 3,
             ),
         )
-        val verified = assertIs<IdeTargetReply.Verified>(
-            fixture.processor.handle(fixture.player, IdeTargetRequest.Verify(reference), tick = 4),
-        )
+        val verified =
+            assertIs<IdeTargetReply.Verified>(
+                fixture.processor.handle(fixture.player, IdeTargetRequest.Verify(reference), tick = 4),
+            )
         assertContentEquals(byteArrayOf(9), verified.ticket.toByteArray())
         assertEquals(reference, verified.target)
 
@@ -118,18 +119,26 @@ class IdeTargetRequestProcessorTest {
     @Test
     fun `processor rejects another player and forged profile before touching target operations`() {
         var calls = 0
-        val fixture = fixture(IdeTargetDeploymentOperations(verifyForDeploy = { calls++; Candidate() }))
+        val fixture =
+            fixture(
+                IdeTargetDeploymentOperations(verifyForDeploy = {
+                    calls++
+                    Candidate()
+                }),
+            )
         val attached = assertIs<IdeTargetReply.Attached>(fixture.processor.handle(fixture.player, attach(), tick = 1)).target
         val reference = IdeTargetReference(attached.id, attached.profile)
         val attacker = UUID.fromString("00000000-0000-0000-0000-000000000002")
         val forged = reference.copy(profile = IdeTargetProfileId(hash(7)))
 
-        val otherPlayer = assertIs<IdeTargetReply.Failed>(
-            fixture.processor.handle(attacker, IdeTargetRequest.Verify(reference), tick = 2),
-        )
-        val otherProfile = assertIs<IdeTargetReply.Failed>(
-            fixture.processor.handle(fixture.player, IdeTargetRequest.Verify(forged), tick = 2),
-        )
+        val otherPlayer =
+            assertIs<IdeTargetReply.Failed>(
+                fixture.processor.handle(attacker, IdeTargetRequest.Verify(reference), tick = 2),
+            )
+        val otherProfile =
+            assertIs<IdeTargetReply.Failed>(
+                fixture.processor.handle(fixture.player, IdeTargetRequest.Verify(forged), tick = 2),
+            )
 
         assertEquals(IdeTargetFailureKind.TargetLost, otherPlayer.failure.kind)
         assertEquals(IdeTargetFailureKind.TargetLost, otherProfile.failure.kind)

@@ -50,7 +50,9 @@ internal object IdeTargetClientNetwork {
 
     @JvmStatic
     @SubscribeEvent
-    fun onLoggingOut(@Suppress("UNUSED_PARAMETER") event: ClientPlayerNetworkEvent.LoggingOut) {
+    fun onLoggingOut(
+        @Suppress("UNUSED_PARAMETER") event: ClientPlayerNetworkEvent.LoggingOut,
+    ) {
         disconnect()
     }
 

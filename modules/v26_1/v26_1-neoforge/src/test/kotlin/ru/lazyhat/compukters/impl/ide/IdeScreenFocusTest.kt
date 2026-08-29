@@ -85,6 +85,7 @@ class IdeScreenFocusTest {
         overlay.hide()
         assertTrue(!overlay.charTyped(CharacterEvent('y'.code)))
     }
+
     @Test
     fun `initial IDE focus routes character input to the editor`() {
         val commands = mutableListOf<IdeCommand>()

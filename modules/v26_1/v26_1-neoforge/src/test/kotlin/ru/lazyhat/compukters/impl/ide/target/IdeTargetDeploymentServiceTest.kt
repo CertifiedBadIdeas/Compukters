@@ -26,8 +26,8 @@ import ru.lazyhat.compukters.ide.client.target.IdeTargetClaim
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFailureKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
-import ru.lazyhat.compukters.ide.client.target.IdeVerifyResult
 import ru.lazyhat.compukters.ide.client.target.IdeVerificationTicket
+import ru.lazyhat.compukters.ide.client.target.IdeVerifyResult
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
@@ -44,10 +44,11 @@ class IdeTargetDeploymentServiceTest {
     fun `ordered bounded upload verifies exact bytes and owns candidate until ticket expiry`() {
         val candidate = Candidate()
         var verified: ByteArray? = null
-        val fixture = fixture { artifact ->
-            verified = artifact.copyOf()
-            candidate
-        }
+        val fixture =
+            fixture { artifact ->
+                verified = artifact.copyOf()
+                candidate
+            }
         val artifact = byteArrayOf(1, 2, 3, 4, 5)
 
         assertEquals(
@@ -163,7 +164,10 @@ class IdeTargetDeploymentServiceTest {
         fixture.leases.attach(fixture.player, IdeTargetClaim.of(byteArrayOf(2)), tick = 6)
         assertTrue(candidates.single().closed)
 
-        val replacement = assertIs<IdeAttachResult.Attached>(fixture.leases.attach(fixture.player, IdeTargetClaim.of(byteArrayOf(3)), tick = 7)).target
+        val replacement =
+            assertIs<IdeAttachResult.Attached>(
+                fixture.leases.attach(fixture.player, IdeTargetClaim.of(byteArrayOf(3)), tick = 7),
+            ).target
         fixture.deployments.beginUpload(fixture.player, replacement, sha256(artifact), artifact.size, tick = 8)
         fixture.deployments.appendUpload(fixture.player, replacement, 0, artifact, tick = 8)
         assertIs<IdeVerifyResult.Verified>(fixture.deployments.verify(fixture.player, replacement, tick = 8))
@@ -347,8 +351,7 @@ class IdeTargetDeploymentServiceTest {
         }
     }
 
-    private fun toolchain() =
-        ToolchainLockIdentity("2.4.0", "2.4", 1u, 2u, 1u, Hash256.zero(), Hash256.zero())
+    private fun toolchain() = ToolchainLockIdentity("2.4.0", "2.4", 1u, 2u, 1u, Hash256.zero(), Hash256.zero())
 
     private companion object {
         fun sha256(bytes: ByteArray): Hash256 = Hash256.of(MessageDigest.getInstance("SHA-256").digest(bytes))

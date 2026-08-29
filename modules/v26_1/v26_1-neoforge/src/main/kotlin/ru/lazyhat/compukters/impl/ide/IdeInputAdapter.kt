@@ -242,15 +242,25 @@ class IdeInputAdapter(
             val row = context.treeFirstRow + ((y - tree.top - TREE_ROWS_TOP).toInt() / UI_LINE_HEIGHT)
             val explorer = context.explorer.ifEmpty { context.tree.map(IdeExplorerRow::ProjectEntry) }
             when (val entry = explorer.getOrNull(row)) {
-                is IdeExplorerRow.ProjectEntry -> if (entry.entry.kind !is ProjectFileKind.Directory) sink.dispatch(IdeCommand.OpenFile(entry.entry.path))
-                is IdeExplorerRow.ComputerEntry ->
+                is IdeExplorerRow.ProjectEntry -> {
+                    if (entry.entry.kind !is ProjectFileKind.Directory) sink.dispatch(IdeCommand.OpenFile(entry.entry.path))
+                }
+
+                is IdeExplorerRow.ComputerEntry -> {
                     when (entry.node) {
-                        is IdeComputerNode.Directory ->
+                        is IdeComputerNode.Directory -> {
                             sink.dispatch(IdeCommand.ExpandComputerDirectory(entry.node.path))
-                        is IdeComputerNode.File ->
+                        }
+
+                        is IdeComputerNode.File -> {
                             sink.dispatch(IdeCommand.OpenComputerFile(entry.node.path))
+                        }
                     }
-                else -> Unit
+                }
+
+                else -> {
+                    Unit
+                }
             }
             pointerActivity()
             return true
@@ -309,10 +319,21 @@ class IdeInputAdapter(
                 }
             }
 
-            IdeHitAction.Verify -> dispatch(IdeCommand.Verify)
-            IdeHitAction.Deploy -> dispatch(IdeCommand.Deploy)
-            IdeHitAction.Run -> dispatch(IdeCommand.Run)
-            IdeHitAction.RefreshComputer -> dispatch(IdeCommand.RefreshComputerTree)
+            IdeHitAction.Verify -> {
+                dispatch(IdeCommand.Verify)
+            }
+
+            IdeHitAction.Deploy -> {
+                dispatch(IdeCommand.Deploy)
+            }
+
+            IdeHitAction.Run -> {
+                dispatch(IdeCommand.Run)
+            }
+
+            IdeHitAction.RefreshComputer -> {
+                dispatch(IdeCommand.RefreshComputerTree)
+            }
         }
 
     fun scroll(
