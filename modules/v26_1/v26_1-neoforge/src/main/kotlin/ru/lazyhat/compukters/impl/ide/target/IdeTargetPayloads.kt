@@ -25,18 +25,18 @@ import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
 import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
+import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
 import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryEntry
 import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryListing
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFailure
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFailureKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileChunk
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileStat
-import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
-import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
-import ru.lazyhat.compukters.ide.client.target.IdeTargetFailure
-import ru.lazyhat.compukters.ide.client.target.IdeTargetFailureKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
+import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
@@ -127,7 +127,10 @@ internal sealed interface IdeTargetRequest {
         val target: IdeTargetReference,
     ) : IdeTargetRequest
 
-    data class FileStat(val target: IdeTargetReference, val path: IdeTargetVirtualPath) : IdeTargetRequest
+    data class FileStat(
+        val target: IdeTargetReference,
+        val path: IdeTargetVirtualPath,
+    ) : IdeTargetRequest
 
     data class FileList(
         val target: IdeTargetReference,
@@ -219,11 +222,17 @@ internal sealed interface IdeTargetReply {
         val retryable: Boolean,
     ) : IdeTargetReply
 
-    data class FileStatObserved(val stat: IdeTargetFileStat) : IdeTargetReply
+    data class FileStatObserved(
+        val stat: IdeTargetFileStat,
+    ) : IdeTargetReply
 
-    data class FileListed(val listing: IdeTargetDirectoryListing) : IdeTargetReply
+    data class FileListed(
+        val listing: IdeTargetDirectoryListing,
+    ) : IdeTargetReply
 
-    data class FileRead(val chunk: IdeTargetFileChunk) : IdeTargetReply
+    data class FileRead(
+        val chunk: IdeTargetFileChunk,
+    ) : IdeTargetReply
 }
 
 internal data class IdeTargetReplyPayload(
@@ -317,11 +326,13 @@ internal object IdeTargetWireProtocol {
                 buffer.writeByte(DETACH)
                 buffer.writeTarget(request.target)
             }
+
             is IdeTargetRequest.FileStat -> {
                 buffer.writeByte(FILE_STAT)
                 buffer.writeTarget(request.target)
                 buffer.writeVirtualPath(request.path)
             }
+
             is IdeTargetRequest.FileList -> {
                 buffer.writeByte(FILE_LIST)
                 buffer.writeTarget(request.target)
@@ -330,6 +341,7 @@ internal object IdeTargetWireProtocol {
                 request.startAfter?.let { buffer.writeUtf(it, MAXIMUM_PATH_CODE_UNITS) }
                 buffer.writeVarInt(request.maximumEntries)
             }
+
             is IdeTargetRequest.FileRead -> {
                 buffer.writeByte(FILE_READ)
                 buffer.writeTarget(request.target)
@@ -345,35 +357,67 @@ internal object IdeTargetWireProtocol {
         val requestId = buffer.readVarLong()
         val request =
             when (val kind = buffer.readUnsignedByte().toInt()) {
-                ATTACH -> IdeTargetRequest.Attach(buffer.readBounded(MAXIMUM_CLAIM_BYTES, "target claim"))
-                BEGIN_UPLOAD -> IdeTargetRequest.BeginUpload(buffer.readTarget(), buffer.readHash(), buffer.readVarInt())
-                UPLOAD_CHUNK -> IdeTargetRequest.UploadChunk(
-                    buffer.readTarget(),
-                    buffer.readVarInt(),
-                    buffer.readBounded(MAXIMUM_CHUNK_BYTES, "artifact chunk"),
-                )
-                VERIFY -> IdeTargetRequest.Verify(buffer.readTarget())
-                EXECUTABLE_REVISION -> IdeTargetRequest.ExecutableRevision(buffer.readTarget(), buffer.readPath())
-                DEPLOY -> IdeTargetRequest.Deploy(
-                    buffer.readTarget(),
-                    buffer.readBounded(MAXIMUM_TICKET_BYTES, "verification ticket"),
-                    buffer.readHash(),
-                    buffer.readVarInt(),
-                    buffer.readPath(),
-                    buffer.readRevision(),
-                )
-                SUBMIT_CANONICAL_LINE -> IdeTargetRequest.SubmitCanonicalLine(buffer.readTarget(), buffer.readCanonicalLine())
-                HEARTBEAT -> IdeTargetRequest.Heartbeat(buffer.readTarget())
-                DETACH -> IdeTargetRequest.Detach(buffer.readTarget())
-                FILE_STAT -> IdeTargetRequest.FileStat(buffer.readTarget(), buffer.readVirtualPath())
-                FILE_LIST ->
+                ATTACH -> {
+                    IdeTargetRequest.Attach(buffer.readBounded(MAXIMUM_CLAIM_BYTES, "target claim"))
+                }
+
+                BEGIN_UPLOAD -> {
+                    IdeTargetRequest.BeginUpload(buffer.readTarget(), buffer.readHash(), buffer.readVarInt())
+                }
+
+                UPLOAD_CHUNK -> {
+                    IdeTargetRequest.UploadChunk(
+                        buffer.readTarget(),
+                        buffer.readVarInt(),
+                        buffer.readBounded(MAXIMUM_CHUNK_BYTES, "artifact chunk"),
+                    )
+                }
+
+                VERIFY -> {
+                    IdeTargetRequest.Verify(buffer.readTarget())
+                }
+
+                EXECUTABLE_REVISION -> {
+                    IdeTargetRequest.ExecutableRevision(buffer.readTarget(), buffer.readPath())
+                }
+
+                DEPLOY -> {
+                    IdeTargetRequest.Deploy(
+                        buffer.readTarget(),
+                        buffer.readBounded(MAXIMUM_TICKET_BYTES, "verification ticket"),
+                        buffer.readHash(),
+                        buffer.readVarInt(),
+                        buffer.readPath(),
+                        buffer.readRevision(),
+                    )
+                }
+
+                SUBMIT_CANONICAL_LINE -> {
+                    IdeTargetRequest.SubmitCanonicalLine(buffer.readTarget(), buffer.readCanonicalLine())
+                }
+
+                HEARTBEAT -> {
+                    IdeTargetRequest.Heartbeat(buffer.readTarget())
+                }
+
+                DETACH -> {
+                    IdeTargetRequest.Detach(buffer.readTarget())
+                }
+
+                FILE_STAT -> {
+                    IdeTargetRequest.FileStat(buffer.readTarget(), buffer.readVirtualPath())
+                }
+
+                FILE_LIST -> {
                     IdeTargetRequest.FileList(
                         buffer.readTarget(),
                         buffer.readVirtualPath(),
                         if (buffer.readBoolean()) buffer.readUtf(MAXIMUM_PATH_CODE_UNITS) else null,
                         buffer.readVarInt(),
                     )
-                FILE_READ ->
+                }
+
+                FILE_READ -> {
                     IdeTargetRequest.FileRead(
                         buffer.readTarget(),
                         buffer.readVirtualPath(),
@@ -381,7 +425,11 @@ internal object IdeTargetWireProtocol {
                         buffer.readVarInt(),
                         buffer.readVarLong(),
                     )
-                else -> throw IllegalArgumentException("unknown IDE target request kind $kind")
+                }
+
+                else -> {
+                    throw IllegalArgumentException("unknown IDE target request kind $kind")
+                }
             }
         return IdeTargetRequestPayload(requestId, request)
     }
@@ -396,7 +444,11 @@ internal object IdeTargetWireProtocol {
                 buffer.writeByte(REPLY_ATTACHED)
                 buffer.writeAttachedTarget(reply.target)
             }
-            IdeTargetReply.UploadAccepted -> buffer.writeByte(REPLY_UPLOAD_ACCEPTED)
+
+            IdeTargetReply.UploadAccepted -> {
+                buffer.writeByte(REPLY_UPLOAD_ACCEPTED)
+            }
+
             is IdeTargetReply.Verified -> {
                 buffer.writeByte(REPLY_VERIFIED)
                 buffer.writeBounded(reply.ticket, MAXIMUM_TICKET_BYTES, "verification ticket")
@@ -404,34 +456,50 @@ internal object IdeTargetWireProtocol {
                 buffer.writeHash(reply.artifactHash)
                 buffer.writeVarInt(reply.artifactBytes)
             }
+
             is IdeTargetReply.RevisionObserved -> {
                 buffer.writeByte(REPLY_REVISION)
                 buffer.writeRevision(reply.revision)
             }
+
             is IdeTargetReply.Deployed -> {
                 buffer.writeByte(REPLY_DEPLOYED)
                 buffer.writeRevision(reply.revision)
             }
+
             is IdeTargetReply.StaleRevision -> {
                 buffer.writeByte(REPLY_STALE_REVISION)
                 buffer.writeRevision(reply.actual)
             }
-            IdeTargetReply.Submitted -> buffer.writeByte(REPLY_SUBMITTED)
-            IdeTargetReply.Alive -> buffer.writeByte(REPLY_ALIVE)
-            IdeTargetReply.Detached -> buffer.writeByte(REPLY_DETACHED)
+
+            IdeTargetReply.Submitted -> {
+                buffer.writeByte(REPLY_SUBMITTED)
+            }
+
+            IdeTargetReply.Alive -> {
+                buffer.writeByte(REPLY_ALIVE)
+            }
+
+            IdeTargetReply.Detached -> {
+                buffer.writeByte(REPLY_DETACHED)
+            }
+
             is IdeTargetReply.Failed -> {
                 buffer.writeByte(REPLY_FAILED)
                 buffer.writeFailure(reply.failure)
                 buffer.writeBoolean(reply.retryable)
             }
+
             is IdeTargetReply.FileStatObserved -> {
                 buffer.writeByte(REPLY_FILE_STAT)
                 buffer.writeFileStat(reply.stat)
             }
+
             is IdeTargetReply.FileListed -> {
                 buffer.writeByte(REPLY_FILE_LIST)
                 buffer.writeDirectoryListing(reply.listing)
             }
+
             is IdeTargetReply.FileRead -> {
                 buffer.writeByte(REPLY_FILE_READ)
                 buffer.writeFileChunk(reply.chunk)
@@ -443,29 +511,68 @@ internal object IdeTargetWireProtocol {
         val requestId = buffer.readVarLong()
         val reply =
             when (val kind = buffer.readUnsignedByte().toInt()) {
-                REPLY_ATTACHED -> IdeTargetReply.Attached(buffer.readAttachedTarget())
-                REPLY_UPLOAD_ACCEPTED -> IdeTargetReply.UploadAccepted
-                REPLY_VERIFIED -> IdeTargetReply.Verified(
-                    buffer.readBounded(MAXIMUM_TICKET_BYTES, "verification ticket"),
-                    buffer.readTarget(),
-                    buffer.readHash(),
-                    buffer.readVarInt(),
-                )
-                REPLY_REVISION -> IdeTargetReply.RevisionObserved(buffer.readRevision())
+                REPLY_ATTACHED -> {
+                    IdeTargetReply.Attached(buffer.readAttachedTarget())
+                }
+
+                REPLY_UPLOAD_ACCEPTED -> {
+                    IdeTargetReply.UploadAccepted
+                }
+
+                REPLY_VERIFIED -> {
+                    IdeTargetReply.Verified(
+                        buffer.readBounded(MAXIMUM_TICKET_BYTES, "verification ticket"),
+                        buffer.readTarget(),
+                        buffer.readHash(),
+                        buffer.readVarInt(),
+                    )
+                }
+
+                REPLY_REVISION -> {
+                    IdeTargetReply.RevisionObserved(buffer.readRevision())
+                }
+
                 REPLY_DEPLOYED -> {
                     val revision = buffer.readRevision()
                     require(revision is IdeExecutableRevision.Present) { "deployed reply requires a present revision" }
                     IdeTargetReply.Deployed(revision)
                 }
-                REPLY_STALE_REVISION -> IdeTargetReply.StaleRevision(buffer.readRevision())
-                REPLY_SUBMITTED -> IdeTargetReply.Submitted
-                REPLY_ALIVE -> IdeTargetReply.Alive
-                REPLY_DETACHED -> IdeTargetReply.Detached
-                REPLY_FAILED -> IdeTargetReply.Failed(buffer.readFailure(), buffer.readBoolean())
-                REPLY_FILE_STAT -> IdeTargetReply.FileStatObserved(buffer.readFileStat())
-                REPLY_FILE_LIST -> IdeTargetReply.FileListed(buffer.readDirectoryListing())
-                REPLY_FILE_READ -> IdeTargetReply.FileRead(buffer.readFileChunk())
-                else -> throw IllegalArgumentException("unknown IDE target reply kind $kind")
+
+                REPLY_STALE_REVISION -> {
+                    IdeTargetReply.StaleRevision(buffer.readRevision())
+                }
+
+                REPLY_SUBMITTED -> {
+                    IdeTargetReply.Submitted
+                }
+
+                REPLY_ALIVE -> {
+                    IdeTargetReply.Alive
+                }
+
+                REPLY_DETACHED -> {
+                    IdeTargetReply.Detached
+                }
+
+                REPLY_FAILED -> {
+                    IdeTargetReply.Failed(buffer.readFailure(), buffer.readBoolean())
+                }
+
+                REPLY_FILE_STAT -> {
+                    IdeTargetReply.FileStatObserved(buffer.readFileStat())
+                }
+
+                REPLY_FILE_LIST -> {
+                    IdeTargetReply.FileListed(buffer.readDirectoryListing())
+                }
+
+                REPLY_FILE_READ -> {
+                    IdeTargetReply.FileRead(buffer.readFileChunk())
+                }
+
+                else -> {
+                    throw IllegalArgumentException("unknown IDE target reply kind $kind")
+                }
             }
         return IdeTargetReplyPayload(requestId, reply)
     }
@@ -532,8 +639,7 @@ private fun RegistryFriendlyByteBuf.readBounded(
     return BinaryValue.of(ByteArray(size).also(::readBytes))
 }
 
-private fun RegistryFriendlyByteBuf.writePath(path: IdeDeploymentPath) =
-    writeUtf(path.value, IdeTargetWireProtocol.MAXIMUM_PATH_CODE_UNITS)
+private fun RegistryFriendlyByteBuf.writePath(path: IdeDeploymentPath) = writeUtf(path.value, IdeTargetWireProtocol.MAXIMUM_PATH_CODE_UNITS)
 
 private fun RegistryFriendlyByteBuf.readPath(): IdeDeploymentPath {
     val value = readUtf(IdeTargetWireProtocol.MAXIMUM_PATH_CODE_UNITS)
@@ -617,7 +723,10 @@ private fun RegistryFriendlyByteBuf.readFileChunk(): IdeTargetFileChunk {
 
 private fun RegistryFriendlyByteBuf.writeRevision(revision: IdeExecutableRevision) {
     when (revision) {
-        IdeExecutableRevision.Absent -> writeByte(0)
+        IdeExecutableRevision.Absent -> {
+            writeByte(0)
+        }
+
         is IdeExecutableRevision.Present -> {
             writeByte(1)
             writeVarLong(revision.generation)

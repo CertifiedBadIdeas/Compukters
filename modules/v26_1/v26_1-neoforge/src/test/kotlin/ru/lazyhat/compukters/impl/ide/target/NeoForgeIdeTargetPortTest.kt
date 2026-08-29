@@ -27,8 +27,8 @@ import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
 import ru.lazyhat.compukters.ide.client.target.IdeTargetClaim
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
-import ru.lazyhat.compukters.ide.client.target.IdeVerifyResult
 import ru.lazyhat.compukters.ide.client.target.IdeVerificationTicket
+import ru.lazyhat.compukters.ide.client.target.IdeVerifyResult
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import java.security.MessageDigest
@@ -61,12 +61,15 @@ class NeoForgeIdeTargetPortTest {
         assertChunk(channel.singleRequest(), offset = 64 * 1024, byteArrayOf(bytes.last()))
         channel.complete(IdeTargetReply.UploadAccepted)
         assertIs<IdeTargetRequest.Verify>(channel.singleRequest())
-        channel.complete(IdeTargetReply.Verified(
-            ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue.of(byteArrayOf(9)),
-            IdeTargetReference(target.id, target.profile),
-            artifact.hash,
-            artifact.size,
-        ))
+        channel.complete(
+            IdeTargetReply.Verified(
+                ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
+                    .of(byteArrayOf(9)),
+                IdeTargetReference(target.id, target.profile),
+                artifact.hash,
+                artifact.size,
+            ),
+        )
 
         val verified = assertIs<IdeVerifyResult.Verified>(result.join())
         assertContentEquals(byteArrayOf(9), verified.ticket.bytes())

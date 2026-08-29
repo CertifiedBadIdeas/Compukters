@@ -258,7 +258,12 @@ internal class IdeScreen(
 
     override fun tick() {
         application.controller.tick()
-        terminalOverlay.setTarget(application.controller.viewState().target.terminalReference())
+        terminalOverlay.setTarget(
+            application.controller
+                .viewState()
+                .target
+                .terminalReference(),
+        )
         if (application.controller.isCloseReady()) restoreParent()
         super.tick()
     }
@@ -536,15 +541,25 @@ internal class IdeScreen(
             is IdeTargetState.Attaching,
             is IdeTargetState.Detached,
             -> null
+
             is IdeTargetState.Attached -> target
+
             is IdeTargetState.Uploading -> target
+
             is IdeTargetState.Verified -> target
+
             is IdeTargetState.Observing -> target
+
             is IdeTargetState.ConfirmationRequired -> target
+
             is IdeTargetState.Deploying -> target
+
             is IdeTargetState.Deployed -> target
+
             is IdeTargetState.Submitting -> target
+
             is IdeTargetState.CommandSubmitted -> target
+
             is IdeTargetState.Failed -> target
         }
 

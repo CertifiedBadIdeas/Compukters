@@ -36,16 +36,28 @@ internal class NeoForgeIdeTargetResolver(
     ): IdeClaimResolution {
         val serverPlayer = server.playerList.getPlayer(player) ?: return rejected("Player is no longer connected")
         val origin = IdeTargetClaimCodec.decode(claim) ?: return rejected("Target claim is malformed")
-        if (origin.dimension != serverPlayer.level().dimension().identifier().toString()) {
+        if (origin.dimension !=
+            serverPlayer
+                .level()
+                .dimension()
+                .identifier()
+                .toString()
+        ) {
             return rejected("Target is in another dimension")
         }
-        val entity = serverPlayer.level().getBlockEntity(origin.position) as? ComputerBlockEntity
-            ?: return rejected("Target computer is unavailable")
+        val entity =
+            serverPlayer.level().getBlockEntity(origin.position) as? ComputerBlockEntity
+                ?: return rejected("Target computer is unavailable")
         if (!origin.isAuthorized(serverPlayer, entity)) return rejected("Target computer is not interactable")
         entity.prepareTerminal() ?: return rejected("Target VM is unavailable")
         val machineId = entity.terminalMachineId ?: return rejected("Target VM is unavailable")
         val profile = NeoForgeCompilerServices.targetProfile(server)
-        val dimension = serverPlayer.level().dimension().identifier().toString()
+        val dimension =
+            serverPlayer
+                .level()
+                .dimension()
+                .identifier()
+                .toString()
         val position = entity.blockPos
         return IdeClaimResolution.Resolved(
             IdeResolvedTarget(
@@ -95,14 +107,15 @@ internal class NeoForgeIdeTargetResolver(
         entity: ComputerBlockEntity,
     ): Boolean =
         when (this) {
-            is IdeTargetClaimOrigin.Terminal ->
+            is IdeTargetClaimOrigin.Terminal -> {
                 entity.terminalMachineId == machineId && TerminalNetwork.isViewing(player, position, machineId)
+            }
+
             is IdeTargetClaimOrigin.Crosshair -> {
                 val hit = player.pick(player.blockInteractionRange(), 1.0f, false) as? BlockHitResult
                 hit?.type == HitResult.Type.BLOCK && hit.blockPos == position
             }
         }
 
-    private fun rejected(detail: String) =
-        IdeClaimResolution.Rejected(IdeTargetFailure(IdeTargetFailureKind.Permission, detail))
+    private fun rejected(detail: String) = IdeClaimResolution.Rejected(IdeTargetFailure(IdeTargetFailureKind.Permission, detail))
 }

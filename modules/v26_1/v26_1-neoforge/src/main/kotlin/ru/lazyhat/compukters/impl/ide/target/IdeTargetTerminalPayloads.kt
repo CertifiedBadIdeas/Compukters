@@ -195,10 +195,12 @@ internal data class IdeTerminalKeyPayload(
                     val keyCode = buffer.readVarInt()
                     val actionCode = buffer.readUnsignedByte().toInt()
                     val modifierBits = buffer.readUnsignedByte().toInt()
-                    val key = TerminalKey.entries.singleOrNull { it.wireCode == keyCode }
-                        ?: throw IllegalArgumentException("unknown terminal key")
-                    val action = TerminalKeyAction.entries.singleOrNull { it.wireCode == actionCode }
-                        ?: throw IllegalArgumentException("unknown terminal key action")
+                    val key =
+                        TerminalKey.entries.singleOrNull { it.wireCode == keyCode }
+                            ?: throw IllegalArgumentException("unknown terminal key")
+                    val action =
+                        TerminalKeyAction.entries.singleOrNull { it.wireCode == actionCode }
+                            ?: throw IllegalArgumentException("unknown terminal key action")
                     val known = TerminalModifier.entries.fold(0) { bits, modifier -> bits or modifier.mask }
                     require(modifierBits and known.inv() == 0) { "unknown terminal modifier" }
                     val modifiers = TerminalModifier.entries.filterTo(linkedSetOf()) { modifierBits and it.mask != 0 }
@@ -290,8 +292,9 @@ internal data class IdeTerminalFailedPayload(
                     val generation = buffer.readVarLong()
                     val token = if (buffer.readBoolean()) buffer.readUUID() else null
                     val kindOrdinal = buffer.readVarInt()
-                    val kind = IdeTargetFailureKind.entries.getOrNull(kindOrdinal)
-                        ?: throw IllegalArgumentException("unknown terminal failure kind")
+                    val kind =
+                        IdeTargetFailureKind.entries.getOrNull(kindOrdinal)
+                            ?: throw IllegalArgumentException("unknown terminal failure kind")
                     IdeTerminalFailedPayload(
                         generation,
                         token,

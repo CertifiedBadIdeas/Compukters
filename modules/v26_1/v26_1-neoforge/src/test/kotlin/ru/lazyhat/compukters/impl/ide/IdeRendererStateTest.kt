@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.impl.ide
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
@@ -43,31 +44,30 @@ import ru.lazyhat.compukters.ide.client.state.IdePageState
 import ru.lazyhat.compukters.ide.client.state.IdeProblem
 import ru.lazyhat.compukters.ide.client.state.IdeProblemSeverity
 import ru.lazyhat.compukters.ide.client.state.IdeProjectSummary
-import ru.lazyhat.compukters.ide.client.state.IdeViewState
 import ru.lazyhat.compukters.ide.client.state.IdeToolingState
+import ru.lazyhat.compukters.ide.client.state.IdeViewState
 import ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
 import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
 import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileKind
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
-import ru.lazyhat.compukters.ide.client.target.IdeTargetFileKind
-import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
 import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
-import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
-import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.IncrementalKotlinHighlighter
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
+import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectTreeStore
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState
+import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -241,7 +241,12 @@ class IdeRendererStateTest {
         listOf(IdeHitAction.Resolve, IdeHitAction.Build, IdeHitAction.Verify, IdeHitAction.Deploy, IdeHitAction.Run).forEach { action ->
             assertFalse(model.hitTargets.single { it.action == action }.enabled)
         }
-        assertTrue(model.text.single { it.kind == IdeTextKind.Status }.value.contains("Kotlin tooling is starting"))
+        assertTrue(
+            model.text
+                .single { it.kind == IdeTextKind.Status }
+                .value
+                .contains("Kotlin tooling is starting"),
+        )
     }
 
     @Test
@@ -329,7 +334,12 @@ class IdeRendererStateTest {
             )
         val state = workspaceState(editor, IdeBuildState.Idle, IdeProblem(message, IdeProblemSeverity.Warning))
 
-        val status = IdeRenderer.extract(state, geometry()).text.single { it.kind == IdeTextKind.Status }.value
+        val status =
+            IdeRenderer
+                .extract(state, geometry())
+                .text
+                .single { it.kind == IdeTextKind.Status }
+                .value
 
         assertEquals(1, Regex(Regex.escape(message)).findAll(status).count())
     }

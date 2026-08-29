@@ -47,18 +47,22 @@ internal class IdeTargetTerminalSessionService(
         tick: Long,
     ): CustomPacketPayload {
         checkOpen()
-        val attached = leases.attached(player, target, tick)
-            ?: return failure(generation, null, IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable", true)
-        val resolved = leases.access(player, attached, tick)
-            ?: return failure(generation, null, IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable", true)
+        val attached =
+            leases.attached(player, target, tick)
+                ?: return failure(generation, null, IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable", true)
+        val resolved =
+            leases.access(player, attached, tick)
+                ?: return failure(generation, null, IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable", true)
         val terminal = resolved.terminal
         if (!resolved.capabilities.terminal || terminal == null) {
             return failure(generation, null, IdeTargetFailureKind.Unsupported, "Target does not provide a terminal", false)
         }
-        val machineId = terminal.machineId()
-            ?: return failure(generation, null, IdeTargetFailureKind.TargetLost, "Target terminal is unavailable", true)
-        val state = terminal.fullState()
-            ?: return failure(generation, null, IdeTargetFailureKind.TargetLost, "Target terminal is unavailable", true)
+        val machineId =
+            terminal.machineId()
+                ?: return failure(generation, null, IdeTargetFailureKind.TargetLost, "Target terminal is unavailable", true)
+        val state =
+            terminal.fullState()
+                ?: return failure(generation, null, IdeTargetFailureKind.TargetLost, "Target terminal is unavailable", true)
         remove(player)
         val token = tokens()
         require(token.mostSignificantBits != 0L || token.leastSignificantBits != 0L) { "terminal session token must not be zero" }
@@ -114,19 +118,27 @@ internal class IdeTargetTerminalSessionService(
         checkOpen()
         val session = matching(player, payload.token, payload.machineId, tick) ?: return null
         return when (val update = session.terminal.changesSince(payload.revision)) {
-            is TerminalUpdate.Delta ->
+            is TerminalUpdate.Delta -> {
                 IdeTerminalDeltaPayload(session.token, session.machineId, update).also {
                     session.revision = update.targetRevision
                 }
-            is TerminalUpdate.Full ->
+            }
+
+            is TerminalUpdate.Full -> {
                 IdeTerminalFullPayload(session.token, session.machineId, update.state).also {
                     session.revision = update.state.revision
                 }
-            is TerminalUpdate.Unchanged -> null
-            null ->
+            }
+
+            is TerminalUpdate.Unchanged -> {
+                null
+            }
+
+            null -> {
                 full(session)?.also {
                     session.revision = it.state.revision
                 }
+            }
         }
     }
 

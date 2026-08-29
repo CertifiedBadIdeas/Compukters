@@ -25,13 +25,22 @@ import ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView
 import ru.lazyhat.compukters.ide.project.tree.ProjectTreeEntry
 
 sealed interface IdeExplorerRow {
-    data class ProjectRoot(val name: String) : IdeExplorerRow
+    data class ProjectRoot(
+        val name: String,
+    ) : IdeExplorerRow
 
-    data class ProjectEntry(val entry: ProjectTreeEntry) : IdeExplorerRow
+    data class ProjectEntry(
+        val entry: ProjectTreeEntry,
+    ) : IdeExplorerRow
 
-    data class ComputerRoot(val state: IdeComputerTreeState) : IdeExplorerRow
+    data class ComputerRoot(
+        val state: IdeComputerTreeState,
+    ) : IdeExplorerRow
 
-    data class ComputerEntry(val node: IdeComputerNode, val depth: Int) : IdeExplorerRow
+    data class ComputerEntry(
+        val node: IdeComputerNode,
+        val depth: Int,
+    ) : IdeExplorerRow
 }
 
 internal fun IdeWorkspaceView.explorerRows(): List<IdeExplorerRow> =

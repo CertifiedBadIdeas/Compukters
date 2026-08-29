@@ -127,16 +127,12 @@ class TerminalRenderGeometry(
     fun cell(
         x: Int,
         y: Int,
-    ): TerminalRect {
-        return gridGeometry.cell(x, y)
-    }
+    ): TerminalRect = gridGeometry.cell(x, y)
 
     val glyphClip: TerminalRect
         get() = gridGeometry.glyphClip
 
-    fun cursor(position: TerminalPosition): TerminalRect {
-        return gridGeometry.cursor(position)
-    }
+    fun cursor(position: TerminalPosition): TerminalRect = gridGeometry.cursor(position)
 
     companion object {
         const val COLUMNS = 51

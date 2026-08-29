@@ -76,8 +76,7 @@ class ComputerBlockResourceTest {
         assertEquals("Compukters", translations["itemGroup.compukters"].asString)
     }
 
-    private fun resourceBytes(path: String): ByteArray =
-        assertNotNull(javaClass.getResourceAsStream(path), path).use { it.readAllBytes() }
+    private fun resourceBytes(path: String): ByteArray = assertNotNull(javaClass.getResourceAsStream(path), path).use { it.readAllBytes() }
 
     private fun resourceJson(path: String): JsonObject =
         resourceBytes(path).inputStream().reader(Charsets.UTF_8).use { JsonParser.parseReader(it).asJsonObject }

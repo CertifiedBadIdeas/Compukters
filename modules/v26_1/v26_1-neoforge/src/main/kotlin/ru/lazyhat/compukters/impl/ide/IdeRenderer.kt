@@ -328,7 +328,8 @@ internal object IdeRenderer {
             } else {
                 action("Build", IdeHitAction.Build, toolingReady, toolingTooltip)
             }
-            val targetReady = toolingReady && targetState.isReadyForAction && build !is IdeBuildState.Compiling && build !is IdeBuildState.Saving
+            val targetReady =
+                toolingReady && targetState.isReadyForAction && build !is IdeBuildState.Compiling && build !is IdeBuildState.Saving
             val targetTooltip =
                 when {
                     !toolingReady -> toolingTooltip
@@ -366,14 +367,27 @@ internal object IdeRenderer {
                 }
                 val (label, depth, color) =
                     when (row) {
-                        is IdeExplorerRow.ProjectRoot -> Triple("Project · ${row.name}", 0, IdeColors.TEXT)
+                        is IdeExplorerRow.ProjectRoot -> {
+                            Triple("Project · ${row.name}", 0, IdeColors.TEXT)
+                        }
+
                         is IdeExplorerRow.ProjectEntry -> {
                             val entry = row.entry
                             val marker = if (entry.kind is ru.lazyhat.compukters.ide.project.tree.ProjectFileKind.Directory) "▸ " else "  "
                             val selected = entry.path == selectedTreePath || entry.path == workspace.activeFile
-                            Triple(marker + entry.path.value.substringAfterLast('/'), entry.path.value.count { it == '/' } + 1, if (selected) IdeColors.ACCENT else IdeColors.TEXT)
+                            Triple(
+                                marker + entry.path.value.substringAfterLast('/'),
+                                entry.path.value.count {
+                                    it == '/'
+                                } + 1,
+                                if (selected) IdeColors.ACCENT else IdeColors.TEXT,
+                            )
                         }
-                        is IdeExplorerRow.ComputerRoot -> Triple(computerRootLabel(row.state), 0, IdeColors.COMPUTER)
+
+                        is IdeExplorerRow.ComputerRoot -> {
+                            Triple(computerRootLabel(row.state), 0, IdeColors.COMPUTER)
+                        }
+
                         is IdeExplorerRow.ComputerEntry -> {
                             val marker =
                                 when (val node = row.node) {
@@ -654,11 +668,22 @@ internal object IdeRenderer {
             }
             workspace.status?.let { parts += it.message }
             when (val transfer = workspace.computerTransfer) {
-                IdeComputerTransferState.Idle -> Unit
-                is IdeComputerTransferState.Downloading ->
-                    parts += "Copying ${transfer.progress.filesComplete}/${transfer.progress.filesTotal} · ${transfer.progress.bytesComplete}/${transfer.progress.bytesTotal} B"
-                is IdeComputerTransferState.ConfirmationRequired -> parts += "Copy ready · confirmation required"
-                is IdeComputerTransferState.Failed -> parts += transfer.detail
+                IdeComputerTransferState.Idle -> {
+                    Unit
+                }
+
+                is IdeComputerTransferState.Downloading -> {
+                    parts +=
+                        "Copying ${transfer.progress.filesComplete}/${transfer.progress.filesTotal} · ${transfer.progress.bytesComplete}/${transfer.progress.bytesTotal} B"
+                }
+
+                is IdeComputerTransferState.ConfirmationRequired -> {
+                    parts += "Copy ready · confirmation required"
+                }
+
+                is IdeComputerTransferState.Failed -> {
+                    parts += transfer.detail
+                }
             }
             ui(
                 IdeTextKind.Status,
@@ -681,13 +706,25 @@ internal object IdeRenderer {
             panel(IdePanelKind.Dialog, bounds, IdeColors.PANEL_ALT, Z_DIALOG)
             val (title, message) =
                 when (dialog) {
-                    is IdeDialogState.Confirmation -> dialog.title to dialog.message
-                    is IdeDialogState.FileConflict -> "File conflict" to dialog.path.value
-                    is IdeDialogState.LockUpdate -> "Update lock" to dialog.projectDirectory
-                    is IdeDialogState.TargetOverwrite ->
+                    is IdeDialogState.Confirmation -> {
+                        dialog.title to dialog.message
+                    }
+
+                    is IdeDialogState.FileConflict -> {
+                        "File conflict" to dialog.path.value
+                    }
+
+                    is IdeDialogState.LockUpdate -> {
+                        "Update lock" to dialog.projectDirectory
+                    }
+
+                    is IdeDialogState.TargetOverwrite -> {
                         "Replace target executable?" to "${dialog.path.value} changed at revision ${dialog.revision.generation}"
-                    is IdeDialogState.ComputerImport ->
+                    }
+
+                    is IdeDialogState.ComputerImport -> {
                         "Replace project entry?" to dialog.destination.value
+                    }
                 }
             ui(IdeTextKind.Dialog, title, bounds.left + 10, bounds.top + 10, IdeColors.TEXT, bounds, Z_DIALOG_TEXT)
             ui(IdeTextKind.Dialog, message, bounds.left + 10, bounds.top + 30, IdeColors.MUTED, bounds, Z_DIALOG_TEXT)
@@ -836,16 +873,27 @@ internal object IdeRenderer {
             IdeTargetState.LocalOnly,
             is IdeTargetState.Attached,
             -> null
+
             is IdeTargetState.Attaching -> "Attaching target…"
+
             is IdeTargetState.Uploading -> "Verifying…"
+
             is IdeTargetState.Verified -> "Verified"
+
             is IdeTargetState.Observing -> "Checking destination…"
+
             is IdeTargetState.ConfirmationRequired -> "Overwrite confirmation required"
+
             is IdeTargetState.Deploying -> "Deploying…"
+
             is IdeTargetState.Deployed -> "Deployed ${state.path.value}"
+
             is IdeTargetState.Submitting -> "Submitting command…"
+
             is IdeTargetState.CommandSubmitted -> state.message
+
             is IdeTargetState.Detached -> state.failure.detail
+
             is IdeTargetState.Failed -> state.failure.detail
         }
 
@@ -856,15 +904,25 @@ internal object IdeRenderer {
                 is IdeTargetState.Attaching,
                 is IdeTargetState.Detached,
                 -> null
+
                 is IdeTargetState.Attached -> target
+
                 is IdeTargetState.Uploading -> target
+
                 is IdeTargetState.Verified -> target
+
                 is IdeTargetState.Observing -> target
+
                 is IdeTargetState.ConfirmationRequired -> target
+
                 is IdeTargetState.Deploying -> target
+
                 is IdeTargetState.Deployed -> target
+
                 is IdeTargetState.Submitting -> target
+
                 is IdeTargetState.CommandSubmitted -> target
+
                 is IdeTargetState.Failed -> target
             }
 

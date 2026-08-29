@@ -103,11 +103,19 @@ internal class IdeTargetTerminalClient(
                 if (payload.generation != state.generation || payload.token != null) return
             }
 
-            is IdeTargetTerminalState.Active -> if (payload.token != state.token) return
-            is IdeTargetTerminalState.Resyncing -> if (payload.token != state.token) return
+            is IdeTargetTerminalState.Active -> {
+                if (payload.token != state.token) return
+            }
+
+            is IdeTargetTerminalState.Resyncing -> {
+                if (payload.token != state.token) return
+            }
+
             is IdeTargetTerminalState.Closed,
             is IdeTargetTerminalState.Failed,
-            -> return
+            -> {
+                return
+            }
         }
         current = IdeTargetTerminalState.Failed(payload.detail, payload.retryable)
     }
@@ -153,7 +161,9 @@ internal class IdeTargetTerminalClient(
     private fun session(): SessionView? =
         when (val state = current) {
             is IdeTargetTerminalState.Active -> SessionView(state.token, state.machineId, state.replica)
+
             is IdeTargetTerminalState.Resyncing -> SessionView(state.token, state.machineId, state.replica)
+
             is IdeTargetTerminalState.Closed,
             is IdeTargetTerminalState.Failed,
             is IdeTargetTerminalState.Opening,

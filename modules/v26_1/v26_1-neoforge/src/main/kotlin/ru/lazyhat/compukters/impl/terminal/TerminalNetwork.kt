@@ -196,7 +196,16 @@ object TerminalNetwork {
         val player = context.player() as? ServerPlayer ?: return
         val viewer = viewers[player.uuid] ?: return
         if (viewer.position != position || viewer.machineId != machineId) return
-        if (!TerminalInputAdmission.accept(player.uuid, player.level().server.tickCount.toLong())) return
+        if (!TerminalInputAdmission.accept(
+                player.uuid,
+                player
+                    .level()
+                    .server.tickCount
+                    .toLong(),
+            )
+        ) {
+            return
+        }
         val entity = player.computerAt(position) ?: return
         if (entity.terminalMachineId != machineId) return
         input(entity)

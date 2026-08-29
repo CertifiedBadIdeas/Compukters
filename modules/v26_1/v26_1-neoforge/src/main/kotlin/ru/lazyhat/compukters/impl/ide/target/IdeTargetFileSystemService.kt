@@ -35,7 +35,12 @@ import java.util.UUID
 internal class IdeTargetFileSystemService(
     private val leases: IdeTargetLeaseService,
 ) {
-    fun stat(player: UUID, target: IdeAttachedTarget, path: IdeTargetVirtualPath, tick: Long): IdeFileStatResult =
+    fun stat(
+        player: UUID,
+        target: IdeAttachedTarget,
+        path: IdeTargetVirtualPath,
+        tick: Long,
+    ): IdeFileStatResult =
         inspect(player, target, tick, { IdeFileStatResult.Failed(it) }) { operations ->
             val value = operations.stat(VmVirtualPath.of(path.value)) ?: return@inspect unavailableStat()
             IdeFileStatResult.Observed(IdeTargetFileStat(value.fileSystemGeneration, value.metadata.toIde()))
@@ -50,8 +55,9 @@ internal class IdeTargetFileSystemService(
         tick: Long,
     ): IdeFileListResult =
         inspect(player, target, tick, { IdeFileListResult.Failed(it) }) { operations ->
-            val value = operations.list(VmVirtualPath.of(path.value), startAfter, maximumEntries)
-                ?: return@inspect unavailableList()
+            val value =
+                operations.list(VmVirtualPath.of(path.value), startAfter, maximumEntries)
+                    ?: return@inspect unavailableList()
             IdeFileListResult.Listed(
                 IdeTargetDirectoryListing(
                     value.fileSystemGeneration,
@@ -72,8 +78,9 @@ internal class IdeTargetFileSystemService(
         tick: Long,
     ): IdeFileReadResult =
         inspect(player, target, tick, { IdeFileReadResult.Failed(it) }) { operations ->
-            val value = operations.read(VmVirtualPath.of(path.value), offset, maximumBytes, expectedGeneration)
-                ?: return@inspect unavailableRead()
+            val value =
+                operations.read(VmVirtualPath.of(path.value), offset, maximumBytes, expectedGeneration)
+                    ?: return@inspect unavailableRead()
             IdeFileReadResult.Read(IdeTargetFileChunk(value.generation, value.nextOffset, value.eof, value.bytes))
         }
 
@@ -108,7 +115,9 @@ internal class IdeTargetFileSystemService(
         IdeTargetFailure(
             when (failure) {
                 VmFileSystemReadFailure.INVALID_PATH -> IdeTargetFailureKind.Protocol
+
                 VmFileSystemReadFailure.PERMISSION -> IdeTargetFailureKind.Permission
+
                 VmFileSystemReadFailure.NOT_FOUND,
                 VmFileSystemReadFailure.NOT_DIRECTORY,
                 VmFileSystemReadFailure.NOT_FILE,
@@ -121,9 +130,14 @@ internal class IdeTargetFileSystemService(
         )
 
     private fun unavailableStat() = IdeFileStatResult.Failed(unavailable())
+
     private fun unavailableList() = IdeFileListResult.Failed(unavailable())
+
     private fun unavailableRead() = IdeFileReadResult.Failed(unavailable())
+
     private fun unavailable() = IdeTargetFailure(IdeTargetFailureKind.TargetLost, "Target VM is unavailable")
+
     private fun unsupported() = IdeTargetFailure(IdeTargetFailureKind.Unsupported, "Target filesystem is unavailable")
+
     private fun targetLost() = IdeTargetFailure(IdeTargetFailureKind.TargetLost, "Target lease is stale or unavailable")
 }
