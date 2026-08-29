@@ -414,6 +414,7 @@ internal object IdeRenderer {
             if (line.isEmpty()) return
             val lexical = editor.lexical.lines.getOrNull(lineIndex)
             val semantic = (editor.analysis as? IdeAnalysisState.Active)?.presentation
+            val projectPath = editor.path
             val boundaries = sortedSetOf(0, line.length)
             lexical?.spans?.forEach { span ->
                 boundaries += span.startUtf16.coerceIn(0, line.length)
@@ -422,7 +423,7 @@ internal object IdeRenderer {
             (editor.analysis as? IdeAnalysisState.Active)
                 ?.presentation
                 ?.semanticTokens
-                ?.filter { it.path.value == editor.path.value }
+                ?.filter { projectPath != null && it.path.value == projectPath.value }
                 ?.forEach { token ->
                     boundaries += (token.range.startUtf16 - lineStart).coerceIn(0, line.length)
                     boundaries += (token.range.endUtf16 - lineStart).coerceIn(0, line.length)
@@ -434,7 +435,9 @@ internal object IdeRenderer {
                     semantic
                         ?.semanticTokens
                         ?.firstOrNull { token ->
-                            token.path.value == editor.path.value && lineStart + start in token.range.startUtf16 until token.range.endUtf16
+                            projectPath != null &&
+                                token.path.value == projectPath.value &&
+                                lineStart + start in token.range.startUtf16 until token.range.endUtf16
                         }?.category
                 val resolved =
                     semanticCategory?.let(IdeTextStyle::Semantic)

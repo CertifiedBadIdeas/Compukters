@@ -29,6 +29,7 @@ import ru.lazyhat.compukters.ide.client.build.IdeBuildJob
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.build.IdeResolveResult
 import ru.lazyhat.compukters.ide.client.files.IdeComputerFileCoordinator
+import ru.lazyhat.compukters.ide.client.files.IdeComputerPreviewState
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferences
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferencesStore
@@ -39,6 +40,7 @@ import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeConflictAction
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
+import ru.lazyhat.compukters.ide.client.state.IdeEditorSource
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdeEvent
 import ru.lazyhat.compukters.ide.client.state.IdeMoveDirection
@@ -108,6 +110,8 @@ class IdeClientController(
     private var tree: ProjectTree? = null
     private var editor: EditorSession? = null
     private var binary: IdeEditorView.Binary? = null
+    private var computerPreview: ComputerPreviewSession? = null
+    private var observedComputerPreview: IdeComputerPreviewState = IdeComputerPreviewState.Closed
     private var latestProjectOperation = 0L
     private var latestOpenOperation = 0L
     private var latestSaveOperation = 0L
@@ -190,7 +194,8 @@ class IdeClientController(
             }
 
             is IdeCommand.OpenComputerFile -> {
-                publishStatus("Computer file preview is not available yet", IdeProblemSeverity.Info)
+                computerFiles?.open(command.path)
+                publishStatus("Opening ${command.path.value}", IdeProblemSeverity.Info)
             }
 
             is IdeCommand.CreateText -> {
@@ -366,6 +371,7 @@ class IdeClientController(
         if (closed) return
         targetCoordinator?.detach()
         refreshTargetState()
+        refreshComputerFiles()
     }
 
     fun isCloseReady(): Boolean {
@@ -385,6 +391,7 @@ class IdeClientController(
         project?.let { persistPreferences(editor?.path ?: binary?.path) }
         editor?.close()
         editor = null
+        closeComputerPreview()
         analysisCoordinator?.closeFile()
         workspace.close()
         cancelBuildJobs()
@@ -413,6 +420,7 @@ class IdeClientController(
         analysisCoordinator?.closeFile()
         observedAnalysisState = IdeAnalysisState.Idle
         binary = null
+        closeComputerPreview()
         project = null
         tree = null
         val operationId = nextOperationId++
@@ -458,6 +466,7 @@ class IdeClientController(
     }
 
     private fun requestFileSwitch(path: ProjectPath) {
+        closeComputerPreview()
         val active = editor
         if (active != null && active.path != path && active.dirty) {
             pendingFile = path
@@ -483,6 +492,10 @@ class IdeClientController(
     }
 
     private fun edit(input: IdeEditorInput) {
+        computerPreview?.let { preview ->
+            editComputerPreview(preview, input)
+            return
+        }
         val active = editor ?: return
         if ((input == IdeEditorInput.Tab || input == IdeEditorInput.Enter) && active.path.isKotlinSource) {
             val analysis = analysisCoordinator
@@ -571,6 +584,18 @@ class IdeClientController(
         lines: Int,
         columns: Int,
     ) {
+        computerPreview?.let { preview ->
+            preview.firstVisibleLine =
+                (preview.firstVisibleLine.toLong() + lines)
+                    .coerceIn(0, (preview.document.lineCount - 1).toLong())
+                    .toInt()
+            preview.firstVisibleColumn =
+                (preview.firstVisibleColumn.toLong() + columns)
+                    .coerceIn(0, preview.document.maximumVisualWidth().toLong())
+                    .toInt()
+            publishWorkspace()
+            return
+        }
         val active = editor ?: return
         active.firstVisibleLine =
             (active.firstVisibleLine.toLong() + lines)
@@ -585,6 +610,10 @@ class IdeClientController(
     }
 
     private fun requestSave() {
+        if (computerPreview != null) {
+            publishStatus("Computer files are read-only", IdeProblemSeverity.Info)
+            return
+        }
         val selected = project ?: return
         val active = editor ?: return
         if (IdeBusyOperation.Project in state.busy) {
@@ -1192,7 +1221,7 @@ class IdeClientController(
     private fun publishWorkspace() {
         val selected = project ?: return
         val selectedTree = tree ?: return
-        val editorView = editor?.toView() ?: binary ?: IdeEditorView.Empty
+        val editorView = computerPreview?.toView() ?: editor?.toView() ?: binary ?: IdeEditorView.Empty
         state =
             state.copy(
                 page =
@@ -1232,6 +1261,33 @@ class IdeClientController(
             conflict,
             highlighter.snapshot(),
             admittedAnalysisState(this),
+        )
+    }
+
+    private fun ComputerPreviewSession.toView(): IdeEditorView.Text {
+        val first = firstVisibleLine.coerceIn(0, document.lineCount - 1)
+        val lastExclusive = minOf(document.lineCount, first + limits.visibleEditorLines)
+        val visible = (first until lastExclusive).map(document::materializeLine)
+        val visibleStarts = (first until lastExclusive).map(document::lineStartOffset)
+        val selection = document.selectionRange
+        return IdeEditorView.Text(
+            path = null,
+            visibleLines = visible,
+            visibleLineStartsUtf16 = visibleStarts,
+            firstVisibleLine = first,
+            firstVisibleColumn = firstVisibleColumn,
+            totalLines = document.lineCount,
+            caretUtf16 = document.caretOffset,
+            selectionStartUtf16 = selection?.startUtf16,
+            selectionEndUtf16 = selection?.endUtf16,
+            contentRevision = document.revision,
+            persistedContentRevision = document.revision,
+            dirty = false,
+            conflict = false,
+            lexical = highlighter.snapshot(),
+            analysis = IdeAnalysisState.Idle,
+            source = IdeEditorSource.Computer(path, targetId, generation),
+            readOnly = true,
         )
     }
 
@@ -1333,12 +1389,74 @@ class IdeClientController(
             }
         }
         val before = files.state()
+        val previewBefore = files.preview()
         files.tick()
-        if (files.state() != before || workspaceComputerTree() != files.state()) publishWorkspace()
+        acceptComputerPreview(files.preview())
+        if (
+            files.state() != before || files.preview() != previewBefore ||
+            workspaceComputerTree() != files.state()
+        ) {
+            publishWorkspace()
+        }
     }
 
     private fun workspaceComputerTree(): IdeComputerTreeState? =
         (state.page as? IdePageState.Workspace)?.value?.computerTree
+
+    private fun acceptComputerPreview(preview: IdeComputerPreviewState) {
+        if (preview == observedComputerPreview) return
+        observedComputerPreview = preview
+        when (preview) {
+            IdeComputerPreviewState.Closed -> closeComputerPreview()
+            is IdeComputerPreviewState.Loading -> Unit
+            is IdeComputerPreviewState.Available -> {
+                closeComputerPreview()
+                computerPreview = ComputerPreviewSession(preview)
+                analysisCoordinator?.dismissCompletion()
+                refreshAnalysisState()
+            }
+            is IdeComputerPreviewState.TooLarge -> {
+                closeComputerPreview()
+                publishStatus(
+                    "Computer file is too large to preview (${preview.logicalBytes} bytes)",
+                    IdeProblemSeverity.Warning,
+                )
+            }
+            is IdeComputerPreviewState.Failed -> {
+                closeComputerPreview()
+                publishStatus(preview.detail, IdeProblemSeverity.Warning)
+            }
+        }
+    }
+
+    private fun editComputerPreview(
+        preview: ComputerPreviewSession,
+        input: IdeEditorInput,
+    ) {
+        when (input) {
+            is IdeEditorInput.SetCaret -> preview.document.setCaret(input.offsetUtf16, input.extendSelection)
+            is IdeEditorInput.Move ->
+                when (input.direction) {
+                    IdeMoveDirection.Left -> preview.document.moveLeft(input.extendSelection)
+                    IdeMoveDirection.Right -> preview.document.moveRight(input.extendSelection)
+                    IdeMoveDirection.Up -> preview.document.moveUp(input.extendSelection)
+                    IdeMoveDirection.Down -> preview.document.moveDown(input.extendSelection)
+                    IdeMoveDirection.Home -> preview.document.moveHome(input.extendSelection)
+                    IdeMoveDirection.End -> preview.document.moveEnd(input.extendSelection)
+                }
+            IdeEditorInput.SelectAll -> preview.document.selectAll()
+            else -> {
+                publishStatus("Computer files are read-only", IdeProblemSeverity.Info)
+                return
+            }
+        }
+        publishWorkspace()
+    }
+
+    private fun closeComputerPreview() {
+        computerPreview?.close()
+        computerPreview = null
+    }
 
     private fun admittedAnalysisState(active: EditorSession): IdeAnalysisState {
         if (!active.path.isKotlinSource) return IdeAnalysisState.Idle
@@ -1473,6 +1591,21 @@ class IdeClientController(
         var firstVisibleLine = 0
         var firstVisibleColumn = 0
         val dirty: Boolean get() = document.revision != persistedRevision
+
+        fun close() {
+            highlighter.close()
+            document.close()
+        }
+    }
+
+    private class ComputerPreviewSession(preview: IdeComputerPreviewState.Available) {
+        val path = preview.path
+        val targetId = preview.targetId
+        val generation = preview.generation
+        val document = EditorDocument(preview.text)
+        val highlighter = IncrementalKotlinHighlighter(document)
+        var firstVisibleLine = 0
+        var firstVisibleColumn = 0
 
         fun close() {
             highlighter.close()

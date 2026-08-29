@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.ide.client.files
 
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
+import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
 import java.util.Collections
 
@@ -78,4 +79,27 @@ sealed interface IdeComputerChildren {
 
         override fun hashCode(): Int = nodes.hashCode()
     }
+}
+
+sealed interface IdeComputerPreviewState {
+    data object Closed : IdeComputerPreviewState
+
+    data class Loading(val path: IdeTargetVirtualPath) : IdeComputerPreviewState
+
+    data class Available(
+        val path: IdeTargetVirtualPath,
+        val targetId: IdeTargetId,
+        val generation: Long,
+        val text: String,
+    ) : IdeComputerPreviewState
+
+    data class TooLarge(
+        val path: IdeTargetVirtualPath,
+        val logicalBytes: Long,
+    ) : IdeComputerPreviewState
+
+    data class Failed(
+        val path: IdeTargetVirtualPath,
+        val detail: String,
+    ) : IdeComputerPreviewState
 }
