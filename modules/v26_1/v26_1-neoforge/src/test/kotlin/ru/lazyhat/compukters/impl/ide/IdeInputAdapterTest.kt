@@ -17,6 +17,7 @@ import net.minecraft.client.input.KeyEvent
 import org.lwjgl.glfw.GLFW
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
+import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
@@ -25,6 +26,9 @@ import ru.lazyhat.compukters.ide.client.state.IdeMoveDirection
 import ru.lazyhat.compukters.ide.client.state.IdeProjectSummary
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
 import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileKind
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
+import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalSnapshot
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectFileKind
@@ -192,6 +196,27 @@ class IdeInputAdapterTest {
     }
 
     @Test
+    fun `wheel scroll includes computer explorer rows`() {
+        val fixture = fixture()
+        val geometry = IdeRenderGeometry.compute(960, 540, 24, 180, 120, true, true, TerminalFontProfile.DINA)
+        val metadata = IdeTargetFileMetadata(IdeTargetFileKind.File, 1, 1, false)
+        val rows =
+            (0 until 80).map { index ->
+                IdeExplorerRow.ComputerEntry(IdeComputerNode.File(IdeTargetVirtualPath.of("/file$index"), metadata), 1)
+            }
+
+        fixture.adapter.scroll(
+            geometry.tree!!.left + 1.0,
+            geometry.tree.top + 1.0,
+            0.0,
+            -2.0,
+            IdePointerContext(geometry, explorer = rows),
+        )
+
+        assertEquals(6, fixture.adapter.treeFirstRow)
+    }
+
+    @Test
     fun `target toolbar actions dispatch controller commands`() {
         val fixture = fixture()
         val geometry = IdeRenderGeometry.compute(960, 540, 24, 180, 120, true, true, TerminalFontProfile.DINA)
@@ -221,6 +246,45 @@ class IdeInputAdapterTest {
         fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_ESCAPE), IdeFocusState(IdeFocusArea.Panel, dialog = dialog))
 
         assertEquals(listOf(IdeCommand.ConfirmTargetDeployment, IdeCommand.CancelTargetDeployment), fixture.commands)
+    }
+
+    @Test
+    fun `computer drag waits four pixels and drops only on project directories`() {
+        val fixture = fixture()
+        val geometry = IdeRenderGeometry.compute(960, 540, 24, 180, 120, true, true, TerminalFontProfile.DINA)
+        val directory = ProjectTreeEntry(ProjectPath.file("src"), ProjectFileKind.Directory, null)
+        val source =
+            IdeComputerNode.File(
+                IdeTargetVirtualPath.of("/home/a.kt"),
+                IdeTargetFileMetadata(IdeTargetFileKind.File, 1, 1, false),
+            )
+        val rows = listOf(IdeExplorerRow.ProjectEntry(directory), IdeExplorerRow.ComputerEntry(source, 1))
+        val context = IdePointerContext(geometry, explorer = rows)
+        val tree = geometry.tree!!
+        val sourceX = tree.left + 8.0
+        val sourceY = tree.top + 4 + 12 + 2.0
+        val destinationY = tree.top + 4 + 2.0
+
+        assertTrue(fixture.adapter.explorerPressed(sourceX, sourceY, 0, context))
+        assertTrue(fixture.adapter.explorerDragged(sourceX + 3, sourceY, context))
+        assertFalse(fixture.adapter.explorerDragActive)
+        assertTrue(fixture.adapter.explorerReleased(sourceX + 3, sourceY, 0, context))
+        assertTrue(fixture.commands.contains(IdeCommand.OpenComputerFile(source.path)))
+
+        fixture.commands.clear()
+        fixture.adapter.explorerPressed(sourceX, sourceY, 0, context)
+        fixture.adapter.explorerDragged(sourceX, destinationY, context)
+        assertTrue(fixture.adapter.explorerDragActive)
+        fixture.adapter.explorerReleased(sourceX, destinationY, 0, context)
+        assertEquals(listOf(IdeCommand.DropComputerEntry(source.path, directory.path), IdeCommand.PointerActivity), fixture.commands)
+
+        val projectFile = ProjectTreeEntry(ProjectPath.file("main.kt"), ProjectFileKind.Text(0), null)
+        val fileContext = IdePointerContext(geometry, explorer = listOf(IdeExplorerRow.ProjectEntry(projectFile), IdeExplorerRow.ComputerEntry(source, 1)))
+        fixture.commands.clear()
+        fixture.adapter.explorerPressed(sourceX, sourceY, 0, fileContext)
+        fixture.adapter.explorerDragged(sourceX, destinationY, fileContext)
+        fixture.adapter.explorerReleased(sourceX, destinationY, 0, fileContext)
+        assertTrue(fixture.commands.isEmpty())
     }
 
     private fun fixture(

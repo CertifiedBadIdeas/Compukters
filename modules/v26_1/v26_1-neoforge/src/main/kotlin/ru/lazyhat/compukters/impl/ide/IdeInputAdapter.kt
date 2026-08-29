@@ -17,6 +17,7 @@ import net.minecraft.client.input.KeyEvent
 import org.lwjgl.glfw.GLFW
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.analysis.IDE_COMPLETION_VISIBLE_ROWS
+import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeConflictAction
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
@@ -24,6 +25,7 @@ import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdeMoveDirection
 import ru.lazyhat.compukters.ide.client.state.IdeProjectSummary
+import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectFileKind
 import ru.lazyhat.compukters.ide.project.tree.ProjectTreeEntry
 
@@ -60,9 +62,17 @@ data class IdePointerContext(
     val editor: IdeEditorView.Text? = null,
     val projects: List<IdeProjectSummary> = emptyList(),
     val tree: List<ProjectTreeEntry> = emptyList(),
+    val explorer: List<IdeExplorerRow> = emptyList(),
     val treeFirstRow: Int = 0,
     val hitTargets: List<IdeHitTarget> = emptyList(),
     val dialog: IdeDialogState? = null,
+)
+
+data class IdeExplorerDragVisual(
+    val source: IdeComputerNode,
+    val x: Double,
+    val y: Double,
+    val destination: ProjectPath?,
 )
 
 class IdeInputAdapter(
@@ -73,6 +83,13 @@ class IdeInputAdapter(
 ) {
     var treeFirstRow: Int = 0
         private set
+    private var explorerCapture: ExplorerCapture? = null
+    val explorerDragActive: Boolean get() = explorerCapture?.active == true
+    val explorerDragVisual: IdeExplorerDragVisual?
+        get() =
+            explorerCapture
+                ?.takeIf { it.active }
+                ?.let { IdeExplorerDragVisual(it.source, it.x, it.y, it.destination) }
 
     fun clampTree(
         entryCount: Int,
@@ -122,6 +139,77 @@ class IdeInputAdapter(
         sink.dispatch(IdeCommand.PointerActivity)
     }
 
+    fun explorerPressed(
+        x: Double,
+        y: Double,
+        modifiers: Int,
+        context: IdePointerContext,
+    ): Boolean {
+        val row = explorerRowAt(x, y, context) as? IdeExplorerRow.ComputerEntry ?: return false
+        explorerCapture = ExplorerCapture(row.node, x, y, modifiers, x, y, active = false, destination = null)
+        return true
+    }
+
+    fun explorerDragged(
+        x: Double,
+        y: Double,
+        context: IdePointerContext,
+    ): Boolean {
+        val capture = explorerCapture ?: return false
+        val active = capture.active || maxOf(kotlin.math.abs(x - capture.pressX), kotlin.math.abs(y - capture.pressY)) >= DRAG_THRESHOLD
+        explorerCapture =
+            capture.copy(
+                x = x,
+                y = y,
+                active = active,
+                destination = if (active) projectDirectoryAt(x, y, context) else null,
+            )
+        return true
+    }
+
+    fun explorerReleased(
+        x: Double,
+        y: Double,
+        modifiers: Int,
+        context: IdePointerContext,
+    ): Boolean {
+        val capture = explorerCapture ?: return false
+        explorerCapture = null
+        if (!capture.active) return pointerClicked(capture.pressX, capture.pressY, capture.modifiers, context)
+        val destination = projectDirectoryAt(x, y, context) ?: return true
+        sink.dispatch(IdeCommand.DropComputerEntry(capture.source.path, destination))
+        pointerActivity()
+        return true
+    }
+
+    fun cancelExplorerDrag(): Boolean {
+        if (explorerCapture == null) return false
+        explorerCapture = null
+        return true
+    }
+
+    private fun explorerRowAt(
+        x: Double,
+        y: Double,
+        context: IdePointerContext,
+    ): IdeExplorerRow? {
+        val bounds = context.geometry.tree ?: return null
+        if (!bounds.contains(x, y)) return null
+        val local = (y - bounds.top - TREE_ROWS_TOP).toInt()
+        if (local < 0) return null
+        val row = context.treeFirstRow + local / UI_LINE_HEIGHT
+        return context.explorer.getOrNull(row)
+    }
+
+    private fun projectDirectoryAt(
+        x: Double,
+        y: Double,
+        context: IdePointerContext,
+    ): ProjectPath? {
+        val row = explorerRowAt(x, y, context) as? IdeExplorerRow.ProjectEntry ?: return null
+        return row.entry.path.takeIf { row.entry.kind is ProjectFileKind.Directory }
+    }
+
     fun pointerClicked(
         x: Double,
         y: Double,
@@ -152,8 +240,18 @@ class IdeInputAdapter(
         val tree = geometry.tree
         if (tree != null && tree.contains(x, y)) {
             val row = context.treeFirstRow + ((y - tree.top - TREE_ROWS_TOP).toInt() / UI_LINE_HEIGHT)
-            val entry = context.tree.getOrNull(row)
-            if (entry != null && entry.kind !is ProjectFileKind.Directory) sink.dispatch(IdeCommand.OpenFile(entry.path))
+            val explorer = context.explorer.ifEmpty { context.tree.map(IdeExplorerRow::ProjectEntry) }
+            when (val entry = explorer.getOrNull(row)) {
+                is IdeExplorerRow.ProjectEntry -> if (entry.entry.kind !is ProjectFileKind.Directory) sink.dispatch(IdeCommand.OpenFile(entry.entry.path))
+                is IdeExplorerRow.ComputerEntry ->
+                    when (entry.node) {
+                        is IdeComputerNode.Directory ->
+                            sink.dispatch(IdeCommand.ExpandComputerDirectory(entry.node.path))
+                        is IdeComputerNode.File ->
+                            sink.dispatch(IdeCommand.OpenComputerFile(entry.node.path))
+                    }
+                else -> Unit
+            }
             pointerActivity()
             return true
         }
@@ -214,6 +312,7 @@ class IdeInputAdapter(
             IdeHitAction.Verify -> dispatch(IdeCommand.Verify)
             IdeHitAction.Deploy -> dispatch(IdeCommand.Deploy)
             IdeHitAction.Run -> dispatch(IdeCommand.Run)
+            IdeHitAction.RefreshComputer -> dispatch(IdeCommand.RefreshComputerTree)
         }
 
     fun scroll(
@@ -232,8 +331,9 @@ class IdeInputAdapter(
         }
         val tree = context.geometry.tree
         if (tree != null && tree.contains(x, y)) {
-            clampTree(context.tree.size, tree.height)
-            treeFirstRow = (treeFirstRow + (-vertical * SCROLL_ROWS).toInt()).coerceIn(0, maximumTreeRow(context.tree.size, tree.height))
+            val entries = if (context.explorer.isEmpty()) context.tree.size else context.explorer.size
+            clampTree(entries, tree.height)
+            treeFirstRow = (treeFirstRow + (-vertical * SCROLL_ROWS).toInt()).coerceIn(0, maximumTreeRow(entries, tree.height))
             pointerActivity()
             return true
         }
@@ -403,7 +503,19 @@ class IdeInputAdapter(
         const val SCROLL_ROWS = 3
         const val SCROLL_COLUMNS = 4
         const val TAB_WIDTH = 4
+        const val DRAG_THRESHOLD = 4.0
     }
+
+    private data class ExplorerCapture(
+        val source: IdeComputerNode,
+        val pressX: Double,
+        val pressY: Double,
+        val modifiers: Int,
+        val x: Double,
+        val y: Double,
+        val active: Boolean,
+        val destination: ProjectPath?,
+    )
 }
 
 class IdeSplitterInteraction(

@@ -27,8 +27,10 @@ internal object IdeColors {
     val TEXT = 0xFFF2F4F8.toInt()
     val MUTED = 0xFF89949E.toInt()
     val ACCENT = 0xFF43D6B0.toInt()
+    val COMPUTER = 0xFF72B7FF.toInt()
     val DISABLED = 0xFF58616A.toInt()
     val SELECTION = 0x88406D92.toInt()
+    val DROP_TARGET = 0x6643D6B0
     val CARET = 0xFFFFFFFF.toInt()
     val ERROR = 0xFFFF6B6B.toInt()
     val WARNING = 0xFFFFC857.toInt()
