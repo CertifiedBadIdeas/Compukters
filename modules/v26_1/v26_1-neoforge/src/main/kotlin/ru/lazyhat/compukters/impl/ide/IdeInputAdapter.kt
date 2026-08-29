@@ -197,6 +197,7 @@ class IdeInputAdapter(
                     is IdeDialogState.LockUpdate -> dispatch(IdeCommand.ConfirmLockUpdate)
                     is IdeDialogState.FileConflict -> dispatch(IdeCommand.ResolveConflict(dialog.confirmAction()))
                     is IdeDialogState.TargetOverwrite -> dispatch(IdeCommand.ConfirmTargetDeployment)
+                    is IdeDialogState.ComputerImport -> dispatch(IdeCommand.ConfirmComputerImport)
                     else -> uiActions.activate(action)
                 }
             }
@@ -205,6 +206,7 @@ class IdeInputAdapter(
                 when (dialog) {
                     null -> uiActions.activate(action)
                     is IdeDialogState.TargetOverwrite -> dispatch(IdeCommand.CancelTargetDeployment)
+                    is IdeDialogState.ComputerImport -> dispatch(IdeCommand.CancelComputerImport)
                     else -> dispatch(IdeCommand.CancelDialog)
                 }
             }
@@ -255,6 +257,7 @@ class IdeInputAdapter(
                 when (dialog) {
                     is IdeDialogState.FileConflict -> IdeCommand.ResolveConflict(IdeConflictAction.Cancel)
                     is IdeDialogState.TargetOverwrite -> IdeCommand.CancelTargetDeployment
+                    is IdeDialogState.ComputerImport -> IdeCommand.CancelComputerImport
                     else -> IdeCommand.CancelDialog
                 }
             return dispatch(command)
@@ -265,6 +268,7 @@ class IdeInputAdapter(
             is IdeDialogState.LockUpdate -> dispatch(IdeCommand.ConfirmLockUpdate)
             is IdeDialogState.FileConflict -> dispatch(IdeCommand.ResolveConflict(dialog.confirmAction()))
             is IdeDialogState.TargetOverwrite -> dispatch(IdeCommand.ConfirmTargetDeployment)
+            is IdeDialogState.ComputerImport -> dispatch(IdeCommand.ConfirmComputerImport)
         }
     }
 

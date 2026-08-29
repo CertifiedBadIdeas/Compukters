@@ -28,6 +28,11 @@ import ru.lazyhat.compukters.ide.client.target.IdeTargetFailureKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
 import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
+import ru.lazyhat.compukters.ide.project.ProjectLimits
+import ru.lazyhat.compukters.ide.project.fs.ProjectPath
+import ru.lazyhat.compukters.ide.project.tree.ProjectImport
+import ru.lazyhat.compukters.ide.project.tree.ProjectImportEntry
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
@@ -68,6 +73,9 @@ class IdeComputerFileCoordinator(
     private var currentPreview: IdeComputerPreviewState = IdeComputerPreviewState.Closed
     private var restoreExpanded = emptySet<IdeTargetVirtualPath>()
     private var previewId = 0L
+    private var transferId = 0L
+    private var transferJob: TransferJob? = null
+    private var currentTransfer: IdeComputerTransferState = IdeComputerTransferState.Idle
 
     init {
         require(eventCapacity > 0) { "computer file event capacity must be positive" }
@@ -83,8 +91,14 @@ class IdeComputerFileCoordinator(
         return currentPreview
     }
 
+    fun transfer(): IdeComputerTransferState {
+        checkOwner()
+        return currentTransfer
+    }
+
     fun attach(target: IdeAttachedTarget) {
         checkOwner()
+        cancelTransfer()
         advanceEpoch()
         this.target = target
         closePreview()
@@ -103,6 +117,7 @@ class IdeComputerFileCoordinator(
         closePreview()
         restoreExpanded = emptySet()
         current = IdeComputerTreeState.NoTarget
+        cancelTransfer()
     }
 
     fun targetLost(detail: String) {
@@ -112,11 +127,15 @@ class IdeComputerFileCoordinator(
         closePreview()
         restoreExpanded = emptySet()
         current = IdeComputerTreeState.TargetLost(detail)
+        failTransfer(detail)
     }
 
     fun refresh() {
         checkOwner()
         if (target == null) return
+        if (currentTransfer is IdeComputerTransferState.Downloading) {
+            failTransfer("Target filesystem was refreshed during transfer")
+        }
         restoreExpanded = (current as? IdeComputerTreeState.Available)?.expanded ?: restoreExpanded
         if (ROOT !in restoreExpanded) restoreExpanded = restoreExpanded + ROOT
         advanceEpoch()
@@ -144,11 +163,52 @@ class IdeComputerFileCoordinator(
         }
     }
 
+    fun drop(source: IdeTargetVirtualPath, destinationDirectory: ProjectPath): Boolean {
+        checkOwner()
+        if (target == null || currentTransfer is IdeComputerTransferState.Downloading ||
+            currentTransfer is IdeComputerTransferState.ConfirmationRequired
+        ) return false
+        if (source.value == "/") {
+            currentTransfer = IdeComputerTransferState.Failed("The target filesystem root cannot be imported")
+            return false
+        }
+        val rootName = source.value.substringAfterLast('/')
+        val destination =
+            runCatching { ProjectPath.file("${destinationDirectory.value}/$rootName") }.getOrElse {
+                currentTransfer = IdeComputerTransferState.Failed(it.message ?: "Target name is not a valid project path")
+                return false
+            }
+        transferId = Math.incrementExact(transferId)
+        val drop = IdeComputerDrop(source, destinationDirectory)
+        val job = TransferJob(transferId, epoch, drop, destination, rootName)
+        transferJob = job
+        currentTransfer = IdeComputerTransferState.Downloading(drop, IdeTransferProgress(0, 0, 0, 0))
+        access.stat(source).whenComplete { result, failure ->
+            enqueue(Event.TransferStat(job.epoch, job.id, source, TransferStatPurpose.Root, result, failure))
+        }
+        return true
+    }
+
+    fun cancelTransfer() {
+        checkOwner()
+        transferId = Math.incrementExact(transferId)
+        transferJob = null
+        currentTransfer = IdeComputerTransferState.Idle
+    }
+
+    fun finishTransfer(detail: String? = null) {
+        checkOwner()
+        transferId = Math.incrementExact(transferId)
+        transferJob = null
+        currentTransfer = if (detail == null) IdeComputerTransferState.Idle else IdeComputerTransferState.Failed(detail)
+    }
+
     fun tick() {
         checkOwner()
         if (overflow.getAndSet(false)) {
             advanceEpoch()
             current = IdeComputerTreeState.Unavailable("Target filesystem event queue overflow")
+            failTransfer("Target filesystem event queue overflow")
             events.clear()
             return
         }
@@ -160,8 +220,211 @@ class IdeComputerFileCoordinator(
                 is Event.DirectoryPage -> acceptDirectoryPage(event)
                 is Event.PreviewStat -> if (event.previewId == previewId) acceptPreviewStat(event)
                 is Event.PreviewRead -> if (event.load.previewId == previewId) acceptPreviewRead(event)
+                is Event.TransferStat -> if (event.transferId == transferId) acceptTransferStat(event)
+                is Event.TransferList -> if (event.transferId == transferId) acceptTransferList(event)
+                is Event.TransferRead -> if (event.transferId == transferId) acceptTransferRead(event)
             }
         }
+    }
+
+    private fun acceptTransferStat(event: Event.TransferStat) {
+        val job = transferJob ?: return
+        val observed = event.result as? IdeFileStatResult.Observed
+        if (event.failure != null || observed == null) {
+            failTransfer(transferFailure(event.failure, (event.result as? IdeFileStatResult.Failed)?.failure))
+            return
+        }
+        when (event.purpose) {
+            TransferStatPurpose.Root -> {
+                job.fileSystemGeneration = observed.stat.fileSystemGeneration
+                if (!addTransferNode(job, event.path, job.rootName, observed.stat.metadata)) return
+                advanceEnumeration(job)
+            }
+
+            TransferStatPurpose.Validation -> {
+                val expected = job.nodes[job.validationIndex]
+                if (
+                    expected.path != event.path || observed.stat.fileSystemGeneration != job.fileSystemGeneration ||
+                    observed.stat.metadata != expected.metadata
+                ) {
+                    failTransfer("Target filesystem changed during transfer")
+                    return
+                }
+                job.validationIndex++
+                advanceValidation(job)
+            }
+        }
+    }
+
+    private fun addTransferNode(
+        job: TransferJob,
+        path: IdeTargetVirtualPath,
+        relativePath: String,
+        metadata: IdeTargetFileMetadata,
+    ): Boolean {
+        if (job.nodes.size >= MAXIMUM_TRANSFER_NODES) {
+            failTransfer("Target subtree exceeds $MAXIMUM_TRANSFER_NODES entries")
+            return false
+        }
+        if (metadata.kind == IdeTargetFileKind.File) {
+            if (metadata.logicalBytes > MAXIMUM_TRANSFER_FILE_BYTES) {
+                failTransfer("Target file exceeds the 1 MiB transfer limit")
+                return false
+            }
+            val total = runCatching { Math.addExact(job.bytesTotal, metadata.logicalBytes) }.getOrNull()
+            if (total == null || total > MAXIMUM_TRANSFER_BYTES) {
+                failTransfer("Target subtree exceeds the 8 MiB transfer limit")
+                return false
+            }
+            job.bytesTotal = total
+        }
+        val node = TransferNode(path, relativePath, metadata)
+        job.nodes += node
+        if (metadata.kind == IdeTargetFileKind.Directory) {
+            job.directories += node
+            job.entries += ProjectImportEntry.Directory(relativePath)
+        } else {
+            job.files += node
+        }
+        return true
+    }
+
+    private fun advanceEnumeration(job: TransferJob) {
+        val directory = job.directories.firstOrNull()
+        if (directory == null) {
+            publishTransferProgress(job)
+            advanceRead(job)
+            return
+        }
+        access.list(directory.path, job.listCursor, PAGE_SIZE).whenComplete { result, failure ->
+            enqueue(Event.TransferList(job.epoch, job.id, directory, job.listCursor, result, failure))
+        }
+    }
+
+    private fun acceptTransferList(event: Event.TransferList) {
+        val job = transferJob ?: return
+        val directory = job.directories.firstOrNull()
+        val listed = event.result as? IdeFileListResult.Listed
+        if (event.failure != null || directory != event.directory || listed == null) {
+            failTransfer(transferFailure(event.failure, (event.result as? IdeFileListResult.Failed)?.failure))
+            return
+        }
+        val listing = listed.listing
+        if (
+            listing.fileSystemGeneration != job.fileSystemGeneration ||
+            listing.directoryGeneration != directory.metadata.generation ||
+            (event.cursor != null && listing.entries.isNotEmpty() && compareUtf8(event.cursor, listing.entries.first().name) >= 0) ||
+            (!listing.complete && listing.entries.isEmpty())
+        ) {
+            failTransfer("Target directory changed while it was being transferred")
+            return
+        }
+        for (entry in listing.entries) {
+            val relative = "${directory.relativePath}/${entry.name}"
+            if (!addTransferNode(job, child(directory.path, entry.name), relative, entry.metadata)) return
+        }
+        if (listing.complete) {
+            job.directories.removeFirst()
+            job.listCursor = null
+        } else {
+            job.listCursor = listing.entries.last().name
+        }
+        advanceEnumeration(job)
+    }
+
+    private fun advanceRead(job: TransferJob) {
+        val file = job.files.getOrNull(job.fileIndex)
+        if (file == null) {
+            advanceValidation(job)
+            return
+        }
+        if (file.metadata.logicalBytes == 0L) {
+            job.entries += ProjectImportEntry.File(file.relativePath, byteArrayOf())
+            job.fileIndex++
+            publishTransferProgress(job)
+            advanceRead(job)
+            return
+        }
+        val remaining = file.metadata.logicalBytes - job.readOffset
+        val maximum = minOf(PREVIEW_CHUNK_BYTES.toLong(), remaining).toInt()
+        access.read(file.path, job.readOffset, maximum, file.metadata.generation).whenComplete { result, failure ->
+            enqueue(Event.TransferRead(job.epoch, job.id, file, job.readOffset, maximum, result, failure))
+        }
+    }
+
+    private fun acceptTransferRead(event: Event.TransferRead) {
+        val job = transferJob ?: return
+        val file = job.files.getOrNull(job.fileIndex)
+        val read = event.result as? IdeFileReadResult.Read
+        if (event.failure != null || file != event.file || event.offset != job.readOffset || read == null) {
+            failTransfer(transferFailure(event.failure, (event.result as? IdeFileReadResult.Failed)?.failure))
+            return
+        }
+        val chunk = read.chunk
+        val bytes = chunk.bytes()
+        val next = job.readOffset + bytes.size
+        if (
+            chunk.generation != file.metadata.generation || bytes.size > event.maximumBytes || chunk.nextOffset != next ||
+            (!chunk.eof && bytes.isEmpty()) || next > file.metadata.logicalBytes
+        ) {
+            failTransfer("Invalid target file chunk")
+            return
+        }
+        job.fileBytes.write(bytes)
+        job.readOffset = next
+        job.bytesComplete += bytes.size
+        if (chunk.eof) {
+            if (next != file.metadata.logicalBytes) {
+                failTransfer("Target file ended before its declared size")
+                return
+            }
+            job.entries += ProjectImportEntry.File(file.relativePath, job.fileBytes.toByteArray())
+            job.fileBytes.reset()
+            job.readOffset = 0
+            job.fileIndex++
+        } else if (next == file.metadata.logicalBytes) {
+            failTransfer("Target file did not terminate at its declared size")
+            return
+        }
+        publishTransferProgress(job)
+        advanceRead(job)
+    }
+
+    private fun advanceValidation(job: TransferJob) {
+        val node = job.nodes.getOrNull(job.validationIndex)
+        if (node == null) {
+            val entries = job.entries.sortedWith { left, right -> compareUtf8(left.relativePath, right.relativePath) }
+            val import =
+                runCatching { ProjectImport.admit(job.destination, replace = false, entries, TRANSFER_PROJECT_LIMITS) }
+                    .getOrElse {
+                        failTransfer(it.message ?: "Target subtree cannot be imported")
+                        return
+                    }
+            currentTransfer = IdeComputerTransferState.ConfirmationRequired(job.drop, import)
+            transferJob = null
+            return
+        }
+        access.stat(node.path).whenComplete { result, failure ->
+            enqueue(Event.TransferStat(job.epoch, job.id, node.path, TransferStatPurpose.Validation, result, failure))
+        }
+    }
+
+    private fun publishTransferProgress(job: TransferJob) {
+        currentTransfer =
+            IdeComputerTransferState.Downloading(
+                job.drop,
+                IdeTransferProgress(job.fileIndex, job.files.size, job.bytesComplete, job.bytesTotal),
+            )
+    }
+
+    private fun transferFailure(throwable: Throwable?, failure: IdeTargetFailure?): String =
+        failure?.detail ?: throwable?.message ?: "Target subtree transfer failed"
+
+    private fun failTransfer(detail: String) {
+        if (currentTransfer == IdeComputerTransferState.Idle && transferJob == null) return
+        transferId = Math.incrementExact(transferId)
+        transferJob = null
+        currentTransfer = IdeComputerTransferState.Failed(detail)
     }
 
     private fun beginRootLoad() {
@@ -422,6 +685,35 @@ class IdeComputerFileCoordinator(
         val chunks: List<ByteArray>,
     )
 
+    private data class TransferNode(
+        val path: IdeTargetVirtualPath,
+        val relativePath: String,
+        val metadata: IdeTargetFileMetadata,
+    )
+
+    private class TransferJob(
+        val id: Long,
+        val epoch: Long,
+        val drop: IdeComputerDrop,
+        val destination: ProjectPath,
+        val rootName: String,
+    ) {
+        var fileSystemGeneration = -1L
+        val nodes = mutableListOf<TransferNode>()
+        val directories = ArrayDeque<TransferNode>()
+        val files = mutableListOf<TransferNode>()
+        val entries = mutableListOf<ProjectImportEntry>()
+        var listCursor: String? = null
+        var bytesTotal = 0L
+        var bytesComplete = 0L
+        var fileIndex = 0
+        var readOffset = 0L
+        val fileBytes = ByteArrayOutputStream()
+        var validationIndex = 0
+    }
+
+    private enum class TransferStatPurpose { Root, Validation }
+
     private sealed interface Event {
         val epoch: Long
 
@@ -453,6 +745,34 @@ class IdeComputerFileCoordinator(
             val result: IdeFileReadResult?,
             val failure: Throwable?,
         ) : Event
+
+        data class TransferStat(
+            override val epoch: Long,
+            val transferId: Long,
+            val path: IdeTargetVirtualPath,
+            val purpose: TransferStatPurpose,
+            val result: IdeFileStatResult?,
+            val failure: Throwable?,
+        ) : Event
+
+        data class TransferList(
+            override val epoch: Long,
+            val transferId: Long,
+            val directory: TransferNode,
+            val cursor: String?,
+            val result: IdeFileListResult?,
+            val failure: Throwable?,
+        ) : Event
+
+        data class TransferRead(
+            override val epoch: Long,
+            val transferId: Long,
+            val file: TransferNode,
+            val offset: Long,
+            val maximumBytes: Int,
+            val result: IdeFileReadResult?,
+            val failure: Throwable?,
+        ) : Event
     }
 
     private companion object {
@@ -461,6 +781,15 @@ class IdeComputerFileCoordinator(
         const val MAXIMUM_DIRECTORY_ENTRIES = 16_384
         const val PREVIEW_CHUNK_BYTES = 32 * 1024
         const val MAXIMUM_PREVIEW_BYTES = 1024 * 1024L
+        const val MAXIMUM_TRANSFER_NODES = 1024
+        const val MAXIMUM_TRANSFER_FILE_BYTES = 1024 * 1024L
+        const val MAXIMUM_TRANSFER_BYTES = 8L * 1024 * 1024
+        val TRANSFER_PROJECT_LIMITS =
+            ProjectLimits(
+                treeEntries = MAXIMUM_TRANSFER_NODES,
+                projectFileBytes = MAXIMUM_TRANSFER_FILE_BYTES.toInt(),
+                projectBytes = MAXIMUM_TRANSFER_BYTES,
+            )
     }
 }
 

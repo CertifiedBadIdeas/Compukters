@@ -52,6 +52,7 @@ import ru.lazyhat.compukters.ide.project.document.ProjectDocumentStore
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.AdmittedProjectDelete
 import ru.lazyhat.compukters.ide.project.tree.ProjectMutationResult
+import ru.lazyhat.compukters.ide.project.tree.ProjectImport
 import ru.lazyhat.compukters.ide.project.tree.ProjectTree
 import ru.lazyhat.compukters.ide.project.tree.ProjectTreeStore
 import java.util.concurrent.CompletableFuture
@@ -434,6 +435,11 @@ internal class ControlledWorkspace : IdeWorkspace {
                 is IdeMutationRequest.Delete -> store.delete(request.admitted)
             }
         }
+
+    override fun importTree(
+        project: ProjectHandle,
+        import: ProjectImport,
+    ): CompletableFuture<ProjectMutationResult> = completeCall { ProjectTreeStore(project).importTree(import) }
 
     override fun buildInput(project: ProjectHandle): CompletableFuture<IdeBuildInput> {
         buildInputRequests++

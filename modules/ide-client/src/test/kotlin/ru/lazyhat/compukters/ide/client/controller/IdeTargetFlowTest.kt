@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
 import ru.lazyhat.compukters.ide.client.build.IdeBuildServices
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
+import ru.lazyhat.compukters.ide.client.files.IdeComputerTransferState
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
@@ -239,6 +240,31 @@ class IdeTargetFlowTest {
 
         assertEquals(null, fixture.controller.viewState().dialog)
         assertIs<IdeTargetState.Attached>(fixture.controller.viewState().target)
+    }
+
+    @Test
+    fun `target file import is atomic and an existing destination requires confirmation`() {
+        val fixture = fixture()
+        fixture.startAttached()
+
+        fixture.controller.dispatch(
+            IdeCommand.DropComputerEntry(IdeTargetVirtualPath.of("/home/hello.kt"), ru.lazyhat.compukters.ide.project.fs.ProjectPath.file("src")),
+        )
+        fixture.tickUntil { fixture.workspaceView().tree.flatten().any { it.path.value == "src/hello.kt" } }
+        assertEquals(IdeComputerTransferState.Idle, fixture.workspaceView().computerTransfer)
+        assertContentEquals(
+            "fun main() = Unit".encodeToByteArray(),
+            fixture.workspace.descriptor.handle.canonicalPath.resolve("src/hello.kt").toFile().readBytes(),
+        )
+
+        fixture.controller.dispatch(
+            IdeCommand.DropComputerEntry(IdeTargetVirtualPath.of("/home/hello.kt"), ru.lazyhat.compukters.ide.project.fs.ProjectPath.file("src")),
+        )
+        fixture.tickUntil { fixture.controller.viewState().dialog is IdeDialogState.ComputerImport }
+        assertIs<IdeComputerTransferState.ConfirmationRequired>(fixture.workspaceView().computerTransfer)
+        fixture.controller.dispatch(IdeCommand.CancelComputerImport)
+        assertEquals(IdeComputerTransferState.Idle, fixture.workspaceView().computerTransfer)
+        assertEquals(null, fixture.controller.viewState().dialog)
     }
 
     private fun fixture(): TargetFixture {
