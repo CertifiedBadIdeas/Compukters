@@ -272,8 +272,11 @@ class ProgramRuntimeHost internal constructor(
 
     fun fileStat(path: ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath) = session?.fileStat(path)
 
-    fun fileList(path: ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath, startAfter: String?, maximumEntries: Int) =
-        session?.fileList(path, startAfter, maximumEntries)
+    fun fileList(
+        path: ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath,
+        startAfter: String?,
+        maximumEntries: Int,
+    ) = session?.fileList(path, startAfter, maximumEntries)
 
     fun fileRead(
         path: ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath,
@@ -282,8 +285,7 @@ class ProgramRuntimeHost internal constructor(
         expectedGeneration: Long,
     ) = session?.fileRead(path, offset, maximumBytes, expectedGeneration)
 
-    fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate? =
-        deploymentOperation { verifyForDeploy(artifact.copyOf()) }
+    fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate? = deploymentOperation { verifyForDeploy(artifact.copyOf()) }
 
     fun executableRevision(path: String): VmExecutableRevision? = deploymentOperation { executableRevision(path) }
 
