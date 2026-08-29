@@ -33,8 +33,7 @@ dependencies {
     implementation(projects.compilerClient)
     implementation(projects.compilerArtifact)
     implementation(libs.kotlin.stdlib)
-    implementation(libs.kotlin.compiler.embeddable)
-    implementation(libs.kotlin.scripting.compiler.embeddable)
+    implementation(libs.kotlin.compiler)
     testImplementation(projects.ideCore)
     testImplementation(kotlin("test"))
 }
@@ -404,26 +403,50 @@ tasks.check {
     dependsOn(forkedWorkerTest)
 }
 
-val compilerModuleNames = setOf("kotlin-compiler-embeddable", "kotlin-scripting-compiler-embeddable")
+val compilerModuleNames =
+    setOf(
+        "kotlin-compiler",
+        "kotlin-compiler-embeddable",
+        "kotlin-scripting-compiler-embeddable",
+        "kotlin-scripting-compiler-impl-embeddable",
+    )
 val nonWorkerIsolationChecks =
-    rootProject.allprojects.filter { it != project && it.path != ":compiler-client" }.map { candidate ->
-        candidate.tasks.register("assertNoK2CompilerRuntime") {
-            doLast {
-                candidate.configurations.findByName("runtimeClasspath")?.takeIf { it.isCanBeResolved }?.let { runtime ->
-                    val leaked = runtime.resolvedConfiguration.resolvedArtifacts.filter { it.moduleVersion.id.name in compilerModuleNames }
-                    check(leaked.isEmpty()) { "${candidate.path} production runtime leaks compiler artifacts: $leaked" }
+    rootProject.allprojects
+        .filter { it != project && it.path !in setOf(":compiler-client", ":ide-analysis-k2") }
+        .map { candidate ->
+            candidate.tasks.register("assertNoK2CompilerRuntime") {
+                doLast {
+                    candidate.configurations.findByName("runtimeClasspath")?.takeIf { it.isCanBeResolved }?.let { runtime ->
+                        val leaked = runtime.resolvedConfiguration.resolvedArtifacts.filter { it.moduleVersion.id.name in compilerModuleNames }
+                        check(leaked.isEmpty()) { "${candidate.path} production runtime leaks compiler artifacts: $leaked" }
+                    }
                 }
             }
         }
-    }
 
 val assertCompilerWorkerIsolation = tasks.register("assertCompilerWorkerIsolation") {
     dependsOn(prepareCompilerWorkerPayload, nonWorkerIsolationChecks, ":compiler-client:assertNoK2CompilerRuntime")
     doLast {
         val workerArtifacts = workerRuntimeClasspath.resolvedConfiguration.resolvedArtifacts
-        compilerModuleNames.forEach { module ->
-            val versions = workerArtifacts.filter { it.moduleVersion.id.name == module }.map { it.moduleVersion.id.version }.toSet()
-            check(versions == setOf(pinnedKotlinVersion)) { "$module must resolve exactly to $pinnedKotlinVersion, got $versions" }
+        val compilerVersions =
+            workerArtifacts
+                .filter { it.moduleVersion.id.name == "kotlin-compiler" }
+                .map { it.moduleVersion.id.version }
+                .toSet()
+        check(compilerVersions == setOf(pinnedKotlinVersion)) {
+            "kotlin-compiler must resolve exactly to $pinnedKotlinVersion, got $compilerVersions"
+        }
+        val forbiddenCompilerModules =
+            workerArtifacts.filter {
+                it.moduleVersion.id.name in
+                    setOf(
+                        "kotlin-compiler-embeddable",
+                        "kotlin-scripting-compiler-embeddable",
+                        "kotlin-scripting-compiler-impl-embeddable",
+                    )
+            }
+        check(forbiddenCompilerModules.isEmpty()) {
+            "compiler worker contains forbidden embeddable or scripting compiler artifacts: $forbiddenCompilerModules"
         }
 
         val registrarPath = "META-INF/services/org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar"
