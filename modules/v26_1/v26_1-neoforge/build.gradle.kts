@@ -35,6 +35,10 @@ plugins {
 
 val gameTest by sourceSets.creating
 
+kotlin.target.compilations.named(gameTest.name) {
+    associateWith(kotlin.target.compilations.getByName("main"))
+}
+
 tasks.named<ProcessResources>(gameTest.processResourcesTaskName) {
     from(rootProject.layout.projectDirectory.file("host/compukter-vm/tests/fixtures/filesystem-write.cpkt")) {
         into("fixtures")
