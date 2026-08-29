@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.ide.client.state
 
+import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 
 sealed interface IdeCommand {
@@ -31,6 +32,16 @@ sealed interface IdeCommand {
 
     data class OpenFile(
         val path: ProjectPath,
+    ) : IdeCommand
+
+    data class ExpandComputerDirectory(
+        val path: IdeTargetVirtualPath,
+    ) : IdeCommand
+
+    data object RefreshComputerTree : IdeCommand
+
+    data class OpenComputerFile(
+        val path: IdeTargetVirtualPath,
     ) : IdeCommand
 
     data class CreateText(

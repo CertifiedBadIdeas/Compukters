@@ -28,6 +28,8 @@ import ru.lazyhat.compukters.ide.client.build.IdeBuildFailureKind
 import ru.lazyhat.compukters.ide.client.build.IdeBuildJob
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.build.IdeResolveResult
+import ru.lazyhat.compukters.ide.client.files.IdeComputerFileCoordinator
+import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferences
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferencesStore
 import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
@@ -126,6 +128,8 @@ class IdeClientController(
     private val buildJobs = mutableMapOf<Long, IdeBuildJob>()
     private var observedAnalysisState: IdeAnalysisState = IdeAnalysisState.Idle
     private val targetBuildActions = mutableMapOf<Long, PendingBuildAction>()
+    private val computerFiles = targetCoordinator?.let { IdeComputerFileCoordinator(it, limits.eventQueueCapacity) }
+    private var computerTarget: IdeAttachedTarget? = null
 
     init {
         tooling?.whenComplete { ready, failure ->
@@ -173,6 +177,20 @@ class IdeClientController(
 
             is IdeCommand.OpenFile -> {
                 requestFileSwitch(command.path)
+            }
+
+            is IdeCommand.ExpandComputerDirectory -> {
+                computerFiles?.expand(command.path)
+                publishWorkspace()
+            }
+
+            IdeCommand.RefreshComputerTree -> {
+                computerFiles?.refresh()
+                publishWorkspace()
+            }
+
+            is IdeCommand.OpenComputerFile -> {
+                publishStatus("Computer file preview is not available yet", IdeProblemSeverity.Info)
             }
 
             is IdeCommand.CreateText -> {
@@ -315,6 +333,7 @@ class IdeClientController(
         events.drain().forEach(::accept)
         targetCoordinator?.tick()
         refreshTargetState()
+        refreshComputerFiles()
         val active = editor
         if (
             active != null && active.dirty && !active.conflict && active.saveInFlight == null &&
@@ -375,6 +394,7 @@ class IdeClientController(
             analysisCoordinator?.close()
         }
         targetCoordinator?.close()
+        computerFiles?.detach()
     }
 
     private fun openProject(directoryName: String) {
@@ -1184,6 +1204,7 @@ class IdeClientController(
                             editorView,
                             (state.page as? IdePageState.Workspace)?.value?.status,
                             buildState,
+                            computerFiles?.state() ?: IdeComputerTreeState.NoTarget,
                         ),
                     ),
             )
@@ -1298,6 +1319,26 @@ class IdeClientController(
             }
         if (state.target != current || state.dialog != dialog) state = state.copy(dialog = dialog, target = current)
     }
+
+    private fun refreshComputerFiles() {
+        val files = computerFiles ?: return
+        val attached = targetCoordinator?.attachedTarget()
+        if (attached != computerTarget) {
+            computerTarget = attached
+            if (attached != null) {
+                files.attach(attached)
+            } else {
+                val targetState = targetCoordinator?.state()
+                if (targetState is IdeTargetState.Detached) files.targetLost(targetState.failure.detail) else files.detach()
+            }
+        }
+        val before = files.state()
+        files.tick()
+        if (files.state() != before || workspaceComputerTree() != files.state()) publishWorkspace()
+    }
+
+    private fun workspaceComputerTree(): IdeComputerTreeState? =
+        (state.page as? IdePageState.Workspace)?.value?.computerTree
 
     private fun admittedAnalysisState(active: EditorSession): IdeAnalysisState {
         if (!active.path.isKotlinSource) return IdeAnalysisState.Idle
