@@ -19,17 +19,19 @@
 package ru.lazyhat.compukters.compiler.runtime.worker
 
 import ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload
-import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadLoader
+import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadManifest
 import java.io.InputStream
 import java.nio.file.Path
 
 data class PackagedWorkerPayloadLimits(
     val entries: Int = 256,
     val bytes: Long = 512L * 1024 * 1024,
+    val manifestBytes: Int = 1024 * 1024,
 ) {
     init {
         require(entries > 0) { "packaged worker entry limit must be positive" }
         require(bytes > 0) { "packaged worker byte limit must be positive" }
+        require(manifestBytes > 0) { "packaged worker manifest byte limit must be positive" }
     }
 }
 
@@ -45,21 +47,29 @@ object PackagedWorkerPayload {
         limits: PackagedWorkerPayloadLimits = PackagedWorkerPayloadLimits(),
     ): PublishedWorkerPayload {
         try {
-            val published =
-                ru.lazyhat.compukters.worker.payload.PackagedWorkerPayload.publish(
+            val bundle =
+                ru.lazyhat.compukters.worker.payload.PackagedToolingBundle.publish(
                     archive,
                     cacheRoot,
                     limits =
-                        ru.lazyhat.compukters.worker.payload.PackagedWorkerPayloadLimits(
+                        ru.lazyhat.compukters.worker.payload.PackagedToolingBundleLimits(
                             limits.entries,
                             limits.bytes,
+                            limits.manifestBytes,
                         ),
                 )
-            return WorkerPayloadLoader.load(published.root)
-        } catch (exception: ru.lazyhat.compukters.worker.payload.PackagedWorkerPayloadException) {
+            val compiler = bundle.profile(COMPILER_PROFILE)
+            return PublishedWorkerPayload(
+                compiler.root,
+                WorkerPayloadManifest.fromToolingProfile(compiler.manifest, bundle.manifest.files),
+                compiler.classpath,
+            )
+        } catch (exception: ru.lazyhat.compukters.worker.payload.PackagedToolingBundleException) {
             throw PackagedWorkerPayloadException(exception.message ?: "packaged worker publication failed", exception)
-        } catch (exception: ru.lazyhat.compukters.worker.payload.WorkerPayloadException) {
-            throw exception
+        } catch (exception: ru.lazyhat.compukters.worker.payload.ToolingBundleException) {
+            throw PackagedWorkerPayloadException(exception.message ?: "packaged worker profile is invalid", exception)
         }
     }
+
+    private const val COMPILER_PROFILE = "compiler"
 }

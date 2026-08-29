@@ -223,7 +223,7 @@ tasks.test {
 val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
     description = "Runs forked K2 analysis worker integration tests."
     group = "verification"
-    dependsOn(analysisWorkerPayload)
+    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle")
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
@@ -238,7 +238,7 @@ val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
         }.get().executablePath.asFile.absolutePath)
         systemProperty(
             "compukters.analysis.payload",
-            analysisWorkerPayloadDirectory.get().asFile.absolutePath,
+            project(":tooling-runtime").layout.buildDirectory.dir("tooling-bundle/content").get().asFile.absolutePath,
         )
     }
 }

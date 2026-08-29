@@ -390,18 +390,19 @@ val generateEditArtifact = tasks.register<Test>("generateEditArtifact") {
 }
 
 val workerMeasurementReport = layout.buildDirectory.file("reports/worker/measurements.json")
+val sharedToolingPayloadDirectory = project(":tooling-runtime").layout.buildDirectory.dir("tooling-bundle/content")
 
 val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
-    dependsOn(prepareCompilerWorkerPayload)
+    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle")
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("ru.lazyhat.compukters.compiler.worker.integration.*")
     shouldRunAfter(tasks.test)
-    inputs.dir(workerPayloadDirectory)
+    inputs.dir(sharedToolingPayloadDirectory)
     outputs.file(workerMeasurementReport)
     doFirst {
-        systemProperty("compukters.worker.payload", workerPayloadDirectory.get().asFile.absolutePath)
+        systemProperty("compukters.worker.payload", sharedToolingPayloadDirectory.get().asFile.absolutePath)
         systemProperty("compukters.worker.java", javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }.get().executablePath)
         systemProperty("compukters.worker.test-classpath", sourceSets.test.get().runtimeClasspath.asPath)
         systemProperty("compukters.worker.measurement-report", workerMeasurementReport.get().asFile.absolutePath)

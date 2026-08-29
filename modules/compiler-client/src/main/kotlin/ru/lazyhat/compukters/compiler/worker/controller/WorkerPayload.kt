@@ -20,6 +20,8 @@ package ru.lazyhat.compukters.compiler.worker.controller
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
+import ru.lazyhat.compukters.worker.payload.ToolingBundleFile
+import ru.lazyhat.compukters.worker.payload.ToolingProfileManifest
 import java.nio.file.Path
 import ru.lazyhat.compukters.worker.payload.WorkerPayloadManifest as GenericWorkerPayloadManifest
 
@@ -34,7 +36,7 @@ class WorkerPayloadManifest private constructor(
     val mainClass: String,
     val files: List<WorkerPayloadFile>,
     val payloadHash: Hash256,
-    internal val generic: GenericWorkerPayloadManifest,
+    internal val generic: GenericWorkerPayloadManifest?,
 ) {
     override fun equals(other: Any?): Boolean =
         other is WorkerPayloadManifest &&
@@ -54,23 +56,50 @@ class WorkerPayloadManifest private constructor(
 
         internal fun fromGeneric(manifest: GenericWorkerPayloadManifest): WorkerPayloadManifest {
             require(manifest.kind == COMPILER_KIND) { "worker payload kind must be compiler" }
-            require(manifest.identityProperties.keys == IDENTITY_KEYS) { "compiler payload identity properties are invalid" }
             val payloadHash = Hash256.of(manifest.payloadHash.toByteArray())
-            val identity =
-                WorkerIdentity(
-                    compilerVersion = manifest.identityProperties.getValue(COMPILER),
-                    languageVersion = manifest.identityProperties.getValue(LANGUAGE),
-                    codegenAbi = manifest.identityProperties.getValue(CODEGEN_ABI).toUInt(),
-                    artifactWriterVersion = manifest.identityProperties.getValue(ARTIFACT_WRITER).toUInt(),
-                    payloadHash = payloadHash,
-                    standardLibraryAbi = Hash256.fromHex(manifest.identityProperties.getValue(STANDARD_LIBRARY_ABI)),
-                )
             return WorkerPayloadManifest(
-                identity,
+                identity(manifest.identityProperties, payloadHash),
                 manifest.mainClass,
                 manifest.files.map { file -> WorkerPayloadFile(file.path, file.bytes, Hash256.of(file.sha256.toByteArray())) },
                 payloadHash,
                 manifest,
+            )
+        }
+
+        fun fromToolingProfile(
+            profile: ToolingProfileManifest,
+            bundleFiles: List<ToolingBundleFile>,
+        ): WorkerPayloadManifest {
+            require(profile.kind == COMPILER_KIND) { "tooling profile kind must be compiler" }
+            val records = bundleFiles.associateBy(ToolingBundleFile::path)
+            require(profile.classpath.toSet() == records.keys.intersect(profile.classpath.toSet())) {
+                "compiler tooling profile references an unavailable file"
+            }
+            val payloadHash = Hash256.of(profile.payloadHash.toByteArray())
+            return WorkerPayloadManifest(
+                identity(profile.identityProperties, payloadHash),
+                profile.mainClass,
+                profile.classpath.map { path ->
+                    val file = records.getValue(path)
+                    WorkerPayloadFile(file.path, file.bytes, Hash256.of(file.sha256.toByteArray()))
+                },
+                payloadHash,
+                null,
+            )
+        }
+
+        private fun identity(
+            properties: Map<String, String>,
+            payloadHash: Hash256,
+        ): WorkerIdentity {
+            require(properties.keys == IDENTITY_KEYS) { "compiler payload identity properties are invalid" }
+            return WorkerIdentity(
+                compilerVersion = properties.getValue(COMPILER),
+                languageVersion = properties.getValue(LANGUAGE),
+                codegenAbi = properties.getValue(CODEGEN_ABI).toUInt(),
+                artifactWriterVersion = properties.getValue(ARTIFACT_WRITER).toUInt(),
+                payloadHash = payloadHash,
+                standardLibraryAbi = Hash256.fromHex(properties.getValue(STANDARD_LIBRARY_ABI)),
             )
         }
 
@@ -122,7 +151,12 @@ object WorkerPayloadPublisher {
     ): PublishedWorkerPayload {
         val published =
             ru.lazyhat.compukters.worker.payload.WorkerPayloadPublisher
-                .publish(manifest.generic, source, cacheRoot, limits)
+                .publish(
+                    requireNotNull(manifest.generic) { "shared tooling profiles cannot be republished as legacy payloads" },
+                    source,
+                    cacheRoot,
+                    limits,
+                )
         return PublishedWorkerPayload(published.root, WorkerPayloadManifest.fromGeneric(published.manifest), published.classpath)
     }
 }

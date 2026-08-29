@@ -32,4 +32,21 @@ object WorkerPayloadLoader {
                 .load(root, limits)
         return PublishedWorkerPayload(loaded.root, WorkerPayloadManifest.fromGeneric(loaded.manifest), loaded.classpath)
     }
+
+    fun loadToolingProfile(
+        root: Path,
+        limits: ru.lazyhat.compukters.worker.payload.ToolingBundleLoadLimits =
+            ru.lazyhat.compukters.worker.payload
+                .ToolingBundleLoadLimits(),
+    ): PublishedWorkerPayload {
+        val bundle =
+            ru.lazyhat.compukters.worker.payload.ToolingBundleLoader
+                .load(root, limits)
+        val compiler = bundle.profile("compiler")
+        return PublishedWorkerPayload(
+            compiler.root,
+            WorkerPayloadManifest.fromToolingProfile(compiler.manifest, bundle.manifest.files),
+            compiler.classpath,
+        )
+    }
 }
