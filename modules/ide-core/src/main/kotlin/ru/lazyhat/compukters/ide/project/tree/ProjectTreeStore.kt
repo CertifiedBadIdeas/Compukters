@@ -26,6 +26,7 @@ import ru.lazyhat.compukters.ide.project.document.FileRevision
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.fs.SecureProjectFileException
 import ru.lazyhat.compukters.ide.project.fs.SecureProjectFiles
+import ru.lazyhat.compukters.ide.project.fs.SecureImportResult
 import java.nio.charset.CharacterCodingException
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.LinkOption
@@ -37,11 +38,14 @@ import java.security.MessageDigest
 class ProjectTreeStore(
     private val handle: ProjectHandle,
     private val limits: ProjectLimits = ProjectLimits(),
+    private val importHook: (ProjectImportStep) -> Unit = {},
 ) {
-    fun scan(): ProjectTree =
+    fun scan(): ProjectTree = scan(ignoreImportArtifacts = false)
+
+    private fun scan(ignoreImportArtifacts: Boolean): ProjectTree =
         SecureProjectFiles.withValidProject(handle.identity) { root ->
             val state = ScanState()
-            scanDirectory(root, emptyList(), state)
+            scanDirectory(root, emptyList(), state, ignoreImportArtifacts)
             if (!SecureProjectFiles.isValid(handle.identity)) {
                 throw SecureProjectFileException("project root was invalidated while scanning")
             }
@@ -131,10 +135,33 @@ class ProjectTreeStore(
             ProjectMutationResult.Changed(scan())
         }
 
+    fun importTree(import: ProjectImport): ProjectMutationResult =
+        mutate(import.destination) {
+            val current = scan()
+            val existing = current.find(import.destination)
+            if ((existing != null) != import.replace) return@mutate ProjectMutationResult.Conflict(import.destination)
+            requireParentDirectory(current, import.destination)
+            val expected = current.subtreeRevisions(import.destination)
+            when (
+                val result =
+                    SecureProjectFiles.importTree(
+                        handle.identity,
+                        import,
+                        expectedStillCurrent = { scan(ignoreImportArtifacts = true).subtreeRevisions(import.destination) == expected },
+                        validatePublished = { scan(ignoreImportArtifacts = true) },
+                        hook = importHook,
+                    )
+            ) {
+                SecureImportResult.Conflict -> ProjectMutationResult.Conflict(import.destination)
+                is SecureImportResult.Published -> ProjectMutationResult.Changed(result.value)
+            }
+        }
+
     private fun scanDirectory(
         directory: SecureDirectoryStream<Path>,
         parent: List<String>,
         state: ScanState,
+        ignoreImportArtifacts: Boolean,
     ) {
         val names =
             buildList {
@@ -143,7 +170,8 @@ class ProjectTreeStore(
                     SecureProjectFiles.validateFilename(name)
                     add(name.toString())
                 }
-            }.sortedWith(TomlSupport.utf8Comparator)
+            }.filterNot { ignoreImportArtifacts && SecureProjectFiles.isImportArtifactName(it) }
+                .sortedWith(TomlSupport.utf8Comparator)
 
         names.forEach { name ->
             val components = parent + name
@@ -160,7 +188,7 @@ class ProjectTreeStore(
                 attributes.isDirectory -> {
                     state.entries += ProjectTreeEntry(path, ProjectFileKind.Directory, revision = null)
                     directory.newDirectoryStream(target, LinkOption.NOFOLLOW_LINKS).use { child ->
-                        scanDirectory(child, components, state)
+                        scanDirectory(child, components, state, ignoreImportArtifacts)
                     }
                 }
 
@@ -295,6 +323,11 @@ class ProjectTreeStore(
 internal const val PROJECT_TREE_ENTRY_METADATA_BYTES = 48L
 
 private fun ProjectTree.find(path: ProjectPath): ProjectTreeEntry? = flatten().singleOrNull { it.path == path }
+
+private fun ProjectTree.subtreeRevisions(path: ProjectPath): Map<ProjectPath, FileRevision?> =
+    flatten()
+        .filter { it.path == path || it.path.value.startsWith("${path.value}/") }
+        .associateTo(linkedMapOf()) { it.path to it.revision }
 
 private fun firstDeleteConflict(
     expected: Map<ProjectPath, FileRevision?>,

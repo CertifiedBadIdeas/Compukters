@@ -27,6 +27,7 @@ import ru.lazyhat.compukters.ide.project.document.FileRevision
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.AdmittedProjectDelete
 import ru.lazyhat.compukters.ide.project.tree.ProjectMutationResult
+import ru.lazyhat.compukters.ide.project.tree.ProjectImport
 import ru.lazyhat.compukters.ide.project.tree.ProjectTree
 import java.util.concurrent.CompletableFuture
 
@@ -50,6 +51,12 @@ interface IdeWorkspace : AutoCloseable {
     ): CompletableFuture<AdmittedProjectDelete>
 
     fun mutate(request: IdeMutationRequest): CompletableFuture<ProjectMutationResult>
+
+    fun importTree(
+        project: ProjectHandle,
+        import: ProjectImport,
+    ): CompletableFuture<ProjectMutationResult> =
+        CompletableFuture.failedFuture(UnsupportedOperationException("project imports are unavailable"))
 
     fun buildInput(project: ProjectHandle): CompletableFuture<IdeBuildInput>
 }

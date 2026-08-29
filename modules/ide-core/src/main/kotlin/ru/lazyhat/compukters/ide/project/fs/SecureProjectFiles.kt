@@ -22,6 +22,9 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.ide.project.TomlSupport
 import ru.lazyhat.compukters.ide.project.document.FileRevision
 import ru.lazyhat.compukters.ide.project.document.ProjectWriteStep
+import ru.lazyhat.compukters.ide.project.tree.ProjectImport
+import ru.lazyhat.compukters.ide.project.tree.ProjectImportEntry
+import ru.lazyhat.compukters.ide.project.tree.ProjectImportStep
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
@@ -246,6 +249,83 @@ internal object SecureProjectFiles {
             }
         }
 
+    internal fun <T> importTree(
+        identity: ProjectRootIdentity,
+        import: ProjectImport,
+        expectedStillCurrent: () -> Boolean,
+        validatePublished: () -> T,
+        hook: (ProjectImportStep) -> Unit,
+    ): SecureImportResult<T> =
+        synchronized(identity) {
+            withValidProject(identity) { root ->
+                withParentDirectory(root, import.destination) { parent, target ->
+                    val existing = attributesOrNull(parent, target)
+                    if (existing != null && !import.replace) return@withParentDirectory SecureImportResult.Conflict
+                    if (existing == null && import.replace) return@withParentDirectory SecureImportResult.Conflict
+                    if (existing != null && (existing.isSymbolicLink || (!existing.isDirectory && !existing.isRegularFile))) {
+                        throw SecureProjectFileException("project import destination must be a real file or directory")
+                    }
+
+                    val token = UUID.randomUUID().toString()
+                    val temporary = Path.of(".compukter-import-$token.tmp")
+                    val backup = Path.of(".compukter-import-$token.bak")
+                    val parentAbsolute =
+                        import.destination.components.dropLast(1).fold(identity.canonicalPath) { current, component ->
+                            current.resolve(component)
+                        }
+                    val temporaryAbsolute = parentAbsolute.resolve(temporary.toString())
+                    var backedUp = false
+                    var published = false
+                    try {
+                        materializeImport(temporaryAbsolute, import.entries)
+                        val staged = attributes(parent, temporary)
+                        if (staged.isSymbolicLink || (!staged.isDirectory && !staged.isRegularFile)) {
+                            throw SecureProjectFileException("staged project import is not a real file or directory")
+                        }
+                        hook(ProjectImportStep.STAGED)
+                        hook(ProjectImportStep.BEFORE_PUBLISH)
+                        if (!isValid(identity)) throw SecureProjectFileException("project root was invalidated")
+                        if (!expectedStillCurrent()) return@withParentDirectory SecureImportResult.Conflict
+
+                        if (existing != null) {
+                            parent.move(target, parent, backup)
+                            backedUp = true
+                            hook(ProjectImportStep.EXISTING_BACKED_UP)
+                        }
+                        parent.move(temporary, parent, target)
+                        published = true
+                        hook(ProjectImportStep.PUBLISHED)
+                        val validated = validatePublished()
+                        if (backedUp) {
+                            deleteRecursively(parent, backup)
+                            backedUp = false
+                        }
+                        SecureImportResult.Published(validated)
+                    } catch (failure: Throwable) {
+                        if (published) {
+                            runCatching { parent.move(target, parent, temporary) }
+                            published = false
+                        }
+                        if (backedUp) {
+                            try {
+                                parent.move(backup, parent, target)
+                                backedUp = false
+                            } catch (rollback: Throwable) {
+                                failure.addSuppressed(rollback)
+                            }
+                        }
+                        throw failure
+                    } finally {
+                        runCatching { deleteRecursively(parent, temporary) }
+                        if (!backedUp) runCatching { deleteRecursively(parent, backup) }
+                    }
+                }
+            }
+        }
+
+    internal fun isImportArtifactName(name: String): Boolean =
+        name.startsWith(".compukter-import-") && (name.endsWith(".tmp") || name.endsWith(".bak"))
+
     fun writeNew(
         identity: ProjectRootIdentity,
         name: String,
@@ -401,6 +481,54 @@ internal object SecureProjectFiles {
         }
     }
 
+    private fun materializeImport(
+        temporary: Path,
+        entries: List<ProjectImportEntry>,
+    ) {
+        val root = entries.first()
+        when (root) {
+            is ProjectImportEntry.Directory -> Files.createDirectory(temporary)
+            is ProjectImportEntry.File -> writeNewAbsolute(temporary, root.ownedBytes())
+        }
+        entries.drop(1).forEach { entry ->
+            val relative = ProjectPath.file(entry.relativePath).components.drop(1)
+            val target = relative.fold(temporary) { current, component -> current.resolve(component) }
+            when (entry) {
+                is ProjectImportEntry.Directory -> Files.createDirectory(target)
+                is ProjectImportEntry.File -> writeNewAbsolute(target, entry.ownedBytes())
+            }
+            val attributes = Files.readAttributes(target, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+            if (attributes.isSymbolicLink || (!attributes.isDirectory && !attributes.isRegularFile)) {
+                throw SecureProjectFileException("staged project import contains a special entry")
+            }
+        }
+    }
+
+    private fun writeNewAbsolute(
+        path: Path,
+        content: ByteArray,
+    ) {
+        Files.newByteChannel(path, WRITE_NEW_OPTIONS).use { channel ->
+            writeFully(channel, content)
+            (channel as? FileChannel)?.force(true)
+        }
+    }
+
+    private fun deleteRecursively(
+        parent: SecureDirectoryStream<Path>,
+        name: Path,
+    ) {
+        val attributes = attributesOrNull(parent, name) ?: return
+        if (attributes.isDirectory && !attributes.isSymbolicLink) {
+            parent.newDirectoryStream(name, LinkOption.NOFOLLOW_LINKS).use { child ->
+                child.toList().forEach { entry -> deleteRecursively(child, entry.fileName) }
+            }
+            parent.deleteDirectory(name)
+        } else {
+            parent.deleteFile(name)
+        }
+    }
+
     internal fun readBytes(
         directory: SecureDirectoryStream<Path>,
         name: Path,
@@ -471,4 +599,10 @@ internal sealed interface SecureWriteResult {
     data class Conflict(
         val actual: FileRevision,
     ) : SecureWriteResult
+}
+
+internal sealed interface SecureImportResult<out T> {
+    data object Conflict : SecureImportResult<Nothing>
+
+    data class Published<T>(val value: T) : SecureImportResult<T>
 }
