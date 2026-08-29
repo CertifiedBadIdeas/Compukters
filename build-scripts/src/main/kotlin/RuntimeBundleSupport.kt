@@ -56,8 +56,8 @@ data class StagedRuntimeNative(
 
 fun runtime5BundleContract(vmCommit: String): RuntimeBundleContract =
     RuntimeBundleContract(
-        runtimeVersion = "5.1",
-        releaseTag = "runtime-v5.1",
+        runtimeVersion = "0.5.1",
+        releaseTag = "runtime-v0.5.1",
         ffiAbi = 5,
         vmCommit = vmCommit,
         formats =
@@ -248,11 +248,11 @@ object RuntimeBundleSupport {
     }
 
     private fun validateContract(contract: RuntimeBundleContract) {
-        require(Regex("[1-9][0-9]*\\.(0|[1-9][0-9]*)").matches(contract.runtimeVersion)) {
+        require(Regex("0\\.[1-9][0-9]*\\.(0|[1-9][0-9]*)").matches(contract.runtimeVersion)) {
             "runtime version is not canonical"
         }
         require(contract.releaseTag == "runtime-v${contract.runtimeVersion}") { "runtime release tag mismatch" }
-        require(contract.ffiAbi == contract.runtimeVersion.substringBefore('.').toInt()) { "runtime ABI mismatch" }
+        require(contract.ffiAbi == contract.runtimeVersion.split('.')[1].toInt()) { "runtime ABI mismatch" }
         require(isLowerHex(contract.vmCommit, 40)) { "runtime VM commit is not canonical" }
         require(contract.formats.isNotEmpty() && contract.formats.all { (name, version) ->
             Regex("[a-z0-9]+(?:-[a-z0-9]+)*").matches(name) && version > 0
