@@ -48,11 +48,13 @@ import kotlin.io.path.name
 
 data class RuntimeBundleContract(
     val runtimeVersion: String,
-    val releaseTag: String,
     val ffiAbi: Int,
     val vmCommit: String,
     val formats: Map<String, Int>,
-)
+) {
+    val releaseTag: String
+        get() = "v$runtimeVersion"
+}
 
 data class StagedRuntimeNative(
     val target: String,
@@ -69,7 +71,6 @@ enum class RuntimeBundleDownloadResult {
 fun runtime5BundleContract(vmCommit: String): RuntimeBundleContract =
     RuntimeBundleContract(
         runtimeVersion = "0.5.1",
-        releaseTag = "runtime-v0.5.1",
         ffiAbi = 5,
         vmCommit = vmCommit,
         formats =
@@ -85,7 +86,6 @@ fun runtimeBundleAssetNames(contract: RuntimeBundleContract): List<String> {
     require(Regex("""0\.(0|[1-9]\d*)\.(0|[1-9]\d*)""").matches(contract.runtimeVersion)) {
         "runtime version is not canonical"
     }
-    require(contract.releaseTag == "runtime-v${contract.runtimeVersion}") { "runtime release tag mismatch" }
     return listOf(
         "compukter-runtime-${contract.runtimeVersion}-checksums.sha256",
         "compukter-runtime-${contract.runtimeVersion}-linux-x86_64.tar.gz",
@@ -360,7 +360,6 @@ object RuntimeBundleSupport {
         require(Regex("0\\.[1-9][0-9]*\\.(0|[1-9][0-9]*)").matches(contract.runtimeVersion)) {
             "runtime version is not canonical"
         }
-        require(contract.releaseTag == "runtime-v${contract.runtimeVersion}") { "runtime release tag mismatch" }
         require(contract.ffiAbi == contract.runtimeVersion.split('.')[1].toInt()) { "runtime ABI mismatch" }
         require(isLowerHex(contract.vmCommit, 40)) { "runtime VM commit is not canonical" }
         require(contract.formats.isNotEmpty() && contract.formats.all { (name, version) ->
