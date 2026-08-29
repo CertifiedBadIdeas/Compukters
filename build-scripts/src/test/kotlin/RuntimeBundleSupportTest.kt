@@ -45,7 +45,7 @@ class RuntimeBundleSupportTest {
         val contract = runtime5BundleContract("0".repeat(40))
 
         assertEquals("0.5.1", contract.runtimeVersion)
-        assertEquals("runtime-v0.5.1", contract.releaseTag)
+        assertEquals("v0.5.1", contract.releaseTag)
         assertEquals(5, contract.ffiAbi)
     }
 
@@ -225,7 +225,7 @@ class RuntimeBundleSupportTest {
             {
               "schema": 1,
               "runtime_version": "0.5.1",
-              "release_tag": "runtime-v0.5.1",
+              "release_tag": "v0.5.1",
               "vm_commit": "$vmCommit",
               "ffi_abi": 5,
               "formats": {
@@ -278,7 +278,6 @@ class RuntimeBundleSupportTest {
             val CONTRACT =
                 RuntimeBundleContract(
                     runtimeVersion = "0.5.1",
-                    releaseTag = "runtime-v0.5.1",
                     ffiAbi = 5,
                     vmCommit = COMMIT,
                     formats =
