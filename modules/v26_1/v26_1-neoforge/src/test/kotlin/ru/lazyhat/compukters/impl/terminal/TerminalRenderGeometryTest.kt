@@ -18,7 +18,10 @@
 
 package ru.lazyhat.compukters.impl.terminal
 
+import net.minecraft.client.gui.navigation.ScreenRectangle
+import org.joml.Matrix3x2f
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
+import kotlin.math.ceil
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -55,7 +58,31 @@ class TerminalRenderGeometryTest {
         )
         assertEquals(small.panel.width, large.panel.width)
         assertEquals(small.panel.height, large.panel.height)
-        assertEquals(large.cell(7, 11), large.glyphClip(7, 11))
+    }
+
+    @Test
+    fun `all glyphs share one whole grid clip under root scaling`() {
+        val geometry = TerminalRenderGeometry(640, 360, TerminalFontProfile.COZETTE)
+
+        assertTrue(geometry.glyphClip.left <= geometry.grid.left)
+        assertTrue(geometry.glyphClip.top <= geometry.grid.top)
+        assertTrue(geometry.glyphClip.right >= geometry.grid.right)
+        assertTrue(geometry.glyphClip.bottom >= geometry.grid.bottom)
+    }
+
+    @Test
+    fun `whole grid glyph clip contains fractional transformed grid edges`() {
+        val geometry = TerminalRenderGeometry(640, 360, TerminalFontProfile.COZETTE)
+
+        listOf(0.75f, 0.25f).forEach { scale ->
+            val clip = geometry.glyphClip
+            val transformed =
+                ScreenRectangle(clip.left, clip.top, clip.width, clip.height)
+                    .transformAxisAligned(Matrix3x2f().scale(scale))
+
+            assertTrue(transformed.right() >= ceil(geometry.grid.right * scale).toInt())
+            assertTrue(transformed.bottom() >= ceil(geometry.grid.bottom * scale).toInt())
+        }
     }
 
     @Test
