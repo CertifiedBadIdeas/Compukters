@@ -29,6 +29,7 @@ import ru.lazyhat.compukters.ide.project.document.ProjectDocumentFailure
 import ru.lazyhat.compukters.ide.project.document.ProjectDocumentStore
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectFileKind
+import ru.lazyhat.compukters.ide.project.tree.ProjectImport
 import ru.lazyhat.compukters.ide.project.tree.ProjectTreeStore
 import java.nio.file.Path
 import java.util.concurrent.ArrayBlockingQueue
@@ -109,6 +110,11 @@ class DefaultIdeWorkspace internal constructor(
                 is IdeMutationRequest.Delete -> store.delete(request.admitted)
             }
         }
+
+    override fun importTree(
+        project: ProjectHandle,
+        import: ProjectImport,
+    ) = submit("importTree") { ProjectTreeStore(project, projectLimits).importTree(import) }
 
     override fun buildInput(project: ProjectHandle) =
         submit("buildInput") {

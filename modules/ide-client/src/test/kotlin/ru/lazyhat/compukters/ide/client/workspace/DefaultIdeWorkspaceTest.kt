@@ -23,6 +23,9 @@ import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ProjectLimits
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
+import ru.lazyhat.compukters.ide.project.tree.ProjectImport
+import ru.lazyhat.compukters.ide.project.tree.ProjectImportEntry
+import ru.lazyhat.compukters.ide.project.tree.ProjectMutationResult
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
@@ -119,6 +122,25 @@ class DefaultIdeWorkspaceTest {
         input.lockBytes?.fill(0)
         assertTrue(input.manifestBytes.any { it != 0.toByte() })
         assertEquals("lock", input.lockBytes?.decodeToString())
+        workspace.close()
+    }
+
+    @Test
+    fun `workspace serializes and publishes admitted imports`() {
+        val workspace = workspace()
+        val project = workspace.createProject("demo").get(5, TimeUnit.SECONDS)
+        val admitted =
+            ProjectImport.admit(
+                ProjectPath.file("src/copied.kt"),
+                false,
+                listOf(ProjectImportEntry.File("copied.kt", "fun copied() = Unit".encodeToByteArray())),
+                ProjectLimits(),
+            )
+
+        val result = workspace.importTree(project.handle, admitted).get(5, TimeUnit.SECONDS)
+
+        assertIs<ProjectMutationResult.Changed>(result)
+        assertEquals("fun copied() = Unit", project.handle.canonicalPath.resolve("src/copied.kt").toFile().readText())
         workspace.close()
     }
 
