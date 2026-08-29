@@ -296,17 +296,18 @@ val verifyPackagedCompukterFfi =
             check(entries.count { it == "META-INF/neoforge.mods.toml" } == 1) {
                 "expected exactly one META-INF/neoforge.mods.toml in ${archive.name}"
             }
-            val workerPayloads =
-                entries
-                    .filter { it.startsWith("compiler/worker/") || it.startsWith("analysis/worker/") }
-                    .sorted()
-            val expectedWorkerPayloads =
-                listOf(
-                    "analysis/worker/ide-analysis-k2-worker.zip",
-                    "compiler/worker/compiler-k2-worker.zip",
-                )
-            check(workerPayloads == expectedWorkerPayloads) {
-                "expected exactly $expectedWorkerPayloads in ${archive.name}, found $workerPayloads"
+            val toolingResources = entries.filter { it.startsWith("tooling/workers/") }.sorted()
+            val expectedToolingResources = listOf(ArtifactSizeReport.TOOLING_RESOURCE)
+            check(toolingResources == expectedToolingResources) {
+                "expected exactly $expectedToolingResources in ${archive.name}, found $toolingResources"
+            }
+            check(
+                entries.none {
+                    it == "compiler/worker/compiler-k2-worker.zip" ||
+                        it == "analysis/worker/ide-analysis-k2-worker.zip"
+                },
+            ) {
+                "legacy worker archives leaked into ${archive.name}"
             }
             listOf(
                 "META-INF/licenses/Compukters-Apache-2.0.txt",
@@ -321,53 +322,61 @@ val verifyPackagedCompukterFfi =
                     "expected exactly one $required in ${archive.name}"
                 }
             }
-            val nestedWorkerEntries =
-                ZipFile(archive).use { zip ->
-                    val worker = checkNotNull(zip.getEntry("compiler/worker/compiler-k2-worker.zip")) {
-                        "compiler worker is missing from ${archive.name}"
-                    }
-                    ZipInputStream(zip.getInputStream(worker)).use { nested ->
-                        buildList {
-                            while (true) {
-                                val entry = nested.nextEntry ?: break
-                                if (!entry.isDirectory) add(entry.name)
-                                nested.closeEntry()
+            val nestedToolingEntries = linkedSetOf<String>()
+            var toolingManifestBytes: ByteArray? = null
+            ZipFile(archive).use { zip ->
+                val worker = checkNotNull(zip.getEntry(ArtifactSizeReport.TOOLING_RESOURCE)) {
+                    "shared tooling bundle is missing from ${archive.name}"
+                }
+                ZipInputStream(zip.getInputStream(worker)).use { nested ->
+                    while (true) {
+                        val entry = nested.nextEntry ?: break
+                        if (!entry.isDirectory) {
+                            check(nestedToolingEntries.add(entry.name)) {
+                                "duplicate shared tooling entry: ${entry.name}"
                             }
+                            if (entry.name == "tooling.bundle") toolingManifestBytes = nested.readBytes()
                         }
+                        nested.closeEntry()
                     }
                 }
-            val nestedAnalysisWorkerEntries =
-                ZipFile(archive).use { zip ->
-                    val worker = checkNotNull(zip.getEntry("analysis/worker/ide-analysis-k2-worker.zip")) {
-                        "analysis worker is missing from ${archive.name}"
-                    }
-                    ZipInputStream(zip.getInputStream(worker)).use { nested ->
-                        buildList {
-                            while (true) {
-                                val entry = nested.nextEntry ?: break
-                                if (!entry.isDirectory) add(entry.name)
-                                nested.closeEntry()
-                            }
-                        }
-                    }
-                }
+            }
             listOf(
                 "META-INF/licenses/Compukters-Apache-2.0.txt",
                 "META-INF/NOTICE.txt",
                 "META-INF/THIRD-PARTY-NOTICES.md",
             ).forEach { required ->
-                check(nestedWorkerEntries.count { it == required } == 1) {
-                    "expected exactly one $required in packaged compiler worker"
-                }
-                check(nestedAnalysisWorkerEntries.count { it == required } == 1) {
-                    "expected exactly one $required in packaged analysis worker"
+                check(nestedToolingEntries.count { it == required } == 1) {
+                    "expected exactly one $required in packaged shared tooling bundle"
                 }
             }
-            check(nestedWorkerEntries.count { it == "worker.payload" } == 1) {
-                "compiler worker payload manifest is missing or duplicated"
+            listOf("tooling.bundle", "manifests/compiler.payload", "manifests/analysis.payload").forEach { required ->
+                check(nestedToolingEntries.count { it == required } == 1) {
+                    "$required is missing or duplicated in packaged shared tooling bundle"
+                }
             }
-            check(nestedAnalysisWorkerEntries.count { it == "worker.payload" } == 1) {
-                "analysis worker payload manifest is missing or duplicated"
+            val toolingManifest = checkNotNull(toolingManifestBytes).decodeToString().lineSequence().toList()
+            check(toolingManifest.firstOrNull() == "format=1") { "shared tooling manifest format is invalid" }
+            check(toolingManifest.count { it.startsWith("profile=compiler\t") } == 1) {
+                "shared tooling manifest must contain exactly one compiler profile"
+            }
+            check(toolingManifest.count { it.startsWith("profile=analysis\t") } == 1) {
+                "shared tooling manifest must contain exactly one analysis profile"
+            }
+            val manifestRuntimeFiles =
+                toolingManifest
+                    .filter { it.startsWith("file=") }
+                    .map { it.removePrefix("file=").substringBefore('\t') }
+                    .sorted()
+            val nestedRuntimeFiles =
+                nestedToolingEntries.filter { path ->
+                    path.endsWith(".jar") &&
+                        (path.startsWith("common/lib/") ||
+                            path.startsWith("compiler/lib/") ||
+                            path.startsWith("analysis/lib/"))
+                }.sorted()
+            check(manifestRuntimeFiles == nestedRuntimeFiles) {
+                "shared tooling manifest runtime inventory does not match its archive"
             }
             val inventory = rootProject.file("licenses/distribution-components.tsv")
             check(inventory.isFile) { "distribution component inventory is missing: $inventory" }
@@ -387,6 +396,42 @@ val verifyPackagedCompukterFfi =
                     .sorted()
             check(actualNestedLibraries == expectedNestedLibraries) {
                 "nested JVM library inventory mismatch: expected $expectedNestedLibraries, found $actualNestedLibraries"
+            }
+            val expectedToolingLibraries =
+                inventory
+                    .readLines()
+                    .drop(1)
+                    .filter { it.isNotBlank() }
+                    .map { it.split('\t') }
+                    .filter { it[0] == "jvm-worker" || it[0] == "jvm-analysis-worker" }
+                    .map { (_, component, version, _) -> "$component-$version.jar" }
+                    .distinct()
+                    .sorted()
+            val toolingProjectPrefixes =
+                listOf(
+                    "compiler-artifact-",
+                    "compiler-client-",
+                    "compiler-k2-",
+                    "guest-api-core-",
+                    "ide-analysis-client-",
+                    "ide-analysis-k2-",
+                    "ide-core-",
+                    "worker-client-",
+                )
+            val actualToolingLibraries =
+                nestedRuntimeFiles
+                    .map { it.substringAfterLast('/') }
+                    .filterNot { name -> toolingProjectPrefixes.any(name::startsWith) }
+                    .sorted()
+            check(actualToolingLibraries == expectedToolingLibraries) {
+                "shared tooling JVM inventory mismatch: expected $expectedToolingLibraries, found $actualToolingLibraries"
+            }
+            check(
+                actualToolingLibraries.none { name ->
+                    "embeddable" in name || "scripting-compiler" in name || "scripting-compiler-impl" in name
+                },
+            ) {
+                "embeddable or scripting compiler distribution leaked into shared tooling"
             }
             check(entries.none { it.startsWith("dev/architectury/") }) {
                 "Architectury runtime classes leaked into ${archive.name}"
@@ -513,6 +558,25 @@ tasks.named("check") {
 
 tasks.named("buildProductionUniversalJar") {
     dependsOn(verifyPackagedCompukterFfi)
+}
+
+val reportProductionArtifactSize =
+    tasks.register("reportProductionArtifactSize") {
+        description = "Reports the exact classified size of the production NeoForge jar."
+        group = "verification"
+        dependsOn(productionJar, verifyPackagedCompukterFfi)
+        val archive = productionJar.flatMap { it.archiveFile }
+        val report = layout.buildDirectory.file("reports/artifact-size/production-artifact-size.tsv")
+        inputs.file(archive)
+        outputs.file(report)
+        doLast {
+            val result = ArtifactSizeReport.write(archive.get().asFile.toPath(), report.get().asFile.toPath())
+            println(result.render())
+        }
+    }
+
+tasks.named("buildProductionUniversalJar") {
+    dependsOn(reportProductionArtifactSize)
 }
 
 fun captureReleaseGit(vararg arguments: String): String {
