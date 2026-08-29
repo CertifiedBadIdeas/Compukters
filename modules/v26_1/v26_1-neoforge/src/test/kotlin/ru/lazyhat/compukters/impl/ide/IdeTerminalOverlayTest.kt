@@ -12,7 +12,13 @@
 
 package ru.lazyhat.compukters.impl.ide
 
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState
 import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
+import ru.lazyhat.compukters.impl.terminal.TerminalReplica
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -20,6 +26,46 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class IdeTerminalOverlayTest {
+    @Test
+    fun `Cozette overlay keeps the exact grid without a dedicated footer`() {
+        val content = IdeRect(0, 0, 640, 360)
+
+        val overlay = IdeTerminalOverlayGeometry.compute(content, TerminalFontProfile.COZETTE)
+
+        assertTrue(overlay.supported)
+        assertEquals(279, overlay.panel.height)
+        assertEquals(51 * 6, overlay.grid?.width)
+        assertEquals(19 * 13, overlay.grid?.height)
+    }
+
+    @Test
+    fun `terminal lifecycle feedback uses the title without exposing revision`() {
+        val token = UUID.fromString("d3354610-5460-4546-8546-000000000001")
+        val replica = TerminalReplica(terminalState(revision = 42))
+        val active =
+            IdeTargetTerminalState.Active(
+                token,
+                7,
+                replica,
+            )
+
+        assertEquals("Target terminal", terminalOverlayTitle(active))
+        assertEquals("Terminal unavailable", terminalOverlayTitle(IdeTargetTerminalState.Closed))
+        assertEquals("Opening target terminal...", terminalOverlayTitle(IdeTargetTerminalState.Opening(1)))
+        assertEquals(
+            "Resynchronizing target terminal...",
+            terminalOverlayTitle(IdeTargetTerminalState.Resyncing(token, 7, replica)),
+        )
+        assertEquals(
+            "connection lost · Click to retry",
+            terminalOverlayTitle(IdeTargetTerminalState.Failed("connection lost", retryable = true)),
+        )
+        assertEquals(
+            "access denied",
+            terminalOverlayTitle(IdeTargetTerminalState.Failed("access denied", retryable = false)),
+        )
+    }
+
     @Test
     fun `every font keeps the exact guest grid and anchors the panel over immutable content`() {
         TerminalFontProfile.ALL.forEach { font ->
@@ -52,4 +98,14 @@ class IdeTerminalOverlayTest {
         assertTrue(overlay.messageBounds.right <= content.right)
         assertEquals("Viewport is too small for the target terminal", overlay.unsupportedMessage)
     }
+
+    private fun terminalState(revision: Long): TerminalState =
+        TerminalState(
+            revision,
+            51,
+            19,
+            List(51 * 19) { TerminalCell(' '.code, 15, 0) },
+            TerminalPosition(0, 0),
+            true,
+        )
 }
