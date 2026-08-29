@@ -50,7 +50,7 @@ class LocalIdeWorkflowTest {
     fun `real project resolves builds and reuses global compiler cache`() {
         val root = createTempDirectory("compukters-local-ide-workflow-").toAbsolutePath().normalize()
         val workspace = DefaultIdeWorkspace(root.resolve("projects").createDirectories())
-        val payload = WorkerPayloadLoader.load(Path.of(checkNotNull(System.getProperty("compukters.ide.compilerPayload"))))
+        val payload = WorkerPayloadLoader.loadToolingProfile(Path.of(checkNotNull(System.getProperty("compukters.ide.toolingPayload"))))
         val limits = WorkerLimits()
         val controller =
             CompilerWorkerController(
@@ -124,8 +124,10 @@ class LocalIdeWorkflowTest {
                     profile,
                 )
 
-            val first = assertIs<ClientBuildResult.Success>(service.build(snapshot).get(90, TimeUnit.SECONDS))
-            val second = assertIs<ClientBuildResult.Success>(service.build(snapshot).get(90, TimeUnit.SECONDS))
+            val firstResult = service.build(snapshot).get(90, TimeUnit.SECONDS)
+            val first = assertIs<ClientBuildResult.Success>(firstResult, firstResult.toString())
+            val secondResult = service.build(snapshot).get(90, TimeUnit.SECONDS)
+            val second = assertIs<ClientBuildResult.Success>(secondResult, secondResult.toString())
 
             assertFalse(first.cacheHit)
             assertTrue(second.cacheHit)
