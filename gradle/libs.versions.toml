@@ -34,7 +34,6 @@ checker-qual = "3.21.2"
 kotlinx-serialization-runtime = "1.7.3"
 caffeine-kotlin = "2.9.3"
 intellij-coroutines = "1.8.0-intellij-13"
-proguard = "7.9.1"
 
 # 26.1
 minecraft-v261 = "26.1.2"
@@ -59,7 +58,6 @@ kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collec
 kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm", version.ref = "kotlinx-serialization-runtime" }
 caffeine-kotlin = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine-kotlin" }
 intellij-coroutines-core = { module = "com.intellij.platform:kotlinx-coroutines-core", version.ref = "intellij-coroutines" }
-proguard-base = { module = "com.guardsquare:proguard-base", version.ref = "proguard" }
 tomlj = { module = "org.tomlj:tomlj", version.ref = "tomlj" }
 antlr4-runtime = { module = "org.antlr:antlr4-runtime", version.ref = "antlr4-runtime" }
 checker-qual = { module = "org.checkerframework:checker-qual", version.ref = "checker-qual" }
