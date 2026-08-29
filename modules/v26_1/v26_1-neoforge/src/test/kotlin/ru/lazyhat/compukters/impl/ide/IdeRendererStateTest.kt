@@ -99,18 +99,31 @@ class IdeRendererStateTest {
     }
 
     @Test
-    fun `start page terminal action follows the attached target capability`() {
+    fun `start page exposes one stable rotated terminal tool action`() {
+        val local = IdeViewState.startPage(emptyList())
         val capable = IdeViewState.startPage(emptyList()).copy(target = IdeTargetState.Attached(target(terminal = true)))
         val unsupported = IdeViewState.startPage(emptyList()).copy(target = IdeTargetState.Attached(target(terminal = false)))
+
+        val localModel = IdeRenderer.extract(local, geometry())
+        val localTerminal = localModel.hitTargets.single { it.action == IdeHitAction.Terminal }
+        assertFalse(localTerminal.enabled)
+        assertEquals("No target attached", localTerminal.tooltip)
 
         val capableModel = IdeRenderer.extract(capable, geometry(), terminalVisible = true)
         val terminal = capableModel.hitTargets.single { it.action == IdeHitAction.Terminal }
         assertTrue(terminal.enabled)
         assertTrue(terminal.selected)
-        assertTrue(capableModel.text.any { it.kind == IdeTextKind.Toolbar && it.value == "Terminal" })
+        assertEquals(IdeRect(940, 46, 960, 118), terminal.bounds)
+        assertEquals(geometry().toolStripe, capableModel.panels.single { it.kind == IdePanelKind.ToolStripe }.bounds)
+        assertTrue(capableModel.text.none { it.kind == IdeTextKind.Toolbar && it.value == "Terminal" })
+        val label = capableModel.text.single { it.kind == IdeTextKind.ToolStripe }
+        assertEquals("Terminal", label.value)
+        assertEquals(IdeTextRotation.Clockwise90, label.rotation)
 
         val unsupportedModel = IdeRenderer.extract(unsupported, geometry())
-        assertTrue(unsupportedModel.hitTargets.none { it.action == IdeHitAction.Terminal })
+        val unsupportedTerminal = unsupportedModel.hitTargets.single { it.action == IdeHitAction.Terminal }
+        assertFalse(unsupportedTerminal.enabled)
+        assertEquals("Target terminal is unavailable", unsupportedTerminal.tooltip)
     }
 
     @Test
@@ -252,7 +265,7 @@ class IdeRendererStateTest {
     }
 
     @Test
-    fun `terminal toolbar action exists only for capable targets and reflects overlay state`() {
+    fun `terminal tool stripe action reflects overlay state`() {
         val capable = IdeTargetState.Attached(target(terminal = true))
         val opening =
             IdeRenderer.extract(
@@ -283,7 +296,10 @@ class IdeRendererStateTest {
                 workspaceState(IdeEditorView.Empty, IdeBuildState.Idle, target = IdeTargetState.Attached(target())),
                 geometry(),
             )
-        assertTrue(unsupported.hitTargets.none { it.action == IdeHitAction.Terminal })
+        val unsupportedTarget = unsupported.hitTargets.single { it.action == IdeHitAction.Terminal }
+        assertFalse(unsupportedTarget.enabled)
+        assertEquals("Target terminal is unavailable", unsupportedTarget.tooltip)
+        assertTrue(unsupported.text.none { it.kind == IdeTextKind.Toolbar && it.value == "Terminal" })
     }
 
     @Test
@@ -518,7 +534,7 @@ class IdeRendererStateTest {
         )
 
     private fun geometry(font: TerminalFontProfile = TerminalFontProfile.DINA) =
-        IdeRenderGeometry.compute(960, 540, 24, 180, 120, true, true, font)
+        IdeRenderGeometry.compute(960, 540, 180, 120, true, true, font)
 }
 
 private fun IdeDrawModel.zOrdered(): Boolean {

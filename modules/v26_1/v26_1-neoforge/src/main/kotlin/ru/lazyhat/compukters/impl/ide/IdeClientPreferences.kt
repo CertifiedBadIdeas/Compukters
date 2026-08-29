@@ -35,13 +35,11 @@ import java.util.UUID
 import kotlin.io.path.createDirectories
 
 data class IdeLayoutSettings(
-    val padding: Int,
     val treeWidth: Int,
     val diagnosticsHeight: Int,
     val diagnosticsExpanded: Boolean,
 ) {
     init {
-        require(padding in MINIMUM_PADDING..MAXIMUM_PADDING) { "IDE padding is outside its admitted range" }
         require(treeWidth in MINIMUM_TREE_WIDTH..MAXIMUM_TREE_WIDTH) { "IDE tree width is outside its admitted range" }
         require(diagnosticsHeight in MINIMUM_DIAGNOSTICS_HEIGHT..MAXIMUM_DIAGNOSTICS_HEIGHT) {
             "IDE diagnostics height is outside its admitted range"
@@ -49,26 +47,21 @@ data class IdeLayoutSettings(
     }
 
     companion object {
-        const val MINIMUM_PADDING = 0
-        const val MAXIMUM_PADDING = 256
         const val MINIMUM_TREE_WIDTH = 64
         const val MAXIMUM_TREE_WIDTH = 4_096
         const val MINIMUM_DIAGNOSTICS_HEIGHT = 32
         const val MAXIMUM_DIAGNOSTICS_HEIGHT = 4_096
-        const val DEFAULT_PADDING = 12
         const val DEFAULT_TREE_WIDTH = 240
         const val DEFAULT_DIAGNOSTICS_HEIGHT = 160
 
-        fun defaults(): IdeLayoutSettings = admit(DEFAULT_PADDING, DEFAULT_TREE_WIDTH, DEFAULT_DIAGNOSTICS_HEIGHT, true)
+        fun defaults(): IdeLayoutSettings = admit(DEFAULT_TREE_WIDTH, DEFAULT_DIAGNOSTICS_HEIGHT, true)
 
         fun admit(
-            padding: Int,
             treeWidth: Int,
             diagnosticsHeight: Int,
             diagnosticsExpanded: Boolean,
         ): IdeLayoutSettings =
             IdeLayoutSettings(
-                padding.coerceIn(MINIMUM_PADDING, MAXIMUM_PADDING),
                 treeWidth.coerceIn(MINIMUM_TREE_WIDTH, MAXIMUM_TREE_WIDTH),
                 diagnosticsHeight.coerceIn(MINIMUM_DIAGNOSTICS_HEIGHT, MAXIMUM_DIAGNOSTICS_HEIGHT),
                 diagnosticsExpanded,

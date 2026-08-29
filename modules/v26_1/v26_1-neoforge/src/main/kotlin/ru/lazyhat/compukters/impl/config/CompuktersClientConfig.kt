@@ -38,15 +38,6 @@ object CompuktersClientConfig {
             .comment("Font used by the local terminal screen")
             .define("terminal.font", TerminalFontProfile.DEFAULT.id, terminalFontValidator)
 
-    internal val idePadding =
-        builder
-            .comment("Outer IDE padding in GUI pixels")
-            .defineInRange(
-                "ide.padding",
-                IdeLayoutSettings.DEFAULT_PADDING,
-                IdeLayoutSettings.MINIMUM_PADDING,
-                IdeLayoutSettings.MAXIMUM_PADDING,
-            )
     internal val ideTreeWidth =
         builder
             .comment("Preferred IDE project tree width in GUI pixels")
@@ -80,23 +71,20 @@ object CompuktersClientConfig {
     }
 
     internal fun admitIdeLayout(
-        padding: Int,
         treeWidth: Int,
         diagnosticsHeight: Int,
         diagnosticsExpanded: Boolean,
-    ): IdeLayoutSettings = IdeLayoutSettings.admit(padding, treeWidth, diagnosticsHeight, diagnosticsExpanded)
+    ): IdeLayoutSettings = IdeLayoutSettings.admit(treeWidth, diagnosticsHeight, diagnosticsExpanded)
 
     internal object IdeLayout : IdeLayoutStore {
         override fun load(): IdeLayoutSettings =
             admitIdeLayout(
-                runCatching(idePadding::get).getOrDefault(IdeLayoutSettings.DEFAULT_PADDING),
                 runCatching(ideTreeWidth::get).getOrDefault(IdeLayoutSettings.DEFAULT_TREE_WIDTH),
                 runCatching(ideDiagnosticsHeight::get).getOrDefault(IdeLayoutSettings.DEFAULT_DIAGNOSTICS_HEIGHT),
                 runCatching(ideDiagnosticsExpanded::get).getOrDefault(true),
             )
 
         override fun save(settings: IdeLayoutSettings) {
-            idePadding.set(settings.padding)
             ideTreeWidth.set(settings.treeWidth)
             ideDiagnosticsHeight.set(settings.diagnosticsHeight)
             ideDiagnosticsExpanded.set(settings.diagnosticsExpanded)

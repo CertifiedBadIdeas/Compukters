@@ -24,6 +24,7 @@ import net.minecraft.client.input.CharacterEvent
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.network.chat.Component
+import org.joml.Matrix3x2fStack
 import org.lwjgl.glfw.GLFW
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
@@ -52,6 +53,24 @@ internal fun executeIdeRenderOperations(
     if (terminalVisible) operations += IdeRenderOperation(IDE_TERMINAL_OVERLAY_Z, renderTerminal)
     operations.sortBy(IdeRenderOperation::zIndex)
     operations.forEach { it.draw() }
+}
+
+internal fun <T> withIdeTextTransform(
+    pose: Matrix3x2fStack,
+    rotation: IdeTextRotation,
+    x: Int,
+    y: Int,
+    draw: () -> T,
+): T {
+    if (rotation == IdeTextRotation.None) return draw()
+    pose.pushMatrix()
+    return try {
+        pose.translate(x.toFloat(), y.toFloat())
+        pose.rotate(CLOCKWISE_QUARTER_TURN)
+        draw()
+    } finally {
+        pose.popMatrix()
+    }
 }
 
 private const val IDE_TERMINAL_OVERLAY_Z = 80
@@ -263,16 +282,21 @@ internal class IdeScreen(
             operations +=
                 IdeRenderOperation(draw.zIndex) {
                     draw.clip?.let { graphics.enableScissor(it.left, it.top, it.right, it.bottom) }
-                    val codeFont = draw.codeFont
-                    if (codeFont == null) {
-                        graphics.text(font, Component.literal(draw.value), draw.x, draw.y, draw.color, false)
-                    } else {
-                        IdeCodeGlyphLayout.layout(draw.value, draw.x, codeFont).forEach { glyph ->
-                            val value =
-                                Component
-                                    .literal(glyph.value)
-                                    .withStyle { style -> style.withFont(codeFont.fontDescription) }
-                            graphics.text(font, value, glyph.x, draw.y, draw.color, false)
+                    withIdeTextTransform(graphics.pose(), draw.rotation, draw.x, draw.y) {
+                        val transformed = draw.rotation != IdeTextRotation.None
+                        val textX = if (transformed) 0 else draw.x
+                        val textY = if (transformed) 0 else draw.y
+                        val codeFont = draw.codeFont
+                        if (codeFont == null) {
+                            graphics.text(font, Component.literal(draw.value), textX, textY, draw.color, false)
+                        } else {
+                            IdeCodeGlyphLayout.layout(draw.value, textX, codeFont).forEach { glyph ->
+                                val value =
+                                    Component
+                                        .literal(glyph.value)
+                                        .withStyle { style -> style.withFont(codeFont.fontDescription) }
+                                graphics.text(font, value, glyph.x, textY, draw.color, false)
+                            }
                         }
                     }
                     if (draw.clip != null) graphics.disableScissor()
@@ -295,7 +319,6 @@ internal class IdeScreen(
         return IdeRenderGeometry.compute(
             width,
             height,
-            layout.padding,
             layout.treeWidth,
             layout.diagnosticsHeight,
             layout.diagnosticsExpanded,
@@ -555,3 +578,5 @@ internal class IdeScreen(
         val TERMINAL_ERROR = 0xFFFF6B6B.toInt()
     }
 }
+
+private val CLOCKWISE_QUARTER_TURN = (Math.PI / 2.0).toFloat()

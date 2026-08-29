@@ -30,8 +30,8 @@ import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
-import ru.lazyhat.compukters.ide.client.state.IdeViewState
 import ru.lazyhat.compukters.ide.client.state.IdeToolingState
+import ru.lazyhat.compukters.ide.client.state.IdeViewState
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
 import ru.lazyhat.compukters.ide.editor.EditorRange
@@ -40,9 +40,36 @@ import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState
 import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 
-enum class IdePanelKind { Main, Header, Toolbar, Tree, Editor, Diagnostics, Status, Control, Dialog }
+enum class IdePanelKind {
+    Main,
+    Header,
+    Toolbar,
+    ToolStripe,
+    Tree,
+    Editor,
+    Diagnostics,
+    Status,
+    Control,
+    Dialog,
+}
 
-enum class IdeTextKind { Header, Toolbar, StartProject, TreeRow, DragGhost, LineNumber, Source, Diagnostic, Status, Binary, Dialog, Completion }
+enum class IdeTextKind {
+    Header,
+    Toolbar,
+    ToolStripe,
+    StartProject,
+    TreeRow,
+    DragGhost,
+    LineNumber,
+    Source,
+    Diagnostic,
+    Status,
+    Binary,
+    Dialog,
+    Completion,
+}
+
+enum class IdeTextRotation { None, Clockwise90 }
 
 enum class IdeFillKind { Background, Border, Selection, DropTarget, Caret, Splitter, DialogScrim }
 
@@ -101,6 +128,7 @@ data class IdeTextDraw(
     val clip: IdeRect?,
     val sourceRange: EditorRange?,
     val zIndex: Int,
+    val rotation: IdeTextRotation = IdeTextRotation.None,
 )
 
 data class IdeFillDraw(
@@ -156,6 +184,7 @@ internal object IdeRenderer {
             is IdePageState.Start -> output.start(page, state.target)
             is IdePageState.Workspace -> output.workspace(page.value, state.target, state.tooling, caretVisible)
         }
+        output.terminalTool(state.target)
         if (prompt != null) {
             output.prompt(prompt)
         } else {
@@ -186,6 +215,7 @@ internal object IdeRenderer {
             panel(IdePanelKind.Main, geometry.panel, IdeColors.PANEL)
             panel(IdePanelKind.Header, geometry.header, IdeColors.PANEL_ALT)
             panel(IdePanelKind.Toolbar, geometry.toolbar, IdeColors.PANEL)
+            panel(IdePanelKind.ToolStripe, geometry.toolStripe, IdeColors.PANEL_ALT)
             panel(IdePanelKind.Status, geometry.status, IdeColors.PANEL_ALT)
             geometry.tree?.let { panel(IdePanelKind.Tree, it, IdeColors.PANEL_ALT) }
             panel(IdePanelKind.Editor, geometry.editor, IdeColors.EDITOR)
@@ -211,19 +241,6 @@ internal object IdeRenderer {
             target(IdeHitAction.OpenProject, open, true)
             ui(IdeTextKind.Toolbar, "Create project", create.left + 4, create.top + 4)
             ui(IdeTextKind.Toolbar, "Open project", open.left + 4, open.top + 4)
-            targetState.attachedTarget
-                ?.takeIf { it.capabilities.terminal }
-                ?.let {
-                    val terminal = IdeRect(open.right + 4, open.top, open.right + 68, open.bottom)
-                    target(
-                        IdeHitAction.Terminal,
-                        terminal,
-                        true,
-                        terminalTooltip(),
-                        selected = terminalVisible,
-                    )
-                    ui(IdeTextKind.Toolbar, "Terminal", terminal.left + 4, terminal.top + 4)
-                }
             val maximumRows = geometry.editor.height / UI_LINE_HEIGHT
             page.projects.take(maximumRows).forEachIndexed { index, project ->
                 ui(
@@ -322,11 +339,6 @@ internal object IdeRenderer {
             action("Verify", IdeHitAction.Verify, targetReady, targetTooltip)
             action("Deploy", IdeHitAction.Deploy, targetReady, targetTooltip)
             action("Run", IdeHitAction.Run, targetReady, targetTooltip)
-            targetState.attachedTarget
-                ?.takeIf { it.capabilities.terminal }
-                ?.let {
-                    action("Terminal", IdeHitAction.Terminal, tooltip = terminalTooltip(), selected = terminalVisible)
-                }
             action("+File", IdeHitAction.CreateText)
             action("+Dir", IdeHitAction.CreateDirectory)
             action("Rename", IdeHitAction.Rename, hasActiveEntry)
@@ -413,6 +425,33 @@ internal object IdeRenderer {
                 is IdeTargetTerminalState.Failed -> state.detail
                 else -> null
             }
+
+        fun terminalTool(targetState: IdeTargetState) {
+            val attached = targetState.attachedTarget
+            val enabled = attached?.capabilities?.terminal == true
+            val tooltip =
+                when {
+                    attached == null -> NO_TARGET
+                    !enabled -> TERMINAL_UNAVAILABLE
+                    else -> terminalTooltip()
+                }
+            val bounds =
+                IdeRect(
+                    geometry.toolStripe.left,
+                    geometry.toolbar.bottom,
+                    geometry.toolStripe.right,
+                    geometry.toolbar.bottom + TERMINAL_TOOL_HEIGHT,
+                )
+            target(IdeHitAction.Terminal, bounds, enabled, tooltip, selected = terminalVisible)
+            ui(
+                IdeTextKind.ToolStripe,
+                "Terminal",
+                bounds.right - TERMINAL_TOOL_TEXT_RIGHT_INSET,
+                bounds.top + TERMINAL_TOOL_TEXT_TOP_INSET,
+                if (enabled) IdeColors.TEXT else IdeColors.DISABLED,
+                rotation = IdeTextRotation.Clockwise90,
+            )
+        }
 
         private fun editor(
             editor: IdeEditorView.Text,
@@ -695,8 +734,9 @@ internal object IdeRenderer {
             color: Int = IdeColors.TEXT,
             clip: IdeRect? = null,
             z: Int = Z_TEXT,
+            rotation: IdeTextRotation = IdeTextRotation.None,
         ) {
-            text += IdeTextDraw(kind, value, x, y, color, IdeTextStyle.Ui, null, clip, null, z)
+            text += IdeTextDraw(kind, value, x, y, color, IdeTextStyle.Ui, null, clip, null, z, rotation)
         }
 
         private fun code(
@@ -906,6 +946,10 @@ internal object IdeRenderer {
     private const val COMPLETION_MINIMUM_WIDTH = 220
     private const val COMPLETION_HORIZONTAL_PADDING = 8
     private const val NO_TARGET = "No target attached"
+    private const val TERMINAL_UNAVAILABLE = "Target terminal is unavailable"
+    private const val TERMINAL_TOOL_HEIGHT = 72
+    private const val TERMINAL_TOOL_TEXT_RIGHT_INSET = 5
+    private const val TERMINAL_TOOL_TEXT_TOP_INSET = 6
     private const val CONTROL_BACKGROUND_OFFSET = 20
     private const val Z_BACKGROUND = 0
     private const val Z_PANEL = 10
