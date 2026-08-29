@@ -154,8 +154,31 @@ val tagRelease =
 
 tasks.register("release") {
     group = "release"
-    description = "Alias for tagRelease; never bumps the version automatically"
-    dependsOn(tagRelease)
+    description = "Tag the current stable version and bump to the next development minor"
+    doLast {
+        val currentVersion = project.version.toString()
+        performMainlineRelease(
+            state =
+                TagReleaseState(
+                    version = currentVersion,
+                    branch = currentBranch(projectDir),
+                    existingTags =
+                        gitCapture(projectDir, "tag", "--list")
+                            .lineSequence()
+                            .filter(String::isNotBlank)
+                            .toSet(),
+                    worktreeStatus = gitCapture(projectDir, "status", "--porcelain"),
+                    submoduleStatus = gitCapture(projectDir, "submodule", "status", "--recursive"),
+                ),
+            createTag = { tag ->
+                git(projectDir, "tag", "-a", tag, "-m", "Compukters $currentVersion")
+                println("Tagged $tag")
+            },
+            bumpVersion = { nextVersion -> doVersionBump(project, nextVersion) },
+        )
+        println("Release commit tagged; HEAD advanced to the next development minor.")
+        println("Push the branch and tag when ready to publish.")
+    }
 }
 
 tasks.register("bumpAfterRelease") {

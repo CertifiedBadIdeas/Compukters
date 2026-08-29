@@ -66,7 +66,6 @@ data class BumpAfterReleaseState(
 
 fun validateUniversalReleaseState(state: UniversalReleaseState) {
     val version = ReleaseVersion.parse(state.version)
-    require(version.value == "0.1.0") { "first public release must be 0.1.0, got ${version.value}" }
     require(state.runtimeBundlesConfigured) { "universal release requires compukterRuntimeBundleDir" }
     require(version.tag in state.headTags) { "HEAD must have exact release tag ${version.tag}" }
     require(state.worktreeStatus.isBlank()) { "release worktree must be clean:\n${state.worktreeStatus}" }
@@ -79,6 +78,17 @@ fun validateTagReleaseState(state: TagReleaseState) {
     require(version.tag !in state.existingTags) { "release tag ${version.tag} already exists" }
     require(state.worktreeStatus.isBlank()) { "release worktree must be clean:\n${state.worktreeStatus}" }
     requireCleanSubmodules(state.submoduleStatus)
+}
+
+fun performMainlineRelease(
+    state: TagReleaseState,
+    createTag: (String) -> Unit,
+    bumpVersion: (String) -> Unit,
+) {
+    validateTagReleaseState(state)
+    val version = ReleaseVersion.parse(state.version)
+    createTag(version.tag)
+    bumpVersion(version.nextDevelopmentVersion)
 }
 
 fun validateBumpAfterReleaseState(state: BumpAfterReleaseState): String {
