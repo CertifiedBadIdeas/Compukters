@@ -40,9 +40,9 @@ class ReleaseSupportTest {
     fun universalReleaseRequiresExactVersionBundlesTagAndCleanRepositories() {
         val valid =
             UniversalReleaseState(
-                version = "0.1.0",
+                version = "0.2.0",
                 runtimeBundlesConfigured = true,
-                headTags = setOf("v0.1.0"),
+                headTags = setOf("v0.2.0"),
                 worktreeStatus = "",
                 submoduleStatus = " 0519552 host/compukter-vm (runtime-v5.1)",
             )
@@ -50,7 +50,7 @@ class ReleaseSupportTest {
         validateUniversalReleaseState(valid)
 
         listOf(
-            valid.copy(version = "0.2.0"),
+            valid.copy(version = "0.2.1"),
             valid.copy(runtimeBundlesConfigured = false),
             valid.copy(headTags = emptySet()),
             valid.copy(worktreeStatus = " M gradle.properties"),
@@ -83,6 +83,50 @@ class ReleaseSupportTest {
         ).forEach { state ->
             assertThrows(IllegalArgumentException::class.java) { validateTagReleaseState(state) }
         }
+    }
+
+    @Test
+    fun mainlineReleaseTagsTheReleaseCommitBeforeBumpingTheMinorVersion() {
+        val events = mutableListOf<String>()
+        val state =
+            TagReleaseState(
+                version = "0.2.0",
+                branch = "dev",
+                existingTags = setOf("v0.1.0"),
+                worktreeStatus = "",
+                submoduleStatus = " 0519552 host/compukter-vm (runtime-v5.1)",
+            )
+
+        performMainlineRelease(
+            state = state,
+            createTag = { events += "tag:$it" },
+            bumpVersion = { events += "bump:$it" },
+        )
+
+        assertEquals(listOf("tag:v0.2.0", "bump:0.3.0"), events)
+    }
+
+    @Test
+    fun mainlineReleaseValidatesEverythingBeforeMutatingGitOrVersionFiles() {
+        val events = mutableListOf<String>()
+        val dirty =
+            TagReleaseState(
+                version = "0.2.0",
+                branch = "dev",
+                existingTags = emptySet(),
+                worktreeStatus = " M gradle.properties",
+                submoduleStatus = " 0519552 host/compukter-vm (runtime-v5.1)",
+            )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            performMainlineRelease(
+                state = dirty,
+                createTag = { events += "tag:$it" },
+                bumpVersion = { events += "bump:$it" },
+            )
+        }
+
+        assertEquals(emptyList<String>(), events)
     }
 
     @Test
