@@ -42,7 +42,30 @@ import ru.lazyhat.compukters.core.device.computer.ProgramComputer
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
+import ru.lazyhat.compukters.ide.client.files.IdeComputerFileAccess
+import ru.lazyhat.compukters.ide.client.files.IdeComputerFileCoordinator
+import ru.lazyhat.compukters.ide.client.files.IdeComputerTransferState
+import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
+import ru.lazyhat.compukters.ide.client.target.IdeAttachResult
+import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
+import ru.lazyhat.compukters.ide.client.target.IdeFileListResult
+import ru.lazyhat.compukters.ide.client.target.IdeFileReadResult
+import ru.lazyhat.compukters.ide.client.target.IdeFileStatResult
+import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
+import ru.lazyhat.compukters.ide.client.target.IdeTargetClaim
+import ru.lazyhat.compukters.ide.client.target.IdeTargetId
+import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
+import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
+import ru.lazyhat.compukters.ide.client.workspace.DefaultIdeWorkspace
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfileIdentity
+import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.impl.fs.NeoForgeWorldFileSystemStores
+import ru.lazyhat.compukters.impl.ide.target.IdeClaimResolution
+import ru.lazyhat.compukters.impl.ide.target.IdeResolvedTarget
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetDeploymentOperations
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetFileSystemOperations
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetFileSystemService
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetLeaseService
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.FileSystemStoreHealth
@@ -57,6 +80,10 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
+import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
+import kotlin.io.path.createTempDirectory
 
 @EventBusSubscriber(modid = MOD_ID)
 object ComputerBlockGameTest {
@@ -114,6 +141,7 @@ object ComputerBlockGameTest {
                     )
                     verifyTwoComputerCompilation(helper)
                     verifyPersistentProgrammingLoop(helper)
+                    verifyIdeTargetFileImport(helper)
                     verifyTombstoneRecovery(helper, position)
                     verifyTwoComputerWorldRestart(helper, position, position.east())
                 }.thenSucceed()
@@ -341,6 +369,144 @@ object ComputerBlockGameTest {
         }
     }
 
+    private fun verifyIdeTargetFileImport(helper: GameTestHelper) {
+        val computerId = ComputerId.fromLongs(0x49444546494C45L, 1)
+        val rom = processTestRom()
+        val context = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, computerId, rom)
+        writeFixture(context.store, computerId, "filesystem-write.cpkt", rom)
+        ProgramComputer(31, { _, _ -> }, context.store, computerId, rom).use { computer ->
+            helper.assertTrue(computer.turnOn() == ProgramComputerState.Running, "IDE filesystem computer did not boot")
+            advanceUntilInput(computer)
+            val profile = ru.lazyhat.compukters.impl.compiler.NeoForgeCompilerServices.targetProfile(helper.level.server)
+            val resolved =
+                IdeResolvedTarget(
+                    machineIdentity = "gametest:$computerId",
+                    profileId = IdeTargetProfileId(TargetCompileProfileIdentity.of(profile).hash),
+                    profile = profile,
+                    capabilities = IdeTargetCapabilities(true, true, true, true),
+                    displayName = "GameTest computer",
+                    alive = { computer.state != ProgramComputerState.Closed },
+                    deployment = IdeTargetDeploymentOperations(verifyForDeploy = { null }),
+                    fileSystem =
+                        IdeTargetFileSystemOperations(
+                            stat = computer::fileStat,
+                            list = computer::fileList,
+                            read = computer::fileRead,
+                        ),
+                )
+            val owner = UUID(0, 536)
+            IdeTargetLeaseService(
+                resolver = { _, _ -> IdeClaimResolution.Resolved(resolved) },
+                targetIds = { IdeTargetId("gametest-files") },
+            ).use { leases ->
+                val attached =
+                    (leases.attach(owner, IdeTargetClaim.of(byteArrayOf(1)), 1) as? IdeAttachResult.Attached)?.target
+                helper.assertTrue(attached != null, "IDE target lease was not attached")
+                val files = IdeTargetFileSystemService(leases)
+                val coordinator = IdeComputerFileCoordinator(serviceAccess(files, owner, attached!!))
+                coordinator.attach(attached)
+                drainCoordinator(coordinator) { it.state() is IdeComputerTreeState.Available }
+
+                helper.assertTrue(
+                    coordinator.drop(IdeTargetVirtualPath.of("/home/project"), ProjectPath.file("src")),
+                    "IDE target directory was not accepted for transfer",
+                )
+                drainCoordinator(coordinator) { it.transfer() is IdeComputerTransferState.ConfirmationRequired }
+                val transfer = coordinator.transfer() as IdeComputerTransferState.ConfirmationRequired
+
+                val root = createTempDirectory("compukters-gametest-ide-")
+                try {
+                    DefaultIdeWorkspace(root).use { workspace ->
+                        val project = workspace.createProject("target-copy").get(5, TimeUnit.SECONDS)
+                        workspace.importTree(project.handle, transfer.import).get(5, TimeUnit.SECONDS)
+                        val imported = project.handle.canonicalPath.resolve("src/project/main.kt").toFile().readBytes()
+                        helper.assertTrue(imported.contentEquals(FIRST_MARKER.encodeToByteArray()), "IDE target copy changed file bytes")
+
+                        attachWithoutReadableFileSystem(profile, owner).use { unavailable ->
+                            val unavailableCoordinator = IdeComputerFileCoordinator(unavailable.access)
+                            unavailableCoordinator.attach(unavailable.target)
+                            helper.assertTrue(
+                                unavailableCoordinator.state() is IdeComputerTreeState.Unavailable,
+                                "target without readable filesystem was not shown as unavailable",
+                            )
+                        }
+                        workspace.tree(project.handle).get(5, TimeUnit.SECONDS)
+                    }
+                } finally {
+                    root.toFile().deleteRecursively()
+                }
+            }
+        }
+    }
+
+    private fun serviceAccess(
+        files: IdeTargetFileSystemService,
+        owner: UUID,
+        target: IdeAttachedTarget,
+    ): IdeComputerFileAccess =
+        object : IdeComputerFileAccess {
+            override fun stat(path: IdeTargetVirtualPath): CompletableFuture<IdeFileStatResult> =
+                CompletableFuture.completedFuture(files.stat(owner, target, path, 2))
+
+            override fun list(
+                path: IdeTargetVirtualPath,
+                startAfter: String?,
+                maximumEntries: Int,
+            ): CompletableFuture<IdeFileListResult> =
+                CompletableFuture.completedFuture(files.list(owner, target, path, startAfter, maximumEntries, 2))
+
+            override fun read(
+                path: IdeTargetVirtualPath,
+                offset: Long,
+                maximumBytes: Int,
+                expectedGeneration: Long,
+            ): CompletableFuture<IdeFileReadResult> =
+                CompletableFuture.completedFuture(files.read(owner, target, path, offset, maximumBytes, expectedGeneration, 2))
+        }
+
+    private fun attachWithoutReadableFileSystem(
+        profile: ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile,
+        owner: UUID,
+    ): UnavailableTarget {
+        val resolved =
+            IdeResolvedTarget(
+                machineIdentity = "gametest:unavailable",
+                profileId = IdeTargetProfileId(TargetCompileProfileIdentity.of(profile).hash),
+                profile = profile,
+                capabilities = IdeTargetCapabilities(true, true, true, false),
+                displayName = "Unavailable filesystem",
+                alive = { true },
+                deployment = IdeTargetDeploymentOperations(verifyForDeploy = { null }),
+            )
+        val leases =
+            IdeTargetLeaseService(
+                resolver = { _, _ -> IdeClaimResolution.Resolved(resolved) },
+                targetIds = { IdeTargetId("gametest-unavailable") },
+            )
+        val target = (leases.attach(owner, IdeTargetClaim.of(byteArrayOf(2)), 1) as IdeAttachResult.Attached).target
+        val files = IdeTargetFileSystemService(leases)
+        return UnavailableTarget(target, serviceAccess(files, owner, target), leases)
+    }
+
+    private fun drainCoordinator(
+        coordinator: IdeComputerFileCoordinator,
+        complete: (IdeComputerFileCoordinator) -> Boolean,
+    ) {
+        repeat(1_000) {
+            coordinator.tick()
+            if (complete(coordinator)) return
+        }
+        error("IDE filesystem coordinator did not complete")
+    }
+
+    private data class UnavailableTarget(
+        val target: IdeAttachedTarget,
+        val access: IdeComputerFileAccess,
+        private val leases: IdeTargetLeaseService,
+    ) : AutoCloseable {
+        override fun close() = leases.close()
+    }
+
     private fun enterCommand(
         computer: ProgramComputer,
         command: String,
@@ -502,9 +668,10 @@ object ComputerBlockGameTest {
         store: ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore,
         computerId: ru.lazyhat.compukters.lang.runtime.fs.ComputerId,
         name: String,
+        rom: ByteArray = emptyRom(),
     ): Long {
         val generation =
-            VmSession.openInStore(fixture(name), store, computerId, emptyRom()).use { session ->
+            VmSession.openInStore(fixture(name), store, computerId, rom).use { session ->
                 advanceUntilHalted(session)
                 session.filesystemGeneration()
             }
