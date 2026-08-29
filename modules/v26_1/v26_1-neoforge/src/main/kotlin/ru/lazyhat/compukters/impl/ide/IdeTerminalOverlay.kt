@@ -27,7 +27,6 @@ internal data class IdeTerminalOverlayGeometry(
     val shadow: IdeRect,
     val title: IdeRect,
     val grid: IdeRect?,
-    val status: IdeRect,
     val messageBounds: IdeRect,
     val supported: Boolean,
     val unsupportedMessage: String,
@@ -41,7 +40,7 @@ internal data class IdeTerminalOverlayGeometry(
             val gridHeight = TerminalProtocol.HEIGHT * font.cellHeight
             val preferredWidth = gridWidth + BORDER_SIZE * 2 + GRID_PADDING * 2
             val preferredHeight =
-                gridHeight + BORDER_SIZE * 2 + TITLE_HEIGHT + STATUS_HEIGHT + GRID_PADDING * 2
+                gridHeight + BORDER_SIZE * 2 + TITLE_HEIGHT + GRID_PADDING * 2
             if (content.width < preferredWidth || content.height < preferredHeight) {
                 val panel = content
                 return IdeTerminalOverlayGeometry(
@@ -49,7 +48,6 @@ internal data class IdeTerminalOverlayGeometry(
                     shadow = IdeRect(panel.left, panel.top, panel.left, panel.bottom),
                     title = panel,
                     grid = null,
-                    status = panel,
                     messageBounds = inset(panel, MESSAGE_PADDING),
                     supported = false,
                     unsupportedMessage = UNSUPPORTED_MESSAGE,
@@ -69,13 +67,11 @@ internal data class IdeTerminalOverlayGeometry(
                     innerLeft + GRID_PADDING + gridWidth,
                     gridTop + gridHeight,
                 )
-            val status = IdeRect(innerLeft, grid.bottom + GRID_PADDING, innerRight, panel.bottom - BORDER_SIZE)
             return IdeTerminalOverlayGeometry(
                 panel = panel,
                 shadow = IdeRect(panel.left - SHADOW_WIDTH, panel.top, panel.left, panel.bottom),
                 title = title,
                 grid = grid,
-                status = status,
                 messageBounds = grid,
                 supported = true,
                 unsupportedMessage = UNSUPPORTED_MESSAGE,
@@ -99,12 +95,20 @@ internal data class IdeTerminalOverlayGeometry(
         private const val BORDER_SIZE = 1
         private const val GRID_PADDING = 6
         private const val TITLE_HEIGHT = 18
-        private const val STATUS_HEIGHT = 14
         private const val SHADOW_WIDTH = 2
         private const val MESSAGE_PADDING = 8
         private const val UNSUPPORTED_MESSAGE = "Viewport is too small for the target terminal"
     }
 }
+
+internal fun terminalOverlayTitle(state: IdeTargetTerminalState): String =
+    when (state) {
+        IdeTargetTerminalState.Closed -> "Terminal unavailable"
+        is IdeTargetTerminalState.Opening -> "Opening target terminal..."
+        is IdeTargetTerminalState.Active -> "Target terminal"
+        is IdeTargetTerminalState.Resyncing -> "Resynchronizing target terminal..."
+        is IdeTargetTerminalState.Failed -> if (state.retryable) "${state.detail} · Click to retry" else state.detail
+    }
 
 internal class IdeTerminalOverlayController(
     private val client: IdeTargetTerminalClient,

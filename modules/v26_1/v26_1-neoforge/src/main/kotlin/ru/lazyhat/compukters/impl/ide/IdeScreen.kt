@@ -112,7 +112,7 @@ internal class IdeScreen(
         if (terminalOverlay.visible && overlay.panel.contains(event.x(), event.y())) {
             focusArea = IdeFocusArea.Terminal
             terminalOverlay.focus()
-            if (overlay.status.contains(event.x(), event.y())) terminalOverlay.retry()
+            if (overlay.title.contains(event.x(), event.y())) terminalOverlay.retry()
             clearFocus()
             input.pointerActivity()
             return true
@@ -451,22 +451,16 @@ internal class IdeScreen(
             graphics.disableScissor()
             return
         }
+        graphics.enableScissor(overlay.title.left, overlay.title.top, overlay.title.right, overlay.title.bottom)
         graphics.text(
             font,
-            Component.literal("Target terminal"),
+            Component.literal(terminalOverlayTitle(terminalOverlay.state())),
             overlay.title.left + 5,
             overlay.title.top + 5,
             if (terminalOverlay.focused) TERMINAL_ACCENT else TERMINAL_TEXT,
             false,
         )
-        val status =
-            when (val state = terminalOverlay.state()) {
-                IdeTargetTerminalState.Closed -> "Terminal unavailable"
-                is IdeTargetTerminalState.Opening -> "Opening…"
-                is IdeTargetTerminalState.Active -> "Revision ${state.replica.state.revision}"
-                is IdeTargetTerminalState.Resyncing -> "Resynchronizing…"
-                is IdeTargetTerminalState.Failed -> if (state.retryable) "${state.detail} · Click to retry" else state.detail
-            }
+        graphics.disableScissor()
         val session =
             when (val state = terminalOverlay.state()) {
                 is IdeTargetTerminalState.Active -> state.replica
@@ -486,9 +480,6 @@ internal class IdeScreen(
                 )
             }
         }
-        graphics.enableScissor(overlay.status.left, overlay.status.top, overlay.status.right, overlay.status.bottom)
-        graphics.text(font, Component.literal(status), overlay.status.left + 5, overlay.status.top + 3, TERMINAL_TEXT, false)
-        graphics.disableScissor()
     }
 
     private fun IdeTargetState.terminalReference(): IdeTargetReference? =
