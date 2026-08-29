@@ -81,12 +81,19 @@ internal class IdeScreen(
             input.pointerActivity()
             return true
         }
-        selectTreeRow(event.x(), event.y(), geometry)
         if (splitters.press(event.x().toInt(), event.y().toInt(), geometry)) {
             input.pointerActivity()
             return true
         }
         val pointerContext = pointerContext(geometry)
+        if (input.explorerPressed(event.x(), event.y(), event.modifiers(), pointerContext)) {
+            focusArea = IdeFocusArea.Tree
+            selectedTreePath = null
+            clearFocus()
+            terminalOverlay.focusLost()
+            return true
+        }
+        selectTreeRow(event.x(), event.y(), geometry)
         val hitAction =
             pointerContext.hitTargets
                 .asReversed()
@@ -126,6 +133,7 @@ internal class IdeScreen(
         val geometry = geometry()
         if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(event.x(), event.y())) return true
         if (splitters.drag(event.x().toInt(), event.y().toInt(), geometry)) return true
+        if (input.explorerDragged(event.x(), event.y(), pointerContext(geometry))) return true
         if (focusArea == IdeFocusArea.Editor) {
             return input.pointerClicked(
                 event.x(),
@@ -137,7 +145,11 @@ internal class IdeScreen(
         return super.mouseDragged(event, dragX, dragY)
     }
 
-    override fun mouseReleased(event: MouseButtonEvent): Boolean = splitters.release() || super.mouseReleased(event)
+    override fun mouseReleased(event: MouseButtonEvent): Boolean {
+        if (splitters.release()) return true
+        if (input.explorerReleased(event.x(), event.y(), event.modifiers(), pointerContext(geometry()))) return true
+        return super.mouseReleased(event)
+    }
 
     override fun mouseScrolled(
         mouseX: Double,
@@ -162,6 +174,7 @@ internal class IdeScreen(
             }
         }
         if (application.controller.viewState().dialog != null) return input.keyPressed(event, focusState())
+        if (event.key() == GLFW.GLFW_KEY_ESCAPE && input.cancelExplorerDrag()) return true
         if (splitters.captured) return true
         if (focusArea == IdeFocusArea.Terminal && terminalOverlay.keyPressed(event, minecraft.keyboardHandler.clipboard)) return true
         return input.keyPressed(event, focusState()) || super.keyPressed(event)
@@ -179,6 +192,7 @@ internal class IdeScreen(
     }
 
     override fun removed() {
+        input.cancelExplorerDrag()
         splitters.focusLost()
         terminalOverlay.focusLost()
         if (!sessionClosed) application.controller.dispatch(IdeCommand.EditorFocusLost)
@@ -223,6 +237,7 @@ internal class IdeScreen(
                 selectedTreePath = selectedTreePath,
                 terminalState = terminalOverlay.state(),
                 terminalVisible = terminalOverlay.visible,
+                explorerDrag = input.explorerDragVisual,
             )
         val operations = mutableListOf<RenderOperation>()
         model.panels.forEach { draw -> operations += RenderOperation(draw.zIndex) { graphics.fill(draw.bounds, draw.color) } }
@@ -288,6 +303,7 @@ internal class IdeScreen(
                 selectedTreePath = selectedTreePath,
                 terminalState = terminalOverlay.state(),
                 terminalVisible = terminalOverlay.visible,
+                explorerDrag = input.explorerDragVisual,
             )
         return when (val page = state.page) {
             is IdePageState.Start -> {
@@ -304,6 +320,7 @@ internal class IdeScreen(
                     geometry,
                     editor = page.value.editor as? IdeEditorView.Text,
                     tree = page.value.tree.flatten(),
+                    explorer = page.value.explorerRows(),
                     treeFirstRow = treeFirstRow,
                     hitTargets = model.hitTargets,
                     dialog = state.dialog,
@@ -478,12 +495,7 @@ internal class IdeScreen(
     private fun activeFile(): ProjectPath? = ((application.controller.viewState().page as? IdePageState.Workspace)?.value?.activeFile)
 
     private fun admittedTreeFirstRow(geometry: IdeRenderGeometry): Int {
-        val entries =
-            (application.controller.viewState().page as? IdePageState.Workspace)
-                ?.value
-                ?.tree
-                ?.flatten()
-                ?.size ?: 0
+        val entries = (application.controller.viewState().page as? IdePageState.Workspace)?.value?.explorerRows()?.size ?: 0
         return input.clampTree(entries, geometry.tree?.height ?: 0)
     }
 
@@ -496,11 +508,7 @@ internal class IdeScreen(
         if (!treeBounds.contains(x, y)) return
         val workspace = (application.controller.viewState().page as? IdePageState.Workspace)?.value ?: return
         val row = input.treeFirstRow + ((y - treeBounds.top - TREE_ROWS_TOP).toInt() / UI_LINE_HEIGHT)
-        selectedTreePath =
-            workspace.tree
-                .flatten()
-                .getOrNull(row)
-                ?.path
+        selectedTreePath = (workspace.explorerRows().getOrNull(row) as? IdeExplorerRow.ProjectEntry)?.entry?.path
     }
 
     private fun IdeRect.contains(

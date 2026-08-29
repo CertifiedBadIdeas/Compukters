@@ -23,6 +23,10 @@ import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
+import ru.lazyhat.compukters.ide.client.files.IdeComputerChildren
+import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
+import ru.lazyhat.compukters.ide.client.files.IdeComputerTransferState
+import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
@@ -38,9 +42,9 @@ import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 
 enum class IdePanelKind { Main, Header, Toolbar, Tree, Editor, Diagnostics, Status, Control, Dialog }
 
-enum class IdeTextKind { Header, Toolbar, StartProject, TreeRow, LineNumber, Source, Diagnostic, Status, Binary, Dialog, Completion }
+enum class IdeTextKind { Header, Toolbar, StartProject, TreeRow, DragGhost, LineNumber, Source, Diagnostic, Status, Binary, Dialog, Completion }
 
-enum class IdeFillKind { Background, Border, Selection, Caret, Splitter, DialogScrim }
+enum class IdeFillKind { Background, Border, Selection, DropTarget, Caret, Splitter, DialogScrim }
 
 enum class IdeScissorKind { Tree, Editor, Diagnostics, Completion }
 
@@ -58,6 +62,7 @@ enum class IdeHitAction {
     Deploy,
     Run,
     Terminal,
+    RefreshComputer,
     Confirm,
     Dismiss,
 }
@@ -139,8 +144,9 @@ internal object IdeRenderer {
         selectedTreePath: ProjectPath? = null,
         terminalState: IdeTargetTerminalState = IdeTargetTerminalState.Closed,
         terminalVisible: Boolean = false,
+        explorerDrag: IdeExplorerDragVisual? = null,
     ): IdeDrawModel {
-        val output = Builder(geometry, geometry.font, treeFirstRow, selectedTreePath, terminalState, terminalVisible)
+        val output = Builder(geometry, geometry.font, treeFirstRow, selectedTreePath, terminalState, terminalVisible, explorerDrag)
         output.base()
         if (!geometry.supported) {
             output.ui(IdeTextKind.Status, geometry.unsupportedMessage, 8, 8, IdeColors.ERROR)
@@ -165,6 +171,7 @@ internal object IdeRenderer {
         private val selectedTreePath: ProjectPath?,
         private val terminalState: IdeTargetTerminalState,
         private val terminalVisible: Boolean,
+        private val explorerDrag: IdeExplorerDragVisual?,
     ) {
         private val panels = mutableListOf<IdePanelDraw>()
         private val text = mutableListOf<IdeTextDraw>()
@@ -330,20 +337,75 @@ internal object IdeRenderer {
             val bounds = geometry.tree ?: return
             scissors += IdeScissorDraw(IdeScissorKind.Tree, bounds, Z_CLIP)
             val rows = bounds.height / UI_LINE_HEIGHT
-            workspace.tree.flatten().drop(treeFirstRow).take(rows).forEachIndexed { index, entry ->
-                val components = entry.path.value.split('/')
-                val depth = components.size - 1
-                val marker = if (entry.kind is ru.lazyhat.compukters.ide.project.tree.ProjectFileKind.Directory) "▸ " else "  "
+            workspace.explorerRows().drop(treeFirstRow).take(rows).forEachIndexed { index, row ->
+                val y = bounds.top + 4 + index * UI_LINE_HEIGHT
+                if (
+                    row is IdeExplorerRow.ProjectEntry &&
+                    row.entry.kind is ru.lazyhat.compukters.ide.project.tree.ProjectFileKind.Directory &&
+                    row.entry.path == explorerDrag?.destination
+                ) {
+                    fills +=
+                        IdeFillDraw(
+                            IdeFillKind.DropTarget,
+                            IdeRect(bounds.left, y - 2, bounds.right, y + UI_LINE_HEIGHT - 1),
+                            IdeColors.DROP_TARGET,
+                            Z_SELECTION,
+                        )
+                }
+                val (label, depth, color) =
+                    when (row) {
+                        is IdeExplorerRow.ProjectRoot -> Triple("Project · ${row.name}", 0, IdeColors.TEXT)
+                        is IdeExplorerRow.ProjectEntry -> {
+                            val entry = row.entry
+                            val marker = if (entry.kind is ru.lazyhat.compukters.ide.project.tree.ProjectFileKind.Directory) "▸ " else "  "
+                            val selected = entry.path == selectedTreePath || entry.path == workspace.activeFile
+                            Triple(marker + entry.path.value.substringAfterLast('/'), entry.path.value.count { it == '/' } + 1, if (selected) IdeColors.ACCENT else IdeColors.TEXT)
+                        }
+                        is IdeExplorerRow.ComputerRoot -> Triple(computerRootLabel(row.state), 0, IdeColors.COMPUTER)
+                        is IdeExplorerRow.ComputerEntry -> {
+                            val marker =
+                                when (val node = row.node) {
+                                    is IdeComputerNode.File -> "  "
+                                    is IdeComputerNode.Directory -> if (node.children is IdeComputerChildren.Unloaded) "▸ " else "▾ "
+                                }
+                            Triple(marker + row.node.name, row.depth, IdeColors.COMPUTER)
+                        }
+                    }
                 ui(
                     IdeTextKind.TreeRow,
-                    marker + components.last(),
+                    label,
                     bounds.left + 5 + depth * 8,
-                    bounds.top + 4 + index * UI_LINE_HEIGHT,
-                    if (entry.path == selectedTreePath || entry.path == workspace.activeFile) IdeColors.ACCENT else IdeColors.TEXT,
+                    y,
+                    color,
                     bounds,
+                )
+                if (row is IdeExplorerRow.ComputerRoot && row.state !is IdeComputerTreeState.NoTarget) {
+                    val refresh = IdeRect(bounds.right - 48, y - 2, bounds.right - 4, y + UI_LINE_HEIGHT - 1)
+                    target(IdeHitAction.RefreshComputer, refresh, row.state !is IdeComputerTreeState.Loading, "Refresh target filesystem")
+                    ui(IdeTextKind.TreeRow, "Refresh", refresh.left + 3, y, IdeColors.MUTED, bounds)
+                }
+            }
+            explorerDrag?.let { drag ->
+                ui(
+                    IdeTextKind.DragGhost,
+                    drag.source.name,
+                    drag.x.toInt() + 7,
+                    drag.y.toInt() + 7,
+                    if (drag.destination == null) IdeColors.MUTED else IdeColors.ACCENT,
+                    geometry.viewport,
+                    Z_DRAG,
                 )
             }
         }
+
+        private fun computerRootLabel(state: IdeComputerTreeState): String =
+            when (state) {
+                IdeComputerTreeState.NoTarget -> "Computer · No target"
+                IdeComputerTreeState.Loading -> "Computer · Loading…"
+                is IdeComputerTreeState.Available -> "Computer"
+                is IdeComputerTreeState.Unavailable -> "Computer · Unavailable"
+                is IdeComputerTreeState.TargetLost -> "Computer · Target lost"
+            }
 
         private fun terminalTooltip(): String? =
             when (val state = terminalState) {
@@ -552,6 +614,13 @@ internal object IdeRenderer {
                 IdeToolingState.Ready -> Unit
             }
             workspace.status?.let { parts += it.message }
+            when (val transfer = workspace.computerTransfer) {
+                IdeComputerTransferState.Idle -> Unit
+                is IdeComputerTransferState.Downloading ->
+                    parts += "Copying ${transfer.progress.filesComplete}/${transfer.progress.filesTotal} · ${transfer.progress.bytesComplete}/${transfer.progress.bytesTotal} B"
+                is IdeComputerTransferState.ConfirmationRequired -> parts += "Copy ready · confirmation required"
+                is IdeComputerTransferState.Failed -> parts += transfer.detail
+            }
             ui(
                 IdeTextKind.Status,
                 parts.joinToString(" · "),
@@ -847,6 +916,7 @@ internal object IdeRenderer {
     private const val Z_CARET = 35
     private const val Z_TARGET = 40
     private const val Z_POPUP = 50
+    private const val Z_DRAG = 60
     private const val Z_POPUP_TEXT = 55
     private const val Z_DIALOG_SCRIM = 90
     private const val Z_DIALOG = 100

@@ -34,6 +34,9 @@ import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionState
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.build.IdeBuiltArtifact
+import ru.lazyhat.compukters.ide.client.files.IdeComputerChildren
+import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
+import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
@@ -50,6 +53,9 @@ import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileKind
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
+import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
@@ -422,12 +428,49 @@ class IdeRendererStateTest {
         assertTrue(model.hitTargets.filter { it.focusGroup == IdeFocusGroup.Page }.all { !it.enabled })
     }
 
+    @Test
+    fun `workspace explorer renders project and lazy computer roots with refresh`() {
+        val file =
+            IdeComputerNode.File(
+                IdeTargetVirtualPath.of("/home/readme.txt"),
+                IdeTargetFileMetadata(IdeTargetFileKind.File, 3, 2, false),
+            )
+        val home =
+            IdeComputerNode.Directory(
+                IdeTargetVirtualPath.of("/home"),
+                IdeTargetFileMetadata(IdeTargetFileKind.Directory, 0, 1, false),
+                IdeComputerChildren.Loaded(listOf(file)),
+            )
+        val root =
+            IdeComputerNode.Directory(
+                IdeTargetVirtualPath.of("/"),
+                IdeTargetFileMetadata(IdeTargetFileKind.Directory, 0, 1, false),
+                IdeComputerChildren.Loaded(listOf(home)),
+            )
+        val state =
+            workspaceState(
+                IdeEditorView.Empty,
+                IdeBuildState.Idle,
+                computerTree = IdeComputerTreeState.Available(root, setOf(IdeTargetVirtualPath.of("/"), IdeTargetVirtualPath.of("/home"))),
+            )
+
+        val model = IdeRenderer.extract(state, geometry())
+        val rows = model.text.filter { it.kind == IdeTextKind.TreeRow }
+
+        assertTrue(rows.any { it.value == "Project · Demo" })
+        assertTrue(rows.any { it.value == "Computer" })
+        assertTrue(rows.any { it.value.contains("home") })
+        assertTrue(rows.any { it.value.contains("readme.txt") })
+        assertTrue(model.hitTargets.any { it.action == IdeHitAction.RefreshComputer && it.enabled })
+    }
+
     private fun workspaceState(
         editor: IdeEditorView,
         build: IdeBuildState,
         status: IdeProblem? = null,
         target: IdeTargetState = IdeTargetState.LocalOnly,
         tooling: IdeToolingState = IdeToolingState.Ready,
+        computerTree: IdeComputerTreeState = IdeComputerTreeState.NoTarget,
     ): IdeViewState {
         val root = createTempDirectory("compukters-renderer-tree-")
         val descriptor = ProjectCatalog.open(root).create("demo")
@@ -448,6 +491,7 @@ class IdeRendererStateTest {
                             editor = editor,
                             status = status,
                             build = build,
+                            computerTree = computerTree,
                         ),
                     ),
                 dialog = null,
