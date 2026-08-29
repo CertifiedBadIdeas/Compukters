@@ -20,6 +20,14 @@ package ru.lazyhat.compukters.lang.runtime.vm
 
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryEntry
+import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryListing
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileChunk
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileKind
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileMetadata
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileStat
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadException
+import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -118,6 +126,47 @@ class VmSession private constructor(
 
     fun filesystemGeneration(): Long = decodeNative { GenerationWireDecoder(bridge.filesystemGeneration(requireHandle())).generation() }
 
+    fun fileStat(path: VmVirtualPath): VmFileStat =
+        decodeNative {
+            FileInspectionWireDecoder(bridge.fileStat(requireHandle(), path.value.encodeToByteArray())).stat()
+        }
+
+    fun fileList(
+        path: VmVirtualPath,
+        startAfter: String? = null,
+        maximumEntries: Int = 128,
+    ): VmDirectoryListing {
+        require(maximumEntries in 1..256) { "filesystem list page must contain 1..256 entries" }
+        val cursor = startAfter?.also(::requireFileName)?.encodeToByteArray() ?: ByteArray(0)
+        return decodeNative {
+            FileInspectionWireDecoder(
+                bridge.fileList(requireHandle(), path.value.encodeToByteArray(), cursor, maximumEntries),
+            ).listing()
+        }
+    }
+
+    fun fileRead(
+        path: VmVirtualPath,
+        offset: Long,
+        maximumBytes: Int,
+        expectedGeneration: Long,
+    ): VmFileChunk {
+        require(offset >= 0) { "filesystem read offset must not be negative" }
+        require(maximumBytes in 1..32 * 1024) { "filesystem read must request 1..32768 bytes" }
+        require(expectedGeneration >= 0) { "filesystem generation must not be negative" }
+        return decodeNative {
+            FileInspectionWireDecoder(
+                bridge.fileRead(
+                    requireHandle(),
+                    path.value.encodeToByteArray(),
+                    offset,
+                    maximumBytes,
+                    expectedGeneration,
+                ),
+            ).chunk()
+        }
+    }
+
     fun verifyForDeploy(artifact: ByteArray): VmDeploymentCandidate {
         val candidateHandle = bridge.verifyForDeploy(requireHandle(), artifact.copyOf())
         return VmDeploymentCandidate(candidateHandle, bridge, deploymentOwner)
@@ -162,6 +211,14 @@ class VmSession private constructor(
     }
 
     private fun requireHandle(): Long = handle.get().takeIf { it != CLOSED } ?: error("VM session is closed")
+
+    private fun requireFileName(value: String) {
+        require(value.isNotEmpty() && value != "." && value != "..") { "filesystem cursor is not a file name" }
+        require(value.none { it == '/' || it == '\\' || it.code < 0x20 || it.code == 0x7f }) {
+            "filesystem cursor contains a forbidden character"
+        }
+        require(value.encodeToByteArray().size <= 4 * 1024) { "filesystem cursor is too long" }
+    }
 
     companion object {
         private const val CLOSED = 0L
@@ -225,6 +282,8 @@ class VmSession private constructor(
                 throw error
             } catch (error: VmBridgeException) {
                 throw error
+            } catch (error: VmFileSystemReadException) {
+                throw error
             } catch (error: Exception) {
                 throw VmBridgeException("invalid native VM result", error)
             }
@@ -259,6 +318,117 @@ class VmDeploymentCandidate internal constructor(
 
     private companion object {
         const val CLOSED = 0L
+    }
+}
+
+private class FileInspectionWireDecoder(
+    bytes: ByteArray,
+) {
+    private val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+
+    fun stat(): VmFileStat {
+        version()
+        val kind = kind()
+        val executable = boolean()
+        require(u8() == 0) { "filesystem stat reserved byte is not zero" }
+        val metadata = VmFileMetadata(kind, nonNegativeLong("file size"), nonNegativeLong("node generation"), executable)
+        val result = VmFileStat(nonNegativeLong("filesystem generation"), metadata)
+        end()
+        return result
+    }
+
+    fun listing(): VmDirectoryListing {
+        version()
+        val fileSystemGeneration = nonNegativeLong("filesystem generation")
+        val directoryGeneration = nonNegativeLong("directory generation")
+        val complete = boolean()
+        val count = u32Count(256)
+        var previous: ByteArray? = null
+        val entries =
+            List(count) {
+                val nameBytes = shortBytes()
+                require(nameBytes.isNotEmpty()) { "filesystem entry name is empty" }
+                previous?.let { require(compareUnsigned(it, nameBytes) < 0) { "filesystem names are not strictly ordered" } }
+                previous = nameBytes
+                VmDirectoryEntry(strictUtf8(nameBytes), metadata())
+            }
+        end()
+        return VmDirectoryListing(fileSystemGeneration, directoryGeneration, complete, entries)
+    }
+
+    fun chunk(): VmFileChunk {
+        version()
+        val generation = nonNegativeLong("node generation")
+        val nextOffset = nonNegativeLong("next file offset")
+        val eof = boolean()
+        val length = u32Count(32 * 1024)
+        require(length == buffer.remaining()) { "filesystem chunk byte count is not exact" }
+        val content = ByteArray(length).also(buffer::get)
+        end()
+        return VmFileChunk(generation, nextOffset, eof, content)
+    }
+
+    private fun metadata(): VmFileMetadata =
+        VmFileMetadata(
+            kind = kind(),
+            executable = boolean(),
+            logicalBytes = nonNegativeLong("file size"),
+            generation = nonNegativeLong("node generation"),
+        )
+
+    private fun version() = require(u8() == 1) { "unsupported filesystem inspection wire version" }
+
+    private fun kind(): VmFileKind =
+        when (u8()) {
+            0 -> VmFileKind.FILE
+            1 -> VmFileKind.DIRECTORY
+            else -> error("invalid filesystem file kind")
+        }
+
+    private fun boolean(): Boolean =
+        when (u8()) {
+            0 -> false
+            1 -> true
+            else -> error("invalid filesystem boolean")
+        }
+
+    private fun shortBytes(): ByteArray {
+        val length = u16()
+        require(length <= buffer.remaining()) { "filesystem name length exceeds its result" }
+        return ByteArray(length).also(buffer::get)
+    }
+
+    private fun strictUtf8(value: ByteArray): String =
+        StandardCharsets.UTF_8
+            .newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(value))
+            .toString()
+
+    private fun nonNegativeLong(name: String): Long = buffer.long.also { require(it >= 0) { "$name exceeds the JVM range" } }
+
+    private fun u32Count(maximum: Int): Int {
+        val value = buffer.int.toLong() and 0xffff_ffffL
+        require(value <= maximum) { "filesystem result count exceeds its bound" }
+        return value.toInt()
+    }
+
+    private fun u8(): Int = buffer.get().toInt() and 0xff
+
+    private fun u16(): Int = buffer.short.toInt() and 0xffff
+
+    private fun end() = require(!buffer.hasRemaining()) { "filesystem inspection result contains trailing bytes" }
+
+    private fun compareUnsigned(
+        left: ByteArray,
+        right: ByteArray,
+    ): Int {
+        for (index in 0 until minOf(left.size, right.size)) {
+            val difference = (left[index].toInt() and 0xff) - (right[index].toInt() and 0xff)
+            if (difference != 0) return difference
+        }
+        return left.size - right.size
     }
 }
 

@@ -26,6 +26,8 @@ import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
 import java.lang.invoke.MethodHandle
 import java.nio.file.Path
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadException
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
 
 internal class FfmBridge private constructor(
     private val arena: Arena,
@@ -44,6 +46,9 @@ internal class FfmBridge private constructor(
     private val createInStoreHandle: MethodHandle,
     private val createBootInStoreHandle: MethodHandle,
     private val filesystemGenerationHandle: MethodHandle,
+    private val filesystemStatHandle: MethodHandle,
+    private val filesystemListHandle: MethodHandle,
+    private val filesystemReadHandle: MethodHandle,
     private val verifyForDeployHandle: MethodHandle,
     private val deploymentCandidateCloseHandle: MethodHandle,
     private val executableRevisionHandle: MethodHandle,
@@ -241,6 +246,72 @@ internal class FfmBridge private constructor(
                 MAXIMUM_STORE_GENERATION_BYTES.toLong(),
                 written,
             ) as Int
+        }
+
+    override fun fileStat(
+        handle: Long,
+        pathUtf8: ByteArray,
+    ): ByteArray =
+        Arena.ofConfined().use { callArena ->
+            val path = callArena.nativeBytes(pathUtf8)
+            variableFilesystemOutput("filesystem stat") { output, capacity, written ->
+                filesystemStatHandle.invokeExact(
+                    handle,
+                    path,
+                    pathUtf8.size.toLong(),
+                    output,
+                    capacity,
+                    written,
+                ) as Int
+            }
+        }
+
+    override fun fileList(
+        handle: Long,
+        pathUtf8: ByteArray,
+        startAfterUtf8: ByteArray,
+        maximumEntries: Int,
+    ): ByteArray =
+        Arena.ofConfined().use { callArena ->
+            val path = callArena.nativeBytes(pathUtf8)
+            val cursor = callArena.nativeBytes(startAfterUtf8)
+            variableFilesystemOutput("filesystem list") { output, capacity, written ->
+                filesystemListHandle.invokeExact(
+                    handle,
+                    path,
+                    pathUtf8.size.toLong(),
+                    cursor,
+                    startAfterUtf8.size.toLong(),
+                    maximumEntries,
+                    output,
+                    capacity,
+                    written,
+                ) as Int
+            }
+        }
+
+    override fun fileRead(
+        handle: Long,
+        pathUtf8: ByteArray,
+        offset: Long,
+        maximumBytes: Int,
+        expectedGeneration: Long,
+    ): ByteArray =
+        Arena.ofConfined().use { callArena ->
+            val path = callArena.nativeBytes(pathUtf8)
+            variableFilesystemOutput("filesystem read") { output, capacity, written ->
+                filesystemReadHandle.invokeExact(
+                    handle,
+                    path,
+                    pathUtf8.size.toLong(),
+                    offset,
+                    maximumBytes,
+                    expectedGeneration,
+                    output,
+                    capacity,
+                    written,
+                ) as Int
+            }
         }
 
     override fun verifyForDeploy(
@@ -495,6 +566,24 @@ internal class FfmBridge private constructor(
             copyResult(operation, output, written, maximum)
         }
 
+    private inline fun variableFilesystemOutput(
+        operation: String,
+        call: (MemorySegment, Long, MemorySegment) -> Int,
+    ): ByteArray =
+        Arena.ofConfined().use { callArena ->
+            val written = callArena.allocate(ValueLayout.JAVA_LONG)
+            val sizingStatus = call(MemorySegment.NULL, 0, written)
+            if (sizingStatus != STATUS_BUFFER_TOO_SMALL) throw filesystemFailure(operation, sizingStatus)
+            val required = written.get(ValueLayout.JAVA_LONG, 0)
+            if (required !in 1..MAXIMUM_FILESYSTEM_RESULT_BYTES.toLong()) {
+                throw VmBridgeException("invalid FFM $operation required length")
+            }
+            val output = callArena.allocate(required)
+            val status = call(output, required, written)
+            if (status != STATUS_OK) throw filesystemFailure(operation, status)
+            copyResult(operation, output, written, required.toInt())
+        }
+
     private inline fun deploymentOutput(
         operation: String,
         call: (Arena, MemorySegment, MemorySegment) -> Int,
@@ -530,6 +619,29 @@ internal class FfmBridge private constructor(
             STATUS_INPUT_TERMINAL -> VmCanonicalLineException(VmCanonicalLineFailure.TERMINAL)
             STATUS_INPUT_RESUME -> VmCanonicalLineException(VmCanonicalLineFailure.RESUME)
             else -> failure("canonical line submission", status)
+        }
+
+    private fun filesystemFailure(
+        operation: String,
+        status: Int,
+    ): RuntimeException =
+        when (status) {
+            STATUS_FILESYSTEM_INVALID_PATH -> VmFileSystemReadException(VmFileSystemReadFailure.INVALID_PATH)
+            STATUS_FILESYSTEM_NOT_FOUND -> VmFileSystemReadException(VmFileSystemReadFailure.NOT_FOUND)
+            STATUS_FILESYSTEM_NOT_DIRECTORY -> VmFileSystemReadException(VmFileSystemReadFailure.NOT_DIRECTORY)
+            STATUS_FILESYSTEM_IS_DIRECTORY -> VmFileSystemReadException(VmFileSystemReadFailure.NOT_FILE)
+            STATUS_FILESYSTEM_READ_ONLY,
+            STATUS_FILESYSTEM_PERMISSION_DENIED,
+            -> VmFileSystemReadException(VmFileSystemReadFailure.PERMISSION)
+            STATUS_FILESYSTEM_STALE -> VmFileSystemReadException(VmFileSystemReadFailure.STALE_GENERATION)
+            STATUS_FILESYSTEM_LIMIT_EXCEEDED -> VmFileSystemReadException(VmFileSystemReadFailure.LIMIT)
+            STATUS_FILESYSTEM_BUSY,
+            STATUS_FILESYSTEM_FAULTED,
+            STATUS_FILESYSTEM_CLOSED,
+            STATUS_FILESYSTEM_OTHER,
+            STATUS_FILESYSTEM_INVALID_RANGE,
+            -> VmFileSystemReadException(VmFileSystemReadFailure.STORAGE)
+            else -> failure(operation, status)
         }
 
     private fun storeIdOperation(
@@ -583,6 +695,7 @@ internal class FfmBridge private constructor(
 
     companion object {
         private const val STATUS_OK = 0
+        private const val STATUS_BUFFER_TOO_SMALL = 10
         private const val STATUS_VERIFICATION = 2
         private const val STATUS_ADMISSION = 3
         private const val STATUS_DEPLOYMENT_CONFLICT = 19
@@ -596,6 +709,19 @@ internal class FfmBridge private constructor(
         private const val STATUS_INPUT_LINE_TOO_LONG = 27
         private const val STATUS_INPUT_TERMINAL = 28
         private const val STATUS_INPUT_RESUME = 29
+        private const val STATUS_FILESYSTEM_INVALID_PATH = 30
+        private const val STATUS_FILESYSTEM_NOT_FOUND = 31
+        private const val STATUS_FILESYSTEM_NOT_DIRECTORY = 32
+        private const val STATUS_FILESYSTEM_IS_DIRECTORY = 33
+        private const val STATUS_FILESYSTEM_READ_ONLY = 34
+        private const val STATUS_FILESYSTEM_PERMISSION_DENIED = 35
+        private const val STATUS_FILESYSTEM_STALE = 36
+        private const val STATUS_FILESYSTEM_LIMIT_EXCEEDED = 37
+        private const val STATUS_FILESYSTEM_BUSY = 38
+        private const val STATUS_FILESYSTEM_FAULTED = 39
+        private const val STATUS_FILESYSTEM_CLOSED = 40
+        private const val STATUS_FILESYSTEM_OTHER = 41
+        private const val STATUS_FILESYSTEM_INVALID_RANGE = 42
         private const val MAXIMUM_CREATE_BYTES = 1024
         private const val MAXIMUM_OUTCOME_BYTES = 1024 * 1024
         private const val MAXIMUM_STORE_OPEN_BYTES = 10
@@ -603,6 +729,7 @@ internal class FfmBridge private constructor(
         private const val MAXIMUM_STORE_GENERATION_BYTES = 9
         private const val MAXIMUM_EXECUTABLE_REVISION_BYTES = 10
         private const val MAXIMUM_COMPILATION_REQUEST_BYTES = 512 * 1024
+        private const val MAXIMUM_FILESYSTEM_RESULT_BYTES = 2 * 1024 * 1024
         private const val COMPILATION_ARTIFACT = 0
         private const val COMPILATION_FAILURE = 1
 
@@ -741,6 +868,51 @@ internal class FfmBridge private constructor(
                         downcall(
                             "compukter_filesystem_generation",
                             FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    filesystemStatHandle =
+                        downcall(
+                            "compukter_filesystem_stat",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    filesystemListHandle =
+                        downcall(
+                            "compukter_filesystem_list",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                            ),
+                        ),
+                    filesystemReadHandle =
+                        downcall(
+                            "compukter_filesystem_read",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_LONG,
                                 ValueLayout.JAVA_INT,
                                 ValueLayout.JAVA_LONG,
                                 ValueLayout.ADDRESS,

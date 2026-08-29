@@ -70,6 +70,26 @@ internal interface LowLevelVmBridge {
 
     fun filesystemGeneration(handle: Long): ByteArray = error("filesystem generation is unavailable")
 
+    fun fileStat(
+        handle: Long,
+        pathUtf8: ByteArray,
+    ): ByteArray = error("filesystem stat is unavailable")
+
+    fun fileList(
+        handle: Long,
+        pathUtf8: ByteArray,
+        startAfterUtf8: ByteArray,
+        maximumEntries: Int,
+    ): ByteArray = error("filesystem list is unavailable")
+
+    fun fileRead(
+        handle: Long,
+        pathUtf8: ByteArray,
+        offset: Long,
+        maximumBytes: Int,
+        expectedGeneration: Long,
+    ): ByteArray = error("filesystem read is unavailable")
+
     fun verifyForDeploy(
         handle: Long,
         artifact: ByteArray,
