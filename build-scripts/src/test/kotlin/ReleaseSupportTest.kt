@@ -44,7 +44,7 @@ class ReleaseSupportTest {
                 runtimeBundlesConfigured = true,
                 headTags = setOf("v0.1.0"),
                 worktreeStatus = "",
-                submoduleStatus = " 0519552 host/compukter-vm (runtime-v5.0)",
+                submoduleStatus = " 0519552 host/compukter-vm (runtime-v5.1)",
             )
 
         validateUniversalReleaseState(valid)
@@ -54,7 +54,7 @@ class ReleaseSupportTest {
             valid.copy(runtimeBundlesConfigured = false),
             valid.copy(headTags = emptySet()),
             valid.copy(worktreeStatus = " M gradle.properties"),
-            valid.copy(submoduleStatus = "+0519552 host/compukter-vm (runtime-v5.0)"),
+            valid.copy(submoduleStatus = "+0519552 host/compukter-vm (runtime-v5.1)"),
             valid.copy(submoduleStatus = "-0519552 host/compukter-vm"),
             valid.copy(submoduleStatus = "U0519552 host/compukter-vm"),
         ).forEach { state ->
@@ -70,7 +70,7 @@ class ReleaseSupportTest {
                 branch = "dev",
                 existingTags = emptySet(),
                 worktreeStatus = "",
-                submoduleStatus = " 0519552 host/compukter-vm (runtime-v5.0)",
+                submoduleStatus = " 0519552 host/compukter-vm (runtime-v5.1)",
             )
 
         validateTagReleaseState(valid)
@@ -79,7 +79,7 @@ class ReleaseSupportTest {
             valid.copy(branch = "fix/0.1.x"),
             valid.copy(existingTags = setOf("v0.1.0")),
             valid.copy(worktreeStatus = "?? release.jar"),
-            valid.copy(submoduleStatus = "+0519552 host/compukter-vm (runtime-v5.0)"),
+            valid.copy(submoduleStatus = "+0519552 host/compukter-vm (runtime-v5.1)"),
         ).forEach { state ->
             assertThrows(IllegalArgumentException::class.java) { validateTagReleaseState(state) }
         }
@@ -92,7 +92,7 @@ class ReleaseSupportTest {
                 version = "0.1.0",
                 headTags = setOf("v0.1.0"),
                 worktreeStatus = "",
-                submoduleStatus = " 0519552 host/compukter-vm (runtime-v5.0)",
+                submoduleStatus = " 0519552 host/compukter-vm (runtime-v5.1)",
             )
 
         assertEquals("0.2.0", validateBumpAfterReleaseState(valid))
