@@ -270,7 +270,9 @@ val nativeFilename =
         else -> error("unreachable native build operating system: $nativeOs")
     }
 val nativeResourcePath = "META-INF/natives/$nativeOs/$nativeArch/$nativeFilename"
-val releaseRuntimeMode = providers.gradleProperty("compukterRuntimeBundleDir").isPresent
+val releaseRuntimeMode =
+    providers.gradleProperty("compukterRuntimeBundleDir").isPresent ||
+        requestsUniversalReleaseBuild(gradle.startParameter.taskNames)
 val expectedPackagedNativeResources = expectedNativeResources(releaseRuntimeMode, nativeResourcePath)
 val productionJar = tasks.named<ShadowJar>("shadowJar")
 val verifyPackagedCompukterFfi =

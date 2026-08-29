@@ -83,12 +83,10 @@ fun validateTagReleaseState(state: TagReleaseState) {
 fun performMainlineRelease(
     state: TagReleaseState,
     createTag: (String) -> Unit,
-    bumpVersion: (String) -> Unit,
 ) {
     validateTagReleaseState(state)
     val version = ReleaseVersion.parse(state.version)
     createTag(version.tag)
-    bumpVersion(version.nextDevelopmentVersion)
 }
 
 fun validateBumpAfterReleaseState(state: BumpAfterReleaseState): String {
@@ -111,6 +109,9 @@ fun expectedNativeResources(
     } else {
         listOf(developmentResource)
     }
+
+fun requestsUniversalReleaseBuild(taskNames: List<String>): Boolean =
+    taskNames.any { it.substringAfterLast(':') == "buildReleaseUniversalJar" }
 
 fun validateNativeResources(
     actual: List<String>,

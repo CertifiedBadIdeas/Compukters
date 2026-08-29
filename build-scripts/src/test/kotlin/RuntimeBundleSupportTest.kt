@@ -24,12 +24,16 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.io.path.readBytes
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
 
 class RuntimeBundleSupportTest {
@@ -43,6 +47,87 @@ class RuntimeBundleSupportTest {
         assertEquals("0.5.1", contract.runtimeVersion)
         assertEquals("runtime-v0.5.1", contract.releaseTag)
         assertEquals(5, contract.ffiAbi)
+    }
+
+    @Test
+    fun downloadsTheExactPinnedReleaseAssetsAndReusesTheCompleteCache() {
+        val contract = runtime5BundleContract("0".repeat(40))
+        val destination = temporary.resolve("downloaded")
+        val requested = mutableListOf<URI>()
+        val payloads =
+            runtimeBundleAssetNames(contract).associateWith { name ->
+                "payload:$name".encodeToByteArray()
+            }
+
+        val first =
+            RuntimeBundleDownloadSupport.download(destination, contract) { uri ->
+                requested += uri
+                ByteArrayInputStream(payloads.getValue(uri.path.substringAfterLast('/')))
+            }
+
+        assertEquals(RuntimeBundleDownloadResult.DOWNLOADED, first)
+        assertEquals(
+            runtimeBundleAssetNames(contract).map { name ->
+                URI("https://github.com/CertifiedBadIdeas/Compukter-VM/releases/download/${contract.releaseTag}/$name")
+            },
+            requested,
+        )
+        payloads.forEach { (name, bytes) -> assertArrayEquals(bytes, destination.resolve(name).readBytes()) }
+
+        val second =
+            RuntimeBundleDownloadSupport.download(destination, contract) {
+                error("complete Runtime cache must not access the network")
+            }
+
+        assertEquals(RuntimeBundleDownloadResult.CACHED, second)
+    }
+
+    @Test
+    fun failedAssetDownloadDoesNotPublishAPartialFileAndCanResume() {
+        val contract = runtime5BundleContract("0".repeat(40))
+        val destination = temporary.resolve("resume")
+        val names = runtimeBundleAssetNames(contract)
+        var fail = true
+
+        assertThrows(IOException::class.java) {
+            RuntimeBundleDownloadSupport.download(destination, contract) { uri ->
+                val name = uri.path.substringAfterLast('/')
+                if (fail && name == names[1]) throw IOException("connection lost")
+                ByteArrayInputStream("payload:$name".encodeToByteArray())
+            }
+        }
+        assertEquals("payload:${names[0]}", destination.resolve(names[0]).readText())
+        assertEquals(false, Files.exists(destination.resolve(names[1])))
+        assertEquals(false, Files.list(destination).use { files -> files.anyMatch { it.fileName.toString().endsWith(".part") } })
+
+        fail = false
+        assertEquals(
+            RuntimeBundleDownloadResult.DOWNLOADED,
+            RuntimeBundleDownloadSupport.download(destination, contract) { uri ->
+                ByteArrayInputStream("payload:${uri.path.substringAfterLast('/')}".encodeToByteArray())
+            },
+        )
+    }
+
+    @Test
+    fun acceptsAnAssetPublishedConcurrentlyByAnotherDownloader() {
+        val contract = runtime5BundleContract("0".repeat(40))
+        val destination = temporary.resolve("concurrent")
+        val firstAsset = runtimeBundleAssetNames(contract).first()
+
+        assertEquals(
+            RuntimeBundleDownloadResult.DOWNLOADED,
+            RuntimeBundleDownloadSupport.download(destination, contract) { uri ->
+                val name = uri.path.substringAfterLast('/')
+                if (name == firstAsset) {
+                    Files.createDirectories(destination)
+                    Files.writeString(destination.resolve(name), "concurrent winner")
+                }
+                ByteArrayInputStream("losing download:$name".encodeToByteArray())
+            },
+        )
+
+        assertEquals("concurrent winner", destination.resolve(firstAsset).readText())
     }
 
     @Test

@@ -154,7 +154,7 @@ val tagRelease =
 
 tasks.register("release") {
     group = "release"
-    description = "Tag the current stable version and bump to the next development minor"
+    description = "Tag the current stable version without changing the project version"
     doLast {
         val currentVersion = project.version.toString()
         performMainlineRelease(
@@ -174,10 +174,9 @@ tasks.register("release") {
                 git(projectDir, "tag", "-a", tag, "-m", "Compukters $currentVersion")
                 println("Tagged $tag")
             },
-            bumpVersion = { nextVersion -> doVersionBump(project, nextVersion) },
         )
-        println("Release commit tagged; HEAD advanced to the next development minor.")
-        println("Push the branch and tag when ready to publish.")
+        println("Release commit tagged; gradle.properties was not changed.")
+        println("Run ':v26_1-neoforge:buildReleaseUniversalJar' before publishing the tag.")
     }
 }
 
