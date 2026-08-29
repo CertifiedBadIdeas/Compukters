@@ -100,12 +100,12 @@ class RuntimeBundleSupportTest {
         val bundles: Path = root.resolve("bundles")
         val staging: Path = root.resolve("staging")
         val contract: RuntimeBundleContract = CONTRACT.copy(vmCommit = COMMIT)
-        val checksums: Path = bundles.resolve("compukter-runtime-5.0-checksums.sha256")
+        val checksums: Path = bundles.resolve("compukter-runtime-5.1-checksums.sha256")
 
         init {
             Files.createDirectories(bundles)
-            val linux = bundles.resolve("compukter-runtime-5.0-linux-x86_64.tar.gz")
-            val windows = bundles.resolve("compukter-runtime-5.0-windows-x86_64.zip")
+            val linux = bundles.resolve("compukter-runtime-5.1-linux-x86_64.tar.gz")
+            val windows = bundles.resolve("compukter-runtime-5.1-windows-x86_64.zip")
             writeTar(linux, entries("x86_64-unknown-linux-gnu", "libcompukter_ffi.so", linuxNative, vmCommit))
             writeZip(
                 windows,
@@ -130,8 +130,8 @@ class RuntimeBundleSupportTest {
             """
             {
               "schema": 1,
-              "runtime_version": "5.0",
-              "release_tag": "runtime-v5.0",
+              "runtime_version": "5.1",
+              "release_tag": "runtime-v5.1",
               "vm_commit": "$vmCommit",
               "ffi_abi": 5,
               "formats": {
@@ -183,8 +183,8 @@ class RuntimeBundleSupportTest {
             val WINDOWS_NATIVE = "windows-native".encodeToByteArray()
             val CONTRACT =
                 RuntimeBundleContract(
-                    runtimeVersion = "5.0",
-                    releaseTag = "runtime-v5.0",
+                    runtimeVersion = "5.1",
+                    releaseTag = "runtime-v5.1",
                     ffiAbi = 5,
                     vmCommit = COMMIT,
                     formats =

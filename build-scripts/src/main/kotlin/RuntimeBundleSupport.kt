@@ -56,8 +56,8 @@ data class StagedRuntimeNative(
 
 fun runtime5BundleContract(vmCommit: String): RuntimeBundleContract =
     RuntimeBundleContract(
-        runtimeVersion = "5.0",
-        releaseTag = "runtime-v5.0",
+        runtimeVersion = "5.1",
+        releaseTag = "runtime-v5.1",
         ffiAbi = 5,
         vmCommit = vmCommit,
         formats =
