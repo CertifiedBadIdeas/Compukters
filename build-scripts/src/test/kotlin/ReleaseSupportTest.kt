@@ -86,7 +86,7 @@ class ReleaseSupportTest {
     }
 
     @Test
-    fun mainlineReleaseTagsTheReleaseCommitBeforeBumpingTheMinorVersion() {
+    fun mainlineReleaseTagsTheCurrentVersionWithoutBumpingIt() {
         val events = mutableListOf<String>()
         val state =
             TagReleaseState(
@@ -100,10 +100,9 @@ class ReleaseSupportTest {
         performMainlineRelease(
             state = state,
             createTag = { events += "tag:$it" },
-            bumpVersion = { events += "bump:$it" },
         )
 
-        assertEquals(listOf("tag:v0.2.0", "bump:0.3.0"), events)
+        assertEquals(listOf("tag:v0.2.0"), events)
     }
 
     @Test
@@ -122,7 +121,6 @@ class ReleaseSupportTest {
             performMainlineRelease(
                 state = dirty,
                 createTag = { events += "tag:$it" },
-                bumpVersion = { events += "bump:$it" },
             )
         }
 
@@ -159,5 +157,13 @@ class ReleaseSupportTest {
         assertThrows(IllegalArgumentException::class.java) {
             validateNativeResources(listOf(linux), expectedNativeResources(true, linux))
         }
+    }
+
+    @Test
+    fun onlyTheExplicitReleaseAssemblyTaskSelectsUniversalRuntimeMode() {
+        assertEquals(true, requestsUniversalReleaseBuild(listOf(":v26_1-neoforge:buildReleaseUniversalJar")))
+        assertEquals(true, requestsUniversalReleaseBuild(listOf("buildReleaseUniversalJar")))
+        assertEquals(false, requestsUniversalReleaseBuild(listOf(":v26_1-neoforge:buildProductionUniversalJar")))
+        assertEquals(false, requestsUniversalReleaseBuild(listOf("release")))
     }
 }

@@ -28,15 +28,22 @@ import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.io.InputStream
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
+import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
+import java.time.Duration
 import kotlin.io.path.name
 
 data class RuntimeBundleContract(
@@ -54,6 +61,11 @@ data class StagedRuntimeNative(
     val sha256: String,
 )
 
+enum class RuntimeBundleDownloadResult {
+    CACHED,
+    DOWNLOADED,
+}
+
 fun runtime5BundleContract(vmCommit: String): RuntimeBundleContract =
     RuntimeBundleContract(
         runtimeVersion = "0.5.1",
@@ -68,6 +80,103 @@ fun runtime5BundleContract(vmCommit: String): RuntimeBundleContract =
                 "filesystem-generation" to 1,
             ),
     )
+
+fun runtimeBundleAssetNames(contract: RuntimeBundleContract): List<String> {
+    require(Regex("""0\.(0|[1-9]\d*)\.(0|[1-9]\d*)""").matches(contract.runtimeVersion)) {
+        "runtime version is not canonical"
+    }
+    require(contract.releaseTag == "runtime-v${contract.runtimeVersion}") { "runtime release tag mismatch" }
+    return listOf(
+        "compukter-runtime-${contract.runtimeVersion}-checksums.sha256",
+        "compukter-runtime-${contract.runtimeVersion}-linux-x86_64.tar.gz",
+        "compukter-runtime-${contract.runtimeVersion}-windows-x86_64.zip",
+    )
+}
+
+object RuntimeBundleDownloadSupport {
+    private const val RELEASE_DOWNLOAD_BASE =
+        "https://github.com/CertifiedBadIdeas/Compukter-VM/releases/download"
+    private const val MAXIMUM_ASSET_BYTES = 256L * 1024 * 1024
+    private val httpClient: HttpClient by lazy {
+        HttpClient
+            .newBuilder()
+            .connectTimeout(Duration.ofSeconds(30))
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build()
+    }
+
+    fun download(
+        destination: Path,
+        contract: RuntimeBundleContract,
+        open: (URI) -> InputStream = ::openReleaseAsset,
+    ): RuntimeBundleDownloadResult {
+        val assets = runtimeBundleAssetNames(contract)
+        Files.createDirectories(destination)
+        require(Files.isDirectory(destination, LinkOption.NOFOLLOW_LINKS)) {
+            "runtime cache destination is not a directory"
+        }
+        if (assets.all { Files.isRegularFile(destination.resolve(it), LinkOption.NOFOLLOW_LINKS) }) {
+            return RuntimeBundleDownloadResult.CACHED
+        }
+
+        var downloaded = false
+        assets.forEach { asset ->
+            val target = destination.resolve(asset)
+            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+                require(Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
+                    "runtime cache asset is not a regular file: $asset"
+                }
+                return@forEach
+            }
+            val temporary = Files.createTempFile(destination, ".$asset.", ".part")
+            try {
+                open(releaseAssetUri(contract, asset)).use { input ->
+                    Files.newOutputStream(temporary, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE).use { output ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        var total = 0L
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            total += read
+                            require(total <= MAXIMUM_ASSET_BYTES) { "runtime release asset exceeds its byte limit: $asset" }
+                            output.write(buffer, 0, read)
+                        }
+                    }
+                }
+                try {
+                    Files.move(temporary, target)
+                } catch (_: FileAlreadyExistsException) {
+                    require(Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
+                        "concurrently published runtime cache asset is not a regular file: $asset"
+                    }
+                }
+                downloaded = true
+            } finally {
+                Files.deleteIfExists(temporary)
+            }
+        }
+        return if (downloaded) RuntimeBundleDownloadResult.DOWNLOADED else RuntimeBundleDownloadResult.CACHED
+    }
+
+    private fun releaseAssetUri(contract: RuntimeBundleContract, asset: String): URI =
+        URI("$RELEASE_DOWNLOAD_BASE/${contract.releaseTag}/$asset")
+
+    private fun openReleaseAsset(uri: URI): InputStream {
+        val request =
+            HttpRequest
+                .newBuilder(uri)
+                .timeout(Duration.ofMinutes(5))
+                .header("User-Agent", "Compukters-Gradle-Runtime-Downloader")
+                .GET()
+                .build()
+        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream())
+        if (response.statusCode() != 200) {
+            response.body().close()
+            throw IOException("Runtime release download failed with HTTP ${response.statusCode()}: $uri")
+        }
+        return response.body()
+    }
+}
 
 object RuntimeBundleSupport {
     private const val MAXIMUM_NATIVE_BYTES = 128L * 1024 * 1024

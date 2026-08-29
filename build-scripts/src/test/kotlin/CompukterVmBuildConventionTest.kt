@@ -50,11 +50,13 @@ class CompukterVmBuildConventionTest {
     }
 
     @Test
-    fun releaseRuntimeBundlesAreAnExplicitOfflineResourceMode() {
+    fun releaseRuntimeBundlesDownloadByDefaultAndRetainAnOfflineOverride() {
         val nativeBuildScript = repoRoot().resolve("modules/native-runtime/build.gradle.kts").readText()
         val support = repoRoot().resolve("build-scripts/src/main/kotlin/RuntimeBundleSupport.kt").readText()
 
         assertTrue(nativeBuildScript.contains("compukterRuntimeBundleDir"))
+        assertTrue(nativeBuildScript.contains("downloadCompukterRuntimeBundles"))
+        assertTrue(nativeBuildScript.contains("RuntimeBundleDownloadSupport.download"))
         assertTrue(nativeBuildScript.contains("preparePackagedReleaseRuntime"))
         assertTrue(nativeBuildScript.contains("RuntimeBundleSupport.validateAndStage"))
         assertTrue(
@@ -62,9 +64,8 @@ class CompukterVmBuildConventionTest {
                 "if (releaseRuntimeMode) preparePackagedReleaseRuntime else preparePackagedCompukterFfi",
             ),
         )
-        assertFalse(support.contains("java.net"))
-        assertFalse(support.contains("HttpClient"))
-        assertFalse(support.contains("URL("))
+        assertTrue(support.contains("HttpClient"))
+        assertTrue(support.contains("Redirect.NORMAL"))
     }
 
     private fun rootBuildSource(): Path {
