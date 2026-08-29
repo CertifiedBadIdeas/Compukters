@@ -63,32 +63,35 @@ internal object TerminalGridRenderer {
         fontProfile: TerminalFontProfile,
         geometry: TerminalGridGeometry,
     ) {
-        repeat(state.height) { y ->
-            repeat(state.width) cellLoop@{ x ->
-                val cell = cell(state, x, y)
-                if (cell.codePoint == ' '.code) return@cellLoop
-                val renderedCodePoint = fontProfile.renderCodePoint(cell.codePoint)
-                val glyph =
-                    Component
-                        .literal(String(Character.toChars(renderedCodePoint)))
-                        .withStyle { style ->
-                            style
-                                .withFont(fontProfile.fontDescription)
-                                .withColor(TerminalRenderGeometry.paletteColor(cell.foreground))
-                        }
-                val bounds = geometry.cell(x, y)
-                val clip = geometry.glyphClip(x, y)
-                graphics.enableScissor(clip.left, clip.top, clip.right, clip.bottom)
-                graphics.text(
-                    minecraftFont,
-                    glyph,
-                    bounds.left,
-                    bounds.top + fontProfile.glyphDrawOffsetY,
-                    TerminalRenderGeometry.paletteColor(cell.foreground),
-                    false,
-                )
-                graphics.disableScissor()
+        val clip = geometry.glyphClip
+        graphics.enableScissor(clip.left, clip.top, clip.right, clip.bottom)
+        try {
+            repeat(state.height) { y ->
+                repeat(state.width) cellLoop@{ x ->
+                    val cell = cell(state, x, y)
+                    if (cell.codePoint == ' '.code) return@cellLoop
+                    val renderedCodePoint = fontProfile.renderCodePoint(cell.codePoint)
+                    val glyph =
+                        Component
+                            .literal(String(Character.toChars(renderedCodePoint)))
+                            .withStyle { style ->
+                                style
+                                    .withFont(fontProfile.fontDescription)
+                                    .withColor(TerminalRenderGeometry.paletteColor(cell.foreground))
+                            }
+                    val bounds = geometry.cell(x, y)
+                    graphics.text(
+                        minecraftFont,
+                        glyph,
+                        bounds.left,
+                        bounds.top + fontProfile.glyphDrawOffsetY,
+                        TerminalRenderGeometry.paletteColor(cell.foreground),
+                        false,
+                    )
+                }
             }
+        } finally {
+            graphics.disableScissor()
         }
     }
 

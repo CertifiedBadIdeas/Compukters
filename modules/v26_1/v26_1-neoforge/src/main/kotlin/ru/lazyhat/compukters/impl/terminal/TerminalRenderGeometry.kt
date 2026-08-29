@@ -58,10 +58,16 @@ class TerminalGridGeometry(
         return TerminalRect(left, top, left + fontProfile.cellWidth, top + fontProfile.cellHeight)
     }
 
-    fun glyphClip(
-        x: Int,
-        y: Int,
-    ): TerminalRect = cell(x, y)
+    val glyphClip: TerminalRect
+        get() =
+            // ScreenRectangle floors the transformed width and height independently. One cell of
+            // positive-edge slack keeps the final grid edge inside the scissor at fractional scales.
+            TerminalRect(
+                bounds.left,
+                bounds.top,
+                bounds.right + fontProfile.cellWidth,
+                bounds.bottom + fontProfile.cellHeight,
+            )
 
     fun cursor(position: TerminalPosition): TerminalRect {
         val cell = cell(position.x, position.y)
@@ -125,10 +131,8 @@ class TerminalRenderGeometry(
         return gridGeometry.cell(x, y)
     }
 
-    fun glyphClip(
-        x: Int,
-        y: Int,
-    ): TerminalRect = gridGeometry.glyphClip(x, y)
+    val glyphClip: TerminalRect
+        get() = gridGeometry.glyphClip
 
     fun cursor(position: TerminalPosition): TerminalRect {
         return gridGeometry.cursor(position)
