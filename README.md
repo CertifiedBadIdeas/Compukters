@@ -27,6 +27,9 @@ The active game baseline is **Minecraft 26.1.2**, **NeoForge 26.1.2.97**, and
 **JDK 25**. The production archive uses Minecraft's official names directly;
 there is no remap stage or Architectury runtime dependency.
 
+See the [Guest Kotlin support matrix](docs/KOTLIN-SUPPORT.md) for the current
+language, standard-library, Guest API, and IDE compatibility boundaries.
+
 ## Minecraft development
 
 Run Gradle with JDK 25 selected through `JAVA_HOME` or a Gradle-discoverable

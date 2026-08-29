@@ -1,0 +1,559 @@
+# Guest Kotlin support
+
+Compukters accepts Kotlin source through a pinned K2 frontend, then lowers it
+to Compukter bytecode for the managed Rust VM. This is **Guest Kotlin**, not
+Kotlin/JVM: K2 accepting source does not imply Java interoperability, JVM
+library compatibility, or executable support in Compukters.
+
+This matrix describes the repository revision that contains it.
+
+## Status legend
+
+- [x] **Supported** — the narrowly stated behavior has execution-level
+  conformance evidence, or a focused tooling test for an IDE-only claim.
+- [ ] **Partial** — a useful subset works, but the stated boundary remains.
+- [ ] **Unsupported** — the backend deliberately rejects the construct or has
+  no implementation for it.
+- **Not planned** — an intentional platform boundary, not queued work.
+
+Every checked item names its evidence. Unchecked work links an exact tracking
+issue when scheduled; otherwise it says `Tracking: not scheduled`. Compiler
+acceptance alone is not execution evidence: a VM operation and a K2 construct
+must meet through conformance coverage before the construct is marked
+supported.
+
+## Entry points and projects
+
+- [x] **`main(args: Array<String>)` argument contract** — ordinary and
+  `suspend` entry points receive one owned array whose strings preserve their
+  exact UTF-16 code units. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `string array entry lowers deterministically for vm argv conformance`,
+  and
+  [`kotlin_writer.rs`](../modules/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
+  test `k2_string_array_entry_executes_exact_utf16_arguments`.
+
+- [ ] **Four legal `main` forms — Partial** — `fun main()`,
+  `suspend fun main()`, and their single-`Array<String>` variants lower with
+  explicit entry tags, but only the argument-bearing runtime contract has a
+  dedicated K2-to-VM execution test. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `all four legal main forms lower deterministically with an explicit entry contract`.
+  Tracking: not scheduled
+
+- [x] **Invalid entry points are rejected** — duplicate entries, missing
+  entries, unsupported parameters, nullable argument arrays, and non-`Unit`
+  results produce no artifact. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  tests `entry policy rejects duplicate and invalid main functions` and
+  `entry policy rejects a project without main`.
+
+- [ ] **Multi-file projects — Partial** — cross-file top-level calls share one
+  K2 session and lower deterministically, while the in-computer `kotlinc`
+  command still accepts exactly one source file. Evidence:
+  [`K2CompilerAdapterTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/K2CompilerAdapterTest.kt),
+  test `cross-file reference participates in one K2 session before bounded lowering`,
+  and
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  tests `multi-file terminal program lowers through trusted symbols` and
+  `kotlinc command line rejects ambiguous or unsupported arguments`.
+  Tracking: not scheduled
+
+- [ ] **Project manifests and modules — Partial** — the IDE resolves canonical
+  project snapshots and Guest API bundles, but the current compiler output is
+  still one application artifact rather than an independently distributable
+  Kotlin module ecosystem. Tracking: not scheduled
+
+## Types and numeric semantics
+
+- [x] **`Int`, `Boolean`, and `Char` scalar values** — these source types lower
+  to distinct verified VM scalar types with Kotlin-compatible control and
+  comparison behavior. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  tests `bounded when forms compile for admitted scalar types` and
+  `primitive char array lowers deterministically for exact utf16 materialization`,
+  paired with [`tests.rs`](../host/compukter-vm/src/execution/tests.rs), test
+  `scalar_vectors_match_kotlin_jvm_semantics`.
+
+- [ ] **`Unit` and `Nothing` — Partial** — `Unit` function results and
+  non-returning trusted intrinsics are admitted, but general `Nothing`
+  expressions such as arbitrary throws are not lowered. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  tests `ordinary and suspend zero argument Unit main lower deterministically`
+  and `typed process v2 facade lowers without public capability masks or suspend calls`.
+  Tracking: not scheduled
+
+- [ ] **`Byte`, `Short`, `Long`, `Float`, and `Double` — Unsupported** — the
+  VM defines additional scalar operations, but the Guest source signature and
+  value-type registry do not admit these Kotlin types; `Long` is covered by an
+  explicit rejection test. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `unsupported source IR produces one stable target diagnostic and no artifact`.
+  Tracking: not scheduled
+
+- [ ] **Unsigned types — Unsupported** — `UByte`, `UShort`, `UInt`, and
+  `ULong` have no Guest representation or standard operations; a `UInt`
+  program is rejected as unsupported IR. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `unsupported source IR produces one stable target diagnostic and no artifact`.
+  Tracking: not scheduled
+
+- [ ] **Integer arithmetic — Partial** — `Int` supports `+`, `-`, `*`, `/`,
+  `%`, and unary minus with VM wrapping/division semantics. Bitwise functions,
+  shifts, and the remaining integer widths are not lowered from source.
+  Evidence:
+  [`KotlinProjectLowering`](../modules/compiler-k2/src/main/kotlin/ru/lazyhat/compukters/compiler/worker/k2/KotlinProjectLowering.kt)
+  and [`numeric.rs`](../host/compukter-vm/src/execution/numeric.rs), test
+  `integers_wrap_mask_shifts_and_handle_min_division`.
+  Tracking: not scheduled
+
+- [ ] **Conversions — Partial** — `Int.toChar()` is lowered; general numeric
+  conversions are outside the source subset even where the VM has conversion
+  semantics. Tracking: not scheduled
+
+## Expressions and control flow
+
+- [x] **Scalar `when` with individual branches** — `Int`, `Char`, `Boolean`,
+  and `String` subjects, plus subjectless boolean conditions, lower to bounded
+  deterministic branches; matched and fallback paths execute in the VM.
+  Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  tests `bounded when lowers deterministically for vm execution` and
+  `bounded when forms compile for admitted scalar types`, and
+  [`kotlin_writer.rs`](../modules/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
+  test `k2_bounded_when_selects_matched_and_fallback_branches`.
+
+- [ ] **Pattern-rich `when` — Unsupported** — range membership, comma-joined
+  branch conditions, and arbitrary `Any` type patterns do not publish an
+  artifact. Type branches over the admitted sealed class subset are handled
+  separately under the object model. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `unsupported when patterns produce no artifact`.
+  Tracking: not scheduled
+
+- [ ] **`if`, blocks, mutable locals, and `while` — Partial** — these forms
+  compile and are used by the checked-in shell, including nested loops and
+  reassignment. There is no source-level conformance suite covering every
+  expression/result shape, `do-while`, or loop jump. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  tests `shell language subset lowers control flow scalars strings and raw terminal calls`
+  and `checked in shell compiles deterministically`.
+  Tracking: not scheduled
+
+- [ ] **`for`, ranges, `break`, and `continue` — Unsupported** — these lower
+  into IR forms or library calls outside the current statement and call
+  subset. Tracking: not scheduled
+
+- [ ] **Destructuring and delegated expressions — Unsupported** — component
+  calls, delegated storage, and their generated source shapes are not admitted
+  as a supported contract. Tracking: not scheduled
+
+## Functions and calls
+
+- [ ] **Top-level and member calls — Partial** — direct top-level calls,
+  immutable property getters, and supported member operations lower by exact
+  symbol. Arbitrary library or virtual dispatch remains outside the subset.
+  Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  tests `multi-file terminal program lowers through trusted symbols` and
+  `same-named guest function remains an ordinary project call`.
+  Tracking: not scheduled
+
+- [x] **Direct `suspend` project calls** — a suspending Guest function may call
+  another suspending project function and resume across an asynchronous host
+  capability. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `suspend project call lowers deterministically for vm execution`, and
+  [`kotlin_writer.rs`](../modules/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
+  test `k2_suspend_project_call_resumes_across_async_capability`.
+
+- [ ] **Default arguments — Partial** — omitted `Array<String>` parameters are
+  supported only for direct `emptyArray()` or direct `arrayOf` call defaults;
+  general default expressions and constructor defaults are rejected.
+  Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  tests `string arrays support copyOfRange and supported default arguments`
+  and `guest object subset rejects mutable generic initialized secondary and explicitly cast shapes`.
+  Tracking: not scheduled
+
+- [ ] **Extension functions and overloads — Partial** — K2 resolves project
+  extensions and overloads by symbol, and same-named project functions do not
+  impersonate trusted intrinsics. Execution coverage is not comprehensive.
+  Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  tests `same-named char array helper remains an ordinary project call` and
+  `same-named guest function remains an ordinary project call`.
+  Tracking: not scheduled
+
+- [ ] **Named and vararg arguments — Partial** — ordinary K2 argument binding
+  works only when the resulting direct call stays in the admitted signature
+  subset; direct `arrayOf` varargs are specially lowered, while spread arrays
+  are rejected. Tracking: not scheduled
+
+- [ ] **Generic functions and classes — Unsupported** — user type parameters
+  are outside the Guest object and signature subset. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `guest object subset rejects mutable generic initialized secondary and explicitly cast shapes`.
+  Tracking: not scheduled
+
+- [ ] **Lambdas, local functions, and function references — Unsupported** —
+  function objects and nested declaration ownership are not represented by the
+  current backend. Tracking: not scheduled
+
+- [ ] **Recursion — Partial** — direct calls and bounded VM call depth can
+  represent recursion, but no Kotlin-to-VM recursive source conformance test
+  defines it as a supported language contract. Tracking: not scheduled
+
+## Classes and object model
+
+- [ ] **Immutable constructor classes — Partial** — classes with a primary
+  constructor whose every parameter is an immutable backed property lower to
+  managed objects. VM allocation, field access, inheritance layout, and type
+  checks are verified independently, but the source class fixture is not yet
+  executed end to end. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `guest object subset lowers sealed results data values enum identity and type branches`,
+  paired with [`heap_tests.rs`](../host/compukter-vm/src/execution/heap_tests.rs),
+  tests `heap_instructions_round_trip_reference_fields` and
+  `heap_instructions_use_inherited_fields_and_interface_closure`.
+  Tracking: not scheduled
+
+- [ ] **Sealed interfaces, data classes, and stateless enums — Partial** — the
+  admitted fixture lowers sealed result types, immutable data values, enum
+  identity, exhaustive type branches, and smart-cast property reads. It lacks
+  an end-to-end source execution test and does not imply all generated data or
+  enum methods. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `guest object subset lowers sealed results data values enum identity and type branches`.
+  Tracking: not scheduled
+
+- [ ] **Mutable properties, custom initializers, computed properties,
+  constructor defaults, secondary constructors, and stateful enums — Unsupported** —
+  each of these shapes is rejected before artifact publication. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `guest object subset rejects mutable generic initialized secondary and explicitly cast shapes`.
+  Tracking: not scheduled
+
+- [ ] **User `object` declarations — Unsupported** — the source class layout
+  admits classes, interfaces, and enums, but not singleton object declarations.
+  Trusted Guest API objects are compiler-provided facades, not evidence for
+  user-defined objects. Tracking: not scheduled
+
+- [ ] **Type tests and casts — Partial** — `is` checks and compiler-generated
+  smart casts over admitted references lower to VM type checks and checked
+  casts; explicit `as` source casts are rejected. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  tests `guest object subset lowers sealed results data values enum identity and type branches`
+  and `guest object subset rejects mutable generic initialized secondary and explicitly cast shapes`,
+  paired with [`heap_tests.rs`](../host/compukter-vm/src/execution/heap_tests.rs),
+  test `heap_instructions_checked_cast_handles_nullability_and_incompatibility`.
+  Tracking: not scheduled
+
+- [ ] **Value classes — Unsupported** — source value classes are not lowered
+  transparently to an underlying Guest scalar or reference representation.
+  Tracking: not scheduled
+
+## Nullability and exceptions
+
+- [ ] **Nullable user references — Unsupported** — artifact and VM types can
+  encode nullable references, but nullable Kotlin source values and operations
+  have no admitted lowering and execution contract. Tracking: not scheduled
+
+- [ ] **Safe calls, Elvis, and non-null assertions — Unsupported** — the IR
+  shapes and exception behavior produced by these operators are not part of
+  the admitted source subset. Tracking: not scheduled
+
+- [ ] **`throw`, `try`, `catch`, and `finally` — Unsupported** — the artifact
+  and VM have verified exception tables, but the K2 backend does not lower
+  `IrThrow` or `IrTry` from Guest source. Tracking: not scheduled
+
+- [ ] **Standard exception classes — Unsupported** — Kotlin/JVM exception
+  classes are not a Guest standard-library surface. VM traps and bounded host
+  failures remain typed runtime outcomes rather than catchable Kotlin
+  exceptions. Tracking: not scheduled
+
+- [x] **Compiler diagnostic source coordinates** — syntax and type diagnostics
+  preserve virtual paths and UTF-16 offsets while bounding count and text.
+  Evidence:
+  [`K2CompilerAdapterTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/K2CompilerAdapterTest.kt),
+  tests `syntax and type diagnostics use virtual paths and UTF-16 offsets` and
+  `diagnostic count text and physical paths are bounded`.
+
+## Strings, arrays, and collections
+
+- [x] **UTF-16 `CharArray` materialization** — `CharArray(size)`, indexed
+  access, mutation, `size`, `concatToString(start, end)`, and
+  `String(array, start, length)` preserve exact UTF-16 code units through
+  Guest execution. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `primitive char array lowers deterministically for exact utf16 materialization`,
+  and
+  [`kotlin_writer.rs`](../modules/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
+  test `k2_char_array_program_executes_exact_utf16_materialization`.
+
+- [ ] **`String` operations — Partial** — literals, concatenation,
+  interpolation lowered as concatenation, `length`, indexed `get`,
+  `substring`, equality, and construction from `CharArray` map to verified VM
+  operations. Other Kotlin text functions are not available. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `shell language subset lowers control flow scalars strings and raw terminal calls`,
+  paired with [`text_tests.rs`](../host/compukter-vm/src/execution/text_tests.rs),
+  tests `string_content_operations_use_kotlin_utf16_semantics`,
+  `string_concat_selects_utf16_for_bmp_and_surrogate_code_units`, and
+  `string_substring_preserves_full_identity_and_freshens_proper_ranges`.
+  Tracking: not scheduled
+
+- [ ] **`Array<String>` operations — Partial** — entry arrays,
+  `emptyArray<String>()`, direct `arrayOf` calls, `size`, indexed get/set, and
+  `copyOfRange` are lowered. General `Array<T>`, spread arguments, iterators,
+  and higher-order operations are unavailable. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  tests `string arrays can be constructed read and written` and
+  `string arrays support copyOfRange and supported default arguments`, paired
+  with [`heap_tests.rs`](../host/compukter-vm/src/execution/heap_tests.rs), test
+  `heap_instructions_round_trip_reference_arrays`.
+  Tracking: not scheduled
+
+- [ ] **Other primitive arrays — Unsupported** — only `CharArray` has a
+  source-level Guest representation even though the VM can store every
+  primitive array width. Tracking: not scheduled
+
+- [ ] **Collections, sequences, and iterators — Unsupported** — `List`,
+  `Set`, `Map`, collection builders, iteration protocols, and sequence APIs
+  are absent; `listOf(1)` is explicitly rejected as unsupported IR. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `unsupported source IR produces one stable target diagnostic and no artifact`.
+  Tracking: not scheduled
+
+## Coroutines and concurrency
+
+- [x] **Direct suspension across a host request** — a `suspend` Guest call
+  resumes at its verified continuation block after an asynchronous capability
+  response. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `suspend project call lowers deterministically for vm execution`, and
+  [`kotlin_writer.rs`](../modules/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
+  test `k2_suspend_project_call_resumes_across_async_capability`.
+
+- [ ] **VM-blocking calls from ordinary functions — Partial** — designated
+  Guest API calls such as terminal event waiting lower from an ordinary caller
+  and the VM verifies the blocking-capability contract, but the generated
+  ordinary-main fixture is not executed end to end. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `ordinary main lowers trusted terminal wait as vm blocking`, paired
+  with [`verify/tests.rs`](../host/compukter-vm/src/verify/tests.rs), tests
+  `vm_blocking_capability_is_valid_in_a_non_suspending_function` and
+  `vm_blocking_capability_does_not_claim_coroutine_semantics`.
+  Tracking: not scheduled
+
+- [ ] **Coroutine builders, scopes, cancellation, and structured concurrency — Unsupported** —
+  `kotlinx.coroutines` is not part of the Guest standard library, and Guest
+  programs cannot create concurrent tasks. Tracking: not scheduled
+
+- [ ] **Parallel Guest execution — Unsupported** — one process waits at a
+  suspension point; concurrent scheduling within one program is future work.
+  Tracking: not scheduled
+
+## Kotlin standard library
+
+- [ ] **Console functions — Partial** — `print` accepts `String`, `Int`,
+  `Boolean`, and `Char`; `println` supports those types plus the no-argument
+  form; `readln()` reads one canonical line. Other overloads and formatting
+  are unavailable. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `ordinary Kotlin standard streams lower to stdio capability operations`,
+  paired with [`computer.rs`](../host/compukter-vm/src/computer.rs), tests
+  `stdio_read_line_echoes_then_writes_stdout_and_stderr_in_order` and
+  `stdio_read_conflict_becomes_bounded_host_failure_without_consuming_input`.
+  Tracking: not scheduled
+
+- [ ] **Core scalar operations — Partial** — the admitted `Int`, `Boolean`,
+  and `Char` operations listed above are provided through pinned Kotlin
+  symbols. The wider primitive API, parsing, formatting, bit operations, and
+  math packages are absent. Tracking: not scheduled
+
+- [ ] **Text and array helpers — Partial** — only the `String`, `CharArray`,
+  and `Array<String>` operations listed above are pinned. Regex, Unicode
+  categories, encodings, generic array helpers, and collection conversions are
+  absent. Tracking: not scheduled
+
+- [ ] **Standard collections and functional helpers — Unsupported** — the
+  collection hierarchy and higher-order functions such as `map`, `filter`,
+  and `fold` are not Guest runtime types. Tracking: not scheduled
+
+- [ ] **Standard exceptions, reflection, and coroutine libraries — Unsupported** —
+  these packages have no Guest implementation. Tracking: not scheduled
+
+## Compukters Guest APIs
+
+- [x] **Terminal write, event wait, and key result** — `Terminal.write`,
+  `Terminal.awaitEvent`, and `Terminal.eventKey` lower to exact terminal
+  capability calls and execute across a host request. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `suspend project call lowers deterministically for vm execution`, and
+  [`kotlin_writer.rs`](../modules/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
+  test `k2_suspend_project_call_resumes_across_async_capability`.
+
+- [ ] **Remaining raw terminal operations — Partial** — clear, erase, text and
+  action/modifier event fields, and event completion lower through trusted
+  signatures and have device-level VM tests, but lack generated
+  Kotlin-to-VM execution coverage. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `shell language subset lowers control flow scalars strings and raw terminal calls`,
+  paired with
+  [`terminal_device.rs`](../host/compukter-vm/tests/terminal_device.rs), tests
+  `stable_key_and_atomic_text_events_merge_in_fifo_order` and
+  `input_limits_reject_whole_events_without_partial_queue_mutation`.
+  Tracking: not scheduled
+
+- [ ] **Positional terminal drawing — Partial** — cursor position and
+  visibility, palette colors, `writeAt`, and rectangular `fill` lower through
+  exact trusted signatures and have VM device conformance, but no generated
+  Kotlin program executes the complete facade end to end. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `positional terminal facade lowers through exact trusted signatures`,
+  paired with
+  [`terminal_device.rs`](../host/compukter-vm/tests/terminal_device.rs), tests
+  `positional_patch_and_fill_do_not_move_the_stream_cursor` and
+  `positional_terminal_write_clips_one_row_and_decodes_scalars`.
+  Tracking: not scheduled
+
+- [ ] **Filesystem facade — Partial** — `stat`, `list`, `readText`, and
+  `writeText` have exact trusted signatures and bounded VM operations.
+  Lowering coverage currently executes only at the compiler/VM sides
+  separately. Evidence:
+  [`TrustedIntrinsicRegistryTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/TrustedIntrinsicRegistryTest.kt),
+  test `filesystem provider requires trusted facade and exact synchronous signatures`,
+  and [`computer.rs`](../host/compukter-vm/src/computer.rs), tests
+  `filesystem_text_response_is_bounded_before_guest_materialization` and
+  `filesystem_text_write_replaces_existing_bytes_through_the_machine`.
+  Tracking: not scheduled
+
+- [ ] **Process facade — Partial** — `Process.run(path, args)` returns typed
+  exited/failed results, and `Process.exit(code)` terminates explicitly. The
+  source facade and VM process contract are covered separately rather than by
+  one end-to-end generated program. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `typed process v2 facade lowers without public capability masks or suspend calls`,
+  paired with [`computer.rs`](../host/compukter-vm/src/computer.rs), tests
+  `process_v2_run_materializes_structured_arguments_for_the_child` and
+  `process_v2_explicit_exit_preserves_all_codes_and_rejects_invalid_values`.
+  Tracking: not scheduled
+
+- [ ] **Compiler facade — Partial** — `Compiler.compile(source, output)` and
+  `Compiler.diagnostics()` are pinned, and the checked-in `/rom/kotlinc`
+  program compiles deterministically. Full Guest-to-host compilation behavior
+  is tested at the VM transaction layer rather than as one generated Kotlin
+  execution test. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `checked in kotlinc compiles deterministically`, paired with
+  [`computer.rs`](../host/compukter-vm/src/computer.rs), test
+  `compiler_transaction_snapshots_and_atomically_installs_an_executable`.
+  Tracking: not scheduled
+
+- [x] **Trusted API identity** — a user declaration cannot impersonate a Guest
+  intrinsic merely by copying its name and signature; providers require the
+  exact trusted bundle origin. Evidence:
+  [`TrustedIntrinsicRegistryTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/TrustedIntrinsicRegistryTest.kt),
+  tests `guest declaration cannot spoof a terminal intrinsic by name and signature`,
+  `terminal provider requires its trusted bundle and exact signatures`, and
+  `compiler provider requires trusted bundle and exact vm-blocking and sync signatures`.
+
+## IDE and tooling
+
+- [x] **Incremental lexical highlighting** — edits propagate lexical state and
+  remain identical to a full scan. Evidence:
+  [`IncrementalKotlinHighlighterTest`](../modules/ide-core/src/test/kotlin/ru/lazyhat/compukters/ide/highlight/IncrementalKotlinHighlighterTest.kt),
+  tests `edits propagate lexical state and remain identical to a full scan`
+  and `seeded random edits always equal the full-scan oracle`.
+
+- [x] **Semantic highlighting and inferred-type presentation** — declarations,
+  extension functions, inferred expressions, and smart casts receive K2-backed
+  semantic tokens. Evidence:
+  [`SemanticTokenQueryTest`](../modules/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/SemanticTokenQueryTest.kt),
+  tests `presentation classifies declarations and extension functions` and
+  `presentation marks inferred and smart cast expressions`.
+
+- [x] **K2 diagnostics** — incomplete syntax remains analyzable, multi-file
+  diagnostics retain virtual paths, and UTF-16 ranges remain exact. Evidence:
+  [`DiagnosticQueryTest`](../modules/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/DiagnosticQueryTest.kt),
+  tests `type error after supplementary character keeps UTF-16 range`,
+  `diagnostics from multiple files retain their virtual paths`, and
+  `incomplete syntax produces a bounded diagnostic instead of failing analysis`.
+
+- [x] **Semantic completion with overloads** — completion uses inferred
+  receivers, applicable extensions, visibility, distinct overload entries,
+  argument labels, deterministic ranking, and bounded result counts. Evidence:
+  [`CompletionQueryTest`](../modules/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/CompletionQueryTest.kt),
+  tests `qualified completion uses inferred receiver members and applicable extensions`,
+  `completion preserves overloads and orders them deterministically`, and
+  `completion gives standard library overloads distinct argument labels`,
+  plus
+  [`CompletionIntegrationTest`](../modules/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/integration/CompletionIntegrationTest.kt),
+  test `forked worker returns semantic completion`.
+
+- [x] **Expression information and callable signatures** — hover-style
+  queries render inferred local types, resolved signatures, and smart-cast
+  types. Evidence:
+  [`ExpressionInfoQueryTest`](../modules/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/ExpressionInfoQueryTest.kt),
+  tests `expression query renders an inferred local type`,
+  `expression query renders a resolved callable signature`, and
+  `expression query reports a smart cast type`.
+
+- [x] **Navigation and project references** — declarations and exact project
+  references resolve across files without matching unrelated same-spelling
+  symbols. Evidence:
+  [`NavigationAndReferencesTest`](../modules/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/integration/NavigationAndReferencesTest.kt),
+  test `forked worker navigates and finds exact project references`, paired
+  with
+  [`ReferenceQueryTest`](../modules/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/ReferenceQueryTest.kt),
+  test `references cross project files and exclude unrelated same spelling symbols`.
+
+- [x] **Local project build and cache** — the client builds real project
+  snapshots, reuses the global compiler cache, deduplicates active work, and
+  keeps compiler I/O off the caller thread. Evidence:
+  [`LocalIdeWorkflowTest`](../modules/ide-client/src/test/kotlin/ru/lazyhat/compukters/ide/client/integration/LocalIdeWorkflowTest.kt),
+  test `real project resolves builds and reuses global compiler cache`, and
+  [`ClientCompilationServiceTest`](../modules/ide-core/src/test/kotlin/ru/lazyhat/compukters/ide/compiler/ClientCompilationServiceTest.kt),
+  tests `deduplicates active build and admits one distinct queued build` and
+  `cache hit avoids another worker request and all IO stays on service thread`.
+
+- [x] **Target verification, deployment, and run** — verification is
+  non-mutating, successful tickets can be reused by deployment, and Run saves,
+  builds, deploys the manifest program, then submits its installed path.
+  Evidence:
+  [`IdeTargetCoordinatorTest`](../modules/ide-client/src/test/kotlin/ru/lazyhat/compukters/ide/client/target/IdeTargetCoordinatorTest.kt),
+  tests `verify is non mutating and its matching ticket is reused by deploy`
+  and `run deploys then submits exactly the installed path`, plus
+  [`IdeTargetFlowTest`](../modules/ide-client/src/test/kotlin/ru/lazyhat/compukters/ide/client/controller/IdeTargetFlowTest.kt),
+  test `run saves builds deploys manifest program and submits canonical line`.
+
+- [ ] **Debugger and runtime inspection — Unsupported** — there are no
+  breakpoints, stepping, watches, stack inspection, or live variable views.
+  Tracking: not scheduled
+
+## Intentional non-goals
+
+- **Not planned: Java interoperability and JVM bytecode/libraries.** Guest
+  programs target Compukter bytecode, not a JVM.
+- **Not planned: reflection and dynamic class loading.** Runtime types and code
+  are admitted from verified artifacts before execution.
+- **Not planned: arbitrary compiler plugins and annotation processors.** The
+  trusted compiler pipeline and Guest API bundles define the source surface.
+- **Not planned: ambient access to host JVM or operating-system resources.**
+  Guest programs cross only explicit, bounded capability interfaces.
+
+## Maintenance policy
+
+- A commit that changes Guest Kotlin support updates the affected matrix entry
+  and its evidence in the same commit.
+- Every checked item keeps a stable repository link and names the exact test
+  behavior that supports it.
+- A scheduled gap links its exact implementation issue; broad umbrella issues
+  do not replace feature-specific tracking.
+- Removing support unchecks the item and states the new boundary in the same
+  change.
+- Intentional non-goals change only through an explicit architecture decision,
+  not by converting them into unchecked tasks.
+- This document carries no manually maintained release number or commit hash;
+  it always describes the revision that contains it.
