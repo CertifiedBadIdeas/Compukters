@@ -59,6 +59,7 @@ fun include(
 include("native-runtime", modulesDir)
 include("compiler-artifact", modulesDir)
 include("worker-client", modulesDir)
+include("tooling-runtime", modulesDir)
 include("compiler-client", modulesDir)
 include("compiler-runtime", modulesDir)
 include("compiler-k2", modulesDir)

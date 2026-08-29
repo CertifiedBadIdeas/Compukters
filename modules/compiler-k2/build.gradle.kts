@@ -142,6 +142,15 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
     }
 }
 
+val compilerWorkerPayloadContent = configurations.create("compilerWorkerPayloadContent") {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+    description = "Prepared compiler worker payload directory for tooling bundle assembly."
+}
+artifacts.add(compilerWorkerPayloadContent.name, workerPayloadDirectory) {
+    builtBy(prepareCompilerWorkerPayload)
+}
+
 val compilerWorkerPayload = tasks.register<Zip>("compilerWorkerPayload") {
     dependsOn(prepareCompilerWorkerPayload)
     from(workerPayloadDirectory)
