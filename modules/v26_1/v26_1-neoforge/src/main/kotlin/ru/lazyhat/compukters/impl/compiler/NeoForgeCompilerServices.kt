@@ -30,14 +30,14 @@ import ru.lazyhat.compukters.compiler.runtime.worker.PackagedWorkerPayload
 import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
 import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerLaunch
-import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.compiler.ServerComputerCompiler
-import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
 import ru.lazyhat.compukters.ide.compiler.profile.COMPUKTER_ARTIFACT_ABI
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
+import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ExecutorService
@@ -154,7 +154,7 @@ internal class NeoForgeCompilerService private constructor(
             return Path.of(System.getProperty("java.home"), "bin", name).toAbsolutePath().normalize()
         }
 
-        private const val WORKER_RESOURCE = "/compiler/worker/compiler-k2-worker.zip"
+        private const val WORKER_RESOURCE = "/tooling/workers/k2-tooling-workers.zip"
     }
 }
 

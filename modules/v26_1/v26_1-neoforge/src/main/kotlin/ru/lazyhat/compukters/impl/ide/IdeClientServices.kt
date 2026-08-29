@@ -57,9 +57,9 @@ import ru.lazyhat.compukters.ide.client.workspace.DefaultIdeWorkspace
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationCache
 import ru.lazyhat.compukters.ide.compiler.ControllerClientCompilerBackend
 import ru.lazyhat.compukters.ide.compiler.DefaultClientCompilationService
+import ru.lazyhat.compukters.ide.compiler.profile.COMPUKTER_ARTIFACT_ABI
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
-import ru.lazyhat.compukters.ide.compiler.profile.COMPUKTER_ARTIFACT_ABI
 import ru.lazyhat.compukters.ide.compiler.profile.GuestApiBundleCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
@@ -69,26 +69,23 @@ import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetClientNetwork
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalClient
 import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
-import ru.lazyhat.compukters.worker.payload.PackagedWorkerPayload
-import ru.lazyhat.compukters.worker.payload.WorkerPayloadExpectation
+import ru.lazyhat.compukters.worker.payload.PackagedToolingBundle
 import ru.lazyhat.compukters.worker.process.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.worker.process.WorkerLaunch
 import java.nio.file.Path
-import java.util.concurrent.Executors
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import ru.lazyhat.compukters.compiler.runtime.worker.PackagedWorkerPayload as CompilerPackagedWorkerPayload
 import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory as CompilerProcessFactory
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerLaunch as CompilerWorkerLaunch
 
 internal data class IdeClientPaths(
     val projects: Path,
     val compilerCache: Path,
-    val compilerWorkers: Path,
-    val analysisWorkers: Path,
+    val toolingWorkers: Path,
     val compilerTemporary: Path,
     val analysisTemporary: Path,
     val preferences: Path,
@@ -99,8 +96,7 @@ internal data class IdeClientPaths(
             return IdeClientPaths(
                 projects = root.resolve("projects"),
                 compilerCache = root.resolve("cache/compiler"),
-                compilerWorkers = root.resolve("workers/compiler"),
-                analysisWorkers = root.resolve("workers/analysis"),
+                toolingWorkers = root.resolve("workers/tooling"),
                 compilerTemporary = root.resolve("tmp/compiler"),
                 analysisTemporary = root.resolve("tmp/analysis"),
                 preferences = root.resolve("session.preferences"),
@@ -211,10 +207,10 @@ private class ProductionIdeRuntime(
     }
 }
 
-private object ProductionIdeApplicationFactory {
+internal object ProductionIdeApplicationFactory {
     data class PreparedWorkers(
         val compilerPayload: ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload,
-        val analysisPayload: ru.lazyhat.compukters.worker.payload.PublishedWorkerPayload,
+        val analysisPayload: ru.lazyhat.compukters.worker.payload.PublishedToolingProfile,
         val java: Path,
         val workerLimits: WorkerLimits,
         val analysisLimits: AnalysisLimits,
@@ -224,25 +220,25 @@ private object ProductionIdeApplicationFactory {
         check(Runtime.version().feature() >= 25) { "Compukters IDE workers require JDK 25" }
         val workerLimits = WorkerLimits()
         val analysisLimits = AnalysisLimits()
+        val bundle = resource(TOOLING_WORKER_RESOURCE).use { archive -> PackagedToolingBundle.publish(archive, paths.toolingWorkers) }
+        val compilerProfile = bundle.profile("compiler")
         val compilerPayload =
-            resource(COMPILER_WORKER_RESOURCE).use { archive ->
-                CompilerPackagedWorkerPayload.publish(archive, paths.compilerWorkers)
-            }
+            ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload(
+                compilerProfile.root,
+                ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadManifest.fromToolingProfile(
+                    compilerProfile.manifest,
+                    bundle.manifest.files,
+                ),
+                compilerProfile.classpath,
+            )
         val compilerIdentity = compilerPayload.manifest.identity
-        val analysisPayload =
-            resource(ANALYSIS_WORKER_RESOURCE).use { archive ->
-                PackagedWorkerPayload.publish(
-                    archive,
-                    paths.analysisWorkers,
-                    WorkerPayloadExpectation(
-                        "analysis",
-                        mapOf(
-                            "compiler" to compilerIdentity.compilerVersion,
-                            "language" to compilerIdentity.languageVersion,
-                        ),
-                    ),
-                )
-            }
+        val analysisPayload = bundle.profile("analysis")
+        check(analysisPayload.manifest.identityProperties.getValue("compiler") == compilerIdentity.compilerVersion) {
+            "analysis worker compiler identity does not match compiler worker"
+        }
+        check(analysisPayload.manifest.identityProperties.getValue("language") == compilerIdentity.languageVersion) {
+            "analysis worker language identity does not match compiler worker"
+        }
         val java = javaExecutable()
         return PreparedWorkers(compilerPayload, analysisPayload, java, workerLimits, analysisLimits)
     }
@@ -261,15 +257,7 @@ private object ProductionIdeApplicationFactory {
         val compilerController =
             CompilerWorkerController(
                 compilerPayload,
-                CompilerWorkerLaunch(
-                    javaExecutable = java,
-                    maximumHeapMiB = COMPILER_HEAP_MIB,
-                    maximumMetaspaceMiB = COMPILER_METASPACE_MIB,
-                    temporaryDirectory = paths.compilerTemporary,
-                    expectedIdentity = compilerIdentity,
-                    maximumFrameBytes = workerLimits.frameBytes,
-                    maximumStderrBytes = workerLimits.stderrBytes,
-                ),
+                compilerLaunch(paths, prepared),
                 workerLimits,
                 CompilerProcessFactory(),
             )
@@ -292,17 +280,7 @@ private object ProductionIdeApplicationFactory {
                 compilerIdentity.languageVersion,
                 Hash256.of(analysisPayload.manifest.payloadHash.toByteArray()),
             )
-        val analysisLaunch =
-            WorkerLaunch(
-                javaExecutable = java,
-                classpath = analysisPayload.classpath,
-                mainClass = analysisPayload.manifest.mainClass,
-                maximumHeapMiB = ANALYSIS_HEAP_MIB,
-                maximumMetaspaceMiB = ANALYSIS_METASPACE_MIB,
-                temporaryDirectory = paths.analysisTemporary,
-                maximumFrameBytes = analysisLimits.frameBytes,
-                maximumStderrBytes = ANALYSIS_STDERR_BYTES,
-            )
+        val analysisLaunch = analysisLaunch(paths, prepared)
         val analysisService =
             AnalysisServiceLifetime(TimeUnit.SECONDS.toNanos(ANALYSIS_IDLE_SECONDS)) {
                 AnalysisWorkerController(
@@ -321,6 +299,35 @@ private object ProductionIdeApplicationFactory {
             throw error
         }
     }
+
+    internal fun compilerLaunch(
+        paths: IdeClientPaths,
+        prepared: PreparedWorkers,
+    ): CompilerWorkerLaunch =
+        CompilerWorkerLaunch(
+            javaExecutable = prepared.java,
+            maximumHeapMiB = COMPILER_HEAP_MIB,
+            maximumMetaspaceMiB = COMPILER_METASPACE_MIB,
+            temporaryDirectory = paths.compilerTemporary,
+            expectedIdentity = prepared.compilerPayload.manifest.identity,
+            maximumFrameBytes = prepared.workerLimits.frameBytes,
+            maximumStderrBytes = prepared.workerLimits.stderrBytes,
+        )
+
+    internal fun analysisLaunch(
+        paths: IdeClientPaths,
+        prepared: PreparedWorkers,
+    ): WorkerLaunch =
+        WorkerLaunch(
+            javaExecutable = prepared.java,
+            classpath = prepared.analysisPayload.classpath,
+            mainClass = prepared.analysisPayload.manifest.mainClass,
+            maximumHeapMiB = ANALYSIS_HEAP_MIB,
+            maximumMetaspaceMiB = ANALYSIS_METASPACE_MIB,
+            temporaryDirectory = paths.analysisTemporary,
+            maximumFrameBytes = prepared.analysisLimits.frameBytes,
+            maximumStderrBytes = ANALYSIS_STDERR_BYTES,
+        )
 
     fun open(
         paths: IdeClientPaths,
@@ -465,8 +472,7 @@ private object ProductionIdeApplicationFactory {
         return Path.of(System.getProperty("java.home"), "bin", name).toAbsolutePath().normalize()
     }
 
-    private const val COMPILER_WORKER_RESOURCE = "/compiler/worker/compiler-k2-worker.zip"
-    private const val ANALYSIS_WORKER_RESOURCE = "/analysis/worker/ide-analysis-k2-worker.zip"
+    private const val TOOLING_WORKER_RESOURCE = "/tooling/workers/k2-tooling-workers.zip"
     private const val COMPILER_HEAP_MIB = 256
     private const val COMPILER_METASPACE_MIB = 256
     private const val ANALYSIS_HEAP_MIB = 384
