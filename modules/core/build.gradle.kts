@@ -41,7 +41,7 @@ val kotlincRuntimeArtifact =
 val editRuntimeArtifact =
     project(":compiler-k2").layout.buildDirectory.file("generated/system/edit.cpkt")
 val compilerWorkerPayload =
-    project(":compiler-k2").tasks.named<Zip>("compilerWorkerPayload").flatMap { it.archiveFile }
+    project(":tooling-runtime").layout.buildDirectory.file("distributions/k2-tooling-workers.zip")
 val processTerminalChildArtifact =
     rootProject.layout.projectDirectory.file("host/compukter-vm/tests/fixtures/process-terminal-child.cpkt")
 val processInstallRomExecutableArtifact =
@@ -60,7 +60,7 @@ val programRuntimeIntegrationTest =
             ":compiler-k2:generateKotlincArtifact",
             ":compiler-k2:generateShellArtifact",
             ":compiler-k2:generateEditArtifact",
-            ":compiler-k2:compilerWorkerPayload",
+            ":tooling-runtime:toolingRuntimeBundle",
             rootProject.tasks.named("cargoBuildCompukterFfi"),
         )
         useJUnitPlatform()

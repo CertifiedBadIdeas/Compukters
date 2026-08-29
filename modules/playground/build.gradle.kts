@@ -33,7 +33,7 @@ application {
     mainClass = "ru.lazyhat.compukters.playground.PlaygroundMainKt"
 }
 
-val workerPayload = project(":compiler-k2").layout.buildDirectory.dir("worker-payload/content")
+val workerPayload = project(":tooling-runtime").layout.buildDirectory.dir("tooling-bundle/content")
 val compukterFfiLibrary =
     rootProject.file(".toolchain/build/cargo/compukter-ffi/release/${System.mapLibraryName("compukter_ffi")}")
 val repositoryRoot = rootProject.layout.projectDirectory
@@ -43,7 +43,7 @@ tasks.test {
 }
 
 tasks.named<JavaExec>("run") {
-    dependsOn(":compiler-k2:prepareCompilerWorkerPayload", rootProject.tasks.named("cargoBuildCompukterFfi"))
+    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle", rootProject.tasks.named("cargoBuildCompukterFfi"))
     workingDir(rootProject.projectDir)
     standardInput = System.`in`
     jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
@@ -57,7 +57,7 @@ val endToEndTest =
     tasks.register<Test>("endToEndTest") {
         description = "Compiles and executes the standalone Kotlin example through the real worker, FFM, and Rust VM."
         group = "verification"
-        dependsOn(":compiler-k2:prepareCompilerWorkerPayload", rootProject.tasks.named("cargoBuildCompukterFfi"))
+        dependsOn(":tooling-runtime:prepareToolingRuntimeBundle", rootProject.tasks.named("cargoBuildCompukterFfi"))
         useJUnitPlatform()
         testClassesDirs = sourceSets.test.get().output.classesDirs
         classpath = sourceSets.test.get().runtimeClasspath
