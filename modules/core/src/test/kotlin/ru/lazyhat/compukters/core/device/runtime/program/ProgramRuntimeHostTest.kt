@@ -27,6 +27,10 @@ import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompiler
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilerCompletion
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryListing
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileChunk
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileStat
+import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.GuestTrap
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
@@ -65,8 +69,12 @@ class ProgramRuntimeHostTest {
             ScriptedSession(
                 defaultOutcome = VmOutcome.SliceExhausted,
                 deploymentCandidate = candidate,
-                executableRevision = ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision.Present(4),
-                deployedRevision = ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision.Present(5),
+                executableRevision =
+                    ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
+                        .Present(4),
+                deployedRevision =
+                    ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
+                        .Present(5),
             )
         val host = host(session)
         host.start(byteArrayOf(1))
@@ -76,14 +84,17 @@ class ProgramRuntimeHostTest {
         artifact[0] = 0
         assertEquals(listOf<Byte>(7, 8, 9), session.verifiedArtifacts.single())
         assertEquals(
-            ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision.Present(4),
+            ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
+                .Present(4),
             host.executableRevision("/home/demo"),
         )
         assertEquals(
-            ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision.Present(5),
+            ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
+                .Present(5),
             host.deploy(
                 "/home/demo",
-                ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision.Present(4),
+                ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
+                    .Present(4),
                 candidate,
             ),
         )
@@ -582,7 +593,8 @@ class ProgramRuntimeHostTest {
         private val executableRevision: ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision =
             ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision.Absent,
         private val deployedRevision: ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision =
-            ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision.Present(1),
+            ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
+                .Present(1),
         private val completionError: VmBridgeException? = null,
         private val closeEvent: (() -> Unit)? = null,
     ) : ProgramVmSession {
@@ -658,6 +670,21 @@ class ProgramRuntimeHostTest {
         }
 
         override fun filesystemGeneration(): Long = filesystemGeneration
+
+        override fun fileStat(path: VmVirtualPath): VmFileStat = error("unexpected fileStat($path)")
+
+        override fun fileList(
+            path: VmVirtualPath,
+            startAfter: String?,
+            maximumEntries: Int,
+        ): VmDirectoryListing = error("unexpected fileList($path, $startAfter, $maximumEntries)")
+
+        override fun fileRead(
+            path: VmVirtualPath,
+            offset: Long,
+            maximumBytes: Int,
+            expectedGeneration: Long,
+        ): VmFileChunk = error("unexpected fileRead($path, $offset, $maximumBytes, $expectedGeneration)")
 
         override fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate {
             verifiedArtifacts += artifact.toList()

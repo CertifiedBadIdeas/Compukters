@@ -89,8 +89,11 @@ class ProgramComputer internal constructor(
 
     fun fileStat(path: ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath) = host.fileStat(path)
 
-    fun fileList(path: ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath, startAfter: String?, maximumEntries: Int) =
-        host.fileList(path, startAfter, maximumEntries)
+    fun fileList(
+        path: ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath,
+        startAfter: String?,
+        maximumEntries: Int,
+    ) = host.fileList(path, startAfter, maximumEntries)
 
     fun fileRead(
         path: ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath,
