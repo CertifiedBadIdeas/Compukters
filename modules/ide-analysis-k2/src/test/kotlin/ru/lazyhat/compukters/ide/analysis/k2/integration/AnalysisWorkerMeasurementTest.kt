@@ -38,7 +38,7 @@ import ru.lazyhat.compukters.ide.analysis.controller.SnapshotOpenResult
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisWorkerIdentity
-import ru.lazyhat.compukters.worker.payload.WorkerPayloadLoader
+import ru.lazyhat.compukters.worker.payload.ToolingBundleLoader
 import ru.lazyhat.compukters.worker.process.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.worker.process.WorkerLaunch
 import ru.lazyhat.compukters.worker.process.WorkerProcess
@@ -54,7 +54,7 @@ import kotlin.test.assertTrue
 class AnalysisWorkerMeasurementTest {
     @Test
     fun `real worker emits bounded baseline measurements and exits after idle`() {
-        val payload = WorkerPayloadLoader.load(Path.of(checkNotNull(System.getProperty("compukters.analysis.payload"))))
+        val payload = ToolingBundleLoader.load(Path.of(checkNotNull(System.getProperty("compukters.analysis.payload")))).profile("analysis")
         val java = Path.of(checkNotNull(System.getProperty("compukters.analysis.java"))).toAbsolutePath().normalize()
         val root = createTempDirectory("compukters-analysis-measurement-").toAbsolutePath().normalize()
         val limits = AnalysisLimits()

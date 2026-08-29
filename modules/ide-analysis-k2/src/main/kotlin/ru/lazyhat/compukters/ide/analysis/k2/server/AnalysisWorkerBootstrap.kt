@@ -20,7 +20,7 @@ package ru.lazyhat.compukters.ide.analysis.k2.server
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisWorkerIdentity
-import ru.lazyhat.compukters.worker.payload.WorkerPayloadLoader
+import ru.lazyhat.compukters.worker.payload.ToolingBundleLoader
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -39,9 +39,7 @@ internal data class AnalysisWorkerBootstrap(
                     ).toAbsolutePath()
                     .normalize()
             require(Files.isRegularFile(workerJar)) { "analysis worker code source is not a jar" }
-            val payloadRoot = checkNotNull(workerJar.parent?.parent) { "analysis worker jar is outside a payload" }
-            val payload = WorkerPayloadLoader.load(payloadRoot)
-            require(payload.manifest.kind == "analysis") { "analysis worker payload kind mismatch" }
+            val payload = ToolingBundleLoader.load(toolingRoot(workerJar)).profile("analysis")
             require(payload.manifest.mainClass == MAIN_CLASS) { "analysis worker main class mismatch" }
             val compiler = payload.manifest.identityProperties.getValue("compiler")
             val language = payload.manifest.identityProperties.getValue("language")
@@ -57,6 +55,16 @@ internal data class AnalysisWorkerBootstrap(
                     .toAbsolutePath()
                     .normalize(),
             )
+        }
+
+        private fun toolingRoot(workerJar: Path): Path {
+            var candidate = workerJar.parent
+            repeat(4) {
+                val current = candidate ?: error("analysis worker jar is outside a tooling bundle")
+                if (Files.isRegularFile(current.resolve("tooling.bundle"))) return current
+                candidate = current.parent
+            }
+            error("analysis worker jar is outside a tooling bundle")
         }
 
         private const val MAIN_CLASS = "ru.lazyhat.compukters.ide.analysis.k2.server.AnalysisWorkerMainKt"

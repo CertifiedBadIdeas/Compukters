@@ -141,4 +141,4 @@ class WorkerMeasurementTest {
     private fun elapsedMillis(started: Long) = (System.nanoTime() - started).coerceAtLeast(0) / 1_000_000
 }
 
-private fun measurementPayload(root: Path): PublishedWorkerPayload = WorkerPayloadLoader.load(root)
+private fun measurementPayload(root: Path): PublishedWorkerPayload = WorkerPayloadLoader.loadToolingProfile(root)

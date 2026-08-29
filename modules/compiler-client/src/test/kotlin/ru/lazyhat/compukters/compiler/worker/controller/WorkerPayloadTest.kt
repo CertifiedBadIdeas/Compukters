@@ -21,6 +21,8 @@ package ru.lazyhat.compukters.compiler.worker.controller
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
+import ru.lazyhat.compukters.worker.payload.ToolingBundleManifest
+import ru.lazyhat.compukters.worker.payload.ToolingProfileDefinition
 import java.io.ByteArrayInputStream
 import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
@@ -34,6 +36,59 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class WorkerPayloadTest {
+    @Test
+    fun `compiler tooling profile reconstructs typed identity and exact ordered files`() {
+        val standardLibraryAbi = Hash256.zero().hex()
+        val files =
+            linkedMapOf(
+                "common/lib/compiler.jar" to byteArrayOf(1),
+                "compiler/lib/compiler-worker.jar" to byteArrayOf(2),
+                "analysis/lib/analysis-worker.jar" to byteArrayOf(3),
+            )
+        val bundle =
+            ToolingBundleManifest.create(
+                files,
+                mapOf(
+                    "compiler" to
+                        ToolingProfileDefinition(
+                            mapOf(
+                                "artifactWriter" to "1",
+                                "codegenAbi" to "1",
+                                "compiler" to "2.4.10",
+                                "language" to "2.4",
+                                "standardLibraryAbi" to standardLibraryAbi,
+                            ),
+                            "example.CompilerMain",
+                            listOf("compiler/lib/compiler-worker.jar", "common/lib/compiler.jar"),
+                        ),
+                    "analysis" to
+                        ToolingProfileDefinition(
+                            mapOf("compiler" to "2.4.10", "language" to "2.4"),
+                            "example.AnalysisMain",
+                            listOf("analysis/lib/analysis-worker.jar", "common/lib/compiler.jar"),
+                        ),
+                ),
+            )
+
+        val compiler = WorkerPayloadManifest.fromToolingProfile(bundle.profiles.getValue("compiler"), bundle.files)
+
+        assertEquals("2.4.10", compiler.identity.compilerVersion)
+        assertEquals(
+            bundle.profiles
+                .getValue("compiler")
+                .payloadHash
+                .hex(),
+            compiler.payloadHash.hex(),
+        )
+        assertEquals(
+            listOf("compiler/lib/compiler-worker.jar", "common/lib/compiler.jar"),
+            compiler.files.map(WorkerPayloadFile::path),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            WorkerPayloadManifest.fromToolingProfile(bundle.profiles.getValue("analysis"), bundle.files)
+        }
+    }
+
     @Test
     fun `validated payload is published once and then reused`() =
         withTempDirectory { root ->

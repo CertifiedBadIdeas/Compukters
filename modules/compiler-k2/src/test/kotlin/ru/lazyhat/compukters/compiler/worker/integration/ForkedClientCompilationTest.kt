@@ -91,7 +91,7 @@ class ForkedClientCompilationTest {
         }
 
     private fun withClient(block: (Fixture) -> Unit) {
-        val payload = WorkerPayloadLoader.load(Path.of(checkNotNull(System.getProperty("compukters.worker.payload"))))
+        val payload = WorkerPayloadLoader.loadToolingProfile(Path.of(checkNotNull(System.getProperty("compukters.worker.payload"))))
         val root = createTempDirectory("compukters-forked-client-").toAbsolutePath().normalize()
         val limits = WorkerLimits()
         var starts = 0

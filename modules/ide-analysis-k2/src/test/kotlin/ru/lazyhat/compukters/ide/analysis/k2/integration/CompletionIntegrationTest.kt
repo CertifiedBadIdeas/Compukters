@@ -38,7 +38,7 @@ import ru.lazyhat.compukters.ide.analysis.controller.SnapshotOpenResult
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisWorkerIdentity
-import ru.lazyhat.compukters.worker.payload.WorkerPayloadLoader
+import ru.lazyhat.compukters.worker.payload.ToolingBundleLoader
 import ru.lazyhat.compukters.worker.process.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.worker.process.WorkerLaunch
 import java.nio.file.Path
@@ -79,7 +79,7 @@ class CompletionIntegrationTest {
     }
 
     private fun withController(block: (AnalysisWorkerController) -> Unit) {
-        val payload = WorkerPayloadLoader.load(Path.of(checkNotNull(System.getProperty("compukters.analysis.payload"))))
+        val payload = ToolingBundleLoader.load(Path.of(checkNotNull(System.getProperty("compukters.analysis.payload")))).profile("analysis")
         val temporaryRoot = createTempDirectory("compukters-analysis-completion-").toAbsolutePath().normalize()
         val limits = AnalysisLimits()
         val workerIdentity =

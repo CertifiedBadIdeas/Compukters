@@ -152,5 +152,5 @@ class ForkedCompilerWorkerTest {
         }
     }
 
-    private fun payload(root: Path): PublishedWorkerPayload = WorkerPayloadLoader.load(root)
+    private fun payload(root: Path): PublishedWorkerPayload = WorkerPayloadLoader.loadToolingProfile(root)
 }

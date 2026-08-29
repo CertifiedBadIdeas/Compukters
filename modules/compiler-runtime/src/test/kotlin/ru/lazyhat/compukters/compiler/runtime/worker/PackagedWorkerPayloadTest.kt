@@ -18,19 +18,16 @@
 
 package ru.lazyhat.compukters.compiler.runtime.worker
 
-import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadException
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadManifest
-import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadPublisher
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
-import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
+import ru.lazyhat.compukters.worker.payload.ToolingBundleManifest
+import ru.lazyhat.compukters.worker.payload.ToolingProfileDefinition
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
-import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
-import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.readBytes
 import kotlin.io.path.writeBytes
@@ -110,40 +107,48 @@ class PackagedWorkerPayloadTest {
             val published = PackagedWorkerPayload.publish(ByteArrayInputStream(archive), root)
             published.classpath.single().writeBytes(byteArrayOf(9, 9, 9))
 
-            assertFailsWith<WorkerPayloadException> {
+            assertFailsWith<PackagedWorkerPayloadException> {
                 PackagedWorkerPayload.publish(ByteArrayInputStream(archive), root)
             }
         }
 
     private fun withPackage(block: (ByteArray, Path, WorkerPayloadManifest) -> Unit) {
         val root = createTempDirectory("compukters-packaged-worker-").toAbsolutePath().normalize()
-        val source = root.resolve("source").createDirectories()
         try {
-            val manifest = WorkerPayloadManifest.create(identity(), MAIN_CLASS, mapOf("lib/worker.jar" to WORKER_BYTES))
-            val published =
-                WorkerPayloadPublisher.publish(
-                    manifest,
-                    { path -> ByteArrayInputStream(if (path == "lib/worker.jar") WORKER_BYTES else error(path)) },
-                    source,
+            val files =
+                linkedMapOf(
+                    "compiler/lib/worker.jar" to WORKER_BYTES,
+                    "analysis/lib/analysis.jar" to byteArrayOf(5, 6),
                 )
-            block(zipDirectory(published.root), root.resolve("published"), manifest)
+            val bundle =
+                ToolingBundleManifest.create(
+                    files,
+                    mapOf(
+                        "compiler" to
+                            ToolingProfileDefinition(
+                                mapOf(
+                                    "artifactWriter" to "1",
+                                    "codegenAbi" to "1",
+                                    "compiler" to "2.4.10",
+                                    "language" to "2.4",
+                                    "standardLibraryAbi" to Hash256.zero().hex(),
+                                ),
+                                MAIN_CLASS,
+                                listOf("compiler/lib/worker.jar"),
+                            ),
+                        "analysis" to
+                            ToolingProfileDefinition(
+                                mapOf("compiler" to "2.4.10", "language" to "2.4"),
+                                "compukter.AnalysisWorker",
+                                listOf("analysis/lib/analysis.jar"),
+                            ),
+                    ),
+                )
+            val expected = WorkerPayloadManifest.fromToolingProfile(bundle.profiles.getValue("compiler"), bundle.files)
+            block(zip(files + bundle.encodedFiles()), root.resolve("published"), expected)
         } finally {
             root.toFile().deleteRecursively()
         }
-    }
-
-    private fun zipDirectory(root: Path): ByteArray {
-        val output = ByteArrayOutputStream()
-        ZipOutputStream(output).use { zip ->
-            Files.walk(root).use { paths ->
-                paths.filter(Files::isRegularFile).sorted().forEach { path ->
-                    zip.putNextEntry(ZipEntry(root.relativize(path).joinToString("/")))
-                    zip.write(path.readBytes())
-                    zip.closeEntry()
-                }
-            }
-        }
-        return output.toByteArray()
     }
 
     private fun zip(vararg entries: Pair<String, ByteArray>): ByteArray {
@@ -157,6 +162,8 @@ class PackagedWorkerPayloadTest {
         }
         return output.toByteArray()
     }
+
+    private fun zip(entries: Map<String, ByteArray>): ByteArray = zip(*entries.map { it.key to it.value }.toTypedArray())
 
     private fun appendZipEntries(
         archive: ByteArray,
@@ -197,16 +204,6 @@ class PackagedWorkerPayloadTest {
         }
         return bytes
     }
-
-    private fun identity() =
-        WorkerIdentity(
-            compilerVersion = "2.4.10",
-            languageVersion = "2.4",
-            codegenAbi = 1u,
-            artifactWriterVersion = 1u,
-            payloadHash = Hash256.zero(),
-            standardLibraryAbi = Hash256.zero(),
-        )
 
     private companion object {
         const val MAIN_CLASS = "compukter.Worker"
