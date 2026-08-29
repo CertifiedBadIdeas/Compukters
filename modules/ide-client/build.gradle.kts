@@ -59,12 +59,12 @@ dependencies {
 }
 
 tasks.test {
-    val compilerPayload = project(":compiler-k2").tasks.named("prepareCompilerWorkerPayload")
-    dependsOn(compilerPayload)
+    val toolingPayload = project(":tooling-runtime").tasks.named("prepareToolingRuntimeBundle")
+    dependsOn(toolingPayload)
     doFirst {
         systemProperty(
-            "compukters.ide.compilerPayload",
-            project(":compiler-k2").layout.buildDirectory.dir("worker-payload/content").get().asFile.absolutePath,
+            "compukters.ide.toolingPayload",
+            project(":tooling-runtime").layout.buildDirectory.dir("tooling-bundle/content").get().asFile.absolutePath,
         )
         systemProperty(
             "compukters.ide.java",
