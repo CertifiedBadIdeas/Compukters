@@ -30,8 +30,8 @@ import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.build.IdeResolveResult
 import ru.lazyhat.compukters.ide.client.files.IdeComputerFileCoordinator
 import ru.lazyhat.compukters.ide.client.files.IdeComputerPreviewState
-import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTransferState
+import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferences
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferencesStore
 import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
@@ -71,8 +71,8 @@ import ru.lazyhat.compukters.ide.project.document.DocumentSaveResult
 import ru.lazyhat.compukters.ide.project.document.FileRevision
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.AdmittedProjectDelete
-import ru.lazyhat.compukters.ide.project.tree.ProjectMutationResult
 import ru.lazyhat.compukters.ide.project.tree.ProjectImport
+import ru.lazyhat.compukters.ide.project.tree.ProjectMutationResult
 import ru.lazyhat.compukters.ide.project.tree.ProjectTree
 import java.util.concurrent.CompletionException
 import java.util.concurrent.CompletionStage
@@ -210,7 +210,9 @@ class IdeClientController(
                 }
             }
 
-            IdeCommand.ConfirmComputerImport -> confirmComputerImport()
+            IdeCommand.ConfirmComputerImport -> {
+                confirmComputerImport()
+            }
 
             IdeCommand.CancelComputerImport -> {
                 computerFiles?.cancelTransfer()
@@ -1114,10 +1116,12 @@ class IdeClientController(
                 computerFiles?.finishTransfer()
                 publishStatus("Imported ${event.import.destination.value}", IdeProblemSeverity.Info)
             }
+
             is ProjectMutationResult.Conflict -> {
                 computerFiles?.finishTransfer("Project entry changed: ${result.path.value}")
                 publishProblem("Project entry changed: ${result.path.value}")
             }
+
             ProjectMutationResult.ProjectInvalidated -> {
                 computerFiles?.finishTransfer("Project root changed")
                 recoverToStart("Project root changed; reopen the project")
@@ -1139,7 +1143,8 @@ class IdeClientController(
         when (transfer) {
             IdeComputerTransferState.Idle,
             is IdeComputerTransferState.Downloading,
-            -> Unit
+            -> {}
+
             is IdeComputerTransferState.ConfirmationRequired -> {
                 if (IdeBusyOperation.Project in state.busy) return
                 val conflict = tree?.flatten()?.any { it.path == transfer.import.destination } == true
@@ -1149,7 +1154,10 @@ class IdeClientController(
                     importComputerTree(transfer.import)
                 }
             }
-            is IdeComputerTransferState.Failed -> publishProblem(transfer.detail)
+
+            is IdeComputerTransferState.Failed -> {
+                publishProblem(transfer.detail)
+            }
         }
         observedComputerTransfer = transfer
     }
@@ -1500,21 +1508,25 @@ class IdeClientController(
         }
     }
 
-    private fun workspaceComputerTree(): IdeComputerTreeState? =
-        (state.page as? IdePageState.Workspace)?.value?.computerTree
+    private fun workspaceComputerTree(): IdeComputerTreeState? = (state.page as? IdePageState.Workspace)?.value?.computerTree
 
     private fun acceptComputerPreview(preview: IdeComputerPreviewState) {
         if (preview == observedComputerPreview) return
         observedComputerPreview = preview
         when (preview) {
-            IdeComputerPreviewState.Closed -> closeComputerPreview()
-            is IdeComputerPreviewState.Loading -> Unit
+            IdeComputerPreviewState.Closed -> {
+                closeComputerPreview()
+            }
+
+            is IdeComputerPreviewState.Loading -> {}
+
             is IdeComputerPreviewState.Available -> {
                 closeComputerPreview()
                 computerPreview = ComputerPreviewSession(preview)
                 analysisCoordinator?.dismissCompletion()
                 refreshAnalysisState()
             }
+
             is IdeComputerPreviewState.TooLarge -> {
                 closeComputerPreview()
                 publishStatus(
@@ -1522,6 +1534,7 @@ class IdeClientController(
                     IdeProblemSeverity.Warning,
                 )
             }
+
             is IdeComputerPreviewState.Failed -> {
                 closeComputerPreview()
                 publishStatus(preview.detail, IdeProblemSeverity.Warning)
@@ -1534,8 +1547,11 @@ class IdeClientController(
         input: IdeEditorInput,
     ) {
         when (input) {
-            is IdeEditorInput.SetCaret -> preview.document.setCaret(input.offsetUtf16, input.extendSelection)
-            is IdeEditorInput.Move ->
+            is IdeEditorInput.SetCaret -> {
+                preview.document.setCaret(input.offsetUtf16, input.extendSelection)
+            }
+
+            is IdeEditorInput.Move -> {
                 when (input.direction) {
                     IdeMoveDirection.Left -> preview.document.moveLeft(input.extendSelection)
                     IdeMoveDirection.Right -> preview.document.moveRight(input.extendSelection)
@@ -1544,7 +1560,12 @@ class IdeClientController(
                     IdeMoveDirection.Home -> preview.document.moveHome(input.extendSelection)
                     IdeMoveDirection.End -> preview.document.moveEnd(input.extendSelection)
                 }
-            IdeEditorInput.SelectAll -> preview.document.selectAll()
+            }
+
+            IdeEditorInput.SelectAll -> {
+                preview.document.selectAll()
+            }
+
             else -> {
                 publishStatus("Computer files are read-only", IdeProblemSeverity.Info)
                 return
@@ -1704,7 +1725,9 @@ class IdeClientController(
         }
     }
 
-    private class ComputerPreviewSession(preview: IdeComputerPreviewState.Available) {
+    private class ComputerPreviewSession(
+        preview: IdeComputerPreviewState.Available,
+    ) {
         val path = preview.path
         val targetId = preview.targetId
         val generation = preview.generation

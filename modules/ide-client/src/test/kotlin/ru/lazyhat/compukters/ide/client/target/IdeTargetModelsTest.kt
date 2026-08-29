@@ -77,8 +77,8 @@ class IdeTargetModelsTest {
     fun `target filesystem paths are absolute canonical and bounded`() {
         assertEquals("/", IdeTargetVirtualPath.of("/").value)
         assertEquals("/home/main.kt", IdeTargetVirtualPath.of("/home/main.kt").value)
-        listOf("", "home", "/home/", "/home//main.kt", "/home/./main.kt", "/home/../main.kt", "/home\\main.kt").forEach {
-            invalid -> assertFailsWith<IllegalArgumentException> { IdeTargetVirtualPath.of(invalid) }
+        listOf("", "home", "/home/", "/home//main.kt", "/home/./main.kt", "/home/../main.kt", "/home\\main.kt").forEach { invalid ->
+            assertFailsWith<IllegalArgumentException> { IdeTargetVirtualPath.of(invalid) }
         }
     }
 

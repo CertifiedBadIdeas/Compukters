@@ -35,22 +35,22 @@ import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeDeployResult
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
 import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
-import ru.lazyhat.compukters.ide.client.target.IdeHeartbeatResult
 import ru.lazyhat.compukters.ide.client.target.IdeFileListResult
 import ru.lazyhat.compukters.ide.client.target.IdeFileReadResult
 import ru.lazyhat.compukters.ide.client.target.IdeFileStatResult
+import ru.lazyhat.compukters.ide.client.target.IdeHeartbeatResult
 import ru.lazyhat.compukters.ide.client.target.IdeRevisionResult
 import ru.lazyhat.compukters.ide.client.target.IdeSubmissionResult
 import ru.lazyhat.compukters.ide.client.target.IdeTargetArtifact
 import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
+import ru.lazyhat.compukters.ide.client.target.IdeTargetClaim
+import ru.lazyhat.compukters.ide.client.target.IdeTargetCoordinator
 import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryEntry
 import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryListing
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileChunk
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileStat
-import ru.lazyhat.compukters.ide.client.target.IdeTargetClaim
-import ru.lazyhat.compukters.ide.client.target.IdeTargetCoordinator
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetPort
 import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
@@ -248,17 +248,34 @@ class IdeTargetFlowTest {
         fixture.startAttached()
 
         fixture.controller.dispatch(
-            IdeCommand.DropComputerEntry(IdeTargetVirtualPath.of("/home/hello.kt"), ru.lazyhat.compukters.ide.project.fs.ProjectPath.file("src")),
+            IdeCommand.DropComputerEntry(
+                IdeTargetVirtualPath.of("/home/hello.kt"),
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src"),
+            ),
         )
-        fixture.tickUntil { fixture.workspaceView().tree.flatten().any { it.path.value == "src/hello.kt" } }
+        fixture.tickUntil {
+            fixture
+                .workspaceView()
+                .tree
+                .flatten()
+                .any { it.path.value == "src/hello.kt" }
+        }
         assertEquals(IdeComputerTransferState.Idle, fixture.workspaceView().computerTransfer)
         assertContentEquals(
             "fun main() = Unit".encodeToByteArray(),
-            fixture.workspace.descriptor.handle.canonicalPath.resolve("src/hello.kt").toFile().readBytes(),
+            fixture.workspace.descriptor.handle.canonicalPath
+                .resolve("src/hello.kt")
+                .toFile()
+                .readBytes(),
         )
 
         fixture.controller.dispatch(
-            IdeCommand.DropComputerEntry(IdeTargetVirtualPath.of("/home/hello.kt"), ru.lazyhat.compukters.ide.project.fs.ProjectPath.file("src")),
+            IdeCommand.DropComputerEntry(
+                IdeTargetVirtualPath.of("/home/hello.kt"),
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src"),
+            ),
         )
         fixture.tickUntil { fixture.controller.viewState().dialog is IdeDialogState.ComputerImport }
         assertIs<IdeComputerTransferState.ConfirmationRequired>(fixture.workspaceView().computerTransfer)

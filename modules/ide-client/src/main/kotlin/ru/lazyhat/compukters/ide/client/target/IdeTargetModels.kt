@@ -85,7 +85,9 @@ data class IdeTargetFileStat(
     val fileSystemGeneration: Long,
     val metadata: IdeTargetFileMetadata,
 ) {
-    init { require(fileSystemGeneration >= 0) { "target filesystem generation must not be negative" } }
+    init {
+        require(fileSystemGeneration >= 0) { "target filesystem generation must not be negative" }
+    }
 }
 
 data class IdeTargetDirectoryEntry(
@@ -113,7 +115,10 @@ data class IdeTargetDirectoryListing(
     }
 }
 
-private fun compareUtf8(left: String, right: String): Int {
+private fun compareUtf8(
+    left: String,
+    right: String,
+): Int {
     val leftBytes = left.encodeToByteArray()
     val rightBytes = right.encodeToByteArray()
     for (index in 0 until minOf(leftBytes.size, rightBytes.size)) {
@@ -140,18 +145,33 @@ class IdeTargetFileChunk(
 }
 
 sealed interface IdeFileStatResult {
-    data class Observed(val stat: IdeTargetFileStat) : IdeFileStatResult
-    data class Failed(val failure: IdeTargetFailure) : IdeFileStatResult
+    data class Observed(
+        val stat: IdeTargetFileStat,
+    ) : IdeFileStatResult
+
+    data class Failed(
+        val failure: IdeTargetFailure,
+    ) : IdeFileStatResult
 }
 
 sealed interface IdeFileListResult {
-    data class Listed(val listing: IdeTargetDirectoryListing) : IdeFileListResult
-    data class Failed(val failure: IdeTargetFailure) : IdeFileListResult
+    data class Listed(
+        val listing: IdeTargetDirectoryListing,
+    ) : IdeFileListResult
+
+    data class Failed(
+        val failure: IdeTargetFailure,
+    ) : IdeFileListResult
 }
 
 sealed interface IdeFileReadResult {
-    data class Read(val chunk: IdeTargetFileChunk) : IdeFileReadResult
-    data class Failed(val failure: IdeTargetFailure) : IdeFileReadResult
+    data class Read(
+        val chunk: IdeTargetFileChunk,
+    ) : IdeFileReadResult
+
+    data class Failed(
+        val failure: IdeTargetFailure,
+    ) : IdeFileReadResult
 }
 
 data class IdeAttachedTarget(

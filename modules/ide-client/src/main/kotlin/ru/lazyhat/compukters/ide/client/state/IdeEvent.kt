@@ -29,9 +29,9 @@ import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
 import ru.lazyhat.compukters.ide.project.ProjectDescriptor
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.AdmittedProjectDelete
+import ru.lazyhat.compukters.ide.project.tree.ProjectImport
 import ru.lazyhat.compukters.ide.project.tree.ProjectMutationResult
 import ru.lazyhat.compukters.ide.project.tree.ProjectTree
-import ru.lazyhat.compukters.ide.project.tree.ProjectImport
 import java.util.Collections
 
 sealed interface IdeEvent {

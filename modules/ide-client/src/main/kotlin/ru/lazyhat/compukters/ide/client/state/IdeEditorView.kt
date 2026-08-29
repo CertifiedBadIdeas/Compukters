@@ -26,7 +26,9 @@ import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import java.util.Collections
 
 sealed interface IdeEditorSource {
-    data class Project(val path: ProjectPath) : IdeEditorSource
+    data class Project(
+        val path: ProjectPath,
+    ) : IdeEditorSource
 
     data class Computer(
         val path: IdeTargetVirtualPath,

@@ -24,16 +24,16 @@ import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeFileListResult
 import ru.lazyhat.compukters.ide.client.target.IdeFileReadResult
 import ru.lazyhat.compukters.ide.client.target.IdeFileStatResult
+import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
 import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryEntry
 import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryListing
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileChunk
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileStat
-import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
-import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
+import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
@@ -204,13 +204,24 @@ private class TransferAccess : IdeComputerFileAccess {
 
     override fun stat(path: IdeTargetVirtualPath) = CompletableFuture<IdeFileStatResult>().also { stats += path to it }
 
-    override fun list(path: IdeTargetVirtualPath, startAfter: String?, maximumEntries: Int) =
-        CompletableFuture<IdeFileListResult>().also { lists += Triple(path, startAfter, it) }
+    override fun list(
+        path: IdeTargetVirtualPath,
+        startAfter: String?,
+        maximumEntries: Int,
+    ) = CompletableFuture<IdeFileListResult>().also { lists += Triple(path, startAfter, it) }
 
-    override fun read(path: IdeTargetVirtualPath, offset: Long, maximumBytes: Int, expectedGeneration: Long) =
-        CompletableFuture<IdeFileReadResult>().also { reads += path to it }
+    override fun read(
+        path: IdeTargetVirtualPath,
+        offset: Long,
+        maximumBytes: Int,
+        expectedGeneration: Long,
+    ) = CompletableFuture<IdeFileReadResult>().also { reads += path to it }
 
-    fun completeStat(path: String, metadata: IdeTargetFileMetadata, fileSystemGeneration: Long) {
+    fun completeStat(
+        path: String,
+        metadata: IdeTargetFileMetadata,
+        fileSystemGeneration: Long,
+    ) {
         stats.last { it.first.value == path && !it.second.isDone }.second.complete(
             IdeFileStatResult.Observed(IdeTargetFileStat(fileSystemGeneration, metadata)),
         )
@@ -228,20 +239,31 @@ private class TransferAccess : IdeComputerFileAccess {
         )
     }
 
-    fun completeRead(path: String, bytes: ByteArray, generation: Long, eof: Boolean) {
+    fun completeRead(
+        path: String,
+        bytes: ByteArray,
+        generation: Long,
+        eof: Boolean,
+    ) {
         reads.last { it.first.value == path && !it.second.isDone }.second.complete(
             IdeFileReadResult.Read(IdeTargetFileChunk(generation, bytes.size.toLong(), eof, bytes)),
         )
     }
 }
 
-private fun transferEntry(name: String, metadata: IdeTargetFileMetadata) = IdeTargetDirectoryEntry(name, metadata)
+private fun transferEntry(
+    name: String,
+    metadata: IdeTargetFileMetadata,
+) = IdeTargetDirectoryEntry(name, metadata)
 
 private fun transferPath(value: String) = IdeTargetVirtualPath.of(value)
 
 private fun transferDirectory(generation: Long) = IdeTargetFileMetadata(IdeTargetFileKind.Directory, 0, generation, false)
 
-private fun transferFile(generation: Long, bytes: Long) = IdeTargetFileMetadata(IdeTargetFileKind.File, bytes, generation, false)
+private fun transferFile(
+    generation: Long,
+    bytes: Long,
+) = IdeTargetFileMetadata(IdeTargetFileKind.File, bytes, generation, false)
 
 private fun transferTarget() =
     IdeAttachedTarget(
