@@ -140,7 +140,13 @@ class DefaultIdeWorkspaceTest {
         val result = workspace.importTree(project.handle, admitted).get(5, TimeUnit.SECONDS)
 
         assertIs<ProjectMutationResult.Changed>(result)
-        assertEquals("fun copied() = Unit", project.handle.canonicalPath.resolve("src/copied.kt").toFile().readText())
+        assertEquals(
+            "fun copied() = Unit",
+            project.handle.canonicalPath
+                .resolve("src/copied.kt")
+                .toFile()
+                .readText(),
+        )
         workspace.close()
     }
 

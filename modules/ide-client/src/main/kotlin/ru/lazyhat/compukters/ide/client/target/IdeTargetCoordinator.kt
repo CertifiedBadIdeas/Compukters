@@ -29,7 +29,8 @@ class IdeTargetCoordinator(
     private val port: IdeTargetPort,
     private val clock: IdeControllerClock,
     limits: IdeClientLimits = IdeClientLimits(),
-) : AutoCloseable, IdeComputerFileAccess {
+) : AutoCloseable,
+    IdeComputerFileAccess {
     private val owner = Thread.currentThread()
     private val events = ArrayBlockingQueue<TargetEvent>(limits.eventQueueCapacity)
     private val overflow = AtomicBoolean()

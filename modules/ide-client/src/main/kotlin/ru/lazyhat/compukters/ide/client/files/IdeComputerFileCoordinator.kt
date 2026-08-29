@@ -33,12 +33,12 @@ import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectImport
 import ru.lazyhat.compukters.ide.project.tree.ProjectImportEntry
 import java.io.ByteArrayOutputStream
-import java.util.concurrent.ArrayBlockingQueue
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.atomic.AtomicBoolean
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicBoolean
 
 interface IdeComputerFileAccess {
     fun stat(path: IdeTargetVirtualPath): CompletableFuture<IdeFileStatResult>
@@ -163,11 +163,16 @@ class IdeComputerFileCoordinator(
         }
     }
 
-    fun drop(source: IdeTargetVirtualPath, destinationDirectory: ProjectPath): Boolean {
+    fun drop(
+        source: IdeTargetVirtualPath,
+        destinationDirectory: ProjectPath,
+    ): Boolean {
         checkOwner()
         if (target == null || currentTransfer is IdeComputerTransferState.Downloading ||
             currentTransfer is IdeComputerTransferState.ConfirmationRequired
-        ) return false
+        ) {
+            return false
+        }
         if (source.value == "/") {
             currentTransfer = IdeComputerTransferState.Failed("The target filesystem root cannot be imported")
             return false
@@ -417,8 +422,10 @@ class IdeComputerFileCoordinator(
             )
     }
 
-    private fun transferFailure(throwable: Throwable?, failure: IdeTargetFailure?): String =
-        failure?.detail ?: throwable?.message ?: "Target subtree transfer failed"
+    private fun transferFailure(
+        throwable: Throwable?,
+        failure: IdeTargetFailure?,
+    ): String = failure?.detail ?: throwable?.message ?: "Target subtree transfer failed"
 
     private fun failTransfer(detail: String) {
         if (currentTransfer == IdeComputerTransferState.Idle && transferJob == null) return
@@ -510,7 +517,11 @@ class IdeComputerFileCoordinator(
         }
     }
 
-    private fun publishPreview(path: IdeTargetVirtualPath, generation: Long, chunks: List<ByteArray>) {
+    private fun publishPreview(
+        path: IdeTargetVirtualPath,
+        generation: Long,
+        chunks: List<ByteArray>,
+    ) {
         val bytes = ByteArray(chunks.sumOf(ByteArray::size))
         var offset = 0
         chunks.forEach { chunk ->
@@ -533,7 +544,11 @@ class IdeComputerFileCoordinator(
         currentPreview = IdeComputerPreviewState.Available(path, targetId, generation, text)
     }
 
-    private fun failPreview(path: IdeTargetVirtualPath, throwable: Throwable?, failure: IdeTargetFailure?) {
+    private fun failPreview(
+        path: IdeTargetVirtualPath,
+        throwable: Throwable?,
+        failure: IdeTargetFailure?,
+    ) {
         val raw = failure?.detail ?: throwable?.message ?: "Target file read failed"
         val detail =
             if (failure?.kind == IdeTargetFailureKind.FileSystem && raw.contains("stale", ignoreCase = true)) {
@@ -609,7 +624,10 @@ class IdeComputerFileCoordinator(
         publishDirectory(event.load, entries)
     }
 
-    private fun publishDirectory(load: DirectoryLoad, entries: List<IdeTargetDirectoryEntry>) {
+    private fun publishDirectory(
+        load: DirectoryLoad,
+        entries: List<IdeTargetDirectoryEntry>,
+    ) {
         val nodes = entries.map { entry -> entry.toNode(child(load.path, entry.name)) }
         if (load.path == ROOT) {
             val root = IdeComputerNode.Directory(ROOT, load.metadata, IdeComputerChildren.Loaded(nodes))
@@ -640,7 +658,10 @@ class IdeComputerFileCoordinator(
             }
     }
 
-    private fun fail(throwable: Throwable?, failure: IdeTargetFailure?) {
+    private fun fail(
+        throwable: Throwable?,
+        failure: IdeTargetFailure?,
+    ) {
         val detail = failure?.detail ?: throwable?.message ?: "Target filesystem request failed"
         current =
             if (failure?.kind == IdeTargetFailureKind.TargetLost || failure?.kind == IdeTargetFailureKind.Closed) {
@@ -799,10 +820,15 @@ private fun IdeTargetDirectoryEntry.toNode(path: IdeTargetVirtualPath): IdeCompu
         IdeTargetFileKind.Directory -> IdeComputerNode.Directory(path, metadata, IdeComputerChildren.Unloaded)
     }
 
-private fun child(parent: IdeTargetVirtualPath, name: String): IdeTargetVirtualPath =
-    IdeTargetVirtualPath.of(if (parent.value == "/") "/$name" else "${parent.value}/$name")
+private fun child(
+    parent: IdeTargetVirtualPath,
+    name: String,
+): IdeTargetVirtualPath = IdeTargetVirtualPath.of(if (parent.value == "/") "/$name" else "${parent.value}/$name")
 
-private fun find(root: IdeComputerNode, path: IdeTargetVirtualPath): IdeComputerNode? {
+private fun find(
+    root: IdeComputerNode,
+    path: IdeTargetVirtualPath,
+): IdeComputerNode? {
     if (root.path == path) return root
     val children = (root as? IdeComputerNode.Directory)?.children as? IdeComputerChildren.Loaded ?: return null
     return children.nodes.firstNotNullOfOrNull { find(it, path) }
@@ -829,7 +855,10 @@ private fun replace(
     return if (changed) root.copy(children = IdeComputerChildren.Loaded(nodes)) else root
 }
 
-private fun compareUtf8(left: String, right: String): Int {
+private fun compareUtf8(
+    left: String,
+    right: String,
+): Int {
     val leftBytes = left.encodeToByteArray()
     val rightBytes = right.encodeToByteArray()
     for (index in 0 until minOf(leftBytes.size, rightBytes.size)) {

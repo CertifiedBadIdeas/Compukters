@@ -44,9 +44,13 @@ sealed interface IdeComputerTreeState {
         override fun hashCode(): Int = 31 * root.hashCode() + expanded.hashCode()
     }
 
-    data class Unavailable(val detail: String) : IdeComputerTreeState
+    data class Unavailable(
+        val detail: String,
+    ) : IdeComputerTreeState
 
-    data class TargetLost(val detail: String) : IdeComputerTreeState
+    data class TargetLost(
+        val detail: String,
+    ) : IdeComputerTreeState
 }
 
 sealed interface IdeComputerNode {
@@ -72,7 +76,9 @@ sealed interface IdeComputerChildren {
 
     data object Loading : IdeComputerChildren
 
-    class Loaded(nodes: List<IdeComputerNode>) : IdeComputerChildren {
+    class Loaded(
+        nodes: List<IdeComputerNode>,
+    ) : IdeComputerChildren {
         val nodes: List<IdeComputerNode> = Collections.unmodifiableList(nodes.toList())
 
         override fun equals(other: Any?): Boolean = other is Loaded && nodes == other.nodes
@@ -84,7 +90,9 @@ sealed interface IdeComputerChildren {
 sealed interface IdeComputerPreviewState {
     data object Closed : IdeComputerPreviewState
 
-    data class Loading(val path: IdeTargetVirtualPath) : IdeComputerPreviewState
+    data class Loading(
+        val path: IdeTargetVirtualPath,
+    ) : IdeComputerPreviewState
 
     data class Available(
         val path: IdeTargetVirtualPath,

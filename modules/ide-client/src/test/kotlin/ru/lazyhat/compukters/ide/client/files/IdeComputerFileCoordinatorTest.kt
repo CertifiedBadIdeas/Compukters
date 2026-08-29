@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.ide.client.files
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeFileListResult
 import ru.lazyhat.compukters.ide.client.target.IdeFileReadResult
@@ -26,16 +27,15 @@ import ru.lazyhat.compukters.ide.client.target.IdeFileStatResult
 import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
 import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryEntry
 import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryListing
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileChunk
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
-import ru.lazyhat.compukters.ide.client.target.IdeTargetFileChunk
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileStat
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
-import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import java.util.concurrent.CompletableFuture
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -62,7 +62,15 @@ class IdeComputerFileCoordinatorTest {
         assertIs<IdeComputerChildren.Loading>(availableNow(coordinator).root.childDirectory("home").children)
         access.completeList("/home", listing(2, entry("hello", file(4))))
         coordinator.tick()
-        assertEquals("hello", availableNow(coordinator).root.childDirectory("home").loadedChildren().single().name)
+        assertEquals(
+            "hello",
+            availableNow(coordinator)
+                .root
+                .childDirectory("home")
+                .loadedChildren()
+                .single()
+                .name,
+        )
     }
 
     @Test
@@ -83,7 +91,15 @@ class IdeComputerFileCoordinatorTest {
         access.completeList("/home", listing(11, entry("new", file(12))))
         coordinator.tick()
 
-        assertEquals("new", availableNow(coordinator).root.childDirectory("home").loadedChildren().single().name)
+        assertEquals(
+            "new",
+            availableNow(coordinator)
+                .root
+                .childDirectory("home")
+                .loadedChildren()
+                .single()
+                .name,
+        )
         assertEquals(setOf(path("/"), path("/home")), availableNow(coordinator).expanded)
 
         coordinator.refresh()
@@ -181,7 +197,10 @@ class IdeComputerFileCoordinatorTest {
         assertEquals(IdeComputerPreviewState.Closed, coordinator.preview())
     }
 
-    private fun loadRoot(coordinator: IdeComputerFileCoordinator, access: ControlledAccess) {
+    private fun loadRoot(
+        coordinator: IdeComputerFileCoordinator,
+        access: ControlledAccess,
+    ) {
         coordinator.attach(target())
         access.completeStat("/", directory(1))
         coordinator.tick()
@@ -225,19 +244,31 @@ private class ControlledAccess : IdeComputerFileAccess {
 
     fun statFuture(value: String) = statRequests.last { it.first == path(value) }.second
 
-    fun completeStat(value: String, metadata: IdeTargetFileMetadata) {
+    fun completeStat(
+        value: String,
+        metadata: IdeTargetFileMetadata,
+    ) {
         statFuture(value).complete(IdeFileStatResult.Observed(IdeTargetFileStat(metadata.generation, metadata)))
     }
 
-    fun completeList(value: String, listing: IdeTargetDirectoryListing) {
+    fun completeList(
+        value: String,
+        listing: IdeTargetDirectoryListing,
+    ) {
         listRequests.last { it.path == path(value) && !it.future.isDone }.future.complete(IdeFileListResult.Listed(listing))
     }
 
     fun pendingListPaths() = listRequests.filterNot { it.future.isDone }.map { it.path.value }
 
-    fun completeRead(value: String, chunk: IdeTargetFileChunk) = completeRead(value, IdeFileReadResult.Read(chunk))
+    fun completeRead(
+        value: String,
+        chunk: IdeTargetFileChunk,
+    ) = completeRead(value, IdeFileReadResult.Read(chunk))
 
-    fun completeRead(value: String, result: IdeFileReadResult) {
+    fun completeRead(
+        value: String,
+        result: IdeFileReadResult,
+    ) {
         readRequests.last { it.path == path(value) && !it.future.isDone }.future.complete(result)
     }
 
@@ -270,10 +301,15 @@ private fun path(value: String) = IdeTargetVirtualPath.of(value)
 
 private fun directory(generation: Long) = IdeTargetFileMetadata(IdeTargetFileKind.Directory, 0, generation, false)
 
-private fun file(generation: Long, logicalBytes: Long = 4) =
-    IdeTargetFileMetadata(IdeTargetFileKind.File, logicalBytes, generation, false)
+private fun file(
+    generation: Long,
+    logicalBytes: Long = 4,
+) = IdeTargetFileMetadata(IdeTargetFileKind.File, logicalBytes, generation, false)
 
-private fun entry(name: String, metadata: IdeTargetFileMetadata) = IdeTargetDirectoryEntry(name, metadata)
+private fun entry(
+    name: String,
+    metadata: IdeTargetFileMetadata,
+) = IdeTargetDirectoryEntry(name, metadata)
 
 private fun listing(
     generation: Long,
