@@ -39,6 +39,23 @@ import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState
 import ru.lazyhat.compukters.impl.terminal.TerminalGridGeometry
 import ru.lazyhat.compukters.impl.terminal.TerminalGridRenderer
 
+internal class IdeRenderOperation(
+    val zIndex: Int,
+    val draw: () -> Unit,
+)
+
+internal fun executeIdeRenderOperations(
+    operations: MutableList<IdeRenderOperation>,
+    terminalVisible: Boolean,
+    renderTerminal: () -> Unit,
+) {
+    if (terminalVisible) operations += IdeRenderOperation(IDE_TERMINAL_OVERLAY_Z, renderTerminal)
+    operations.sortBy(IdeRenderOperation::zIndex)
+    operations.forEach { it.draw() }
+}
+
+private const val IDE_TERMINAL_OVERLAY_Z = 80
+
 internal class IdeScreen(
     private val session: IdeClientSession<IdeClientApplication>,
     private val parent: Screen?,
@@ -239,12 +256,12 @@ internal class IdeScreen(
                 terminalVisible = terminalOverlay.visible,
                 explorerDrag = input.explorerDragVisual,
             )
-        val operations = mutableListOf<RenderOperation>()
-        model.panels.forEach { draw -> operations += RenderOperation(draw.zIndex) { graphics.fill(draw.bounds, draw.color) } }
-        model.fills.forEach { draw -> operations += RenderOperation(draw.zIndex) { graphics.fill(draw.bounds, draw.color) } }
+        val operations = mutableListOf<IdeRenderOperation>()
+        model.panels.forEach { draw -> operations += IdeRenderOperation(draw.zIndex) { graphics.fill(draw.bounds, draw.color) } }
+        model.fills.forEach { draw -> operations += IdeRenderOperation(draw.zIndex) { graphics.fill(draw.bounds, draw.color) } }
         model.text.forEach { draw ->
             operations +=
-                RenderOperation(draw.zIndex) {
+                IdeRenderOperation(draw.zIndex) {
                     draw.clip?.let { graphics.enableScissor(it.left, it.top, it.right, it.bottom) }
                     val codeFont = draw.codeFont
                     if (codeFont == null) {
@@ -261,8 +278,11 @@ internal class IdeScreen(
                     if (draw.clip != null) graphics.disableScissor()
                 }
         }
-        operations.sortedBy(RenderOperation::zIndex).forEach { it.draw() }
-        if (terminalOverlay.visible) renderTerminalOverlay(graphics, terminalOverlayGeometry(geometry), profile)
+        executeIdeRenderOperations(
+            operations = operations,
+            terminalVisible = terminalOverlay.visible,
+            renderTerminal = { renderTerminalOverlay(graphics, terminalOverlayGeometry(geometry), profile) },
+        )
         super.extractRenderState(graphics, mouseX, mouseY, partialTick)
     }
 
@@ -522,11 +542,6 @@ internal class IdeScreen(
     ) {
         fill(bounds.left, bounds.top, bounds.right, bounds.bottom, color)
     }
-
-    private class RenderOperation(
-        val zIndex: Int,
-        val draw: () -> Unit,
-    )
 
     private companion object {
         const val UI_LINE_HEIGHT = 12

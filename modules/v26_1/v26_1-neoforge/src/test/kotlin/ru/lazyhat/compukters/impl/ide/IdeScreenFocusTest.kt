@@ -115,6 +115,30 @@ class IdeScreenFocusTest {
         assertTrue(model.text.filter { it.kind == IdeTextKind.Dialog }.any { it.value == "Permanent" })
     }
 
+    @Test
+    fun `terminal render layer stays below modal scrim and dialog`() {
+        val rendered = mutableListOf<String>()
+        val state =
+            IdeViewState
+                .startPage(listOf(IdeProjectSummary("demo", "Demo")))
+                .copy(dialog = IdeDialogState.Confirmation("Delete", "Permanent", 7))
+        val geometry = IdeRenderGeometry.compute(960, 540, 12, 180, 120, true, true, TerminalFontProfile.DINA)
+        val model = IdeRenderer.extract(state, geometry)
+
+        executeIdeRenderOperations(
+            operations =
+                mutableListOf(
+                    IdeRenderOperation(model.panels.single { it.kind == IdePanelKind.Main }.zIndex) { rendered += "workspace" },
+                    IdeRenderOperation(model.fills.single { it.kind == IdeFillKind.DialogScrim }.zIndex) { rendered += "scrim" },
+                    IdeRenderOperation(model.panels.single { it.kind == IdePanelKind.Dialog }.zIndex) { rendered += "dialog" },
+                ),
+            terminalVisible = true,
+            renderTerminal = { rendered += "terminal" },
+        )
+
+        assertEquals(listOf("workspace", "terminal", "scrim", "dialog"), rendered)
+    }
+
     private class RecordingTerminalTransport : IdeTargetTerminalTransport {
         val sent = mutableListOf<CustomPacketPayload>()
 
