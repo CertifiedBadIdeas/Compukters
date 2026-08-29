@@ -49,7 +49,7 @@ class ForkedPlaygroundCompiler(
 
     init {
         try {
-            val payload = WorkerPayloadLoader.load(payloadRoot)
+            val payload = WorkerPayloadLoader.loadToolingProfile(payloadRoot)
             val launch =
                 WorkerLaunch(
                     javaExecutable = javaExecutable,
