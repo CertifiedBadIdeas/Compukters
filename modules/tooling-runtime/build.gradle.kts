@@ -16,6 +16,8 @@
  * limitations under the License.
  */
 
+import java.util.zip.ZipFile
+
 plugins {
     application
     alias(libs.plugins.kotlinConvention)
@@ -102,6 +104,72 @@ val verifyToolingRuntimeBundle = tasks.register<JavaExec>("verifyToolingRuntimeB
     }
 }
 
+val verifyToolingRuntimeLicenses =
+    tasks.register("verifyToolingRuntimeLicenses") {
+        group = "verification"
+        description = "Checks shared tooling licenses and its exact external JVM inventory."
+        dependsOn(toolingRuntimeBundle)
+        inputs.file(toolingRuntimeBundle.flatMap { it.archiveFile })
+        inputs.file(rootProject.layout.projectDirectory.file("licenses/distribution-components.tsv"))
+        doLast {
+            val archive = toolingRuntimeBundle.get().archiveFile.get().asFile
+            val entries =
+                ZipFile(archive).use { zip ->
+                    zip.entries().asSequence().filterNot { it.isDirectory }.map { it.name }.toList()
+                }
+            listOf(
+                "tooling.bundle",
+                "manifests/compiler.payload",
+                "manifests/analysis.payload",
+                "META-INF/licenses/Compukters-Apache-2.0.txt",
+                "META-INF/NOTICE.txt",
+                "META-INF/THIRD-PARTY-NOTICES.md",
+            ).forEach { required ->
+                check(entries.count { it == required } == 1) {
+                    "expected exactly one $required in ${archive.name}"
+                }
+            }
+            val expectedExternal =
+                rootProject
+                    .file("licenses/distribution-components.tsv")
+                    .readLines()
+                    .drop(1)
+                    .filter { it.isNotBlank() }
+                    .map { it.split('\t') }
+                    .filter { it[0] == "jvm-worker" || it[0] == "jvm-analysis-worker" }
+                    .map { (_, component, version, _) -> "$component-$version.jar" }
+                    .distinct()
+                    .sorted()
+            val projectPrefixes =
+                listOf(
+                    "compiler-artifact-",
+                    "compiler-client-",
+                    "compiler-k2-",
+                    "guest-api-core-",
+                    "ide-analysis-client-",
+                    "ide-analysis-k2-",
+                    "ide-core-",
+                    "worker-client-",
+                )
+            val actualExternal =
+                entries
+                    .filter { path ->
+                        path.endsWith(".jar") &&
+                            (path.startsWith("common/lib/") ||
+                                path.startsWith("compiler/lib/") ||
+                                path.startsWith("analysis/lib/"))
+                    }.map { it.substringAfterLast('/') }
+                    .filterNot { name -> projectPrefixes.any(name::startsWith) }
+                    .sorted()
+            check(actualExternal == expectedExternal) {
+                "shared tooling library inventory mismatch: expected $expectedExternal, found $actualExternal"
+            }
+            check(actualExternal.none { "embeddable" in it || "scripting-compiler" in it }) {
+                "embeddable or scripting compiler distribution leaked into ${archive.name}"
+            }
+        }
+    }
+
 tasks.check {
-    dependsOn(verifyToolingRuntimeBundle)
+    dependsOn(verifyToolingRuntimeBundle, verifyToolingRuntimeLicenses)
 }
