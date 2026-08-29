@@ -145,6 +145,15 @@ val prepareAnalysisWorkerPayload = tasks.register<Sync>("prepareAnalysisWorkerPa
     }
 }
 
+val analysisWorkerPayloadContent = configurations.create("analysisWorkerPayloadContent") {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+    description = "Prepared analysis worker payload directory for tooling bundle assembly."
+}
+artifacts.add(analysisWorkerPayloadContent.name, analysisWorkerPayloadDirectory) {
+    builtBy(prepareAnalysisWorkerPayload)
+}
+
 val analysisWorkerPayload = tasks.register<Zip>("analysisWorkerPayload") {
     dependsOn(prepareAnalysisWorkerPayload)
     from(analysisWorkerPayloadDirectory)
