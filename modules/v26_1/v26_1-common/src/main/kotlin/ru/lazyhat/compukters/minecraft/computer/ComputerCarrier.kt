@@ -28,6 +28,10 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
+import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryListing
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileChunk
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileStat
+import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 
 internal interface ComputerCarrier : AutoCloseable {
     val state: ProgramComputerState
@@ -49,6 +53,12 @@ internal interface ComputerCarrier : AutoCloseable {
     fun sendTerminalText(value: String): Boolean
 
     fun filesystemGeneration(): Long?
+
+    fun fileStat(path: VmVirtualPath): VmFileStat? = null
+
+    fun fileList(path: VmVirtualPath, startAfter: String?, maximumEntries: Int): VmDirectoryListing? = null
+
+    fun fileRead(path: VmVirtualPath, offset: Long, maximumBytes: Int, expectedGeneration: Long): VmFileChunk? = null
 
     fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate? = null
 
@@ -118,6 +128,14 @@ private class ProgramComputerCarrier(
     override fun sendTerminalText(value: String): Boolean = delegate.sendTerminalText(value)
 
     override fun filesystemGeneration(): Long? = delegate.filesystemGeneration()
+
+    override fun fileStat(path: VmVirtualPath): VmFileStat? = delegate.fileStat(path)
+
+    override fun fileList(path: VmVirtualPath, startAfter: String?, maximumEntries: Int): VmDirectoryListing? =
+        delegate.fileList(path, startAfter, maximumEntries)
+
+    override fun fileRead(path: VmVirtualPath, offset: Long, maximumBytes: Int, expectedGeneration: Long): VmFileChunk? =
+        delegate.fileRead(path, offset, maximumBytes, expectedGeneration)
 
     override fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate? = delegate.verifyForDeploy(artifact)
 

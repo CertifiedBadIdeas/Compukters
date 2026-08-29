@@ -87,6 +87,18 @@ class ProgramComputer internal constructor(
 
     fun filesystemGeneration(): Long? = host.filesystemGeneration()
 
+    fun fileStat(path: ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath) = host.fileStat(path)
+
+    fun fileList(path: ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath, startAfter: String?, maximumEntries: Int) =
+        host.fileList(path, startAfter, maximumEntries)
+
+    fun fileRead(
+        path: ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath,
+        offset: Long,
+        maximumBytes: Int,
+        expectedGeneration: Long,
+    ) = host.fileRead(path, offset, maximumBytes, expectedGeneration)
+
     fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate? = host.verifyForDeploy(artifact)
 
     fun executableRevision(path: String): VmExecutableRevision? = host.executableRevision(path)

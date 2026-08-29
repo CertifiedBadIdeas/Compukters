@@ -40,7 +40,119 @@ data class IdeTargetCapabilities(
     val writableFileSystem: Boolean,
     val canonicalInput: Boolean,
     val terminal: Boolean,
+    val readableFileSystem: Boolean = false,
 )
+
+@JvmInline
+value class IdeTargetVirtualPath private constructor(
+    val value: String,
+) {
+    companion object {
+        private const val MAXIMUM_UTF8_BYTES = 4 * 1024
+
+        fun of(value: String): IdeTargetVirtualPath {
+            require(value.startsWith('/')) { "target path must be absolute" }
+            require(value.length == 1 || !value.endsWith('/')) { "target path must not end with a separator" }
+            require(value.none { it == '\\' || it.isISOControl() }) { "target path contains a forbidden character" }
+            if (value != "/") {
+                require(value.drop(1).split('/').all { it.isNotEmpty() && it != "." && it != ".." }) {
+                    "target path contains a non-canonical component"
+                }
+            }
+            require(value.encodeToByteArray().size <= MAXIMUM_UTF8_BYTES) { "target path is too long" }
+            return IdeTargetVirtualPath(value)
+        }
+    }
+}
+
+enum class IdeTargetFileKind {
+    File,
+    Directory,
+}
+
+data class IdeTargetFileMetadata(
+    val kind: IdeTargetFileKind,
+    val logicalBytes: Long,
+    val generation: Long,
+    val executable: Boolean,
+) {
+    init {
+        require(logicalBytes >= 0 && generation >= 0) { "target file metadata must not be negative" }
+    }
+}
+
+data class IdeTargetFileStat(
+    val fileSystemGeneration: Long,
+    val metadata: IdeTargetFileMetadata,
+) {
+    init { require(fileSystemGeneration >= 0) { "target filesystem generation must not be negative" } }
+}
+
+data class IdeTargetDirectoryEntry(
+    val name: String,
+    val metadata: IdeTargetFileMetadata,
+) {
+    init {
+        require(name.isNotEmpty() && name != "." && name != "..") { "target entry name is invalid" }
+        require(name.none { it == '/' || it == '\\' || it.isISOControl() }) { "target entry name is invalid" }
+    }
+}
+
+data class IdeTargetDirectoryListing(
+    val fileSystemGeneration: Long,
+    val directoryGeneration: Long,
+    val complete: Boolean,
+    val entries: List<IdeTargetDirectoryEntry>,
+) {
+    init {
+        require(fileSystemGeneration >= 0 && directoryGeneration >= 0) { "target directory generations must not be negative" }
+        require(entries.size <= 256) { "target directory page is too large" }
+        require(entries.zipWithNext().all { (left, right) -> compareUtf8(left.name, right.name) < 0 }) {
+            "target directory entries must be strictly UTF-8 ordered"
+        }
+    }
+}
+
+private fun compareUtf8(left: String, right: String): Int {
+    val leftBytes = left.encodeToByteArray()
+    val rightBytes = right.encodeToByteArray()
+    for (index in 0 until minOf(leftBytes.size, rightBytes.size)) {
+        val difference = (leftBytes[index].toInt() and 0xff) - (rightBytes[index].toInt() and 0xff)
+        if (difference != 0) return difference
+    }
+    return leftBytes.size - rightBytes.size
+}
+
+class IdeTargetFileChunk(
+    val generation: Long,
+    val nextOffset: Long,
+    val eof: Boolean,
+    bytes: ByteArray,
+) {
+    private val value = BinaryValue.of(bytes)
+
+    init {
+        require(generation >= 0 && nextOffset >= 0) { "target file chunk metadata must not be negative" }
+        require(bytes.size <= 32 * 1024) { "target file chunk is too large" }
+    }
+
+    fun bytes(): ByteArray = value.toByteArray()
+}
+
+sealed interface IdeFileStatResult {
+    data class Observed(val stat: IdeTargetFileStat) : IdeFileStatResult
+    data class Failed(val failure: IdeTargetFailure) : IdeFileStatResult
+}
+
+sealed interface IdeFileListResult {
+    data class Listed(val listing: IdeTargetDirectoryListing) : IdeFileListResult
+    data class Failed(val failure: IdeTargetFailure) : IdeFileListResult
+}
+
+sealed interface IdeFileReadResult {
+    data class Read(val chunk: IdeTargetFileChunk) : IdeFileReadResult
+    data class Failed(val failure: IdeTargetFailure) : IdeFileReadResult
+}
 
 data class IdeAttachedTarget(
     val id: IdeTargetId,

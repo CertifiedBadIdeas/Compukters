@@ -25,6 +25,13 @@ import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
 import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
+import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryEntry
+import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryListing
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileChunk
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileKind
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileStat
+import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFailure
@@ -119,6 +126,36 @@ internal sealed interface IdeTargetRequest {
     data class Detach(
         val target: IdeTargetReference,
     ) : IdeTargetRequest
+
+    data class FileStat(val target: IdeTargetReference, val path: IdeTargetVirtualPath) : IdeTargetRequest
+
+    data class FileList(
+        val target: IdeTargetReference,
+        val path: IdeTargetVirtualPath,
+        val startAfter: String?,
+        val maximumEntries: Int,
+    ) : IdeTargetRequest {
+        init {
+            require(maximumEntries in 1..IdeTargetWireProtocol.MAXIMUM_FILE_LIST_ENTRIES)
+            startAfter?.let { name ->
+                require(name.isNotEmpty() && name != "." && name != "..")
+                require(name.none { it == '/' || it == '\\' || it.isISOControl() })
+            }
+        }
+    }
+
+    data class FileRead(
+        val target: IdeTargetReference,
+        val path: IdeTargetVirtualPath,
+        val offset: Long,
+        val maximumBytes: Int,
+        val expectedGeneration: Long,
+    ) : IdeTargetRequest {
+        init {
+            require(offset >= 0 && expectedGeneration >= 0)
+            require(maximumBytes in 1..IdeTargetWireProtocol.MAXIMUM_FILE_READ_BYTES)
+        }
+    }
 }
 
 internal data class IdeTargetRequestPayload(
@@ -181,6 +218,12 @@ internal sealed interface IdeTargetReply {
         val failure: IdeTargetFailure,
         val retryable: Boolean,
     ) : IdeTargetReply
+
+    data class FileStatObserved(val stat: IdeTargetFileStat) : IdeTargetReply
+
+    data class FileListed(val listing: IdeTargetDirectoryListing) : IdeTargetReply
+
+    data class FileRead(val chunk: IdeTargetFileChunk) : IdeTargetReply
 }
 
 internal data class IdeTargetReplyPayload(
@@ -206,6 +249,8 @@ internal data class IdeTargetReplyPayload(
 internal object IdeTargetWireProtocol {
     const val MAXIMUM_CHUNK_BYTES = 32 * 1024
     const val MAXIMUM_CANONICAL_LINE_CODE_UNITS = 4_096
+    const val MAXIMUM_FILE_LIST_ENTRIES = 256
+    const val MAXIMUM_FILE_READ_BYTES = 32 * 1024
     private const val MAXIMUM_CLAIM_BYTES = 256
     private const val MAXIMUM_TICKET_BYTES = 256
     const val MAXIMUM_TARGET_ID_CODE_UNITS = 128
@@ -272,6 +317,27 @@ internal object IdeTargetWireProtocol {
                 buffer.writeByte(DETACH)
                 buffer.writeTarget(request.target)
             }
+            is IdeTargetRequest.FileStat -> {
+                buffer.writeByte(FILE_STAT)
+                buffer.writeTarget(request.target)
+                buffer.writeVirtualPath(request.path)
+            }
+            is IdeTargetRequest.FileList -> {
+                buffer.writeByte(FILE_LIST)
+                buffer.writeTarget(request.target)
+                buffer.writeVirtualPath(request.path)
+                buffer.writeBoolean(request.startAfter != null)
+                request.startAfter?.let { buffer.writeUtf(it, MAXIMUM_PATH_CODE_UNITS) }
+                buffer.writeVarInt(request.maximumEntries)
+            }
+            is IdeTargetRequest.FileRead -> {
+                buffer.writeByte(FILE_READ)
+                buffer.writeTarget(request.target)
+                buffer.writeVirtualPath(request.path)
+                buffer.writeVarLong(request.offset)
+                buffer.writeVarInt(request.maximumBytes)
+                buffer.writeVarLong(request.expectedGeneration)
+            }
         }
     }
 
@@ -299,6 +365,22 @@ internal object IdeTargetWireProtocol {
                 SUBMIT_CANONICAL_LINE -> IdeTargetRequest.SubmitCanonicalLine(buffer.readTarget(), buffer.readCanonicalLine())
                 HEARTBEAT -> IdeTargetRequest.Heartbeat(buffer.readTarget())
                 DETACH -> IdeTargetRequest.Detach(buffer.readTarget())
+                FILE_STAT -> IdeTargetRequest.FileStat(buffer.readTarget(), buffer.readVirtualPath())
+                FILE_LIST ->
+                    IdeTargetRequest.FileList(
+                        buffer.readTarget(),
+                        buffer.readVirtualPath(),
+                        if (buffer.readBoolean()) buffer.readUtf(MAXIMUM_PATH_CODE_UNITS) else null,
+                        buffer.readVarInt(),
+                    )
+                FILE_READ ->
+                    IdeTargetRequest.FileRead(
+                        buffer.readTarget(),
+                        buffer.readVirtualPath(),
+                        buffer.readVarLong(),
+                        buffer.readVarInt(),
+                        buffer.readVarLong(),
+                    )
                 else -> throw IllegalArgumentException("unknown IDE target request kind $kind")
             }
         return IdeTargetRequestPayload(requestId, request)
@@ -342,6 +424,18 @@ internal object IdeTargetWireProtocol {
                 buffer.writeFailure(reply.failure)
                 buffer.writeBoolean(reply.retryable)
             }
+            is IdeTargetReply.FileStatObserved -> {
+                buffer.writeByte(REPLY_FILE_STAT)
+                buffer.writeFileStat(reply.stat)
+            }
+            is IdeTargetReply.FileListed -> {
+                buffer.writeByte(REPLY_FILE_LIST)
+                buffer.writeDirectoryListing(reply.listing)
+            }
+            is IdeTargetReply.FileRead -> {
+                buffer.writeByte(REPLY_FILE_READ)
+                buffer.writeFileChunk(reply.chunk)
+            }
         }
     }
 
@@ -368,6 +462,9 @@ internal object IdeTargetWireProtocol {
                 REPLY_ALIVE -> IdeTargetReply.Alive
                 REPLY_DETACHED -> IdeTargetReply.Detached
                 REPLY_FAILED -> IdeTargetReply.Failed(buffer.readFailure(), buffer.readBoolean())
+                REPLY_FILE_STAT -> IdeTargetReply.FileStatObserved(buffer.readFileStat())
+                REPLY_FILE_LIST -> IdeTargetReply.FileListed(buffer.readDirectoryListing())
+                REPLY_FILE_READ -> IdeTargetReply.FileRead(buffer.readFileChunk())
                 else -> throw IllegalArgumentException("unknown IDE target reply kind $kind")
             }
         return IdeTargetReplyPayload(requestId, reply)
@@ -382,6 +479,9 @@ internal object IdeTargetWireProtocol {
     private const val SUBMIT_CANONICAL_LINE = 6
     private const val HEARTBEAT = 7
     private const val DETACH = 8
+    private const val FILE_STAT = 9
+    private const val FILE_LIST = 10
+    private const val FILE_READ = 11
     private const val REPLY_ATTACHED = 0
     private const val REPLY_UPLOAD_ACCEPTED = 1
     private const val REPLY_VERIFIED = 2
@@ -392,6 +492,9 @@ internal object IdeTargetWireProtocol {
     private const val REPLY_ALIVE = 7
     private const val REPLY_DETACHED = 8
     private const val REPLY_FAILED = 9
+    private const val REPLY_FILE_STAT = 10
+    private const val REPLY_FILE_LIST = 11
+    private const val REPLY_FILE_READ = 12
 }
 
 internal fun RegistryFriendlyByteBuf.writeTarget(target: IdeTargetReference) {
@@ -438,6 +541,80 @@ private fun RegistryFriendlyByteBuf.readPath(): IdeDeploymentPath {
     return IdeDeploymentPath.fromProgramName(value.removePrefix("/home/"))
 }
 
+private fun RegistryFriendlyByteBuf.writeVirtualPath(path: IdeTargetVirtualPath) = writeUtf(path.value, 4_096)
+
+private fun RegistryFriendlyByteBuf.readVirtualPath(): IdeTargetVirtualPath = IdeTargetVirtualPath.of(readUtf(4_096))
+
+private fun RegistryFriendlyByteBuf.writeFileMetadata(metadata: IdeTargetFileMetadata) {
+    writeByte(if (metadata.kind == IdeTargetFileKind.File) 0 else 1)
+    writeBoolean(metadata.executable)
+    writeVarLong(metadata.logicalBytes)
+    writeVarLong(metadata.generation)
+}
+
+private fun RegistryFriendlyByteBuf.readFileMetadata(): IdeTargetFileMetadata {
+    val kind =
+        when (val kind = readUnsignedByte().toInt()) {
+            0 -> IdeTargetFileKind.File
+            1 -> IdeTargetFileKind.Directory
+            else -> throw IllegalArgumentException("unknown target file kind $kind")
+        }
+    val executable = readBoolean()
+    return IdeTargetFileMetadata(kind, readVarLong(), readVarLong(), executable)
+}
+
+private fun RegistryFriendlyByteBuf.writeFileStat(stat: IdeTargetFileStat) {
+    writeVarLong(stat.fileSystemGeneration)
+    writeFileMetadata(stat.metadata)
+}
+
+private fun RegistryFriendlyByteBuf.readFileStat() = IdeTargetFileStat(readVarLong(), readFileMetadata())
+
+private fun RegistryFriendlyByteBuf.writeDirectoryListing(listing: IdeTargetDirectoryListing) {
+    require(listing.entries.size <= IdeTargetWireProtocol.MAXIMUM_FILE_LIST_ENTRIES)
+    writeVarLong(listing.fileSystemGeneration)
+    writeVarLong(listing.directoryGeneration)
+    writeBoolean(listing.complete)
+    writeVarInt(listing.entries.size)
+    listing.entries.forEach { entry ->
+        writeUtf(entry.name, 4_096)
+        writeFileMetadata(entry.metadata)
+    }
+}
+
+private fun RegistryFriendlyByteBuf.readDirectoryListing(): IdeTargetDirectoryListing {
+    val filesystemGeneration = readVarLong()
+    val directoryGeneration = readVarLong()
+    val complete = readBoolean()
+    val count = readVarInt()
+    require(count in 0..IdeTargetWireProtocol.MAXIMUM_FILE_LIST_ENTRIES)
+    return IdeTargetDirectoryListing(
+        filesystemGeneration,
+        directoryGeneration,
+        complete,
+        List(count) { IdeTargetDirectoryEntry(readUtf(4_096), readFileMetadata()) },
+    )
+}
+
+private fun RegistryFriendlyByteBuf.writeFileChunk(chunk: IdeTargetFileChunk) {
+    val bytes = chunk.bytes()
+    require(bytes.size <= IdeTargetWireProtocol.MAXIMUM_FILE_READ_BYTES)
+    writeVarLong(chunk.generation)
+    writeVarLong(chunk.nextOffset)
+    writeBoolean(chunk.eof)
+    writeVarInt(bytes.size)
+    writeBytes(bytes)
+}
+
+private fun RegistryFriendlyByteBuf.readFileChunk(): IdeTargetFileChunk {
+    val generation = readVarLong()
+    val nextOffset = readVarLong()
+    val eof = readBoolean()
+    val size = readVarInt()
+    require(size in 0..IdeTargetWireProtocol.MAXIMUM_FILE_READ_BYTES)
+    return IdeTargetFileChunk(generation, nextOffset, eof, ByteArray(size).also(::readBytes))
+}
+
 private fun RegistryFriendlyByteBuf.writeRevision(revision: IdeExecutableRevision) {
     when (revision) {
         IdeExecutableRevision.Absent -> writeByte(0)
@@ -474,6 +651,7 @@ private fun RegistryFriendlyByteBuf.writeAttachedTarget(target: IdeAttachedTarge
     writeBoolean(target.capabilities.writableFileSystem)
     writeBoolean(target.capabilities.canonicalInput)
     writeBoolean(target.capabilities.terminal)
+    writeBoolean(target.capabilities.readableFileSystem)
     writeUtf(target.displayName, 128)
 }
 
@@ -483,7 +661,7 @@ private fun RegistryFriendlyByteBuf.readAttachedTarget(): IdeAttachedTarget {
         target.id,
         target.profile,
         readProfile(),
-        IdeTargetCapabilities(readBoolean(), readBoolean(), readBoolean()),
+        IdeTargetCapabilities(readBoolean(), readBoolean(), readBoolean(), readBoolean()),
         readUtf(128),
     )
 }

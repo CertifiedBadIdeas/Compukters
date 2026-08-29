@@ -52,7 +52,13 @@ internal class NeoForgeIdeTargetResolver(
                 machineIdentity = "$dimension:${position.x},${position.y},${position.z}:$machineId",
                 profileId = IdeTargetProfileId(TargetCompileProfileIdentity.of(profile).hash),
                 profile = profile,
-                capabilities = IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true, terminal = true),
+                capabilities =
+                    IdeTargetCapabilities(
+                        writableFileSystem = true,
+                        canonicalInput = true,
+                        terminal = true,
+                        readableFileSystem = true,
+                    ),
                 displayName = "Computer ${position.x}, ${position.y}, ${position.z}",
                 alive = {
                     !entity.isRemoved &&
@@ -73,6 +79,12 @@ internal class NeoForgeIdeTargetResolver(
                         changesSince = entity::terminalChangesSince,
                         submitKey = entity::submitTerminalKey,
                         submitText = entity::submitTerminalText,
+                    ),
+                fileSystem =
+                    IdeTargetFileSystemOperations(
+                        stat = entity::fileStat,
+                        list = entity::fileList,
+                        read = entity::fileRead,
                     ),
             ),
         )

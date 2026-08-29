@@ -33,6 +33,26 @@ interface IdeTargetPort {
         path: IdeDeploymentPath,
     ): CompletableFuture<IdeRevisionResult>
 
+    fun fileStat(
+        target: IdeAttachedTarget,
+        path: IdeTargetVirtualPath,
+    ): CompletableFuture<IdeFileStatResult> = CompletableFuture.completedFuture(IdeFileStatResult.Failed(unsupportedFiles()))
+
+    fun fileList(
+        target: IdeAttachedTarget,
+        path: IdeTargetVirtualPath,
+        startAfter: String?,
+        maximumEntries: Int,
+    ): CompletableFuture<IdeFileListResult> = CompletableFuture.completedFuture(IdeFileListResult.Failed(unsupportedFiles()))
+
+    fun fileRead(
+        target: IdeAttachedTarget,
+        path: IdeTargetVirtualPath,
+        offset: Long,
+        maximumBytes: Int,
+        expectedGeneration: Long,
+    ): CompletableFuture<IdeFileReadResult> = CompletableFuture.completedFuture(IdeFileReadResult.Failed(unsupportedFiles()))
+
     fun deploy(
         target: IdeAttachedTarget,
         ticket: IdeVerificationTicket,
@@ -48,4 +68,6 @@ interface IdeTargetPort {
     fun heartbeat(target: IdeAttachedTarget): CompletableFuture<IdeHeartbeatResult>
 
     fun detach(target: IdeAttachedTarget): CompletableFuture<Unit>
+
+    private fun unsupportedFiles() = IdeTargetFailure(IdeTargetFailureKind.Unsupported, "Target filesystem is unavailable")
 }
