@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.ide.client.state
 
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
+import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
 import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
@@ -65,6 +66,7 @@ data class IdeWorkspaceView(
     val editor: IdeEditorView,
     val status: IdeProblem?,
     val build: IdeBuildState,
+    val computerTree: IdeComputerTreeState = IdeComputerTreeState.NoTarget,
 )
 
 sealed interface IdePageState {

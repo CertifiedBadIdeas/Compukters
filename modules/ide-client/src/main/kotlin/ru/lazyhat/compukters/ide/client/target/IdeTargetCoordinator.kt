@@ -20,14 +20,16 @@ package ru.lazyhat.compukters.ide.client.target
 
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.controller.IdeControllerClock
+import ru.lazyhat.compukters.ide.client.files.IdeComputerFileAccess
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 
 class IdeTargetCoordinator(
     private val port: IdeTargetPort,
     private val clock: IdeControllerClock,
     limits: IdeClientLimits = IdeClientLimits(),
-) : AutoCloseable {
+) : AutoCloseable, IdeComputerFileAccess {
     private val owner = Thread.currentThread()
     private val events = ArrayBlockingQueue<TargetEvent>(limits.eventQueueCapacity)
     private val overflow = AtomicBoolean()
@@ -51,6 +53,30 @@ class IdeTargetCoordinator(
     fun attachedTarget(): IdeAttachedTarget? {
         checkOwner()
         return attached
+    }
+
+    override fun stat(path: IdeTargetVirtualPath): CompletableFuture<IdeFileStatResult> {
+        val target = requireReadableFileSystem()
+        return port.fileStat(target, path)
+    }
+
+    override fun list(
+        path: IdeTargetVirtualPath,
+        startAfter: String?,
+        maximumEntries: Int,
+    ): CompletableFuture<IdeFileListResult> {
+        val target = requireReadableFileSystem()
+        return port.fileList(target, path, startAfter, maximumEntries)
+    }
+
+    override fun read(
+        path: IdeTargetVirtualPath,
+        offset: Long,
+        maximumBytes: Int,
+        expectedGeneration: Long,
+    ): CompletableFuture<IdeFileReadResult> {
+        val target = requireReadableFileSystem()
+        return port.fileRead(target, path, offset, maximumBytes, expectedGeneration)
     }
 
     fun attach(claim: IdeTargetClaim) {
@@ -461,6 +487,12 @@ class IdeTargetCoordinator(
     private fun requireTarget(): IdeAttachedTarget {
         checkActive()
         return checkNotNull(attached) { "no target is attached" }
+    }
+
+    private fun requireReadableFileSystem(): IdeAttachedTarget {
+        val target = requireTarget()
+        check(target.capabilities.readableFileSystem) { "target filesystem is unavailable" }
+        return target
     }
 
     private fun checkOwner() = check(Thread.currentThread() === owner) { "target coordinator must run on its owner thread" }
