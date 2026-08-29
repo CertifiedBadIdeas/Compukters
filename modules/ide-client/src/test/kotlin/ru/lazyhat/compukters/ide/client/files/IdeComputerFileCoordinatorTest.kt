@@ -21,12 +21,14 @@ package ru.lazyhat.compukters.ide.client.files
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeFileListResult
+import ru.lazyhat.compukters.ide.client.target.IdeFileReadResult
 import ru.lazyhat.compukters.ide.client.target.IdeFileStatResult
 import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
 import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryEntry
 import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryListing
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileChunk
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileStat
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
@@ -118,6 +120,67 @@ class IdeComputerFileCoordinatorTest {
         assertIs<IdeComputerTreeState.Unavailable>(coordinator.state())
     }
 
+    @Test
+    fun `preview assembles bounded chunks with one generation and strict utf8`() {
+        val access = ControlledAccess()
+        val coordinator = IdeComputerFileCoordinator(access)
+        loadRoot(coordinator, access)
+
+        coordinator.open(path("/home/hello.kt"))
+        access.completeStat("/home/hello.kt", file(30, logicalBytes = 5))
+        coordinator.tick()
+        access.completeRead("/home/hello.kt", IdeTargetFileChunk(30, 2, false, "he".encodeToByteArray()))
+        coordinator.tick()
+        access.completeRead("/home/hello.kt", IdeTargetFileChunk(30, 5, true, "llo".encodeToByteArray()))
+        coordinator.tick()
+
+        val preview = assertIs<IdeComputerPreviewState.Available>(coordinator.preview())
+        assertEquals("hello", preview.text)
+        assertEquals(30, preview.generation)
+        assertEquals(listOf(0L, 2L), access.readOffsets)
+
+        coordinator.open(path("/home/bad"))
+        access.completeStat("/home/bad", file(31, logicalBytes = 1))
+        coordinator.tick()
+        access.completeRead("/home/bad", IdeTargetFileChunk(31, 1, true, byteArrayOf(0x80.toByte())))
+        coordinator.tick()
+        assertIs<IdeComputerPreviewState.Failed>(coordinator.preview())
+    }
+
+    @Test
+    fun `preview rejects oversized and stale files and closes on detach`() {
+        val access = ControlledAccess()
+        val coordinator = IdeComputerFileCoordinator(access)
+        loadRoot(coordinator, access)
+
+        coordinator.open(path("/huge"))
+        access.completeStat("/huge", file(40, logicalBytes = 1024L * 1024L + 1))
+        coordinator.tick()
+        assertIs<IdeComputerPreviewState.TooLarge>(coordinator.preview())
+        assertEquals(0, access.readRequests.size)
+
+        coordinator.open(path("/stale"))
+        access.completeStat("/stale", file(41, logicalBytes = 1))
+        coordinator.tick()
+        access.completeRead(
+            "/stale",
+            IdeFileReadResult.Failed(
+                ru.lazyhat.compukters.ide.client.target.IdeTargetFailure(
+                    ru.lazyhat.compukters.ide.client.target.IdeTargetFailureKind.FileSystem,
+                    "stale generation",
+                ),
+            ),
+        )
+        coordinator.tick()
+        assertEquals(
+            "File changed; refresh and reopen",
+            assertIs<IdeComputerPreviewState.Failed>(coordinator.preview()).detail,
+        )
+
+        coordinator.detach()
+        assertEquals(IdeComputerPreviewState.Closed, coordinator.preview())
+    }
+
     private fun loadRoot(coordinator: IdeComputerFileCoordinator, access: ControlledAccess) {
         coordinator.attach(target())
         access.completeStat("/", directory(1))
@@ -137,6 +200,8 @@ class IdeComputerFileCoordinatorTest {
 private class ControlledAccess : IdeComputerFileAccess {
     val statRequests = mutableListOf<Pair<IdeTargetVirtualPath, CompletableFuture<IdeFileStatResult>>>()
     private val listRequests = mutableListOf<ListRequest>()
+    val readRequests = mutableListOf<ReadRequest>()
+    val readOffsets: List<Long> get() = readRequests.map { it.offset }
 
     override fun stat(path: IdeTargetVirtualPath): CompletableFuture<IdeFileStatResult> =
         CompletableFuture<IdeFileStatResult>().also { statRequests += path to it }
@@ -147,6 +212,16 @@ private class ControlledAccess : IdeComputerFileAccess {
         maximumEntries: Int,
     ): CompletableFuture<IdeFileListResult> =
         CompletableFuture<IdeFileListResult>().also { listRequests += ListRequest(path, startAfter, maximumEntries, it) }
+
+    override fun read(
+        path: IdeTargetVirtualPath,
+        offset: Long,
+        maximumBytes: Int,
+        expectedGeneration: Long,
+    ): CompletableFuture<IdeFileReadResult> =
+        CompletableFuture<IdeFileReadResult>().also {
+            readRequests += ReadRequest(path, offset, maximumBytes, expectedGeneration, it)
+        }
 
     fun statFuture(value: String) = statRequests.last { it.first == path(value) }.second
 
@@ -160,11 +235,25 @@ private class ControlledAccess : IdeComputerFileAccess {
 
     fun pendingListPaths() = listRequests.filterNot { it.future.isDone }.map { it.path.value }
 
+    fun completeRead(value: String, chunk: IdeTargetFileChunk) = completeRead(value, IdeFileReadResult.Read(chunk))
+
+    fun completeRead(value: String, result: IdeFileReadResult) {
+        readRequests.last { it.path == path(value) && !it.future.isDone }.future.complete(result)
+    }
+
     private data class ListRequest(
         val path: IdeTargetVirtualPath,
         val startAfter: String?,
         val maximumEntries: Int,
         val future: CompletableFuture<IdeFileListResult>,
+    )
+
+    data class ReadRequest(
+        val path: IdeTargetVirtualPath,
+        val offset: Long,
+        val maximumBytes: Int,
+        val expectedGeneration: Long,
+        val future: CompletableFuture<IdeFileReadResult>,
     )
 }
 
@@ -181,7 +270,8 @@ private fun path(value: String) = IdeTargetVirtualPath.of(value)
 
 private fun directory(generation: Long) = IdeTargetFileMetadata(IdeTargetFileKind.Directory, 0, generation, false)
 
-private fun file(generation: Long) = IdeTargetFileMetadata(IdeTargetFileKind.File, 4, generation, false)
+private fun file(generation: Long, logicalBytes: Long = 4) =
+    IdeTargetFileMetadata(IdeTargetFileKind.File, logicalBytes, generation, false)
 
 private fun entry(name: String, metadata: IdeTargetFileMetadata) = IdeTargetDirectoryEntry(name, metadata)
 

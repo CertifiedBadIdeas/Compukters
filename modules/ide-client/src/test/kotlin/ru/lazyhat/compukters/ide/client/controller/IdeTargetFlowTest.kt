@@ -27,22 +27,34 @@ import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
+import ru.lazyhat.compukters.ide.client.state.IdeEditorSource
+import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.target.IdeAttachResult
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeDeployResult
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
 import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
 import ru.lazyhat.compukters.ide.client.target.IdeHeartbeatResult
+import ru.lazyhat.compukters.ide.client.target.IdeFileListResult
+import ru.lazyhat.compukters.ide.client.target.IdeFileReadResult
+import ru.lazyhat.compukters.ide.client.target.IdeFileStatResult
 import ru.lazyhat.compukters.ide.client.target.IdeRevisionResult
 import ru.lazyhat.compukters.ide.client.target.IdeSubmissionResult
 import ru.lazyhat.compukters.ide.client.target.IdeTargetArtifact
 import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
+import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryEntry
+import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryListing
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileChunk
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileKind
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFileStat
 import ru.lazyhat.compukters.ide.client.target.IdeTargetClaim
 import ru.lazyhat.compukters.ide.client.target.IdeTargetCoordinator
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetPort
 import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
+import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
 import ru.lazyhat.compukters.ide.client.target.IdeVerificationTicket
 import ru.lazyhat.compukters.ide.client.target.IdeVerifyResult
 import ru.lazyhat.compukters.ide.compiler.ClientBuildResult
@@ -64,6 +76,28 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class IdeTargetFlowTest {
+    @Test
+    fun `computer preview is read only and closes with its target`() {
+        val fixture = fixture()
+        fixture.startAttached()
+
+        fixture.controller.dispatch(IdeCommand.OpenComputerFile(IdeTargetVirtualPath.of("/home/hello.kt")))
+        fixture.controller.tick()
+
+        val preview = assertIs<IdeEditorView.Text>(fixture.workspaceView().editor)
+        assertIs<IdeEditorSource.Computer>(preview.source)
+        assertEquals("Computer · /home/hello.kt · Read-only", preview.title)
+        assertEquals(true, preview.readOnly)
+        assertEquals("fun main() = Unit", preview.visibleLines.single())
+
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("x")))
+        assertEquals("fun main() = Unit", assertIs<IdeEditorView.Text>(fixture.workspaceView().editor).visibleLines.single())
+        assertEquals(0, fixture.workspace.saveRequests.size)
+
+        fixture.controller.detachTarget()
+        assertIs<IdeEditorSource.Project>(assertIs<IdeEditorView.Text>(fixture.workspaceView().editor).source)
+    }
+
     @Test
     fun `verify builds against captured target profile and publishes target state`() {
         val fixture = fixture()
@@ -276,6 +310,7 @@ private class TargetCompilation : ClientCompilationService {
 }
 
 private class TargetPort : IdeTargetPort {
+    private val previewText = "fun main() = Unit".encodeToByteArray()
     val verifications = mutableListOf<Verification>()
     val revisions = mutableListOf<Revision>()
     val deployments = mutableListOf<Deployment>()
@@ -288,6 +323,58 @@ private class TargetPort : IdeTargetPort {
         target: IdeAttachedTarget,
         artifact: IdeTargetArtifact,
     ) = CompletableFuture<IdeVerifyResult>().also { verifications += Verification(artifact, it) }
+
+    override fun fileStat(
+        target: IdeAttachedTarget,
+        path: IdeTargetVirtualPath,
+    ): CompletableFuture<IdeFileStatResult> {
+        val metadata =
+            when (path.value) {
+                "/" -> IdeTargetFileMetadata(IdeTargetFileKind.Directory, 0, 1, false)
+                "/home/hello.kt" -> IdeTargetFileMetadata(IdeTargetFileKind.File, previewText.size.toLong(), 2, false)
+                else -> IdeTargetFileMetadata(IdeTargetFileKind.Directory, 0, 3, false)
+            }
+        return CompletableFuture.completedFuture(IdeFileStatResult.Observed(IdeTargetFileStat(metadata.generation, metadata)))
+    }
+
+    override fun fileList(
+        target: IdeAttachedTarget,
+        path: IdeTargetVirtualPath,
+        startAfter: String?,
+        maximumEntries: Int,
+    ): CompletableFuture<IdeFileListResult> {
+        val entries =
+            if (path.value == "/") {
+                listOf(IdeTargetDirectoryEntry("home", IdeTargetFileMetadata(IdeTargetFileKind.Directory, 0, 3, false)))
+            } else {
+                listOf(
+                    IdeTargetDirectoryEntry(
+                        "hello.kt",
+                        IdeTargetFileMetadata(IdeTargetFileKind.File, previewText.size.toLong(), 2, false),
+                    ),
+                )
+            }
+        val generation = if (path.value == "/") 1L else 3L
+        return CompletableFuture.completedFuture(
+            IdeFileListResult.Listed(IdeTargetDirectoryListing(generation, generation, true, entries)),
+        )
+    }
+
+    override fun fileRead(
+        target: IdeAttachedTarget,
+        path: IdeTargetVirtualPath,
+        offset: Long,
+        maximumBytes: Int,
+        expectedGeneration: Long,
+    ): CompletableFuture<IdeFileReadResult> {
+        val start = offset.toInt()
+        val end = minOf(previewText.size, start + maximumBytes)
+        return CompletableFuture.completedFuture(
+            IdeFileReadResult.Read(
+                IdeTargetFileChunk(expectedGeneration, end.toLong(), end == previewText.size, previewText.copyOfRange(start, end)),
+            ),
+        )
+    }
 
     override fun executableRevision(
         target: IdeAttachedTarget,
@@ -353,7 +440,12 @@ private fun target() =
         IdeTargetId("computer-1"),
         IdeTargetProfileId(hash(7)),
         TargetCompileProfile(toolchain(), emptyList(), TARGET_LIMITS),
-        IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true, terminal = false),
+        IdeTargetCapabilities(
+            writableFileSystem = true,
+            canonicalInput = true,
+            terminal = false,
+            readableFileSystem = true,
+        ),
         "Computer",
     )
 

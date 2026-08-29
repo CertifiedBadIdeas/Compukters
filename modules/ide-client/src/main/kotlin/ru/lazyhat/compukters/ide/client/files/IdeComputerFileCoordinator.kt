@@ -31,6 +31,9 @@ import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
+import java.nio.charset.StandardCharsets
 
 interface IdeComputerFileAccess {
     fun stat(path: IdeTargetVirtualPath): CompletableFuture<IdeFileStatResult>
@@ -62,7 +65,9 @@ class IdeComputerFileCoordinator(
     private var epoch = 0L
     private var target: IdeAttachedTarget? = null
     private var current: IdeComputerTreeState = IdeComputerTreeState.NoTarget
+    private var currentPreview: IdeComputerPreviewState = IdeComputerPreviewState.Closed
     private var restoreExpanded = emptySet<IdeTargetVirtualPath>()
+    private var previewId = 0L
 
     init {
         require(eventCapacity > 0) { "computer file event capacity must be positive" }
@@ -73,10 +78,16 @@ class IdeComputerFileCoordinator(
         return current
     }
 
+    fun preview(): IdeComputerPreviewState {
+        checkOwner()
+        return currentPreview
+    }
+
     fun attach(target: IdeAttachedTarget) {
         checkOwner()
         advanceEpoch()
         this.target = target
+        closePreview()
         restoreExpanded = setOf(ROOT)
         if (!target.capabilities.readableFileSystem) {
             current = IdeComputerTreeState.Unavailable("Target filesystem is unavailable")
@@ -89,6 +100,7 @@ class IdeComputerFileCoordinator(
         checkOwner()
         advanceEpoch()
         target = null
+        closePreview()
         restoreExpanded = emptySet()
         current = IdeComputerTreeState.NoTarget
     }
@@ -97,6 +109,7 @@ class IdeComputerFileCoordinator(
         checkOwner()
         advanceEpoch()
         target = null
+        closePreview()
         restoreExpanded = emptySet()
         current = IdeComputerTreeState.TargetLost(detail)
     }
@@ -119,6 +132,18 @@ class IdeComputerFileCoordinator(
         requestDirectory(path, directory.metadata, epoch, restore = false)
     }
 
+    fun open(path: IdeTargetVirtualPath) {
+        checkOwner()
+        if (target == null) return
+        previewId = Math.incrementExact(previewId)
+        currentPreview = IdeComputerPreviewState.Loading(path)
+        val requestEpoch = epoch
+        val requestPreview = previewId
+        access.stat(path).whenComplete { result, failure ->
+            enqueue(Event.PreviewStat(requestEpoch, requestPreview, path, result, failure))
+        }
+    }
+
     fun tick() {
         checkOwner()
         if (overflow.getAndSet(false)) {
@@ -133,6 +158,8 @@ class IdeComputerFileCoordinator(
             when (event) {
                 is Event.RootStat -> acceptRootStat(event)
                 is Event.DirectoryPage -> acceptDirectoryPage(event)
+                is Event.PreviewStat -> if (event.previewId == previewId) acceptPreviewStat(event)
+                is Event.PreviewRead -> if (event.load.previewId == previewId) acceptPreviewRead(event)
             }
         }
     }
@@ -155,6 +182,108 @@ class IdeComputerFileCoordinator(
             return
         }
         requestDirectory(ROOT, metadata, event.epoch, restore = true, expectedFileSystemGeneration = observed.stat.fileSystemGeneration)
+    }
+
+    private fun acceptPreviewStat(event: Event.PreviewStat) {
+        val observed = event.result as? IdeFileStatResult.Observed
+        if (event.failure != null || observed == null) {
+            failPreview(event.path, event.failure, (event.result as? IdeFileStatResult.Failed)?.failure)
+            return
+        }
+        val metadata = observed.stat.metadata
+        if (metadata.kind != IdeTargetFileKind.File) {
+            currentPreview = IdeComputerPreviewState.Failed(event.path, "Directories cannot be previewed")
+            return
+        }
+        if (metadata.logicalBytes > MAXIMUM_PREVIEW_BYTES) {
+            currentPreview = IdeComputerPreviewState.TooLarge(event.path, metadata.logicalBytes)
+            return
+        }
+        if (metadata.logicalBytes == 0L) {
+            publishPreview(event.path, metadata.generation, emptyList())
+            return
+        }
+        requestPreviewChunk(PreviewLoad(event.path, metadata, event.epoch, event.previewId, 0, emptyList()))
+    }
+
+    private fun requestPreviewChunk(load: PreviewLoad) {
+        val remaining = load.metadata.logicalBytes - load.offset
+        val maximum = minOf(PREVIEW_CHUNK_BYTES.toLong(), remaining).toInt()
+        access.read(load.path, load.offset, maximum, load.metadata.generation).whenComplete { result, failure ->
+            enqueue(Event.PreviewRead(load.epoch, load, maximum, result, failure))
+        }
+    }
+
+    private fun acceptPreviewRead(event: Event.PreviewRead) {
+        val read = event.result as? IdeFileReadResult.Read
+        if (event.failure != null || read == null) {
+            failPreview(event.load.path, event.failure, (event.result as? IdeFileReadResult.Failed)?.failure)
+            return
+        }
+        val chunk = read.chunk
+        val bytes = chunk.bytes()
+        val expectedNext = event.load.offset + bytes.size
+        if (
+            chunk.generation != event.load.metadata.generation ||
+            bytes.size > event.maximumBytes ||
+            chunk.nextOffset != expectedNext ||
+            (!chunk.eof && bytes.isEmpty()) ||
+            expectedNext > event.load.metadata.logicalBytes
+        ) {
+            currentPreview = IdeComputerPreviewState.Failed(event.load.path, "Invalid target file chunk")
+            return
+        }
+        val chunks = event.load.chunks + bytes
+        if (chunk.eof) {
+            if (expectedNext != event.load.metadata.logicalBytes) {
+                currentPreview = IdeComputerPreviewState.Failed(event.load.path, "Target file ended before its declared size")
+                return
+            }
+            publishPreview(event.load.path, event.load.metadata.generation, chunks)
+        } else if (expectedNext == event.load.metadata.logicalBytes) {
+            currentPreview = IdeComputerPreviewState.Failed(event.load.path, "Target file did not terminate at its declared size")
+        } else {
+            requestPreviewChunk(event.load.copy(offset = expectedNext, chunks = chunks))
+        }
+    }
+
+    private fun publishPreview(path: IdeTargetVirtualPath, generation: Long, chunks: List<ByteArray>) {
+        val bytes = ByteArray(chunks.sumOf(ByteArray::size))
+        var offset = 0
+        chunks.forEach { chunk ->
+            chunk.copyInto(bytes, offset)
+            offset += chunk.size
+        }
+        val text =
+            runCatching {
+                StandardCharsets.UTF_8
+                    .newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(bytes))
+                    .toString()
+            }.getOrElse {
+                currentPreview = IdeComputerPreviewState.Failed(path, "Target file is not valid UTF-8")
+                return
+            }
+        val targetId = target?.id ?: return
+        currentPreview = IdeComputerPreviewState.Available(path, targetId, generation, text)
+    }
+
+    private fun failPreview(path: IdeTargetVirtualPath, throwable: Throwable?, failure: IdeTargetFailure?) {
+        val raw = failure?.detail ?: throwable?.message ?: "Target file read failed"
+        val detail =
+            if (failure?.kind == IdeTargetFailureKind.FileSystem && raw.contains("stale", ignoreCase = true)) {
+                "File changed; refresh and reopen"
+            } else {
+                raw
+            }
+        currentPreview = IdeComputerPreviewState.Failed(path, detail)
+    }
+
+    private fun closePreview() {
+        previewId = Math.incrementExact(previewId)
+        currentPreview = IdeComputerPreviewState.Closed
     }
 
     private fun requestDirectory(
@@ -284,6 +413,15 @@ class IdeComputerFileCoordinator(
         val cursor: String?,
     )
 
+    private data class PreviewLoad(
+        val path: IdeTargetVirtualPath,
+        val metadata: IdeTargetFileMetadata,
+        val epoch: Long,
+        val previewId: Long,
+        val offset: Long,
+        val chunks: List<ByteArray>,
+    )
+
     private sealed interface Event {
         val epoch: Long
 
@@ -299,12 +437,30 @@ class IdeComputerFileCoordinator(
             val result: IdeFileListResult?,
             val failure: Throwable?,
         ) : Event
+
+        data class PreviewStat(
+            override val epoch: Long,
+            val previewId: Long,
+            val path: IdeTargetVirtualPath,
+            val result: IdeFileStatResult?,
+            val failure: Throwable?,
+        ) : Event
+
+        data class PreviewRead(
+            override val epoch: Long,
+            val load: PreviewLoad,
+            val maximumBytes: Int,
+            val result: IdeFileReadResult?,
+            val failure: Throwable?,
+        ) : Event
     }
 
     private companion object {
         val ROOT = IdeTargetVirtualPath.of("/")
         const val PAGE_SIZE = 256
         const val MAXIMUM_DIRECTORY_ENTRIES = 16_384
+        const val PREVIEW_CHUNK_BYTES = 32 * 1024
+        const val MAXIMUM_PREVIEW_BYTES = 1024 * 1024L
     }
 }
 
