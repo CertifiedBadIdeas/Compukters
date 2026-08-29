@@ -59,6 +59,8 @@ class ProjectImport private constructor(
 ) {
     val entries: List<ProjectImportEntry> = Collections.unmodifiableList(entries.toList())
 
+    fun replacingExisting(): ProjectImport = if (replace) this else ProjectImport(destination, true, entries)
+
     companion object {
         fun admit(
             destination: ProjectPath,

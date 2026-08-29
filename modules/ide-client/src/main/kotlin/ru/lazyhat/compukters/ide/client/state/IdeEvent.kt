@@ -31,6 +31,7 @@ import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.AdmittedProjectDelete
 import ru.lazyhat.compukters.ide.project.tree.ProjectMutationResult
 import ru.lazyhat.compukters.ide.project.tree.ProjectTree
+import ru.lazyhat.compukters.ide.project.tree.ProjectImport
 import java.util.Collections
 
 sealed interface IdeEvent {
@@ -103,6 +104,19 @@ sealed interface IdeEvent {
         val result: ProjectMutationResult,
     ) : IdeEvent
 
+    data class ComputerImportCompleted(
+        val generation: Long,
+        val operationId: Long,
+        val import: ProjectImport,
+        val result: ProjectMutationResult,
+    ) : IdeEvent
+
+    data class ComputerImportFailed(
+        val generation: Long,
+        val operationId: Long,
+        val detail: String,
+    ) : IdeEvent
+
     data class CatalogLoaded(
         val generation: Long,
         val projects: List<IdeProjectSummary>,
@@ -161,6 +175,8 @@ internal fun IdeEvent.copyForQueue(): IdeEvent =
         is IdeEvent.SaveCompleted,
         is IdeEvent.DeleteAdmitted,
         is IdeEvent.MutationCompleted,
+        is IdeEvent.ComputerImportCompleted,
+        is IdeEvent.ComputerImportFailed,
         is IdeEvent.PollCompleted,
         is IdeEvent.BuildCompleted,
         is IdeEvent.Failed,

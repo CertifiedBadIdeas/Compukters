@@ -44,6 +44,15 @@ sealed interface IdeCommand {
         val path: IdeTargetVirtualPath,
     ) : IdeCommand
 
+    data class DropComputerEntry(
+        val source: IdeTargetVirtualPath,
+        val destinationDirectory: ProjectPath,
+    ) : IdeCommand
+
+    data object ConfirmComputerImport : IdeCommand
+
+    data object CancelComputerImport : IdeCommand
+
     data class CreateText(
         val path: ProjectPath,
     ) : IdeCommand

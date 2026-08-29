@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.ide.client.state
 
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
+import ru.lazyhat.compukters.ide.client.files.IdeComputerTransferState
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
 import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
@@ -67,6 +68,7 @@ data class IdeWorkspaceView(
     val status: IdeProblem?,
     val build: IdeBuildState,
     val computerTree: IdeComputerTreeState = IdeComputerTreeState.NoTarget,
+    val computerTransfer: IdeComputerTransferState = IdeComputerTransferState.Idle,
 )
 
 sealed interface IdePageState {
@@ -105,6 +107,10 @@ sealed interface IdeDialogState {
     data class TargetOverwrite(
         val path: IdeDeploymentPath,
         val revision: IdeExecutableRevision.Present,
+    ) : IdeDialogState
+
+    data class ComputerImport(
+        val destination: ProjectPath,
     ) : IdeDialogState
 }
 

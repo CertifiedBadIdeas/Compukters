@@ -578,6 +578,8 @@ internal object IdeRenderer {
                     is IdeDialogState.LockUpdate -> "Update lock" to dialog.projectDirectory
                     is IdeDialogState.TargetOverwrite ->
                         "Replace target executable?" to "${dialog.path.value} changed at revision ${dialog.revision.generation}"
+                    is IdeDialogState.ComputerImport ->
+                        "Replace project entry?" to dialog.destination.value
                 }
             ui(IdeTextKind.Dialog, title, bounds.left + 10, bounds.top + 10, IdeColors.TEXT, bounds, Z_DIALOG_TEXT)
             ui(IdeTextKind.Dialog, message, bounds.left + 10, bounds.top + 30, IdeColors.MUTED, bounds, Z_DIALOG_TEXT)

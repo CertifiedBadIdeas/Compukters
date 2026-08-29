@@ -31,6 +31,7 @@ import ru.lazyhat.compukters.ide.client.build.IdeResolveResult
 import ru.lazyhat.compukters.ide.client.files.IdeComputerFileCoordinator
 import ru.lazyhat.compukters.ide.client.files.IdeComputerPreviewState
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
+import ru.lazyhat.compukters.ide.client.files.IdeComputerTransferState
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferences
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferencesStore
 import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
@@ -71,6 +72,7 @@ import ru.lazyhat.compukters.ide.project.document.FileRevision
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.AdmittedProjectDelete
 import ru.lazyhat.compukters.ide.project.tree.ProjectMutationResult
+import ru.lazyhat.compukters.ide.project.tree.ProjectImport
 import ru.lazyhat.compukters.ide.project.tree.ProjectTree
 import java.util.concurrent.CompletionException
 import java.util.concurrent.CompletionStage
@@ -112,10 +114,12 @@ class IdeClientController(
     private var binary: IdeEditorView.Binary? = null
     private var computerPreview: ComputerPreviewSession? = null
     private var observedComputerPreview: IdeComputerPreviewState = IdeComputerPreviewState.Closed
+    private var observedComputerTransfer: IdeComputerTransferState = IdeComputerTransferState.Idle
     private var latestProjectOperation = 0L
     private var latestOpenOperation = 0L
     private var latestSaveOperation = 0L
     private var latestMutationOperation = 0L
+    private var latestComputerImportOperation = 0L
     private var pendingFile: ProjectPath? = null
     private var pendingProjectDirectory: String? = null
     private var pendingSave = false
@@ -196,6 +200,22 @@ class IdeClientController(
             is IdeCommand.OpenComputerFile -> {
                 computerFiles?.open(command.path)
                 publishStatus("Opening ${command.path.value}", IdeProblemSeverity.Info)
+            }
+
+            is IdeCommand.DropComputerEntry -> {
+                if (IdeBusyOperation.Project in state.busy) return
+                if (computerFiles?.drop(command.source, command.destinationDirectory) == true) {
+                    state = state.copy(dialog = null)
+                    publishWorkspace()
+                }
+            }
+
+            IdeCommand.ConfirmComputerImport -> confirmComputerImport()
+
+            IdeCommand.CancelComputerImport -> {
+                computerFiles?.cancelTransfer()
+                state = state.copy(dialog = null)
+                publishWorkspace()
             }
 
             is IdeCommand.CreateText -> {
@@ -411,6 +431,7 @@ class IdeClientController(
             return
         }
         generation = Math.incrementExact(generation)
+        cancelComputerTransfer()
         project?.let { persistPreferences(editor?.path ?: binary?.path) }
         cancelBuildJobs()
         pendingBuildAction = null
@@ -438,6 +459,7 @@ class IdeClientController(
 
     private fun createProject(name: String) {
         generation = Math.incrementExact(generation)
+        cancelComputerTransfer()
         val operationId = nextOperationId++
         latestProjectOperation = operationId
         pendingFile = ProjectPath.file("src/main.kt")
@@ -785,6 +807,10 @@ class IdeClientController(
 
             is IdeEvent.MutationCompleted -> acceptMutation(event)
 
+            is IdeEvent.ComputerImportCompleted -> acceptComputerImport(event)
+
+            is IdeEvent.ComputerImportFailed -> acceptComputerImportFailure(event)
+
             is IdeEvent.PollCompleted -> acceptPoll(event)
 
             is IdeEvent.Failed -> acceptFailure(event)
@@ -1079,6 +1105,77 @@ class IdeClientController(
         continuePendingSave()
     }
 
+    private fun acceptComputerImport(event: IdeEvent.ComputerImportCompleted) {
+        if (event.operationId != latestComputerImportOperation) return
+        state = state.copy(busy = state.busy - IdeBusyOperation.Project, dialog = null)
+        when (val result = event.result) {
+            is ProjectMutationResult.Changed -> {
+                tree = result.tree
+                computerFiles?.finishTransfer()
+                publishStatus("Imported ${event.import.destination.value}", IdeProblemSeverity.Info)
+            }
+            is ProjectMutationResult.Conflict -> {
+                computerFiles?.finishTransfer("Project entry changed: ${result.path.value}")
+                publishProblem("Project entry changed: ${result.path.value}")
+            }
+            ProjectMutationResult.ProjectInvalidated -> {
+                computerFiles?.finishTransfer("Project root changed")
+                recoverToStart("Project root changed; reopen the project")
+            }
+        }
+        publishWorkspace()
+    }
+
+    private fun acceptComputerImportFailure(event: IdeEvent.ComputerImportFailed) {
+        if (event.operationId != latestComputerImportOperation) return
+        state = state.copy(busy = state.busy - IdeBusyOperation.Project, dialog = null)
+        computerFiles?.finishTransfer(event.detail)
+        publishProblem(event.detail)
+        publishWorkspace()
+    }
+
+    private fun acceptComputerTransfer(transfer: IdeComputerTransferState) {
+        if (transfer == observedComputerTransfer) return
+        when (transfer) {
+            IdeComputerTransferState.Idle,
+            is IdeComputerTransferState.Downloading,
+            -> Unit
+            is IdeComputerTransferState.ConfirmationRequired -> {
+                if (IdeBusyOperation.Project in state.busy) return
+                val conflict = tree?.flatten()?.any { it.path == transfer.import.destination } == true
+                if (conflict) {
+                    state = state.copy(dialog = IdeDialogState.ComputerImport(transfer.import.destination))
+                } else {
+                    importComputerTree(transfer.import)
+                }
+            }
+            is IdeComputerTransferState.Failed -> publishProblem(transfer.detail)
+        }
+        observedComputerTransfer = transfer
+    }
+
+    private fun confirmComputerImport() {
+        val transfer = computerFiles?.transfer() as? IdeComputerTransferState.ConfirmationRequired ?: return
+        if (state.dialog !is IdeDialogState.ComputerImport) return
+        state = state.copy(dialog = null)
+        importComputerTree(transfer.import.replacingExisting())
+    }
+
+    private fun importComputerTree(import: ProjectImport) {
+        if (IdeBusyOperation.Project in state.busy) return
+        val operationId = nextOperationId++
+        latestComputerImportOperation = operationId
+        val requestGeneration = generation
+        state = state.copy(busy = state.busy + IdeBusyOperation.Project)
+        workspace.importTree(requireProject(), import).whenComplete { result, failure ->
+            if (failure == null) {
+                enqueue(IdeEvent.ComputerImportCompleted(requestGeneration, operationId, import, result))
+            } else {
+                enqueue(IdeEvent.ComputerImportFailed(requestGeneration, operationId, failure.message ?: "Project import failed"))
+            }
+        }
+    }
+
     private fun applyRename(
         source: ProjectPath,
         target: ProjectPath,
@@ -1234,6 +1331,7 @@ class IdeClientController(
                             (state.page as? IdePageState.Workspace)?.value?.status,
                             buildState,
                             computerFiles?.state() ?: IdeComputerTreeState.NoTarget,
+                            computerFiles?.transfer() ?: IdeComputerTransferState.Idle,
                         ),
                     ),
             )
@@ -1390,10 +1488,12 @@ class IdeClientController(
         }
         val before = files.state()
         val previewBefore = files.preview()
+        val transferBefore = files.transfer()
         files.tick()
         acceptComputerPreview(files.preview())
+        acceptComputerTransfer(files.transfer())
         if (
-            files.state() != before || files.preview() != previewBefore ||
+            files.state() != before || files.preview() != previewBefore || files.transfer() != transferBefore ||
             workspaceComputerTree() != files.state()
         ) {
             publishWorkspace()
@@ -1499,6 +1599,7 @@ class IdeClientController(
     }
 
     private fun recoverToStart(message: String) {
+        cancelComputerTransfer()
         cancelBuildJobs()
         pendingBuildAction = null
         buildState = IdeBuildState.Idle
@@ -1518,6 +1619,11 @@ class IdeClientController(
                 state.target,
                 state.tooling,
             )
+    }
+
+    private fun cancelComputerTransfer() {
+        computerFiles?.cancelTransfer()
+        observedComputerTransfer = IdeComputerTransferState.Idle
     }
 
     private fun publishProblem(message: String) {
@@ -1655,6 +1761,10 @@ private fun IdeEvent.generationOrNull(): Long? =
         is IdeEvent.DeleteAdmitted -> generation
 
         is IdeEvent.MutationCompleted -> generation
+
+        is IdeEvent.ComputerImportCompleted -> generation
+
+        is IdeEvent.ComputerImportFailed -> generation
 
         is IdeEvent.CatalogLoaded -> generation
 
