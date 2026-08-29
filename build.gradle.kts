@@ -44,6 +44,8 @@ val compukterFfiLibrary = compukterFfiTargetRoot.resolve("release/${System.mapLi
 val compukterVmManifest = compukterVmRoot.resolve("Cargo.toml")
 val compukterVmLock = compukterVmRoot.resolve("Cargo.lock")
 
+registerCompukterVmReleaseTasks(compukterVmRoot)
+
 fun cleanWorkspaceTargets(): List<File> {
     val repositoryRoot = rootProject.projectDir
     return repositoryRoot
