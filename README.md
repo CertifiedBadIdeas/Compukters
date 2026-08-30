@@ -29,6 +29,8 @@ there is no remap stage or Architectury runtime dependency.
 
 See the [Guest Kotlin support matrix](docs/KOTLIN-SUPPORT.md) for the current
 language, standard-library, Guest API, and IDE compatibility boundaries.
+See [Redstone GPIO](docs/REDSTONE.md) for local-side input waits, persistent
+weak/direct outputs, and tick-boundary behavior.
 
 ## Minecraft development
 

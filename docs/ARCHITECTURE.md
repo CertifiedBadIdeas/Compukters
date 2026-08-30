@@ -29,6 +29,8 @@ The raw terminal is a synchronous Rust device: cell writes, positional writes, r
 
 The Minecraft carrier owns exactly one host and advances it once per server tick. Rust starts `/rom/boot`, compiled from `system/programs/boot.kt`; boot delegates to `/rom/shell`, compiled from `system/programs/shell.kt`. A foreground child suspends its parent and returns a stable integer result when it exits or fails. There is one active foreground lane today, while the runtime contract leaves room for later parallel execution. Reboot replaces the complete machine stack and clears the terminal. Minecraft sends full state to a new viewer and ordered deltas thereafter. All viewers may submit bounded key and text events, which merge in server-arrival order without a client-side echo or an input lease.
 
+Minecraft owns the persistent 30-bit redstone output register and samples dirty local faces before VM advancement. Rust owns the complete input snapshot, predicate waiters, and confirmed output mirror. Input crosses FFI as one scalar changed-mask-plus-levels packet; output requests are reduced in publication order and committed through one loader-independent host port at most once per computer per tick. A successful physical commit is confirmed to Rust before every original blocking request resumes. VM halt, fault, shutdown, reboot, and replacement never synthesize a zero output.
+
 The client renders the fixed 51x19 grid in a centered compact panel using one 6x9 `minecraft:uniform` cell scale; the world remains visible through a translucent dim layer. Presentation never changes terminal coordinates or owns a second grid.
 
 The Rust VM owns verification, the Tier 0 interpreter, managed memory and collection, quotas, traps/faults, capability suspension, and host-neutral sessions. Future JIT/AOT tiers must remain behind the same verified artifact and session contract.
@@ -41,7 +43,7 @@ Boot, shell, `kotlinc`, and `edit` are ordinary no-std Kotlin programs packaged 
 
 `/rom/edit <path>` is a nano-like 51x19 editor backed by one managed 4096-unit `CharArray` gap buffer. Cursor motion and deletion preserve UTF-16 surrogate pairs, CRLF input is normalized to LF, Tab inserts four spaces, Enter inherits leading indentation, and the viewport scrolls in both axes. Ctrl+S writes through Rust-owned `FileSystem.writeText`; Ctrl+X exits directly when clean or opens a Y/N/Escape save prompt when dirty. The buffer, source, and compiled artifact belong to the computer filesystem, while the terminal state belongs only to the current VM lifetime. The verified playable loop is `edit demo.kt` -> `kotlinc demo.kt` -> `demo`; source and artifact survive machine reload and remain isolated by `ComputerId`.
 
-Terminal, process, filesystem, and compiler declarations live in the `guest-api-core` metadata bundle so the compiler, future addon bundles, and IDE autocomplete consume the same Kotlin API surface. General stream handles, pipes, process redirection, multi-file projects, and addon API bundles remain later layers.
+Terminal, redstone, process, filesystem, and compiler declarations live in the `guest-api-core` metadata bundle so the compiler, future addon bundles, and IDE autocomplete consume the same Kotlin API surface. General stream handles, pipes, process redirection, multi-file projects, and addon API bundles remain later layers.
 
 ## Module ownership
 
