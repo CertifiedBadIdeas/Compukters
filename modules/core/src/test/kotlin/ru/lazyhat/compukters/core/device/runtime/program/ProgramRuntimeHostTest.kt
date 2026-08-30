@@ -35,6 +35,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.GuestTrap
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.QuotaKind
+import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
@@ -63,6 +64,133 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class ProgramRuntimeHostTest {
+    @Test
+    fun `redstone batch commits once confirms before every success and stops this tick`() {
+        val events = mutableListOf<String>()
+        val requests =
+            listOf(
+                redstoneSide(1, 2, 7),
+                redstoneAll(2, RedstoneWire.REGISTER_MASK),
+                redstoneSide(3, 4, 0),
+            )
+        val candidate = RedstoneWire.replaceOutput(RedstoneWire.REGISTER_MASK, 4, 0)
+        val session =
+            ScriptedSession(
+                outcomes = listOf(VmOutcome.HostRequestBatch(requests), VmOutcome.Halted(null)),
+                lifecycleEvents = events,
+            )
+        val committed = mutableListOf<Int>()
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { session },
+                tickBudget = ProgramTickBudget(8, 4, 2),
+                redstoneHostPort = RedstoneHostPort { packed ->
+                    events += "port:$packed"
+                    committed += packed
+                    RedstoneCommitResult.Committed
+                },
+            )
+        host.start(byteArrayOf(1))
+        events.clear()
+
+        assertEquals(ProgramRuntimeState.Running, host.serverTick())
+
+        assertEquals(listOf(candidate), committed)
+        assertEquals(1, session.advances.size)
+        assertEquals(
+            listOf("port:$candidate", "confirm:$candidate", "resume:1", "resume:2", "resume:3"),
+            events,
+        )
+        assertEquals(requests.map { response(it.taskId, it.id, HostResponse.UnitSuccess) }, session.responses)
+    }
+
+    @Test
+    fun `redstone port failure fails every request while a no-op skips the physical port`() {
+        val failure = RedstoneCommitResult.Failed(HostFailureKind.INPUT_OUTPUT, 9)
+        val failedSession = ScriptedSession(outcomes = listOf(VmOutcome.HostRequestBatch(listOf(redstoneSide(1, 0, 4)))))
+        val failedHost =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { failedSession },
+                redstoneHostPort = RedstoneHostPort { failure },
+            )
+        failedHost.start(byteArrayOf(1))
+        failedSession.confirmedOutputs.clear()
+
+        failedHost.serverTick()
+
+        assertEquals(emptyList(), failedSession.confirmedOutputs)
+        assertEquals(
+            listOf(response(1, 1, HostResponse.Failure(HostFailureKind.INPUT_OUTPUT, 9))),
+            failedSession.responses,
+        )
+
+        var commits = 0
+        val noOpSession = ScriptedSession(outcomes = listOf(VmOutcome.HostRequestBatch(listOf(redstoneAll(2, 7)))))
+        val noOpHost =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { noOpSession },
+                initialRedstoneOutput = 7,
+                redstoneHostPort = RedstoneHostPort {
+                    commits++
+                    RedstoneCommitResult.Committed
+                },
+            )
+        noOpHost.start(byteArrayOf(1))
+        noOpSession.confirmedOutputs.clear()
+
+        noOpHost.serverTick()
+
+        assertEquals(0, commits)
+        assertEquals(emptyList(), noOpSession.confirmedOutputs)
+        assertEquals(listOf(response(1, 2, HostResponse.UnitSuccess)), noOpSession.responses)
+    }
+
+    @Test
+    fun `replacement seeds confirmed output and the latest complete input snapshot`() {
+        val first = ScriptedSession(defaultOutcome = VmOutcome.SliceExhausted)
+        val second = ScriptedSession(defaultOutcome = VmOutcome.SliceExhausted)
+        val sessions = ArrayDeque(listOf(first, second))
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { sessions.removeFirst() },
+                initialRedstoneOutput = 17,
+            )
+        host.start(byteArrayOf(1))
+        val packet = RedstoneWire.packInput(1 shl 2, intArrayOf(1, 2, 3, 4, 5, 6))
+        assertTrue(host.submitRedstoneInput(packet))
+
+        host.start(byteArrayOf(2))
+
+        assertEquals(listOf(17), second.confirmedOutputs)
+        assertEquals(listOf(RedstoneWire.withAllInputSidesChanged(packet)), second.redstoneInputs)
+        assertEquals(0, second.advances.size)
+    }
+
+    @Test
+    fun `lifecycle transitions never synthesize a redstone reset`() {
+        val first = ScriptedSession(defaultOutcome = VmOutcome.SliceExhausted)
+        val second = ScriptedSession(outcomes = listOf(VmOutcome.Faulted(VmFault.CORRUPT_LIFECYCLE)))
+        val sessions = ArrayDeque(listOf(first, second))
+        val commits = mutableListOf<Int>()
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { sessions.removeFirst() },
+                initialRedstoneOutput = 23,
+                redstoneHostPort = RedstoneHostPort {
+                    commits += it
+                    RedstoneCommitResult.Committed
+                },
+            )
+
+        host.start(byteArrayOf(1))
+        host.shutdown()
+        host.start(byteArrayOf(2))
+        host.serverTick()
+        host.close()
+
+        assertEquals(emptyList(), commits)
+    }
+
     @Test
     fun `deployment facade delegates to the active VM session without exposing its handle`() {
         val candidate = fakeDeploymentCandidate()
@@ -610,6 +738,7 @@ class ProgramRuntimeHostTest {
                 .Present(1),
         private val completionError: VmBridgeException? = null,
         private val closeEvent: (() -> Unit)? = null,
+        private val lifecycleEvents: MutableList<String>? = null,
     ) : ProgramVmSession {
         private val outcomes = ArrayDeque(outcomes)
         val advances = mutableListOf<Pair<Int, Int>>()
@@ -624,6 +753,8 @@ class ProgramRuntimeHostTest {
         val revisionPaths = mutableListOf<String>()
         val deploymentPaths = mutableListOf<String>()
         val canonicalLines = mutableListOf<String>()
+        val redstoneInputs = mutableListOf<Int>()
+        val confirmedOutputs = mutableListOf<Int>()
 
         override fun advance(
             guestBudget: Int,
@@ -638,7 +769,18 @@ class ProgramRuntimeHostTest {
             response: HostResponse,
         ) {
             resumeError?.let { throw it }
+            lifecycleEvents?.add("resume:${identity.requestId}")
             responses += identity to response
+        }
+
+        override fun submitRedstoneInput(packet: Int) {
+            redstoneInputs += packet
+            lifecycleEvents?.add("input:$packet")
+        }
+
+        override fun confirmRedstoneOutput(packed: Int) {
+            confirmedOutputs += packed
+            lifecycleEvents?.add("confirm:$packed")
         }
 
         override fun completeCompilationArtifact(
@@ -753,6 +895,19 @@ class ProgramRuntimeHostTest {
     ): Pair<VmHostRequestIdentity, HostResponse> = VmHostRequestIdentity(taskId, requestId) to response
 
     private companion object {
+        val REDSTONE = CapabilityIdentity("compukter", "redstone", 1, 0)
+
+        fun redstoneSide(
+            id: Long,
+            side: Int,
+            output: Int,
+        ): VmHostRequest = VmHostRequest(id, REDSTONE, 6, listOf(VmValue.I32(side), VmValue.I32(output)))
+
+        fun redstoneAll(
+            id: Long,
+            packed: Int,
+        ): VmHostRequest = VmHostRequest(id, REDSTONE, 7, listOf(VmValue.I32(packed)))
+
         fun fakeDeploymentCandidate(): ProgramDeploymentCandidate =
             object : ProgramDeploymentCandidate {
                 override fun close() = Unit
