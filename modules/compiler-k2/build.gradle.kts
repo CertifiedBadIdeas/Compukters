@@ -237,6 +237,7 @@ val blockingCallConformanceArtifact = layout.buildDirectory.file("generated/conf
 val suspendCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/suspend-call.cpkt")
 val whenConformanceArtifact = layout.buildDirectory.file("generated/conformance/when.cpkt")
 val argvConformanceArtifact = layout.buildDirectory.file("generated/conformance/argv.cpkt")
+val valueClassConformanceArtifact = layout.buildDirectory.file("generated/conformance/value-class.cpkt")
 val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = layout.buildDirectory.file("generated/system/shell.cpkt")
 val kotlincArtifact = layout.buildDirectory.file("generated/system/kotlinc.cpkt")
@@ -317,6 +318,22 @@ val generateArgvConformanceArtifact = tasks.register<Test>("generateArgvConforma
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.argvArtifact", argvConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateValueClassConformanceArtifact = tasks.register<Test>("generateValueClassConformanceArtifact") {
+    description = "Compiles a primitive-backed value-class precondition program for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*JvmInline value class admits one bounded Int constructor precondition*")
+    inputs.file(workerJar)
+    outputs.file(valueClassConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.valueClassArtifact", valueClassConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

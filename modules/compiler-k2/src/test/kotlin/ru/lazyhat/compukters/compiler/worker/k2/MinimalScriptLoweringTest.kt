@@ -252,6 +252,199 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `JvmInline value class erases construction access calls locals and equality to Int`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                @JvmInline
+                value class Signal(val level: Int)
+
+                fun doubled(signal: Signal): Signal = Signal(signal.level + signal.level)
+
+                fun main() {
+                    var signal = Signal(7)
+                    signal = doubled(signal)
+                    signal == Signal(14)
+                }
+                """.trimIndent()
+
+            val result = adapter.compile(request(source))
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val opcodes = applicationCodeOpcodes(artifact)
+
+            assertTrue(0x30 !in opcodes, "value-class construction must not allocate an object: $opcodes")
+            assertTrue(0x35 !in opcodes, "underlying-property access must not load a field: $opcodes")
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+        }
+
+    @Test
+    fun `JvmInline value class computed getter and operator compile as scalar member calls`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                @JvmInline
+                value class Signal(val level: Int) {
+                    val doubled: Int get() = level + level
+                    operator fun plus(other: Signal): Signal = Signal(level + other.level)
+                }
+
+                fun main() {
+                    val signal = Signal(3) + Signal(4)
+                    signal.doubled
+                }
+                """.trimIndent()
+
+            val result = adapter.compile(request(source))
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val opcodes = applicationCodeOpcodes(artifact)
+
+            assertTrue(0x30 !in opcodes, "value-class members must not allocate an object: $opcodes")
+            assertTrue(0x35 !in opcodes, "value-class members must not load an underlying field: $opcodes")
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+        }
+
+    @Test
+    fun `JvmInline Boolean and Char value classes erase to their scalar representations`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                @JvmInline
+                value class Enabled(val value: Boolean)
+
+                @JvmInline
+                value class Glyph(val value: Char)
+
+                fun main() {
+                    Enabled(true) == Enabled(false)
+                    Glyph('a') == Glyph('z')
+                }
+                """.trimIndent()
+
+            val result = adapter.compile(request(source))
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val opcodes = applicationCodeOpcodes(artifact)
+
+            assertTrue(0x30 !in opcodes, "value-class construction must not allocate an object: $opcodes")
+            assertTrue(0x35 !in opcodes, "underlying-property access must not load a field: $opcodes")
+        }
+
+    @Test
+    fun `JvmInline value class overload keeps a distinct deterministic artifact name`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                @JvmInline
+                value class Signal(val level: Int)
+
+                fun read(value: Int): Int = value
+                fun read(value: Signal): Int = value.level
+
+                fun main() {
+                    read(1) + read(Signal(2))
+                }
+                """.trimIndent()
+
+            val result = adapter.compile(request(source))
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val metadata = indexedSectionRecords(artifact, 0x0100).map(ByteArray::decodeToString)
+
+            assertTrue("read" in metadata, metadata.toString())
+            assertTrue("read#(Signal)->kotlin.Int" in metadata, metadata.toString())
+        }
+
+    @Test
+    fun `JvmInline value class rejects non scalar generic nullable stateful and interface shapes`() =
+        withAdapter { adapter ->
+            val unsupported =
+                listOf(
+                    "@JvmInline value class Ref(val value: String)\nfun main() { Ref(\"x\") }",
+                    "@JvmInline value class Generic<T>(val value: T)\nfun main() { Generic(1) }",
+                    "@JvmInline value class Nullable(val value: Int?)\nfun main() { Nullable(null) }",
+                    "@JvmInline value class Stateful(val value: Int) { init { value + 1 } }\nfun main() { Stateful(1) }",
+                    "interface Marker\n@JvmInline value class Marked(val value: Int) : Marker\nfun main() { Marked(1) }",
+                    "@JvmInline value class Signal(val value: Int) { init { require(value in 0..15) }; companion object { val INVALID = Signal(16) } }\nfun main() { Signal.INVALID }",
+                )
+
+            unsupported.forEach { source ->
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact, source)
+                assertTrue(
+                    result.diagnostics.any { it.code == "UNSUPPORTED_IR" },
+                    "$source: ${result.diagnostics}",
+                )
+            }
+        }
+
+    @Test
+    fun `JvmInline value class rejects nullable boxed and collection uses before artifact publication`() =
+        withAdapter { adapter ->
+            val unsupported =
+                listOf(
+                    "@JvmInline value class Signal(val value: Int)\nfun keep(value: Signal?): Signal? = value\nfun main() { keep(null) }",
+                    "@JvmInline value class Signal(val value: Int)\nfun box(value: Signal): Any = value\nfun main() { box(Signal(1)) }",
+                    "@JvmInline value class Signal(val value: Int)\nfun keep(values: Array<Signal>): Int = values.size\nfun main() { keep(arrayOf(Signal(1))) }",
+                )
+
+            unsupported.forEach { source ->
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact, source)
+                assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" }, result.diagnostics.toString())
+            }
+        }
+
+    @Test
+    fun `JvmInline typed companion constants fold to scalar constants without static objects`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                @JvmInline
+                value class Signal(val level: Int) {
+                    companion object {
+                        val MIN: Signal = Signal(0)
+                        val MAX: Signal = Signal(15)
+                    }
+                }
+
+                fun main() {
+                    Signal.MAX.level - Signal.MIN.level
+                }
+                """.trimIndent()
+
+            val result = adapter.compile(request(source))
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val opcodes = applicationCodeOpcodes(artifact)
+
+            assertTrue(0x30 !in opcodes, "value-class companion must not allocate an object: $opcodes")
+            assertTrue(0x38 !in opcodes, "value-class companion constants must not use static fields: $opcodes")
+        }
+
+    @Test
+    fun `JvmInline value class admits one bounded Int constructor precondition`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                @JvmInline
+                value class Signal(val level: Int) {
+                    init {
+                        require(level in 0..15)
+                    }
+                }
+
+                fun main() {
+                    Signal(16)
+                }
+                """.trimIndent()
+
+            val result = adapter.compile(request(source))
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+
+            assertTrue(0x30 !in applicationCodeOpcodes(artifact))
+            System.getProperty("compukter.vm.valueClassArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `all four legal main forms lower deterministically with an explicit entry contract`() =
         withAdapter { adapter ->
             val sources =

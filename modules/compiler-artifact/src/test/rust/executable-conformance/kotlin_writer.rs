@@ -2,8 +2,8 @@ use std::{fs, sync::Arc};
 
 use compukter_vm::{
     verify_artifact, AdvanceOutcome, ArtifactLimits, CapabilityBinding, EntryArgumentLimits,
-    EntryValue, ExecutionProfile, HostResponse, HostValueInput, HostValueType, HostValueView,
-    OperationSchema, RequestId, Session,
+    EntryValue, ExecutionProfile, GuestTrap, HostResponse, HostValueInput, HostValueType,
+    HostValueView, OperationSchema, RequestId, Session,
 };
 
 #[test]
@@ -23,6 +23,45 @@ fn entry_argument_limits() -> EntryArgumentLimits {
         maximum_count: 64,
         maximum_code_units_per_argument: 4096,
         maximum_total_code_units: 16_384,
+    }
+}
+
+#[test]
+fn k2_value_class_precondition_traps_before_publishing_a_value() {
+    let Ok(path) = std::env::var("COMPUKTER_KOTLIN_VALUE_CLASS_ARTIFACT") else {
+        return;
+    };
+    let bytes = fs::read(path).expect("K2 value-class output must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("pinned VM must verify K2 value-class output");
+    let profile = ExecutionProfile {
+        heap_bytes: 1024 * 1024,
+        frame_storage_bytes: 1024 * 1024,
+        maximum_call_depth: 64,
+        maximum_coroutines: 1,
+        maximum_host_requests: 64,
+        maximum_events: 0,
+        maximum_slice_budget: u32::MAX,
+        compiler_abi: [0; 32],
+        standard_library_abi: [0; 32],
+        maximum_host_arguments: 16,
+        maximum_outbound_utf16_code_units: 4096,
+        maximum_inbound_utf16_code_units: 4096,
+        maximum_accepted_responses: 64,
+        entry_argument_limits: entry_argument_limits(),
+    };
+    let mut session = Session::admit(verified, profile, &[]).expect("value-class artifact must admit");
+    session.start(&[]).expect("value-class artifact must start");
+
+    loop {
+        match session.advance(64, 64).expect("value-class artifact must advance") {
+            AdvanceOutcome::SliceExhausted => {}
+            AdvanceOutcome::Crashed(GuestTrap::DivisionByZero) => break,
+            AdvanceOutcome::HostRequestBatch(_) => {
+                panic!("invalid value class construction must trap before a host request")
+            }
+            outcome => panic!("unexpected value-class precondition outcome: {outcome:?}"),
+        }
     }
 }
 

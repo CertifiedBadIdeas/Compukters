@@ -272,6 +272,24 @@ val testKotlinArgvVmConformance =
         environment("COMPUKTER_KOTLIN_ARGV_ARTIFACT", artifact.get().asFile.absolutePath)
     }
 
+val testKotlinValueClassVmConformance =
+    tasks.register<Exec>("testKotlinValueClassVmConformance") {
+        description = "Executes a primitive-backed K2 value-class precondition with the pinned Compukter VM."
+        group = "verification"
+        dependsOn(":compiler-k2:generateValueClassConformanceArtifact")
+        val harness = rootProject.file("modules/compiler-artifact/src/test/rust/executable-conformance/Cargo.toml")
+        val artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/value-class.cpkt")
+        val target = rootProject.file(".toolchain/build/cargo/compiler-k2-value-class-conformance")
+        inputs.file(harness)
+        inputs.file(rootProject.file("modules/compiler-artifact/src/test/rust/executable-conformance/Cargo.lock"))
+        inputs.file(rootProject.file("modules/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs"))
+        inputs.file(artifact)
+        commandLine("cargo", "test", "--locked", "--offline", "--manifest-path", harness.absolutePath)
+        environment("CARGO_TARGET_DIR", target.absolutePath)
+        environment("COMPUKTER_KOTLIN_EXECUTABLE_ARTIFACT", artifact.get().asFile.absolutePath)
+        environment("COMPUKTER_KOTLIN_VALUE_CLASS_ARTIFACT", artifact.get().asFile.absolutePath)
+    }
+
 val buildScriptsTest = gradle.includedBuild("build-scripts").task(":test")
 
 val verifyActiveMinecraftBaseline =

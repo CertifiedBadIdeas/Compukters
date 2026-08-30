@@ -138,6 +138,231 @@ private data class GuestConstructorTarget(
     val functionId: FunctionId,
 )
 
+private data class InlineValueClassLayout(
+    val declaration: IrClass,
+    val constructor: IrConstructorSymbol,
+    val getter: IrSimpleFunctionSymbol,
+    val underlyingType: IrType,
+    val intRange: InlineIntRange?,
+)
+
+private data class InlineIntRange(
+    val minimum: Int,
+    val maximum: Int,
+)
+
+private data class InlineScalarConstant(
+    val value: Any,
+)
+
+private class InlineValueClassRegistry private constructor(
+    private val byClass: Map<IrClassSymbol, InlineValueClassLayout>,
+    private val byConstructor: Map<IrConstructorSymbol, InlineValueClassLayout>,
+    private val byGetter: Map<IrSimpleFunctionSymbol, InlineValueClassLayout>,
+    private val companionClasses: Set<IrClassSymbol>,
+    private val constantsByGetter: Map<IrSimpleFunctionSymbol, InlineScalarConstant>,
+) {
+    operator fun get(symbol: IrClassSymbol): InlineValueClassLayout? = byClass[symbol]
+
+    fun constructor(symbol: IrConstructorSymbol): InlineValueClassLayout? = byConstructor[symbol]
+
+    fun getter(symbol: IrSimpleFunctionSymbol): InlineValueClassLayout? = byGetter[symbol]
+
+    fun contains(symbol: IrClassSymbol?): Boolean = symbol != null && symbol in byClass
+
+    fun isCompanion(symbol: IrClassSymbol): Boolean = symbol in companionClasses
+
+    fun constant(getter: IrSimpleFunctionSymbol): InlineScalarConstant? = constantsByGetter[getter]
+
+    fun constantValues(): List<Any> =
+        constantsByGetter.values.map(InlineScalarConstant::value) +
+            byClass.values.flatMap { layout ->
+                layout.intRange?.let { listOf(it.minimum, it.maximum) }.orEmpty()
+            }
+
+    companion object {
+        @OptIn(UnsafeDuringIrConstructionAPI::class)
+        fun build(
+            classes: List<IrClass>,
+            pluginContext: IrPluginContext,
+        ): InlineValueClassRegistry {
+            val layouts = classes.filter { it.isValue }.map { declaration -> validate(declaration, pluginContext) }
+            val layoutsByClass = layouts.associateBy { it.declaration.symbol }
+            val companions =
+                classes.filter { declaration ->
+                    declaration.kind == ClassKind.OBJECT &&
+                        declaration.name.asString() == "Companion" &&
+                        layoutsByClass.containsKey((declaration.parent as? IrClass)?.symbol)
+                }
+            val constants =
+                companions.flatMap { companion ->
+                    companion.declarations.filterIsInstance<IrProperty>().map { property ->
+                        if (property.isVar || property.getter == null || property.backingField == null) {
+                            throw UnsupportedKotlinIr(property, "value class companion properties must be immutable scalar constants")
+                        }
+                        val initializer =
+                            requireNotNull(property.backingField).initializer?.expression
+                                ?: throw UnsupportedKotlinIr(property, "value class companion constant requires an initializer")
+                        requireNotNull(property.getter).symbol to
+                            InlineScalarConstant(
+                                scalarConstant(
+                                    initializer,
+                                    layouts.associateBy(InlineValueClassLayout::constructor),
+                                    pluginContext,
+                                ),
+                            )
+                    }
+                }.toMap()
+            return InlineValueClassRegistry(
+                byClass = layoutsByClass,
+                byConstructor = layouts.associateBy(InlineValueClassLayout::constructor),
+                byGetter = layouts.associateBy(InlineValueClassLayout::getter),
+                companionClasses = companions.mapTo(mutableSetOf()) { it.symbol },
+                constantsByGetter = constants,
+            )
+        }
+
+        @OptIn(UnsafeDuringIrConstructionAPI::class)
+        private fun scalarConstant(
+            expression: IrExpression,
+            layouts: Map<IrConstructorSymbol, InlineValueClassLayout>,
+            pluginContext: IrPluginContext,
+        ): Any =
+            when (expression) {
+                is IrConst ->
+                    expression.value
+                        ?: throw UnsupportedKotlinIr(expression, "null companion constants are not supported")
+
+                is IrConstructorCall -> {
+                    val layout =
+                        layouts[expression.symbol]
+                            ?: throw UnsupportedKotlinIr(expression, "companion constant constructor is not a supported value class")
+                    val argument =
+                        expression.symbol.owner.parameters
+                            .mapIndexedNotNull { index, parameter ->
+                                expression.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.Regular }
+                            }.singleOrNull()
+                            ?: throw UnsupportedKotlinIr(expression, "value class companion constant requires one scalar argument")
+                    val value = scalarConstant(argument, layouts, pluginContext)
+                    val valid =
+                        when (layout.underlyingType) {
+                            pluginContext.irBuiltIns.intType -> value is Int
+                            pluginContext.irBuiltIns.booleanType -> value is Boolean
+                            pluginContext.irBuiltIns.charType -> value is Char
+                            else -> false
+                        }
+                    if (!valid) throw UnsupportedKotlinIr(expression, "value class companion constant type mismatch")
+                    layout.intRange?.let { range ->
+                        val intValue = value as Int
+                        if (intValue !in range.minimum..range.maximum) {
+                            throw UnsupportedKotlinIr(expression, "value class companion constant violates its precondition")
+                        }
+                    }
+                    value
+                }
+
+                else -> throw UnsupportedKotlinIr(expression, "value class companion initializer must be a scalar constant")
+            }
+
+        @OptIn(UnsafeDuringIrConstructionAPI::class)
+        private fun validate(
+            declaration: IrClass,
+            pluginContext: IrPluginContext,
+        ): InlineValueClassLayout {
+            if (declaration.annotations.none {
+                    it.symbol.owner.parentAsClass.fqNameWhenAvailable?.asString() == "kotlin.jvm.JvmInline"
+                }
+            ) {
+                throw UnsupportedKotlinIr(declaration, "value class must be annotated with @JvmInline")
+            }
+            if (declaration.typeParameters.isNotEmpty()) {
+                throw UnsupportedKotlinIr(declaration, "generic value classes are not supported")
+            }
+            val constructor =
+                declaration.constructors.singleOrNull { it.isPrimary }
+                    ?: throw UnsupportedKotlinIr(declaration, "value class must have one primary constructor")
+            if (declaration.constructors.any { !it.isPrimary }) {
+                throw UnsupportedKotlinIr(declaration, "value class secondary constructors are not supported")
+            }
+            val parameter =
+                constructor.parameters.singleOrNull { it.kind == IrParameterKind.Regular }
+                    ?: throw UnsupportedKotlinIr(declaration, "value class must have one underlying property")
+            val property =
+                declaration.declarations.filterIsInstance<IrProperty>().singleOrNull { property ->
+                    property.backingField != null && property.name == parameter.name
+                } ?: throw UnsupportedKotlinIr(declaration, "value class must have one underlying property")
+            if (property.isVar || property.getter == null || property.getter?.origin != IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR) {
+                throw UnsupportedKotlinIr(property, "value class underlying property must be immutable")
+            }
+            if (parameter.type.isNullable() ||
+                parameter.type !in
+                setOf(
+                    pluginContext.irBuiltIns.intType,
+                    pluginContext.irBuiltIns.booleanType,
+                    pluginContext.irBuiltIns.charType,
+                )
+            ) {
+                throw UnsupportedKotlinIr(parameter, "value class underlying type must be a supported non-null scalar")
+            }
+            val initializers = declaration.declarations.filterIsInstance<IrAnonymousInitializer>()
+            val intRange =
+                when (initializers.size) {
+                    0 -> null
+                    1 -> parseIntRange(initializers.single(), requireNotNull(property.getter).symbol)
+                    else -> throw UnsupportedKotlinIr(declaration, "value class supports at most one scalar precondition")
+                }
+            val unsupportedParent =
+                declaration.superTypes
+                    .mapNotNull { (it as? IrSimpleType)?.classifier as? IrClassSymbol }
+                    .firstOrNull { it.owner.fqNameWhenAvailable?.asString() != "kotlin.Any" }
+            if (unsupportedParent != null) {
+                throw UnsupportedKotlinIr(declaration, "value class interfaces and custom supertypes are not supported")
+            }
+            return InlineValueClassLayout(
+                declaration = declaration,
+                constructor = constructor.symbol,
+                getter = requireNotNull(property.getter).symbol,
+                underlyingType = parameter.type,
+                intRange = intRange,
+            )
+        }
+
+        @OptIn(UnsafeDuringIrConstructionAPI::class)
+        private fun parseIntRange(
+            initializer: IrAnonymousInitializer,
+            getter: IrSimpleFunctionSymbol,
+        ): InlineIntRange {
+            val requireCall =
+                initializer.body.statements.singleOrNull() as? IrCall
+                    ?: throw UnsupportedKotlinIr(initializer, "value class initializer must be one require call")
+            if (requireCall.symbol.owner.fqNameWhenAvailable?.asString() != "kotlin.require") {
+                throw UnsupportedKotlinIr(initializer, "value class initializer must be one require call")
+            }
+            val contains =
+                requireCall.arguments.filterNotNull().singleOrNull() as? IrCall
+                    ?: throw UnsupportedKotlinIr(initializer, "value class require must check one inclusive Int range")
+            if (contains.symbol.owner.fqNameWhenAvailable?.asString() != "kotlin.ranges.IntRange.contains") {
+                throw UnsupportedKotlinIr(initializer, "value class require must check one inclusive Int range")
+            }
+            val containsArguments = contains.arguments.filterNotNull()
+            val range =
+                containsArguments.getOrNull(0) as? IrCall
+                    ?: throw UnsupportedKotlinIr(initializer, "value class require must use a constant Int range")
+            val value = containsArguments.getOrNull(1) as? IrCall
+            if (range.symbol.owner.name.asString() != "rangeTo" || value?.symbol != getter) {
+                throw UnsupportedKotlinIr(initializer, "value class require must check its underlying property")
+            }
+            val bounds = range.arguments.filterNotNull().map { (it as? IrConst)?.value }
+            val minimum = bounds.getOrNull(0) as? Int
+            val maximum = bounds.getOrNull(1) as? Int
+            if (minimum == null || maximum == null || minimum > maximum) {
+                throw UnsupportedKotlinIr(initializer, "value class require bounds must be ordered Int constants")
+            }
+            return InlineIntRange(minimum, maximum)
+        }
+    }
+}
+
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 internal object KotlinProjectLowering {
     fun lower(
@@ -148,10 +373,24 @@ internal object KotlinProjectLowering {
         session: CompilationSession,
     ): Artifact {
         val guestTypes = GuestTypeRegistry(pluginContext)
+        val sourceClasses =
+            classes
+                .filterNot { session.trustedApiIdentity(it.file.fileEntry.name) != null }
+                .sortedBy { it.fqNameWhenAvailable?.asString().orEmpty() }
+        val inlineValueClasses = InlineValueClassRegistry.build(classes, pluginContext)
         val playerFunctions =
             functions
-                .filter { it.parent is IrFile }
-                .filterNot { session.trustedApiIdentity(it.file.fileEntry.name) != null }
+                .filter { function ->
+                    function.parent is IrFile ||
+                        (
+                            inlineValueClasses.contains((function.parent as? IrClass)?.symbol) &&
+                                function.origin == IrDeclarationOrigin.DEFINED
+                        )
+                }
+                .filterNot { function ->
+                    session.trustedApiIdentity(function.file.fileEntry.name) != null &&
+                        !inlineValueClasses.contains((function.parent as? IrClass)?.symbol)
+                }
         val processFacadeNames = setOf("compukter.process.Process.run", "compukter.process.Process.exit")
         val usesProcessFacade =
             playerFunctions.any { function ->
@@ -204,6 +443,7 @@ internal object KotlinProjectLowering {
                                 pluginContext.irBuiltIns.intType,
                                 pluginContext.irBuiltIns.booleanType,
                                 pluginContext.irBuiltIns.charType,
+                                inlineValueClasses,
                             ) as? TrustedIntrinsic.StandardOutput
                         if (intrinsic != null) {
                             val argumentType =
@@ -253,11 +493,14 @@ internal object KotlinProjectLowering {
                     ),
                 )
         require(userFunctions.firstOrNull() === entry)
-        val sourceClasses =
-            classes
-                .filterNot { session.trustedApiIdentity(it.file.fileEntry.name) != null }
-                .sortedBy { it.fqNameWhenAvailable?.asString().orEmpty() }
-        val userClasses = collectGuestClasses(sourceClasses, userFunctions, session)
+        val userClasses =
+            collectGuestClasses(
+                sourceClasses.filterNot {
+                    inlineValueClasses.contains(it.symbol) || inlineValueClasses.isCompanion(it.symbol)
+                },
+                userFunctions,
+                session,
+            )
         val constructorClasses =
             userClasses.filter { declaration ->
                 declaration.kind == ClassKind.CLASS &&
@@ -275,6 +518,7 @@ internal object KotlinProjectLowering {
                     pluginContext.irBuiltIns.intType,
                     pluginContext.irBuiltIns.booleanType,
                     pluginContext.irBuiltIns.charType,
+                    inlineValueClasses,
                 )
             }
         userFunctions.forEach { function -> function.accept(intrinsicCollector, null) }
@@ -290,12 +534,16 @@ internal object KotlinProjectLowering {
                     guestTypes.isStringArray(function.returnType) ||
                         loweredParameters(function, session).any { parameter -> guestTypes.isStringArray(parameter.type) }
                 }
+        val functionArtifactNames =
+            userFunctions.associate { function ->
+                function.symbol to artifactFunctionName(function, pluginContext, inlineValueClasses, session)
+            }
         val metadataValues =
             (
                 listOf("app") +
                     listOfNotNull("kotlin.Array".takeIf { usesStringArray }) +
                     capabilityIdentities.flatMap { listOf(it.namespace, it.name) } +
-                    userFunctions.map { it.name.asString() } +
+                    userFunctions.map { requireNotNull(functionArtifactNames[it.symbol]) } +
                     userClasses.map { it.fqNameWhenAvailable?.asString() ?: it.name.asString() } +
                     userClasses.flatMap { declaration ->
                         declaration.declarations.filterIsInstance<IrProperty>().map { it.name.asString() } +
@@ -316,7 +564,12 @@ internal object KotlinProjectLowering {
                 }.sorted()
         val literalIds = literals.withIndex().associate { (index, value) -> value to Utf16LiteralId.of(index.toUInt()) }
         val constantPool = ConstantPoolBuilder()
-        (literalCollector.values.map { value -> value.toArtifactConstant(literalIds) } + Constant.I32(0) + Constant.Bool(false))
+        (
+            (literalCollector.values + inlineValueClasses.constantValues())
+                .map { value -> value.toArtifactConstant(literalIds) } +
+                Constant.I32(0) +
+                Constant.Bool(false)
+        )
             .forEach(constantPool::intern)
         val constants = constantPool.freeze().records
         val constantIds = constants.withIndex().associate { (index, value) -> value to ConstantId.of(index.toUInt()) }
@@ -349,7 +602,9 @@ internal object KotlinProjectLowering {
                 nullable = false,
                 type = TypeRef.Local(TypeId.of((userFunctions.size + constructorClasses.size + userClasses.size).toUInt())),
             )
-        userFunctions.forEach { validateFunction(it, pluginContext, guestTypes, classTypeIds, session) }
+        userFunctions.forEach {
+            validateFunction(it, pluginContext, guestTypes, classTypeIds, inlineValueClasses, session)
+        }
         val classLayouts =
             buildClassLayouts(
                 userClasses,
@@ -359,6 +614,7 @@ internal object KotlinProjectLowering {
                 stringType,
                 charArrayType,
                 stringArrayType,
+                inlineValueClasses,
             )
         val classLayoutsBySymbol = classLayouts.associateBy { it.declaration.symbol }
         val blocks = mutableListOf<Block>()
@@ -389,6 +645,7 @@ internal object KotlinProjectLowering {
                     session = session,
                     capabilityIds = capabilityIds,
                     classTypeIds = classTypeIds,
+                    inlineValueClasses = inlineValueClasses,
                     constructorLayouts =
                         classLayouts
                             .mapNotNull { layout ->
@@ -417,17 +674,28 @@ internal object KotlinProjectLowering {
                     charArrayType,
                     stringArrayType,
                     classTypeIds,
+                    inlineValueClasses,
                     function,
                 )
             val parameterTypes =
                 loweredParameters(function, session).map {
-                    valueType(it.type, pluginContext, guestTypes, stringType, charArrayType, stringArrayType, classTypeIds, it)
+                    valueType(
+                        it.type,
+                        pluginContext,
+                        guestTypes,
+                        stringType,
+                        charArrayType,
+                        stringArrayType,
+                        classTypeIds,
+                        inlineValueClasses,
+                        it,
+                    )
                 }
             val flags = setOfNotNull(FunctionFlag.STATIC, FunctionFlag.SUSPENDING.takeIf { function.isSuspend })
             loweredFunctions +=
                 Function(
                     owner = null,
-                    name = requireNotNull(metadataIds[function.name.asString()]),
+                    name = requireNotNull(metadataIds[functionArtifactNames[function.symbol]]),
                     signature = TypeRef.Local(requireNotNull(functionTypeIds[function.symbol])),
                     flags = flags,
                     registers = parameterTypes + compiled.localTypes,
@@ -480,7 +748,7 @@ internal object KotlinProjectLowering {
         val functionTypes =
             userFunctions.map { function ->
                 NominalType.Function(
-                    name = requireNotNull(metadataIds[function.name.asString()]),
+                    name = requireNotNull(metadataIds[functionArtifactNames[function.symbol]]),
                     suspending = function.isSuspend,
                     result =
                         valueType(
@@ -491,11 +759,22 @@ internal object KotlinProjectLowering {
                             charArrayType,
                             stringArrayType,
                             classTypeIds,
+                            inlineValueClasses,
                             function,
                         ),
                     parameters =
                         loweredParameters(function, session).map {
-                            valueType(it.type, pluginContext, guestTypes, stringType, charArrayType, stringArrayType, classTypeIds, it)
+                            valueType(
+                                it.type,
+                                pluginContext,
+                                guestTypes,
+                                stringType,
+                                charArrayType,
+                                stringArrayType,
+                                classTypeIds,
+                                inlineValueClasses,
+                                it,
+                            )
                         },
                 )
             }
@@ -648,11 +927,57 @@ internal object KotlinProjectLowering {
         )
     }
 
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    private fun artifactFunctionName(
+        function: IrSimpleFunction,
+        pluginContext: IrPluginContext,
+        inlineValueClasses: InlineValueClassRegistry,
+        session: CompilationSession,
+    ): String {
+        val signatureTypes = loweredParameters(function, session).map { it.type } + function.returnType
+        if (signatureTypes.none { type ->
+                inlineValueClasses.contains((type as? IrSimpleType)?.classifier as? IrClassSymbol)
+            }
+        ) {
+            return function.name.asString()
+        }
+        val parameters =
+            loweredParameters(function, session).joinToString(",") { parameter ->
+                sourceTypeName(parameter.type, pluginContext, inlineValueClasses)
+            }
+        val result = sourceTypeName(function.returnType, pluginContext, inlineValueClasses)
+        return "${function.name.asString()}#($parameters)->$result"
+    }
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    private fun sourceTypeName(
+        type: IrType,
+        pluginContext: IrPluginContext,
+        inlineValueClasses: InlineValueClassRegistry,
+    ): String =
+        when (type) {
+            pluginContext.irBuiltIns.unitType -> "kotlin.Unit"
+            pluginContext.irBuiltIns.intType -> "kotlin.Int"
+            pluginContext.irBuiltIns.booleanType -> "kotlin.Boolean"
+            pluginContext.irBuiltIns.charType -> "kotlin.Char"
+            pluginContext.irBuiltIns.stringType -> "kotlin.String"
+            else -> {
+                val classifier = requireNotNull((type as? IrSimpleType)?.classifier as? IrClassSymbol)
+                inlineValueClasses[classifier]
+                    ?.declaration
+                    ?.name
+                    ?.asString()
+                    ?: classifier.owner.fqNameWhenAvailable?.asString()
+                    ?: classifier.owner.name.asString()
+            }
+        }
+
     private fun validateFunction(
         function: IrSimpleFunction,
         pluginContext: IrPluginContext,
         guestTypes: GuestTypeRegistry,
         classTypeIds: Map<IrClassSymbol, TypeId>,
+        inlineValueClasses: InlineValueClassRegistry,
         session: CompilationSession,
     ) {
         val supported =
@@ -668,6 +993,10 @@ internal object KotlinProjectLowering {
             type in supported || type.isNothing() ||
                 type.isExactClass(pluginContext.irBuiltIns.charArray) ||
                 guestTypes.isStringArray(type) ||
+                (
+                    !type.isNullable() &&
+                        inlineValueClasses.contains((type as? IrSimpleType)?.classifier as? IrClassSymbol)
+                ) ||
                 classTypeIds.containsKey((type as? IrSimpleType)?.classifier)
         if (loweredParameters(function, session).any { !isSupported(it.type) } ||
             !isSupported(function.returnType)
@@ -684,6 +1013,7 @@ internal object KotlinProjectLowering {
         charArrayType: ValueType,
         stringArrayType: ValueType,
         classTypeIds: Map<IrClassSymbol, TypeId>,
+        inlineValueClasses: InlineValueClassRegistry,
         element: IrElement,
     ): ValueType =
         when (type) {
@@ -715,8 +1045,23 @@ internal object KotlinProjectLowering {
                 } else if (guestTypes.isStringArray(type)) {
                     stringArrayType
                 } else if (type is IrSimpleType && type.classifier is IrClassSymbol) {
-                    val id = classTypeIds[type.classifier]
-                    if (id != null) {
+                    val classifier = type.classifier as IrClassSymbol
+                    val inline = inlineValueClasses[classifier]
+                    val id = classTypeIds[classifier]
+                    if (inline != null) {
+                        if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable value classes are not supported")
+                        valueType(
+                            inline.underlyingType,
+                            pluginContext,
+                            guestTypes,
+                            stringType,
+                            charArrayType,
+                            stringArrayType,
+                            classTypeIds,
+                            inlineValueClasses,
+                            element,
+                        )
+                    } else if (id != null) {
                         ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Local(id))
                     } else {
                         throw UnsupportedKotlinIr(element, "unsupported value type")
@@ -735,6 +1080,7 @@ internal object KotlinProjectLowering {
         stringType: ValueType,
         charArrayType: ValueType,
         stringArrayType: ValueType,
+        inlineValueClasses: InlineValueClassRegistry,
     ): List<GuestClassLayout> {
         var nextField = 0u
         return classes.map { declaration ->
@@ -788,6 +1134,7 @@ internal object KotlinProjectLowering {
                             charArrayType,
                             stringArrayType,
                             classTypeIds,
+                            inlineValueClasses,
                             property,
                         )
                     GuestFieldLayout(property, parameterIndex, FieldId.of(nextField++), fieldType)
@@ -921,6 +1268,7 @@ private class FunctionCompiler(
     private val session: CompilationSession,
     private val capabilityIds: Map<TrustedCapabilityIdentity, CapabilityId>,
     private val classTypeIds: Map<IrClassSymbol, TypeId>,
+    private val inlineValueClasses: InlineValueClassRegistry,
     private val constructorLayouts: Map<IrConstructorSymbol, GuestConstructorTarget>,
     private val fieldsByGetter: Map<IrSimpleFunctionSymbol, GuestFieldLayout>,
     private val enumEntries: Map<IrEnumEntrySymbol, GuestEnumEntryLayout>,
@@ -1073,6 +1421,20 @@ private class FunctionCompiler(
     private fun compileConstructor(call: IrConstructorCall): RegisterId {
         val target = call.symbol.owner
         val arguments = call.arguments.filterNotNull()
+        inlineValueClasses.constructor(call.symbol)?.let { layout ->
+            val argument =
+                target.parameters
+                    .mapIndexedNotNull { index, parameter ->
+                        call.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.Regular }
+                    }.singleOrNull()
+                    ?: throw UnsupportedKotlinIr(call, "value class constructor argument is missing")
+            if (argument.type != layout.underlyingType) {
+                throw UnsupportedKotlinIr(call, "value class constructor argument type does not match its underlying scalar")
+            }
+            val value = compileExpression(argument)
+            layout.intRange?.let { emitIntRangePrecondition(value, it, call) }
+            return value
+        }
         if (target.parentAsClass.symbol == kotlinCharArrayClass &&
             call.type.isExactClass(kotlinCharArrayClass) &&
             arguments.size == 1 &&
@@ -1165,6 +1527,24 @@ private class FunctionCompiler(
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun compileCall(call: IrCall): RegisterId? {
         val target = call.symbol.owner
+        inlineValueClasses.constant(target.symbol)?.let { constant ->
+            val artifactConstant = constant.value.toArtifactConstant(literalIds)
+            val constantId =
+                constantIds[artifactConstant]
+                    ?: throw UnsupportedKotlinIr(call, "value class companion constant is absent from canonical pool")
+            return allocate(valueType(call.type, call)).also { destination ->
+                emit(Instruction.Const(destination, constantId))
+            }
+        }
+        inlineValueClasses.getter(target.symbol)?.let {
+            val receiver =
+                target.parameters
+                    .mapIndexedNotNull { index, parameter ->
+                        call.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.DispatchReceiver }
+                    }.singleOrNull()
+                    ?: throw UnsupportedKotlinIr(call, "value class property getter receiver is missing")
+            return compileExpression(receiver)
+        }
         fieldsByGetter[target.symbol]?.let { field ->
             val receiverExpression =
                 target.parameters
@@ -1341,6 +1721,34 @@ private class FunctionCompiler(
             constantIds[Constant.I32(value)]
                 ?: throw UnsupportedKotlinIr(element, "generated array constant is absent from canonical pool")
         return allocate(ValueType.I32).also { emit(Instruction.Const(it, id)) }
+    }
+
+    private fun emitIntRangePrecondition(
+        value: RegisterId,
+        range: InlineIntRange,
+        element: IrElement,
+    ) {
+        val minimum = emitI32Constant(range.minimum, element)
+        val maximum = emitI32Constant(range.maximum, element)
+        val below = allocate(ValueType.Bool)
+        emit(Instruction.Less(OrderedScalarValueType.I32, below, value, minimum))
+        val upperCheck = createBlock()
+        val failure = createBlock()
+        val success = createBlock()
+        emit(Instruction.Branch(below, blockId(failure), blockId(upperCheck)))
+
+        currentBlock = upperCheck
+        val above = allocate(ValueType.Bool)
+        emit(Instruction.Greater(OrderedScalarValueType.I32, above, value, maximum))
+        emit(Instruction.Branch(above, blockId(failure), blockId(success)))
+
+        currentBlock = failure
+        val zero = emitI32Constant(0, element)
+        val trapped = allocate(ValueType.I32)
+        emit(Instruction.DivideI32(trapped, zero, zero))
+        emit(Instruction.Unreachable)
+
+        currentBlock = success
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -1683,7 +2091,16 @@ private class FunctionCompiler(
     }
 
     private fun trustedIntrinsic(function: IrSimpleFunction): TrustedIntrinsic? =
-        resolveTrustedIntrinsic(function, session, unitType, kotlinStringType, intType, booleanType, charType)
+        resolveTrustedIntrinsic(
+            function,
+            session,
+            unitType,
+            kotlinStringType,
+            intType,
+            booleanType,
+            charType,
+            inlineValueClasses,
+        )
 
     private fun valueType(
         type: IrType,
@@ -1718,8 +2135,13 @@ private class FunctionCompiler(
                 } else if (guestTypes.isStringArray(type)) {
                     stringArrayType
                 } else if (type is IrSimpleType && type.classifier is IrClassSymbol) {
-                    val id = classTypeIds[type.classifier]
-                    if (id != null) {
+                    val classifier = type.classifier as IrClassSymbol
+                    val inline = inlineValueClasses[classifier]
+                    val id = classTypeIds[classifier]
+                    if (inline != null) {
+                        if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable value classes are not supported")
+                        valueType(inline.underlyingType, element)
+                    } else if (id != null) {
                         ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Local(id))
                     } else {
                         throw UnsupportedKotlinIr(element, "unsupported value type")
@@ -1740,10 +2162,10 @@ private class FunctionCompiler(
         type: IrType,
         element: IrElement,
     ): ScalarValueType =
-        when (type) {
-            intType -> ScalarValueType.I32
-            booleanType -> ScalarValueType.BOOL
-            charType -> ScalarValueType.CHAR
+        when (valueType(type, element)) {
+            ValueType.I32 -> ScalarValueType.I32
+            ValueType.Bool -> ScalarValueType.BOOL
+            ValueType.Char -> ScalarValueType.CHAR
             else -> throw UnsupportedKotlinIr(element, "unsupported equality operand")
         }
 
@@ -1751,9 +2173,9 @@ private class FunctionCompiler(
         type: IrType,
         element: IrElement,
     ): OrderedScalarValueType =
-        when (type) {
-            intType -> OrderedScalarValueType.I32
-            charType -> OrderedScalarValueType.CHAR
+        when (valueType(type, element)) {
+            ValueType.I32 -> OrderedScalarValueType.I32
+            ValueType.Char -> OrderedScalarValueType.CHAR
             else -> throw UnsupportedKotlinIr(element, "unsupported ordered-comparison operand")
         }
 
@@ -1881,6 +2303,7 @@ private fun resolveTrustedIntrinsic(
     intType: IrType,
     booleanType: IrType,
     charType: IrType,
+    inlineValueClasses: InlineValueClassRegistry,
 ): TrustedIntrinsic? {
     var parent = function.parent
     while (parent !is IrFile) {
@@ -1906,7 +2329,17 @@ private fun resolveTrustedIntrinsic(
             intType -> TrustedValueType.INT
             booleanType -> TrustedValueType.BOOL
             charType -> TrustedValueType.CHAR
-            else -> if (isNothing()) TrustedValueType.NOTHING else TrustedValueType.OTHER
+            else -> {
+                val classifier = (this as? IrSimpleType)?.classifier as? IrClassSymbol
+                val inline = classifier?.let(inlineValueClasses::get)
+                if (inline != null && !isNullable()) {
+                    inline.underlyingType.trustedType()
+                } else if (isNothing()) {
+                    TrustedValueType.NOTHING
+                } else {
+                    TrustedValueType.OTHER
+                }
+            }
         }
     val identity =
         TrustedCallableIdentity(
