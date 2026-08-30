@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.impl.ide
 
+import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,10 +36,13 @@ class IdeClientServicesTest {
             val prepared = ProductionIdeApplicationFactory.prepare(paths)
             val compiler = prepared.compilerPayload
             val analysis = prepared.analysisPayload
+            val guestApi = prepared.analysisBundles.single()
 
             assertEquals(compiler.root, analysis.root)
             assertNotEquals(compiler.classpath, analysis.classpath)
             assertNotEquals(compiler.manifest.mainClass, analysis.manifest.mainClass)
+            assertTrue(Path.of(guestApi.classRoot).fileName.toString().startsWith("guest-api-core-"))
+            assertEquals(guestApi.classRoot, guestApi.sourceRoot)
 
             val compilerLaunch = ProductionIdeApplicationFactory.compilerLaunch(paths, prepared)
             val analysisLaunch = ProductionIdeApplicationFactory.analysisLaunch(paths, prepared)
