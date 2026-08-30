@@ -20,6 +20,10 @@ plugins {
     alias(libs.plugins.kotlinConvention)
 }
 
+dependencies {
+    testImplementation(kotlin("test"))
+}
+
 tasks.processResources {
     from("src/main/kotlin") {
         include("**/*.kt")

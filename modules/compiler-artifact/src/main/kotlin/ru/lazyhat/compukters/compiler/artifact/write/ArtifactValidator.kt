@@ -318,6 +318,16 @@ internal fun validateArtifact(
 
             is Instruction.RemainderI32 -> listOf(left, right)
 
+            is Instruction.BitAndI32 -> listOf(left, right)
+
+            is Instruction.BitOrI32 -> listOf(left, right)
+
+            is Instruction.BitXorI32 -> listOf(left, right)
+
+            is Instruction.ShiftLeftI32 -> listOf(left, right)
+
+            is Instruction.ShiftUnsignedI32 -> listOf(left, right)
+
             is Instruction.Equal -> listOf(left, right)
 
             is Instruction.RefEqual -> listOf(left, right)
@@ -398,6 +408,16 @@ internal fun validateArtifact(
             is Instruction.DivideI32 -> listOf(destination)
 
             is Instruction.RemainderI32 -> listOf(destination)
+
+            is Instruction.BitAndI32 -> listOf(destination)
+
+            is Instruction.BitOrI32 -> listOf(destination)
+
+            is Instruction.BitXorI32 -> listOf(destination)
+
+            is Instruction.ShiftLeftI32 -> listOf(destination)
+
+            is Instruction.ShiftUnsignedI32 -> listOf(destination)
 
             is Instruction.Equal -> listOf(destination)
 
@@ -983,12 +1003,22 @@ internal fun validateArtifact(
                         is Instruction.MultiplyI32,
                         is Instruction.DivideI32,
                         is Instruction.RemainderI32,
+                        is Instruction.BitAndI32,
+                        is Instruction.BitOrI32,
+                        is Instruction.BitXorI32,
+                        is Instruction.ShiftLeftI32,
+                        is Instruction.ShiftUnsignedI32,
                         -> {
                             val name =
                                 when (instruction) {
                                     is Instruction.MultiplyI32 -> "multiply"
                                     is Instruction.DivideI32 -> "divide"
                                     is Instruction.RemainderI32 -> "remainder"
+                                    is Instruction.BitAndI32 -> "bit-and"
+                                    is Instruction.BitOrI32 -> "bit-or"
+                                    is Instruction.BitXorI32 -> "bit-xor"
+                                    is Instruction.ShiftLeftI32 -> "shift-left"
+                                    is Instruction.ShiftUnsignedI32 -> "shift-unsigned"
                                 }
                             val registers =
                                 when (instruction) {
@@ -1001,6 +1031,26 @@ internal fun validateArtifact(
                                     }
 
                                     is Instruction.RemainderI32 -> {
+                                        listOf(instruction.destination, instruction.left, instruction.right)
+                                    }
+
+                                    is Instruction.BitAndI32 -> {
+                                        listOf(instruction.destination, instruction.left, instruction.right)
+                                    }
+
+                                    is Instruction.BitOrI32 -> {
+                                        listOf(instruction.destination, instruction.left, instruction.right)
+                                    }
+
+                                    is Instruction.BitXorI32 -> {
+                                        listOf(instruction.destination, instruction.left, instruction.right)
+                                    }
+
+                                    is Instruction.ShiftLeftI32 -> {
+                                        listOf(instruction.destination, instruction.left, instruction.right)
+                                    }
+
+                                    is Instruction.ShiftUnsignedI32 -> {
                                         listOf(instruction.destination, instruction.left, instruction.right)
                                     }
                                 }

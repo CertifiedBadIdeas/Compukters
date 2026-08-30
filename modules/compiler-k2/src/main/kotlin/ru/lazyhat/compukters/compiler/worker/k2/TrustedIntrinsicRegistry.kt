@@ -91,6 +91,7 @@ internal object TrustedIntrinsicRegistry {
     const val PROCESS_BUNDLE_ID = "compukter.process-api@2"
     const val FILESYSTEM_BUNDLE_ID = "compukter.filesystem-api@1"
     const val COMPILER_BUNDLE_ID = "compukter.compiler-api@1"
+    const val REDSTONE_BUNDLE_ID = "compukter.redstone-api@1"
     val CORE_SOURCE_BUNDLES =
         listOf(
             TrustedApiSourceBundle(
@@ -118,24 +119,72 @@ internal object TrustedIntrinsicRegistry {
                 "/compukter-guest-api/compukter/compiler/Compiler.kt",
                 "compiler.kt",
             ),
+            TrustedApiSourceBundle(
+                REDSTONE_BUNDLE_ID,
+                "/compukter-guest-api/compukter/redstone/Redstone.kt",
+                "redstone.kt",
+            ),
         )
     val TERMINAL_CAPABILITY = TrustedCapabilityIdentity("compukter", "terminal", 2u.toUShort(), 0u.toUShort(), 14u)
     val STDIO_CAPABILITY = TrustedCapabilityIdentity("compukter", "stdio", 1u.toUShort(), 0u.toUShort(), 3u)
     val PROCESS_CAPABILITY = TrustedCapabilityIdentity("compukter", "process", 2u.toUShort(), 0u.toUShort(), 3u)
     val FILESYSTEM_CAPABILITY = TrustedCapabilityIdentity("compukter", "filesystem", 1u.toUShort(), 0u.toUShort(), 7u)
     val COMPILER_CAPABILITY = TrustedCapabilityIdentity("compukter", "compiler", 1u.toUShort(), 0u.toUShort(), 2u)
+    val REDSTONE_CAPABILITY = TrustedCapabilityIdentity("compukter", "redstone", 1u.toUShort(), 0u.toUShort(), 8u)
 
     private val providers: List<TrustedIntrinsicProvider> =
         listOf(
             CompilerIntrinsicProvider,
             FilesystemIntrinsicProvider,
             ProcessIntrinsicProvider,
+            RedstoneIntrinsicProvider,
             StdioIntrinsicProvider,
             TerminalIntrinsicProvider,
         )
 
     fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic? =
         providers.firstNotNullOfOrNull { provider -> provider.resolve(callable) }
+}
+
+private object RedstoneIntrinsicProvider : TrustedIntrinsicProvider {
+    override fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic? {
+        if (
+            callable.origin != TrustedCallableOrigin.TRUSTED_SDK_SOURCE ||
+            callable.bundleIdentity != TrustedIntrinsicRegistry.REDSTONE_BUNDLE_ID ||
+            callable.suspending
+        ) {
+            return null
+        }
+        val binding = "compukter.redstone.RedstoneBindings."
+        return when (callable.name) {
+            "${binding}input" -> operation(0u, callable, listOf(TrustedValueType.INT), TrustedValueType.INT, BlockingMode.NONE)
+            "${binding}awaitInputChange" ->
+                operation(1u, callable, listOf(TrustedValueType.INT), TrustedValueType.INT, BlockingMode.VM_TASK)
+            "${binding}awaitInput" ->
+                operation(2u, callable, listOf(TrustedValueType.INT, TrustedValueType.INT), TrustedValueType.INT, BlockingMode.VM_TASK)
+            "${binding}awaitAtLeastInput" ->
+                operation(3u, callable, listOf(TrustedValueType.INT, TrustedValueType.INT), TrustedValueType.INT, BlockingMode.VM_TASK)
+            "${binding}awaitAtMostInput" ->
+                operation(4u, callable, listOf(TrustedValueType.INT, TrustedValueType.INT), TrustedValueType.INT, BlockingMode.VM_TASK)
+            "${binding}outputs" -> operation(5u, callable, emptyList(), TrustedValueType.INT, BlockingMode.NONE)
+            "${binding}setOutput" ->
+                operation(6u, callable, listOf(TrustedValueType.INT, TrustedValueType.INT), TrustedValueType.UNIT, BlockingMode.VM_TASK)
+            "${binding}setOutputs" ->
+                operation(7u, callable, listOf(TrustedValueType.INT), TrustedValueType.UNIT, BlockingMode.VM_TASK)
+            else -> null
+        }
+    }
+
+    private fun operation(
+        operation: UInt,
+        callable: TrustedCallableIdentity,
+        parameters: List<TrustedValueType>,
+        result: TrustedValueType,
+        blocking: BlockingMode,
+    ): TrustedIntrinsic? =
+        TrustedIntrinsic.CapabilityOperation(TrustedIntrinsicRegistry.REDSTONE_CAPABILITY, operation, blocking).takeIf {
+            callable.parameters == parameters && callable.result == result
+        }
 }
 
 private object StdioIntrinsicProvider : TrustedIntrinsicProvider {
