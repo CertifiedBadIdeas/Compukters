@@ -30,6 +30,22 @@ import kotlin.test.assertFailsWith
 
 class VmSessionTest {
     @Test
+    fun `redstone synchronization validates and delegates exact unsigned bits`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(7)))
+        val session = VmSession.open(byteArrayOf(1), bridge)
+        val input = RedstoneWire.packInput(1, intArrayOf(15, 0, 0, 0, 0, 0))
+        val output = RedstoneWire.replaceOutput(0, 5, 0x1f)
+
+        session.submitRedstoneInput(input)
+        session.confirmRedstoneOutput(output)
+
+        assertEquals(listOf(7L to input), bridge.redstoneInputs)
+        assertEquals(listOf(7L to output), bridge.redstoneOutputs)
+        assertFailsWith<IllegalArgumentException> { session.submitRedstoneInput(1 shl 30) }
+        assertFailsWith<IllegalArgumentException> { session.confirmRedstoneOutput(1 shl 31) }
+    }
+
+    @Test
     fun `host request batch owns an immutable request snapshot`() {
         val requests =
             mutableListOf(
@@ -496,6 +512,8 @@ class VmSessionTest {
         val closedCandidates = mutableListOf<Long>()
         val deployments = mutableListOf<Deployment>()
         val canonicalLines = mutableListOf<List<Char>>()
+        val redstoneInputs = mutableListOf<Pair<Long, Int>>()
+        val redstoneOutputs = mutableListOf<Pair<Long, Int>>()
         var revisionResult: ByteArray = byteArrayOf(99)
         var deployResult: ByteArray = byteArrayOf(99)
         var deployFailure: RuntimeException? = null
@@ -536,6 +554,20 @@ class VmSessionTest {
             line: CharArray,
         ) {
             canonicalLines += line.toList()
+        }
+
+        override fun submitRedstoneInput(
+            handle: Long,
+            packet: Int,
+        ) {
+            redstoneInputs += handle to packet
+        }
+
+        override fun confirmRedstoneOutput(
+            handle: Long,
+            packed: Int,
+        ) {
+            redstoneOutputs += handle to packed
         }
 
         override fun storeOpen(

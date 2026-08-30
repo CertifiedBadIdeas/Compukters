@@ -115,6 +115,16 @@ internal interface LowLevelVmBridge {
         line: CharArray,
     ): Unit = error("canonical line submission is unavailable")
 
+    fun submitRedstoneInput(
+        handle: Long,
+        packet: Int,
+    ): Unit = error("redstone input is unavailable")
+
+    fun confirmRedstoneOutput(
+        handle: Long,
+        packed: Int,
+    ): Unit = error("redstone output is unavailable")
+
     fun advance(
         handle: Long,
         guestBudget: Int,

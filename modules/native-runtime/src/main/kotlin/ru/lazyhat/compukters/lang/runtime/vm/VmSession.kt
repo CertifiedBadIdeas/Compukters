@@ -218,6 +218,12 @@ class VmSession private constructor(
     fun submitCanonicalLine(line: CharArray): Unit =
         bridge.submitCanonicalLine(requireHandle(), line.copyOf())
 
+    fun submitRedstoneInput(packet: Int): Unit =
+        bridge.submitRedstoneInput(requireHandle(), RedstoneWire.requireInputPacket(packet))
+
+    fun confirmRedstoneOutput(packed: Int): Unit =
+        bridge.confirmRedstoneOutput(requireHandle(), RedstoneWire.requireOutputRegister(packed))
+
     override fun close() {
         val closing = handle.getAndSet(CLOSED)
         if (closing != CLOSED) {
