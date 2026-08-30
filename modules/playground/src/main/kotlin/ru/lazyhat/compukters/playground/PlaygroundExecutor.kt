@@ -212,7 +212,7 @@ class NativePlaygroundExecutor(
         value: String? = null,
     ): VmHostRequest =
         VmHostRequest(
-            id = 0,
+            id = 1,
             capability = terminal.identity,
             operation = operation,
             arguments = value?.let { listOf(VmValue.StringValue(it)) }.orEmpty(),
