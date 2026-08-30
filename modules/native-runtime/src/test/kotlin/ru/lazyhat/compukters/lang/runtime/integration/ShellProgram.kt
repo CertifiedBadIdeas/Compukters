@@ -48,7 +48,7 @@ internal object ShellProgram {
 
     private fun advanceUntilWaiting(session: VmSession) {
         repeat(MAXIMUM_ADVANCES) {
-            when (val outcome = session.advance(GUEST_BUDGET, MAINTENANCE_BUDGET)) {
+            when (val outcome = session.advance(GUEST_BUDGET, MAINTENANCE_BUDGET, Int.MAX_VALUE)) {
                 VmOutcome.SliceExhausted -> Unit
                 VmOutcome.WaitingForTerminalEvent -> return
                 else -> error("unexpected VM outcome: $outcome")

@@ -705,7 +705,7 @@ object ComputerBlockGameTest {
 
     private fun advanceUntilHalted(session: VmSession): VmOutcome.Halted {
         repeat(10_000) {
-            when (val outcome = session.advance(64, 64)) {
+            when (val outcome = session.advance(64, 64, Int.MAX_VALUE)) {
                 VmOutcome.SliceExhausted -> Unit
                 is VmOutcome.Halted -> return outcome
                 else -> error("unexpected VM outcome: $outcome")

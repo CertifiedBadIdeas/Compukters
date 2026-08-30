@@ -166,6 +166,7 @@ class WorldFileSystemStoreTest {
             handle: Long,
             guestBudget: Int,
             maintenanceBudget: Int,
+            hostRequestBudget: Int,
         ): ByteArray = error("unused")
 
         override fun resumeUnit(

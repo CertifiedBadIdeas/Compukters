@@ -415,6 +415,7 @@ internal class FfmBridge private constructor(
         handle: Long,
         guestBudget: Int,
         maintenanceBudget: Int,
+        hostRequestBudget: Int,
     ): ByteArray =
         Arena.ofConfined().use { callArena ->
             val maximum = maximumOutcomeBytes
@@ -425,6 +426,7 @@ internal class FfmBridge private constructor(
                     handle,
                     guestBudget,
                     maintenanceBudget,
+                    hostRequestBudget,
                     output,
                     maximum.toLong(),
                     written,
@@ -1023,6 +1025,7 @@ internal class FfmBridge private constructor(
                                 ValueLayout.JAVA_LONG,
                                 ValueLayout.JAVA_INT,
                                 ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_INT,
                                 ValueLayout.ADDRESS,
                                 ValueLayout.JAVA_LONG,
                                 ValueLayout.ADDRESS,
@@ -1148,7 +1151,7 @@ internal class FfmBridge private constructor(
                             ),
                         ),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 7) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 8) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()

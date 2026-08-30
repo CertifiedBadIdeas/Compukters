@@ -192,6 +192,8 @@ enum class HostFailureKind(
 sealed interface VmOutcome {
     data object SliceExhausted : VmOutcome
 
+    data object WaitingForHostQuota : VmOutcome
+
     data object WaitingForTerminalEvent : VmOutcome
 
     class HostRequestBatch(requests: List<VmHostRequest>) : VmOutcome {

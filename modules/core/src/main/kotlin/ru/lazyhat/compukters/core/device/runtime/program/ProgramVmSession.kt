@@ -150,7 +150,7 @@ private class NativeProgramVmSession(
     override fun advance(
         guestBudget: Int,
         maintenanceBudget: Int,
-    ): VmOutcome = session.advance(guestBudget, maintenanceBudget)
+    ): VmOutcome = session.advance(guestBudget, maintenanceBudget, Int.MAX_VALUE)
 
     override fun resume(
         identity: VmHostRequestIdentity,

@@ -46,11 +46,16 @@ class VmSession private constructor(
     fun advance(
         guestBudget: Int,
         maintenanceBudget: Int,
+        hostRequestBudget: Int,
     ): VmOutcome {
-        require(guestBudget >= 0 && maintenanceBudget >= 0) { "VM budgets must be non-negative" }
+        require(guestBudget >= 0 && maintenanceBudget >= 0 && hostRequestBudget >= 0) {
+            "VM budgets must be non-negative"
+        }
         val activeHandle = requireHandle()
         return decodeNative {
-            WireDecoder(bridge.advance(activeHandle, guestBudget, maintenanceBudget)).outcome { token ->
+            WireDecoder(
+                bridge.advance(activeHandle, guestBudget, maintenanceBudget, hostRequestBudget),
+            ).outcome { token ->
                 val request = CompilationWireDecoder(bridge.compilationRequest(activeHandle, token)).request()
                 require(request.token == token) { "native compilation token mismatch" }
                 VmOutcome.CompilationRequested(request)
@@ -517,6 +522,7 @@ private class WireDecoder(
             7 -> VmOutcome.HostFailed(hostFailureKind(u8()), u32())
             9 -> VmOutcome.WaitingForTerminalEvent
             10 -> compilation(i64().also { require(it > 0) { "invalid native compilation token" } })
+            11 -> VmOutcome.WaitingForHostQuota
             else -> invalid()
         }.also { end() }
 
