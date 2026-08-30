@@ -132,12 +132,14 @@ class ProgramRuntimeHost internal constructor(
     }
 
     private fun advanceForTick(activeSession: ProgramVmSession) {
+        var remainingHostRequests = tickBudget.hostRequestsPerTick
         repeat(tickBudget.maximumAdvancesPerTick) {
             val outcome =
                 try {
                     activeSession.advance(
                         tickBudget.guestBudgetPerAdvance,
                         tickBudget.maintenanceBudgetPerAdvance,
+                        remainingHostRequests,
                     )
                 } catch (error: VmBridgeException) {
                     finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))
@@ -152,6 +154,8 @@ class ProgramRuntimeHost internal constructor(
                     state = ProgramRuntimeState.WaitingForInput
                     return
                 }
+
+                VmOutcome.WaitingForHostQuota -> return
 
                 is VmOutcome.Halted -> {
                     state = ProgramRuntimeState.Halted(outcome.value)
@@ -192,6 +196,10 @@ class ProgramRuntimeHost internal constructor(
                 }
 
                 is VmOutcome.HostRequestBatch -> {
+                    check(outcome.requests.size <= remainingHostRequests) {
+                        "native VM exceeded supplied host request budget"
+                    }
+                    remainingHostRequests -= outcome.requests.size
                     if (outcome.requests.all(::isRedstoneOutputRequest)) {
                         commitRedstoneBatch(activeSession, outcome.requests)
                         return

@@ -427,6 +427,9 @@ class ProgramRuntimeHostTest {
                 maximumAdvancesPerTick = 0,
             )
         }
+        assertFailsWith<IllegalArgumentException> {
+            ProgramTickBudget(hostRequestsPerTick = 0)
+        }
     }
 
     @Test
@@ -434,6 +437,7 @@ class ProgramRuntimeHostTest {
         assertEquals(4_096, ProgramTickBudget().guestBudgetPerAdvance)
         assertEquals(256, ProgramTickBudget().maintenanceBudgetPerAdvance)
         assertEquals(32, ProgramTickBudget().maximumAdvancesPerTick)
+        assertEquals(16, ProgramTickBudget().hostRequestsPerTick)
         assertEquals(ProgramRuntimeState.Idle, ProgramRuntimeState.Idle)
     }
 
@@ -455,7 +459,75 @@ class ProgramRuntimeHostTest {
 
         assertEquals(ProgramRuntimeState.Running, host.serverTick())
 
-        assertEquals(listOf(7 to 3, 7 to 3, 7 to 3, 7 to 3), session.advances)
+        assertEquals(
+            listOf(
+                AdvanceBudget(7, 3, 16),
+                AdvanceBudget(7, 3, 16),
+                AdvanceBudget(7, 3, 16),
+                AdvanceBudget(7, 3, 16),
+            ),
+            session.advances,
+        )
+    }
+
+    @Test
+    fun `tick shares host credits and stops only when vm cannot progress`() {
+        val addon = CapabilityIdentity("addon", "device", 1, 0)
+        fun batch(
+            first: Long,
+            count: Int,
+        ): VmOutcome.HostRequestBatch =
+            VmOutcome.HostRequestBatch(
+                List(count) { offset ->
+                    VmHostRequest(
+                        id = first + offset,
+                        capability = addon,
+                        operation = 0,
+                        arguments = emptyList(),
+                        taskId = if (offset % 2 == 0) 1 else 2,
+                    )
+                },
+            )
+        val session =
+            ScriptedSession(
+                outcomes =
+                    listOf(
+                        batch(1, 10),
+                        batch(11, 6),
+                        VmOutcome.SliceExhausted,
+                        VmOutcome.WaitingForHostQuota,
+                    ),
+            )
+        val host = host(session, ProgramTickBudget(8, 4, 4, hostRequestsPerTick = 16))
+        host.start(byteArrayOf(1))
+
+        assertEquals(ProgramRuntimeState.Running, host.serverTick())
+        assertEquals(
+            listOf(
+                AdvanceBudget(8, 4, 16),
+                AdvanceBudget(8, 4, 6),
+                AdvanceBudget(8, 4, 0),
+                AdvanceBudget(8, 4, 0),
+            ),
+            session.advances,
+        )
+    }
+
+    @Test
+    fun `host credits refill after quota wait on the next tick`() {
+        val session =
+            ScriptedSession(
+                outcomes = listOf(VmOutcome.WaitingForHostQuota, VmOutcome.Halted(null)),
+            )
+        val host = host(session, ProgramTickBudget(8, 4, 1, hostRequestsPerTick = 16))
+        host.start(byteArrayOf(1))
+
+        assertEquals(ProgramRuntimeState.Running, host.serverTick())
+        assertEquals(ProgramRuntimeState.Halted(null), host.serverTick())
+        assertEquals(
+            listOf(AdvanceBudget(8, 4, 16), AdvanceBudget(8, 4, 16)),
+            session.advances,
+        )
     }
 
     @Test
@@ -741,7 +813,7 @@ class ProgramRuntimeHostTest {
         private val lifecycleEvents: MutableList<String>? = null,
     ) : ProgramVmSession {
         private val outcomes = ArrayDeque(outcomes)
-        val advances = mutableListOf<Pair<Int, Int>>()
+        val advances = mutableListOf<AdvanceBudget>()
         val responses = mutableListOf<Pair<VmHostRequestIdentity, HostResponse>>()
         var closeCalls = 0
         var terminalCommits = 0
@@ -759,8 +831,9 @@ class ProgramRuntimeHostTest {
         override fun advance(
             guestBudget: Int,
             maintenanceBudget: Int,
+            hostRequestBudget: Int,
         ): VmOutcome {
-            advances += guestBudget to maintenanceBudget
+            advances += AdvanceBudget(guestBudget, maintenanceBudget, hostRequestBudget)
             return outcomes.removeFirstOrNull() ?: requireNotNull(defaultOutcome) { "no scripted outcome" }
         }
 
@@ -893,6 +966,12 @@ class ProgramRuntimeHostTest {
         requestId: Long,
         response: HostResponse,
     ): Pair<VmHostRequestIdentity, HostResponse> = VmHostRequestIdentity(taskId, requestId) to response
+
+    private data class AdvanceBudget(
+        val guest: Int,
+        val maintenance: Int,
+        val hostRequests: Int,
+    )
 
     private companion object {
         val REDSTONE = CapabilityIdentity("compukter", "redstone", 1, 0)
