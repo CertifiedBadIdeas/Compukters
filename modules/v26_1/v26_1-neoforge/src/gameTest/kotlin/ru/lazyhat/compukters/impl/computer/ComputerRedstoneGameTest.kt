@@ -33,6 +33,7 @@ import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
 
@@ -80,6 +81,13 @@ internal class ComputerRedstoneGameTest(
                 val bottom = helper.level.getSignal(helper.absolutePos(computerPosition), Direction.UP)
                 helper.assertTrue(direct == 15, "local TOP direct output expected level 15, got $direct")
                 helper.assertTrue(bottom == 0, "local BOTTOM output expected level 0, got $bottom")
+            }.thenWaitUntil {
+                val state = entity.runtimeState
+                val output = terminalText(entity.terminalFullState())
+                helper.assertTrue(
+                    state == ProgramComputerState.WaitingForInput && output.endsWith("> redstone\n>\n"),
+                    "redstone program did not return successfully after more than 64 writes: state=$state output=$output",
+                )
             }.thenSucceed()
     }
 
@@ -91,4 +99,15 @@ internal class ComputerRedstoneGameTest(
         requireNotNull(javaClass.getResourceAsStream("/fixtures/redstone.cpkt")) {
             "missing generated redstone GameTest fixture"
         }.use { it.readAllBytes() }
+
+    private fun terminalText(state: TerminalState?): String {
+        val terminal = requireNotNull(state) { "computer did not expose terminal state" }
+        val output = StringBuilder()
+        repeat(terminal.height) { y ->
+            val row = StringBuilder()
+            repeat(terminal.width) { x -> row.appendCodePoint(terminal.cells[y * terminal.width + x].codePoint) }
+            output.append(row.toString().trimEnd()).append('\n')
+        }
+        return output.toString().trimEnd('\n') + '\n'
+    }
 }

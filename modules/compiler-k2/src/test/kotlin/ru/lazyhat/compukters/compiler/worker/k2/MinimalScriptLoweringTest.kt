@@ -92,6 +92,11 @@ class MinimalScriptLoweringTest {
                             .with(RedstoneSide.TOP, RedstoneOutput.MAX)
                             .with(RedstoneSide.BOTTOM, RedstoneOutput.MIN),
                     )
+                    var writes = 0
+                    while (writes < 80) {
+                        Redstone.setOutput(RedstoneSide.RIGHT, RedstoneOutput.MAX)
+                        writes = writes + 1
+                    }
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))
