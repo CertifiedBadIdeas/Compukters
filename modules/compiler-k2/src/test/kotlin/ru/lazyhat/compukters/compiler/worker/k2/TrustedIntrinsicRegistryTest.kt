@@ -459,4 +459,51 @@ class TrustedIntrinsicRegistryTest {
             ),
         )
     }
+
+    @Test
+    fun `redstone provider exposes only exact scalar binding signatures`() {
+        fun resolve(
+            name: String,
+            parameters: List<TrustedValueType>,
+            result: TrustedValueType,
+            bundle: String? = "compukter.redstone-api@1",
+            origin: TrustedCallableOrigin = TrustedCallableOrigin.TRUSTED_SDK_SOURCE,
+        ) = TrustedIntrinsicRegistry.resolve(
+            TrustedCallableIdentity(bundle, name, false, parameters, result, origin),
+        )
+
+        val capability = TrustedCapabilityIdentity("compukter", "redstone", 1u.toUShort(), 0u.toUShort(), 8u)
+        val operations =
+            listOf(
+                Triple("input", listOf(TrustedValueType.INT), TrustedValueType.INT),
+                Triple("awaitInputChange", listOf(TrustedValueType.INT), TrustedValueType.INT),
+                Triple("awaitInput", listOf(TrustedValueType.INT, TrustedValueType.INT), TrustedValueType.INT),
+                Triple("awaitAtLeastInput", listOf(TrustedValueType.INT, TrustedValueType.INT), TrustedValueType.INT),
+                Triple("awaitAtMostInput", listOf(TrustedValueType.INT, TrustedValueType.INT), TrustedValueType.INT),
+                Triple("outputs", emptyList(), TrustedValueType.INT),
+                Triple("setOutput", listOf(TrustedValueType.INT, TrustedValueType.INT), TrustedValueType.UNIT),
+                Triple("setOutputs", listOf(TrustedValueType.INT), TrustedValueType.UNIT),
+            )
+
+        operations.forEachIndexed { operation, (name, parameters, result) ->
+            val blocking = if (operation == 0 || operation == 5) BlockingMode.NONE else BlockingMode.VM_TASK
+            assertEquals(
+                TrustedIntrinsic.CapabilityOperation(capability, operation.toUInt(), blocking),
+                resolve("compukter.redstone.RedstoneBindings.$name", parameters, result),
+            )
+        }
+        assertNull(resolve("compukter.redstone.RedstoneBindings.input", listOf(TrustedValueType.INT), TrustedValueType.INT, bundle = null))
+        assertNull(
+            resolve(
+                "compukter.redstone.RedstoneBindings.input",
+                listOf(TrustedValueType.INT),
+                TrustedValueType.INT,
+                origin = TrustedCallableOrigin.PLAYER_SOURCE,
+            ),
+        )
+        assertNull(resolve("compukter.redstone.Redstone.input", listOf(TrustedValueType.OTHER), TrustedValueType.INT))
+        assertNull(resolve("compukter.redstone.RedstoneBindings.input", listOf(TrustedValueType.OTHER), TrustedValueType.INT))
+        assertNull(resolve("compukter.redstone.RedstoneBindings.input", emptyList(), TrustedValueType.INT))
+        assertNull(resolve("compukter.redstone.RedstoneBindings.input", listOf(TrustedValueType.INT), TrustedValueType.OTHER))
+    }
 }

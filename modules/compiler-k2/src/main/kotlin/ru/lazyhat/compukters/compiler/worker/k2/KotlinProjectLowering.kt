@@ -387,10 +387,7 @@ internal object KotlinProjectLowering {
                                 function.origin == IrDeclarationOrigin.DEFINED
                         )
                 }
-                .filterNot { function ->
-                    session.trustedApiIdentity(function.file.fileEntry.name) != null &&
-                        !inlineValueClasses.contains((function.parent as? IrClass)?.symbol)
-                }
+                .filterNot { function -> session.trustedApiIdentity(function.file.fileEntry.name) != null }
         val processFacadeNames = setOf("compukter.process.Process.run", "compukter.process.Process.exit")
         val usesProcessFacade =
             playerFunctions.any { function ->
@@ -421,6 +418,65 @@ internal object KotlinProjectLowering {
                 functions.filter { function ->
                     session.trustedApiIdentity(function.file.fileEntry.name) == TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID &&
                         function.fqNameWhenAvailable?.asString() in processSupportNames
+                }
+            } else {
+                emptyList()
+            }
+        var usesRedstoneApi = false
+        playerFunctions.forEach { function ->
+            function.accept(
+                object : IrVisitorVoid() {
+                    override fun visitElement(element: IrElement) {
+                        element.acceptChildren(this, null)
+                    }
+
+                    override fun visitCall(expression: IrCall) {
+                        val bundle =
+                            runCatching { session.trustedApiIdentity(expression.symbol.owner.file.fileEntry.name) }
+                                .getOrNull()
+                        if (bundle == TrustedIntrinsicRegistry.REDSTONE_BUNDLE_ID) {
+                            usesRedstoneApi = true
+                        }
+                        super.visitCall(expression)
+                    }
+
+                    override fun visitConstructorCall(expression: IrConstructorCall) {
+                        val bundle =
+                            runCatching { session.trustedApiIdentity(expression.symbol.owner.file.fileEntry.name) }
+                                .getOrNull()
+                        if (bundle == TrustedIntrinsicRegistry.REDSTONE_BUNDLE_ID) {
+                            usesRedstoneApi = true
+                        }
+                        super.visitConstructorCall(expression)
+                    }
+                },
+                null,
+            )
+        }
+        val redstoneFacadeNames =
+            setOf(
+                "compukter.redstone.Redstone.input",
+                "compukter.redstone.Redstone.awaitInputChange",
+                "compukter.redstone.Redstone.awaitInput",
+                "compukter.redstone.Redstone.awaitAtLeastInput",
+                "compukter.redstone.Redstone.awaitAtMostInput",
+                "compukter.redstone.Redstone.output",
+                "compukter.redstone.Redstone.outputs",
+                "compukter.redstone.Redstone.setOutput",
+                "compukter.redstone.Redstone.setOutputs",
+                "compukter.redstone.redstoneSideIndex",
+            )
+        val redstoneSupportFunctions =
+            if (usesRedstoneApi) {
+                functions.filter { function ->
+                    session.trustedApiIdentity(function.file.fileEntry.name) == TrustedIntrinsicRegistry.REDSTONE_BUNDLE_ID &&
+                        (
+                            function.fqNameWhenAvailable?.asString() in redstoneFacadeNames ||
+                                (
+                                    inlineValueClasses.contains((function.parent as? IrClass)?.symbol) &&
+                                        function.origin == IrDeclarationOrigin.DEFINED
+                                )
+                        )
                 }
             } else {
                 emptyList()
@@ -483,7 +539,7 @@ internal object KotlinProjectLowering {
                 emptyList()
             }
         val userFunctions =
-            (playerFunctions + processSupportFunctions + stdioSupportFunctions)
+            (playerFunctions + processSupportFunctions + redstoneSupportFunctions + stdioSupportFunctions)
                 .sortedWith(
                     compareBy<IrSimpleFunction>(
                         { if (it === entry) 0 else 1 },
@@ -500,7 +556,9 @@ internal object KotlinProjectLowering {
                 },
                 userFunctions,
                 session,
-            )
+            ).filterNot {
+                inlineValueClasses.contains(it.symbol) || inlineValueClasses.isCompanion(it.symbol)
+            }
         val constructorClasses =
             userClasses.filter { declaration ->
                 declaration.kind == ClassKind.CLASS &&
@@ -556,6 +614,24 @@ internal object KotlinProjectLowering {
         val literalCollector =
             LiteralCollector()
                 .also { userFunctions.forEach { function -> function.accept(it, null) } }
+        var needsAllBitsI32 = false
+        userFunctions.forEach { function ->
+            function.accept(
+                object : IrVisitorVoid() {
+                    override fun visitElement(element: IrElement) {
+                        element.acceptChildren(this, null)
+                    }
+
+                    override fun visitCall(expression: IrCall) {
+                        if (expression.symbol.owner.fqNameWhenAvailable?.asString() == "kotlin.Int.inv") {
+                            needsAllBitsI32 = true
+                        }
+                        super.visitCall(expression)
+                    }
+                },
+                null,
+            )
+        }
         val literals =
             literalCollector.strings
                 .distinct()
@@ -568,6 +644,7 @@ internal object KotlinProjectLowering {
             (literalCollector.values + inlineValueClasses.constantValues())
                 .map { value -> value.toArtifactConstant(literalIds) } +
                 Constant.I32(0) +
+                listOfNotNull(Constant.I32(-1).takeIf { needsAllBitsI32 }) +
                 Constant.Bool(false)
         )
             .forEach(constantPool::intern)
@@ -1644,9 +1721,16 @@ private class FunctionCompiler(
             call.arguments.getOrNull(index)
                 ?: parameter.defaultValue
                     ?.expression
-                    ?.takeIf(::isSupportedStringArrayDefault)
+                    ?.takeIf { expression ->
+                        isSupportedScalarDefault(expression) || isSupportedStringArrayDefault(expression)
+                    }
                 ?: throw UnsupportedKotlinIr(call, "omitted argument is outside the project subset")
         }
+
+    private fun isSupportedScalarDefault(expression: IrExpression): Boolean =
+        expression is IrConst &&
+            expression.value != null &&
+            expression.type in setOf(intType, booleanType, charType, kotlinStringType)
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun isSupportedStringArrayDefault(expression: IrExpression): Boolean {
@@ -1808,6 +1892,11 @@ private class FunctionCompiler(
                 "times" -> return result(ValueType.I32) { Instruction.MultiplyI32(it, arguments[0], arguments[1]) }
                 "div" -> return result(ValueType.I32) { Instruction.DivideI32(it, arguments[0], arguments[1]) }
                 "rem" -> return result(ValueType.I32) { Instruction.RemainderI32(it, arguments[0], arguments[1]) }
+                "and" -> return result(ValueType.I32) { Instruction.BitAndI32(it, arguments[0], arguments[1]) }
+                "or" -> return result(ValueType.I32) { Instruction.BitOrI32(it, arguments[0], arguments[1]) }
+                "xor" -> return result(ValueType.I32) { Instruction.BitXorI32(it, arguments[0], arguments[1]) }
+                "shl" -> return result(ValueType.I32) { Instruction.ShiftLeftI32(it, arguments[0], arguments[1]) }
+                "ushr" -> return result(ValueType.I32) { Instruction.ShiftUnsignedI32(it, arguments[0], arguments[1]) }
             }
         }
         if (arguments.size == 1 && argumentExpressions[0].type == booleanType && name == "not") {
@@ -1818,6 +1907,10 @@ private class FunctionCompiler(
         if (arguments.size == 1 && argumentExpressions[0].type == intType && name == "unaryMinus") {
             val zero = emitI32Constant(0, call)
             return result(ValueType.I32) { Instruction.SubtractI32(it, zero, arguments[0]) }
+        }
+        if (arguments.size == 1 && argumentExpressions[0].type == intType && name == "inv") {
+            val allBits = emitI32Constant(-1, call)
+            return result(ValueType.I32) { Instruction.BitXorI32(it, arguments[0], allBits) }
         }
         if (arguments.size == 1 && argumentExpressions[0].type == intType && call.type == charType && name == "toChar") {
             return result(ValueType.Char) { Instruction.Convert(it, arguments[0]) }
@@ -2226,11 +2319,17 @@ private fun IrType.isExactClass(symbol: IrClassSymbol): Boolean = (this as? IrSi
 private fun loweredParameters(
     function: IrSimpleFunction,
     session: CompilationSession,
-) = if (session.trustedApiIdentity(function.file.fileEntry.name) == TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID) {
-    function.parameters.filter { it.kind == IrParameterKind.Regular }
-} else {
-    function.parameters
-}
+) =
+    when (session.trustedApiIdentity(function.file.fileEntry.name)) {
+        TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID -> function.parameters.filter { it.kind == IrParameterKind.Regular }
+        TrustedIntrinsicRegistry.REDSTONE_BUNDLE_ID ->
+            if ((function.parent as? IrClass)?.name?.asString() == "Redstone") {
+                function.parameters.filter { it.kind == IrParameterKind.Regular }
+            } else {
+                function.parameters
+            }
+        else -> function.parameters
+    }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private class LiteralCollector : IrVisitorVoid() {

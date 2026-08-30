@@ -828,6 +828,44 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `typed redstone facade lowers deterministically to scalar capability operations`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.redstone.Redstone
+                import compukter.redstone.RedstoneOutput
+                import compukter.redstone.RedstoneSide
+                import compukter.redstone.RedstoneSignal
+
+                fun main() {
+                    val current = Redstone.input(RedstoneSide.LEFT)
+                    Redstone.awaitInputChange(RedstoneSide.LEFT)
+                    Redstone.awaitInput(RedstoneSide.LEFT, current)
+                    Redstone.awaitAtLeastInput(RedstoneSide.LEFT, RedstoneSignal(7))
+                    Redstone.awaitAtMostInput(RedstoneSide.LEFT, RedstoneSignal.MAX)
+                    val next = Redstone.outputs()
+                        .with(RedstoneSide.RIGHT, Redstone.output(RedstoneSignal.MAX))
+                        .with(RedstoneSide.TOP, RedstoneOutput.MAX)
+                    Redstone.setOutput(RedstoneSide.BOTTOM, RedstoneOutput.MIN)
+                    Redstone.setOutputs(next)
+                }
+                """.trimIndent()
+
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+
+            assertContentEquals(artifact, assertNotNull(second.artifact, second.diagnostics.joinToString()).toByteArray())
+            val opcodes = applicationCodeOpcodes(artifact)
+            assertEquals(2, opcodes.count { it == 0x51 }, "input and outputs must be synchronous scalar calls: $opcodes")
+            assertEquals(6, opcodes.count { it == 0xe9 }, "waits and writes must be VM-task-blocking calls: $opcodes")
+            assertTrue(0x35 !in opcodes, "redstone value classes must not load fields: $opcodes")
+            setOf(0x16, 0x17, 0x19, 0x1b).forEach { opcode ->
+                assertTrue(opcode in opcodes, "redstone packing must retain scalar bit operation 0x${opcode.toString(16)}: $opcodes")
+            }
+        }
+
+    @Test
     fun `ordinary Kotlin standard streams lower to stdio capability operations`() =
         withAdapter { adapter ->
             val result =

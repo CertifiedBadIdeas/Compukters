@@ -70,6 +70,36 @@ sealed interface Instruction {
         val right: RegisterId,
     ) : Instruction
 
+    data class BitAndI32(
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    data class BitOrI32(
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    data class BitXorI32(
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    data class ShiftLeftI32(
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    data class ShiftUnsignedI32(
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
     data class Equal(
         val type: ScalarValueType,
         val destination: RegisterId,
