@@ -238,6 +238,7 @@ val suspendCallConformanceArtifact = layout.buildDirectory.file("generated/confo
 val whenConformanceArtifact = layout.buildDirectory.file("generated/conformance/when.cpkt")
 val argvConformanceArtifact = layout.buildDirectory.file("generated/conformance/argv.cpkt")
 val valueClassConformanceArtifact = layout.buildDirectory.file("generated/conformance/value-class.cpkt")
+val redstoneConformanceArtifact = layout.buildDirectory.file("generated/conformance/redstone.cpkt")
 val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = layout.buildDirectory.file("generated/system/shell.cpkt")
 val kotlincArtifact = layout.buildDirectory.file("generated/system/kotlinc.cpkt")
@@ -334,6 +335,22 @@ val generateValueClassConformanceArtifact = tasks.register<Test>("generateValueC
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.valueClassArtifact", valueClassConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateRedstoneConformanceArtifact = tasks.register<Test>("generateRedstoneConformanceArtifact") {
+    description = "Compiles the deterministic redstone GPIO program for GameTest conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*redstone program lowers deterministically for vm conformance*")
+    inputs.file(workerJar)
+    outputs.file(redstoneConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.redstoneArtifact", redstoneConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

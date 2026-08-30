@@ -34,12 +34,17 @@ plugins {
 }
 
 val gameTest by sourceSets.creating
+val redstoneConformanceArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/redstone.cpkt")
 
 kotlin.target.compilations.named(gameTest.name) {
     associateWith(kotlin.target.compilations.getByName("main"))
 }
 
 tasks.named<ProcessResources>(gameTest.processResourcesTaskName) {
+    dependsOn(":compiler-k2:generateRedstoneConformanceArtifact")
+    from(redstoneConformanceArtifact) {
+        into("fixtures")
+    }
     from(rootProject.layout.projectDirectory.file("host/compukter-vm/tests/fixtures/filesystem-write.cpkt")) {
         into("fixtures")
     }
