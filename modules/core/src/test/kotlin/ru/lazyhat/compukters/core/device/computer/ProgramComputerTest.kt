@@ -35,9 +35,23 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ProgramComputerTest {
+    @Test
+    fun `redstone input delegates only while powered`() {
+        val fixture = fixture()
+
+        assertFalse(fixture.computer.submitRedstoneInput(1))
+        fixture.computer.turnOn()
+        assertTrue(fixture.computer.submitRedstoneInput(0x1234))
+        fixture.computer.shutdown()
+        assertFalse(fixture.computer.submitRedstoneInput(2))
+
+        assertEquals(listOf(0x1234), fixture.host.redstoneInputs)
+    }
+
     @Test
     fun `deployment facade delegates opaque candidates and exact revisions`() {
         val candidate = fakeDeploymentCandidate()
@@ -235,6 +249,7 @@ class ProgramComputerTest {
         val revisionPaths = mutableListOf<String>()
         val deploymentPaths = mutableListOf<String>()
         val canonicalLines = mutableListOf<String>()
+        val redstoneInputs = mutableListOf<Int>()
 
         override fun startBoot(): ProgramStartResult {
             bootCalls++
@@ -295,6 +310,11 @@ class ProgramComputerTest {
 
         override fun submitCanonicalLine(line: CharArray): Boolean {
             canonicalLines += line.concatToString()
+            return true
+        }
+
+        override fun submitRedstoneInput(packet: Int): Boolean {
+            redstoneInputs += packet
             return true
         }
 

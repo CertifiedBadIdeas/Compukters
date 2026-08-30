@@ -81,6 +81,8 @@ internal interface ProgramHost : AutoCloseable {
 
     fun submitCanonicalLine(line: CharArray): Boolean
 
+    fun submitRedstoneInput(packet: Int): Boolean
+
     fun shutdown()
 }
 
@@ -134,6 +136,8 @@ internal class RuntimeProgramHost(
     ): VmExecutableRevision? = delegate.deploy(path, expected, candidate)
 
     override fun submitCanonicalLine(line: CharArray): Boolean = delegate.submitCanonicalLine(line)
+
+    override fun submitRedstoneInput(packet: Int): Boolean = delegate.submitRedstoneInput(packet)
 
     override fun shutdown() = delegate.shutdown()
 

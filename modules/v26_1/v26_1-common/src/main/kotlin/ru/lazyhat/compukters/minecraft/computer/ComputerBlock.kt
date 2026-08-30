@@ -24,6 +24,7 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.context.BlockPlaceContext
+import net.minecraft.world.level.BlockGetter
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.EntityBlock
@@ -36,7 +37,9 @@ import net.minecraft.world.level.block.state.BlockBehaviour
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.StateDefinition
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
+import net.minecraft.world.level.redstone.Orientation
 import net.minecraft.world.phys.BlockHitResult
+import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
 import java.util.function.Supplier
 
 class ComputerBlock(
@@ -102,6 +105,60 @@ class ComputerBlock(
             (level.getBlockEntity(position) as? ComputerBlockEntity)?.destroyFileSystem()
         }
         return super.playerWillDestroy(level, position, blockState, player)
+    }
+
+    override fun isSignalSource(state: BlockState): Boolean = true
+
+    override fun getSignal(
+        state: BlockState,
+        level: BlockGetter,
+        position: BlockPos,
+        direction: Direction,
+    ): Int =
+        ((level.getBlockEntity(position) as? ComputerBlockEntity)?.redstoneOutput(direction.opposite) ?: 0) and
+            RedstoneWire.SIGNAL_MASK
+
+    override fun getDirectSignal(
+        state: BlockState,
+        level: BlockGetter,
+        position: BlockPos,
+        direction: Direction,
+    ): Int {
+        val output = (level.getBlockEntity(position) as? ComputerBlockEntity)?.redstoneOutput(direction.opposite) ?: 0
+        return if (output and RedstoneWire.DIRECT_MASK != 0) {
+            output and RedstoneWire.SIGNAL_MASK
+        } else {
+            0
+        }
+    }
+
+    override fun neighborChanged(
+        state: BlockState,
+        level: Level,
+        position: BlockPos,
+        block: Block,
+        orientation: Orientation?,
+        movedByPiston: Boolean,
+    ) {
+        super.neighborChanged(state, level, position, block, orientation, movedByPiston)
+        (level.getBlockEntity(position) as? ComputerBlockEntity)
+            ?.markRedstoneInputDirty(orientation?.front?.opposite)
+    }
+
+    override fun onPlace(
+        state: BlockState,
+        level: Level,
+        position: BlockPos,
+        oldState: BlockState,
+        movedByPiston: Boolean,
+    ) {
+        super.onPlace(state, level, position, oldState, movedByPiston)
+        if (!level.isClientSide && oldState.block === this && oldState.getValue(FACING) != state.getValue(FACING)) {
+            (level.getBlockEntity(position) as? ComputerBlockEntity)?.markRedstoneInputDirty()
+            Direction.entries.forEach { direction ->
+                level.neighborChanged(position.relative(direction), this, null)
+            }
+        }
     }
 
     companion object {

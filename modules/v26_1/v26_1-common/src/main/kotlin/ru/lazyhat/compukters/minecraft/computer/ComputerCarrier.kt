@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.core.device.computer.ProgramComputer
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStateSink
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
+import ru.lazyhat.compukters.core.device.runtime.program.RedstoneHostPort
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
@@ -72,6 +73,8 @@ internal interface ComputerCarrier : AutoCloseable {
 
     fun submitCanonicalLine(line: CharArray): Boolean = false
 
+    fun submitRedstoneInput(packet: Int): Boolean
+
     fun reboot(): ProgramComputerState
 
     fun shutdown()
@@ -82,6 +85,8 @@ internal fun interface ComputerCarrierFactory {
         deviceId: Int,
         stateSink: ProgramComputerStateSink,
         filesystem: ComputerFileSystemContext?,
+        redstoneHostPort: RedstoneHostPort,
+        initialRedstoneOutput: Int,
     ): ComputerCarrier
 }
 
@@ -90,6 +95,8 @@ internal object RuntimeComputerCarrierFactory : ComputerCarrierFactory {
         deviceId: Int,
         stateSink: ProgramComputerStateSink,
         filesystem: ComputerFileSystemContext?,
+        redstoneHostPort: RedstoneHostPort,
+        initialRedstoneOutput: Int,
     ): ComputerCarrier {
         val context = requireNotNull(filesystem) { "production computer boot requires a filesystem context" }
         return ProgramComputerCarrier(
@@ -100,6 +107,8 @@ internal object RuntimeComputerCarrierFactory : ComputerCarrierFactory {
                 computerId = context.computerId,
                 romImage = context.romImage(),
                 compilerRouter = context.compilerRouter,
+                redstoneHostPort = redstoneHostPort,
+                initialRedstoneOutput = initialRedstoneOutput,
             ),
         )
     }
@@ -148,6 +157,8 @@ private class ProgramComputerCarrier(
     ): VmExecutableRevision? = delegate.deploy(path, expected, candidate)
 
     override fun submitCanonicalLine(line: CharArray): Boolean = delegate.submitCanonicalLine(line)
+
+    override fun submitRedstoneInput(packet: Int): Boolean = delegate.submitRedstoneInput(packet)
 
     override fun reboot(): ProgramComputerState = delegate.reboot()
 
