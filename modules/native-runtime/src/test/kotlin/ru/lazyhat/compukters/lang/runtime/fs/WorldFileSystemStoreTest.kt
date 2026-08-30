@@ -170,17 +170,20 @@ class WorldFileSystemStoreTest {
 
         override fun resumeUnit(
             handle: Long,
+            taskId: Int,
             requestId: Long,
         ) = error("unused")
 
         override fun resumeString(
             handle: Long,
+            taskId: Int,
             requestId: Long,
             value: CharArray,
         ) = error("unused")
 
         override fun resumeFailure(
             handle: Long,
+            taskId: Int,
             requestId: Long,
             kind: Int,
             code: Long,

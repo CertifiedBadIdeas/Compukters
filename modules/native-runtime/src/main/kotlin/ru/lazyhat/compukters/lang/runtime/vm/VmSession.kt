@@ -75,31 +75,50 @@ class VmSession private constructor(
     }
 
     fun resume(
-        requestId: Long,
+        identity: VmHostRequestIdentity,
         response: HostResponse,
     ) {
         when (response) {
-            HostResponse.UnitSuccess -> resumeUnit(requestId)
-            is HostResponse.StringSuccess -> resumeString(requestId, response.value)
-            is HostResponse.Failure -> resumeFailure(requestId, response.kind, response.code)
+            HostResponse.UnitSuccess -> resumeUnit(identity)
+            is HostResponse.StringSuccess -> resumeString(identity, response.value)
+            is HostResponse.Failure -> resumeFailure(identity, response.kind, response.code)
         }
     }
 
-    fun resumeUnit(requestId: Long) = bridge.resumeUnit(requireHandle(), requestId)
+    fun resume(
+        requestId: Long,
+        response: HostResponse,
+    ) = resume(VmHostRequestIdentity(1, requestId), response)
+
+    fun resumeUnit(identity: VmHostRequestIdentity) =
+        bridge.resumeUnit(requireHandle(), identity.taskId, identity.requestId)
+
+    fun resumeUnit(requestId: Long) = resumeUnit(VmHostRequestIdentity(1, requestId))
+
+    fun resumeString(
+        identity: VmHostRequestIdentity,
+        value: String,
+    ) = bridge.resumeString(requireHandle(), identity.taskId, identity.requestId, value.toCharArray())
 
     fun resumeString(
         requestId: Long,
         value: String,
-    ) = bridge.resumeString(requireHandle(), requestId, value.toCharArray())
+    ) = resumeString(VmHostRequestIdentity(1, requestId), value)
+
+    fun resumeFailure(
+        identity: VmHostRequestIdentity,
+        kind: HostFailureKind,
+        code: Long,
+    ) {
+        require(code in 0..UInt.MAX_VALUE.toLong()) { "host failure code must fit u32" }
+        bridge.resumeFailure(requireHandle(), identity.taskId, identity.requestId, kind.wireCode, code)
+    }
 
     fun resumeFailure(
         requestId: Long,
         kind: HostFailureKind,
         code: Long,
-    ) {
-        require(code in 0..UInt.MAX_VALUE.toLong()) { "host failure code must fit u32" }
-        bridge.resumeFailure(requireHandle(), requestId, kind.wireCode, code)
-    }
+    ) = resumeFailure(VmHostRequestIdentity(1, requestId), kind, code)
 
     fun commitTerminal(): Unit = bridge.terminalCommit(requireHandle())
 
@@ -483,7 +502,7 @@ private class WireDecoder(
     fun outcome(compilation: (Long) -> VmOutcome): VmOutcome =
         when (u8()) {
             0 -> VmOutcome.SliceExhausted
-            1 -> VmOutcome.HostRequest(request())
+            1 -> hostRequestBatch()
             2 -> VmOutcome.AllocationExhausted(boolean())
             3 -> VmOutcome.QuotaExhausted(quotaKind(u8()), i64(), i64())
             4 -> VmOutcome.Halted(optionalValue())
@@ -495,13 +514,38 @@ private class WireDecoder(
             else -> invalid()
         }.also { end() }
 
+    private fun hostRequestBatch(): VmOutcome.HostRequestBatch {
+        val count = i32().boundedCount().also { require(it > 0) { "empty native host request batch" } }
+        val requests = List(count) { request() }
+        require(requests.map(VmHostRequest::identity).toSet().size == requests.size) {
+            "duplicate native host request identity"
+        }
+        return VmOutcome.HostRequestBatch(requests)
+    }
+
     private fun request(): VmHostRequest =
         VmHostRequest(
-            id = i64(),
+            taskId = i32().also { require(it > 0) { "invalid native task id" } },
+            id = i64().also { require(it > 0) { "invalid native request id" } },
             capability = CapabilityIdentity(text(), text(), u16(), u16()),
             operation = i32(),
             arguments = List(i32().boundedCount()) { value() },
+            merge = merge(),
         )
+
+    private fun merge(): VmHostMerge =
+        when (u8()) {
+            0 -> VmHostMerge.Ordinary
+            1 ->
+                VmHostMerge.LastWriteWins(
+                    groupBits = i32(),
+                    entries =
+                        List(i32().boundedCount().also { require(it > 0) { "empty native merge entries" } }) {
+                            VmHostMergeEntry(i32(), i32())
+                        },
+                )
+            else -> invalid()
+        }
 
     private fun value(): VmValue =
         when (u8()) {

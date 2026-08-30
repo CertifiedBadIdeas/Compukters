@@ -60,7 +60,57 @@ data class VmHostRequest(
     val capability: CapabilityIdentity,
     val operation: Int,
     val arguments: List<VmValue>,
+    val taskId: Int = 1,
+    val merge: VmHostMerge = VmHostMerge.Ordinary,
+) {
+    val identity: VmHostRequestIdentity
+        get() = VmHostRequestIdentity(taskId, id)
+
+    init {
+        require(taskId > 0) { "host request task id must be positive" }
+        require(id > 0) { "host request id must be positive" }
+    }
+}
+
+data class VmHostRequestIdentity(
+    val taskId: Int,
+    val requestId: Long,
+) {
+    init {
+        require(taskId > 0) { "host request task id must be positive" }
+        require(requestId > 0) { "host request id must be positive" }
+    }
+}
+
+data class VmHostMergeEntry(
+    val keyBits: Int,
+    val valueBits: Int,
 )
+
+sealed interface VmHostMerge {
+    data object Ordinary : VmHostMerge
+
+    class LastWriteWins(
+        val groupBits: Int,
+        entries: List<VmHostMergeEntry>,
+    ) : VmHostMerge {
+        val entries: List<VmHostMergeEntry> = entries.toList()
+
+        init {
+            require(this.entries.isNotEmpty()) { "mergeable host request must contain entries" }
+        }
+
+        override fun equals(other: Any?): Boolean =
+            this === other ||
+                other is LastWriteWins &&
+                groupBits == other.groupBits &&
+                entries == other.entries
+
+        override fun hashCode(): Int = 31 * groupBits + entries.hashCode()
+
+        override fun toString(): String = "LastWriteWins(groupBits=$groupBits, entries=$entries)"
+    }
+}
 
 class VmCompilationSource(
     val path: String,
@@ -144,9 +194,23 @@ sealed interface VmOutcome {
 
     data object WaitingForTerminalEvent : VmOutcome
 
-    data class HostRequest(
-        val request: VmHostRequest,
-    ) : VmOutcome
+    class HostRequestBatch(requests: List<VmHostRequest>) : VmOutcome {
+        val requests: List<VmHostRequest> = requests.toList()
+
+        init {
+            require(this.requests.isNotEmpty()) { "host request batch must not be empty" }
+            require(this.requests.map(VmHostRequest::identity).toSet().size == this.requests.size) {
+                "host request batch identities must be unique"
+            }
+        }
+
+        override fun equals(other: Any?): Boolean =
+            this === other || other is HostRequestBatch && requests == other.requests
+
+        override fun hashCode(): Int = requests.hashCode()
+
+        override fun toString(): String = "HostRequestBatch(requests=$requests)"
+    }
 
     data class AllocationExhausted(
         val collectionAttempted: Boolean,

@@ -34,6 +34,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentCandidate
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
+import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
 
 internal interface ProgramVmSession : AutoCloseable {
@@ -43,7 +44,7 @@ internal interface ProgramVmSession : AutoCloseable {
     ): VmOutcome
 
     fun resume(
-        requestId: Long,
+        identity: VmHostRequestIdentity,
         response: HostResponse,
     )
 
@@ -148,9 +149,9 @@ private class NativeProgramVmSession(
     ): VmOutcome = session.advance(guestBudget, maintenanceBudget)
 
     override fun resume(
-        requestId: Long,
+        identity: VmHostRequestIdentity,
         response: HostResponse,
-    ) = session.resume(requestId, response)
+    ) = session.resume(identity, response)
 
     override fun completeCompilationArtifact(
         token: Long,

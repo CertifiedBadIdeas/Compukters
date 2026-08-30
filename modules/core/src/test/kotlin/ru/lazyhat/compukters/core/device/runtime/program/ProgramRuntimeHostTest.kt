@@ -49,6 +49,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmCompilationRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmCompilationSource
 import ru.lazyhat.compukters.lang.runtime.vm.VmFault
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
+import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmStartException
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
@@ -502,13 +503,25 @@ class ProgramRuntimeHostTest {
     @Test
     fun `addon host requests remain host owned and receive stable unavailable failures`() {
         val unknown = CapabilityIdentity("addon", "terminal", 1, 0)
-        val request = VmOutcome.HostRequest(VmHostRequest(1, unknown, 0, listOf(VmValue.StringValue("x"))))
-        val session = ScriptedSession(outcomes = listOf(request), defaultOutcome = VmOutcome.SliceExhausted)
+        val requests =
+            VmOutcome.HostRequestBatch(
+                listOf(
+                    VmHostRequest(1, unknown, 0, listOf(VmValue.StringValue("x")), taskId = 2),
+                    VmHostRequest(2, unknown, 0, listOf(VmValue.StringValue("y")), taskId = 3),
+                ),
+            )
+        val session = ScriptedSession(outcomes = listOf(requests), defaultOutcome = VmOutcome.SliceExhausted)
         val host = host(session, ProgramTickBudget(8, 4, 1))
         host.start(byteArrayOf(1))
 
         assertEquals(ProgramRuntimeState.Running, host.serverTick())
-        assertEquals(listOf(response(1, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))), session.responses)
+        assertEquals(
+            listOf(
+                response(2, 1, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0)),
+                response(3, 2, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0)),
+            ),
+            session.responses,
+        )
     }
 
     @Test
@@ -600,7 +613,7 @@ class ProgramRuntimeHostTest {
     ) : ProgramVmSession {
         private val outcomes = ArrayDeque(outcomes)
         val advances = mutableListOf<Pair<Int, Int>>()
-        val responses = mutableListOf<Pair<Long, HostResponse>>()
+        val responses = mutableListOf<Pair<VmHostRequestIdentity, HostResponse>>()
         var closeCalls = 0
         var terminalCommits = 0
         val terminalKeys = mutableListOf<Triple<TerminalKey, TerminalKeyAction, Set<TerminalModifier>>>()
@@ -621,11 +634,11 @@ class ProgramRuntimeHostTest {
         }
 
         override fun resume(
-            requestId: Long,
+            identity: VmHostRequestIdentity,
             response: HostResponse,
         ) {
             resumeError?.let { throw it }
-            responses += requestId to response
+            responses += identity to response
         }
 
         override fun completeCompilationArtifact(
@@ -734,9 +747,10 @@ class ProgramRuntimeHostTest {
     }
 
     private fun response(
+        taskId: Int,
         requestId: Long,
         response: HostResponse,
-    ): Pair<Long, HostResponse> = requestId to response
+    ): Pair<VmHostRequestIdentity, HostResponse> = VmHostRequestIdentity(taskId, requestId) to response
 
     private companion object {
         fun fakeDeploymentCandidate(): ProgramDeploymentCandidate =
