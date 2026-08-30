@@ -41,6 +41,7 @@ internal interface ProgramVmSession : AutoCloseable {
     fun advance(
         guestBudget: Int,
         maintenanceBudget: Int,
+        hostRequestBudget: Int,
     ): VmOutcome
 
     fun resume(
@@ -150,7 +151,8 @@ private class NativeProgramVmSession(
     override fun advance(
         guestBudget: Int,
         maintenanceBudget: Int,
-    ): VmOutcome = session.advance(guestBudget, maintenanceBudget, Int.MAX_VALUE)
+        hostRequestBudget: Int,
+    ): VmOutcome = session.advance(guestBudget, maintenanceBudget, hostRequestBudget)
 
     override fun resume(
         identity: VmHostRequestIdentity,

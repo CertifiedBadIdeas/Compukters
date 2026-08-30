@@ -28,11 +28,13 @@ data class ProgramTickBudget(
     val guestBudgetPerAdvance: Int = 4_096,
     val maintenanceBudgetPerAdvance: Int = 256,
     val maximumAdvancesPerTick: Int = 32,
+    val hostRequestsPerTick: Int = 16,
 ) {
     init {
         require(guestBudgetPerAdvance > 0) { "guest budget per advance must be positive" }
         require(maintenanceBudgetPerAdvance > 0) { "maintenance budget per advance must be positive" }
         require(maximumAdvancesPerTick > 0) { "maximum advances per tick must be positive" }
+        require(hostRequestsPerTick > 0) { "host requests per tick must be positive" }
     }
 }
 
