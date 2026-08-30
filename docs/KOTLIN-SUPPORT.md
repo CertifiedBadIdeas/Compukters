@@ -99,8 +99,9 @@ supported.
   Tracking: not scheduled
 
 - [ ] **Integer arithmetic — Partial** — `Int` supports `+`, `-`, `*`, `/`,
-  `%`, and unary minus with VM wrapping/division semantics. Bitwise functions,
-  shifts, and the remaining integer widths are not lowered from source.
+  `%`, unary minus, `and`, `or`, `xor`, `inv`, `shl`, and `ushr` with VM
+  wrapping and masked-shift semantics. The remaining integer widths are not
+  lowered from source.
   Evidence:
   [`KotlinProjectLowering`](../modules/compiler-k2/src/main/kotlin/ru/lazyhat/compukters/compiler/worker/k2/KotlinProjectLowering.kt)
   and [`numeric.rs`](../host/compukter-vm/src/execution/numeric.rs), test
@@ -249,8 +250,14 @@ supported.
   test `heap_instructions_checked_cast_handles_nullability_and_incompatibility`.
   Tracking: not scheduled
 
-- [ ] **Value classes — Unsupported** — source value classes are not lowered
-  transparently to an underlying Guest scalar or reference representation.
+- [ ] **Primitive `@JvmInline` value classes — Partial** — a value class with
+  exactly one `Int`, `Boolean`, or `Char` property erases to that scalar for
+  constructors, properties, methods, operators, constants, and trusted ABI
+  calls. Nullable, generic, reference-backed, boxed, and multi-property forms
+  are rejected. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  tests `JvmInline value class admits one bounded Int constructor precondition`
+  and `redstone program lowers deterministically for vm conformance`.
   Tracking: not scheduled
 
 ## Nullability and exceptions
@@ -385,6 +392,16 @@ supported.
   these packages have no Guest implementation. Tracking: not scheduled
 
 ## Compukters Guest APIs
+
+- [x] **Redstone GPIO** — immediate reads, exact/threshold/change waits, packed
+  immutable output updates, and blocking per-side/bulk writes lower through the
+  trusted scalar capability. Rust waiter tests, core batch-commit tests, and the
+  real NeoForge `compukters:computer_redstone` GameTest cover the complete path.
+  Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `redstone program lowers deterministically for vm conformance`,
+  [`computer.rs`](../host/compukter-vm/src/computer.rs), redstone tests, and
+  [`ComputerRedstoneGameTest`](../modules/v26_1/v26_1-neoforge/src/gameTest/kotlin/ru/lazyhat/compukters/impl/computer/ComputerRedstoneGameTest.kt).
 
 - [x] **Terminal write, event wait, and key result** — `Terminal.write`,
   `Terminal.awaitEvent`, and `Terminal.eventKey` lower to exact terminal
