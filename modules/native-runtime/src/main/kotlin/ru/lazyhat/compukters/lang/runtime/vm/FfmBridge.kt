@@ -54,6 +54,8 @@ internal class FfmBridge private constructor(
     private val executableRevisionHandle: MethodHandle,
     private val deployHandle: MethodHandle,
     private val submitCanonicalLineHandle: MethodHandle,
+    private val submitRedstoneInputHandle: MethodHandle,
+    private val confirmRedstoneOutputHandle: MethodHandle,
     private val advanceHandle: MethodHandle,
     private val compilationRequestSizeHandle: MethodHandle,
     private val compilationRequestCopyHandle: MethodHandle,
@@ -392,6 +394,22 @@ internal class FfmBridge private constructor(
             if (status != STATUS_OK) throw canonicalLineFailure(status)
         }
     }
+
+    override fun submitRedstoneInput(
+        handle: Long,
+        packet: Int,
+    ) = requireSuccess(
+        "submit redstone input",
+        submitRedstoneInputHandle.invokeExact(handle, packet) as Int,
+    )
+
+    override fun confirmRedstoneOutput(
+        handle: Long,
+        packed: Int,
+    ) = requireSuccess(
+        "confirm redstone output",
+        confirmRedstoneOutputHandle.invokeExact(handle, packed) as Int,
+    )
 
     override fun advance(
         handle: Long,
@@ -979,6 +997,24 @@ internal class FfmBridge private constructor(
                                 ValueLayout.JAVA_LONG,
                             ),
                         ),
+                    submitRedstoneInputHandle =
+                        downcall(
+                            "compukter_redstone_submit_input",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_INT,
+                            ),
+                        ),
+                    confirmRedstoneOutputHandle =
+                        downcall(
+                            "compukter_redstone_confirm_output",
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_INT,
+                            ),
+                        ),
                     advanceHandle =
                         downcall(
                             "compukter_advance",
@@ -1112,7 +1148,7 @@ internal class FfmBridge private constructor(
                             ),
                         ),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 6) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 7) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()
