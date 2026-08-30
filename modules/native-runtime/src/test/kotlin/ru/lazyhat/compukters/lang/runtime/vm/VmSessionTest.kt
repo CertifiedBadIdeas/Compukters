@@ -30,6 +30,29 @@ import kotlin.test.assertFailsWith
 
 class VmSessionTest {
     @Test
+    fun `host request batch owns an immutable request snapshot`() {
+        val requests =
+            mutableListOf(
+                VmHostRequest(1, CapabilityIdentity("app", "device", 1, 0), 0, emptyList()),
+            )
+        val batch = VmOutcome.HostRequestBatch(requests)
+
+        requests.clear()
+
+        assertEquals(1, batch.requests.size)
+    }
+
+    @Test
+    fun `last write wins merge owns an immutable entry snapshot`() {
+        val entries = mutableListOf(VmHostMergeEntry(keyBits = 2, valueBits = 15))
+        val merge = VmHostMerge.LastWriteWins(groupBits = 7, entries = entries)
+
+        entries.clear()
+
+        assertEquals(listOf(VmHostMergeEntry(keyBits = 2, valueBits = 15)), merge.entries)
+    }
+
+    @Test
     fun `deployment candidate is retryable on failure and consumed only by success`() {
         val bridge = FakeBridge(createResult = bytes(0, long(7)))
         val session = VmSession.open(byteArrayOf(1), bridge)
@@ -200,12 +223,16 @@ class VmSessionTest {
 
         assertEquals(VmOutcome.SliceExhausted, session.advance(64, 64))
         assertEquals(
-            VmOutcome.HostRequest(
-                VmHostRequest(
-                    id = 9,
-                    capability = CapabilityIdentity("compukter", "terminal", 1, 0),
-                    operation = 0,
-                    arguments = listOf(VmValue.StringValue("A\ud800\udc00")),
+            VmOutcome.HostRequestBatch(
+                listOf(
+                    VmHostRequest(
+                        taskId = 2,
+                        id = 9,
+                        capability = CapabilityIdentity("compukter", "terminal", 1, 0),
+                        operation = 0,
+                        arguments = listOf(VmValue.StringValue("A\ud800\udc00")),
+                        merge = VmHostMerge.Ordinary,
+                    ),
                 ),
             ),
             session.advance(64, 64),
@@ -217,6 +244,49 @@ class VmSessionTest {
         assertEquals(VmOutcome.QuotaExhausted(QuotaKind.HOST_REQUESTS, 4, 3), session.advance(64, 64))
         assertEquals(VmOutcome.HostFailed(HostFailureKind.END_OF_FILE, 17), session.advance(64, 64))
         assertEquals(VmOutcome.WaitingForTerminalEvent, session.advance(64, 64))
+    }
+
+    @Test
+    fun `advance preserves every request and last write wins entry in a batch`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(11)))
+        val session = VmSession.open(byteArrayOf(1), bridge)
+        bridge.outcomes +=
+            bytes(
+                1,
+                int(2),
+                encodedRequest(taskId = 2, requestId = 9, operation = 4, merge = bytes(0)),
+                encodedRequest(
+                    taskId = 3,
+                    requestId = 10,
+                    operation = 5,
+                    merge = bytes(1, int(7), int(2), int(2), int(15), int(4), int(0)),
+                ),
+            )
+
+        assertEquals(
+            VmOutcome.HostRequestBatch(
+                listOf(
+                    VmHostRequest(9, CapabilityIdentity("app", "device", 1, 0), 4, emptyList(), taskId = 2),
+                    VmHostRequest(
+                        10,
+                        CapabilityIdentity("app", "device", 1, 0),
+                        5,
+                        emptyList(),
+                        taskId = 3,
+                        merge =
+                            VmHostMerge.LastWriteWins(
+                                groupBits = 7,
+                                entries =
+                                    listOf(
+                                        VmHostMergeEntry(keyBits = 2, valueBits = 15),
+                                        VmHostMergeEntry(keyBits = 4, valueBits = 0),
+                                    ),
+                            ),
+                    ),
+                ),
+            ),
+            session.advance(64, 64),
+        )
     }
 
     @Test
@@ -279,13 +349,13 @@ class VmSessionTest {
         val bridge = FakeBridge(createResult = bytes(0, long(11)))
         val session = VmSession.open(byteArrayOf(1), bridge)
 
-        session.resume(7, HostResponse.UnitSuccess)
-        session.resume(8, HostResponse.StringSuccess("A\ud800B"))
-        session.resume(9, HostResponse.Failure(HostFailureKind.END_OF_FILE, 17))
+        session.resume(VmHostRequestIdentity(2, 7), HostResponse.UnitSuccess)
+        session.resume(VmHostRequestIdentity(3, 8), HostResponse.StringSuccess("A\ud800B"))
+        session.resume(VmHostRequestIdentity(4, 9), HostResponse.Failure(HostFailureKind.END_OF_FILE, 17))
 
-        assertEquals(listOf(11L to 7L), bridge.unitResponses)
-        assertEquals(listOf(Triple(11L, 8L, "A\ud800B".toCharArray().toList())), bridge.stringResponses)
-        assertEquals(listOf(FailureResponse(11, 9, 0, 17)), bridge.failures)
+        assertEquals(listOf(UnitResponse(11, 2, 7)), bridge.unitResponses)
+        assertEquals(listOf(StringResponse(11, 3, 8, "A\ud800B".toCharArray().toList())), bridge.stringResponses)
+        assertEquals(listOf(FailureResponse(11, 4, 9, 0, 17)), bridge.failures)
     }
 
     @Test
@@ -361,6 +431,8 @@ class VmSessionTest {
     private fun request(): ByteArray =
         bytes(
             1,
+            int(1),
+            int(2),
             long(9),
             int(9),
             "compukter".encodeToByteArray(),
@@ -375,6 +447,27 @@ class VmSessionTest {
             short(0x41),
             short(0xd800),
             short(0xdc00),
+            0,
+        )
+
+    private fun encodedRequest(
+        taskId: Int,
+        requestId: Long,
+        operation: Int,
+        merge: ByteArray,
+    ): ByteArray =
+        bytes(
+            int(taskId),
+            long(requestId),
+            int(3),
+            "app".encodeToByteArray(),
+            int(6),
+            "device".encodeToByteArray(),
+            short(1),
+            short(0),
+            int(operation),
+            int(0),
+            merge,
         )
 
     private class FakeBridge(
@@ -382,8 +475,8 @@ class VmSessionTest {
     ) : LowLevelVmBridge {
         val outcomes = ArrayDeque<ByteArray>()
         val closed = mutableListOf<Long>()
-        val unitResponses = mutableListOf<Pair<Long, Long>>()
-        val stringResponses = mutableListOf<Triple<Long, Long, List<Char>>>()
+        val unitResponses = mutableListOf<UnitResponse>()
+        val stringResponses = mutableListOf<StringResponse>()
         val failures = mutableListOf<FailureResponse>()
         var terminalState = ByteArray(0)
         var terminalUpdate = ByteArray(0)
@@ -502,26 +595,29 @@ class VmSessionTest {
 
         override fun resumeUnit(
             handle: Long,
+            taskId: Int,
             requestId: Long,
         ) {
-            unitResponses += handle to requestId
+            unitResponses += UnitResponse(handle, taskId, requestId)
         }
 
         override fun resumeString(
             handle: Long,
+            taskId: Int,
             requestId: Long,
             value: CharArray,
         ) {
-            stringResponses += Triple(handle, requestId, value.toList())
+            stringResponses += StringResponse(handle, taskId, requestId, value.toList())
         }
 
         override fun resumeFailure(
             handle: Long,
+            taskId: Int,
             requestId: Long,
             kind: Int,
             code: Long,
         ) {
-            failures += FailureResponse(handle, requestId, kind, code)
+            failures += FailureResponse(handle, taskId, requestId, kind, code)
         }
 
         override fun close(handle: Long) {
@@ -578,8 +674,22 @@ class VmSessionTest {
         }
     }
 
+    private data class UnitResponse(
+        val handle: Long,
+        val taskId: Int,
+        val requestId: Long,
+    )
+
+    private data class StringResponse(
+        val handle: Long,
+        val taskId: Int,
+        val requestId: Long,
+        val value: List<Char>,
+    )
+
     private data class FailureResponse(
         val handle: Long,
+        val taskId: Int,
         val requestId: Long,
         val kind: Int,
         val code: Long,

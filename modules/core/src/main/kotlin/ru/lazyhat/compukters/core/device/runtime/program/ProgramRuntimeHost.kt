@@ -178,8 +178,10 @@ class ProgramRuntimeHost internal constructor(
                     return
                 }
 
-                is VmOutcome.HostRequest -> {
-                    if (!resume(outcome.request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))) return
+                is VmOutcome.HostRequestBatch -> {
+                    for (request in outcome.requests) {
+                        if (!resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))) return
+                    }
                 }
 
                 is VmOutcome.CompilationRequested -> {
@@ -320,7 +322,7 @@ class ProgramRuntimeHost internal constructor(
         response: HostResponse,
     ): Boolean =
         try {
-            requireNotNull(session).resume(request.id, response)
+            requireNotNull(session).resume(request.identity, response)
             true
         } catch (error: VmBridgeException) {
             finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))

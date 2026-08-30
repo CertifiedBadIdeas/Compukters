@@ -109,8 +109,10 @@ class NativePlaygroundExecutor(
                 var publishedTerminalText = ""
                 repeat(maximumAdvances) {
                     when (val outcome = session.advance(GUEST_BUDGET, MAINTENANCE_BUDGET)) {
-                        is VmOutcome.HostRequest -> {
-                            session.resume(outcome.request.id, capabilities.dispatch(outcome.request))
+                        is VmOutcome.HostRequestBatch -> {
+                            for (request in outcome.requests) {
+                                session.resume(request.identity, capabilities.dispatch(request))
+                            }
                         }
 
                         is VmOutcome.Halted -> {

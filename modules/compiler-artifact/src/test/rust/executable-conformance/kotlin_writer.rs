@@ -103,7 +103,8 @@ fn k2_string_array_entry_executes_exact_utf16_arguments() {
     let request_id = loop {
         match session.advance(64, 64).expect("K2 argv must advance") {
             AdvanceOutcome::SliceExhausted => {}
-            AdvanceOutcome::HostRequest(request) => {
+            AdvanceOutcome::HostRequestBatch(batch) => {
+                let request = batch.get(0).expect("K2 argv must publish one request");
                 assert_eq!(0, request.operation());
                 assert_eq!(
                     Some(HostValueView::String(&[
@@ -199,7 +200,8 @@ fn k2_char_array_program_executes_exact_utf16_materialization() {
     let request_id = loop {
         match session.advance(64, 64).expect("K2 subset must advance") {
             AdvanceOutcome::SliceExhausted => {}
-            AdvanceOutcome::HostRequest(request) => {
+            AdvanceOutcome::HostRequestBatch(batch) => {
+                let request = batch.get(0).expect("K2 subset must publish one request");
                 assert_eq!("compukter", request.namespace());
                 assert_eq!("terminal", request.name());
                 assert_eq!(0, request.operation());
@@ -438,7 +440,8 @@ fn next_string_host_request(
             .unwrap_or_else(|error| panic!("K2 program failed before {operation_name}: {error:?}"))
         {
             AdvanceOutcome::SliceExhausted => {}
-            AdvanceOutcome::HostRequest(request) => {
+            AdvanceOutcome::HostRequestBatch(batch) => {
+                let request = batch.get(0).expect("K2 program must publish one request");
                 assert_eq!(expected_operation, request.operation(), "{operation_name}");
                 let value = match request.arguments().get(0) {
                     Some(HostValueView::String(value)) => value.to_vec(),
@@ -467,7 +470,8 @@ fn next_host_request(
             .unwrap_or_else(|error| panic!("K2 program failed before {operation_name}: {error:?}"))
         {
             AdvanceOutcome::SliceExhausted => {}
-            AdvanceOutcome::HostRequest(request) => {
+            AdvanceOutcome::HostRequestBatch(batch) => {
+                let request = batch.get(0).expect("K2 program must publish one request");
                 assert_eq!(expected_operation, request.operation(), "{operation_name}");
                 if let Some(expected) = expected_string {
                     assert_eq!(

@@ -454,11 +454,13 @@ internal class FfmBridge private constructor(
 
     override fun resumeUnit(
         handle: Long,
+        taskId: Int,
         requestId: Long,
-    ) = requireSuccess("resume unit", resumeUnitHandle.invokeExact(handle, requestId) as Int)
+    ) = requireSuccess("resume unit", resumeUnitHandle.invokeExact(handle, taskId, requestId) as Int)
 
     override fun resumeString(
         handle: Long,
+        taskId: Int,
         requestId: Long,
         value: CharArray,
     ) {
@@ -467,6 +469,7 @@ internal class FfmBridge private constructor(
                 "resume string",
                 resumeStringHandle.invokeExact(
                     handle,
+                    taskId,
                     requestId,
                     callArena.nativeChars(value),
                     value.size.toLong(),
@@ -477,12 +480,13 @@ internal class FfmBridge private constructor(
 
     override fun resumeFailure(
         handle: Long,
+        taskId: Int,
         requestId: Long,
         kind: Int,
         code: Long,
     ) = requireSuccess(
         "resume failure",
-        resumeFailureHandle.invokeExact(handle, requestId, kind, code.toInt()) as Int,
+        resumeFailureHandle.invokeExact(handle, taskId, requestId, kind, code.toInt()) as Int,
     )
 
     override fun close(handle: Long) = requireSuccess("close", closeHandle.invokeExact(handle) as Int)
@@ -1025,7 +1029,12 @@ internal class FfmBridge private constructor(
                     resumeUnitHandle =
                         downcall(
                             "compukter_resume_unit",
-                            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG),
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.JAVA_LONG,
+                            ),
                         ),
                     resumeStringHandle =
                         downcall(
@@ -1033,6 +1042,7 @@ internal class FfmBridge private constructor(
                             FunctionDescriptor.of(
                                 ValueLayout.JAVA_INT,
                                 ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_INT,
                                 ValueLayout.JAVA_LONG,
                                 ValueLayout.ADDRESS,
                                 ValueLayout.JAVA_LONG,
@@ -1044,6 +1054,7 @@ internal class FfmBridge private constructor(
                             FunctionDescriptor.of(
                                 ValueLayout.JAVA_INT,
                                 ValueLayout.JAVA_LONG,
+                                ValueLayout.JAVA_INT,
                                 ValueLayout.JAVA_LONG,
                                 ValueLayout.JAVA_INT,
                                 ValueLayout.JAVA_INT,
@@ -1101,7 +1112,7 @@ internal class FfmBridge private constructor(
                             ),
                         ),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 5) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 6) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()

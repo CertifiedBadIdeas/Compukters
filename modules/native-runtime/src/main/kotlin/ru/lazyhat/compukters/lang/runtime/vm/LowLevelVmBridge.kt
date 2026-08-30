@@ -140,17 +140,20 @@ internal interface LowLevelVmBridge {
 
     fun resumeUnit(
         handle: Long,
+        taskId: Int,
         requestId: Long,
     )
 
     fun resumeString(
         handle: Long,
+        taskId: Int,
         requestId: Long,
         value: CharArray,
     )
 
     fun resumeFailure(
         handle: Long,
+        taskId: Int,
         requestId: Long,
         kind: Int,
         code: Long,
