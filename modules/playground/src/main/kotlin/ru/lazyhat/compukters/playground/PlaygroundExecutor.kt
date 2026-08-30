@@ -143,6 +143,10 @@ class NativePlaygroundExecutor(
                             return@repeat
                         }
 
+                        VmOutcome.WaitingForHostQuota -> {
+                            return PlaygroundExecution.PlatformFailure("unlimited host request budget was exhausted")
+                        }
+
                         is VmOutcome.AllocationExhausted -> {
                             return PlaygroundExecution.ResourceFailure(outcome.collectionAttempted)
                         }
