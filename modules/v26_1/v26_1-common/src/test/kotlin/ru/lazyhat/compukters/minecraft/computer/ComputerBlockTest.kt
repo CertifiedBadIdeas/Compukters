@@ -81,7 +81,7 @@ class ComputerBlockTest {
             TEST_TYPE,
             BlockPos.ZERO,
             Blocks.FURNACE.defaultBlockState(),
-            ComputerCarrierFactory { _, stateSink, _ ->
+            ComputerCarrierFactory { _, stateSink, _, _, _ ->
                 carrier.attach(stateSink)
             },
         )
@@ -123,6 +123,8 @@ class ComputerBlockTest {
         override fun sendTerminalText(value: String): Boolean = false
 
         override fun filesystemGeneration(): Long? = null
+
+        override fun submitRedstoneInput(packet: Int): Boolean = true
 
         override fun reboot(): ProgramComputerState = turnOn()
 

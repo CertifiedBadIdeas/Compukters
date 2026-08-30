@@ -24,6 +24,8 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
+import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
+import ru.lazyhat.compukters.core.device.runtime.program.RedstoneHostPort
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
@@ -32,6 +34,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
+import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 
 class ProgramComputer internal constructor(
     private val deviceId: Int,
@@ -46,10 +49,23 @@ class ProgramComputer internal constructor(
         romImage: ByteArray,
         tickBudget: ProgramTickBudget = ProgramTickBudget(),
         compilerRouter: CompilerCompletionRouter? = null,
+        redstoneHostPort: RedstoneHostPort =
+            RedstoneHostPort { RedstoneCommitResult.Failed(HostFailureKind.UNAVAILABLE, 0) },
+        initialRedstoneOutput: Int = 0,
     ) : this(
         deviceId,
         stateSink,
-        RuntimeProgramHost(ProgramRuntimeHost(store, computerId, romImage, tickBudget, compilerRouter)),
+        RuntimeProgramHost(
+            ProgramRuntimeHost(
+                store = store,
+                computerId = computerId,
+                romImage = romImage,
+                tickBudget = tickBudget,
+                compilerRouter = compilerRouter,
+                redstoneHostPort = redstoneHostPort,
+                initialRedstoneOutput = initialRedstoneOutput,
+            ),
+        ),
     )
 
     var state: ProgramComputerState = ProgramComputerState.PoweredOff(ProgramComputerStopReason.NeverStarted)
@@ -113,6 +129,8 @@ class ProgramComputer internal constructor(
     ): VmExecutableRevision? = host.deploy(path, expected, candidate)
 
     fun submitCanonicalLine(line: CharArray): Boolean = host.submitCanonicalLine(line)
+
+    fun submitRedstoneInput(packet: Int): Boolean = state.isPoweredOn() && host.submitRedstoneInput(packet)
 
     fun shutdown() {
         if (state == ProgramComputerState.Closed || state == SHUTDOWN_STATE) return

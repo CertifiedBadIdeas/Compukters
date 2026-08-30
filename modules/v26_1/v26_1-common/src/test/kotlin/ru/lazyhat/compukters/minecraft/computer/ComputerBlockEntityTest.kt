@@ -40,6 +40,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
+import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
 import java.util.stream.Stream
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -48,6 +49,59 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ComputerBlockEntityTest {
+    @Test
+    fun `output register persists exactly and malformed reserved bits sanitize to zero`() {
+        val fresh = fixture()
+        val freshTag = fresh.entity.saveForTest()
+        assertEquals(0, freshTag.getCompoundOrEmpty("compukters").getIntOr("redstoneOutput", -1))
+
+        val valid = 1 or (17 shl 5) or (31 shl 25)
+        val validTag = fresh.entity.saveForTest()
+        validTag.getCompoundOrEmpty("compukters").putInt("redstoneOutput", valid)
+        val restored = fixture()
+        restored.entity.loadForTest(validTag)
+        restored.entity.serverTick()
+        assertEquals(valid, restored.carriers.single().initialRedstoneOutput)
+        assertEquals(valid, restored.entity.saveForTest().getCompoundOrEmpty("compukters").getIntOr("redstoneOutput", -1))
+
+        val malformedTag = fresh.entity.saveForTest()
+        malformedTag.getCompoundOrEmpty("compukters").putInt("redstoneOutput", 1 shl 30)
+        val sanitized = fixture()
+        sanitized.entity.loadForTest(malformedTag)
+        sanitized.entity.serverTick()
+        assertEquals(0, sanitized.carriers.single().initialRedstoneOutput)
+    }
+
+    @Test
+    fun `dirty sampling reads only selected faces and emits complete snapshots only on change`() {
+        val fixture = fixture()
+        val facing = fixture.entity.blockState.getValue(ComputerBlock.FACING)
+        val sampled = mutableListOf<net.minecraft.core.Direction>()
+        val first =
+            fixture.entity.sampleRedstoneInputs { direction ->
+                sampled += direction
+                localSide(facing, direction).ordinal + 1
+            }
+
+        assertEquals(6, sampled.size)
+        val expectedLevels = IntArray(6) { it + 1 }
+        assertEquals(RedstoneWire.packInput(RedstoneWire.ALL_SIDES_MASK, expectedLevels), first)
+
+        sampled.clear()
+        fixture.entity.markRedstoneInputDirty(worldDirection(facing, LocalRedstoneSide.LEFT))
+        val second =
+            fixture.entity.sampleRedstoneInputs { direction ->
+                sampled += direction
+                if (localSide(facing, direction) == LocalRedstoneSide.LEFT) 15 else error("unexpected side")
+            }
+        expectedLevels[LocalRedstoneSide.LEFT.ordinal] = 15
+        assertEquals(listOf(worldDirection(facing, LocalRedstoneSide.LEFT)), sampled)
+        assertEquals(RedstoneWire.packInput(1 shl LocalRedstoneSide.LEFT.ordinal, expectedLevels), second)
+
+        fixture.entity.markRedstoneInputDirty(worldDirection(facing, LocalRedstoneSide.LEFT))
+        assertNull(fixture.entity.sampleRedstoneInputs { 15 })
+    }
+
     @Test
     fun `deployment adapters address the current carrier without exposing it`() {
         val fixture = fixture()
@@ -175,8 +229,8 @@ class ComputerBlockEntityTest {
         val carriers = mutableListOf<FakeCarrier>()
         val entity =
             TestComputerBlockEntity(
-                ComputerCarrierFactory { deviceId, stateSink, _ ->
-                    FakeCarrier(deviceId, stateSink).also(carriers::add)
+                ComputerCarrierFactory { deviceId, stateSink, _, redstoneHostPort, initialRedstoneOutput ->
+                    FakeCarrier(deviceId, stateSink, redstoneHostPort, initialRedstoneOutput).also(carriers::add)
                 },
             )
         return Fixture(entity, carriers)
@@ -202,6 +256,8 @@ class ComputerBlockEntityTest {
     private class FakeCarrier(
         private val deviceId: Int,
         private val stateSink: ProgramComputerStateSink,
+        val redstoneHostPort: ru.lazyhat.compukters.core.device.runtime.program.RedstoneHostPort,
+        val initialRedstoneOutput: Int,
     ) : ComputerCarrier {
         override var state: ProgramComputerState = neverStarted()
             private set
@@ -220,6 +276,7 @@ class ComputerBlockEntityTest {
         val revisionPaths = mutableListOf<String>()
         val deploymentPaths = mutableListOf<String>()
         val canonicalLines = mutableListOf<String>()
+        val redstoneInputs = mutableListOf<Int>()
 
         override fun turnOn(): ProgramComputerState {
             turnOnCalls++
@@ -257,6 +314,11 @@ class ComputerBlockEntityTest {
         }
 
         override fun filesystemGeneration(): Long? = null
+
+        override fun submitRedstoneInput(packet: Int): Boolean {
+            redstoneInputs += packet
+            return true
+        }
 
         override fun verifyForDeploy(artifact: ByteArray): ProgramDeploymentCandidate {
             verifiedArtifact = artifact.toList()

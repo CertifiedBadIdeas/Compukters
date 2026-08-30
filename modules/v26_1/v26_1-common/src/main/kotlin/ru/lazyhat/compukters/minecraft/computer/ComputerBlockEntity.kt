@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.minecraft.computer
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
@@ -28,6 +29,9 @@ import net.minecraft.world.level.storage.ValueOutput
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
+import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
+import ru.lazyhat.compukters.core.device.runtime.program.RedstoneHostPort
+import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
@@ -70,6 +74,10 @@ open class ComputerBlockEntity internal constructor(
     private var carrier: ComputerCarrier? = null
     private var filesystemLease: ComputerFileSystemLease? = null
     private var lastMachineId = 0L
+    private var committedRedstoneOutput = 0
+    private var sampledRedstoneInputs = IntArray(RedstoneWire.SIDE_COUNT)
+    private var dirtyRedstoneInputs = RedstoneWire.ALL_SIDES_MASK
+    private val redstoneHostPort = RedstoneHostPort(::commitRedstoneOutput)
 
     var terminalMachineId: Long? = null
         private set
@@ -121,10 +129,45 @@ open class ComputerBlockEntity internal constructor(
 
     fun submitCanonicalLine(line: CharArray): Boolean = carrier?.submitCanonicalLine(line) == true
 
+    internal fun redstoneOutput(direction: Direction): Int =
+        redstoneOutputField(committedRedstoneOutput, localSide(blockState.getValue(ComputerBlock.FACING), direction))
+
+    internal fun markRedstoneInputDirty(direction: Direction? = null) {
+        dirtyRedstoneInputs =
+            if (direction == null) {
+                RedstoneWire.ALL_SIDES_MASK
+            } else {
+                dirtyRedstoneInputs or (1 shl localSide(blockState.getValue(ComputerBlock.FACING), direction).ordinal)
+            }
+    }
+
+    internal fun sampleRedstoneInputs(sample: (Direction) -> Int): Int? {
+        val dirty = dirtyRedstoneInputs
+        var changed = 0
+        LocalRedstoneSide.entries.forEach { side ->
+            val bit = 1 shl side.ordinal
+            if (dirty and bit == 0) return@forEach
+            val level = sample(worldDirection(blockState.getValue(ComputerBlock.FACING), side))
+            require(level in 0..RedstoneWire.SIGNAL_MASK) { "vanilla redstone level is out of range" }
+            if (sampledRedstoneInputs[side.ordinal] != level) {
+                sampledRedstoneInputs[side.ordinal] = level
+                changed = changed or bit
+            }
+        }
+        dirtyRedstoneInputs = 0
+        return changed.takeIf { it != 0 }?.let { RedstoneWire.packInput(it, sampledRedstoneInputs) }
+    }
+
     internal fun serverTick() {
         val current = carrier ?: createCarrier().also { carrier = it }
         if (current.state == neverStarted()) {
             runtimeState = current.turnOn()
+        }
+        val serverLevel = level as? ServerLevel
+        if (serverLevel != null) {
+            sampleRedstoneInputs { direction ->
+                serverLevel.getSignal(blockPos.relative(direction), direction)
+            }?.let(current::submitRedstoneInput)
         }
         if (runtimeState.isPoweredOn()) {
             runtimeState = current.serverTick()
@@ -148,6 +191,12 @@ open class ComputerBlockEntity internal constructor(
         closeCarrier()
         val payload = input.child(ROOT_KEY).orElse(null)
         identity.load(payload)
+        committedRedstoneOutput =
+            payload?.getInt(REDSTONE_OUTPUT_KEY)?.orElse(0)?.let { packed ->
+                runCatching { RedstoneWire.requireOutputRegister(packed) }.getOrDefault(0)
+            } ?: 0
+        sampledRedstoneInputs = IntArray(RedstoneWire.SIDE_COUNT)
+        dirtyRedstoneInputs = RedstoneWire.ALL_SIDES_MASK
         runtimeState = neverStarted()
     }
 
@@ -155,6 +204,7 @@ open class ComputerBlockEntity internal constructor(
         super.saveAdditional(output)
         val payload = output.child(ROOT_KEY)
         identity.save(payload)
+        payload.putInt(REDSTONE_OUTPUT_KEY, committedRedstoneOutput)
     }
 
     private fun createCarrier(): ComputerCarrier {
@@ -169,9 +219,28 @@ open class ComputerBlockEntity internal constructor(
                 deviceId = deviceId,
                 stateSink = { _, state -> runtimeState = state },
                 filesystem = filesystem,
+                redstoneHostPort = redstoneHostPort,
+                initialRedstoneOutput = committedRedstoneOutput,
             )
         filesystemLease = filesystem?.attach(created::filesystemGeneration, ::drainCarrier)
         return created
+    }
+
+    private fun commitRedstoneOutput(packed: Int): RedstoneCommitResult {
+        val serverLevel = requireNotNull(level as? ServerLevel) { "redstone output requires a server level" }
+        check(serverLevel.server.isSameThread) { "redstone output must be committed on the server thread" }
+        val validated = RedstoneWire.requireOutputRegister(packed)
+        if (validated == committedRedstoneOutput) return RedstoneCommitResult.Committed
+        val previous = committedRedstoneOutput
+        committedRedstoneOutput = validated
+        setChanged()
+        LocalRedstoneSide.entries.forEach { side ->
+            if (redstoneOutputField(previous, side) != redstoneOutputField(validated, side)) {
+                val direction = worldDirection(blockState.getValue(ComputerBlock.FACING), side)
+                serverLevel.neighborChanged(blockPos.relative(direction), blockState.block, null)
+            }
+        }
+        return RedstoneCommitResult.Committed
     }
 
     private fun closeCarrier() {
@@ -206,6 +275,7 @@ open class ComputerBlockEntity internal constructor(
 
     private companion object {
         const val ROOT_KEY = "compukters"
+        const val REDSTONE_OUTPUT_KEY = "redstoneOutput"
 
         fun neverStarted(): ProgramComputerState = ProgramComputerState.PoweredOff(ProgramComputerStopReason.NeverStarted)
     }
