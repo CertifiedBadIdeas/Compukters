@@ -54,6 +54,8 @@ Minecraft/UI changes.
 Respect user changes in the worktree. Prefer focused edits, run the narrowest useful verification, and update docs or
 active machine ABI references when behavior changes.
 Do not create Git worktrees in this repository. Perform all work in the user's current checkout and current branch.
+Keep temporary design specs and implementation plans under `.agents/tmp/specs/` and `.agents/tmp/plans/` respectively;
+do not place them under `docs/` or commit them unless the user explicitly requests publication.
 For GitHub operations in this repository, do not use the GitHub MCP server or GitHub app connector tools. Use the
 `gh` CLI instead, including `gh api` for REST or GraphQL operations that are not covered by first-class `gh` commands.
 All `gh` commands and Git commands which access a remote repository must run outside the sandbox. If an SSH remote
