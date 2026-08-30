@@ -25,7 +25,9 @@ import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationOut
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
+import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
+import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
@@ -46,6 +48,8 @@ class ProgramRuntimeHost internal constructor(
     private val tickBudget: ProgramTickBudget = ProgramTickBudget(),
     private val computerId: ComputerId = ComputerId.fromLongs(0, 1),
     private val compilerRouter: CompilerCompletionRouter? = null,
+    private val redstoneHostPort: RedstoneHostPort = UNAVAILABLE_REDSTONE_PORT,
+    initialRedstoneOutput: Int = 0,
 ) : AutoCloseable {
     constructor(tickBudget: ProgramTickBudget = ProgramTickBudget()) : this(NativeProgramVmSessionFactory(), tickBudget)
 
@@ -55,17 +59,23 @@ class ProgramRuntimeHost internal constructor(
         romImage: ByteArray,
         tickBudget: ProgramTickBudget = ProgramTickBudget(),
         compilerRouter: CompilerCompletionRouter? = null,
+        redstoneHostPort: RedstoneHostPort = UNAVAILABLE_REDSTONE_PORT,
+        initialRedstoneOutput: Int = 0,
     ) : this(
         NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, computerId, romImage)),
         tickBudget,
         computerId,
         compilerRouter,
+        redstoneHostPort,
+        initialRedstoneOutput,
     )
 
     private var session: ProgramVmSession? = null
     private var vmEpoch = 0L
     private var activeVmEpoch = 0L
     private var pendingCompilation: ComputerCompilationAddress? = null
+    private var confirmedRedstoneOutput = RedstoneWire.requireOutputRegister(initialRedstoneOutput)
+    private var lastRedstoneInput = 0
     var state: ProgramRuntimeState = ProgramRuntimeState.Idle
         private set
 
@@ -84,6 +94,8 @@ class ProgramRuntimeHost internal constructor(
         vmEpoch = openingEpoch
         return try {
             session = open()
+            requireNotNull(session).confirmRedstoneOutput(confirmedRedstoneOutput)
+            requireNotNull(session).submitRedstoneInput(RedstoneWire.withAllInputSidesChanged(lastRedstoneInput))
             activeVmEpoch = openingEpoch
             state = ProgramRuntimeState.Running
             ProgramStartResult.Started
@@ -96,6 +108,7 @@ class ProgramRuntimeHost internal constructor(
         } catch (error: VmBootException) {
             rejectStart(ProgramFailure.Start(error.code))
         } catch (error: VmBridgeException) {
+            releaseSession()
             rejectStart(ProgramFailure.Bridge(error.bridgeDetail()))
         }
     }
@@ -179,6 +192,10 @@ class ProgramRuntimeHost internal constructor(
                 }
 
                 is VmOutcome.HostRequestBatch -> {
+                    if (outcome.requests.all(::isRedstoneOutputRequest)) {
+                        commitRedstoneBatch(activeSession, outcome.requests)
+                        return
+                    }
                     for (request in outcome.requests) {
                         if (!resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))) return
                     }
@@ -305,6 +322,27 @@ class ProgramRuntimeHost internal constructor(
         return true
     }
 
+    fun submitRedstoneInput(packet: Int): Boolean {
+        val validated = RedstoneWire.requireInputPacket(packet)
+        lastRedstoneInput = validated
+        if (
+            state != ProgramRuntimeState.Running &&
+            state != ProgramRuntimeState.WaitingForInput &&
+            state != ProgramRuntimeState.WaitingForCompiler
+        ) {
+            return false
+        }
+        val activeSession = session ?: return false
+        return try {
+            activeSession.submitRedstoneInput(validated)
+            if (state == ProgramRuntimeState.WaitingForInput) state = ProgramRuntimeState.Running
+            true
+        } catch (error: VmBridgeException) {
+            finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))
+            false
+        }
+    }
+
     fun shutdown() {
         if (state == ProgramRuntimeState.Closed) return
         releaseSession()
@@ -328,6 +366,43 @@ class ProgramRuntimeHost internal constructor(
             finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))
             false
         }
+
+    private fun commitRedstoneBatch(
+        activeSession: ProgramVmSession,
+        requests: List<VmHostRequest>,
+    ) {
+        val batch =
+            try {
+                RedstoneOutputBatch.reduce(confirmedRedstoneOutput, requests)
+            } catch (error: IllegalArgumentException) {
+                finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.message ?: "invalid redstone output batch")))
+                return
+            }
+        if (session !== activeSession) return
+        val response =
+            if (batch.packed == confirmedRedstoneOutput) {
+                HostResponse.UnitSuccess
+            } else {
+                when (val result = redstoneHostPort.commitOutput(batch.packed)) {
+                    RedstoneCommitResult.Committed -> {
+                        if (session !== activeSession) return
+                        confirmedRedstoneOutput = batch.packed
+                        try {
+                            activeSession.confirmRedstoneOutput(batch.packed)
+                        } catch (error: VmBridgeException) {
+                            finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))
+                            return
+                        }
+                        HostResponse.UnitSuccess
+                    }
+
+                    is RedstoneCommitResult.Failed -> HostResponse.Failure(result.kind, result.code)
+                }
+            }
+        for (request in requests) {
+            if (!resume(request, response)) return
+        }
+    }
 
     private fun <T> terminalQuery(query: ProgramVmSession.() -> T): T? {
         val activeSession = session ?: return null
@@ -397,4 +472,13 @@ class ProgramRuntimeHost internal constructor(
     }
 
     private fun VmBridgeException.bridgeDetail(): String = message ?: "native VM bridge failure"
+
+    private companion object {
+        val REDSTONE_CAPABILITY = CapabilityIdentity("compukter", "redstone", 1, 0)
+        val UNAVAILABLE_REDSTONE_PORT =
+            RedstoneHostPort { RedstoneCommitResult.Failed(HostFailureKind.UNAVAILABLE, 0) }
+
+        fun isRedstoneOutputRequest(request: VmHostRequest): Boolean =
+            request.capability == REDSTONE_CAPABILITY && request.operation in 6..7
+    }
 }

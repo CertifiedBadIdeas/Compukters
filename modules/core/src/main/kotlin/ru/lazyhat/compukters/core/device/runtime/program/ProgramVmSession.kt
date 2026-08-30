@@ -100,6 +100,10 @@ internal interface ProgramVmSession : AutoCloseable {
     ): VmExecutableRevision
 
     fun submitCanonicalLine(line: CharArray)
+
+    fun submitRedstoneInput(packet: Int)
+
+    fun confirmRedstoneOutput(packed: Int)
 }
 
 interface ProgramDeploymentCandidate : AutoCloseable
@@ -209,6 +213,10 @@ private class NativeProgramVmSession(
     }
 
     override fun submitCanonicalLine(line: CharArray) = session.submitCanonicalLine(line)
+
+    override fun submitRedstoneInput(packet: Int) = session.submitRedstoneInput(packet)
+
+    override fun confirmRedstoneOutput(packed: Int) = session.confirmRedstoneOutput(packed)
 
     override fun close() = session.close()
 }
