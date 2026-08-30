@@ -187,7 +187,7 @@ class VmSessionTest {
         session.close()
 
         assertEquals(listOf(7L), bridge.closed)
-        assertFailsWith<IllegalStateException> { session.advance(64, 64) }
+        assertFailsWith<IllegalStateException> { session.advance(64, 64, Int.MAX_VALUE) }
     }
 
     @Test
@@ -237,7 +237,7 @@ class VmSessionTest {
         bridge.outcomes += bytes(7, 0, int(17))
         bridge.outcomes += bytes(9)
 
-        assertEquals(VmOutcome.SliceExhausted, session.advance(64, 64))
+        assertEquals(VmOutcome.SliceExhausted, session.advance(64, 64, Int.MAX_VALUE))
         assertEquals(
             VmOutcome.HostRequestBatch(
                 listOf(
@@ -251,15 +251,25 @@ class VmSessionTest {
                     ),
                 ),
             ),
-            session.advance(64, 64),
+            session.advance(64, 64, Int.MAX_VALUE),
         )
-        assertEquals(VmOutcome.AllocationExhausted(collectionAttempted = true), session.advance(64, 64))
-        assertEquals(VmOutcome.Halted(VmValue.I32(23)), session.advance(64, 64))
-        assertEquals(VmOutcome.Crashed(GuestTrap.DIVISION_BY_ZERO), session.advance(64, 64))
-        assertEquals(VmOutcome.Faulted(VmFault.HANDLE_EXHAUSTED), session.advance(64, 64))
-        assertEquals(VmOutcome.QuotaExhausted(QuotaKind.HOST_REQUESTS, 4, 3), session.advance(64, 64))
-        assertEquals(VmOutcome.HostFailed(HostFailureKind.END_OF_FILE, 17), session.advance(64, 64))
-        assertEquals(VmOutcome.WaitingForTerminalEvent, session.advance(64, 64))
+        assertEquals(VmOutcome.AllocationExhausted(collectionAttempted = true), session.advance(64, 64, Int.MAX_VALUE))
+        assertEquals(VmOutcome.Halted(VmValue.I32(23)), session.advance(64, 64, Int.MAX_VALUE))
+        assertEquals(VmOutcome.Crashed(GuestTrap.DIVISION_BY_ZERO), session.advance(64, 64, Int.MAX_VALUE))
+        assertEquals(VmOutcome.Faulted(VmFault.HANDLE_EXHAUSTED), session.advance(64, 64, Int.MAX_VALUE))
+        assertEquals(VmOutcome.QuotaExhausted(QuotaKind.HOST_REQUESTS, 4, 3), session.advance(64, 64, Int.MAX_VALUE))
+        assertEquals(VmOutcome.HostFailed(HostFailureKind.END_OF_FILE, 17), session.advance(64, 64, Int.MAX_VALUE))
+        assertEquals(VmOutcome.WaitingForTerminalEvent, session.advance(64, 64, Int.MAX_VALUE))
+    }
+
+    @Test
+    fun `advance forwards host request budget and maps quota waiting`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(11)))
+        val session = VmSession.open(byteArrayOf(1), bridge)
+        bridge.outcomes += bytes(11)
+
+        assertEquals(VmOutcome.WaitingForHostQuota, session.advance(64, 32, 7))
+        assertEquals(AdvanceCall(11, 64, 32, 7), bridge.advances.single())
     }
 
     @Test
@@ -301,7 +311,7 @@ class VmSessionTest {
                     ),
                 ),
             ),
-            session.advance(64, 64),
+            session.advance(64, 64, Int.MAX_VALUE),
         )
     }
 
@@ -314,9 +324,9 @@ class VmSessionTest {
         bridge.outcomes += bytes(10, long(token))
         bridge.compilationRequests[token] = compilationRequest(token, "/home/main.kt", "fun main() = 42\n".encodeToByteArray())
 
-        assertEquals(VmOutcome.SliceExhausted, session.advance(64, 64))
+        assertEquals(VmOutcome.SliceExhausted, session.advance(64, 64, Int.MAX_VALUE))
         assertEquals(emptyList(), bridge.compilationRequestCalls)
-        val outcome = session.advance(64, 64) as VmOutcome.CompilationRequested
+        val outcome = session.advance(64, 64, Int.MAX_VALUE) as VmOutcome.CompilationRequested
         assertEquals(token, outcome.request.token)
         assertEquals(
             "/home/main.kt",
@@ -353,11 +363,11 @@ class VmSessionTest {
         val session = VmSession.open(byteArrayOf(1), bridge)
         bridge.outcomes += bytes(10, long(7))
         bridge.compilationRequests[7] = compilationRequest(7, "/home/main.kt", byteArrayOf(0xff.toByte()))
-        assertFailsWith<VmBridgeException> { session.advance(64, 64) }
+        assertFailsWith<VmBridgeException> { session.advance(64, 64, Int.MAX_VALUE) }
 
         bridge.outcomes += bytes(10, long(8))
         bridge.compilationRequests[8] = compilationRequest(8, "/home/main.kt", byteArrayOf()).plus(99)
-        assertFailsWith<VmBridgeException> { session.advance(64, 64) }
+        assertFailsWith<VmBridgeException> { session.advance(64, 64, Int.MAX_VALUE) }
     }
 
     @Test
@@ -382,10 +392,10 @@ class VmSessionTest {
         val bridge = FakeBridge(createResult = bytes(0, long(11)))
         val session = VmSession.open(byteArrayOf(1), bridge)
         bridge.outcomes += bytes(0, 99)
-        assertFailsWith<VmBridgeException> { session.advance(64, 64) }
+        assertFailsWith<VmBridgeException> { session.advance(64, 64, Int.MAX_VALUE) }
 
         bridge.outcomes += bytes(2, 2)
-        assertFailsWith<VmBridgeException> { session.advance(64, 64) }
+        assertFailsWith<VmBridgeException> { session.advance(64, 64, Int.MAX_VALUE) }
     }
 
     @Test
@@ -490,6 +500,7 @@ class VmSessionTest {
         private val createResult: ByteArray,
     ) : LowLevelVmBridge {
         val outcomes = ArrayDeque<ByteArray>()
+        val advances = mutableListOf<AdvanceCall>()
         val closed = mutableListOf<Long>()
         val unitResponses = mutableListOf<UnitResponse>()
         val stringResponses = mutableListOf<StringResponse>()
@@ -602,7 +613,11 @@ class VmSessionTest {
             handle: Long,
             guestBudget: Int,
             maintenanceBudget: Int,
-        ): ByteArray = outcomes.removeFirst()
+            hostRequestBudget: Int,
+        ): ByteArray {
+            advances += AdvanceCall(handle, guestBudget, maintenanceBudget, hostRequestBudget)
+            return outcomes.removeFirst()
+        }
 
         override fun compilationRequest(
             handle: Long,
@@ -710,6 +725,13 @@ class VmSessionTest {
         val handle: Long,
         val taskId: Int,
         val requestId: Long,
+    )
+
+    private data class AdvanceCall(
+        val handle: Long,
+        val guestBudget: Int,
+        val maintenanceBudget: Int,
+        val hostRequestBudget: Int,
     )
 
     private data class StringResponse(

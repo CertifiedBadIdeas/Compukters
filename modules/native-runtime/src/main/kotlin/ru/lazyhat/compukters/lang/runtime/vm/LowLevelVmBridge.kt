@@ -129,6 +129,7 @@ internal interface LowLevelVmBridge {
         handle: Long,
         guestBudget: Int,
         maintenanceBudget: Int,
+        hostRequestBudget: Int,
     ): ByteArray
 
     fun compilationRequest(

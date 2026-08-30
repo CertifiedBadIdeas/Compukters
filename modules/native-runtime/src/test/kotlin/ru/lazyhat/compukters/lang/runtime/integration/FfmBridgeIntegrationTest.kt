@@ -38,7 +38,7 @@ class FfmBridgeIntegrationTest {
     @Test
     fun `JDK 25 FFM reads the native ABI version`() {
         FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
-            assertEquals(7, bridge.abiVersion())
+            assertEquals(8, bridge.abiVersion())
         }
     }
 
@@ -132,7 +132,7 @@ class FfmBridgeIntegrationTest {
 
     private fun advanceUntilWaiting(session: VmSession) {
         repeat(10_000) {
-            when (val outcome = session.advance(64, 64)) {
+            when (val outcome = session.advance(64, 64, Int.MAX_VALUE)) {
                 VmOutcome.SliceExhausted -> Unit
                 VmOutcome.WaitingForTerminalEvent -> return
                 else -> error("unexpected VM outcome: $outcome")
@@ -143,7 +143,7 @@ class FfmBridgeIntegrationTest {
 
     private fun advanceUntilHalted(session: VmSession) {
         repeat(10_000) {
-            when (val outcome = session.advance(64, 64)) {
+            when (val outcome = session.advance(64, 64, Int.MAX_VALUE)) {
                 VmOutcome.SliceExhausted -> Unit
                 is VmOutcome.Halted -> return
                 else -> error("unexpected VM outcome: $outcome")

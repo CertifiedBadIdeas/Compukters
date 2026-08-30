@@ -312,7 +312,7 @@ class ProgramRuntimeHostIntegrationTest {
 
     private fun advanceUntilHalted(session: VmSession): VmOutcome.Halted {
         repeat(MAXIMUM_TICKS) {
-            when (val outcome = session.advance(64, 64)) {
+            when (val outcome = session.advance(64, 64, Int.MAX_VALUE)) {
                 VmOutcome.SliceExhausted -> Unit
                 is VmOutcome.Halted -> return outcome
                 else -> error("installer terminated unexpectedly: $outcome")
