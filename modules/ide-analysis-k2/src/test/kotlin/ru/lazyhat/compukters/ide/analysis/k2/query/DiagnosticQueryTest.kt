@@ -31,6 +31,27 @@ import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
     @Test
+    fun `core guest API resolves redstone facade without errors`() {
+        val source =
+            """
+            import compukter.redstone.Redstone
+
+            fun main() {
+                val outputs = Redstone.outputs()
+            }
+            """.trimIndent()
+        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+            val result = fixture.execute(AnalysisQuery.Presentation(fixture.identity)) as AnalysisResult.Presentation
+            val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+
+            assertTrue(
+                active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error },
+                active.diagnostics.toString(),
+            )
+        }
+    }
+
+    @Test
     fun `type error after supplementary character keeps UTF-16 range`() {
         val source = "val emoji = \"😀\"\nval answer: String = 42"
         K2QueryFixture.source("main.kt" to source).use { fixture ->

@@ -72,7 +72,9 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
 import ru.lazyhat.compukters.worker.payload.PackagedToolingBundle
 import ru.lazyhat.compukters.worker.process.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.worker.process.WorkerLaunch
+import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -211,6 +213,7 @@ internal object ProductionIdeApplicationFactory {
     data class PreparedWorkers(
         val compilerPayload: ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload,
         val analysisPayload: ru.lazyhat.compukters.worker.payload.PublishedToolingProfile,
+        val analysisBundles: List<AdmittedAnalysisBundle>,
         val java: Path,
         val workerLimits: WorkerLimits,
         val analysisLimits: AnalysisLimits,
@@ -239,8 +242,21 @@ internal object ProductionIdeApplicationFactory {
         check(analysisPayload.manifest.identityProperties.getValue("language") == compilerIdentity.languageVersion) {
             "analysis worker language identity does not match compiler worker"
         }
+        val guestApi =
+            compilerProfile.classpath.single { path ->
+                path.fileName.toString().startsWith("guest-api-core-")
+            }
+        val guestApiHash = Hash256.of(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(guestApi)))
+        val analysisBundles =
+            listOf(
+                AdmittedAnalysisBundle(
+                    AnalysisBundleIdentity(CORE_GUEST_API_BUNDLE, guestApiHash),
+                    guestApi.toString(),
+                    guestApi.toString(),
+                ),
+            )
         val java = javaExecutable()
-        return PreparedWorkers(compilerPayload, analysisPayload, java, workerLimits, analysisLimits)
+        return PreparedWorkers(compilerPayload, analysisPayload, analysisBundles, java, workerLimits, analysisLimits)
     }
 
     fun createTooling(
@@ -291,7 +307,16 @@ internal object ProductionIdeApplicationFactory {
                 )
             }
         try {
-            val tooling = composeTooling(workspace, compilerIdentity, workerLimits, analysisLimits, compilation, analysisService)
+            val tooling =
+                composeTooling(
+                    workspace,
+                    compilerIdentity,
+                    workerLimits,
+                    analysisLimits,
+                    prepared.analysisBundles,
+                    compilation,
+                    analysisService,
+                )
             return tooling
         } catch (error: Throwable) {
             runCatching(compilation::close)
@@ -359,6 +384,7 @@ internal object ProductionIdeApplicationFactory {
         compilerIdentity: ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity,
         workerLimits: WorkerLimits,
         analysisLimits: AnalysisLimits,
+        analysisBundles: List<AdmittedAnalysisBundle>,
         compilation: DefaultClientCompilationService,
         analysisService: AnalysisServiceLifetime,
     ): IdeClientTooling {
@@ -393,7 +419,7 @@ internal object ProductionIdeApplicationFactory {
                 inputLoader = IdeAnalysisInputLoader(workspace::buildInput),
                 snapshotFactory =
                     IdeAnalysisSnapshotFactory { input, activePath, activeText ->
-                        analysisSnapshot(input, activePath, activeText, profileResolver, analysisLimits)
+                        analysisSnapshot(input, activePath, activeText, profileResolver, analysisLimits, analysisBundles)
                     },
                 requestFactory =
                     IdeAnalysisRequestFactory { sink ->
@@ -419,6 +445,7 @@ internal object ProductionIdeApplicationFactory {
         activeText: String,
         resolver: CompileProfileResolver,
         limits: AnalysisLimits,
+        coreBundles: List<AdmittedAnalysisBundle>,
     ): AdmittedAnalysisSnapshot {
         val lockBytes = checkNotNull(input.lockBytes) { "resolve compukter.lock before analysis" }
         val lock = ProjectLockCodec.decode(lockBytes.decodeToString())
@@ -440,7 +467,7 @@ internal object ProductionIdeApplicationFactory {
                     frameBytes = limits.frameBytes,
                 ),
             )
-        val admittedBundles = emptyList<AdmittedAnalysisBundle>()
+        val admittedBundles = coreBundles
         val profileIdentity = analysisProfile(profile, ProjectLockCodec.encode(lock).encodeToByteArray(), admittedBundles)
         return AdmittedAnalysisSnapshot(
             AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profileIdentity),
@@ -473,6 +500,7 @@ internal object ProductionIdeApplicationFactory {
     }
 
     private const val TOOLING_WORKER_RESOURCE = "/tooling/workers/k2-tooling-workers.zip"
+    private const val CORE_GUEST_API_BUNDLE = "compukter.core-api@1"
     private const val COMPILER_HEAP_MIB = 256
     private const val COMPILER_METASPACE_MIB = 256
     private const val ANALYSIS_HEAP_MIB = 384
