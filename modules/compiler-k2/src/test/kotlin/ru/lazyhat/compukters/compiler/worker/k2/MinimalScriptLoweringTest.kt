@@ -74,6 +74,38 @@ import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
     @Test
+    fun `redstone program lowers deterministically for vm conformance`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.redstone.Redstone
+                import compukter.redstone.RedstoneOutput
+                import compukter.redstone.RedstoneSide
+                import compukter.redstone.RedstoneSignal
+
+                fun main() {
+                    Redstone.awaitAtLeastInput(RedstoneSide.LEFT, RedstoneSignal(7))
+                    Redstone.setOutput(RedstoneSide.RIGHT, Redstone.output(RedstoneSignal.MAX))
+                    Redstone.awaitInput(RedstoneSide.FRONT, RedstoneSignal.MAX)
+                    Redstone.setOutputs(
+                        Redstone.outputs()
+                            .with(RedstoneSide.TOP, RedstoneOutput.MAX)
+                            .with(RedstoneSide.BOTTOM, RedstoneOutput.MIN),
+                    )
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukter.vm.redstoneArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `shell lexer parses bounded POSIX-lite words`() {
         assertLex(
             "greet Ada \"Red Engineer\" '' pre\"fix value\"post",

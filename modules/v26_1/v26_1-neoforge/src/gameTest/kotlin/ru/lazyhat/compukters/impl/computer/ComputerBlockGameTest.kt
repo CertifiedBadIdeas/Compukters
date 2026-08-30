@@ -113,6 +113,10 @@ object ComputerBlockGameTest {
             Identifier.fromNamespaceAndPath(MOD_ID, "computer_lifecycle"),
             ComputerLifecycleGameTest(testData),
         )
+        event.registerTest(
+            Identifier.fromNamespaceAndPath(MOD_ID, "computer_redstone"),
+            ComputerRedstoneGameTest(testData),
+        )
     }
 
     private class ComputerLifecycleGameTest(
