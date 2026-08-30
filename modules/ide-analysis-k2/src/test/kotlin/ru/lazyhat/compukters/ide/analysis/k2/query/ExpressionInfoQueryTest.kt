@@ -70,4 +70,27 @@ class ExpressionInfoQueryTest {
             assertEquals("kotlin.String", assertNotNull(result.value).renderedType)
         }
     }
+
+    @Test
+    fun `expression query preserves the nominal type of an inline value class`() {
+        val source =
+            """
+            @JvmInline
+            value class Signal(val value: Int)
+
+            fun main() {
+                val signal = Signal(7)
+                println(signal)
+            }
+            """.trimIndent()
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val offset = source.lastIndexOf("signal") + 1
+            val result =
+                fixture.execute(
+                    AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), offset),
+                ) as AnalysisResult.ExpressionInfo
+
+            assertEquals("Signal", assertNotNull(result.value).renderedType)
+        }
+    }
 }
