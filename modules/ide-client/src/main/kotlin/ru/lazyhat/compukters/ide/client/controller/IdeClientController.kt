@@ -23,6 +23,7 @@ import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionAcceptance
+import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
 import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
 import ru.lazyhat.compukters.ide.client.build.IdeBuildFailureKind
 import ru.lazyhat.compukters.ide.client.build.IdeBuildJob
@@ -88,6 +89,7 @@ class IdeClientController(
     analysisCoordinator: IdeAnalysisCoordinator? = null,
     private val targetCoordinator: IdeTargetCoordinator? = null,
     tooling: CompletionStage<IdeClientTooling>? = null,
+    private val visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
 ) : AutoCloseable {
     private val owner = Thread.currentThread()
     private var state =
@@ -414,7 +416,7 @@ class IdeClientController(
         editor?.close()
         editor = null
         closeComputerPreview()
-        analysisCoordinator?.closeFile()
+        closeAnalysisFile(forceDrop = true)
         workspace.close()
         cancelBuildJobs()
         installedTooling?.close()
@@ -440,8 +442,7 @@ class IdeClientController(
         buildState = IdeBuildState.Idle
         editor?.close()
         editor = null
-        analysisCoordinator?.closeFile()
-        observedAnalysisState = IdeAnalysisState.Idle
+        closeAnalysisFile()
         binary = null
         closeComputerPreview()
         project = null
@@ -596,6 +597,9 @@ class IdeClientController(
             }
         if (result is EditorEditResult.Applied) {
             active.lastEditMillis = clock.nowMillis()
+            if (active.path.isKotlinSource && analysisCoordinator != null) {
+                visibleLatency.editApplied(active.document.revision)
+            }
             updateAnalysis(active, (input as? IdeEditorInput.Type)?.text, result.change)
         } else if (input is IdeEditorInput.SetCaret || input is IdeEditorInput.Move) {
             analysisCoordinator?.dismissCompletion()
@@ -971,8 +975,7 @@ class IdeClientController(
         editor?.close()
         editor = null
         binary = null
-        analysisCoordinator?.closeFile()
-        observedAnalysisState = IdeAnalysisState.Idle
+        closeAnalysisFile()
         when (val result = event.result) {
             is ProjectFileOpenResult.Text -> {
                 val document = EditorDocument(result.snapshot.text)
@@ -1049,7 +1052,7 @@ class IdeClientController(
                 } else if (diskRevision == null) {
                     active.close()
                     editor = null
-                    analysisCoordinator?.closeFile()
+                    closeAnalysisFile()
                     publishProblem("Active file was removed outside the IDE")
                 } else {
                     openFile(active.path)
@@ -1189,7 +1192,9 @@ class IdeClientController(
         target: ProjectPath,
     ) {
         editor?.takeIf { it.path.isWithin(source) }?.let { active ->
+            val wasKotlinSource = active.path.isKotlinSource
             active.path = active.path.rebase(source, target)
+            if (wasKotlinSource && active.path.isKotlinSource) visibleLatency.dropActive()
             openAnalysis(active)
         }
         binary?.takeIf { it.path.isWithin(source) }?.let { active ->
@@ -1207,7 +1212,7 @@ class IdeClientController(
             } else {
                 active.close()
                 editor = null
-                analysisCoordinator?.closeFile()
+                closeAnalysisFile()
             }
         }
         if (binary?.path?.isWithin(deleted) == true) binary = null
@@ -1400,8 +1405,7 @@ class IdeClientController(
     private fun openAnalysis(active: EditorSession) {
         val selected = project ?: return
         if (!active.path.isKotlinSource) {
-            analysisCoordinator?.closeFile()
-            observedAnalysisState = IdeAnalysisState.Idle
+            closeAnalysisFile()
             return
         }
         analysisCoordinator?.open(
@@ -1411,6 +1415,12 @@ class IdeClientController(
             active.document.revision,
         )
         refreshAnalysisState()
+    }
+
+    private fun closeAnalysisFile(forceDrop: Boolean = false) {
+        if (forceDrop || observedAnalysisState !== IdeAnalysisState.Idle) visibleLatency.dropActive()
+        analysisCoordinator?.closeFile()
+        observedAnalysisState = IdeAnalysisState.Idle
     }
 
     private fun updateAnalysis(
@@ -1436,6 +1446,7 @@ class IdeClientController(
         val current = analysisCoordinator?.state() ?: IdeAnalysisState.Idle
         if (current === observedAnalysisState) return
         observedAnalysisState = current
+        if (current is IdeAnalysisState.Active) visibleLatency.controllerObserved(current.documentRevision)
         if (current is IdeAnalysisState.Unavailable) {
             publishStatus(current.status, IdeProblemSeverity.Warning)
         }
@@ -1626,8 +1637,7 @@ class IdeClientController(
         buildState = IdeBuildState.Idle
         editor?.close()
         editor = null
-        analysisCoordinator?.closeFile()
-        observedAnalysisState = IdeAnalysisState.Idle
+        closeAnalysisFile()
         binary = null
         project = null
         tree = null

@@ -149,6 +149,7 @@ class IdeAnalysisCoordinator(
     private val inputLoader: IdeAnalysisInputLoader,
     private val snapshotFactory: IdeAnalysisSnapshotFactory,
     requestFactory: IdeAnalysisRequestFactory,
+    private val visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
 ) : AnalysisResultSink,
     AutoCloseable {
     private val lock = Any()
@@ -225,6 +226,7 @@ class IdeAnalysisCoordinator(
             publishedState.set(IdeAnalysisState.Loading(updated.path, documentRevision))
             rebuild = updated.input?.let { Rebuild(version, updated) }
         }
+        if (trigger) visibleLatency.automaticCompletionExpected(documentRevision)
         rebuild?.let { pending -> rebuild(pending.version, requireNotNull(pending.session.input)) }
     }
 
@@ -288,6 +290,7 @@ class IdeAnalysisCoordinator(
         val result = completion.accept(document, state.identity, path)
         if (result is IdeCompletionAcceptance.Applied) {
             dismissCompletion()
+            visibleLatency.editApplied(document.revision)
             sourceChanged(
                 current.project,
                 current.path,
@@ -321,6 +324,8 @@ class IdeAnalysisCoordinator(
                 }
 
                 is AnalysisClientResult.Failure -> {
+                    visibleLatency.resultUnavailable(IdeVisibleLatencyKind.Presentation, current.documentRevision)
+                    visibleLatency.resultUnavailable(IdeVisibleLatencyKind.AutomaticCompletion, current.documentRevision)
                     publishedState.set(
                         IdeAnalysisState.Unavailable(
                             current.path,
@@ -410,23 +415,35 @@ class IdeAnalysisCoordinator(
         if (result.identity != snapshot.identity) return
         when (result) {
             is AnalysisResult.Presentation -> {
-                val accepted = result.value.accept(snapshot.identity) as? SnapshotPresentationAcceptance.Active ?: return
+                val accepted = result.value.accept(snapshot.identity) as? SnapshotPresentationAcceptance.Active
+                if (accepted == null) {
+                    visibleLatency.resultUnavailable(IdeVisibleLatencyKind.Presentation, current.documentRevision)
+                    return
+                }
                 val priorCompletion = (publishedState.get() as? IdeAnalysisState.Active)?.completion
-                publishedState.set(
+                val next =
                     IdeAnalysisState.Active(
                         snapshot.identity,
                         current.path,
                         current.documentRevision,
                         IdeAnalysisPresentation.of(accepted.diagnostics, accepted.semanticTokens),
                         priorCompletion,
-                    ),
-                )
+                    )
+                visibleLatency.analysisPublished(IdeVisibleLatencyKind.Presentation, current.documentRevision)
+                publishedState.set(next)
             }
 
             is AnalysisResult.Completion -> {
-                if (result.items.isEmpty() || !validRange(current.text, result.replacement.startUtf16, result.replacement.endUtf16)) return
-                val prior = publishedState.get() as? IdeAnalysisState.Active ?: return
-                publishedState.set(
+                if (result.items.isEmpty() || !validRange(current.text, result.replacement.startUtf16, result.replacement.endUtf16)) {
+                    visibleLatency.resultUnavailable(IdeVisibleLatencyKind.AutomaticCompletion, current.documentRevision)
+                    return
+                }
+                val prior = publishedState.get() as? IdeAnalysisState.Active
+                if (prior == null) {
+                    visibleLatency.resultUnavailable(IdeVisibleLatencyKind.AutomaticCompletion, current.documentRevision)
+                    return
+                }
+                val next =
                     prior.copy(
                         completion =
                             IdeCompletionState.create(
@@ -435,8 +452,9 @@ class IdeAnalysisCoordinator(
                                 result.replacement,
                                 result.items,
                             ),
-                    ),
-                )
+                    )
+                visibleLatency.analysisPublished(IdeVisibleLatencyKind.AutomaticCompletion, current.documentRevision)
+                publishedState.set(next)
             }
 
             is AnalysisResult.Declaration,
@@ -461,6 +479,8 @@ class IdeAnalysisCoordinator(
         synchronized(lock) {
             val current = session ?: return
             if (closed || version != expectedVersion) return
+            visibleLatency.resultUnavailable(IdeVisibleLatencyKind.Presentation, current.documentRevision)
+            visibleLatency.resultUnavailable(IdeVisibleLatencyKind.AutomaticCompletion, current.documentRevision)
             publishedState.set(
                 IdeAnalysisState.Unavailable(
                     current.path,

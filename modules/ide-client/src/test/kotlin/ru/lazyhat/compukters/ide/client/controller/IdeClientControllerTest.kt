@@ -24,6 +24,23 @@ import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisResult
+import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
+import ru.lazyhat.compukters.ide.analysis.SnapshotPresentation
+import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
+import ru.lazyhat.compukters.ide.analysis.controller.AdmittedAnalysisSnapshot
+import ru.lazyhat.compukters.ide.analysis.controller.AnalysisClientResult
+import ru.lazyhat.compukters.ide.analysis.controller.AnalysisRequestCoordinator
+import ru.lazyhat.compukters.ide.analysis.controller.AnalysisResultSink
+import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
+import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
+import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator
+import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisInputLoader
+import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisRequestFactory
+import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisSnapshotFactory
+import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyKind
+import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
 import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferences
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferencesStore
@@ -289,6 +306,63 @@ class IdeClientControllerTest {
         val page = assertIs<IdePageState.Start>(fixture.controller.viewState().page)
         assertTrue(requireNotNull(page.error).message.contains("root"))
     }
+
+    @Test
+    fun `applied Kotlin edit starts latency before analysis rebuild and tick observes fresh state`() {
+        val latency = ControllerRecordingVisibleLatencyTrace()
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture =
+            ControllerFixture(
+                preferences = preferences("demo", "src/main.kt"),
+                visibleLatency = latency,
+                analysisCoordinatorFactory = { workspace -> latencyCoordinator(workspace, requests, latency) },
+            )
+        fixture.startAndTick()
+        latency.observed.clear()
+
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("x")))
+
+        assertEquals(listOf(1L), latency.edits)
+        latency.observed.clear()
+        requests.publishFreshPresentation()
+        assertTrue(latency.observed.isEmpty())
+        fixture.controller.tick()
+        assertEquals(listOf(1L), latency.observed)
+    }
+
+    @Test
+    fun `file switch and controller close drop unfinished latency`() {
+        val latency = ControllerRecordingVisibleLatencyTrace()
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture =
+            ControllerFixture(
+                preferences = preferences("demo", "src/main.kt"),
+                visibleLatency = latency,
+                analysisCoordinatorFactory = { workspace -> latencyCoordinator(workspace, requests, latency) },
+            )
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("x")))
+
+        fixture.controller.dispatch(IdeCommand.OpenFile(ProjectPath.file("notes.txt")))
+        fixture.workspace.completeSave()
+        fixture.controller.tick()
+        fixture.controller.tick()
+
+        assertEquals(1, latency.drops)
+        fixture.controller.close()
+        assertEquals(2, latency.drops)
+    }
+
+    private fun latencyCoordinator(
+        workspace: ControlledWorkspace,
+        requests: ControllerRecordingAnalysisRequests,
+        latency: IdeVisibleLatencyTrace,
+    ) = IdeAnalysisCoordinator(
+        IdeAnalysisInputLoader(workspace::buildInput),
+        IdeAnalysisSnapshotFactory { input, path, text -> latencyAnalysisSnapshot(input.sources, path, text) },
+        IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
+        latency,
+    )
 }
 
 internal class ControllerFixture(
@@ -296,6 +370,7 @@ internal class ControllerFixture(
     analysisCoordinatorFactory: ((ControlledWorkspace) -> ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator)? = null,
     targetCoordinatorFactory: ((MutableClock) -> ru.lazyhat.compukters.ide.client.target.IdeTargetCoordinator)? = null,
     tooling: CompletableFuture<IdeClientTooling>? = null,
+    visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
     buildCoordinatorFactory: ((ControlledWorkspace, MutableClock) -> IdeBuildCoordinator)? = null,
 ) {
     val clock = MutableClock()
@@ -314,6 +389,7 @@ internal class ControllerFixture(
             analysisCoordinator = analysisCoordinator,
             targetCoordinator = targetCoordinator,
             tooling = tooling,
+            visibleLatency = visibleLatency,
         )
 
     fun startAndTick() {
@@ -476,3 +552,98 @@ internal fun preferences(
 ): IdePreferences = IdePreferences.admit(project, file, 0, 0, 0, 240, 160, true)
 
 private fun revision(seed: Int) = FileRevision.Present(Hash256.of(ByteArray(32) { seed.toByte() }))
+
+private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
+    lateinit var sink: AnalysisResultSink
+    val snapshots = mutableListOf<AdmittedAnalysisSnapshot>()
+
+    override fun sourceChanged(snapshot: AdmittedAnalysisSnapshot) {
+        snapshots += snapshot
+    }
+
+    override fun automaticCompletion(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ) = Unit
+
+    override fun manualCompletion(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> = CompletableFuture()
+
+    override fun close() = Unit
+
+    fun publishFreshPresentation() {
+        val snapshot = snapshots.last()
+        val lengths =
+            snapshot.sources.sources.associate {
+                it.path to
+                    it.content
+                        .toByteArray()
+                        .decodeToString()
+                        .length
+            }
+        sink.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Presentation(
+                    snapshot.identity,
+                    SnapshotPresentation.create(snapshot.identity, lengths),
+                ),
+            ),
+        )
+    }
+}
+
+private class ControllerRecordingVisibleLatencyTrace : IdeVisibleLatencyTrace {
+    val edits = mutableListOf<Long>()
+    val observed = mutableListOf<Long>()
+    var drops = 0
+
+    override fun editApplied(documentRevision: Long) {
+        edits += documentRevision
+    }
+
+    override fun automaticCompletionExpected(documentRevision: Long) = Unit
+
+    override fun analysisPublished(
+        kind: IdeVisibleLatencyKind,
+        documentRevision: Long,
+    ) = Unit
+
+    override fun controllerObserved(documentRevision: Long) {
+        observed += documentRevision
+    }
+
+    override fun frameExtracted(
+        documentRevision: Long,
+        presentationVisible: Boolean,
+        completionVisible: Boolean,
+    ) = Unit
+
+    override fun resultUnavailable(
+        kind: IdeVisibleLatencyKind,
+        documentRevision: Long,
+    ) = Unit
+
+    override fun dropActive() {
+        drops++
+    }
+}
+
+private fun latencyAnalysisSnapshot(
+    original: ProjectSnapshot,
+    path: VirtualSourcePath,
+    text: String,
+): AdmittedAnalysisSnapshot {
+    val limits = WorkerLimits(sourceFiles = 8, sourceFileBytes = 4096, sourceBytes = 8192)
+    val sources =
+        ProjectSnapshot.of(
+            original.sources.map { source ->
+                if (source.path == path) ProjectSource(path, BinaryValue.of(text.encodeToByteArray())) else source
+            },
+            limits,
+        )
+    val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 5 }))
+    val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
+    return AdmittedAnalysisSnapshot(identity, sources, AdmittedAnalysisProfile(profile, emptyList()), AnalysisLimits())
+}

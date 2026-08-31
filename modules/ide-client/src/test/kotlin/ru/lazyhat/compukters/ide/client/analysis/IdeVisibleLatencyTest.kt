@@ -117,6 +117,21 @@ class IdeVisibleLatencyTest {
         trace.frameExtracted(11, presentationVisible = true, completionVisible = false)
         assertEquals(IdeVisibleLatencyKind.Presentation, trace.samples().single().kind)
     }
+
+    @Test
+    fun `lifecycle drop allows a new document to restart its revisions`() {
+        val clock = MutableNanoClock()
+        val trace = BoundedIdeVisibleLatencyCollector(clock, maximumSamples = 2)
+        trace.editApplied(9)
+        trace.dropActive()
+
+        trace.editApplied(0)
+        trace.analysisPublished(IdeVisibleLatencyKind.Presentation, 0)
+        trace.controllerObserved(0)
+        trace.frameExtracted(0, presentationVisible = true, completionVisible = false)
+
+        assertEquals(0, trace.samples().single().documentRevision)
+    }
 }
 
 private class MutableNanoClock(
