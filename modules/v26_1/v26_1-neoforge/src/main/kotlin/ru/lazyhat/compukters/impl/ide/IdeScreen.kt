@@ -303,9 +303,10 @@ internal class IdeScreen(
         val profile = CompuktersClientConfig.selectedFont()
         val geometry = geometry(profile, viewport)
         val treeFirstRow = admittedTreeFirstRow(geometry)
+        val state = application.controller.viewState()
         val model =
             IdeRenderer.extract(
-                application.controller.viewState(),
+                state,
                 geometry,
                 prompt = prompt.state,
                 treeFirstRow = treeFirstRow,
@@ -314,6 +315,13 @@ internal class IdeScreen(
                 terminalVisible = terminalOverlay.visible,
                 explorerDrag = input.explorerDragVisual,
             )
+        IdeVisibleFrameEvidence.from(state, model)?.let { evidence ->
+            application.visibleLatency.frameExtracted(
+                evidence.documentRevision,
+                evidence.presentationVisible,
+                evidence.completionVisible,
+            )
+        }
         val operations = mutableListOf<IdeRenderOperation>()
         model.panels.forEach { draw -> operations += IdeRenderOperation(draw.zIndex) { graphics.fill(draw.bounds, draw.color) } }
         model.fills.forEach { draw -> operations += IdeRenderOperation(draw.zIndex) { graphics.fill(draw.bounds, draw.color) } }
