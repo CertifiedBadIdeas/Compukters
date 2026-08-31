@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
@@ -46,6 +47,7 @@ import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisInputLoader
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisRequestFactory
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisSnapshotFactory
+import ru.lazyhat.compukters.ide.client.analysis.IdeAttachedSourceCatalog
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
 import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
 import ru.lazyhat.compukters.ide.client.build.IdeBuildServices
@@ -75,6 +77,7 @@ import ru.lazyhat.compukters.worker.process.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.worker.process.WorkerLaunch
 import ru.lazyhat.compukters.worker.process.WorkerProcessFactory
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.concurrent.CompletableFuture
@@ -83,6 +86,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.zip.ZipFile
 import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory as CompilerProcessFactory
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerLaunch as CompilerWorkerLaunch
 
@@ -225,6 +229,7 @@ internal object ProductionIdeApplicationFactory {
         val compilerPayload: ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload,
         val analysisPayload: ru.lazyhat.compukters.worker.payload.PublishedToolingProfile,
         val analysisBundles: List<AdmittedAnalysisBundle>,
+        val attachedSources: IdeAttachedSourceCatalog,
         val java: Path,
         val workerLimits: WorkerLimits,
         val analysisLimits: AnalysisLimits,
@@ -266,8 +271,9 @@ internal object ProductionIdeApplicationFactory {
                     guestApi.toString(),
                 ),
             )
+        val attachedSources = loadAttachedSources(analysisBundles, analysisLimits)
         val java = javaExecutable()
-        return PreparedWorkers(compilerPayload, analysisPayload, analysisBundles, java, workerLimits, analysisLimits)
+        return PreparedWorkers(compilerPayload, analysisPayload, analysisBundles, attachedSources, java, workerLimits, analysisLimits)
     }
 
     fun createTooling(
@@ -327,6 +333,7 @@ internal object ProductionIdeApplicationFactory {
                     workerLimits,
                     analysisLimits,
                     prepared.analysisBundles,
+                    prepared.attachedSources,
                     compilation,
                     analysisService,
                     visibleLatency,
@@ -401,6 +408,7 @@ internal object ProductionIdeApplicationFactory {
         workerLimits: WorkerLimits,
         analysisLimits: AnalysisLimits,
         analysisBundles: List<AdmittedAnalysisBundle>,
+        attachedSources: IdeAttachedSourceCatalog,
         compilation: DefaultClientCompilationService,
         analysisService: AnalysisServiceLifetime,
         visibleLatency: IdeVisibleLatencyTrace,
@@ -454,9 +462,57 @@ internal object ProductionIdeApplicationFactory {
                         ClosingAnalysisRequestCoordinator(delegate, session, scheduler)
                     },
                 limits = clientLimits,
+                attachedSources = attachedSources,
                 visibleLatency = visibleLatency,
             )
         return IdeClientTooling(build, analysis, analysisService)
+    }
+
+    internal fun loadAttachedSources(
+        bundles: List<AdmittedAnalysisBundle>,
+        limits: AnalysisLimits,
+    ): IdeAttachedSourceCatalog {
+        require(bundles.size <= limits.bundles) { "attached source bundle count exceeds analysis limit" }
+        var sourceCount = 0
+        var totalBytes = 0L
+        val sources = linkedMapOf<AnalysisBundleIdentity, Map<VirtualSourcePath, String>>()
+        bundles.forEach { bundle ->
+            val sourceRoot = bundle.sourceRoot ?: return@forEach
+            val archivePath = Path.of(sourceRoot)
+            require(archivePath.isAbsolute && archivePath.normalize() == archivePath) {
+                "bundle source root must be absolute and normalized"
+            }
+            require(!Files.isSymbolicLink(archivePath) && Files.isRegularFile(archivePath, LinkOption.NOFOLLOW_LINKS)) {
+                "bundle source root is missing or is not a regular file"
+            }
+            val bundleSources = linkedMapOf<VirtualSourcePath, String>()
+            ZipFile(archivePath.toFile()).use { archive ->
+                archive
+                    .entries()
+                    .asSequence()
+                    .filterNot { it.isDirectory }
+                    .filter { it.name.endsWith(".kt") }
+                    .forEach { entry ->
+                        require(sourceCount < limits.sourceFiles) { "bundle source count exceeds analysis limit" }
+                        val bytes = archive.getInputStream(entry).use { it.readNBytes(limits.sourceFileBytes + 1) }
+                        require(bytes.size <= limits.sourceFileBytes) { "bundle source file exceeds analysis limit" }
+                        sourceCount = Math.incrementExact(sourceCount)
+                        totalBytes = Math.addExact(totalBytes, bytes.size.toLong())
+                        require(totalBytes <= limits.sourceBytes.toLong()) { "bundle source bytes exceed analysis limit" }
+                        val path = VirtualSourcePath.kotlin(entry.name)
+                        val text = bytes.decodeToString(throwOnInvalidSequence = true)
+                        require(bundleSources.put(path, text) == null) { "duplicate bundle source path: ${entry.name}" }
+                    }
+            }
+            sources[bundle.identity] = bundleSources
+        }
+        return IdeAttachedSourceCatalog.of(
+            sources,
+            limits.bundles,
+            limits.sourceFiles,
+            limits.sourceFileBytes,
+            limits.sourceBytes,
+        )
     }
 
     private fun analysisSnapshot(

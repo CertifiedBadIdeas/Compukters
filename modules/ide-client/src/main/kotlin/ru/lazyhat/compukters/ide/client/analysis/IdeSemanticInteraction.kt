@@ -25,6 +25,10 @@ import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
 import ru.lazyhat.compukters.ide.analysis.EditorExpressionInfo
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
+import java.nio.CharBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
+import java.nio.charset.StandardCharsets
 import java.util.Collections
 
 data class IdeSemanticAnchor(
@@ -131,6 +135,51 @@ sealed interface IdeSemanticInteraction {
     }
 }
 
+class IdeAttachedSourceCatalog private constructor(
+    private val sources: Map<AnalysisBundleIdentity, Map<VirtualSourcePath, String>>,
+) {
+    fun text(
+        bundle: AnalysisBundleIdentity,
+        path: VirtualSourcePath,
+    ): String? = sources[bundle]?.get(path)
+
+    companion object {
+        fun empty(): IdeAttachedSourceCatalog = IdeAttachedSourceCatalog(emptyMap())
+
+        fun of(
+            sources: Map<AnalysisBundleIdentity, Map<VirtualSourcePath, String>>,
+            maximumBundles: Int,
+            maximumFiles: Int,
+            maximumFileBytes: Int,
+            maximumTotalBytes: Int,
+        ): IdeAttachedSourceCatalog {
+            require(maximumBundles >= 0) { "attached source bundle limit must not be negative" }
+            require(maximumFiles >= 0) { "attached source file limit must not be negative" }
+            require(maximumFileBytes >= 0) { "attached source file byte limit must not be negative" }
+            require(maximumTotalBytes >= 0) { "attached source total byte limit must not be negative" }
+            require(sources.size <= maximumBundles) { "attached source bundle count exceeds limit" }
+            var files = 0
+            var totalBytes = 0L
+            val admitted = linkedMapOf<AnalysisBundleIdentity, Map<VirtualSourcePath, String>>()
+            sources.forEach { (bundle, bundleSources) ->
+                val copied = linkedMapOf<VirtualSourcePath, String>()
+                bundleSources.forEach { (path, text) ->
+                    VirtualSourcePath.kotlin(path.value)
+                    files = Math.incrementExact(files)
+                    require(files <= maximumFiles) { "attached source file count exceeds limit" }
+                    val bytes = strictSourceBytes(text)
+                    require(bytes <= maximumFileBytes) { "attached source file exceeds byte limit" }
+                    totalBytes = Math.addExact(totalBytes, bytes.toLong())
+                    require(totalBytes <= maximumTotalBytes.toLong()) { "attached source bytes exceed limit" }
+                    require(copied.put(path, text) == null) { "duplicate attached source path: ${path.value}" }
+                }
+                admitted[bundle] = Collections.unmodifiableMap(copied)
+            }
+            return IdeAttachedSourceCatalog(Collections.unmodifiableMap(admitted))
+        }
+    }
+}
+
 object KotlinSourceTokenRange {
     fun find(
         source: String,
@@ -179,3 +228,15 @@ object KotlinSourceTokenRange {
 }
 
 private fun <T> immutableList(values: List<T>): List<T> = Collections.unmodifiableList(values.toList())
+
+private fun strictSourceBytes(value: String): Int =
+    try {
+        StandardCharsets.UTF_8
+            .newEncoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .encode(CharBuffer.wrap(value))
+            .remaining()
+    } catch (exception: CharacterCodingException) {
+        throw IllegalArgumentException("attached source must be strict UTF-8", exception)
+    }

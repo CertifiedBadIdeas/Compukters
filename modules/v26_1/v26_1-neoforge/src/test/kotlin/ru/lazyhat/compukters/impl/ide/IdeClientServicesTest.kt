@@ -18,11 +18,18 @@
 
 package ru.lazyhat.compukters.impl.ide
 
+import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisBundle
+import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyKind
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
 import ru.lazyhat.compukters.ide.client.controller.IdeClientTooling
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -33,6 +40,33 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class IdeClientServicesTest {
+    @Test
+    fun `attached source loader admits exact Unicode Kotlin text`() {
+        val archive = createTempDirectory("compukters-attached-source-").resolve("sources.jar")
+        val text = "package compukter.api\nclass Пример"
+        ZipOutputStream(
+            java.nio.file.Files
+                .newOutputStream(archive),
+        ).use { output ->
+            output.putNextEntry(ZipEntry("compukter/api/Sample.kt"))
+            output.write(text.encodeToByteArray())
+            output.closeEntry()
+            output.putNextEntry(ZipEntry("compukter/api/ignored.class"))
+            output.write(byteArrayOf(1, 2, 3))
+            output.closeEntry()
+        }
+        val identity = AnalysisBundleIdentity("std.core", Hash256.of(ByteArray(32) { 7 }))
+
+        val catalog =
+            ProductionIdeApplicationFactory.loadAttachedSources(
+                listOf(AdmittedAnalysisBundle(identity, archive.toString(), archive.toString())),
+                AnalysisLimits(sourceFiles = 2, sourceFileBytes = 128, sourceBytes = 128, bundles = 1),
+            )
+
+        assertEquals(text, catalog.text(identity, VirtualSourcePath.kotlin("compukter/api/Sample.kt")))
+        archive.parent.toFile().deleteRecursively()
+    }
+
     @Test
     fun `production analysis timing favors completion without starving presentation`() {
         assertEquals(150_000_000L, ProductionIdeApplicationFactory.analysisTiming.presentationDebounceNanos)
