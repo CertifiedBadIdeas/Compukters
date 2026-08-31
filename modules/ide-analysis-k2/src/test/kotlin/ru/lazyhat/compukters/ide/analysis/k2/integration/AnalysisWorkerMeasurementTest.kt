@@ -35,8 +35,14 @@ import ru.lazyhat.compukters.ide.analysis.controller.AnalysisServiceLifetime
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisWorkerController
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisWorkerPolicy
 import ru.lazyhat.compukters.ide.analysis.controller.SnapshotOpenResult
+import ru.lazyhat.compukters.ide.analysis.k2.measurement.AnalysisMeasurementFixture
+import ru.lazyhat.compukters.ide.analysis.k2.measurement.AnalysisMeasurementFixtures
+import ru.lazyhat.compukters.ide.analysis.k2.measurement.AnalysisPerformanceReport
+import ru.lazyhat.compukters.ide.analysis.k2.measurement.PhaseSamples
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
+import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFrameCodec
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
+import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisMessageType
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisWorkerIdentity
 import ru.lazyhat.compukters.worker.payload.ToolingBundleLoader
 import ru.lazyhat.compukters.worker.process.JdkWorkerProcessFactory
@@ -45,6 +51,7 @@ import ru.lazyhat.compukters.worker.process.WorkerProcess
 import ru.lazyhat.compukters.worker.process.WorkerProcessFactory
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -87,8 +94,15 @@ class AnalysisWorkerMeasurementTest {
                 )
             }
         try {
-            val first = snapshot("fun candidate() = Unit\nfun main() { can }", 1, limits)
-            val second = snapshot("fun candidate() = Unit\nfun main() { candidate() }", 2, limits)
+            val firstFixture = AnalysisMeasurementFixtures.singleFile()
+            val secondFixture =
+                AnalysisMeasurementFixture(
+                    firstFixture.sources.map { source ->
+                        source.copy(text = source.text.replace("fun completionProbe() { can }", "fun completionProbe() { candidate() }"))
+                    },
+                )
+            val first = snapshot(firstFixture, 1, limits)
+            val second = snapshot(secondFixture, 1, limits)
             val session = service.openSession()
             val client = session.client
             val coldOpen = measured { assertIs<SnapshotOpenResult.Opened>(client.open(first).get(90, TimeUnit.SECONDS)) }
@@ -105,7 +119,7 @@ class AnalysisWorkerMeasurementTest {
                             .query(
                                 AnalysisQuery.Completion(
                                     first.identity,
-                                    VirtualSourcePath.kotlin("main.kt"),
+                                    VirtualSourcePath.kotlin("benchmark/Main.kt"),
                                     first.sources.sources
                                         .single()
                                         .content
@@ -118,6 +132,15 @@ class AnalysisWorkerMeasurementTest {
                     )
                 }
             val replacement = measured { assertIs<SnapshotOpenResult.Opened>(client.open(second).get(90, TimeUnit.SECONDS)) }
+            factory.clearQueryWrites()
+            val cancelledQuery = client.query(AnalysisQuery.Presentation(second.identity))
+            factory.awaitQueryWrite()
+            val cancellation =
+                measured {
+                    assertTrue(client.cancel(cancelledQuery))
+                    assertIs<AnalysisClientResult.Cancelled>(cancelledQuery.get(90, TimeUnit.SECONDS))
+                }
+            val reopen = measured { assertIs<SnapshotOpenResult.Opened>(client.open(second).get(90, TimeUnit.SECONDS)) }
             val process = checkNotNull(factory.process)
             val pid = checkNotNull(process.processId)
             val residentBytes = residentBytes(pid)
@@ -130,18 +153,22 @@ class AnalysisWorkerMeasurementTest {
             session.close()
             awaitExit(pid)
             val report =
-                MeasurementReport(
-                    coldOpen,
-                    presentation,
-                    completion,
-                    replacement,
-                    residentBytes,
-                    memory.heapUsedBytes,
-                    memory.metaspaceUsedBytes,
-                    postIdleProcessExited = true,
+                AnalysisPerformanceReport(
+                    snapshotApply = PhaseSamples(listOf(coldOpen, replacement, reopen)),
+                    presentation = PhaseSamples(listOf(presentation)),
+                    completion = PhaseSamples(listOf(completion)),
+                    endToEndPresentation = PhaseSamples(listOf(Math.addExact(coldOpen, presentation))),
+                    endToEndCompletion = PhaseSamples(listOf(Math.addExact(replacement, completion))),
+                    cancellation = PhaseSamples(listOf(cancellation)),
+                    workerStarts = factory.starts,
+                    fullRebuilds = 3,
+                    incrementalUpdates = 0,
+                    heapBytes = memory.heapUsedBytes,
+                    metaspaceBytes = memory.metaspaceUsedBytes,
+                    rssBytes = residentBytes,
                 ).render()
             println(report)
-            assertTrue(report.startsWith("compukters.analysis.measurement.v1\n"))
+            assertTrue(report.startsWith("compukters.analysis.performance.v2\n"))
         } finally {
             service.close()
             root.toFile().deleteRecursively()
@@ -149,13 +176,13 @@ class AnalysisWorkerMeasurementTest {
     }
 
     private fun snapshot(
-        text: String,
+        fixture: AnalysisMeasurementFixture,
         profileByte: Int,
         limits: AnalysisLimits,
     ): AdmittedAnalysisSnapshot {
         val sources =
             ProjectSnapshot.of(
-                listOf(ProjectSource(VirtualSourcePath.kotlin("main.kt"), BinaryValue.of(text.encodeToByteArray()))),
+                fixture.sources.map { source -> ProjectSource(source.path, BinaryValue.of(source.text.encodeToByteArray())) },
                 WorkerLimits(),
             )
         val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { profileByte.toByte() }))
@@ -222,38 +249,36 @@ class AnalysisWorkerMeasurementTest {
 
 private class MeasuringWorkerFactory : WorkerProcessFactory {
     private val delegate = JdkWorkerProcessFactory()
+    private val queryWrites = LinkedBlockingQueue<Unit>()
 
     @Volatile var process: WorkerProcess? = null
         private set
+    var starts: Int = 0
+        private set
 
-    override fun start(launch: WorkerLaunch): WorkerProcess = delegate.start(launch).also { process = it }
+    override fun start(launch: WorkerLaunch): WorkerProcess {
+        starts += 1
+        return MeasuringWorkerProcess(delegate.start(launch), queryWrites).also { process = it }
+    }
+
+    fun clearQueryWrites() = queryWrites.clear()
+
+    fun awaitQueryWrite() {
+        checkNotNull(queryWrites.poll(30, TimeUnit.SECONDS)) { "analysis query was not written" }
+    }
+}
+
+private class MeasuringWorkerProcess(
+    private val delegate: WorkerProcess,
+    private val queryWrites: LinkedBlockingQueue<Unit>,
+) : WorkerProcess by delegate {
+    override fun writeFrame(frame: ByteArray) {
+        if (AnalysisFrameCodec.decode(frame, frame.size).type == AnalysisMessageType.Query) queryWrites.offer(Unit)
+        delegate.writeFrame(frame)
+    }
 }
 
 private data class WorkerMemory(
     val heapUsedBytes: Long,
     val metaspaceUsedBytes: Long,
 )
-
-private data class MeasurementReport(
-    val coldStartupOpenNanos: Long,
-    val warmPresentationNanos: Long,
-    val warmCompletionNanos: Long,
-    val snapshotReplacementNanos: Long,
-    val idleResidentBytes: Long,
-    val idleHeapUsedBytes: Long,
-    val idleMetaspaceUsedBytes: Long,
-    val postIdleProcessExited: Boolean,
-) {
-    fun render(): String =
-        buildString {
-            appendLine("compukters.analysis.measurement.v1")
-            appendLine("coldStartupOpenNanos=$coldStartupOpenNanos")
-            appendLine("warmPresentationNanos=$warmPresentationNanos")
-            appendLine("warmCompletionNanos=$warmCompletionNanos")
-            appendLine("snapshotReplacementNanos=$snapshotReplacementNanos")
-            appendLine("idleResidentBytes=$idleResidentBytes")
-            appendLine("idleHeapUsedBytes=$idleHeapUsedBytes")
-            appendLine("idleMetaspaceUsedBytes=$idleMetaspaceUsedBytes")
-            appendLine("postIdleProcessExited=$postIdleProcessExited")
-        }
-}

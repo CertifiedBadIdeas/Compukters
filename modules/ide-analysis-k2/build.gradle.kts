@@ -243,11 +243,40 @@ val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
     }
 }
 
+val incrementalAnalysisPerformanceTest = tasks.register<Test>("incrementalAnalysisPerformanceTest") {
+    description = "Runs machine-sensitive incremental IDE analysis SLO checks."
+    group = "verification"
+    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle")
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    maxHeapSize = "512m"
+    filter {
+        includeTestsMatching("ru.lazyhat.compukters.ide.analysis.k2.integration.AnalysisWorkerMeasurementTest")
+        isFailOnNoMatchingTests = true
+    }
+    doFirst {
+        systemProperty("compukters.analysis.performance", "true")
+        systemProperty("compukters.analysis.testClasspath", classpath.files.joinToString(File.pathSeparator))
+        systemProperty("compukters.analysis.java", javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of(25)
+        }.get().executablePath.asFile.absolutePath)
+        systemProperty(
+            "compukters.analysis.payload",
+            project(":tooling-runtime").layout.buildDirectory.dir("tooling-bundle/content").get().asFile.absolutePath,
+        )
+    }
+}
+
 // Both suites initialize the heavyweight standalone K2/IntelliJ environment.
 // Keep their Gradle test workers disjoint in time: concurrent execution can
 // terminate the ordinary test worker while Gradle is still finalizing its
 // binary results.
 forkedWorkerTest.configure {
+    mustRunAfter(tasks.test)
+}
+
+incrementalAnalysisPerformanceTest.configure {
     mustRunAfter(tasks.test)
 }
 
