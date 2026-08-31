@@ -69,6 +69,7 @@ internal class ManualAnalysisTaskScheduler : AnalysisTaskScheduler {
 
 internal class RecordingAnalysisClient : AnalysisClient {
     val opens = mutableListOf<AdmittedAnalysisSnapshot>()
+    val querySnapshots = mutableListOf<AdmittedAnalysisSnapshot>()
     val queries = mutableListOf<AnalysisQuery>()
     val queryFutures = mutableListOf<CompletableFuture<AnalysisClientResult>>()
     val cancelled = mutableListOf<CompletableFuture<AnalysisClientResult>>()
@@ -77,11 +78,14 @@ internal class RecordingAnalysisClient : AnalysisClient {
     override fun open(snapshot: AdmittedAnalysisSnapshot): CompletableFuture<SnapshotOpenResult> =
         CompletableFuture.completedFuture<SnapshotOpenResult>(SnapshotOpenResult.Opened(snapshot.identity)).also { opens += snapshot }
 
-    override fun query(query: AnalysisQuery) =
-        CompletableFuture<AnalysisClientResult>().also {
-            queries += query
-            queryFutures += it
-        }
+    override fun query(
+        snapshot: AdmittedAnalysisSnapshot,
+        query: AnalysisQuery,
+    ) = CompletableFuture<AnalysisClientResult>().also {
+        querySnapshots += snapshot
+        queries += query
+        queryFutures += it
+    }
 
     override fun cancel(future: CompletableFuture<AnalysisClientResult>): Boolean = cancelled.add(future)
 
@@ -98,7 +102,9 @@ internal fun admittedSnapshot(text: String): AdmittedAnalysisSnapshot {
     return AdmittedAnalysisSnapshot(identity, source, AdmittedAnalysisProfile(identity.profile, emptyList()), AnalysisLimits())
 }
 
-internal fun testQuery(): AnalysisQuery = AnalysisQuery.Presentation(admittedSnapshot("val test = true").identity)
+internal fun testSnapshot(): AdmittedAnalysisSnapshot = admittedSnapshot("val test = true")
+
+internal fun testQuery(snapshot: AdmittedAnalysisSnapshot = testSnapshot()): AnalysisQuery = AnalysisQuery.Presentation(snapshot.identity)
 
 internal fun testPath(): VirtualSourcePath = VirtualSourcePath.kotlin("main.kt")
 

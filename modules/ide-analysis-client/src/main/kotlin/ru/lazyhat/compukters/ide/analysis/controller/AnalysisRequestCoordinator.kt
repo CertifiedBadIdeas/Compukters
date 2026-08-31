@@ -115,7 +115,7 @@ class DefaultAnalysisRequestCoordinator(
             completionTask?.cancel()
             completionTask = null
             oldCompletion = completionFuture
-            future = client.query(AnalysisQuery.Completion(current.identity, path, offsetUtf16, CompletionTrigger.Manual))
+            future = client.query(current, AnalysisQuery.Completion(current.identity, path, offsetUtf16, CompletionTrigger.Manual))
             completionFuture = future
         }
         oldCompletion?.let(client::cancel)
@@ -145,7 +145,7 @@ class DefaultAnalysisRequestCoordinator(
             synchronized(lock) {
                 if (closed || snapshot !== expected) return
                 presentationTask = null
-                client.query(AnalysisQuery.Presentation(expected.identity)).also { presentationFuture = it }
+                client.query(expected, AnalysisQuery.Presentation(expected.identity)).also { presentationFuture = it }
             }
         future.whenComplete { result, failure ->
             if (failure == null && result != null && admitPresentation(expected, future)) resultSink.publish(result)
@@ -160,7 +160,7 @@ class DefaultAnalysisRequestCoordinator(
             synchronized(lock) {
                 if (closed || snapshot !== expected) return
                 completionTask = null
-                client.query(query).also { completionFuture = it }
+                client.query(expected, query).also { completionFuture = it }
             }
         publishCompletion(expected, future)
     }

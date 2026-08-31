@@ -71,6 +71,7 @@ class NavigationAndReferencesTest {
                 assertIs<AnalysisClientResult.Success>(
                     controller
                         .query(
+                            admitted,
                             AnalysisQuery.Declaration(
                                 identity,
                                 VirtualSourcePath.kotlin("demo/Usage.kt"),
@@ -84,6 +85,7 @@ class NavigationAndReferencesTest {
                 assertIs<AnalysisClientResult.Success>(
                     controller
                         .query(
+                            admitted,
                             AnalysisQuery.References(
                                 identity,
                                 VirtualSourcePath.kotlin("demo/Declaration.kt"),

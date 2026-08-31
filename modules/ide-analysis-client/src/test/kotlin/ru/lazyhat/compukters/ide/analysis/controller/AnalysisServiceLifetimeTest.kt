@@ -34,7 +34,8 @@ class AnalysisServiceLifetimeTest {
         assertEquals(0, created.size)
         assertSame(first.client, second.client)
 
-        first.client.query(testQuery())
+        val snapshot = testSnapshot()
+        first.client.query(snapshot, testQuery(snapshot))
         assertEquals(1, created.size)
         first.close()
         assertEquals(0, scheduler.pendingCount)
@@ -54,7 +55,8 @@ class AnalysisServiceLifetimeTest {
         val created = mutableListOf<RecordingAnalysisClient>()
         val service = AnalysisServiceLifetime(50, scheduler) { RecordingAnalysisClient().also(created::add) }
         val first = service.openSession()
-        first.client.query(testQuery())
+        val snapshot = testSnapshot()
+        first.client.query(snapshot, testQuery(snapshot))
         first.close()
 
         val reopened = service.openSession()
@@ -64,7 +66,7 @@ class AnalysisServiceLifetimeTest {
         scheduler.advanceBy(50)
         assertEquals(1, created.single().closeCount)
 
-        service.openSession().use { it.client.query(testQuery()) }
+        service.openSession().use { it.client.query(snapshot, testQuery(snapshot)) }
         assertEquals(2, created.size)
         service.close()
         assertEquals(1, created.last().closeCount)

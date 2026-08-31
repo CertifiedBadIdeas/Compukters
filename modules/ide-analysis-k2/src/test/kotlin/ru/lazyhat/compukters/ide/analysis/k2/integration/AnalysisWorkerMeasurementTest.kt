@@ -109,7 +109,7 @@ class AnalysisWorkerMeasurementTest {
             val presentation =
                 measured {
                     assertIs<AnalysisClientResult.Success>(
-                        client.query(AnalysisQuery.Presentation(first.identity)).get(90, TimeUnit.SECONDS),
+                        client.query(first, AnalysisQuery.Presentation(first.identity)).get(90, TimeUnit.SECONDS),
                     )
                 }
             val completion =
@@ -117,6 +117,7 @@ class AnalysisWorkerMeasurementTest {
                     assertIs<AnalysisClientResult.Success>(
                         client
                             .query(
+                                first,
                                 AnalysisQuery.Completion(
                                     first.identity,
                                     VirtualSourcePath.kotlin("benchmark/Main.kt"),
@@ -133,7 +134,7 @@ class AnalysisWorkerMeasurementTest {
                 }
             val replacement = measured { assertIs<SnapshotOpenResult.Opened>(client.open(second).get(90, TimeUnit.SECONDS)) }
             factory.clearQueryWrites()
-            val cancelledQuery = client.query(AnalysisQuery.Presentation(second.identity))
+            val cancelledQuery = client.query(second, AnalysisQuery.Presentation(second.identity))
             factory.awaitQueryWrite()
             val cancellation =
                 measured {
