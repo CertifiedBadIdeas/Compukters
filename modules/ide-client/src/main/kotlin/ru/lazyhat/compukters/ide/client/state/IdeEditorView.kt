@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.ide.client.state
 
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
@@ -39,6 +41,11 @@ sealed interface IdeEditorSource {
             require(generation >= 0) { "computer editor generation must not be negative" }
         }
     }
+
+    data class AttachedApi(
+        val bundle: AnalysisBundleIdentity,
+        val path: VirtualSourcePath,
+    ) : IdeEditorSource
 }
 
 sealed interface IdeEditorView {
@@ -69,6 +76,7 @@ sealed interface IdeEditorView {
             when (source) {
                 is IdeEditorSource.Project -> source.path.value
                 is IdeEditorSource.Computer -> "Computer · ${source.path.value} · Read-only"
+                is IdeEditorSource.AttachedApi -> "${source.bundle.name} · ${source.path.value} · Read-only"
             }
 
         init {
@@ -86,6 +94,7 @@ sealed interface IdeEditorView {
             when (source) {
                 is IdeEditorSource.Project -> require(path == source.path && !readOnly) { "project editor source must be writable" }
                 is IdeEditorSource.Computer -> require(path == null && readOnly) { "computer editor source must be read-only" }
+                is IdeEditorSource.AttachedApi -> require(path == null && readOnly) { "attached API source must be read-only" }
             }
         }
     }

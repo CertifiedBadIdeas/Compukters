@@ -19,11 +19,15 @@
 package ru.lazyhat.compukters.ide.client.controller
 
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionAcceptance
+import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationOutcome
+import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationTarget
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
+import ru.lazyhat.compukters.ide.client.analysis.KotlinSourceTokenRange
 import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
 import ru.lazyhat.compukters.ide.client.build.IdeBuildFailureKind
 import ru.lazyhat.compukters.ide.client.build.IdeBuildJob
@@ -33,6 +37,9 @@ import ru.lazyhat.compukters.ide.client.files.IdeComputerFileCoordinator
 import ru.lazyhat.compukters.ide.client.files.IdeComputerPreviewState
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTransferState
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
+import ru.lazyhat.compukters.ide.client.navigation.IdeNavigationHistory
+import ru.lazyhat.compukters.ide.client.navigation.IdeNavigationPosition
+import ru.lazyhat.compukters.ide.client.navigation.IdeNavigationSource
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferences
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferencesStore
 import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
@@ -115,14 +122,19 @@ class IdeClientController(
     private var editor: EditorSession? = null
     private var binary: IdeEditorView.Binary? = null
     private var computerPreview: ComputerPreviewSession? = null
+    private var attachedSourcePreview: AttachedSourcePreviewSession? = null
     private var observedComputerPreview: IdeComputerPreviewState = IdeComputerPreviewState.Closed
     private var observedComputerTransfer: IdeComputerTransferState = IdeComputerTransferState.Idle
     private var latestProjectOperation = 0L
     private var latestOpenOperation = 0L
+    private var latestDeclarationOperation = 0L
     private var latestSaveOperation = 0L
     private var latestMutationOperation = 0L
     private var latestComputerImportOperation = 0L
     private var pendingFile: ProjectPath? = null
+    private var pendingProjectNavigation: PendingProjectNavigation? = null
+    private var pendingAttachedNavigation: PendingAttachedNavigation? = null
+    private var openingProjectNavigation: PendingProjectNavigation? = null
     private var pendingProjectDirectory: String? = null
     private var pendingSave = false
     private var rememberedFile: ProjectPath? = null
@@ -140,6 +152,7 @@ class IdeClientController(
     private val targetBuildActions = mutableMapOf<Long, PendingBuildAction>()
     private val computerFiles = targetCoordinator?.let { IdeComputerFileCoordinator(it, limits.eventQueueCapacity) }
     private var computerTarget: IdeAttachedTarget? = null
+    private val navigationHistory = IdeNavigationHistory(limits.navigationHistory)
 
     init {
         tooling?.whenComplete { ready, failure ->
@@ -200,6 +213,7 @@ class IdeClientController(
             }
 
             is IdeCommand.OpenComputerFile -> {
+                closeAttachedSourcePreview()
                 computerFiles?.open(command.path)
                 publishStatus("Opening ${command.path.value}", IdeProblemSeverity.Info)
             }
@@ -343,6 +357,46 @@ class IdeClientController(
                 publishWorkspace()
             }
 
+            is IdeCommand.SourcePointer -> {
+                sourcePointer(command.offsetUtf16, command.controlDown)
+            }
+
+            is IdeCommand.GoToDeclaration -> {
+                goToDeclaration(command.offsetUtf16)
+            }
+
+            IdeCommand.ControlReleased -> {
+                analysisCoordinator?.controlReleased()
+                refreshAnalysisState()
+                publishWorkspace()
+            }
+
+            is IdeCommand.MoveDeclarationChoice -> {
+                analysisCoordinator?.moveDeclarationChoice(command.delta)
+                refreshAnalysisState()
+                publishWorkspace()
+            }
+
+            IdeCommand.AcceptDeclarationChoice -> {
+                analysisCoordinator?.acceptDeclarationChoice()?.let(::navigateToDeclaration)
+                refreshAnalysisState()
+                publishWorkspace()
+            }
+
+            IdeCommand.DismissSemanticInteraction -> {
+                analysisCoordinator?.dismissSemanticInteraction()
+                refreshAnalysisState()
+                publishWorkspace()
+            }
+
+            IdeCommand.NavigateBack -> {
+                navigateHistory(NavigationDirection.Back)
+            }
+
+            IdeCommand.NavigateForward -> {
+                navigateHistory(NavigationDirection.Forward)
+            }
+
             IdeCommand.EditorFocusLost -> {
                 analysisCoordinator?.focusLost()
                 refreshAnalysisState()
@@ -416,6 +470,7 @@ class IdeClientController(
         editor?.close()
         editor = null
         closeComputerPreview()
+        closeAttachedSourcePreview()
         closeAnalysisFile(forceDrop = true)
         workspace.close()
         cancelBuildJobs()
@@ -435,6 +490,7 @@ class IdeClientController(
             return
         }
         generation = Math.incrementExact(generation)
+        navigationHistory.clear()
         cancelComputerTransfer()
         project?.let { persistPreferences(editor?.path ?: binary?.path) }
         cancelBuildJobs()
@@ -442,9 +498,13 @@ class IdeClientController(
         buildState = IdeBuildState.Idle
         editor?.close()
         editor = null
+        closeComputerPreview()
+        closeAttachedSourcePreview()
         closeAnalysisFile()
         binary = null
-        closeComputerPreview()
+        pendingProjectNavigation = null
+        pendingAttachedNavigation = null
+        openingProjectNavigation = null
         project = null
         tree = null
         val operationId = nextOperationId++
@@ -462,7 +522,10 @@ class IdeClientController(
 
     private fun createProject(name: String) {
         generation = Math.incrementExact(generation)
+        navigationHistory.clear()
         cancelComputerTransfer()
+        closeComputerPreview()
+        closeAttachedSourcePreview()
         val operationId = nextOperationId++
         latestProjectOperation = operationId
         pendingFile = ProjectPath.file("src/main.kt")
@@ -492,6 +555,10 @@ class IdeClientController(
 
     private fun requestFileSwitch(path: ProjectPath) {
         closeComputerPreview()
+        closeAttachedSourcePreview()
+        pendingProjectNavigation = null
+        pendingAttachedNavigation = null
+        openingProjectNavigation = null
         val active = editor
         if (active != null && active.path != path && active.dirty) {
             pendingFile = path
@@ -501,10 +568,16 @@ class IdeClientController(
         openFile(path)
     }
 
-    private fun openFile(path: ProjectPath) {
+    private fun openFile(
+        path: ProjectPath,
+        navigation: PendingProjectNavigation? = null,
+    ) {
         val selected = project ?: return
+        closeComputerPreview()
+        closeAttachedSourcePreview()
         val operationId = nextOperationId++
         latestOpenOperation = operationId
+        openingProjectNavigation = navigation
         state = state.copy(busy = state.busy + IdeBusyOperation.Project)
         val requestGeneration = generation
         workspace.open(selected.handle, path).whenComplete { result, failure ->
@@ -517,6 +590,10 @@ class IdeClientController(
     }
 
     private fun edit(input: IdeEditorInput) {
+        attachedSourcePreview?.let { preview ->
+            editAttachedSourcePreview(preview, input)
+            return
+        }
         computerPreview?.let { preview ->
             editComputerPreview(preview, input)
             return
@@ -612,6 +689,10 @@ class IdeClientController(
         lines: Int,
         columns: Int,
     ) {
+        attachedSourcePreview?.let { preview ->
+            scrollAttachedSourcePreview(preview, lines, columns)
+            return
+        }
         computerPreview?.let { preview ->
             preview.firstVisibleLine =
                 (preview.firstVisibleLine.toLong() + lines)
@@ -638,6 +719,10 @@ class IdeClientController(
     }
 
     private fun requestSave() {
+        if (attachedSourcePreview != null) {
+            publishStatus("Attached API sources are read-only", IdeProblemSeverity.Info)
+            return
+        }
         if (computerPreview != null) {
             publishStatus("Computer files are read-only", IdeProblemSeverity.Info)
             return
@@ -807,6 +892,8 @@ class IdeClientController(
 
             is IdeEvent.FileOpened -> acceptFile(event)
 
+            is IdeEvent.DeclarationResolved -> acceptDeclaration(event)
+
             is IdeEvent.SaveCompleted -> acceptSave(event)
 
             is IdeEvent.DeleteAdmitted -> acceptDeleteAdmitted(event)
@@ -972,6 +1059,8 @@ class IdeClientController(
 
     private fun acceptFile(event: IdeEvent.FileOpened) {
         if (event.operationId != latestOpenOperation) return
+        val navigation = openingProjectNavigation
+        openingProjectNavigation = null
         editor?.close()
         editor = null
         binary = null
@@ -990,16 +1079,23 @@ class IdeClientController(
                         session.firstVisibleColumn = remembered.firstVisibleColumn
                     }
                 editor = session
+                navigation?.let { pending ->
+                    restoreCaret(document, pending.caretUtf16)
+                    session.firstVisibleLine = pending.firstVisibleLine ?: document.lineContaining(document.caretOffset)
+                    session.firstVisibleColumn = pending.firstVisibleColumn
+                }
                 openAnalysis(session)
             }
 
             is ProjectFileOpenResult.Binary -> {
                 binary = IdeEditorView.Binary(result.path, result.bytes)
+                if (navigation != null) publishStatus("Declaration source is not text", IdeProblemSeverity.Warning)
             }
         }
         state = state.copy(busy = state.busy - IdeBusyOperation.Project)
         publishWorkspace()
         persistPreferences(event.path)
+        if (navigation != null && editor != null) completeNavigation(navigation)
     }
 
     private fun acceptSave(event: IdeEvent.SaveCompleted) {
@@ -1223,6 +1319,7 @@ class IdeClientController(
             editor?.saveInFlight = null
             editor?.lastEditMillis = clock.nowMillis()
         }
+        if (event.operation == IdeBusyOperation.Project) openingProjectNavigation = null
         if (project?.handle?.isValid() == false) {
             recoverToStart("Project root changed; reopen the project")
             return
@@ -1287,6 +1384,30 @@ class IdeClientController(
             }
             return
         }
+        val declaration = pendingProjectNavigation
+        if (declaration != null) {
+            val active = editor
+            if (active?.conflict == true) return
+            if (active?.dirty == true) {
+                requestSave()
+            } else {
+                pendingProjectNavigation = null
+                openFile(declaration.path, declaration)
+            }
+            return
+        }
+        val attached = pendingAttachedNavigation
+        if (attached != null) {
+            val active = editor
+            if (active?.conflict == true) return
+            if (active?.dirty == true) {
+                requestSave()
+            } else {
+                pendingAttachedNavigation = null
+                openAttached(attached)
+            }
+            return
+        }
         val target = pendingFile ?: return
         val active = editor
         if (active?.conflict == true) return
@@ -1331,7 +1452,7 @@ class IdeClientController(
     private fun publishWorkspace() {
         val selected = project ?: return
         val selectedTree = tree ?: return
-        val editorView = computerPreview?.toView() ?: editor?.toView() ?: binary ?: IdeEditorView.Empty
+        val editorView = attachedSourcePreview?.toView() ?: computerPreview?.toView() ?: editor?.toView() ?: binary ?: IdeEditorView.Empty
         state =
             state.copy(
                 page =
@@ -1399,6 +1520,261 @@ class IdeClientController(
             analysis = IdeAnalysisState.Idle,
             source = IdeEditorSource.Computer(path, targetId, generation),
             readOnly = true,
+        )
+    }
+
+    private fun AttachedSourcePreviewSession.toView(): IdeEditorView.Text {
+        val first = firstVisibleLine.coerceIn(0, document.lineCount - 1)
+        val lastExclusive = minOf(document.lineCount, first + limits.visibleEditorLines)
+        val visible = (first until lastExclusive).map(document::materializeLine)
+        val visibleStarts = (first until lastExclusive).map(document::lineStartOffset)
+        val selection = document.selectionRange
+        return IdeEditorView.Text(
+            path = null,
+            visibleLines = visible,
+            visibleLineStartsUtf16 = visibleStarts,
+            firstVisibleLine = first,
+            firstVisibleColumn = firstVisibleColumn,
+            totalLines = document.lineCount,
+            caretUtf16 = document.caretOffset,
+            selectionStartUtf16 = selection?.startUtf16,
+            selectionEndUtf16 = selection?.endUtf16,
+            contentRevision = document.revision,
+            persistedContentRevision = document.revision,
+            dirty = false,
+            conflict = false,
+            lexical = highlighter.snapshot(),
+            analysis = IdeAnalysisState.Idle,
+            source = IdeEditorSource.AttachedApi(bundle, path),
+            readOnly = true,
+        )
+    }
+
+    private fun sourcePointer(
+        offsetUtf16: Int?,
+        controlDown: Boolean,
+    ) {
+        val active = editor
+        val source =
+            active
+                ?.takeIf {
+                    attachedSourcePreview == null && computerPreview == null && binary == null && it.path.isKotlinSource
+                }?.document
+                ?.materialize()
+        val token = if (source != null && offsetUtf16 != null) KotlinSourceTokenRange.find(source, offsetUtf16) else null
+        analysisCoordinator?.pointerMoved(token, offsetUtf16, controlDown)
+        refreshAnalysisState()
+        publishWorkspace()
+    }
+
+    private fun goToDeclaration(offsetUtf16: Int?) {
+        if (attachedSourcePreview != null || computerPreview != null || binary != null) return
+        val active = editor?.takeIf { it.path.isKotlinSource } ?: return
+        val offset = offsetUtf16 ?: active.document.caretOffset
+        val token = KotlinSourceTokenRange.find(active.document.materialize(), offset) ?: return
+        val coordinator = analysisCoordinator ?: return
+        val operationId = nextOperationId++
+        latestDeclarationOperation = operationId
+        val requestGeneration = generation
+        coordinator.goToDeclaration(token, offset).whenComplete { outcome, failure ->
+            val admitted =
+                if (failure == null && outcome != null) {
+                    outcome
+                } else {
+                    IdeDeclarationOutcome.Failed(failure?.message?.takeIf(String::isNotEmpty) ?: "Declaration request failed")
+                }
+            enqueue(IdeEvent.DeclarationResolved(requestGeneration, operationId, admitted))
+        }
+    }
+
+    private fun acceptDeclaration(event: IdeEvent.DeclarationResolved) {
+        if (event.operationId != latestDeclarationOperation) return
+        when (val outcome = event.outcome) {
+            IdeDeclarationOutcome.NotFound -> {
+                publishStatus("Declaration not found", IdeProblemSeverity.Info)
+            }
+
+            is IdeDeclarationOutcome.SourceUnavailable -> {
+                publishStatus("Source for ${outcome.bundle.name} is unavailable", IdeProblemSeverity.Warning)
+            }
+
+            is IdeDeclarationOutcome.Failed -> {
+                publishStatus(outcome.detail, IdeProblemSeverity.Warning)
+            }
+
+            is IdeDeclarationOutcome.Targets -> {
+                if (outcome.values.size == 1) navigateToDeclaration(outcome.values.single())
+            }
+        }
+        refreshAnalysisState()
+        publishWorkspace()
+    }
+
+    private fun navigateToDeclaration(target: IdeDeclarationTarget) {
+        val from = currentNavigationPosition() ?: return
+        val transition = NavigationTransition.Fresh(from)
+        when (target) {
+            is IdeDeclarationTarget.Project -> {
+                navigateToProject(
+                    PendingProjectNavigation(
+                        target.path,
+                        target.range.startUtf16,
+                        firstVisibleLine = null,
+                        firstVisibleColumn = 0,
+                        transition,
+                    ),
+                )
+            }
+
+            is IdeDeclarationTarget.AttachedSource -> {
+                navigateToAttached(
+                    target.bundle,
+                    target.path,
+                    target.range.startUtf16,
+                    firstVisibleLine = null,
+                    firstVisibleColumn = 0,
+                    transition,
+                )
+            }
+        }
+    }
+
+    private fun navigateHistory(direction: NavigationDirection) {
+        val current = currentNavigationPosition() ?: return
+        val target =
+            when (direction) {
+                NavigationDirection.Back -> navigationHistory.peekBack()
+                NavigationDirection.Forward -> navigationHistory.peekForward()
+            } ?: return
+        val transition = NavigationTransition.History(current, target, direction)
+        when (val source = target.source) {
+            is IdeNavigationSource.Project -> {
+                navigateToProject(
+                    PendingProjectNavigation(
+                        source.path,
+                        target.caretUtf16,
+                        target.firstVisibleLine,
+                        target.firstVisibleColumn,
+                        transition,
+                    ),
+                )
+            }
+
+            is IdeNavigationSource.Attached -> {
+                navigateToAttached(
+                    source.bundle,
+                    source.path,
+                    target.caretUtf16,
+                    target.firstVisibleLine,
+                    target.firstVisibleColumn,
+                    transition,
+                )
+            }
+        }
+    }
+
+    private fun navigateToProject(navigation: PendingProjectNavigation) {
+        pendingFile = null
+        pendingAttachedNavigation = null
+        val active = editor
+        if (active != null && active.path == navigation.path) {
+            closeComputerPreview()
+            closeAttachedSourcePreview()
+            restoreCaret(active.document, navigation.caretUtf16)
+            active.firstVisibleLine = navigation.firstVisibleLine ?: active.document.lineContaining(active.document.caretOffset)
+            active.firstVisibleColumn = navigation.firstVisibleColumn
+            analysisCoordinator?.dismissSemanticInteraction()
+            completeNavigation(navigation)
+            publishWorkspace()
+            persistPreferences(active.path)
+            return
+        }
+        closeComputerPreview()
+        closeAttachedSourcePreview()
+        if (active?.dirty == true) {
+            pendingProjectNavigation = navigation
+            requestSave()
+        } else {
+            openFile(navigation.path, navigation)
+        }
+    }
+
+    private fun navigateToAttached(
+        bundle: AnalysisBundleIdentity,
+        path: VirtualSourcePath,
+        caretUtf16: Int,
+        firstVisibleLine: Int?,
+        firstVisibleColumn: Int,
+        transition: NavigationTransition,
+    ) {
+        pendingFile = null
+        pendingProjectNavigation = null
+        val navigation =
+            PendingAttachedNavigation(bundle, path, caretUtf16, firstVisibleLine, firstVisibleColumn, transition)
+        if (editor?.dirty == true) {
+            pendingAttachedNavigation = navigation
+            requestSave()
+            return
+        }
+        openAttached(navigation)
+    }
+
+    private fun openAttached(navigation: PendingAttachedNavigation) {
+        val bundle = navigation.bundle
+        val path = navigation.path
+        val text = analysisCoordinator?.attachedSource(bundle, path)
+        if (text == null) {
+            publishStatus("Source for ${bundle.name} is unavailable", IdeProblemSeverity.Warning)
+            return
+        }
+        closeComputerPreview()
+        closeAttachedSourcePreview()
+        val preview = AttachedSourcePreviewSession(bundle, path, text)
+        restoreCaret(preview.document, navigation.caretUtf16)
+        preview.firstVisibleLine = navigation.firstVisibleLine ?: preview.document.lineContaining(preview.document.caretOffset)
+        preview.firstVisibleColumn = navigation.firstVisibleColumn
+        attachedSourcePreview = preview
+        analysisCoordinator?.dismissSemanticInteraction()
+        completeNavigation(navigation.transition)
+        publishWorkspace()
+    }
+
+    private fun completeNavigation(navigation: PendingProjectNavigation) {
+        completeNavigation(navigation.transition)
+    }
+
+    private fun completeNavigation(transition: NavigationTransition) {
+        val current = currentNavigationPosition() ?: return
+        when (transition) {
+            is NavigationTransition.Fresh -> {
+                navigationHistory.record(transition.from, current)
+            }
+
+            is NavigationTransition.History -> {
+                when (transition.direction) {
+                    NavigationDirection.Back -> navigationHistory.commitBack(transition.from, transition.target)
+                    NavigationDirection.Forward -> navigationHistory.commitForward(transition.from, transition.target)
+                }
+            }
+        }
+    }
+
+    private fun currentNavigationPosition(): IdeNavigationPosition? {
+        attachedSourcePreview?.let { preview ->
+            return IdeNavigationPosition(
+                IdeNavigationSource.Attached(preview.bundle, preview.path),
+                preview.document.caretOffset,
+                preview.firstVisibleLine,
+                preview.firstVisibleColumn,
+            )
+        }
+        if (computerPreview != null || binary != null) return null
+        val active = editor ?: return null
+        return IdeNavigationPosition(
+            IdeNavigationSource.Project(active.path),
+            active.document.caretOffset,
+            active.firstVisibleLine,
+            active.firstVisibleColumn,
         )
     }
 
@@ -1585,9 +1961,69 @@ class IdeClientController(
         publishWorkspace()
     }
 
+    private fun editAttachedSourcePreview(
+        preview: AttachedSourcePreviewSession,
+        input: IdeEditorInput,
+    ) {
+        when (input) {
+            is IdeEditorInput.SetCaret -> {
+                preview.document.setCaret(input.offsetUtf16, input.extendSelection)
+            }
+
+            is IdeEditorInput.Move -> {
+                moveReadOnlyCaret(preview.document, input)
+            }
+
+            IdeEditorInput.SelectAll -> {
+                preview.document.selectAll()
+            }
+
+            else -> {
+                publishStatus("Attached API sources are read-only", IdeProblemSeverity.Info)
+                return
+            }
+        }
+        publishWorkspace()
+    }
+
+    private fun moveReadOnlyCaret(
+        document: EditorDocument,
+        input: IdeEditorInput.Move,
+    ) {
+        when (input.direction) {
+            IdeMoveDirection.Left -> document.moveLeft(input.extendSelection)
+            IdeMoveDirection.Right -> document.moveRight(input.extendSelection)
+            IdeMoveDirection.Up -> document.moveUp(input.extendSelection)
+            IdeMoveDirection.Down -> document.moveDown(input.extendSelection)
+            IdeMoveDirection.Home -> document.moveHome(input.extendSelection)
+            IdeMoveDirection.End -> document.moveEnd(input.extendSelection)
+        }
+    }
+
+    private fun scrollAttachedSourcePreview(
+        preview: AttachedSourcePreviewSession,
+        lines: Int,
+        columns: Int,
+    ) {
+        preview.firstVisibleLine =
+            (preview.firstVisibleLine.toLong() + lines)
+                .coerceIn(0, (preview.document.lineCount - 1).toLong())
+                .toInt()
+        preview.firstVisibleColumn =
+            (preview.firstVisibleColumn.toLong() + columns)
+                .coerceIn(0, preview.document.maximumVisualWidth().toLong())
+                .toInt()
+        publishWorkspace()
+    }
+
     private fun closeComputerPreview() {
         computerPreview?.close()
         computerPreview = null
+    }
+
+    private fun closeAttachedSourcePreview() {
+        attachedSourcePreview?.close()
+        attachedSourcePreview = null
     }
 
     private fun admittedAnalysisState(active: EditorSession): IdeAnalysisState {
@@ -1637,6 +2073,8 @@ class IdeClientController(
         buildState = IdeBuildState.Idle
         editor?.close()
         editor = null
+        closeComputerPreview()
+        closeAttachedSourcePreview()
         closeAnalysisFile()
         binary = null
         project = null
@@ -1752,6 +2190,56 @@ class IdeClientController(
         }
     }
 
+    private class AttachedSourcePreviewSession(
+        val bundle: AnalysisBundleIdentity,
+        val path: VirtualSourcePath,
+        text: String,
+    ) {
+        val document = EditorDocument(text)
+        val highlighter = IncrementalKotlinHighlighter(document)
+        var firstVisibleLine = 0
+        var firstVisibleColumn = 0
+
+        fun close() {
+            highlighter.close()
+            document.close()
+        }
+    }
+
+    private data class PendingProjectNavigation(
+        val path: ProjectPath,
+        val caretUtf16: Int,
+        val firstVisibleLine: Int?,
+        val firstVisibleColumn: Int,
+        val transition: NavigationTransition,
+    )
+
+    private data class PendingAttachedNavigation(
+        val bundle: AnalysisBundleIdentity,
+        val path: VirtualSourcePath,
+        val caretUtf16: Int,
+        val firstVisibleLine: Int?,
+        val firstVisibleColumn: Int,
+        val transition: NavigationTransition,
+    )
+
+    private sealed interface NavigationTransition {
+        data class Fresh(
+            val from: IdeNavigationPosition,
+        ) : NavigationTransition
+
+        data class History(
+            val from: IdeNavigationPosition,
+            val target: IdeNavigationPosition,
+            val direction: NavigationDirection,
+        ) : NavigationTransition
+    }
+
+    private enum class NavigationDirection {
+        Back,
+        Forward,
+    }
+
     private data class PendingBuildAction(
         val operationId: Long,
         val action: IdeBuildAction,
@@ -1789,6 +2277,8 @@ private fun IdeEvent.generationOrNull(): Long? =
 
         is IdeEvent.FileOpened -> generation
 
+        is IdeEvent.DeclarationResolved -> generation
+
         is IdeEvent.SaveCompleted -> generation
 
         is IdeEvent.DeleteAdmitted -> generation
@@ -1809,6 +2299,17 @@ private fun IdeEvent.generationOrNull(): Long? =
     }
 
 private fun ProjectPath.isWithin(parent: ProjectPath): Boolean = value == parent.value || value.startsWith("${parent.value}/")
+
+private fun EditorDocument.lineContaining(offsetUtf16: Int): Int {
+    val admitted = offsetUtf16.coerceIn(0, length)
+    var low = 0
+    var high = lineCount
+    while (low < high) {
+        val middle = (low + high) ushr 1
+        if (lineStartOffset(middle) <= admitted) low = middle + 1 else high = middle
+    }
+    return (low - 1).coerceAtLeast(0)
+}
 
 private fun ProjectPath.rebase(
     source: ProjectPath,

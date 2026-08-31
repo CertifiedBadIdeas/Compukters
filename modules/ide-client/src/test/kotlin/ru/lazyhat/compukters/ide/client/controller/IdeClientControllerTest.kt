@@ -24,9 +24,12 @@ import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
+import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
+import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.SnapshotPresentation
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.controller.AdmittedAnalysisSnapshot
@@ -39,6 +42,9 @@ import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisInputLoader
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisRequestFactory
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisSnapshotFactory
+import ru.lazyhat.compukters.ide.client.analysis.IdeAttachedSourceCatalog
+import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationOutcome
+import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticInteraction
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyKind
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
 import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
@@ -49,7 +55,9 @@ import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeConflictAction
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
+import ru.lazyhat.compukters.ide.client.state.IdeEditorSource
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
+import ru.lazyhat.compukters.ide.client.state.IdeEvent
 import ru.lazyhat.compukters.ide.client.state.IdePageState
 import ru.lazyhat.compukters.ide.client.state.IdeProblemSeverity
 import ru.lazyhat.compukters.ide.client.state.IdeToolingState
@@ -59,6 +67,7 @@ import ru.lazyhat.compukters.ide.client.workspace.IdeSaveRequest
 import ru.lazyhat.compukters.ide.client.workspace.IdeSaveResult
 import ru.lazyhat.compukters.ide.client.workspace.IdeWorkspace
 import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
+import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ProjectDescriptor
 import ru.lazyhat.compukters.ide.project.ProjectHandle
@@ -353,6 +362,196 @@ class IdeClientControllerTest {
         assertEquals(2, latency.drops)
     }
 
+    @Test
+    fun `declaration opens a project target and back restores the exact editor position`() {
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture = navigationFixture(requests)
+        activateNavigation(fixture, requests)
+        val source = fixture.textEditor().visibleLines.joinToString("\n")
+        val token = source.indexOf("main").takeIf { it >= 0 } ?: source.indexOfFirst(Char::isJavaIdentifierPart)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(token + 1, extendSelection = false)))
+        fixture.controller.dispatch(IdeCommand.ScrollEditor(lines = 1, columns = 3))
+        val origin = fixture.textEditor()
+
+        fixture.controller.dispatch(IdeCommand.GoToDeclaration())
+        requests.completeNavigation(
+            listOf(
+                DeclarationLocation.Source(
+                    DeclarationOrigin.Project,
+                    VirtualSourcePath.kotlin("src/other.kt"),
+                    EditorRange(1, 4),
+                ),
+            ),
+            additionalLengths = mapOf(VirtualSourcePath.kotlin("src/other.kt") to 9),
+        )
+        fixture.controller.tick()
+        fixture.controller.tick()
+
+        assertEquals(ProjectPath.file("src/other.kt"), fixture.workspaceView().activeFile)
+        assertEquals(1, fixture.textEditor().caretUtf16)
+
+        fixture.controller.dispatch(IdeCommand.NavigateBack)
+        fixture.controller.tick()
+
+        val restored = fixture.textEditor()
+        assertEquals(ProjectPath.file("src/main.kt"), fixture.workspaceView().activeFile)
+        assertEquals(origin.caretUtf16, restored.caretUtf16)
+        assertEquals(origin.firstVisibleLine, restored.firstVisibleLine)
+        assertEquals(origin.firstVisibleColumn, restored.firstVisibleColumn)
+    }
+
+    @Test
+    fun `cross-file declaration waits for dirty source save`() {
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture = navigationFixture(requests)
+        activateNavigation(fixture, requests)
+        val source = fixture.textEditor().visibleLines.joinToString("\n")
+        val token = source.indexOf("main").takeIf { it >= 0 } ?: source.indexOfFirst(Char::isJavaIdentifierPart)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(source.length, extendSelection = false)))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type(" ")))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(token + 1, extendSelection = false)))
+
+        fixture.controller.dispatch(IdeCommand.GoToDeclaration())
+        requests.completeNavigation(
+            listOf(
+                DeclarationLocation.Source(
+                    DeclarationOrigin.Project,
+                    VirtualSourcePath.kotlin("src/other.kt"),
+                    EditorRange(1, 4),
+                ),
+            ),
+            additionalLengths = mapOf(VirtualSourcePath.kotlin("src/other.kt") to 9),
+        )
+        fixture.controller.tick()
+
+        assertEquals(ProjectPath.file("src/main.kt"), fixture.workspaceView().activeFile)
+        assertEquals(1, fixture.workspace.saveRequests.size)
+        fixture.workspace.completeSave()
+        fixture.controller.tick()
+        fixture.controller.tick()
+
+        assertEquals(ProjectPath.file("src/other.kt"), fixture.workspaceView().activeFile)
+        assertEquals(1, fixture.textEditor().caretUtf16)
+    }
+
+    @Test
+    fun `attached declaration opens a read-only bundle-qualified preview`() {
+        val bundle = AnalysisBundleIdentity("std.core", Hash256.of(ByteArray(32) { 9 }))
+        val path = VirtualSourcePath.kotlin("compukter/api/Sample.kt")
+        val text = "class Sample"
+        val catalog = IdeAttachedSourceCatalog.of(mapOf(bundle to mapOf(path to text)), 1, 1, 64, 64)
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture = navigationFixture(requests, catalog)
+        activateNavigation(fixture, requests)
+        val source = fixture.textEditor().visibleLines.joinToString("\n")
+        val token = source.indexOf("main").takeIf { it >= 0 } ?: source.indexOfFirst(Char::isJavaIdentifierPart)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(token + 1, extendSelection = false)))
+
+        fixture.controller.dispatch(IdeCommand.GoToDeclaration())
+        requests.completeNavigation(
+            listOf(DeclarationLocation.Source(DeclarationOrigin.Bundle(bundle), path, EditorRange(6, 12))),
+            bundleLengths = mapOf(bundle to mapOf(path to text.length)),
+        )
+        fixture.controller.tick()
+
+        val preview = fixture.textEditor()
+        assertEquals(IdeEditorSource.AttachedApi(bundle, path), preview.source)
+        assertTrue(preview.readOnly)
+        assertEquals(6, preview.caretUtf16)
+        assertTrue(preview.title.contains("std.core"))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("ignored")))
+        assertEquals(text, fixture.textEditor().visibleLines.single())
+        assertTrue(requireNotNull(fixture.workspaceView().status).message.contains("read-only"))
+    }
+
+    @Test
+    fun `unavailable declaration reports status while multiple targets stay in chooser`() {
+        val bundle = AnalysisBundleIdentity("missing.api", Hash256.of(ByteArray(32) { 7 }))
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture = navigationFixture(requests)
+        activateNavigation(fixture, requests)
+        val source = fixture.textEditor().visibleLines.joinToString("\n")
+        val token = source.indexOf("main").takeIf { it >= 0 } ?: source.indexOfFirst(Char::isJavaIdentifierPart)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(token + 1, extendSelection = false)))
+
+        fixture.controller.dispatch(IdeCommand.GoToDeclaration())
+        requests.completeNavigation(listOf(DeclarationLocation.SourceUnavailable(DeclarationOrigin.Bundle(bundle))))
+        fixture.controller.tick()
+        assertTrue(requireNotNull(fixture.workspaceView().status).message.contains("missing.api"))
+
+        fixture.controller.dispatch(IdeCommand.GoToDeclaration())
+        requests.completeNavigation(
+            listOf(
+                DeclarationLocation.Source(DeclarationOrigin.Project, VirtualSourcePath.kotlin("src/main.kt"), EditorRange(0, 3)),
+                DeclarationLocation.Source(DeclarationOrigin.Project, VirtualSourcePath.kotlin("src/main.kt"), EditorRange(4, 8)),
+            ),
+        )
+        fixture.controller.tick()
+
+        assertIs<IdeSemanticInteraction.Chooser>(
+            fixture
+                .textEditor()
+                .analysis
+                .let {
+                    assertIs<ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState.Active>(it)
+                }.interaction,
+        )
+        fixture.controller.dispatch(IdeCommand.MoveDeclarationChoice(1))
+        fixture.controller.dispatch(IdeCommand.AcceptDeclarationChoice)
+        assertEquals(4, fixture.textEditor().caretUtf16)
+    }
+
+    @Test
+    fun `navigation history exposed by the controller evicts its 129th oldest position`() {
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture = navigationFixture(requests)
+        activateNavigation(fixture, requests)
+        val source = fixture.textEditor().visibleLines.joinToString("\n")
+        val token = source.indexOf("main").takeIf { it >= 0 } ?: source.indexOfFirst(Char::isJavaIdentifierPart)
+
+        repeat(129) { index ->
+            val target = if (index % 2 == 0) 0 else 4
+            fixture.controller.dispatch(IdeCommand.GoToDeclaration(token + 1))
+            requests.completeNavigation(
+                listOf(
+                    DeclarationLocation.Source(
+                        DeclarationOrigin.Project,
+                        VirtualSourcePath.kotlin("src/main.kt"),
+                        EditorRange(target, target + 1),
+                    ),
+                ),
+            )
+            fixture.controller.tick()
+        }
+
+        repeat(128) { fixture.controller.dispatch(IdeCommand.NavigateBack) }
+        val oldestRetained = fixture.textEditor().caretUtf16
+        fixture.controller.dispatch(IdeCommand.NavigateBack)
+
+        assertEquals(0, oldestRetained)
+        assertEquals(oldestRetained, fixture.textEditor().caretUtf16)
+    }
+
+    @Test
+    fun `declaration event from an old project generation is ignored`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        val oldGeneration = fixture.controller.viewState().generation
+
+        fixture.controller.dispatch(IdeCommand.CreateProject("fresh"))
+        fixture.eventQueue.offer(
+            IdeEvent.DeclarationResolved(
+                oldGeneration,
+                operationId = 0,
+                IdeDeclarationOutcome.Failed("stale declaration must stay hidden"),
+            ),
+        )
+        fixture.controller.tick()
+
+        assertEquals("fresh", fixture.workspaceView().project.directoryName)
+        assertEquals(null, fixture.workspaceView().status)
+    }
+
     private fun latencyCoordinator(
         workspace: ControlledWorkspace,
         requests: ControllerRecordingAnalysisRequests,
@@ -363,6 +562,31 @@ class IdeClientControllerTest {
         IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
         latency,
     )
+
+    private fun navigationFixture(
+        requests: ControllerRecordingAnalysisRequests,
+        attachedSources: IdeAttachedSourceCatalog = IdeAttachedSourceCatalog.empty(),
+    ): ControllerFixture =
+        ControllerFixture(
+            preferences = preferences("demo", "src/main.kt"),
+            analysisCoordinatorFactory = { workspace ->
+                IdeAnalysisCoordinator(
+                    IdeAnalysisInputLoader(workspace::buildInput),
+                    IdeAnalysisSnapshotFactory { input, path, text -> latencyAnalysisSnapshot(input.sources, path, text) },
+                    IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
+                    attachedSources = attachedSources,
+                )
+            },
+        )
+
+    private fun activateNavigation(
+        fixture: ControllerFixture,
+        requests: ControllerRecordingAnalysisRequests,
+    ) {
+        fixture.startAndTick()
+        requests.publishFreshPresentation()
+        fixture.controller.tick()
+    }
 }
 
 internal class ControllerFixture(
@@ -379,12 +603,13 @@ internal class ControllerFixture(
     val buildCoordinator = buildCoordinatorFactory?.invoke(workspace, clock)
     val analysisCoordinator = analysisCoordinatorFactory?.invoke(workspace)
     val targetCoordinator = targetCoordinatorFactory?.invoke(clock)
+    val eventQueue = BoundedIdeEventQueue(64)
     val controller =
         IdeClientController(
             workspace,
             this.preferences,
             clock,
-            BoundedIdeEventQueue(64),
+            eventQueue,
             buildCoordinator = buildCoordinator,
             analysisCoordinator = analysisCoordinator,
             targetCoordinator = targetCoordinator,
@@ -425,6 +650,7 @@ internal class ControlledWorkspace : IdeWorkspace {
     val descriptor = ProjectCatalog.open(root).create("demo")
     private val main = ProjectPath.file("src/main.kt")
     private val notes = ProjectPath.file("notes.txt")
+    private val other = ProjectPath.file("src/other.kt")
     val openResults = mutableMapOf<ProjectPath, ProjectFileOpenResult>()
     val saveRequests = mutableListOf<IdeSaveRequest>()
     var buildInputRequests = 0
@@ -435,9 +661,14 @@ internal class ControlledWorkspace : IdeWorkspace {
             .resolve(notes.value)
             .toFile()
             .writeText("notes")
+        descriptor.handle.canonicalPath
+            .resolve(other.value)
+            .toFile()
+            .writeText("val other")
         val store = ProjectDocumentStore(descriptor.handle)
         openResults[main] = ProjectFileOpenResult.Text(store.open(main))
         openResults[notes] = ProjectFileOpenResult.Text(store.open(notes))
+        openResults[other] = ProjectFileOpenResult.Text(store.open(other))
     }
 
     override fun projects(): CompletableFuture<List<ProjectDescriptor>> = completed(listOf(descriptor))
@@ -556,6 +787,7 @@ private fun revision(seed: Int) = FileRevision.Present(Hash256.of(ByteArray(32) 
 private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
     lateinit var sink: AnalysisResultSink
     val snapshots = mutableListOf<AdmittedAnalysisSnapshot>()
+    private val navigation = ArrayDeque<CompletableFuture<AnalysisClientResult>>()
 
     override fun sourceChanged(
         snapshot: AdmittedAnalysisSnapshot,
@@ -574,6 +806,11 @@ private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
         offsetUtf16: Int,
     ): CompletableFuture<AnalysisClientResult> = CompletableFuture()
 
+    override fun declaration(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> = CompletableFuture<AnalysisClientResult>().also(navigation::addLast)
+
     override fun close() = Unit
 
     fun publishFreshPresentation() {
@@ -591,6 +828,32 @@ private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
                 AnalysisResult.Presentation(
                     snapshot.identity,
                     SnapshotPresentation.create(snapshot.identity, lengths),
+                ),
+            ),
+        )
+    }
+
+    fun completeNavigation(
+        locations: List<DeclarationLocation>,
+        additionalLengths: Map<VirtualSourcePath, Int> = emptyMap(),
+        bundleLengths: Map<AnalysisBundleIdentity, Map<VirtualSourcePath, Int>> = emptyMap(),
+    ) {
+        val snapshot = snapshots.last()
+        val lengths =
+            snapshot.sources.sources.associate {
+                it.path to
+                    it.content
+                        .toByteArray()
+                        .decodeToString()
+                        .length
+            } + additionalLengths
+        navigation.removeFirst().complete(
+            AnalysisClientResult.Success(
+                AnalysisResult.Declaration.create(
+                    snapshot.identity,
+                    locations,
+                    lengths,
+                    bundleSourceLengthsUtf16 = bundleLengths,
                 ),
             ),
         )

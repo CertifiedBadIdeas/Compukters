@@ -115,6 +115,29 @@ sealed interface IdeCommand {
 
     data object DismissCompletion : IdeCommand
 
+    data class SourcePointer(
+        val offsetUtf16: Int?,
+        val controlDown: Boolean,
+    ) : IdeCommand
+
+    data class GoToDeclaration(
+        val offsetUtf16: Int? = null,
+    ) : IdeCommand
+
+    data object ControlReleased : IdeCommand
+
+    data class MoveDeclarationChoice(
+        val delta: Int,
+    ) : IdeCommand
+
+    data object AcceptDeclarationChoice : IdeCommand
+
+    data object DismissSemanticInteraction : IdeCommand
+
+    data object NavigateBack : IdeCommand
+
+    data object NavigateForward : IdeCommand
+
     data object EditorFocusLost : IdeCommand
 
     data object CloseRequested : IdeCommand
