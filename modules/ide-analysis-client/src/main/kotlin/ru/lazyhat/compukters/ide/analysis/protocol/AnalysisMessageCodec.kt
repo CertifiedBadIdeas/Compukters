@@ -189,8 +189,27 @@ object AnalysisMessageCodec {
                     AnalysisMessageType.OpenSnapshot
                 }
 
+                is UpdateSnapshotRequest -> {
+                    sink.requestId(message.requestId)
+                    sink.identity(message.baseIdentity)
+                    sink.identity(message.targetIdentity)
+                    sink.changedSources(message.changedSources)
+                    AnalysisMessageType.UpdateSnapshot
+                }
+
                 is SnapshotReady -> {
                     sink.snapshotResponse(message.requestId, message.identity, AnalysisMessageType.SnapshotReady)
+                }
+
+                is SnapshotUpdated -> {
+                    sink.snapshotResponse(message.requestId, message.targetIdentity, AnalysisMessageType.SnapshotUpdated)
+                }
+
+                is SnapshotReopenRequired -> {
+                    sink.requestId(message.requestId)
+                    sink.identity(message.targetIdentity)
+                    sink.string(message.reason)
+                    AnalysisMessageType.SnapshotReopenRequired
                 }
 
                 is AnalysisQueryRequest -> {
@@ -251,8 +270,20 @@ object AnalysisMessageCodec {
                         source.openSnapshot()
                     }
 
+                    AnalysisMessageType.UpdateSnapshot -> {
+                        source.updateSnapshot()
+                    }
+
                     AnalysisMessageType.SnapshotReady -> {
                         SnapshotReady(source.requestId(), source.identity())
+                    }
+
+                    AnalysisMessageType.SnapshotUpdated -> {
+                        SnapshotUpdated(source.requestId(), source.identity())
+                    }
+
+                    AnalysisMessageType.SnapshotReopenRequired -> {
+                        SnapshotReopenRequired(source.requestId(), source.identity(), source.string(context.limits.detailTextBytes))
                     }
 
                     AnalysisMessageType.Query -> {
@@ -304,9 +335,38 @@ private fun validateForWire(
 ) {
     if (context.isUnchecked()) return
     when (message) {
-        is AnalysisQueryRequest -> validateQuery(message.query, context)
-        is AnalysisQuerySuccess -> validateResult(message.result, context)
-        else -> Unit
+        is AnalysisQueryRequest -> {
+            validateQuery(message.query, context)
+        }
+
+        is AnalysisQuerySuccess -> {
+            validateResult(message.result, context)
+        }
+
+        is SnapshotReopenRequired -> {
+            require(strictUtf8Size(message.reason) <= context.limits.detailTextBytes) {
+                "snapshot reopen reason exceeds analysis limit"
+            }
+        }
+
+        is UpdateSnapshotRequest -> {
+            validateChangedSources(message.changedSources, context.limits)
+        }
+
+        else -> {}
+    }
+}
+
+private fun validateChangedSources(
+    sources: List<ProjectSource>,
+    limits: AnalysisLimits,
+) {
+    require(sources.size <= limits.sourceFiles) { "changed source count exceeds analysis limit" }
+    var totalBytes = 0L
+    sources.forEach { source ->
+        require(source.content.size <= limits.sourceFileBytes) { "changed source file exceeds analysis limit" }
+        totalBytes = Math.addExact(totalBytes, source.content.size.toLong())
+        require(totalBytes <= limits.sourceBytes.toLong()) { "changed source bytes exceed analysis limit" }
     }
 }
 
@@ -443,6 +503,14 @@ private class MessageSink {
     fun sources(value: ProjectSnapshot) {
         u32(value.sources.size)
         value.sources.forEach { source ->
+            string(source.path.value)
+            bytes(source.content)
+        }
+    }
+
+    fun changedSources(value: List<ProjectSource>) {
+        u32(value.size)
+        value.forEach { source ->
             string(source.path.value)
             bytes(source.content)
         }
@@ -751,6 +819,31 @@ private class MessageSource(
         val sources = sources(limits)
         val profile = profile(identity.profile, limits)
         return OpenSnapshotRequest(requestId, identity, sources, profile, limits)
+    }
+
+    fun updateSnapshot(): UpdateSnapshotRequest {
+        val requestId = requestId()
+        val baseIdentity = identity()
+        val targetIdentity = identity()
+        val changedSources = changedSources(context.limits)
+        return UpdateSnapshotRequest(requestId, baseIdentity, targetIdentity, changedSources)
+    }
+
+    fun changedSources(limits: AnalysisLimits): List<ProjectSource> {
+        val count = boundedCount(limits.sourceFiles, "changed source")
+        var totalBytes = 0L
+        return List(count) {
+            val path = kotlinPath()
+            val content = bytes(limits.sourceFileBytes)
+            totalBytes = Math.addExact(totalBytes, content.size.toLong())
+            if (totalBytes > limits.sourceBytes) fail(AnalysisProtocolError.CountLimit, "changed sources exceed analysis limit")
+            try {
+                decodeStrictUtf8(content)
+            } catch (_: CharacterCodingException) {
+                fail(AnalysisProtocolError.InvalidUtf8, "changed source is not strict UTF-8")
+            }
+            ProjectSource(path, content)
+        }
     }
 
     fun sources(limits: AnalysisLimits): ProjectSnapshot {

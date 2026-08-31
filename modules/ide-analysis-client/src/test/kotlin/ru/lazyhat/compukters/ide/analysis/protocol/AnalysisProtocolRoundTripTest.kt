@@ -61,6 +61,9 @@ class AnalysisProtocolRoundTripTest {
 
     @Test
     fun `handshake snapshot lifecycle queries cancellation and failure round trip`() {
+        val updatedSnapshot = snapshot("src/main.kt" to "val answer = 43")
+        val updatedIdentity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(updatedSnapshot), identity.profile)
+        val changedSources = updatedSnapshot.sources
         val profile =
             AdmittedAnalysisProfile(
                 identity.profile,
@@ -76,6 +79,9 @@ class AnalysisProtocolRoundTripTest {
                 ),
                 OpenSnapshotRequest(requestId, identity, snapshot, profile, AnalysisLimits()),
                 SnapshotReady(requestId, identity),
+                UpdateSnapshotRequest(requestId, identity, updatedIdentity, changedSources),
+                SnapshotUpdated(requestId, updatedIdentity),
+                SnapshotReopenRequired(requestId, updatedIdentity, "workspace mutation failed"),
                 AnalysisQueryRequest(requestId, AnalysisQuery.Presentation(identity)),
                 AnalysisQueryRequest(
                     requestId,
@@ -92,6 +98,18 @@ class AnalysisProtocolRoundTripTest {
             )
 
         messages.forEach { message -> assertEquals(message, roundTrip(message)) }
+    }
+
+    @Test
+    fun `snapshot update defensively owns its changed sources`() {
+        val changed = mutableListOf(ProjectSource(path(), BinaryValue.of("val answer = 43".encodeToByteArray())))
+        val targetSnapshot = snapshot("src/main.kt" to "val answer = 43")
+        val targetIdentity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(targetSnapshot), identity.profile)
+        val request = UpdateSnapshotRequest(requestId, identity, targetIdentity, changed)
+
+        changed.clear()
+
+        assertEquals(targetSnapshot.sources, request.changedSources)
     }
 
     @Test

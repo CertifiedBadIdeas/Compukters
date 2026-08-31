@@ -30,6 +30,7 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
+import ru.lazyhat.compukters.ide.analysis.SourceSnapshotId
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import kotlin.test.Test
@@ -49,6 +50,15 @@ class AnalysisProtocolHostileInputTest {
         assertEquals(AnalysisProtocolError.FrameTooLarge, frameFailure(encoded, 0).error)
         assertEquals(AnalysisProtocolError.TrailingBytes, frameFailure(encoded + 0).error)
         assertEquals(AnalysisProtocolError.WrongVersion, frameFailure(encoded.copyOf().also { it[4] = 0x7f }).error)
+        assertEquals(
+            AnalysisProtocolError.WrongVersion,
+            frameFailure(
+                encoded.copyOf().also { bytes ->
+                    bytes[4] = 1
+                    bytes[5] = 0
+                },
+            ).error,
+        )
         assertEquals(AnalysisProtocolError.UnknownMessageType, frameFailure(encoded.copyOf().also { it[6] = 0x7f }).error)
     }
 
@@ -89,8 +99,89 @@ class AnalysisProtocolHostileInputTest {
                 ),
                 context,
             )
-        val wrongProtocol = handshake.copy(payload = handshake.payload.copyOf().also { it[0] = 2 })
+        val wrongProtocol = handshake.copy(payload = handshake.payload.copyOf().also { it[0] = 1 })
         assertEquals(AnalysisProtocolError.WrongVersion, messageFailure(wrongProtocol).error)
+    }
+
+    @Test
+    fun `snapshot update rejects invalid identities sources ordering utf8 and reopen reasons`() {
+        val target = identity.copy(source = SourceSnapshotId(hash(2)))
+        val otherProfile = target.copy(profile = AnalysisProfileIdentity(hash(3)))
+        val first = ProjectSource(VirtualSourcePath.kotlin("a.kt"), BinaryValue.of("a".encodeToByteArray()))
+        val second = ProjectSource(VirtualSourcePath.kotlin("b.kt"), BinaryValue.of("b".encodeToByteArray()))
+
+        assertFailsWith<IllegalArgumentException> { UpdateSnapshotRequest(RequestId.of(1uL), identity, identity, listOf(first)) }
+        assertFailsWith<IllegalArgumentException> { UpdateSnapshotRequest(RequestId.of(1uL), identity, otherProfile, listOf(first)) }
+        assertFailsWith<IllegalArgumentException> { UpdateSnapshotRequest(RequestId.of(1uL), identity, target, emptyList()) }
+        assertFailsWith<IllegalArgumentException> {
+            UpdateSnapshotRequest(RequestId.of(1uL), identity, target, listOf(second, first))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            UpdateSnapshotRequest(RequestId.of(1uL), identity, target, listOf(first, first))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            UpdateSnapshotRequest(
+                RequestId.of(1uL),
+                identity,
+                target,
+                listOf(ProjectSource(VirtualSourcePath.kotlin("a.kt"), BinaryValue.of(byteArrayOf(0x80.toByte())))),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> { SnapshotReopenRequired(RequestId.of(1uL), target, "") }
+        assertFailsWith<IllegalArgumentException> { SnapshotReopenRequired(RequestId.of(1uL), target, "bad\uD800") }
+        assertFailsWith<IllegalArgumentException> {
+            SnapshotReopenRequired(RequestId.of(1uL), target, "x".repeat(ProtocolLimits.MAX_TEXT_BYTES + 1))
+        }
+    }
+
+    @Test
+    fun `snapshot update codec enforces active changed-source limits and strict utf8`() {
+        val target = identity.copy(source = SourceSnapshotId(hash(2)))
+        val twoSources =
+            listOf(
+                ProjectSource(VirtualSourcePath.kotlin("a.kt"), BinaryValue.of("aaa".encodeToByteArray())),
+                ProjectSource(VirtualSourcePath.kotlin("b.kt"), BinaryValue.of("bbb".encodeToByteArray())),
+            )
+        val request = UpdateSnapshotRequest(RequestId.of(1uL), identity, target, twoSources)
+        val encoded = AnalysisMessageCodec.encode(request, AnalysisProtocolContext.unchecked())
+
+        assertFailsWith<IllegalArgumentException> {
+            AnalysisMessageCodec.encode(request, AnalysisProtocolContext.of(snapshot, AnalysisLimits(sourceFiles = 1)))
+        }
+        assertEquals(
+            AnalysisProtocolError.CountLimit,
+            messageFailure(encoded, AnalysisProtocolContext.unbound(AnalysisLimits(sourceFiles = 1))).error,
+        )
+        assertEquals(
+            AnalysisProtocolError.CountLimit,
+            messageFailure(
+                encoded,
+                AnalysisProtocolContext.unbound(AnalysisLimits(sourceFiles = 2, sourceFileBytes = 3, sourceBytes = 5)),
+            ).error,
+        )
+
+        val oneSource = UpdateSnapshotRequest(RequestId.of(2uL), identity, target, listOf(twoSources.first()))
+        val malformed =
+            AnalysisMessageCodec
+                .encode(oneSource, AnalysisProtocolContext.unchecked())
+                .let { frame -> frame.copy(payload = frame.payload.copyOf().also { it[it.lastIndex] = 0x80.toByte() }) }
+        assertEquals(AnalysisProtocolError.InvalidUtf8, messageFailure(malformed).error)
+    }
+
+    @Test
+    fun `snapshot reopen reason obeys the active detail limit`() {
+        val target = identity.copy(source = SourceSnapshotId(hash(2)))
+        val response = SnapshotReopenRequired(RequestId.of(1uL), target, "abcde")
+        val limits = AnalysisLimits(detailTextBytes = 4)
+
+        assertFailsWith<IllegalArgumentException> {
+            AnalysisMessageCodec.encode(response, AnalysisProtocolContext.of(snapshot, limits))
+        }
+        val encoded = AnalysisMessageCodec.encode(response, AnalysisProtocolContext.unchecked())
+        assertEquals(
+            AnalysisProtocolError.CountLimit,
+            messageFailure(encoded, AnalysisProtocolContext.unbound(limits)).error,
+        )
     }
 
     @Test
@@ -231,8 +322,10 @@ class AnalysisProtocolHostileInputTest {
         }
     }
 
-    private fun messageFailure(frame: AnalysisFrame): AnalysisProtocolException =
-        assertFailsWith { AnalysisMessageCodec.decode(frame, context) }
+    private fun messageFailure(
+        frame: AnalysisFrame,
+        protocolContext: AnalysisProtocolContext = context,
+    ): AnalysisProtocolException = assertFailsWith { AnalysisMessageCodec.decode(frame, protocolContext) }
 
     private fun frameFailure(
         bytes: ByteArray,
