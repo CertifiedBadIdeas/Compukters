@@ -18,12 +18,18 @@
 
 package ru.lazyhat.compukters.ide.analysis.k2.standalone
 
+import com.intellij.core.CoreApplicationEnvironment
+import com.intellij.mock.MockComponentManager
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.editor.impl.DocumentWriteAccessGuard
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.StandardFileSystems
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.pom.PomModel
+import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiTreeChangeListener
 import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.analysis.api.projectStructure.KaLibraryModule
 import org.jetbrains.kotlin.analysis.api.standalone.StandaloneAnalysisAPISession
@@ -59,11 +65,31 @@ internal class K2ProjectEnvironment private constructor(
                 val binaryModules = linkedMapOf<Path, KaLibraryModule>()
                 val session =
                     buildStandaloneAnalysisAPISession(disposable, unitTestMode = false) {
+                        val area = application.extensionArea
+                        synchronized(area) {
+                            if (!area.hasExtensionPoint(DocumentWriteAccessGuard.EP_NAME)) {
+                                CoreApplicationEnvironment.registerExtensionPoint(
+                                    area,
+                                    DocumentWriteAccessGuard.EP_NAME,
+                                    DocumentWriteAccessGuard::class.java,
+                                )
+                            }
+                        }
                         StandaloneProgressManager.register(this)
+                        CoreApplicationEnvironment.registerExtensionPoint(
+                            project.extensionArea,
+                            PsiTreeChangeListener.EP.name,
+                            PsiTreeChangeListener::class.java,
+                        )
                         registerProjectService(
                             ModuleVisibilityManager::class.java,
                             CliModuleVisibilityManagerImpl(enabled = true),
                         )
+                        val mockProject = project as MockComponentManager
+                        mockProject.picoContainer.unregisterComponent(PsiDocumentManager::class.java.name)
+                        registerProjectService(PsiDocumentManager::class.java, StandalonePsiDocumentManager(project))
+                        mockProject.picoContainer.unregisterComponent(PomModel::class.java.name)
+                        registerProjectService(PomModel::class.java, StandalonePomModel())
                         buildKtModuleProvider {
                             this.platform = platform
                             addModule(

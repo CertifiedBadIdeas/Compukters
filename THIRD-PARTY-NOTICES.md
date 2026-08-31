@@ -44,6 +44,8 @@ The worker also contains these pinned runtime dependencies:
 - IntelliJ's patched `kotlinx-coroutines-core-jvm` 1.8.0-intellij-13,
   `kotlinx-serialization-core-jvm` 1.7.3, Caffeine 2.9.3, Error Prone
   annotations 2.10.0, and JetBrains annotations 23.0.0 — Apache-2.0.
+- IntelliJ Platform `util-diff` 251.27812.49 — Apache-2.0; upstream:
+  <https://github.com/JetBrains/intellij-community>.
 - Checker Qual 3.19.0 — MIT; complete text at
   `licenses/jvm/checker-qual-3.19.0-MIT.txt`.
 

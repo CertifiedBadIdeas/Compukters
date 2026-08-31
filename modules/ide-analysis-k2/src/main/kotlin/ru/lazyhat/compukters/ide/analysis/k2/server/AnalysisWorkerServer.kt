@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.ide.analysis.k2.server
 
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
+import ru.lazyhat.compukters.ide.analysis.k2.standalone.IncrementalK2Workspace
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.SnapshotAdmission
 import ru.lazyhat.compukters.ide.analysis.protocol.ANALYSIS_PROTOCOL_VERSION
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisCancelled
@@ -61,7 +62,7 @@ internal class AnalysisWorkerServer(
 ) : AutoCloseable {
     private val outputLock = Any()
     private val execution = AnalysisExecutionQueue(MAXIMUM_QUEUED_REQUESTS)
-    private var active: AdmittedK2Snapshot? = null
+    private var active: IncrementalK2Workspace? = null
 
     @Volatile private var activeIdentity: ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity? = null
 
@@ -144,8 +145,8 @@ internal class AnalysisWorkerServer(
             request.requestId,
             request.query.identity,
             task = { cancellation ->
-                val snapshot = active
-                if (snapshot == null || snapshot.identity != request.query.identity) {
+                val workspace = active
+                if (workspace == null || workspace.identity != request.query.identity) {
                     write(
                         AnalysisFailure(
                             request.requestId,
@@ -156,6 +157,7 @@ internal class AnalysisWorkerServer(
                     )
                     return@submit
                 }
+                val snapshot = workspace.view()
                 val response =
                     K2ProgressCancellation.run(cancellation) {
                         queryHandler.execute(request, snapshot, cancellation)
