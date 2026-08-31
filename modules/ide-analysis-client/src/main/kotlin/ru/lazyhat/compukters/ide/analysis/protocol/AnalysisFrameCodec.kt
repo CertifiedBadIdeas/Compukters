@@ -31,6 +31,9 @@ enum class AnalysisMessageType(
     CloseSnapshot(8),
     SnapshotClosed(9),
     Failure(10),
+    UpdateSnapshot(11),
+    SnapshotUpdated(12),
+    SnapshotReopenRequired(13),
     ;
 
     companion object {
@@ -78,7 +81,7 @@ class AnalysisProtocolException(
 
 object AnalysisFrameCodec {
     private const val HEADER_BYTES = 12
-    private const val VERSION = 1
+    private const val VERSION = 2
     private val magic = byteArrayOf(0x43, 0x50, 0x4b, 0x41)
 
     fun encode(frame: AnalysisFrame): ByteArray {

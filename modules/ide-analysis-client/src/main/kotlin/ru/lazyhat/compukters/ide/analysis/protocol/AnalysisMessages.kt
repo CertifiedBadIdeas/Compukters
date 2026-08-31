@@ -19,6 +19,8 @@
 package ru.lazyhat.compukters.ide.analysis.protocol
 
 import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
+import ru.lazyhat.compukters.compiler.project.ProjectSource
+import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
@@ -27,13 +29,14 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
+import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Collections
 
-const val ANALYSIS_PROTOCOL_VERSION: UInt = 1u
+const val ANALYSIS_PROTOCOL_VERSION: UInt = 2u
 
 data class AnalysisWorkerIdentity(
     val compilerVersion: String,
@@ -128,6 +131,55 @@ data class AnalysisQueryRequest(
     val query: AnalysisQuery,
 ) : AnalysisMessage
 
+class UpdateSnapshotRequest(
+    val requestId: RequestId,
+    val baseIdentity: AnalysisSnapshotIdentity,
+    val targetIdentity: AnalysisSnapshotIdentity,
+    changedSources: List<ProjectSource>,
+) : AnalysisMessage {
+    val changedSources: List<ProjectSource> = immutableSourceCopy(changedSources)
+
+    init {
+        require(baseIdentity != targetIdentity) { "snapshot update identities must differ" }
+        require(baseIdentity.profile == targetIdentity.profile) { "snapshot update profile identities must match" }
+        require(this.changedSources.isNotEmpty()) { "snapshot update must contain a changed source" }
+        require(this.changedSources.size <= ProtocolLimits.MAX_SOURCE_FILES) { "changed source count exceeds protocol limit" }
+        requireCanonicalSources(this.changedSources)
+        var totalBytes = 0L
+        this.changedSources.forEach { source ->
+            require(source.content.size <= ProtocolLimits.MAX_SOURCE_FILE_BYTES) { "changed source exceeds protocol limit" }
+            requireStrictUtf8(source.content)
+            totalBytes = Math.addExact(totalBytes, source.content.size.toLong())
+            require(totalBytes <= ProtocolLimits.MAX_SOURCE_BYTES) { "changed sources exceed protocol limit" }
+        }
+    }
+
+    override fun equals(other: Any?): Boolean =
+        other is UpdateSnapshotRequest &&
+            requestId == other.requestId &&
+            baseIdentity == other.baseIdentity &&
+            targetIdentity == other.targetIdentity &&
+            changedSources == other.changedSources
+
+    override fun hashCode(): Int = listOf(requestId, baseIdentity, targetIdentity, changedSources).hashCode()
+}
+
+data class SnapshotUpdated(
+    val requestId: RequestId,
+    val targetIdentity: AnalysisSnapshotIdentity,
+) : AnalysisMessage
+
+data class SnapshotReopenRequired(
+    val requestId: RequestId,
+    val targetIdentity: AnalysisSnapshotIdentity,
+    val reason: String,
+) : AnalysisMessage {
+    init {
+        require(reason.isNotEmpty()) { "snapshot reopen reason must not be empty" }
+        require(strictUtf8Size(reason) <= ProtocolLimits.MAX_TEXT_BYTES) { "snapshot reopen reason exceeds protocol limit" }
+    }
+}
+
 data class CancelAnalysisRequest(
     val requestId: RequestId,
 ) : AnalysisMessage
@@ -211,6 +263,18 @@ internal fun strictUtf8Size(value: String): Int =
         throw IllegalArgumentException("protocol text must be strict UTF-8", exception)
     }
 
+private fun requireStrictUtf8(value: BinaryValue) {
+    try {
+        StandardCharsets.UTF_8
+            .newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(value.toByteArray()))
+    } catch (exception: CharacterCodingException) {
+        throw IllegalArgumentException("changed source must be strict UTF-8", exception)
+    }
+}
+
 internal fun validateProtocolSourcePath(value: String) {
     require(strictUtf8Size(value) <= ProtocolLimits.MAX_PATH_BYTES) { "virtual source path exceeds protocol limit" }
 }
@@ -219,6 +283,15 @@ private fun requireCanonicalBundles(bundles: List<AdmittedAnalysisBundle>) {
     bundles.zipWithNext().forEach { (left, right) ->
         require(compareUnsigned(left.identity.name.encodeToByteArray(), right.identity.name.encodeToByteArray()) < 0) {
             "analysis bundles must be uniquely ordered by UTF-8 name"
+        }
+    }
+}
+
+private fun requireCanonicalSources(sources: List<ProjectSource>) {
+    sources.forEach { source -> validateProtocolSourcePath(source.path.value) }
+    sources.zipWithNext().forEach { (left, right) ->
+        require(compareUnsigned(left.path.value.encodeToByteArray(), right.path.value.encodeToByteArray()) < 0) {
+            "changed sources must be uniquely ordered by UTF-8 path"
         }
     }
 }
@@ -235,3 +308,8 @@ private fun compareUnsigned(
 }
 
 private fun <T> immutableCopy(values: List<T>): List<T> = Collections.unmodifiableList(values.toList())
+
+private fun immutableSourceCopy(values: List<ProjectSource>): List<ProjectSource> =
+    Collections.unmodifiableList(
+        values.map { source -> ProjectSource(source.path, BinaryValue.of(source.content.toByteArray())) },
+    )
