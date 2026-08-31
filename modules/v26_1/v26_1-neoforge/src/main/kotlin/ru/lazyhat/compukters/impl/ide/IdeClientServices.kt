@@ -73,6 +73,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
 import ru.lazyhat.compukters.worker.payload.PackagedToolingBundle
 import ru.lazyhat.compukters.worker.process.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.worker.process.WorkerLaunch
+import ru.lazyhat.compukters.worker.process.WorkerProcessFactory
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
@@ -273,6 +274,7 @@ internal object ProductionIdeApplicationFactory {
         workspace: DefaultIdeWorkspace,
         prepared: PreparedWorkers,
         visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
+        analysisProcessFactory: WorkerProcessFactory = JdkWorkerProcessFactory(),
     ): IdeClientTooling {
         val compilerPayload = prepared.compilerPayload
         val analysisPayload = prepared.analysisPayload
@@ -313,7 +315,7 @@ internal object ProductionIdeApplicationFactory {
                     analysisLaunch,
                     analysisIdentity,
                     analysisLimits,
-                    JdkWorkerProcessFactory(),
+                    analysisProcessFactory,
                 )
             }
         try {
