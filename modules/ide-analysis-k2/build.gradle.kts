@@ -35,6 +35,12 @@ repositories {
             includeGroup("com.intellij.platform")
         }
     }
+    maven("https://www.jetbrains.com/intellij-repository/releases") {
+        name = "JetBrainsIntellijReleases"
+        content {
+            includeModule("com.jetbrains.intellij.platform", "util-diff")
+        }
+    }
 }
 
 dependencies {
@@ -49,6 +55,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.caffeine.kotlin)
     implementation(libs.intellij.coroutines.core)
+    implementation(libs.intellij.util.diff) { isTransitive = false }
     implementation(libs.kotlin.analysis.api) { isTransitive = false }
     implementation(libs.kotlin.analysis.api.impl.base) { isTransitive = false }
     implementation(libs.kotlin.analysis.api.k2) { isTransitive = false }

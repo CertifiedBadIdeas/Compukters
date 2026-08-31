@@ -38,18 +38,12 @@ import kotlin.io.path.createDirectories
 
 internal class AdmittedK2Snapshot(
     val identity: AnalysisSnapshotIdentity,
-    private val root: Path,
     val environment: K2ProjectEnvironment,
     val files: Map<VirtualSourcePath, KtFile>,
     val sourceLengthsUtf16: Map<VirtualSourcePath, Int>,
     val bundles: List<AdmittedK2Bundle>,
     val bundleSourceFiles: Map<AnalysisBundleIdentity, Map<VirtualSourcePath, KtFile>>,
-) : AutoCloseable {
-    override fun close() {
-        environment.close()
-        root.toFile().deleteRecursively()
-    }
-}
+)
 
 internal data class AdmittedK2Bundle(
     val identity: AnalysisBundleIdentity,
@@ -61,8 +55,9 @@ internal class SnapshotAdmission(
     private val temporaryRoot: Path,
     private val standardLibrary: Path,
     private val jdkHome: Path,
+    private val sourceUpdater: K2SourceUpdater = DocumentK2SourceUpdater,
 ) {
-    fun admit(request: OpenSnapshotRequest): AdmittedK2Snapshot {
+    fun admit(request: OpenSnapshotRequest): IncrementalK2Workspace {
         val bundles =
             request.profile.bundles.map { bundle ->
                 val classRoot = validatedRegularFile(bundle.classRoot, "bundle class root")
@@ -109,14 +104,16 @@ internal class SnapshotAdmission(
                         bundle.identity to attachedFiles
                     }
                 }
-            return AdmittedK2Snapshot(
+            return IncrementalK2Workspace(
                 request.identity,
                 root,
                 environment,
                 files.toMap(),
+                request.sources,
                 sourceLengths.toMap(),
                 bundles.toList(),
                 bundleSourceFiles,
+                sourceUpdater,
             )
         } catch (exception: Exception) {
             environment?.close()
