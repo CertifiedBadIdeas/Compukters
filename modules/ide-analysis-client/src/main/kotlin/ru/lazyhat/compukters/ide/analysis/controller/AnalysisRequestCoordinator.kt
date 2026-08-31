@@ -192,8 +192,7 @@ class DefaultAnalysisRequestCoordinator(
     override fun declarationProbe(
         path: VirtualSourcePath,
         offsetUtf16: Int,
-    ): CompletableFuture<AnalysisClientResult> =
-        pointerRequest(0) { identity -> AnalysisQuery.Declaration(identity, path, offsetUtf16) }
+    ): CompletableFuture<AnalysisClientResult> = pointerRequest(0) { identity -> AnalysisQuery.Declaration(identity, path, offsetUtf16) }
 
     override fun declaration(
         path: VirtualSourcePath,
