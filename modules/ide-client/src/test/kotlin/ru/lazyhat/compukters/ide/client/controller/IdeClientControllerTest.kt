@@ -557,7 +557,10 @@ private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
     lateinit var sink: AnalysisResultSink
     val snapshots = mutableListOf<AdmittedAnalysisSnapshot>()
 
-    override fun sourceChanged(snapshot: AdmittedAnalysisSnapshot) {
+    override fun sourceChanged(
+        snapshot: AdmittedAnalysisSnapshot,
+        activePath: VirtualSourcePath,
+    ) {
         snapshots += snapshot
     }
 

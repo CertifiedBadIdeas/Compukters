@@ -97,7 +97,7 @@ class SnapshotAdmissionTest {
             assertEquals(updated.identity, assertIs<SnapshotUpdated>(receive(worker, limits, initialContext)).targetIdentity)
 
             val updatedContext = AnalysisProtocolContext.of(updated.sources, updated.profile, limits)
-            val query = AnalysisQuery.Presentation(updated.identity)
+            val query = AnalysisQuery.Presentation(updated.identity, VirtualSourcePath.kotlin("demo/Main.kt"))
             val queryContext = updatedContext.forQuery(query)
             send(
                 worker,
@@ -208,7 +208,11 @@ class SnapshotAdmissionTest {
 
             val presentation =
                 assertIs<AnalysisClientResult.Success>(
-                    controller.query(admitted, AnalysisQuery.Presentation(admitted.identity)).get(90, TimeUnit.SECONDS),
+                    controller
+                        .query(
+                            admitted,
+                            AnalysisQuery.Presentation(admitted.identity, VirtualSourcePath.kotlin("demo/Main.kt")),
+                        ).get(90, TimeUnit.SECONDS),
                 ).result as AnalysisResult.Presentation
             val active = assertIs<SnapshotPresentationAcceptance.Active>(presentation.value.accept(admitted.identity))
             assertTrue(active.diagnostics.any { it.path?.value == "demo/Main.kt" })

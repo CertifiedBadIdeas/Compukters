@@ -41,7 +41,7 @@ class DiagnosticQueryTest {
             }
             """.trimIndent()
         K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
-            val result = fixture.execute(AnalysisQuery.Presentation(fixture.identity)) as AnalysisResult.Presentation
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
             val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
 
             assertTrue(
@@ -55,7 +55,7 @@ class DiagnosticQueryTest {
     fun `type error after supplementary character keeps UTF-16 range`() {
         val source = "val emoji = \"😀\"\nval answer: String = 42"
         K2QueryFixture.source("main.kt" to source).use { fixture ->
-            val result = fixture.execute(AnalysisQuery.Presentation(fixture.identity)) as AnalysisResult.Presentation
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
             val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
             val offset = source.lastIndexOf('=')
 
@@ -69,23 +69,26 @@ class DiagnosticQueryTest {
     }
 
     @Test
-    fun `diagnostics from multiple files retain their virtual paths`() {
+    fun `presentation returns diagnostics only for its active file`() {
         K2QueryFixture
             .source(
                 "a.kt" to "val first: String = 1",
                 "nested/b.kt" to "val second: Int = \"bad\"",
             ).use { fixture ->
-                val result = fixture.execute(AnalysisQuery.Presentation(fixture.identity)) as AnalysisResult.Presentation
+                val result =
+                    fixture.execute(
+                        fixture.presentation("a.kt"),
+                    ) as AnalysisResult.Presentation
                 val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
 
-                assertEquals(setOf("a.kt", "nested/b.kt"), active.diagnostics.mapNotNull { it.path?.value }.toSet())
+                assertEquals(setOf("a.kt"), active.diagnostics.mapNotNull { it.path?.value }.toSet())
             }
     }
 
     @Test
     fun `incomplete syntax produces a bounded diagnostic instead of failing analysis`() {
         K2QueryFixture.source("main.kt" to "fun main( {").use { fixture ->
-            val result = fixture.execute(AnalysisQuery.Presentation(fixture.identity)) as AnalysisResult.Presentation
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
             val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
 
             assertTrue(active.diagnostics.isNotEmpty())
@@ -96,7 +99,7 @@ class DiagnosticQueryTest {
     fun `raw diagnostics beyond the negotiated cap fail explicitly`() {
         K2QueryFixture.source("main.kt" to "val broken: String = 42").use { fixture ->
             assertFailsWith<AnalysisOutputLimitException> {
-                fixture.execute(AnalysisQuery.Presentation(fixture.identity), AnalysisLimits(diagnostics = 0))
+                fixture.execute(fixture.presentation(), AnalysisLimits(diagnostics = 0))
             }
         }
     }

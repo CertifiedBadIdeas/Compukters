@@ -65,6 +65,9 @@ internal class K2QueryFixture private constructor(
         limits: AnalysisLimits = AnalysisLimits(),
     ): AnalysisResult = K2QueryDispatcher.execute(query, snapshot, limits)
 
+    fun presentation(path: String = sources.keys.single().value): AnalysisQuery.Presentation =
+        AnalysisQuery.Presentation(identity, VirtualSourcePath.kotlin(path))
+
     fun update(vararg changedSources: Pair<String, String>) {
         val request = updateRequest(*changedSources)
         workspace.update(request, AnalysisLimits())

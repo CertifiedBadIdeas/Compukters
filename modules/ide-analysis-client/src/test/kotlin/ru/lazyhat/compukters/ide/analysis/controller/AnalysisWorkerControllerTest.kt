@@ -348,7 +348,7 @@ class AnalysisWorkerControllerTest {
             val first = open(controller, processes[0], workerIdentity, limits)
             val active = controller.query(first, AnalysisQuery.ExpressionInfo(first.identity, path(), 3))
             assertIs<AnalysisQueryRequest>(processes[0].awaitWrite())
-            val queued = controller.query(first, AnalysisQuery.Presentation(first.identity))
+            val queued = controller.query(first, AnalysisQuery.Presentation(first.identity, testPath()))
 
             processes[1].enqueue(handshake(workerIdentity, limits))
             val second = admitted("val changed = true", limits)

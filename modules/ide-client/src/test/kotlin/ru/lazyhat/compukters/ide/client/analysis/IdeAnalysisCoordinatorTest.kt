@@ -622,7 +622,10 @@ private class RecordingRequests : AnalysisRequestCoordinator {
     val manualOffsets = mutableListOf<Int>()
     var onSourceChanged: ((AdmittedAnalysisSnapshot) -> Unit)? = null
 
-    override fun sourceChanged(snapshot: AdmittedAnalysisSnapshot) {
+    override fun sourceChanged(
+        snapshot: AdmittedAnalysisSnapshot,
+        activePath: VirtualSourcePath,
+    ) {
         snapshots += snapshot
         onSourceChanged?.invoke(snapshot)
     }

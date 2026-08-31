@@ -51,6 +51,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class AnalysisProtocolRoundTripTest {
@@ -82,7 +83,7 @@ class AnalysisProtocolRoundTripTest {
                 UpdateSnapshotRequest(requestId, identity, updatedIdentity, changedSources),
                 SnapshotUpdated(requestId, updatedIdentity),
                 SnapshotReopenRequired(requestId, updatedIdentity, "workspace mutation failed"),
-                AnalysisQueryRequest(requestId, AnalysisQuery.Presentation(identity)),
+                AnalysisQueryRequest(requestId, AnalysisQuery.Presentation(identity, path())),
                 AnalysisQueryRequest(
                     requestId,
                     AnalysisQuery.Completion(identity, path(), 3, CompletionTrigger.Automatic),
@@ -220,7 +221,7 @@ class AnalysisProtocolRoundTripTest {
             assertIs<AnalysisQuerySuccess>(
                 roundTrip(
                     AnalysisQuerySuccess(requestId, AnalysisResult.Presentation(identity, presentation)),
-                    context.forQuery(AnalysisQuery.Presentation(identity)),
+                    context.forQuery(AnalysisQuery.Presentation(identity, path())),
                 ),
             )
         val decodedPresentation = assertIs<AnalysisResult.Presentation>(decoded.result).value
@@ -229,6 +230,31 @@ class AnalysisProtocolRoundTripTest {
         assertEquals(listOf(EditorDiagnostic(EditorDiagnosticSeverity.Warning, "warning", path(), EditorRange(0, 3))), active.diagnostics)
         assertEquals(listOf(SemanticToken(path(), EditorRange(4, 10), SemanticCategory.Property)), active.semanticTokens)
         assertEquals(listOf(SourceLocation(path(), EditorRange(4, 10))), active.locations)
+    }
+
+    @Test
+    fun `presentation query and result stay inside the active source`() {
+        val closedPath = VirtualSourcePath.kotlin("src/closed.kt")
+        val sources = snapshot(closedPath.value to "val closed = 2", path().value to "val active = 1")
+        val scopedIdentity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), identity.profile)
+        val scopedContext = AnalysisProtocolContext.of(sources)
+
+        assertFailsWith<IllegalArgumentException> {
+            scopedContext.forQuery(AnalysisQuery.Presentation(scopedIdentity, VirtualSourcePath.kotlin("src/missing.kt")))
+        }
+
+        val presentation =
+            SnapshotPresentation.create(
+                scopedIdentity,
+                mapOf(path() to "val active = 1".length, closedPath to "val closed = 2".length),
+                diagnostics = listOf(EditorDiagnostic(EditorDiagnosticSeverity.Warning, "closed", closedPath, EditorRange(0, 3))),
+            )
+        assertFailsWith<IllegalArgumentException> {
+            roundTrip(
+                AnalysisQuerySuccess(requestId, AnalysisResult.Presentation(scopedIdentity, presentation)),
+                scopedContext.forQuery(AnalysisQuery.Presentation(scopedIdentity, path())),
+            )
+        }
     }
 
     private fun roundTrip(

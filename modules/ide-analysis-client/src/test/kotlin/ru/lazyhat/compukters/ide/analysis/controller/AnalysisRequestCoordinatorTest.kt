@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.ide.analysis.controller
 
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
@@ -37,14 +38,15 @@ class AnalysisRequestCoordinatorTest {
         val first = admittedSnapshot("val first = 1")
         val second = admittedSnapshot("val second = 2")
 
-        coordinator.sourceChanged(first)
-        coordinator.sourceChanged(second)
+        coordinator.sourceChanged(first, VirtualSourcePath.kotlin("src/first.kt"))
+        coordinator.sourceChanged(second, VirtualSourcePath.kotlin("src/second.kt"))
         assertEquals(emptyList(), client.opens)
         assertEquals(emptyList(), client.queries)
         scheduler.advanceBy(30)
 
         val presentation = assertIs<AnalysisQuery.Presentation>(client.queries.single())
         assertEquals(second.identity, presentation.identity)
+        assertEquals(VirtualSourcePath.kotlin("src/second.kt"), presentation.path)
         assertSame(second, client.querySnapshots.single())
     }
 
@@ -56,9 +58,9 @@ class AnalysisRequestCoordinatorTest {
         val first = admittedSnapshot("val answer = 4")
         val latest = admittedSnapshot("val answer = 42")
 
-        coordinator.sourceChanged(first)
+        coordinator.sourceChanged(first, testPath())
         coordinator.automaticCompletion(testPath(), 3)
-        coordinator.sourceChanged(latest)
+        coordinator.sourceChanged(latest, testPath())
         coordinator.automaticCompletion(testPath(), 7)
         scheduler.advanceBy(74)
         assertEquals(emptyList(), client.queries)
@@ -76,7 +78,7 @@ class AnalysisRequestCoordinatorTest {
         val client = RecordingAnalysisClient()
         val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 0, 10)
         val snapshot = admittedSnapshot("val answer = 42")
-        coordinator.sourceChanged(snapshot)
+        coordinator.sourceChanged(snapshot, testPath())
         scheduler.advanceBy(0)
         val presentation = client.queryFutures.single()
 
@@ -101,7 +103,7 @@ class AnalysisRequestCoordinatorTest {
         val firstClient = RecordingAnalysisClient()
         val firstCoordinator = DefaultAnalysisRequestCoordinator(firstClient, firstScheduler, 30, 10)
 
-        firstCoordinator.sourceChanged(snapshot)
+        firstCoordinator.sourceChanged(snapshot, testPath())
         firstScheduler.advanceBy(30)
         val presentation = firstClient.queryFutures.single()
         firstCoordinator.automaticCompletion(testPath(), 3)
@@ -111,7 +113,7 @@ class AnalysisRequestCoordinatorTest {
         val secondClient = RecordingAnalysisClient()
         val secondCoordinator = DefaultAnalysisRequestCoordinator(secondClient, secondScheduler, 30, 10)
 
-        secondCoordinator.sourceChanged(snapshot)
+        secondCoordinator.sourceChanged(snapshot, testPath())
         secondCoordinator.automaticCompletion(testPath(), 4)
         secondScheduler.advanceBy(10)
         val completion = secondClient.queryFutures.single()
@@ -129,10 +131,10 @@ class AnalysisRequestCoordinatorTest {
         val first = admittedSnapshot("val first = 1")
         val second = admittedSnapshot("val second = 2")
 
-        coordinator.sourceChanged(first)
+        coordinator.sourceChanged(first, testPath())
         scheduler.advanceBy(0)
         val stalePresentation = client.queryFutures.single()
-        coordinator.sourceChanged(second)
+        coordinator.sourceChanged(second, testPath())
         stalePresentation.complete(AnalysisClientResult.Stale)
         assertEquals(emptyList(), published)
 
@@ -162,10 +164,10 @@ class AnalysisRequestCoordinatorTest {
         val first = admittedSnapshot("val answer = 42")
         val replacement = AdmittedAnalysisSnapshot(first.identity, first.sources, first.profile, first.limits)
 
-        coordinator.sourceChanged(first)
+        coordinator.sourceChanged(first, testPath())
         scheduler.advanceBy(0)
         val stale = client.queryFutures.single()
-        coordinator.sourceChanged(replacement)
+        coordinator.sourceChanged(replacement, testPath())
         stale.complete(
             AnalysisClientResult.Success(
                 AnalysisResult.Presentation(
@@ -184,7 +186,7 @@ class AnalysisRequestCoordinatorTest {
         val client = RecordingAnalysisClient()
         val published = mutableListOf<AnalysisClientResult>()
         val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 30, 10, AnalysisResultSink(published::add))
-        coordinator.sourceChanged(admittedSnapshot("val answer = 42"))
+        coordinator.sourceChanged(admittedSnapshot("val answer = 42"), testPath())
         coordinator.automaticCompletion(testPath(), 3)
         scheduler.advanceBy(10)
         val automatic = client.queryFutures.single()

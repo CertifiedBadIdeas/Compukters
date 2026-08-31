@@ -18,11 +18,13 @@
 
 package ru.lazyhat.compukters.ide.analysis.k2.query
 
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
 import ru.lazyhat.compukters.ide.analysis.SnapshotPresentationAcceptance
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class SemanticTokenQueryTest {
@@ -30,7 +32,7 @@ class SemanticTokenQueryTest {
     fun `presentation classifies declarations and extension functions`() {
         val source = "class Box(val value: Int)\nfun Box.doubled() = value * 2"
         K2QueryFixture.source("main.kt" to source).use { fixture ->
-            val result = fixture.execute(AnalysisQuery.Presentation(fixture.identity)) as AnalysisResult.Presentation
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
             val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
             val categories = active.semanticTokens.map { it.category }.toSet()
 
@@ -52,12 +54,29 @@ class SemanticTokenQueryTest {
             }
             """.trimIndent()
         K2QueryFixture.source("main.kt" to source).use { fixture ->
-            val result = fixture.execute(AnalysisQuery.Presentation(fixture.identity)) as AnalysisResult.Presentation
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
             val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
             val categories = active.semanticTokens.map { it.category }.toSet()
 
             assertTrue(SemanticCategory.InferredExpression in categories, active.semanticTokens.toString())
             assertTrue(SemanticCategory.SmartCastExpression in categories, active.semanticTokens.toString())
         }
+    }
+
+    @Test
+    fun `presentation returns semantic tokens only for its active file`() {
+        K2QueryFixture
+            .source(
+                "a.kt" to "class ActiveFile",
+                "b.kt" to "class ClosedFile",
+            ).use { fixture ->
+                val result =
+                    fixture.execute(
+                        fixture.presentation("b.kt"),
+                    ) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+
+                assertEquals(setOf("b.kt"), active.semanticTokens.map { it.path.value }.toSet())
+            }
     }
 }
