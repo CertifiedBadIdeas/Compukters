@@ -46,6 +46,7 @@ import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisInputLoader
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisRequestFactory
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisSnapshotFactory
+import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
 import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
 import ru.lazyhat.compukters.ide.client.build.IdeBuildServices
 import ru.lazyhat.compukters.ide.client.controller.IdeClientController
@@ -157,6 +158,7 @@ internal class IdeClientApplication(
     val controller: IdeClientController,
     val preferences: IdeClientPreferences,
     val targetTerminal: IdeTargetTerminalClient,
+    val visibleLatency: IdeVisibleLatencyTrace,
     private val targetPort: AutoCloseable,
 ) : AutoCloseable {
     private val closed = AtomicBoolean()
@@ -270,6 +272,7 @@ internal object ProductionIdeApplicationFactory {
         paths: IdeClientPaths,
         workspace: DefaultIdeWorkspace,
         prepared: PreparedWorkers,
+        visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
     ): IdeClientTooling {
         val compilerPayload = prepared.compilerPayload
         val analysisPayload = prepared.analysisPayload
@@ -323,6 +326,7 @@ internal object ProductionIdeApplicationFactory {
                     prepared.analysisBundles,
                     compilation,
                     analysisService,
+                    visibleLatency,
                 )
             return tooling
         } catch (error: Throwable) {
@@ -363,6 +367,7 @@ internal object ProductionIdeApplicationFactory {
 
     fun open(
         paths: IdeClientPaths,
+        visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
         tooling: (DefaultIdeWorkspace) -> CompletableFuture<IdeClientTooling>,
     ): IdeClientApplication {
         val clientLimits = IdeClientLimits()
@@ -381,9 +386,10 @@ internal object ProductionIdeApplicationFactory {
                 limits = clientLimits,
                 targetCoordinator = target,
                 tooling = tooling(workspace),
+                visibleLatency = visibleLatency,
             )
         controller.start()
-        return IdeClientApplication(controller, preferences, targetTerminal, targetPort)
+        return IdeClientApplication(controller, preferences, targetTerminal, visibleLatency, targetPort)
     }
 
     private fun composeTooling(
@@ -394,6 +400,7 @@ internal object ProductionIdeApplicationFactory {
         analysisBundles: List<AdmittedAnalysisBundle>,
         compilation: DefaultClientCompilationService,
         analysisService: AnalysisServiceLifetime,
+        visibleLatency: IdeVisibleLatencyTrace,
     ): IdeClientTooling {
         val clientLimits = IdeClientLimits()
         val toolchain =
@@ -442,6 +449,7 @@ internal object ProductionIdeApplicationFactory {
                             )
                         ClosingAnalysisRequestCoordinator(delegate, session, scheduler)
                     },
+                visibleLatency = visibleLatency,
             )
         return IdeClientTooling(build, analysis, analysisService)
     }

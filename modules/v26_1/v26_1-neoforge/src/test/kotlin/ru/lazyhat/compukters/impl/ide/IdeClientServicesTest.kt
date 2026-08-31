@@ -18,13 +18,18 @@
 
 package ru.lazyhat.compukters.impl.ide
 
+import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyKind
+import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
+import ru.lazyhat.compukters.ide.client.controller.IdeClientTooling
 import java.nio.file.Path
+import java.util.concurrent.CompletableFuture
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class IdeClientServicesTest {
@@ -32,6 +37,26 @@ class IdeClientServicesTest {
     fun `production analysis timing favors completion without starving presentation`() {
         assertEquals(150_000_000L, ProductionIdeApplicationFactory.analysisTiming.presentationDebounceNanos)
         assertEquals(75_000_000L, ProductionIdeApplicationFactory.analysisTiming.automaticCompletionDebounceNanos)
+    }
+
+    @Test
+    fun `production application retains the injected visible latency trace`() {
+        val gameRoot = createTempDirectory("compukters-ide-visible-latency-").toAbsolutePath().normalize()
+        val trace = RecordingVisibleLatencyTrace()
+        val pendingTooling = CompletableFuture<IdeClientTooling>()
+        var application: IdeClientApplication? = null
+        try {
+            application =
+                ProductionIdeApplicationFactory.open(IdeClientPaths.at(gameRoot), trace) { _ ->
+                    pendingTooling
+                }
+
+            assertSame(trace, application.visibleLatency)
+        } finally {
+            application?.close()
+            pendingTooling.cancel(true)
+            gameRoot.toFile().deleteRecursively()
+        }
     }
 
     @Test
@@ -102,6 +127,32 @@ class IdeClientServicesTest {
             gameRoot.toFile().deleteRecursively()
         }
     }
+}
+
+private class RecordingVisibleLatencyTrace : IdeVisibleLatencyTrace {
+    override fun editApplied(documentRevision: Long) = Unit
+
+    override fun automaticCompletionExpected(documentRevision: Long) = Unit
+
+    override fun analysisPublished(
+        kind: IdeVisibleLatencyKind,
+        documentRevision: Long,
+    ) = Unit
+
+    override fun controllerObserved(documentRevision: Long) = Unit
+
+    override fun frameExtracted(
+        documentRevision: Long,
+        presentationVisible: Boolean,
+        completionVisible: Boolean,
+    ) = Unit
+
+    override fun resultUnavailable(
+        kind: IdeVisibleLatencyKind,
+        documentRevision: Long,
+    ) = Unit
+
+    override fun dropActive() = Unit
 }
 
 private class RecordingLifetime : AutoCloseable {
