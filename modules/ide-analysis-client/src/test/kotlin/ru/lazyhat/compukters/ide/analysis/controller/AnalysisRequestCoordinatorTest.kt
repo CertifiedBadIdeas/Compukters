@@ -25,11 +25,106 @@ import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
 import ru.lazyhat.compukters.ide.analysis.SnapshotPresentation
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AnalysisRequestCoordinatorTest {
+    @Test
+    fun `hover waits for debounce and coalesces in the pointer lane`() {
+        val scheduler = ManualAnalysisTaskScheduler()
+        val client = RecordingAnalysisClient()
+        val coordinator =
+            DefaultAnalysisRequestCoordinator(
+                client,
+                scheduler,
+                presentationDebounceNanos = 1_000,
+                automaticCompletionDebounceNanos = 0,
+                hoverDebounceNanos = 400,
+            )
+        val snapshot = admittedSnapshot("val answer = 42")
+        coordinator.sourceChanged(snapshot, testPath())
+
+        val first = coordinator.hoverInfo(testPath(), 3)
+        val second = coordinator.hoverInfo(testPath(), 8)
+        scheduler.advanceBy(399)
+
+        assertTrue(client.queries.isEmpty())
+        scheduler.advanceBy(1)
+        assertEquals(8, assertIs<AnalysisQuery.ExpressionInfo>(client.queries.single()).offsetUtf16)
+        assertTrue(first.isCancelled)
+        assertFalse(second.isDone)
+    }
+
+    @Test
+    fun `explicit declaration preempts pointer work and later hover cannot cancel it`() {
+        val scheduler = ManualAnalysisTaskScheduler()
+        val client = RecordingAnalysisClient()
+        val coordinator =
+            DefaultAnalysisRequestCoordinator(
+                client,
+                scheduler,
+                presentationDebounceNanos = 0,
+                automaticCompletionDebounceNanos = 0,
+                hoverDebounceNanos = 400,
+            )
+        val snapshot = admittedSnapshot("val answer = 42")
+        coordinator.sourceChanged(snapshot, testPath())
+
+        val probe = coordinator.declarationProbe(testPath(), 4)
+        val explicit = coordinator.declaration(testPath(), 4)
+        coordinator.hoverInfo(testPath(), 8)
+
+        assertTrue(probe.isCancelled)
+        assertIs<AnalysisQuery.Declaration>(client.queries.single())
+        assertTrue(client.cancelled.isEmpty())
+        client.queryFutures.single().complete(AnalysisClientResult.Stale)
+        assertEquals(AnalysisClientResult.Stale, explicit.join())
+    }
+
+    @Test
+    fun `source changes cancel interactive lanes and suppress late completion`() {
+        val scheduler = ManualAnalysisTaskScheduler()
+        val client = RecordingAnalysisClient()
+        val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 1_000, 0, hoverDebounceNanos = 0)
+        val firstSnapshot = admittedSnapshot("val first = 1")
+        val secondSnapshot = admittedSnapshot("val second = 2")
+        coordinator.sourceChanged(firstSnapshot, testPath())
+
+        val hover = coordinator.hoverInfo(testPath(), 2)
+        scheduler.advanceBy(0)
+        val hoverClientFuture = client.queryFutures.single()
+        val declaration = coordinator.declaration(testPath(), 2)
+        val declarationClientFuture = client.queryFutures.last()
+        coordinator.sourceChanged(secondSnapshot, testPath())
+
+        assertTrue(hover.isCancelled)
+        assertTrue(declaration.isCancelled)
+        assertEquals(listOf(hoverClientFuture, declarationClientFuture), client.cancelled)
+        hoverClientFuture.complete(AnalysisClientResult.Stale)
+        declarationClientFuture.complete(AnalysisClientResult.Stale)
+        assertTrue(hover.isCancelled)
+        assertTrue(declaration.isCancelled)
+    }
+
+    @Test
+    fun `close cancels scheduled pointer and active declaration`() {
+        val scheduler = ManualAnalysisTaskScheduler()
+        val client = RecordingAnalysisClient()
+        val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 0, 0, hoverDebounceNanos = 400)
+        coordinator.sourceChanged(admittedSnapshot("val answer = 42"), testPath())
+
+        val declaration = coordinator.declaration(testPath(), 2)
+        val activeClientFuture = client.queryFutures.single()
+        val hover = coordinator.hoverInfo(testPath(), 2)
+        coordinator.close()
+
+        assertTrue(hover.isCancelled)
+        assertTrue(declaration.isCancelled)
+        assertEquals(listOf(activeClientFuture), client.cancelled)
+    }
+
     @Test
     fun `source changes coalesce presentation for the latest immutable snapshot`() {
         val scheduler = ManualAnalysisTaskScheduler()
@@ -127,7 +222,8 @@ class AnalysisRequestCoordinatorTest {
         val scheduler = ManualAnalysisTaskScheduler()
         val client = RecordingAnalysisClient()
         val published = mutableListOf<AnalysisClientResult>()
-        val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 0, 0, AnalysisResultSink(published::add))
+        val coordinator =
+            DefaultAnalysisRequestCoordinator(client, scheduler, 0, 0, resultSink = AnalysisResultSink(published::add))
         val first = admittedSnapshot("val first = 1")
         val second = admittedSnapshot("val second = 2")
 
@@ -160,7 +256,8 @@ class AnalysisRequestCoordinatorTest {
         val scheduler = ManualAnalysisTaskScheduler()
         val client = RecordingAnalysisClient()
         val published = mutableListOf<AnalysisClientResult>()
-        val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 0, 0, AnalysisResultSink(published::add))
+        val coordinator =
+            DefaultAnalysisRequestCoordinator(client, scheduler, 0, 0, resultSink = AnalysisResultSink(published::add))
         val first = admittedSnapshot("val answer = 42")
         val replacement = AdmittedAnalysisSnapshot(first.identity, first.sources, first.profile, first.limits)
 
@@ -185,7 +282,8 @@ class AnalysisRequestCoordinatorTest {
         val scheduler = ManualAnalysisTaskScheduler()
         val client = RecordingAnalysisClient()
         val published = mutableListOf<AnalysisClientResult>()
-        val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 30, 10, AnalysisResultSink(published::add))
+        val coordinator =
+            DefaultAnalysisRequestCoordinator(client, scheduler, 30, 10, resultSink = AnalysisResultSink(published::add))
         coordinator.sourceChanged(admittedSnapshot("val answer = 42"), testPath())
         coordinator.automaticCompletion(testPath(), 3)
         scheduler.advanceBy(10)

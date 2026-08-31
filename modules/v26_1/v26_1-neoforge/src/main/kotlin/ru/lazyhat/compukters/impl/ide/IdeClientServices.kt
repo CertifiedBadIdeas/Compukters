@@ -215,10 +215,11 @@ private class ProductionIdeRuntime(
 internal data class IdeAnalysisTiming(
     val presentationDebounceNanos: Long,
     val automaticCompletionDebounceNanos: Long,
+    val hoverDebounceNanos: Long,
 )
 
 internal object ProductionIdeApplicationFactory {
-    val analysisTiming = IdeAnalysisTiming(150_000_000L, 75_000_000L)
+    val analysisTiming = IdeAnalysisTiming(150_000_000L, 75_000_000L, 400_000_000L)
 
     data class PreparedWorkers(
         val compilerPayload: ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload,
@@ -447,7 +448,8 @@ internal object ProductionIdeApplicationFactory {
                                 scheduler,
                                 analysisTiming.presentationDebounceNanos,
                                 analysisTiming.automaticCompletionDebounceNanos,
-                                sink,
+                                analysisTiming.hoverDebounceNanos,
+                                resultSink = sink,
                             )
                         ClosingAnalysisRequestCoordinator(delegate, session, scheduler)
                     },

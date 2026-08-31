@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.ide.analysis.controller
 
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
+import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
 import java.util.concurrent.CompletableFuture
 
@@ -38,7 +39,27 @@ interface AnalysisRequestCoordinator : AutoCloseable {
         path: VirtualSourcePath,
         offsetUtf16: Int,
     ): CompletableFuture<AnalysisClientResult>
+
+    fun hoverInfo(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> = unsupportedInteractiveRequest()
+
+    fun declarationProbe(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> = unsupportedInteractiveRequest()
+
+    fun declaration(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> = unsupportedInteractiveRequest()
+
+    fun cancelPointerInteraction() = Unit
 }
+
+private fun unsupportedInteractiveRequest(): CompletableFuture<AnalysisClientResult> =
+    CompletableFuture.failedFuture(UnsupportedOperationException("interactive analysis requests are not configured"))
 
 fun interface AnalysisResultSink {
     fun publish(result: AnalysisClientResult)
@@ -49,6 +70,7 @@ class DefaultAnalysisRequestCoordinator(
     private val scheduler: AnalysisTaskScheduler,
     private val presentationDebounceNanos: Long,
     private val automaticCompletionDebounceNanos: Long,
+    private val hoverDebounceNanos: Long = 400_000_000L,
     private val resultSink: AnalysisResultSink = AnalysisResultSink {},
 ) : AnalysisRequestCoordinator {
     private val lock = Any()
@@ -58,11 +80,17 @@ class DefaultAnalysisRequestCoordinator(
     private var completionTask: AnalysisScheduledTask? = null
     private var completionFuture: CompletableFuture<AnalysisClientResult>? = null
     private var completionTrigger: CompletionTrigger? = null
+    private var pointerTask: AnalysisScheduledTask? = null
+    private var pointerFuture: CompletableFuture<AnalysisClientResult>? = null
+    private var pointerResult: CompletableFuture<AnalysisClientResult>? = null
+    private var navigationFuture: CompletableFuture<AnalysisClientResult>? = null
+    private var navigationResult: CompletableFuture<AnalysisClientResult>? = null
     private var closed = false
 
     init {
         require(presentationDebounceNanos >= 0) { "presentation debounce must not be negative" }
         require(automaticCompletionDebounceNanos >= 0) { "automatic-completion debounce must not be negative" }
+        require(hoverDebounceNanos >= 0) { "hover debounce must not be negative" }
     }
 
     override fun sourceChanged(
@@ -71,15 +99,27 @@ class DefaultAnalysisRequestCoordinator(
     ) {
         val oldPresentation: CompletableFuture<AnalysisClientResult>?
         val oldCompletion: CompletableFuture<AnalysisClientResult>?
+        val oldPointer: CompletableFuture<AnalysisClientResult>?
+        val oldNavigation: CompletableFuture<AnalysisClientResult>?
         synchronized(lock) {
             check(!closed) { "analysis request coordinator is closed" }
             this.snapshot = snapshot
             presentationTask?.cancel()
             completionTask?.cancel()
+            pointerTask?.cancel()
             oldPresentation = presentationFuture
             oldCompletion = completionFuture
+            oldPointer = pointerFuture
+            oldNavigation = navigationFuture
+            pointerResult?.cancel(false)
+            navigationResult?.cancel(false)
             presentationFuture = null
             completionFuture = null
+            pointerTask = null
+            pointerFuture = null
+            pointerResult = null
+            navigationFuture = null
+            navigationResult = null
             completionTrigger = null
             completionTask = null
             presentationTask =
@@ -89,6 +129,8 @@ class DefaultAnalysisRequestCoordinator(
         }
         oldPresentation?.let(client::cancel)
         oldCompletion?.let(client::cancel)
+        oldPointer?.let(client::cancel)
+        oldNavigation?.let(client::cancel)
     }
 
     override fun automaticCompletion(
@@ -141,6 +183,63 @@ class DefaultAnalysisRequestCoordinator(
         return future
     }
 
+    override fun hoverInfo(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> =
+        pointerRequest(hoverDebounceNanos) { identity -> AnalysisQuery.ExpressionInfo(identity, path, offsetUtf16) }
+
+    override fun declarationProbe(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> =
+        pointerRequest(0) { identity -> AnalysisQuery.Declaration(identity, path, offsetUtf16) }
+
+    override fun declaration(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> {
+        val expected: AdmittedAnalysisSnapshot
+        val result = CompletableFuture<AnalysisClientResult>()
+        val oldPointer: CompletableFuture<AnalysisClientResult>?
+        val oldNavigation: CompletableFuture<AnalysisClientResult>?
+        val future: CompletableFuture<AnalysisClientResult>
+        synchronized(lock) {
+            check(!closed) { "analysis request coordinator is closed" }
+            expected = checkNotNull(snapshot) { "analysis snapshot is not open" }
+            pointerTask?.cancel()
+            pointerTask = null
+            oldPointer = pointerFuture
+            pointerFuture = null
+            pointerResult?.cancel(false)
+            pointerResult = null
+            oldNavigation = navigationFuture
+            navigationResult?.cancel(false)
+            val query = AnalysisQuery.Declaration(expected.identity, path, offsetUtf16)
+            future = client.query(expected, query)
+            navigationFuture = future
+            navigationResult = result
+        }
+        oldPointer?.let(client::cancel)
+        oldNavigation?.let(client::cancel)
+        completeNavigation(expected, future, result)
+        return result
+    }
+
+    override fun cancelPointerInteraction() {
+        val oldPointer: CompletableFuture<AnalysisClientResult>?
+        synchronized(lock) {
+            if (closed) return
+            pointerTask?.cancel()
+            pointerTask = null
+            oldPointer = pointerFuture
+            pointerFuture = null
+            pointerResult?.cancel(false)
+            pointerResult = null
+        }
+        oldPointer?.let(client::cancel)
+    }
+
     override fun close() {
         val futures: List<CompletableFuture<AnalysisClientResult>>
         synchronized(lock) {
@@ -148,15 +247,109 @@ class DefaultAnalysisRequestCoordinator(
             closed = true
             presentationTask?.cancel()
             completionTask?.cancel()
+            pointerTask?.cancel()
             presentationTask = null
             completionTask = null
-            futures = listOfNotNull(presentationFuture, completionFuture)
+            pointerResult?.cancel(false)
+            navigationResult?.cancel(false)
+            futures = listOfNotNull(presentationFuture, completionFuture, pointerFuture, navigationFuture)
             presentationFuture = null
             completionFuture = null
+            pointerTask = null
+            pointerFuture = null
+            pointerResult = null
+            navigationFuture = null
+            navigationResult = null
             completionTrigger = null
             snapshot = null
         }
         futures.forEach(client::cancel)
+    }
+
+    private fun pointerRequest(
+        delayNanos: Long,
+        query: (AnalysisSnapshotIdentity) -> AnalysisQuery,
+    ): CompletableFuture<AnalysisClientResult> {
+        val expected: AdmittedAnalysisSnapshot
+        val result = CompletableFuture<AnalysisClientResult>()
+        val oldPointer: CompletableFuture<AnalysisClientResult>?
+        synchronized(lock) {
+            check(!closed) { "analysis request coordinator is closed" }
+            expected = checkNotNull(snapshot) { "analysis snapshot is not open" }
+            pointerTask?.cancel()
+            oldPointer = pointerFuture
+            pointerFuture = null
+            pointerResult?.cancel(false)
+            pointerResult = result
+            val request = query(expected.identity)
+            pointerTask = scheduler.schedule(delayNanos) { dispatchPointer(expected, request, result) }
+        }
+        oldPointer?.let(client::cancel)
+        return result
+    }
+
+    private fun dispatchPointer(
+        expected: AdmittedAnalysisSnapshot,
+        query: AnalysisQuery,
+        result: CompletableFuture<AnalysisClientResult>,
+    ) {
+        val future =
+            synchronized(lock) {
+                if (closed || snapshot !== expected || pointerResult !== result) return
+                pointerTask = null
+                client.query(expected, query).also { pointerFuture = it }
+            }
+        completePointer(expected, future, result)
+    }
+
+    private fun completePointer(
+        expected: AdmittedAnalysisSnapshot,
+        future: CompletableFuture<AnalysisClientResult>,
+        result: CompletableFuture<AnalysisClientResult>,
+    ) {
+        future.whenComplete { value, failure ->
+            val admitted =
+                synchronized(lock) {
+                    if (closed || snapshot !== expected || pointerFuture !== future || pointerResult !== result) {
+                        return@synchronized false
+                    }
+                    pointerFuture = null
+                    pointerResult = null
+                    true
+                }
+            if (admitted) completeResult(result, value, failure)
+        }
+    }
+
+    private fun completeNavigation(
+        expected: AdmittedAnalysisSnapshot,
+        future: CompletableFuture<AnalysisClientResult>,
+        result: CompletableFuture<AnalysisClientResult>,
+    ) {
+        future.whenComplete { value, failure ->
+            val admitted =
+                synchronized(lock) {
+                    if (closed || snapshot !== expected || navigationFuture !== future || navigationResult !== result) {
+                        return@synchronized false
+                    }
+                    navigationFuture = null
+                    navigationResult = null
+                    true
+                }
+            if (admitted) completeResult(result, value, failure)
+        }
+    }
+
+    private fun completeResult(
+        result: CompletableFuture<AnalysisClientResult>,
+        value: AnalysisClientResult?,
+        failure: Throwable?,
+    ) {
+        if (failure != null) {
+            result.completeExceptionally(failure)
+        } else {
+            result.complete(requireNotNull(value) { "analysis request completed without a result" })
+        }
     }
 
     private fun dispatchPresentation(
