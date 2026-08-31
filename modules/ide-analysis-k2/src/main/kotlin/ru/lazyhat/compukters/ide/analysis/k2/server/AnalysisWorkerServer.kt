@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.ide.analysis.k2.server
 
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.IncrementalK2Workspace
+import ru.lazyhat.compukters.ide.analysis.k2.standalone.K2WorkspaceReopenRequiredException
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.SnapshotAdmission
 import ru.lazyhat.compukters.ide.analysis.protocol.ANALYSIS_PROTOCOL_VERSION
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisCancelled
@@ -39,6 +40,9 @@ import ru.lazyhat.compukters.ide.analysis.protocol.CloseSnapshotRequest
 import ru.lazyhat.compukters.ide.analysis.protocol.OpenSnapshotRequest
 import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotClosed
 import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotReady
+import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotReopenRequired
+import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotUpdated
+import ru.lazyhat.compukters.ide.analysis.protocol.UpdateSnapshotRequest
 import java.io.InputStream
 import java.io.OutputStream
 
@@ -100,6 +104,10 @@ internal class AnalysisWorkerServer(
 
             is AnalysisQueryRequest -> {
                 submitQuery(message)
+            }
+
+            is UpdateSnapshotRequest -> {
+                submitUpdate(message)
             }
 
             is CancelAnalysisRequest -> {
@@ -166,6 +174,13 @@ internal class AnalysisWorkerServer(
             },
         )
 
+    private fun submitUpdate(request: UpdateSnapshotRequest): Boolean =
+        submit(
+            request.requestId,
+            request.targetIdentity,
+            task = { update(request) },
+        )
+
     private fun submit(
         requestId: ru.lazyhat.compukters.compiler.worker.protocol.RequestId,
         requestIdentity: ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity,
@@ -226,6 +241,46 @@ internal class AnalysisWorkerServer(
                     ),
                 )
             }
+        }
+    }
+
+    private fun update(request: UpdateSnapshotRequest) {
+        val workspace = active
+        if (workspace == null || workspace.identity != request.baseIdentity) {
+            write(
+                AnalysisFailure(
+                    request.requestId,
+                    request.targetIdentity,
+                    AnalysisFailureKind.InvalidSnapshot,
+                    "analysis snapshot base is not active",
+                ),
+            )
+            return
+        }
+        try {
+            workspace.update(request, limits)
+            activeIdentity = request.targetIdentity
+            write(SnapshotUpdated(request.requestId, request.targetIdentity))
+        } catch (failure: K2WorkspaceReopenRequiredException) {
+            workspace.close()
+            active = null
+            activeIdentity = null
+            write(
+                SnapshotReopenRequired(
+                    request.requestId,
+                    request.targetIdentity,
+                    bounded(failure.message ?: "workspace update failed", limits.detailTextBytes),
+                ),
+            )
+        } catch (failure: IllegalArgumentException) {
+            write(
+                AnalysisFailure(
+                    request.requestId,
+                    request.targetIdentity,
+                    AnalysisFailureKind.InvalidSnapshot,
+                    bounded(failure.message ?: "snapshot update is invalid", limits.detailTextBytes),
+                ),
+            )
         }
     }
 

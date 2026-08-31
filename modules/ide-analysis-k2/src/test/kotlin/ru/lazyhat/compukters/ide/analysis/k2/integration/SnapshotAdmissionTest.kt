@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
 import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
@@ -39,11 +40,23 @@ import ru.lazyhat.compukters.ide.analysis.controller.SnapshotOpenResult
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisBundle
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFailureKind
+import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFrameCodec
+import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisHandshake
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
+import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisMessage
+import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisMessageCodec
+import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisProtocolContext
+import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisQueryRequest
+import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisQuerySuccess
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisWorkerIdentity
+import ru.lazyhat.compukters.ide.analysis.protocol.OpenSnapshotRequest
+import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotReady
+import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotUpdated
+import ru.lazyhat.compukters.ide.analysis.protocol.UpdateSnapshotRequest
 import ru.lazyhat.compukters.worker.payload.ToolingBundleLoader
 import ru.lazyhat.compukters.worker.process.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.worker.process.WorkerLaunch
+import ru.lazyhat.compukters.worker.process.WorkerProcess
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -55,6 +68,48 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class SnapshotAdmissionTest {
+    @Test
+    fun `forked worker applies an incremental update before querying the target snapshot`() {
+        val initial = snapshot(profileByte = 7, main = "package demo\nval answer = 1".encodeToByteArray())
+        val updated = snapshot(profileByte = 7, main = "package demo\nval broken: String = 42".encodeToByteArray())
+        val limits = AnalysisLimits()
+        withRawWorker(limits) { worker ->
+            assertIs<AnalysisHandshake>(receive(worker, limits, AnalysisProtocolContext.unbound(limits)))
+            val initialContext = AnalysisProtocolContext.of(initial.sources, initial.profile, limits)
+            send(
+                worker,
+                OpenSnapshotRequest(RequestId.of(1uL), initial.identity, initial.sources, initial.profile, limits),
+                initialContext,
+            )
+            assertEquals(initial.identity, assertIs<SnapshotReady>(receive(worker, limits, initialContext)).identity)
+
+            val changedSources =
+                updated.sources.sources.filter { candidate ->
+                    initial.sources.sources
+                        .single { it.path == candidate.path }
+                        .content != candidate.content
+                }
+            send(
+                worker,
+                UpdateSnapshotRequest(RequestId.of(2uL), initial.identity, updated.identity, changedSources),
+                initialContext,
+            )
+            assertEquals(updated.identity, assertIs<SnapshotUpdated>(receive(worker, limits, initialContext)).targetIdentity)
+
+            val updatedContext = AnalysisProtocolContext.of(updated.sources, updated.profile, limits)
+            val query = AnalysisQuery.Presentation(updated.identity)
+            val queryContext = updatedContext.forQuery(query)
+            send(
+                worker,
+                AnalysisQueryRequest(RequestId.of(3uL), query),
+                queryContext,
+            )
+            val result = assertIs<AnalysisQuerySuccess>(receive(worker, limits, queryContext)).result as AnalysisResult.Presentation
+            val active = assertIs<SnapshotPresentationAcceptance.Active>(result.value.accept(updated.identity))
+            assertTrue(active.diagnostics.any { it.path?.value == "demo/Main.kt" })
+        }
+    }
+
     @Test
     fun `forked worker admits multi-file snapshot replaces profile and closes it`() {
         withController { controller ->
@@ -209,6 +264,33 @@ class SnapshotAdmissionTest {
         }
     }
 
+    private fun withRawWorker(
+        limits: AnalysisLimits,
+        block: (WorkerProcess) -> Unit,
+    ) {
+        val payload = ToolingBundleLoader.load(Path.of(checkNotNull(System.getProperty("compukters.analysis.payload")))).profile("analysis")
+        val temporaryRoot = createTempDirectory("compukters-analysis-raw-").toAbsolutePath().normalize()
+        val worker =
+            JdkWorkerProcessFactory().start(
+                WorkerLaunch(
+                    Path.of(checkNotNull(System.getProperty("compukters.analysis.java"))).toAbsolutePath().normalize(),
+                    payload.classpath,
+                    payload.manifest.mainClass,
+                    512,
+                    256,
+                    temporaryRoot.resolve("worker"),
+                    limits.frameBytes + 12,
+                    64 * 1024,
+                ),
+            )
+        try {
+            block(worker)
+        } finally {
+            worker.close()
+            temporaryRoot.toFile().deleteRecursively()
+        }
+    }
+
     private fun snapshot(
         profileByte: Int,
         main: ByteArray = "package demo\nfun answer() = helper()".encodeToByteArray(),
@@ -229,4 +311,21 @@ class SnapshotAdmissionTest {
         val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
         return AdmittedAnalysisSnapshot(identity, sources, AdmittedAnalysisProfile(profile, bundles), AnalysisLimits())
     }
+}
+
+private fun send(
+    worker: WorkerProcess,
+    message: AnalysisMessage,
+    context: AnalysisProtocolContext,
+) {
+    worker.writeFrame(AnalysisFrameCodec.encode(AnalysisMessageCodec.encode(message, context)))
+}
+
+private fun receive(
+    worker: WorkerProcess,
+    limits: AnalysisLimits,
+    context: AnalysisProtocolContext,
+): AnalysisMessage {
+    val frame = checkNotNull(worker.readFrame(System.nanoTime() + TimeUnit.SECONDS.toNanos(90)))
+    return AnalysisMessageCodec.decode(AnalysisFrameCodec.decode(frame, limits.frameBytes), context)
 }

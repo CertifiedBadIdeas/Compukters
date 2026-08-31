@@ -29,8 +29,10 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
+import ru.lazyhat.compukters.ide.analysis.k2.standalone.K2SourceUpdater
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.SnapshotAdmission
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
+import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisCancelled
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFailure
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFailureKind
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFrameCodec
@@ -41,13 +43,19 @@ import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisQueryRequest
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisWorkerIdentity
 import ru.lazyhat.compukters.ide.analysis.protocol.CancelAnalysisRequest
 import ru.lazyhat.compukters.ide.analysis.protocol.OpenSnapshotRequest
+import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotReady
+import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotReopenRequired
+import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotUpdated
+import ru.lazyhat.compukters.ide.analysis.protocol.UpdateSnapshotRequest
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -56,6 +64,158 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class AnalysisWorkerServerConcurrencyTest {
+    @Test
+    fun `update is serialized with queries and keeps the active K2 environment`() {
+        val root = createTempDirectory("compukters-server-update-")
+        val output = RecordingOutputStream()
+        val queryStarted = CountDownLatch(1)
+        val releaseQuery = CountDownLatch(1)
+        val updateStarted = CountDownLatch(1)
+        val releaseUpdate = CountDownLatch(1)
+        val queryAfterUpdate = CountDownLatch(1)
+        val observedEnvironments = mutableListOf<Any>()
+        val initialSources = projectSources("val answer = 1")
+        val initialIdentity = identity(initialSources)
+        val updatedSources = projectSources("val answer = 2")
+        val updatedIdentity = identity(updatedSources)
+        val updater =
+            K2SourceUpdater { environment, files, changedTexts ->
+                updateStarted.countDown()
+                releaseUpdate.await(5, TimeUnit.SECONDS)
+                ru.lazyhat.compukters.ide.analysis.k2.standalone.DocumentK2SourceUpdater.update(
+                    environment,
+                    files,
+                    changedTexts,
+                )
+            }
+        val server =
+            server(root, output, updater) { request, snapshot, _ ->
+                synchronized(observedEnvironments) { observedEnvironments += snapshot.environment }
+                if (request.query.identity == initialIdentity) {
+                    queryStarted.countDown()
+                    releaseQuery.await(5, TimeUnit.SECONDS)
+                } else {
+                    queryAfterUpdate.countDown()
+                }
+                AnalysisFailure(
+                    request.requestId,
+                    request.query.identity,
+                    AnalysisFailureKind.UnsupportedFeature,
+                    snapshot.files.getValue(VirtualSourcePath.kotlin("main.kt")).text,
+                )
+            }
+        try {
+            assertTrue(server.accept(openRequest(RequestId.of(1uL), initialIdentity, initialSources)))
+            assertIs<SnapshotReady>(output.next())
+
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(2uL), AnalysisQuery.Presentation(initialIdentity))))
+            assertTrue(queryStarted.await(5, TimeUnit.SECONDS))
+            assertTrue(server.accept(updateRequest(RequestId.of(3uL), initialIdentity, updatedIdentity, "val answer = 2")))
+            assertFalse(updateStarted.await(100, TimeUnit.MILLISECONDS))
+
+            releaseQuery.countDown()
+            assertIs<AnalysisFailure>(output.next())
+            assertTrue(updateStarted.await(5, TimeUnit.SECONDS))
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(4uL), AnalysisQuery.Presentation(updatedIdentity))))
+            assertFalse(queryAfterUpdate.await(100, TimeUnit.MILLISECONDS))
+
+            releaseUpdate.countDown()
+            assertEquals(updatedIdentity, assertIs<SnapshotUpdated>(output.next()).targetIdentity)
+            assertTrue(queryAfterUpdate.await(5, TimeUnit.SECONDS))
+            assertEquals("val answer = 2", assertIs<AnalysisFailure>(output.next()).detail)
+            val replacementSources = projectSources("val answer = 3")
+            val replacementIdentity = identity(replacementSources)
+            assertTrue(server.accept(openRequest(RequestId.of(5uL), replacementIdentity, replacementSources)))
+            assertIs<SnapshotReady>(output.next())
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(6uL), AnalysisQuery.Presentation(replacementIdentity))))
+            assertEquals("val answer = 3", assertIs<AnalysisFailure>(output.next()).detail)
+
+            val environments = synchronized(observedEnvironments) { observedEnvironments.toList() }
+            assertTrue(environments[0] === environments[1])
+            assertFalse(environments[1] === environments[2])
+        } finally {
+            releaseQuery.countDown()
+            releaseUpdate.countDown()
+            server.close()
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `stale update is rejected without mutating the active snapshot`() {
+        val root = createTempDirectory("compukters-server-stale-update-")
+        val output = RecordingOutputStream()
+        val initialSources = projectSources("val answer = 1")
+        val initialIdentity = identity(initialSources)
+        val targetSources = projectSources("val answer = 2")
+        val targetIdentity = identity(targetSources)
+        val staleBase = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(projectSources("val answer = 0")), initialIdentity.profile)
+        val server =
+            server(root, output) { request, snapshot, _ ->
+                AnalysisFailure(
+                    request.requestId,
+                    request.query.identity,
+                    AnalysisFailureKind.UnsupportedFeature,
+                    snapshot.files.getValue(VirtualSourcePath.kotlin("main.kt")).text,
+                )
+            }
+        try {
+            assertTrue(server.accept(openRequest(RequestId.of(10uL), initialIdentity, initialSources)))
+            assertIs<SnapshotReady>(output.next())
+
+            assertTrue(server.accept(updateRequest(RequestId.of(11uL), staleBase, targetIdentity, "val answer = 2")))
+            val rejected = assertIs<AnalysisFailure>(output.next())
+            assertEquals(AnalysisFailureKind.InvalidSnapshot, rejected.failure)
+
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(12uL), AnalysisQuery.Presentation(initialIdentity))))
+            assertEquals("val answer = 1", assertIs<AnalysisFailure>(output.next()).detail)
+        } finally {
+            server.close()
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `mutation failure requires reopen and a full open restores the server`() {
+        val root = createTempDirectory("compukters-server-reopen-")
+        val output = RecordingOutputStream()
+        val initialSources = projectSources("val answer = 1")
+        val initialIdentity = identity(initialSources)
+        val targetSources = projectSources("val answer = 2")
+        val targetIdentity = identity(targetSources)
+        val server =
+            server(
+                root,
+                output,
+                K2SourceUpdater { _, _, _ -> error("synthetic mutation failure") },
+            ) { request, snapshot, _ ->
+                AnalysisFailure(
+                    request.requestId,
+                    request.query.identity,
+                    AnalysisFailureKind.UnsupportedFeature,
+                    snapshot.files.getValue(VirtualSourcePath.kotlin("main.kt")).text,
+                )
+            }
+        try {
+            assertTrue(server.accept(openRequest(RequestId.of(20uL), initialIdentity, initialSources)))
+            assertIs<SnapshotReady>(output.next())
+
+            assertTrue(server.accept(updateRequest(RequestId.of(21uL), initialIdentity, targetIdentity, "val answer = 2")))
+            assertEquals(targetIdentity, assertIs<SnapshotReopenRequired>(output.next()).targetIdentity)
+
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(22uL), AnalysisQuery.Presentation(initialIdentity))))
+            assertEquals(AnalysisFailureKind.InvalidSnapshot, assertIs<AnalysisFailure>(output.next()).failure)
+
+            assertTrue(server.accept(openRequest(RequestId.of(23uL), targetIdentity, targetSources)))
+            assertIs<SnapshotReady>(output.next())
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(24uL), AnalysisQuery.Presentation(targetIdentity))))
+            assertEquals("val answer = 2", assertIs<AnalysisFailure>(output.next()).detail)
+        } finally {
+            server.close()
+            root.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `query is rejected before entering K2 when its snapshot is not active`() {
         val root = createTempDirectory("compukters-server-inactive-")
@@ -100,6 +260,9 @@ class AnalysisWorkerServerConcurrencyTest {
         val root = createTempDirectory("compukters-server-concurrency-")
         val started = CountDownLatch(1)
         val observed = CompletableFuture<Unit>()
+        val resumed = CompletableFuture<Unit>()
+        val invocations = AtomicInteger()
+        val output = RecordingOutputStream()
         val sources = projectSources()
         val profile = AnalysisProfileIdentity(hash(2))
         val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
@@ -108,13 +271,17 @@ class AnalysisWorkerServerConcurrencyTest {
                 AnalysisWorkerIdentity("2.4.10", "2.4", hash(3)),
                 AnalysisLimits(),
                 ByteArrayInputStream(ByteArray(0)),
-                ByteArrayOutputStream(),
+                output,
                 SnapshotAdmission(root, standardLibrary(), Path.of(System.getProperty("java.home"))),
                 queryHandler =
                     AnalysisQueryHandler { request, _, cancellation ->
-                        started.countDown()
-                        while (!cancellation.isCancelled) Thread.onSpinWait()
-                        observed.complete(Unit)
+                        if (invocations.incrementAndGet() == 1) {
+                            started.countDown()
+                            while (!cancellation.isCancelled) Thread.onSpinWait()
+                            observed.complete(Unit)
+                        } else {
+                            resumed.complete(Unit)
+                        }
                         AnalysisFailure(
                             request.requestId,
                             request.query.identity,
@@ -135,12 +302,18 @@ class AnalysisWorkerServerConcurrencyTest {
                     ),
                 ),
             )
+            assertIs<SnapshotReady>(output.next())
             assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(7uL), AnalysisQuery.Presentation(identity))))
             assertTrue(started.await(5, TimeUnit.SECONDS))
 
             assertTrue(server.accept(CancelAnalysisRequest(RequestId.of(7uL))))
 
             observed.get(5, TimeUnit.SECONDS)
+            assertIs<AnalysisCancelled>(output.next())
+
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(8uL), AnalysisQuery.Presentation(identity))))
+            resumed.get(5, TimeUnit.SECONDS)
+            assertIs<AnalysisFailure>(output.next())
         } finally {
             server.close()
             root.toFile().deleteRecursively()
@@ -155,18 +328,89 @@ class AnalysisWorkerServerConcurrencyTest {
             ).toAbsolutePath()
             .normalize()
 
-    private fun projectSources(): ProjectSnapshot =
+    private fun server(
+        root: Path,
+        output: RecordingOutputStream,
+        updater: K2SourceUpdater? = null,
+        handler: AnalysisQueryHandler,
+    ): AnalysisWorkerServer =
+        AnalysisWorkerServer(
+            AnalysisWorkerIdentity("2.4.10", "2.4", hash(3)),
+            AnalysisLimits(),
+            ByteArrayInputStream(ByteArray(0)),
+            output,
+            if (updater == null) {
+                SnapshotAdmission(root, standardLibrary(), Path.of(System.getProperty("java.home")))
+            } else {
+                SnapshotAdmission(root, standardLibrary(), Path.of(System.getProperty("java.home")), updater)
+            },
+            handler,
+        )
+
+    private fun openRequest(
+        requestId: RequestId,
+        identity: AnalysisSnapshotIdentity,
+        sources: ProjectSnapshot,
+    ): OpenSnapshotRequest =
+        OpenSnapshotRequest(
+            requestId,
+            identity,
+            sources,
+            AdmittedAnalysisProfile(identity.profile, emptyList()),
+            AnalysisLimits(),
+        )
+
+    private fun updateRequest(
+        requestId: RequestId,
+        base: AnalysisSnapshotIdentity,
+        target: AnalysisSnapshotIdentity,
+        text: String,
+    ): UpdateSnapshotRequest =
+        UpdateSnapshotRequest(
+            requestId,
+            base,
+            target,
+            listOf(ProjectSource(VirtualSourcePath.kotlin("main.kt"), BinaryValue.of(text.encodeToByteArray()))),
+        )
+
+    private fun identity(sources: ProjectSnapshot): AnalysisSnapshotIdentity =
+        AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), AnalysisProfileIdentity(hash(2)))
+
+    private fun projectSources(text: String = "val answer = 42"): ProjectSnapshot =
         ProjectSnapshot.of(
             listOf(
                 ProjectSource(
                     VirtualSourcePath.kotlin("main.kt"),
-                    BinaryValue.of("val answer = 42".encodeToByteArray()),
+                    BinaryValue.of(text.encodeToByteArray()),
                 ),
             ),
             WorkerLimits(),
         )
 
     private fun hash(value: Int) = Hash256.of(ByteArray(32) { value.toByte() })
+}
+
+private class RecordingOutputStream : ByteArrayOutputStream() {
+    private val frames = LinkedBlockingQueue<ByteArray>()
+
+    @Synchronized
+    override fun write(
+        bytes: ByteArray,
+        offset: Int,
+        length: Int,
+    ) {
+        super.write(bytes, offset, length)
+        frames.put(bytes.copyOfRange(offset, offset + length))
+    }
+
+    fun next(): ru.lazyhat.compukters.ide.analysis.protocol.AnalysisMessage {
+        val frame = checkNotNull(frames.poll(5, TimeUnit.SECONDS)) { "timed out waiting for analysis response" }
+        val limits = AnalysisLimits()
+        return AnalysisMessageCodec.decode(
+            AnalysisFrameCodec.decode(frame, limits.frameBytes),
+            AnalysisProtocolContext.unbound(limits),
+        )
+    }
 }
 
 private class SignallingOutputStream : ByteArrayOutputStream() {
