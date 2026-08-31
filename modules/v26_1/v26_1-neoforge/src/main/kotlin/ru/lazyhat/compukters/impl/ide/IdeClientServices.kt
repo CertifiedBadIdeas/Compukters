@@ -453,6 +453,7 @@ internal object ProductionIdeApplicationFactory {
                             )
                         ClosingAnalysisRequestCoordinator(delegate, session, scheduler)
                     },
+                limits = clientLimits,
                 visibleLatency = visibleLatency,
             )
         return IdeClientTooling(build, analysis, analysisService)
