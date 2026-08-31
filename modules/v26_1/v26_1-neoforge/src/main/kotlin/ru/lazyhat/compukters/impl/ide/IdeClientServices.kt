@@ -209,7 +209,14 @@ private class ProductionIdeRuntime(
     }
 }
 
+internal data class IdeAnalysisTiming(
+    val presentationDebounceNanos: Long,
+    val automaticCompletionDebounceNanos: Long,
+)
+
 internal object ProductionIdeApplicationFactory {
+    val analysisTiming = IdeAnalysisTiming(150_000_000L, 75_000_000L)
+
     data class PreparedWorkers(
         val compilerPayload: ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload,
         val analysisPayload: ru.lazyhat.compukters.worker.payload.PublishedToolingProfile,
@@ -429,8 +436,8 @@ internal object ProductionIdeApplicationFactory {
                             DefaultAnalysisRequestCoordinator(
                                 session.client,
                                 scheduler,
-                                PRESENTATION_DEBOUNCE_NANOS,
-                                COMPLETION_DEBOUNCE_NANOS,
+                                analysisTiming.presentationDebounceNanos,
+                                analysisTiming.automaticCompletionDebounceNanos,
                                 sink,
                             )
                         ClosingAnalysisRequestCoordinator(delegate, session, scheduler)
@@ -507,8 +514,6 @@ internal object ProductionIdeApplicationFactory {
     private const val ANALYSIS_METASPACE_MIB = 384
     private const val ANALYSIS_STDERR_BYTES = 64 * 1024
     private const val ANALYSIS_IDLE_SECONDS = 30L
-    private const val PRESENTATION_DEBOUNCE_NANOS = 150_000_000L
-    private const val COMPLETION_DEBOUNCE_NANOS = 120_000_000L
 }
 
 private class IdeAnalysisTaskScheduler : AnalysisTaskScheduler {
