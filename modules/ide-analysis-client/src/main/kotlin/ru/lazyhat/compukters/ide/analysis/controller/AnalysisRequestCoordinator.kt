@@ -54,6 +54,7 @@ class DefaultAnalysisRequestCoordinator(
     private var presentationFuture: CompletableFuture<AnalysisClientResult>? = null
     private var completionTask: AnalysisScheduledTask? = null
     private var completionFuture: CompletableFuture<AnalysisClientResult>? = null
+    private var completionTrigger: CompletionTrigger? = null
     private var closed = false
 
     init {
@@ -73,6 +74,7 @@ class DefaultAnalysisRequestCoordinator(
             oldCompletion = completionFuture
             presentationFuture = null
             completionFuture = null
+            completionTrigger = null
             completionTask = null
             presentationTask =
                 scheduler.schedule(presentationDebounceNanos) {
@@ -81,7 +83,6 @@ class DefaultAnalysisRequestCoordinator(
         }
         oldPresentation?.let(client::cancel)
         oldCompletion?.let(client::cancel)
-        client.open(snapshot)
     }
 
     override fun automaticCompletion(
@@ -90,15 +91,21 @@ class DefaultAnalysisRequestCoordinator(
     ) {
         val current: AdmittedAnalysisSnapshot
         val oldCompletion: CompletableFuture<AnalysisClientResult>?
+        val oldPresentation: CompletableFuture<AnalysisClientResult>?
         synchronized(lock) {
             check(!closed) { "analysis request coordinator is closed" }
             current = snapshot ?: return
+            if (completionTrigger == CompletionTrigger.Manual && completionFuture?.isDone == false) return
             completionTask?.cancel()
             oldCompletion = completionFuture
+            oldPresentation = presentationFuture
             completionFuture = null
+            completionTrigger = null
+            presentationFuture = null
             val query = AnalysisQuery.Completion(current.identity, path, offsetUtf16, CompletionTrigger.Automatic)
             completionTask = scheduler.schedule(automaticCompletionDebounceNanos) { dispatchCompletion(current, query) }
         }
+        oldPresentation?.let(client::cancel)
         oldCompletion?.let(client::cancel)
     }
 
@@ -108,6 +115,7 @@ class DefaultAnalysisRequestCoordinator(
     ): CompletableFuture<AnalysisClientResult> {
         val current: AdmittedAnalysisSnapshot
         val oldCompletion: CompletableFuture<AnalysisClientResult>?
+        val oldPresentation: CompletableFuture<AnalysisClientResult>?
         val future: CompletableFuture<AnalysisClientResult>
         synchronized(lock) {
             check(!closed) { "analysis request coordinator is closed" }
@@ -115,9 +123,13 @@ class DefaultAnalysisRequestCoordinator(
             completionTask?.cancel()
             completionTask = null
             oldCompletion = completionFuture
+            oldPresentation = presentationFuture
+            presentationFuture = null
             future = client.query(current, AnalysisQuery.Completion(current.identity, path, offsetUtf16, CompletionTrigger.Manual))
             completionFuture = future
+            completionTrigger = CompletionTrigger.Manual
         }
+        oldPresentation?.let(client::cancel)
         oldCompletion?.let(client::cancel)
         publishCompletion(current, future)
         return future
@@ -135,6 +147,7 @@ class DefaultAnalysisRequestCoordinator(
             futures = listOfNotNull(presentationFuture, completionFuture)
             presentationFuture = null
             completionFuture = null
+            completionTrigger = null
             snapshot = null
         }
         futures.forEach(client::cancel)
@@ -160,7 +173,10 @@ class DefaultAnalysisRequestCoordinator(
             synchronized(lock) {
                 if (closed || snapshot !== expected) return
                 completionTask = null
-                client.query(expected, query).also { completionFuture = it }
+                client.query(expected, query).also {
+                    completionFuture = it
+                    completionTrigger = query.trigger
+                }
             }
         publishCompletion(expected, future)
     }
@@ -191,6 +207,7 @@ class DefaultAnalysisRequestCoordinator(
         synchronized(lock) {
             if (closed || snapshot !== expected || completionFuture !== future) return@synchronized false
             completionFuture = null
+            completionTrigger = null
             true
         }
 }

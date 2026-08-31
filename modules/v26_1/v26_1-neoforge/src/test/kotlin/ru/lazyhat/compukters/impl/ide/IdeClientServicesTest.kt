@@ -29,6 +29,12 @@ import kotlin.test.assertTrue
 
 class IdeClientServicesTest {
     @Test
+    fun `production analysis timing favors completion without starving presentation`() {
+        assertEquals(150_000_000L, ProductionIdeApplicationFactory.analysisTiming.presentationDebounceNanos)
+        assertEquals(75_000_000L, ProductionIdeApplicationFactory.analysisTiming.automaticCompletionDebounceNanos)
+    }
+
+    @Test
     fun `prepares distinct compiler and analysis workers from one shared bundle`() {
         val gameRoot = createTempDirectory("compukters-ide-tooling-").toAbsolutePath().normalize()
         try {
@@ -41,7 +47,13 @@ class IdeClientServicesTest {
             assertEquals(compiler.root, analysis.root)
             assertNotEquals(compiler.classpath, analysis.classpath)
             assertNotEquals(compiler.manifest.mainClass, analysis.manifest.mainClass)
-            assertTrue(Path.of(guestApi.classRoot).fileName.toString().startsWith("guest-api-core-"))
+            assertTrue(
+                Path
+                    .of(guestApi.classRoot)
+                    .fileName
+                    .toString()
+                    .startsWith("guest-api-core-"),
+            )
             assertEquals(guestApi.classRoot, guestApi.sourceRoot)
 
             val compilerLaunch = ProductionIdeApplicationFactory.compilerLaunch(paths, prepared)
