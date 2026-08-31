@@ -21,12 +21,49 @@ package ru.lazyhat.compukters.ide.analysis.k2.query
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
+import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class ExpressionInfoQueryTest {
+    @Test
+    fun `expression query reports project origin`() {
+        val source = "fun local() = Unit\nfun main() = local()"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val result =
+                fixture.execute(
+                    AnalysisQuery.ExpressionInfo(
+                        fixture.identity,
+                        VirtualSourcePath.kotlin("main.kt"),
+                        source.lastIndexOf("local") + 1,
+                    ),
+                ) as AnalysisResult.ExpressionInfo
+
+            assertEquals(DeclarationOrigin.Project, assertNotNull(result.value).origin)
+        }
+    }
+
+    @Test
+    fun `expression query reports attached Guest API bundle origin`() {
+        val source = "import compukter.terminal.Terminal\nfun main() = Terminal.write(\"ok\")"
+        K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
+            val result =
+                fixture.execute(
+                    AnalysisQuery.ExpressionInfo(
+                        fixture.identity,
+                        VirtualSourcePath.kotlin("main.kt"),
+                        source.indexOf("write") + 1,
+                    ),
+                ) as AnalysisResult.ExpressionInfo
+
+            val bundle = assertIs<DeclarationOrigin.Bundle>(assertNotNull(result.value).origin)
+            assertEquals("std.core", bundle.identity.name)
+        }
+    }
+
     @Test
     fun `expression query renders an inferred local type`() {
         val source = "fun main() { val answer = \"ok\"; println(answer) }"

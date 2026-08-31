@@ -26,8 +26,10 @@ import org.jetbrains.kotlin.analysis.api.components.render
 import org.jetbrains.kotlin.analysis.api.renderer.declarations.impl.KaDeclarationRendererForSource
 import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassLikeSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaConstructorSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaDeclarationSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.findClass
 import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.symbol
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
@@ -38,12 +40,19 @@ import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
 import ru.lazyhat.compukters.ide.editor.EditorRange
 
 internal object DeclarationOriginMapper {
+    fun MappedDeclaration.origin(): DeclarationOrigin =
+        when (this) {
+            is MappedDeclaration.Location -> value.origin
+            is MappedDeclaration.BundleTarget -> DeclarationOrigin.Bundle(identity)
+        }
+
     @OptIn(KaExperimentalApi::class)
     fun KaSession.map(
         symbol: KaSymbol,
         snapshot: AdmittedK2Snapshot,
     ): MappedDeclaration? {
-        val declaration = symbol.psi as? KtNamedDeclaration
+        val navigableSymbol = (symbol as? KaConstructorSymbol)?.containingClassId?.let(::findClass) ?: symbol
+        val declaration = navigableSymbol.psi as? KtNamedDeclaration
         val name = declaration?.nameIdentifier
         val path =
             snapshot.files.entries
@@ -58,17 +67,17 @@ internal object DeclarationOriginMapper {
                 ),
             )
         }
-        val module = symbol.containingModule
+        val module = navigableSymbol.containingModule
         val binaryRoot =
             snapshot.environment.binaryModules.entries
                 .firstOrNull { (_, candidate) -> candidate == module }
                 ?.key
         val bundle = snapshot.bundles.singleOrNull { it.classRoot == binaryRoot } ?: return null
-        val targetName = (symbol as? KaNamedSymbol)?.name?.asString()
+        val targetName = (navigableSymbol as? KaNamedSymbol)?.name?.asString()
         val targetSignature =
-            (symbol as? KaDeclarationSymbol)?.render(KaDeclarationRendererForSource.WITH_QUALIFIED_NAMES)
+            (navigableSymbol as? KaDeclarationSymbol)?.render(KaDeclarationRendererForSource.WITH_QUALIFIED_NAMES)
         return if (targetName != null && targetSignature != null && snapshot.bundleSourceFiles[bundle.identity].orEmpty().isNotEmpty()) {
-            MappedDeclaration.BundleTarget(bundle.identity, targetName, symbol.stableId(), targetSignature)
+            MappedDeclaration.BundleTarget(bundle.identity, targetName, navigableSymbol.stableId(), targetSignature)
         } else {
             MappedDeclaration.Location(DeclarationLocation.SourceUnavailable(DeclarationOrigin.Bundle(bundle.identity)))
         }

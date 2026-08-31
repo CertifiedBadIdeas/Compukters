@@ -32,6 +32,49 @@ import kotlin.test.assertIs
 
 class DeclarationQueryTest {
     @Test
+    fun `navigation resolves every link styled declaration kind`() {
+        val source =
+            """
+            class Box(val property: Int) {
+                fun member(parameter: Int) {
+                    val local = parameter
+                    println(local)
+                }
+            }
+            fun top() = Box(1)
+            fun use() {
+                top()
+                Box(2).property
+                Box(3).member(4)
+            }
+            """.trimIndent()
+        val usages =
+            listOf(
+                "class" to source.lastIndexOf("Box(2)") + 1,
+                "top-level function" to source.lastIndexOf("top()") + 1,
+                "member function" to source.lastIndexOf("member(4)") + 1,
+                "property" to source.lastIndexOf("property") + 1,
+                "local variable" to source.lastIndexOf("local") + 1,
+                "parameter" to source.indexOf("parameter", source.indexOf("val local")) + 1,
+            )
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            usages.forEach { (kind, offset) ->
+                val result =
+                    fixture.execute(
+                        AnalysisQuery.Declaration(
+                            fixture.identity,
+                            VirtualSourcePath.kotlin("main.kt"),
+                            offset,
+                        ),
+                    ) as AnalysisResult.Declaration
+
+                assertEquals(1, result.locations.size, kind)
+                assertIs<DeclarationOrigin.Project>(result.locations.single().origin, kind)
+            }
+        }
+    }
+
+    @Test
     fun `navigation resolves local top level member and extension declarations`() {
         val declarations =
             """
