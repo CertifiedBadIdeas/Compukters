@@ -15,8 +15,17 @@ package ru.lazyhat.compukters.impl.ide
 import net.minecraft.client.input.CharacterEvent
 import net.minecraft.client.input.KeyEvent
 import org.lwjgl.glfw.GLFW
+import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
+import ru.lazyhat.compukters.ide.analysis.SourceSnapshotId
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
+import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisPresentation
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
+import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationTarget
+import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticAnchor
+import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticInteraction
 import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
@@ -29,6 +38,7 @@ import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
 import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
+import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalSnapshot
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectFileKind
@@ -145,6 +155,35 @@ class IdeInputAdapterTest {
                 IdeCommand.MoveDeclarationChoice(-1),
                 IdeCommand.AcceptDeclarationChoice,
                 IdeCommand.DismissSemanticInteraction,
+            ),
+            fixture.commands,
+        )
+    }
+
+    @Test
+    fun `clicking a declaration chooser row selects and accepts its exact index`() {
+        val fixture = fixture()
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val editor = chooserEditor()
+        val bounds = IdeRect(300, 100, 500, 112)
+        val target =
+            IdeHitTarget(
+                IdeHitAction.DeclarationChoice,
+                bounds,
+                enabled = true,
+                tooltip = null,
+                focusGroup = IdeFocusGroup.Page,
+                zIndex = 55,
+                choiceIndex = 1,
+            )
+
+        fixture.adapter.pointerClicked(301.0, 101.0, 0, IdePointerContext(geometry, editor, hitTargets = listOf(target)))
+
+        assertEquals(
+            listOf<IdeCommand>(
+                IdeCommand.MoveDeclarationChoice(1),
+                IdeCommand.AcceptDeclarationChoice,
+                IdeCommand.PointerActivity,
             ),
             fixture.commands,
         )
@@ -437,6 +476,40 @@ class IdeInputAdapterTest {
             KotlinLexicalSnapshot(0, emptyList()),
             IdeAnalysisState.Idle,
         )
+
+    private fun chooserEditor(): IdeEditorView.Text {
+        val source = "val answer = sample"
+        val identity = AnalysisSnapshotIdentity(SourceSnapshotId(Hash256.zero()), AnalysisProfileIdentity(Hash256.zero()))
+        val path = VirtualSourcePath.kotlin("src/main.kt")
+        val anchor = IdeSemanticAnchor(identity, path, 0, 6, EditorRange(4, 10))
+        val chooser =
+            IdeSemanticInteraction.Chooser(
+                anchor,
+                listOf(
+                    IdeDeclarationTarget.Project(ProjectPath.file("src/One.kt"), EditorRange(0, 3)),
+                    IdeDeclarationTarget.Project(ProjectPath.file("src/Two.kt"), EditorRange(0, 3)),
+                ),
+                selectedIndex = 0,
+                maximumTargets = 64,
+            )
+        return IdeEditorView.Text(
+            ProjectPath.file(path.value),
+            listOf(source),
+            listOf(0),
+            0,
+            0,
+            1,
+            0,
+            null,
+            null,
+            0,
+            0,
+            false,
+            false,
+            KotlinLexicalSnapshot(0, emptyList()),
+            IdeAnalysisState.Active(identity, path, 0, IdeAnalysisPresentation.Empty, null, chooser),
+        )
+    }
 
     private data class Fixture(
         val commands: MutableList<IdeCommand>,

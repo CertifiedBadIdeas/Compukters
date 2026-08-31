@@ -106,6 +106,18 @@ class IdeRenderGeometryTest {
         assertEquals(IdeRect(680, 250, 940, 350), above.bounds)
     }
 
+    @Test
+    fun `anchored semantic popup stays inside editor at both edge anchors`() {
+        val geometry = geometry()
+        val below = geometry.anchoredPopup(IdeRect(181, 46, 187, 56), 300, 90)
+        val above = geometry.anchoredPopup(IdeRect(934, 391, 940, 401), 300, 90)
+
+        assertEquals(AnchoredPopupPlacement.Below, below.placement)
+        assertEquals(IdeRect(181, 56, 481, 146), below.bounds)
+        assertEquals(AnchoredPopupPlacement.Above, above.placement)
+        assertEquals(IdeRect(640, 301, 940, 391), above.bounds)
+    }
+
     private fun geometry() =
         IdeRenderGeometry.compute(
             viewportWidth = 960,

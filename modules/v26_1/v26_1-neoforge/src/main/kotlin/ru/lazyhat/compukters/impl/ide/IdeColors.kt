@@ -42,4 +42,5 @@ internal object IdeColors {
     val TYPE = 0xFFFFCB6B.toInt()
     val FUNCTION = 0xFF82AAFF.toInt()
     val PROPERTY = 0xFF89DDFF.toInt()
+    val HYPERLINK = 0xFF4AA3FF.toInt()
 }
