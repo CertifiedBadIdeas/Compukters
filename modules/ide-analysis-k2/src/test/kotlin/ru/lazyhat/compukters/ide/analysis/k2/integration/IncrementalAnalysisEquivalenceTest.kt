@@ -92,7 +92,7 @@ class IncrementalAnalysisEquivalenceTest {
                     snapshot(listOf(original.path to original.text.replace("{ can }", "{ $suffix }")), limits)
                 }
 
-            revisions.forEach(coordinator::sourceChanged)
+            revisions.forEach { revision -> coordinator.sourceChanged(revision, original.path) }
             assertEquals(1, factory.fullRebuilds)
             assertEquals(0, factory.incrementalUpdates)
             scheduler.advanceBy(10)
@@ -181,10 +181,10 @@ class IncrementalAnalysisEquivalenceTest {
         val identifier = changed(probe = { "$it\nfun completionProbe() { file0S }" })
         val dot = changed(probe = { "$it\nfun completionProbe() { \"text\". }" })
         return listOf(
-            presentation("body", body, limits),
-            presentation("signature", signature, limits),
-            presentation("import", imported, limits),
-            presentation("invalid-text", invalid, limits),
+            presentation("body", body, firstPath, limits),
+            presentation("signature", signature, firstPath, limits),
+            presentation("import", imported, firstPath, limits),
+            presentation("invalid-text", invalid, firstPath, limits),
             completion("identifier-completion", identifier, probePath, "file0S", limits),
             completion("dot-completion", dot, probePath, ".", limits),
         )
@@ -195,15 +195,16 @@ class IncrementalAnalysisEquivalenceTest {
         path: VirtualSourcePath,
         text: String,
         limits: AnalysisLimits,
-    ) = presentation(name, listOf(path to text), limits)
+    ) = presentation(name, listOf(path to text), path, limits)
 
     private fun presentation(
         name: String,
         sources: List<Pair<VirtualSourcePath, String>>,
+        path: VirtualSourcePath,
         limits: AnalysisLimits,
     ): QueryRevision {
         val admitted = snapshot(sources, limits)
-        return QueryRevision(name, admitted, AnalysisQuery.Presentation(admitted.identity))
+        return QueryRevision(name, admitted, AnalysisQuery.Presentation(admitted.identity, path))
     }
 
     private fun completion(

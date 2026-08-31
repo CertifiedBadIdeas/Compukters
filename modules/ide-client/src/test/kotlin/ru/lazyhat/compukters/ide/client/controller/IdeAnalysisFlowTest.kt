@@ -109,7 +109,10 @@ private class FlowAnalysisRequests : AnalysisRequestCoordinator {
 
     fun publish(result: AnalysisClientResult) = sink.publish(result)
 
-    override fun sourceChanged(snapshot: AdmittedAnalysisSnapshot) = Unit
+    override fun sourceChanged(
+        snapshot: AdmittedAnalysisSnapshot,
+        activePath: VirtualSourcePath,
+    ) = Unit
 
     override fun automaticCompletion(
         path: VirtualSourcePath,

@@ -108,7 +108,7 @@ class AnalysisWorkerServerConcurrencyTest {
             assertTrue(server.accept(openRequest(RequestId.of(1uL), initialIdentity, initialSources)))
             assertIs<SnapshotReady>(output.next())
 
-            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(2uL), AnalysisQuery.Presentation(initialIdentity))))
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(2uL), AnalysisQuery.Presentation(initialIdentity, mainPath()))))
             assertTrue(queryStarted.await(5, TimeUnit.SECONDS))
             assertTrue(server.accept(updateRequest(RequestId.of(3uL), initialIdentity, updatedIdentity, "val answer = 2")))
             assertFalse(updateStarted.await(100, TimeUnit.MILLISECONDS))
@@ -116,7 +116,7 @@ class AnalysisWorkerServerConcurrencyTest {
             releaseQuery.countDown()
             assertIs<AnalysisFailure>(output.next())
             assertTrue(updateStarted.await(5, TimeUnit.SECONDS))
-            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(4uL), AnalysisQuery.Presentation(updatedIdentity))))
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(4uL), AnalysisQuery.Presentation(updatedIdentity, mainPath()))))
             assertFalse(queryAfterUpdate.await(100, TimeUnit.MILLISECONDS))
 
             releaseUpdate.countDown()
@@ -127,7 +127,7 @@ class AnalysisWorkerServerConcurrencyTest {
             val replacementIdentity = identity(replacementSources)
             assertTrue(server.accept(openRequest(RequestId.of(5uL), replacementIdentity, replacementSources)))
             assertIs<SnapshotReady>(output.next())
-            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(6uL), AnalysisQuery.Presentation(replacementIdentity))))
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(6uL), AnalysisQuery.Presentation(replacementIdentity, mainPath()))))
             assertEquals("val answer = 3", assertIs<AnalysisFailure>(output.next()).detail)
 
             val environments = synchronized(observedEnvironments) { observedEnvironments.toList() }
@@ -167,7 +167,7 @@ class AnalysisWorkerServerConcurrencyTest {
             val rejected = assertIs<AnalysisFailure>(output.next())
             assertEquals(AnalysisFailureKind.InvalidSnapshot, rejected.failure)
 
-            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(12uL), AnalysisQuery.Presentation(initialIdentity))))
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(12uL), AnalysisQuery.Presentation(initialIdentity, mainPath()))))
             assertEquals("val answer = 1", assertIs<AnalysisFailure>(output.next()).detail)
         } finally {
             server.close()
@@ -203,12 +203,12 @@ class AnalysisWorkerServerConcurrencyTest {
             assertTrue(server.accept(updateRequest(RequestId.of(21uL), initialIdentity, targetIdentity, "val answer = 2")))
             assertEquals(targetIdentity, assertIs<SnapshotReopenRequired>(output.next()).targetIdentity)
 
-            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(22uL), AnalysisQuery.Presentation(initialIdentity))))
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(22uL), AnalysisQuery.Presentation(initialIdentity, mainPath()))))
             assertEquals(AnalysisFailureKind.InvalidSnapshot, assertIs<AnalysisFailure>(output.next()).failure)
 
             assertTrue(server.accept(openRequest(RequestId.of(23uL), targetIdentity, targetSources)))
             assertIs<SnapshotReady>(output.next())
-            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(24uL), AnalysisQuery.Presentation(targetIdentity))))
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(24uL), AnalysisQuery.Presentation(targetIdentity, mainPath()))))
             assertEquals("val answer = 2", assertIs<AnalysisFailure>(output.next()).detail)
         } finally {
             server.close()
@@ -237,7 +237,7 @@ class AnalysisWorkerServerConcurrencyTest {
                     },
             )
         try {
-            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(7uL), AnalysisQuery.Presentation(identity))))
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(7uL), AnalysisQuery.Presentation(identity, mainPath()))))
             assertTrue(output.written.await(5, TimeUnit.SECONDS))
 
             val failure =
@@ -303,7 +303,7 @@ class AnalysisWorkerServerConcurrencyTest {
                 ),
             )
             assertIs<SnapshotReady>(output.next())
-            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(7uL), AnalysisQuery.Presentation(identity))))
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(7uL), AnalysisQuery.Presentation(identity, mainPath()))))
             assertTrue(started.await(5, TimeUnit.SECONDS))
 
             assertTrue(server.accept(CancelAnalysisRequest(RequestId.of(7uL))))
@@ -311,7 +311,7 @@ class AnalysisWorkerServerConcurrencyTest {
             observed.get(5, TimeUnit.SECONDS)
             assertIs<AnalysisCancelled>(output.next())
 
-            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(8uL), AnalysisQuery.Presentation(identity))))
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(8uL), AnalysisQuery.Presentation(identity, mainPath()))))
             resumed.get(5, TimeUnit.SECONDS)
             assertIs<AnalysisFailure>(output.next())
         } finally {
@@ -389,6 +389,8 @@ class AnalysisWorkerServerConcurrencyTest {
 
     private fun hash(value: Int) = Hash256.of(ByteArray(32) { value.toByte() })
 }
+
+private fun mainPath(): VirtualSourcePath = VirtualSourcePath.kotlin("main.kt")
 
 private class RecordingOutputStream : ByteArrayOutputStream() {
     private val frames = LinkedBlockingQueue<ByteArray>()

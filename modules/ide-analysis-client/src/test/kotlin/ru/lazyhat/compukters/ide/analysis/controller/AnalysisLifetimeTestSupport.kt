@@ -104,7 +104,8 @@ internal fun admittedSnapshot(text: String): AdmittedAnalysisSnapshot {
 
 internal fun testSnapshot(): AdmittedAnalysisSnapshot = admittedSnapshot("val test = true")
 
-internal fun testQuery(snapshot: AdmittedAnalysisSnapshot = testSnapshot()): AnalysisQuery = AnalysisQuery.Presentation(snapshot.identity)
+internal fun testQuery(snapshot: AdmittedAnalysisSnapshot = testSnapshot()): AnalysisQuery =
+    AnalysisQuery.Presentation(snapshot.identity, testPath())
 
 internal fun testPath(): VirtualSourcePath = VirtualSourcePath.kotlin("main.kt")
 

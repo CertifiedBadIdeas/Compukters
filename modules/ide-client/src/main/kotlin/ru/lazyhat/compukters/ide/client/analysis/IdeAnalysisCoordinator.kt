@@ -398,7 +398,7 @@ class IdeAnalysisCoordinator(
                     null,
                 ),
             )
-            requests.sourceChanged(snapshot)
+            requests.sourceChanged(snapshot, current.path)
         }
         when (completion) {
             PendingCompletion.Automatic -> requests.automaticCompletion(current.path, current.caretOffsetUtf16)

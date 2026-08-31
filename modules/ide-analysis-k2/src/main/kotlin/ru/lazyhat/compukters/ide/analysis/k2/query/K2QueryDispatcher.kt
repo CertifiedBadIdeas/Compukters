@@ -50,17 +50,13 @@ internal object K2QueryDispatcher {
         snapshot: AdmittedK2Snapshot,
         limits: AnalysisLimits,
     ): AnalysisResult.Presentation {
-        val first = snapshot.files.values.firstOrNull()
+        val file = requireNotNull(snapshot.files[query.path]) { "analysis source path is not active" }
         val collected =
-            if (first == null) {
-                PresentationParts(emptyList(), emptyList())
-            } else {
-                analyze(first) {
-                    PresentationParts(
-                        DiagnosticQuery.collect(this, snapshot, limits),
-                        SemanticTokenQuery.collect(this, snapshot, limits),
-                    )
-                }
+            analyze(file) {
+                PresentationParts(
+                    DiagnosticQuery.collect(this, query.path, file, limits),
+                    SemanticTokenQuery.collect(this, query.path, file, limits),
+                )
             }
         val presentation =
             SnapshotPresentation.create(

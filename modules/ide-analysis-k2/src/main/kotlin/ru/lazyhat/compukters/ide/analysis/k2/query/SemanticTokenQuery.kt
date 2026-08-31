@@ -34,6 +34,7 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtEnumEntry
+import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
@@ -43,9 +44,9 @@ import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtSimpleNameExpression
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import org.jetbrains.kotlin.psi.KtTypeParameter
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
 import ru.lazyhat.compukters.ide.analysis.SemanticToken
-import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.editor.EditorRange
 
@@ -53,69 +54,68 @@ internal object SemanticTokenQuery {
     @OptIn(KaExperimentalApi::class)
     fun collect(
         session: KaSession,
-        snapshot: AdmittedK2Snapshot,
+        path: VirtualSourcePath,
+        file: KtFile,
         limits: AnalysisLimits,
     ): List<SemanticToken> {
         val result = mutableListOf<SemanticToken>()
-        snapshot.files.toSortedMap(compareBy { it.value }).forEach { (path, file) ->
-            file.accept(
-                object : KtTreeVisitorVoid() {
-                    override fun visitNamedDeclaration(declaration: KtNamedDeclaration) {
-                        declaration.nameIdentifier?.let { identifier ->
-                            declaration.category()?.let { category ->
-                                result.addBounded(
-                                    path,
-                                    identifier.textRange.startOffset,
-                                    identifier.textRange.endOffset,
-                                    category,
-                                    limits,
-                                )
-                            }
-                        }
-                        super.visitNamedDeclaration(declaration)
-                    }
-
-                    override fun visitProperty(property: KtProperty) {
-                        property.initializer?.takeIf { property.typeReference == null }?.let { initializer ->
+        file.accept(
+            object : KtTreeVisitorVoid() {
+                override fun visitNamedDeclaration(declaration: KtNamedDeclaration) {
+                    declaration.nameIdentifier?.let { identifier ->
+                        declaration.category()?.let { category ->
                             result.addBounded(
                                 path,
-                                initializer.textRange.startOffset,
-                                initializer.textRange.endOffset,
-                                SemanticCategory.InferredExpression,
+                                identifier.textRange.startOffset,
+                                identifier.textRange.endOffset,
+                                category,
                                 limits,
                             )
                         }
-                        super.visitProperty(property)
                     }
+                    super.visitNamedDeclaration(declaration)
+                }
 
-                    override fun visitSimpleNameExpression(expression: KtSimpleNameExpression) {
-                        if (expression is KtNameReferenceExpression) {
-                            with(session) { expression.resolveSymbol() }
-                                ?.semanticCategory()
-                                ?.let { category ->
-                                    result.addBounded(
-                                        path,
-                                        expression.textRange.startOffset,
-                                        expression.textRange.endOffset,
-                                        category,
-                                        limits,
-                                    )
-                                }
-                            if (with(session) { expression.smartCastInfo } != null) {
+                override fun visitProperty(property: KtProperty) {
+                    property.initializer?.takeIf { property.typeReference == null }?.let { initializer ->
+                        result.addBounded(
+                            path,
+                            initializer.textRange.startOffset,
+                            initializer.textRange.endOffset,
+                            SemanticCategory.InferredExpression,
+                            limits,
+                        )
+                    }
+                    super.visitProperty(property)
+                }
+
+                override fun visitSimpleNameExpression(expression: KtSimpleNameExpression) {
+                    if (expression is KtNameReferenceExpression) {
+                        with(session) { expression.resolveSymbol() }
+                            ?.semanticCategory()
+                            ?.let { category ->
                                 result.addBounded(
                                     path,
                                     expression.textRange.startOffset,
                                     expression.textRange.endOffset,
-                                    SemanticCategory.SmartCastExpression,
+                                    category,
                                     limits,
                                 )
                             }
+                        if (with(session) { expression.smartCastInfo } != null) {
+                            result.addBounded(
+                                path,
+                                expression.textRange.startOffset,
+                                expression.textRange.endOffset,
+                                SemanticCategory.SmartCastExpression,
+                                limits,
+                            )
                         }
-                        super.visitSimpleNameExpression(expression)
                     }
-                },
-            )
-        }
+                    super.visitSimpleNameExpression(expression)
+                }
+            },
+        )
         return result
             .distinct()
             .sortedWith(compareBy({ it.path.value }, { it.range.startUtf16 }, { it.category.ordinal }))

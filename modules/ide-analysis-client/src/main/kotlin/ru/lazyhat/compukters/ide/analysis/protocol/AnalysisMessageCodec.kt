@@ -375,7 +375,7 @@ private fun validateQuery(
     context: AnalysisProtocolContext,
 ) {
     when (query) {
-        is AnalysisQuery.Presentation -> Unit
+        is AnalysisQuery.Presentation -> context.validate(query.path, 0)
         is AnalysisQuery.Completion -> context.validate(query.path, query.offsetUtf16)
         is AnalysisQuery.ExpressionInfo -> context.validate(query.path, query.offsetUtf16)
         is AnalysisQuery.Declaration -> context.validate(query.path, query.offsetUtf16)
@@ -396,6 +396,12 @@ private fun validateResult(
             require(query is AnalysisQuery.Presentation) { "analysis result kind does not match its query" }
             val active = result.value.accept(result.identity)
             require(active is SnapshotPresentationAcceptance.Active) { "presentation result is stale" }
+            require(active.diagnostics.all { it.path == null || it.path == query.path }) {
+                "presentation diagnostic does not belong to the active source"
+            }
+            require(active.semanticTokens.all { it.path == query.path }) {
+                "presentation semantic token does not belong to the active source"
+            }
             SnapshotPresentation.create(
                 result.identity,
                 sourceLengths,
@@ -538,7 +544,9 @@ private class MessageSink {
         )
         identity(value.identity)
         when (value) {
-            is AnalysisQuery.Presentation -> {}
+            is AnalysisQuery.Presentation -> {
+                string(value.path.value)
+            }
 
             is AnalysisQuery.Completion -> {
                 string(value.path.value)
@@ -892,7 +900,7 @@ private class MessageSource(
         val identity = identity()
         return when (kind) {
             QueryKind.Presentation -> {
-                AnalysisQuery.Presentation(identity)
+                AnalysisQuery.Presentation(identity, kotlinPath())
             }
 
             QueryKind.Completion -> {

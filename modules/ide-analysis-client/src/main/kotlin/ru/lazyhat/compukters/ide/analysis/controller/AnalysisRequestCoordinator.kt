@@ -24,7 +24,10 @@ import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
 import java.util.concurrent.CompletableFuture
 
 interface AnalysisRequestCoordinator : AutoCloseable {
-    fun sourceChanged(snapshot: AdmittedAnalysisSnapshot)
+    fun sourceChanged(
+        snapshot: AdmittedAnalysisSnapshot,
+        activePath: VirtualSourcePath,
+    )
 
     fun automaticCompletion(
         path: VirtualSourcePath,
@@ -62,7 +65,10 @@ class DefaultAnalysisRequestCoordinator(
         require(automaticCompletionDebounceNanos >= 0) { "automatic-completion debounce must not be negative" }
     }
 
-    override fun sourceChanged(snapshot: AdmittedAnalysisSnapshot) {
+    override fun sourceChanged(
+        snapshot: AdmittedAnalysisSnapshot,
+        activePath: VirtualSourcePath,
+    ) {
         val oldPresentation: CompletableFuture<AnalysisClientResult>?
         val oldCompletion: CompletableFuture<AnalysisClientResult>?
         synchronized(lock) {
@@ -78,7 +84,7 @@ class DefaultAnalysisRequestCoordinator(
             completionTask = null
             presentationTask =
                 scheduler.schedule(presentationDebounceNanos) {
-                    dispatchPresentation(snapshot)
+                    dispatchPresentation(snapshot, activePath)
                 }
         }
         oldPresentation?.let(client::cancel)
@@ -153,12 +159,15 @@ class DefaultAnalysisRequestCoordinator(
         futures.forEach(client::cancel)
     }
 
-    private fun dispatchPresentation(expected: AdmittedAnalysisSnapshot) {
+    private fun dispatchPresentation(
+        expected: AdmittedAnalysisSnapshot,
+        activePath: VirtualSourcePath,
+    ) {
         val future =
             synchronized(lock) {
                 if (closed || snapshot !== expected) return
                 presentationTask = null
-                client.query(expected, AnalysisQuery.Presentation(expected.identity)).also { presentationFuture = it }
+                client.query(expected, AnalysisQuery.Presentation(expected.identity, activePath)).also { presentationFuture = it }
             }
         future.whenComplete { result, failure ->
             if (failure == null && result != null && admitPresentation(expected, future)) resultSink.publish(result)

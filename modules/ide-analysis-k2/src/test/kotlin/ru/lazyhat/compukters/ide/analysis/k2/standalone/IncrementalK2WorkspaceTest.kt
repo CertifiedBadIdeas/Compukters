@@ -78,7 +78,7 @@ class IncrementalK2WorkspaceTest {
     fun `validation failures happen before mutation and preserve the active snapshot`() {
         K2QueryFixture.source("main.kt" to "fun value(): Int = 1").use { fixture ->
             val originalIdentity = fixture.identity
-            val originalPresentation = fixture.execute(AnalysisQuery.Presentation(originalIdentity)).presentation()
+            val originalPresentation = fixture.execute(fixture.presentation()).presentation()
             val valid = fixture.updateRequest("main.kt" to "fun value(): Int = 2")
             val stale =
                 UpdateSnapshotRequest(
@@ -113,7 +113,7 @@ class IncrementalK2WorkspaceTest {
             assertFailsWith<IllegalArgumentException> { fixture.workspace.update(unknownTarget, AnalysisLimits()) }
 
             assertEquals(originalIdentity, fixture.workspace.view().identity)
-            assertEquals(originalPresentation, fixture.execute(AnalysisQuery.Presentation(originalIdentity)).presentation())
+            assertEquals(originalPresentation, fixture.execute(fixture.presentation()).presentation())
         }
     }
 
@@ -136,8 +136,8 @@ class IncrementalK2WorkspaceTest {
         main: String,
     ) {
         val incrementalPresentation =
-            incremental.execute(AnalysisQuery.Presentation(incremental.identity)).presentation()
-        val freshPresentation = fresh.execute(AnalysisQuery.Presentation(fresh.identity)).presentation()
+            incremental.execute(incremental.presentation("sample/Main.kt")).presentation()
+        val freshPresentation = fresh.execute(fresh.presentation("sample/Main.kt")).presentation()
         assertEquals(freshPresentation, incrementalPresentation)
 
         val offset = main.indexOf("result.sub") + "result.sub".length

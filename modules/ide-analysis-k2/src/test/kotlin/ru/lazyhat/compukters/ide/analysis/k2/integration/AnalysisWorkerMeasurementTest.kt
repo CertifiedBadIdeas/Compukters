@@ -145,8 +145,10 @@ class AnalysisWorkerMeasurementTest {
                 val presentationRevision = revision(fixture, limits, ++revision)
                 successful(
                     client
-                        .query(presentationRevision.snapshot, AnalysisQuery.Presentation(presentationRevision.snapshot.identity))
-                        .get(TIMEOUT_SECONDS, TimeUnit.SECONDS),
+                        .query(
+                            presentationRevision.snapshot,
+                            AnalysisQuery.Presentation(presentationRevision.snapshot.identity, presentationRevision.path),
+                        ).get(TIMEOUT_SECONDS, TimeUnit.SECONDS),
                 )
                 snapshotApply += factory.probe.takeSnapshotApply()
                 presentation += factory.probe.takeQuery()
@@ -172,7 +174,7 @@ class AnalysisWorkerMeasurementTest {
             val endToEndCompletion = mutableListOf<Long>()
             repeat(sampleCount) {
                 val presentationRevision = revision(fixture, limits, ++revision)
-                endToEndPresentation += measureEndToEndPresentation(client, presentationRevision.snapshot)
+                endToEndPresentation += measureEndToEndPresentation(client, presentationRevision)
                 factory.probe.takeSnapshotApply()
                 factory.probe.takeQuery()
 
@@ -187,7 +189,7 @@ class AnalysisWorkerMeasurementTest {
                 val current = revision(fixture, limits, ++revision)
                 successful(
                     client
-                        .query(current.snapshot, AnalysisQuery.Presentation(current.snapshot.identity))
+                        .query(current.snapshot, AnalysisQuery.Presentation(current.snapshot.identity, current.path))
                         .get(TIMEOUT_SECONDS, TimeUnit.SECONDS),
                 )
                 factory.probe.takeSnapshotApply()
@@ -239,7 +241,7 @@ class AnalysisWorkerMeasurementTest {
             client
                 .query(
                     presentation.snapshot,
-                    AnalysisQuery.Presentation(presentation.snapshot.identity),
+                    AnalysisQuery.Presentation(presentation.snapshot.identity, presentation.path),
                 ).get(TIMEOUT_SECONDS, TimeUnit.SECONDS),
         )
         probe.takeSnapshotApply()
@@ -265,7 +267,7 @@ class AnalysisWorkerMeasurementTest {
 
     private fun measureEndToEndPresentation(
         client: AnalysisClient,
-        snapshot: AdmittedAnalysisSnapshot,
+        revision: MeasurementRevision,
     ): Long {
         val published = CompletableFuture<PublishedResult>()
         ExecutorMeasurementScheduler().use { scheduler ->
@@ -277,7 +279,7 @@ class AnalysisWorkerMeasurementTest {
                 matchingSink<AnalysisResult.Presentation>(published),
             ).use { coordinator ->
                 val started = System.nanoTime()
-                coordinator.sourceChanged(snapshot)
+                coordinator.sourceChanged(revision.snapshot, revision.path)
                 val result = published.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 assertIs<AnalysisClientResult.Success>(result.result)
                 return result.completedNanos - started
@@ -299,7 +301,7 @@ class AnalysisWorkerMeasurementTest {
                 matchingSink<AnalysisResult.Completion>(published),
             ).use { coordinator ->
                 val started = System.nanoTime()
-                coordinator.sourceChanged(revision.snapshot)
+                coordinator.sourceChanged(revision.snapshot, revision.path)
                 coordinator.automaticCompletion(revision.path, revision.offsetUtf16)
                 val result = published.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 assertIs<AnalysisClientResult.Success>(result.result)
@@ -327,7 +329,7 @@ class AnalysisWorkerMeasurementTest {
         probe: ProtocolMeasurementProbe,
     ): Long {
         probe.clearQueryWrites()
-        val cancelled = client.query(revision.snapshot, AnalysisQuery.Presentation(revision.snapshot.identity))
+        val cancelled = client.query(revision.snapshot, AnalysisQuery.Presentation(revision.snapshot.identity, revision.path))
         probe.awaitQueryWrite()
         val next =
             client.query(
