@@ -175,6 +175,64 @@ class IdeAnalysisCoordinatorTest {
     }
 
     @Test
+    fun `bundle declaration becomes a lightweight target only when exact source was admitted`() {
+        val bundle =
+            ru.lazyhat.compukters.ide.analysis
+                .AnalysisBundleIdentity("std.core", hash(9))
+        val sourcePath = VirtualSourcePath.kotlin("compukter/api/Sample.kt")
+        val sourceText = "class Sample"
+        val catalog = IdeAttachedSourceCatalog.of(mapOf(bundle to mapOf(sourcePath to sourceText)), 1, 1, 64, 64)
+        val fixture = fixture("val answer = 42", attachedSources = catalog)
+        val active = fixture.open()
+        val pending = fixture.coordinator.goToDeclaration(EditorRange(4, 10), 6)
+
+        fixture.requests.completeNavigation(
+            AnalysisClientResult.Success(
+                AnalysisResult.Declaration.create(
+                    active.identity,
+                    listOf(
+                        DeclarationLocation.Source(
+                            DeclarationOrigin.Bundle(bundle),
+                            sourcePath,
+                            EditorRange(6, 12),
+                        ),
+                    ),
+                    mapOf(path() to fixture.text.length),
+                    bundleSourceLengthsUtf16 = mapOf(bundle to mapOf(sourcePath to sourceText.length)),
+                ),
+            ),
+        )
+
+        val target = assertIs<IdeDeclarationOutcome.Targets>(pending.join()).values.single()
+        assertEquals(IdeDeclarationTarget.AttachedSource(bundle, sourcePath, EditorRange(6, 12)), target)
+        assertEquals(sourceText, fixture.coordinator.attachedSource(bundle, sourcePath))
+    }
+
+    @Test
+    fun `bundle declaration with no exact catalog entry reports source unavailable`() {
+        val bundle =
+            ru.lazyhat.compukters.ide.analysis
+                .AnalysisBundleIdentity("std.core", hash(9))
+        val sourcePath = VirtualSourcePath.kotlin("compukter/api/Sample.kt")
+        val fixture = fixture("val answer = 42")
+        val active = fixture.open()
+        val pending = fixture.coordinator.goToDeclaration(EditorRange(4, 10), 6)
+
+        fixture.requests.completeNavigation(
+            AnalysisClientResult.Success(
+                AnalysisResult.Declaration.create(
+                    active.identity,
+                    listOf(DeclarationLocation.Source(DeclarationOrigin.Bundle(bundle), sourcePath, EditorRange(6, 12))),
+                    mapOf(path() to fixture.text.length),
+                    bundleSourceLengthsUtf16 = mapOf(bundle to mapOf(sourcePath to 12)),
+                ),
+            ),
+        )
+
+        assertEquals(IdeDeclarationOutcome.SourceUnavailable(bundle), pending.join())
+    }
+
+    @Test
     fun `presentation rebases compatible semantic tokens and drops transient diagnostics`() {
         val otherPath = VirtualSourcePath.kotlin("src/other.kt")
         val before = SemanticToken(path(), EditorRange(0, 3), SemanticCategory.Property)
@@ -645,7 +703,8 @@ class IdeAnalysisCoordinatorTest {
     private fun fixture(
         text: String,
         visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
-    ) = AnalysisFixture(text, visibleLatency = visibleLatency)
+        attachedSources: IdeAttachedSourceCatalog = IdeAttachedSourceCatalog.empty(),
+    ) = AnalysisFixture(text, visibleLatency = visibleLatency, attachedSources = attachedSources)
 
     private fun source(text: String) =
         ProjectSnapshot.of(listOf(ProjectSource(path(), BinaryValue.of(text.encodeToByteArray()))), ANALYSIS_LIMITS)
@@ -695,6 +754,7 @@ private class AnalysisFixture(
     private val deferredInput: Boolean = false,
     private val rejectedText: String? = null,
     visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
+    attachedSources: IdeAttachedSourceCatalog = IdeAttachedSourceCatalog.empty(),
 ) {
     var text = initialText
     val descriptor = ProjectCatalog.open(createTempDirectory("compukters-analysis-")).create("demo")
@@ -715,6 +775,7 @@ private class AnalysisFixture(
                 },
             requestFactory = IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
             visibleLatency = visibleLatency,
+            attachedSources = attachedSources,
         )
 
     fun open(): AdmittedAnalysisSnapshot {

@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.ide.client.analysis
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
@@ -33,6 +34,42 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 class IdeSemanticInteractionTest {
+    @Test
+    fun `attached source catalog copies text and requires exact bundle identity`() {
+        val bundle = AnalysisBundleIdentity("std.core", hash(3))
+        val replacement = AnalysisBundleIdentity("std.core", hash(4))
+        val path = VirtualSourcePath.kotlin("compukter/api/Sample.kt")
+        val files = mutableMapOf(path to "class Sample")
+        val sources = mutableMapOf(bundle to files)
+        val catalog = IdeAttachedSourceCatalog.of(sources, 1, 1, 64, 64)
+
+        files[path] = "changed"
+        sources.clear()
+
+        assertEquals("class Sample", catalog.text(bundle, path))
+        assertNull(catalog.text(replacement, path))
+    }
+
+    @Test
+    fun `attached source catalog enforces strict UTF-8 budgets`() {
+        val bundle = AnalysisBundleIdentity("std.core", hash(3))
+        val first = VirtualSourcePath.kotlin("first.kt")
+        val second = VirtualSourcePath.kotlin("second.kt")
+
+        assertFailsWith<IllegalArgumentException> {
+            IdeAttachedSourceCatalog.of(mapOf(bundle to mapOf(first to "😀")), 1, 1, 3, 4)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            IdeAttachedSourceCatalog.of(mapOf(bundle to mapOf(first to "é", second to "é")), 1, 2, 2, 3)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            IdeAttachedSourceCatalog.of(mapOf(bundle to mapOf(first to "\uD800")), 1, 1, 8, 8)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            IdeAttachedSourceCatalog.of(mapOf(bundle to mapOf(first to "a", second to "b")), 1, 1, 8, 8)
+        }
+    }
+
     @Test
     fun `token range admits the complete identifier around a UTF-16 offset`() {
         assertEquals(EditorRange(4, 10), KotlinSourceTokenRange.find("val answer = 42", 7))
