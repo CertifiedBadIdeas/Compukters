@@ -194,6 +194,8 @@ class BoundedIdeVisibleLatencyCollector(
     @Synchronized
     override fun dropActive() {
         active.values.toList().forEach(::retire)
+        latestEdit = null
+        retiredRevisions.clear()
     }
 
     @Synchronized

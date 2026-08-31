@@ -339,7 +339,199 @@ class IdeAnalysisCoordinatorTest {
         assertIs<IdeAnalysisState.Unavailable>(fixture.coordinator.state())
     }
 
-    private fun fixture(text: String) = AnalysisFixture(text)
+    @Test
+    fun `automatic completion expectation and fresh results use current document revision`() {
+        val latency = RecordingVisibleLatencyTrace()
+        val initial = "fun candidate() = Unit\nfun main() { can }"
+        val fixture = fixture(initial, latency)
+        fixture.open()
+        val insertionOffset = initial.indexOf("can }") + "can".length
+
+        fixture.coordinator.sourceChanged(
+            fixture.project,
+            path(),
+            initial.replaceRange(insertionOffset, insertionOffset, "d"),
+            documentRevision = 1,
+            insertedText = "d",
+            caretOffsetUtf16 = insertionOffset + 1,
+            change = insertion(insertionOffset, 0, 1),
+        )
+        assertEquals(listOf(1L), latency.automaticExpected)
+
+        val current = fixture.requests.snapshots.last()
+        val token = SemanticToken(path(), EditorRange(4, 13), SemanticCategory.Function)
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Presentation(
+                    current.identity,
+                    SnapshotPresentation.create(
+                        current.identity,
+                        mapOf(path() to fixture.text.length),
+                        semanticTokens = listOf(token),
+                    ),
+                ),
+            ),
+        )
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Completion.create(
+                    current.identity,
+                    EditorRange(insertionOffset - 3, insertionOffset + 1),
+                    listOf(CompletionItem("candidate", "candidate", CompletionKind.Function)),
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                IdeVisibleLatencyKind.Presentation to 1L,
+                IdeVisibleLatencyKind.AutomaticCompletion to 1L,
+            ),
+            latency.published.takeLast(2),
+        )
+    }
+
+    @Test
+    fun `rebased provisional and stale results publish no fresh latency event`() {
+        val latency = RecordingVisibleLatencyTrace()
+        val fixture = fixture("val answer = 42", latency)
+        val initial = fixture.open()
+        val token = SemanticToken(path(), EditorRange(4, 10), SemanticCategory.LocalVariable)
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Presentation(
+                    initial.identity,
+                    SnapshotPresentation.create(
+                        initial.identity,
+                        mapOf(path() to fixture.text.length),
+                        semanticTokens = listOf(token),
+                    ),
+                ),
+            ),
+        )
+        latency.published.clear()
+
+        fixture.coordinator.sourceChanged(
+            fixture.project,
+            path(),
+            "xval answer = 42",
+            documentRevision = 1,
+            insertedText = "x",
+            caretOffsetUtf16 = 1,
+            change = insertion(0, 0, 1),
+        )
+        assertTrue(assertIs<IdeAnalysisState.Active>(fixture.coordinator.state()).presentation.semanticTokens.isNotEmpty())
+        assertTrue(latency.published.isEmpty())
+
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Presentation(
+                    initial.identity,
+                    SnapshotPresentation.create(
+                        initial.identity,
+                        mapOf(path() to "val answer = 42".length),
+                        semanticTokens = listOf(token),
+                    ),
+                ),
+            ),
+        )
+        assertTrue(latency.published.isEmpty())
+    }
+
+    @Test
+    fun `accepted completion starts its edit trace before rebuilding analysis`() {
+        val latency = RecordingVisibleLatencyTrace()
+        val fixture = fixture("pr", latency)
+        val active = fixture.open()
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Completion.create(
+                    active.identity,
+                    EditorRange(0, 2),
+                    listOf(CompletionItem("println", "println", CompletionKind.Function)),
+                ),
+            ),
+        )
+        latency.events.clear()
+        fixture.requests.onSourceChanged = { snapshot ->
+            fixture.publish(
+                AnalysisClientResult.Success(
+                    AnalysisResult.Presentation(
+                        snapshot.identity,
+                        SnapshotPresentation.create(snapshot.identity, mapOf(path() to "println".length)),
+                    ),
+                ),
+            )
+        }
+
+        val accepted = assertIs<IdeCompletionAcceptance.Applied>(fixture.coordinator.acceptCompletion(EditorDocument("pr"), path()))
+
+        assertEquals(1, accepted.edit.change.newRevision)
+        assertEquals(
+            listOf(
+                VisibleLatencyEvent.EditApplied(1),
+                VisibleLatencyEvent.AnalysisPublished(IdeVisibleLatencyKind.Presentation, 1),
+            ),
+            latency.events,
+        )
+    }
+
+    @Test
+    fun `empty automatic completion terminates its trace without publication`() {
+        val latency = RecordingVisibleLatencyTrace()
+        val fixture = fixture("pr", latency)
+        fixture.open()
+        fixture.coordinator.sourceChanged(
+            fixture.project,
+            path(),
+            "pri",
+            documentRevision = 1,
+            insertedText = "i",
+            caretOffsetUtf16 = 3,
+            change = insertion(2, 0, 1),
+        )
+        val current = fixture.requests.snapshots.last()
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Completion.create(current.identity, EditorRange(0, 3), emptyList()),
+            ),
+        )
+
+        assertEquals(listOf(IdeVisibleLatencyKind.AutomaticCompletion to 1L), latency.unavailable)
+        assertTrue(IdeVisibleLatencyKind.AutomaticCompletion to 1L !in latency.published)
+    }
+
+    @Test
+    fun `analysis unavailable terminates matching traces`() {
+        val latency = RecordingVisibleLatencyTrace()
+        val fixture = fixture("pr", latency)
+        fixture.open()
+        fixture.coordinator.sourceChanged(
+            fixture.project,
+            path(),
+            "pri",
+            documentRevision = 1,
+            insertedText = "i",
+            caretOffsetUtf16 = 3,
+            change = insertion(2, 0, 1),
+        )
+
+        fixture.publish(AnalysisClientResult.Failure(AnalysisFailureKind.InternalAnalysis, "boom"))
+
+        assertEquals(
+            listOf(
+                IdeVisibleLatencyKind.Presentation to 1L,
+                IdeVisibleLatencyKind.AutomaticCompletion to 1L,
+            ),
+            latency.unavailable,
+        )
+        assertIs<IdeAnalysisState.Unavailable>(fixture.coordinator.state())
+    }
+
+    private fun fixture(
+        text: String,
+        visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
+    ) = AnalysisFixture(text, visibleLatency = visibleLatency)
 
     private fun source(text: String) =
         ProjectSnapshot.of(listOf(ProjectSource(path(), BinaryValue.of(text.encodeToByteArray()))), ANALYSIS_LIMITS)
@@ -363,6 +555,7 @@ private class AnalysisFixture(
     initialText: String,
     private val deferredInput: Boolean = false,
     private val rejectedText: String? = null,
+    visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
 ) {
     var text = initialText
     val descriptor = ProjectCatalog.open(createTempDirectory("compukters-analysis-")).create("demo")
@@ -382,6 +575,7 @@ private class AnalysisFixture(
                     snapshot(input, activePath, activeText)
                 },
             requestFactory = IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
+            visibleLatency = visibleLatency,
         )
 
     fun open(): AdmittedAnalysisSnapshot {
@@ -426,9 +620,11 @@ private class RecordingRequests : AnalysisRequestCoordinator {
     val snapshots = mutableListOf<AdmittedAnalysisSnapshot>()
     val automaticOffsets = mutableListOf<Int>()
     val manualOffsets = mutableListOf<Int>()
+    var onSourceChanged: ((AdmittedAnalysisSnapshot) -> Unit)? = null
 
     override fun sourceChanged(snapshot: AdmittedAnalysisSnapshot) {
         snapshots += snapshot
+        onSourceChanged?.invoke(snapshot)
     }
 
     override fun automaticCompletion(
@@ -447,6 +643,65 @@ private class RecordingRequests : AnalysisRequestCoordinator {
     }
 
     override fun close() = Unit
+}
+
+private class RecordingVisibleLatencyTrace : IdeVisibleLatencyTrace {
+    val edits = mutableListOf<Long>()
+    val automaticExpected = mutableListOf<Long>()
+    val published = mutableListOf<Pair<IdeVisibleLatencyKind, Long>>()
+    val observed = mutableListOf<Long>()
+    val unavailable = mutableListOf<Pair<IdeVisibleLatencyKind, Long>>()
+    val events = mutableListOf<VisibleLatencyEvent>()
+    var drops = 0
+
+    override fun editApplied(documentRevision: Long) {
+        edits += documentRevision
+        events += VisibleLatencyEvent.EditApplied(documentRevision)
+    }
+
+    override fun automaticCompletionExpected(documentRevision: Long) {
+        automaticExpected += documentRevision
+    }
+
+    override fun analysisPublished(
+        kind: IdeVisibleLatencyKind,
+        documentRevision: Long,
+    ) {
+        published += kind to documentRevision
+        events += VisibleLatencyEvent.AnalysisPublished(kind, documentRevision)
+    }
+
+    override fun controllerObserved(documentRevision: Long) {
+        observed += documentRevision
+    }
+
+    override fun frameExtracted(
+        documentRevision: Long,
+        presentationVisible: Boolean,
+        completionVisible: Boolean,
+    ) = Unit
+
+    override fun resultUnavailable(
+        kind: IdeVisibleLatencyKind,
+        documentRevision: Long,
+    ) {
+        unavailable += kind to documentRevision
+    }
+
+    override fun dropActive() {
+        drops++
+    }
+}
+
+private sealed interface VisibleLatencyEvent {
+    data class EditApplied(
+        val documentRevision: Long,
+    ) : VisibleLatencyEvent
+
+    data class AnalysisPublished(
+        val kind: IdeVisibleLatencyKind,
+        val documentRevision: Long,
+    ) : VisibleLatencyEvent
 }
 
 private fun path() = VirtualSourcePath.kotlin("src/main.kt")
