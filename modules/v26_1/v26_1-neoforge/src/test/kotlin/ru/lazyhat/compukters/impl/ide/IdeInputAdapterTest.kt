@@ -55,22 +55,137 @@ class IdeInputAdapterTest {
 
         fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_S, GLFW.GLFW_MOD_CONTROL), IdeFocusState.Editor)
         fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_B, GLFW.GLFW_MOD_CONTROL), IdeFocusState.Editor)
+        fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_F9, GLFW.GLFW_MOD_CONTROL), IdeFocusState.Editor)
         fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_SPACE, GLFW.GLFW_MOD_CONTROL), IdeFocusState.Editor)
         fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_Z, GLFW.GLFW_MOD_CONTROL), IdeFocusState.Editor)
         fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_Y, GLFW.GLFW_MOD_CONTROL), IdeFocusState.Editor)
         fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_LEFT, GLFW.GLFW_MOD_SHIFT), IdeFocusState.Editor)
+        fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_LEFT, GLFW.GLFW_MOD_ALT), IdeFocusState.Editor)
+        fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_RIGHT, GLFW.GLFW_MOD_ALT), IdeFocusState.Editor)
 
         assertEquals(
-            listOf(
+            listOf<IdeCommand>(
                 IdeCommand.Save,
+                IdeCommand.GoToDeclaration(),
                 IdeCommand.Build,
                 IdeCommand.ManualCompletion,
                 IdeCommand.Edit(IdeEditorInput.Undo),
                 IdeCommand.Edit(IdeEditorInput.Redo),
                 IdeCommand.Edit(IdeEditorInput.Move(IdeMoveDirection.Left, true)),
+                IdeCommand.NavigateBack,
+                IdeCommand.NavigateForward,
             ),
             fixture.commands,
         )
+    }
+
+    @Test
+    fun `Ctrl click navigates without first moving the caret`() {
+        val fixture = fixture()
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val editor = textEditor("answer")
+        val codeLeft = geometry.editor.left + 4 * geometry.font.cellWidth
+
+        fixture.adapter.pointerClicked(
+            codeLeft + geometry.font.cellWidth.toDouble(),
+            geometry.editor.top + 1.0,
+            GLFW.GLFW_MOD_CONTROL,
+            IdePointerContext(geometry, editor),
+        )
+
+        assertEquals(IdeCommand.GoToDeclaration(1), fixture.commands.first())
+        assertFalse(fixture.commands.any { it is IdeCommand.Edit })
+    }
+
+    @Test
+    fun `pointer mapping preserves tabs and surrogate pairs and clears outside source glyphs`() {
+        val fixture = fixture()
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val editor = textEditor("a😀\tb")
+        val codeLeft = geometry.editor.left + 4 * geometry.font.cellWidth
+        val context = IdePointerContext(geometry, editor)
+
+        fixture.adapter.pointerMoved(
+            codeLeft + 4.0 * geometry.font.cellWidth,
+            geometry.editor.top + 1.0,
+            GLFW.GLFW_MOD_CONTROL,
+            context,
+        )
+        fixture.adapter.pointerMoved(
+            codeLeft + 6.0 * geometry.font.cellWidth,
+            geometry.editor.top + 1.0,
+            0,
+            context,
+        )
+        fixture.adapter.pointerMoved(geometry.editor.right + 1.0, geometry.editor.top + 1.0, 0, context)
+
+        assertEquals(
+            listOf<IdeCommand>(
+                IdeCommand.SourcePointer(4, true),
+                IdeCommand.SourcePointer(null, false),
+                IdeCommand.SourcePointer(null, false),
+            ),
+            fixture.commands,
+        )
+    }
+
+    @Test
+    fun `chooser consumes navigation keys before completion and ordinary editor input`() {
+        val fixture = fixture()
+        val focus = IdeFocusState(IdeFocusArea.Editor, completionVisible = true, declarationChooserVisible = true)
+
+        fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_DOWN), focus)
+        fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_UP), focus)
+        fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_ENTER), focus)
+        fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_ESCAPE), focus)
+
+        assertEquals(
+            listOf(
+                IdeCommand.MoveDeclarationChoice(1),
+                IdeCommand.MoveDeclarationChoice(-1),
+                IdeCommand.AcceptDeclarationChoice,
+                IdeCommand.DismissSemanticInteraction,
+            ),
+            fixture.commands,
+        )
+    }
+
+    @Test
+    fun `completion consumes its navigation keys when no declaration chooser is open`() {
+        val fixture = fixture()
+        val focus = IdeFocusState(IdeFocusArea.Editor, completionVisible = true)
+
+        fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_DOWN), focus)
+        fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_ESCAPE), focus)
+
+        assertEquals(
+            listOf<IdeCommand>(
+                IdeCommand.Edit(IdeEditorInput.Move(IdeMoveDirection.Down, false)),
+                IdeCommand.DismissCompletion,
+            ),
+            fixture.commands,
+        )
+    }
+
+    @Test
+    fun `dialog remains modal over declaration chooser`() {
+        val fixture = fixture()
+        val dialog = IdeDialogState.Confirmation("Delete", "Permanent", 7)
+        val focus = IdeFocusState(IdeFocusArea.Editor, declarationChooserVisible = true, dialog = dialog)
+
+        fixture.adapter.keyPressed(key(GLFW.GLFW_KEY_ESCAPE), focus)
+
+        assertEquals(listOf<IdeCommand>(IdeCommand.CancelDialog), fixture.commands)
+    }
+
+    @Test
+    fun `releasing either control key clears semantic link state`() {
+        val fixture = fixture()
+
+        assertTrue(fixture.adapter.keyReleased(key(GLFW.GLFW_KEY_LEFT_CONTROL)))
+        assertTrue(fixture.adapter.keyReleased(key(GLFW.GLFW_KEY_RIGHT_CONTROL)))
+
+        assertEquals(listOf<IdeCommand>(IdeCommand.ControlReleased, IdeCommand.ControlReleased), fixture.commands)
     }
 
     @Test
@@ -303,6 +418,25 @@ class IdeInputAdapterTest {
         key: Int,
         modifiers: Int = 0,
     ) = KeyEvent(key, 0, modifiers)
+
+    private fun textEditor(text: String) =
+        IdeEditorView.Text(
+            ProjectPath.file("src/main.kt"),
+            listOf(text),
+            listOf(0),
+            0,
+            0,
+            1,
+            0,
+            null,
+            null,
+            0,
+            0,
+            false,
+            false,
+            KotlinLexicalSnapshot(0, emptyList()),
+            IdeAnalysisState.Idle,
+        )
 
     private data class Fixture(
         val commands: MutableList<IdeCommand>,

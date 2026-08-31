@@ -17,6 +17,8 @@ import net.minecraft.client.input.KeyEvent
 import org.lwjgl.glfw.GLFW
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.analysis.IDE_COMPLETION_VISIBLE_ROWS
+import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
+import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticInteraction
 import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeConflictAction
@@ -46,6 +48,7 @@ enum class IdeFocusArea { Editor, Tree, Panel, Terminal, None }
 data class IdeFocusState(
     val area: IdeFocusArea,
     val completionVisible: Boolean = false,
+    val declarationChooserVisible: Boolean = false,
     val dialog: IdeDialogState? = null,
 ) {
     companion object {
@@ -105,20 +108,29 @@ class IdeInputAdapter(
         focus: IdeFocusState,
     ): Boolean {
         focus.dialog?.let { return dialogKey(event, it) }
+        if (focus.declarationChooserVisible) chooserKey(event)?.let { return dispatch(it) }
         if (focus.completionVisible) completionKey(event)?.let { return dispatch(it) }
         if (focus.area != IdeFocusArea.Editor) return false
         if (event.isPaste) return dispatchType(boundedClipboard(clipboard.text()))
         val control = event.modifiers() and GLFW.GLFW_MOD_CONTROL != 0
+        val alt = event.modifiers() and GLFW.GLFW_MOD_ALT != 0
         val shift = event.modifiers() and GLFW.GLFW_MOD_SHIFT != 0
         val command =
             if (control) {
                 when (event.key()) {
                     GLFW.GLFW_KEY_S -> IdeCommand.Save
-                    GLFW.GLFW_KEY_B -> IdeCommand.Build
+                    GLFW.GLFW_KEY_B -> IdeCommand.GoToDeclaration()
+                    GLFW.GLFW_KEY_F9 -> IdeCommand.Build
                     GLFW.GLFW_KEY_SPACE -> IdeCommand.ManualCompletion
                     GLFW.GLFW_KEY_Z -> IdeCommand.Edit(IdeEditorInput.Undo)
                     GLFW.GLFW_KEY_Y -> IdeCommand.Edit(IdeEditorInput.Redo)
                     GLFW.GLFW_KEY_A -> IdeCommand.Edit(IdeEditorInput.SelectAll)
+                    else -> null
+                }
+            } else if (alt) {
+                when (event.key()) {
+                    GLFW.GLFW_KEY_LEFT -> IdeCommand.NavigateBack
+                    GLFW.GLFW_KEY_RIGHT -> IdeCommand.NavigateForward
                     else -> null
                 }
             } else {
@@ -134,6 +146,13 @@ class IdeInputAdapter(
         if (focus.dialog != null || focus.area != IdeFocusArea.Editor) return false
         return dispatchType(event.codepointAsString())
     }
+
+    fun keyReleased(event: KeyEvent): Boolean =
+        if (event.key() == GLFW.GLFW_KEY_LEFT_CONTROL || event.key() == GLFW.GLFW_KEY_RIGHT_CONTROL) {
+            dispatch(IdeCommand.ControlReleased)
+        } else {
+            false
+        }
 
     fun pointerActivity() {
         sink.dispatch(IdeCommand.PointerActivity)
@@ -229,7 +248,13 @@ class IdeInputAdapter(
             val editor = context.editor
             if (editor != null) {
                 val offset = editorOffset(x, y, editor, geometry) ?: return true
-                sink.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(offset, modifiers and GLFW.GLFW_MOD_SHIFT != 0)))
+                val control = modifiers and GLFW.GLFW_MOD_CONTROL != 0
+                val shift = modifiers and GLFW.GLFW_MOD_SHIFT != 0
+                if (control && !shift) {
+                    sink.dispatch(IdeCommand.GoToDeclaration(offset))
+                } else {
+                    sink.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(offset, shift)))
+                }
             } else if (context.projects.isNotEmpty()) {
                 val row = ((y - geometry.editor.top - START_ROWS_TOP).toInt() / UI_LINE_HEIGHT)
                 context.projects.getOrNull(row)?.let { sink.dispatch(IdeCommand.OpenProject(it.directoryName)) }
@@ -266,6 +291,22 @@ class IdeInputAdapter(
             return true
         }
         return false
+    }
+
+    fun pointerMoved(
+        x: Double,
+        y: Double,
+        modifiers: Int,
+        context: IdePointerContext,
+    ) {
+        val geometry = context.geometry
+        val interaction = (context.editor?.analysis as? IdeAnalysisState.Active)?.interaction
+        if (interaction is IdeSemanticInteraction.Chooser) return
+        val offset =
+            context.editor
+                ?.takeIf { geometry.editor.contains(x, y) }
+                ?.let { editorOffset(x, y, it, geometry, sourceGlyphOnly = true) }
+        sink.dispatch(IdeCommand.SourcePointer(offset, modifiers and GLFW.GLFW_MOD_CONTROL != 0))
     }
 
     private fun activate(
@@ -408,6 +449,15 @@ class IdeInputAdapter(
             else -> null
         }
 
+    private fun chooserKey(event: KeyEvent): IdeCommand? =
+        when (event.key()) {
+            GLFW.GLFW_KEY_ESCAPE -> IdeCommand.DismissSemanticInteraction
+            GLFW.GLFW_KEY_ENTER -> IdeCommand.AcceptDeclarationChoice
+            GLFW.GLFW_KEY_UP -> IdeCommand.MoveDeclarationChoice(-1)
+            GLFW.GLFW_KEY_DOWN -> IdeCommand.MoveDeclarationChoice(1)
+            else -> null
+        }
+
     private fun editorKey(
         key: Int,
         shift: Boolean,
@@ -488,6 +538,7 @@ class IdeInputAdapter(
         y: Double,
         editor: IdeEditorView.Text,
         geometry: IdeRenderGeometry,
+        sourceGlyphOnly: Boolean = false,
     ): Int? {
         val font = geometry.font
         val gutterDigits =
@@ -496,10 +547,12 @@ class IdeInputAdapter(
                 .length
                 .coerceAtLeast(2)
         val codeLeft = geometry.editor.left + (gutterDigits + 2) * font.cellWidth
+        if (sourceGlyphOnly && x < codeLeft) return null
         val row = ((y - geometry.editor.top).toInt() / font.cellHeight)
         val line = editor.visibleLines.getOrNull(row) ?: return null
         val lineStart = editor.visibleLineStartsUtf16[row]
         val requestedColumn = editor.firstVisibleColumn + ((x - codeLeft).toInt() / font.cellWidth).coerceAtLeast(0)
+        if (sourceGlyphOnly && requestedColumn !in editor.firstVisibleColumn until line.visualWidth()) return null
         var offset = 0
         var column = 0
         while (offset < line.length && column < requestedColumn) {
@@ -510,6 +563,17 @@ class IdeInputAdapter(
             offset += Character.charCount(codePoint)
         }
         return lineStart + offset
+    }
+
+    private fun String.visualWidth(): Int {
+        var offset = 0
+        var column = 0
+        while (offset < length) {
+            val codePoint = codePointAt(offset)
+            column = if (codePoint == '\t'.code) column + TAB_WIDTH - column % TAB_WIDTH else column + 1
+            offset += Character.charCount(codePoint)
+        }
+        return column
     }
 
     private fun IdeRect.contains(

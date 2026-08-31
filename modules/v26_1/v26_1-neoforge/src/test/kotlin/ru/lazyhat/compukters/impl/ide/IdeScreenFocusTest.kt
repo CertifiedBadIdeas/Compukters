@@ -98,6 +98,7 @@ class IdeScreenFocusTest {
     @Test
     fun `IDE screen owns mouse focus policy`() {
         assertNotNull(IdeScreen::class.java.declaredMethods.singleOrNull { it.name == "mouseClicked" && it.parameterCount == 2 })
+        assertNotNull(IdeScreen::class.java.declaredMethods.singleOrNull { it.name == "mouseMoved" && it.parameterCount == 2 })
     }
 
     @Test
