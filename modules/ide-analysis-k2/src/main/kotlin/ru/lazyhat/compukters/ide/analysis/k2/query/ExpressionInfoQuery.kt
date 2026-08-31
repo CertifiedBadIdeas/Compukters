@@ -30,7 +30,6 @@ import org.jetbrains.kotlin.types.Variance
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisResultLimits
-import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.EditorExpressionInfo
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
@@ -68,11 +67,9 @@ internal object ExpressionInfoQuery {
                             ?.render(KaDeclarationRendererForSource.WITH_QUALIFIED_NAMES)
                             ?.let { value -> requiredBoundedUtf8(value, limits.detailTextBytes, "callable signature") }
                     val origin =
-                        if (symbol?.psi?.containingFile in snapshot.files.values) {
-                            DeclarationOrigin.Project
-                        } else {
-                            null
-                        }
+                        symbol
+                            ?.let { resolved -> DeclarationOriginMapper.run { map(resolved, snapshot) } }
+                            ?.let { mapped -> DeclarationOriginMapper.run { mapped.origin() } }
                     EditorExpressionInfo(
                         query.path,
                         EditorRange(expression.textRange.startOffset, expression.textRange.endOffset),
