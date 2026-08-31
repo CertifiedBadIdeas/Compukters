@@ -18,10 +18,14 @@
 
 package ru.lazyhat.compukters.impl.ide
 
+import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnostic
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
+import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationTarget
+import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticAnchor
+import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticInteraction
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.files.IdeComputerChildren
 import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
@@ -67,13 +71,15 @@ enum class IdeTextKind {
     Binary,
     Dialog,
     Completion,
+    Hover,
+    DeclarationChoice,
 }
 
 enum class IdeTextRotation { None, Clockwise90 }
 
-enum class IdeFillKind { Background, Border, Selection, DropTarget, Caret, Splitter, DialogScrim }
+enum class IdeFillKind { Background, Border, Selection, DropTarget, Caret, Splitter, HyperlinkUnderline, DialogScrim }
 
-enum class IdeScissorKind { Tree, Editor, Diagnostics, Completion }
+enum class IdeScissorKind { Tree, Editor, Diagnostics, Completion, SemanticPopup }
 
 enum class IdeHitAction {
     CreateProject,
@@ -92,6 +98,7 @@ enum class IdeHitAction {
     RefreshComputer,
     Confirm,
     Dismiss,
+    DeclarationChoice,
 }
 
 enum class IdeFocusGroup { Page, Dialog }
@@ -152,6 +159,7 @@ data class IdeHitTarget(
     val focusGroup: IdeFocusGroup,
     val zIndex: Int,
     val selected: Boolean = false,
+    val choiceIndex: Int? = null,
 )
 
 data class IdeDrawModel(
@@ -498,7 +506,19 @@ internal object IdeRenderer {
                     fills += IdeFillDraw(IdeFillKind.Caret, IdeRect(x, y, x + 1, y + font.cellHeight), IdeColors.CARET, Z_CARET)
                 }
             }
-            completion(editor, codeLeft)
+            val active = editor.analysis as? IdeAnalysisState.Active
+            when (val interaction = active?.interaction) {
+                is IdeSemanticInteraction.Chooser -> {
+                    semanticChooser(editor, codeLeft, interaction)
+                }
+
+                else -> {
+                    completion(editor, codeLeft)
+                    if (active?.completion == null && interaction is IdeSemanticInteraction.Hover) {
+                        semanticHover(editor, codeLeft, interaction)
+                    }
+                }
+            }
         }
 
         private fun selection(
@@ -529,6 +549,10 @@ internal object IdeRenderer {
             if (line.isEmpty()) return
             val lexical = editor.lexical.lines.getOrNull(lineIndex)
             val semantic = (editor.analysis as? IdeAnalysisState.Active)?.presentation
+            val link =
+                ((editor.analysis as? IdeAnalysisState.Active)?.interaction as? IdeSemanticInteraction.Link)
+                    ?.takeIf { it.anchor.path.value == editor.path?.value }
+                    ?.anchor
             val projectPath = editor.path
             val boundaries = sortedSetOf(0, line.length)
             lexical?.spans?.forEach { span ->
@@ -543,6 +567,10 @@ internal object IdeRenderer {
                     boundaries += (token.range.startUtf16 - lineStart).coerceIn(0, line.length)
                     boundaries += (token.range.endUtf16 - lineStart).coerceIn(0, line.length)
                 }
+            link?.tokenRange?.let { range ->
+                boundaries += (range.startUtf16 - lineStart).coerceIn(0, line.length)
+                boundaries += (range.endUtf16 - lineStart).coerceIn(0, line.length)
+            }
             boundaries.zipWithNext().forEach { (start, end) ->
                 if (end <= start) return@forEach
                 val lexicalKind = lexical?.spans?.firstOrNull { start >= it.startUtf16 && start < it.endUtf16 }?.kind
@@ -559,17 +587,182 @@ internal object IdeRenderer {
                         ?: lexicalKind?.let(IdeTextStyle::Lexical)
                         ?: IdeTextStyle.Plain
                 val x = codeLeft + (visualColumns(line.substring(0, start)) - editor.firstVisibleColumn) * font.cellWidth
+                val absoluteRange = EditorRange(lineStart + start, lineStart + end)
+                val linked =
+                    link?.tokenRange?.let { absoluteRange.startUtf16 >= it.startUtf16 && absoluteRange.endUtf16 <= it.endUtf16 } == true
                 code(
                     IdeTextKind.Source,
                     projectGlyphs(line.substring(start, end)),
                     x,
                     y,
-                    styleColor(resolved),
+                    if (linked) IdeColors.HYPERLINK else styleColor(resolved),
                     geometry.editor,
                     resolved,
-                    EditorRange(lineStart + start, lineStart + end),
+                    absoluteRange,
+                )
+                if (linked) hyperlinkUnderline(x, line.substring(start, end), y)
+            }
+        }
+
+        private fun hyperlinkUnderline(
+            x: Int,
+            value: String,
+            textY: Int,
+        ) {
+            val left = maxOf(x, geometry.editor.left)
+            val right = minOf(x + visualColumns(value) * font.cellWidth, geometry.editor.right)
+            if (right <= left) return
+            val top = (textY - font.glyphDrawOffsetY + font.cellHeight - 1).coerceIn(geometry.editor.top, geometry.editor.bottom - 1)
+            fills +=
+                IdeFillDraw(
+                    IdeFillKind.HyperlinkUnderline,
+                    IdeRect(left, top, right, top + 1),
+                    IdeColors.HYPERLINK,
+                    Z_TEXT,
+                )
+        }
+
+        private fun semanticHover(
+            editor: IdeEditorView.Text,
+            codeLeft: Int,
+            hover: IdeSemanticInteraction.Hover,
+        ) {
+            val anchor = sourceAnchor(editor, codeLeft, hover.anchor) ?: return
+            val lines =
+                buildList {
+                    hover.info.signature?.let(::add)
+                    add("Type: ${hover.info.renderedType}")
+                    hover.info.origin?.let { origin ->
+                        add(
+                            when (origin) {
+                                DeclarationOrigin.Project -> "Origin: Project"
+                                is DeclarationOrigin.Bundle -> "Origin: ${origin.identity.name}"
+                            },
+                        )
+                    }
+                }.map(::popupText)
+            if (lines.isEmpty()) return
+            val requestedWidth =
+                maxOf(
+                    SEMANTIC_POPUP_MINIMUM_WIDTH,
+                    lines.maxOf(::visualColumns) * font.cellWidth + POPUP_HORIZONTAL_PADDING,
+                )
+            val popup = geometry.anchoredPopup(anchor, requestedWidth, lines.size * UI_LINE_HEIGHT + POPUP_VERTICAL_PADDING)
+            semanticPopupPanel(popup.bounds)
+            lines.forEachIndexed { index, value ->
+                ui(
+                    IdeTextKind.Hover,
+                    value,
+                    popup.bounds.left + 4,
+                    popup.bounds.top + 3 + index * UI_LINE_HEIGHT,
+                    IdeColors.TEXT,
+                    popup.bounds,
+                    Z_POPUP_TEXT,
                 )
             }
+        }
+
+        private fun semanticChooser(
+            editor: IdeEditorView.Text,
+            codeLeft: Int,
+            chooser: IdeSemanticInteraction.Chooser,
+        ) {
+            val anchor = sourceAnchor(editor, codeLeft, chooser.anchor) ?: return
+            val labels = chooser.targets.map(::declarationLabel).map(::popupText)
+            val requestedWidth =
+                maxOf(
+                    SEMANTIC_POPUP_MINIMUM_WIDTH,
+                    labels.maxOf(::visualColumns) * font.cellWidth + POPUP_HORIZONTAL_PADDING,
+                )
+            val requestedRows = minOf(DECLARATION_VISIBLE_ROWS, labels.size)
+            val popup = geometry.anchoredPopup(anchor, requestedWidth, requestedRows * UI_LINE_HEIGHT + POPUP_VERTICAL_PADDING)
+            val visibleRows = ((popup.bounds.height - POPUP_VERTICAL_PADDING) / UI_LINE_HEIGHT).coerceAtLeast(1)
+            val first = (chooser.selectedIndex - visibleRows + 1).coerceIn(0, (labels.size - visibleRows).coerceAtLeast(0))
+            val last = minOf(labels.size, first + visibleRows)
+            semanticPopupPanel(popup.bounds)
+            for (index in first until last) {
+                val row = index - first
+                val rowBounds =
+                    IdeRect(
+                        popup.bounds.left,
+                        popup.bounds.top + 2 + row * UI_LINE_HEIGHT,
+                        popup.bounds.right,
+                        minOf(popup.bounds.bottom, popup.bounds.top + 2 + (row + 1) * UI_LINE_HEIGHT),
+                    )
+                if (rowBounds.height <= 0) continue
+                val selected = index == chooser.selectedIndex
+                if (selected) {
+                    fills += IdeFillDraw(IdeFillKind.Selection, rowBounds, IdeColors.SELECTION, Z_POPUP)
+                }
+                ui(
+                    IdeTextKind.DeclarationChoice,
+                    labels[index],
+                    popup.bounds.left + 4,
+                    popup.bounds.top + 3 + row * UI_LINE_HEIGHT,
+                    if (selected) IdeColors.ACCENT else IdeColors.TEXT,
+                    popup.bounds,
+                    Z_POPUP_TEXT,
+                )
+                hitTargets +=
+                    IdeHitTarget(
+                        IdeHitAction.DeclarationChoice,
+                        rowBounds,
+                        enabled = true,
+                        tooltip = null,
+                        focusGroup = IdeFocusGroup.Page,
+                        zIndex = Z_POPUP_TEXT,
+                        selected = selected,
+                        choiceIndex = index,
+                    )
+            }
+        }
+
+        private fun semanticPopupPanel(bounds: IdeRect) {
+            panel(IdePanelKind.Dialog, bounds, IdeColors.PANEL_ALT, Z_POPUP)
+            scissors += IdeScissorDraw(IdeScissorKind.SemanticPopup, bounds, Z_POPUP)
+        }
+
+        private fun sourceAnchor(
+            editor: IdeEditorView.Text,
+            codeLeft: Int,
+            anchor: IdeSemanticAnchor,
+        ): IdeRect? {
+            val visibleIndex = editor.visibleLineStartsUtf16.indexOfLast { it <= anchor.tokenRange.startUtf16 }
+            if (visibleIndex !in editor.visibleLines.indices) return null
+            val line = editor.visibleLines[visibleIndex]
+            val lineStart = editor.visibleLineStartsUtf16[visibleIndex]
+            val localStart = anchor.tokenRange.startUtf16 - lineStart
+            if (localStart !in 0..line.length) return null
+            val localEnd = (anchor.tokenRange.endUtf16 - lineStart).coerceIn(localStart, line.length)
+            val left = codeLeft + (visualColumns(line.substring(0, localStart)) - editor.firstVisibleColumn) * font.cellWidth
+            val right =
+                maxOf(
+                    left + font.cellWidth,
+                    codeLeft + (visualColumns(line.substring(0, localEnd)) - editor.firstVisibleColumn) * font.cellWidth,
+                )
+            val top = geometry.editor.top + visibleIndex * font.cellHeight
+            return IdeRect(left, top, right, top + font.cellHeight)
+        }
+
+        private fun declarationLabel(target: IdeDeclarationTarget): String =
+            when (target) {
+                is IdeDeclarationTarget.Project -> "Project · ${target.path.value}"
+                is IdeDeclarationTarget.AttachedSource -> "${target.bundle.name} · ${target.path.value}"
+            }
+
+        private fun popupText(value: String): String {
+            val maximumColumns = (geometry.editor.width / font.cellWidth - 2).coerceAtLeast(1)
+            if (visualColumns(value) <= maximumColumns) return value
+            val result = StringBuilder(minOf(value.length, maximumColumns))
+            var offset = 0
+            var columns = 0
+            while (offset < value.length && columns < maximumColumns - 1) {
+                val codePoint = value.codePointAt(offset)
+                result.appendCodePoint(codePoint)
+                offset += Character.charCount(codePoint)
+                columns++
+            }
+            return result.append('…').toString()
         }
 
         private fun completion(
@@ -1003,6 +1196,10 @@ internal object IdeRenderer {
     private const val UI_LINE_HEIGHT = 12
     private const val COMPLETION_MINIMUM_WIDTH = 220
     private const val COMPLETION_HORIZONTAL_PADDING = 8
+    private const val SEMANTIC_POPUP_MINIMUM_WIDTH = 180
+    private const val POPUP_HORIZONTAL_PADDING = 8
+    private const val POPUP_VERTICAL_PADDING = 4
+    private const val DECLARATION_VISIBLE_ROWS = 8
     private const val NO_TARGET = "No target attached"
     private const val TERMINAL_UNAVAILABLE = "Target terminal is unavailable"
     private const val TERMINAL_TOOL_HEIGHT = 72

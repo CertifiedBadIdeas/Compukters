@@ -240,6 +240,17 @@ class IdeInputAdapter(
             .asReversed()
             .firstOrNull { it.enabled && it.bounds.contains(x, y) }
             ?.let { target ->
+                if (target.action == IdeHitAction.DeclarationChoice) {
+                    val chooser =
+                        ((context.editor?.analysis as? IdeAnalysisState.Active)?.interaction as? IdeSemanticInteraction.Chooser)
+                    val index = target.choiceIndex
+                    if (chooser != null && index != null) {
+                        sink.dispatch(IdeCommand.MoveDeclarationChoice(index - chooser.selectedIndex))
+                        sink.dispatch(IdeCommand.AcceptDeclarationChoice)
+                        pointerActivity()
+                        return true
+                    }
+                }
                 val handled = activate(target.action, context.dialog)
                 if (handled) pointerActivity()
                 return handled
@@ -374,6 +385,10 @@ class IdeInputAdapter(
 
             IdeHitAction.RefreshComputer -> {
                 dispatch(IdeCommand.RefreshComputerTree)
+            }
+
+            IdeHitAction.DeclarationChoice -> {
+                false
             }
         }
 

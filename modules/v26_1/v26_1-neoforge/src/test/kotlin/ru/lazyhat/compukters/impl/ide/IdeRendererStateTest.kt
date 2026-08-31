@@ -21,18 +21,25 @@ package ru.lazyhat.compukters.impl.ide
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
+import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
+import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnostic
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
+import ru.lazyhat.compukters.ide.analysis.EditorExpressionInfo
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
 import ru.lazyhat.compukters.ide.analysis.SemanticToken
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotId
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisPresentation
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionState
+import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationTarget
+import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticAnchor
+import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticInteraction
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.build.IdeBuiltArtifact
 import ru.lazyhat.compukters.ide.client.files.IdeComputerChildren
@@ -181,6 +188,90 @@ class IdeRendererStateTest {
         assertEquals(listOf("Example warning"), model.text.filter { it.kind == IdeTextKind.Diagnostic }.map { it.value })
         assertTrue(model.scissors.any { it.kind == IdeScissorKind.Editor })
         assertTrue(model.text.filter { it.kind == IdeTextKind.TreeRow }.any { "main.kt" in it.value })
+    }
+
+    @Test
+    fun `confirmed declaration link has exact hyperlink draw and clipped underline`() {
+        val source = "val answer = sample"
+        val range = EditorRange(4, 10)
+        val editor =
+            semanticEditor(source) { identity, path ->
+                IdeSemanticInteraction.Link(
+                    IdeSemanticAnchor(identity, path, 0, 6, range),
+                    listOf(DeclarationLocation.Source(DeclarationOrigin.Project, path, range)),
+                )
+            }
+
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry())
+        val linked = model.text.single { it.sourceRange == range }
+
+        assertEquals(IdeColors.HYPERLINK, linked.color)
+        assertTrue(
+            model.fills.any {
+                it.kind == IdeFillKind.HyperlinkUnderline &&
+                    it.bounds.left == linked.x &&
+                    it.bounds.right <= geometry().editor.right
+            },
+        )
+    }
+
+    @Test
+    fun `hover popup contains signature type and bundle origin below modal dialogs`() {
+        val source = "val answer = sample"
+        val range = EditorRange(4, 10)
+        val bundle = AnalysisBundleIdentity("std.core", Hash256.of(ByteArray(32) { 4 }))
+        val editor =
+            semanticEditor(source) { identity, path ->
+                IdeSemanticInteraction.Hover(
+                    IdeSemanticAnchor(identity, path, 0, 6, range),
+                    EditorExpressionInfo(path, range, "kotlin.Int", "val answer: kotlin.Int", DeclarationOrigin.Bundle(bundle)),
+                )
+            }
+        val state =
+            workspaceState(editor, IdeBuildState.Idle).copy(
+                dialog = IdeDialogState.Confirmation("Delete", "Permanent", 7),
+            )
+
+        val model = IdeRenderer.extract(state, geometry())
+        val hover = model.text.filter { it.kind == IdeTextKind.Hover }
+
+        assertTrue(hover.any { it.value == "val answer: kotlin.Int" })
+        assertTrue(hover.any { "kotlin.Int" in it.value })
+        assertTrue(hover.any { "std.core" in it.value })
+        assertTrue(hover.maxOf { it.zIndex } < model.text.filter { it.kind == IdeTextKind.Dialog }.minOf { it.zIndex })
+        assertTrue(
+            hover.all {
+                requireNotNull(it.clip).let { clip ->
+                    clip.left >= geometry().editor.left &&
+                        clip.right <= geometry().editor.right
+                }
+            },
+        )
+    }
+
+    @Test
+    fun `declaration chooser renders bounded selected rows with mouse hit metadata`() {
+        val source = "val answer = sample"
+        val range = EditorRange(4, 10)
+        val editor =
+            semanticEditor(source) { identity, path ->
+                IdeSemanticInteraction.Chooser(
+                    IdeSemanticAnchor(identity, path, 0, 6, range),
+                    (0 until 12).map { index ->
+                        IdeDeclarationTarget.Project(ProjectPath.file("src/Target$index.kt"), EditorRange(0, 3))
+                    },
+                    selectedIndex = 10,
+                    maximumTargets = 64,
+                )
+            }
+
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry())
+        val rows = model.text.filter { it.kind == IdeTextKind.DeclarationChoice }
+
+        assertEquals(8, rows.size)
+        assertEquals(IdeColors.ACCENT, rows.last().color)
+        assertEquals((3..10).toList(), model.hitTargets.filter { it.action == IdeHitAction.DeclarationChoice }.map { it.choiceIndex })
+        assertTrue(model.scissors.any { it.kind == IdeScissorKind.SemanticPopup })
     }
 
     @Test
@@ -542,6 +633,42 @@ class IdeRendererStateTest {
             IdeTargetCapabilities(writableFileSystem = true, canonicalInput = true, terminal = terminal),
             "Computer",
         )
+
+    private fun semanticEditor(
+        source: String,
+        interaction: (AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeSemanticInteraction,
+    ): IdeEditorView.Text {
+        val document = EditorDocument(source)
+        val lexical = IncrementalKotlinHighlighter(document).use { it.snapshot() }
+        val identity = AnalysisSnapshotIdentity(SourceSnapshotId(Hash256.zero()), AnalysisProfileIdentity(Hash256.zero()))
+        val path = ProjectPath.file("src/main.kt")
+        val virtualPath = VirtualSourcePath.kotlin(path.value)
+        return IdeEditorView.Text(
+            path = path,
+            visibleLines = listOf(source),
+            visibleLineStartsUtf16 = listOf(0),
+            firstVisibleLine = 0,
+            firstVisibleColumn = 0,
+            totalLines = 1,
+            caretUtf16 = 0,
+            selectionStartUtf16 = null,
+            selectionEndUtf16 = null,
+            contentRevision = 0,
+            persistedContentRevision = 0,
+            dirty = false,
+            conflict = false,
+            lexical = lexical,
+            analysis =
+                IdeAnalysisState.Active(
+                    identity,
+                    virtualPath,
+                    0,
+                    IdeAnalysisPresentation.Empty,
+                    completion = null,
+                    interaction = interaction(identity, virtualPath),
+                ),
+        )
+    }
 
     private fun geometry(font: TerminalFontProfile = TerminalFontProfile.DINA) =
         IdeRenderGeometry.compute(960, 540, 180, 120, true, true, font)

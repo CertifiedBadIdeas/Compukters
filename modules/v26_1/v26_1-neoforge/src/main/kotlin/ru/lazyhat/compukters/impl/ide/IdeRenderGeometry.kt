@@ -44,12 +44,15 @@ sealed interface IdeGeometryFallback {
     data object Unsupported : IdeGeometryFallback
 }
 
-enum class CompletionPopupPlacement { Above, Below }
+enum class AnchoredPopupPlacement { Above, Below }
 
-data class CompletionPopupGeometry(
+data class AnchoredPopupGeometry(
     val bounds: IdeRect,
-    val placement: CompletionPopupPlacement,
+    val placement: AnchoredPopupPlacement,
 )
+
+typealias CompletionPopupPlacement = AnchoredPopupPlacement
+typealias CompletionPopupGeometry = AnchoredPopupGeometry
 
 class IdeRenderGeometry private constructor(
     val viewport: IdeRect,
@@ -90,27 +93,33 @@ class IdeRenderGeometry private constructor(
         caret: IdeRect,
         requestedWidth: Int,
         requestedHeight: Int,
-    ): CompletionPopupGeometry {
-        check(supported) { "completion popup is unavailable for unsupported geometry" }
-        require(requestedWidth > 0 && requestedHeight > 0) { "completion popup size must be positive" }
+    ): CompletionPopupGeometry = anchoredPopup(caret, requestedWidth, requestedHeight)
+
+    fun anchoredPopup(
+        anchor: IdeRect,
+        requestedWidth: Int,
+        requestedHeight: Int,
+    ): AnchoredPopupGeometry {
+        check(supported) { "anchored popup is unavailable for unsupported geometry" }
+        require(requestedWidth > 0 && requestedHeight > 0) { "anchored popup size must be positive" }
         val width = minOf(requestedWidth, editor.width)
-        val spaceBelow = (editor.bottom - caret.bottom).coerceAtLeast(0)
-        val spaceAbove = (caret.top - editor.top).coerceAtLeast(0)
+        val spaceBelow = (editor.bottom - anchor.bottom).coerceAtLeast(0)
+        val spaceAbove = (anchor.top - editor.top).coerceAtLeast(0)
         val placement =
             if (requestedHeight <= spaceBelow || spaceBelow >= spaceAbove) {
-                CompletionPopupPlacement.Below
+                AnchoredPopupPlacement.Below
             } else {
-                CompletionPopupPlacement.Above
+                AnchoredPopupPlacement.Above
             }
-        val height = minOf(requestedHeight, if (placement == CompletionPopupPlacement.Below) spaceBelow else spaceAbove)
-        val left = caret.left.coerceIn(editor.left, editor.right - width)
+        val height = minOf(requestedHeight, if (placement == AnchoredPopupPlacement.Below) spaceBelow else spaceAbove)
+        val left = anchor.left.coerceIn(editor.left, editor.right - width)
         val top =
-            if (placement == CompletionPopupPlacement.Below) {
-                caret.bottom.coerceIn(editor.top, editor.bottom - height)
+            if (placement == AnchoredPopupPlacement.Below) {
+                anchor.bottom.coerceIn(editor.top, editor.bottom - height)
             } else {
-                (caret.top - height).coerceIn(editor.top, editor.bottom - height)
+                (anchor.top - height).coerceIn(editor.top, editor.bottom - height)
             }
-        return CompletionPopupGeometry(IdeRect(left, top, left + width, top + height), placement)
+        return AnchoredPopupGeometry(IdeRect(left, top, left + width, top + height), placement)
     }
 
     companion object {
