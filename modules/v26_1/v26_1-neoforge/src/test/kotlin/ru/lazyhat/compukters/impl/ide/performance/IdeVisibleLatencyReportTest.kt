@@ -123,13 +123,12 @@ class IdeVisibleLatencyReportTest {
         kind: IdeVisibleLatencyKind,
         revision: Long = 1,
         total: Long,
-    ) =
-        IdeVisibleLatencySample(
-            kind = kind,
-            documentRevision = revision,
-            analysisNanos = total.coerceAtLeast(0) / 10,
-            tickObservationNanos = total.coerceAtLeast(0) / 100,
-            renderWaitNanos = total.coerceAtLeast(0) / 50,
-            totalVisibleNanos = total,
-        )
+    ) = IdeVisibleLatencySample(
+        kind = kind,
+        documentRevision = revision,
+        analysisNanos = total.coerceAtLeast(0) / 10,
+        tickObservationNanos = total.coerceAtLeast(0) / 100,
+        renderWaitNanos = total.coerceAtLeast(0) / 50,
+        totalVisibleNanos = total,
+    )
 }

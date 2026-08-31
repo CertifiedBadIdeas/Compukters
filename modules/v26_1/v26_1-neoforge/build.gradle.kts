@@ -145,6 +145,26 @@ dependencies {
     add(gameTest.implementationConfigurationName, project(path = projects.v261Common.path))
 }
 
+tasks.test {
+    filter.excludeTestsMatching("ru.lazyhat.compukters.impl.ide.performance.IdeVisibleLatencyPerformanceTest")
+}
+
+val visibleIdeLatencyPerformanceTest =
+    tasks.register<Test>("visibleIdeLatencyPerformanceTest") {
+        description = "Runs machine-sensitive first-visible-frame IDE latency SLO checks."
+        group = "verification"
+        useJUnitPlatform()
+        dependsOn(tasks.named(sourceSets.test.get().classesTaskName), ":v26_1-common:processResources")
+        testClassesDirs = sourceSets.test.get().output.classesDirs
+        classpath = sourceSets.test.get().runtimeClasspath
+        maxHeapSize = "512m"
+        filter {
+            includeTestsMatching("ru.lazyhat.compukters.impl.ide.performance.IdeVisibleLatencyPerformanceTest")
+            isFailOnNoMatchingTests = true
+        }
+        mustRunAfter(tasks.test)
+    }
+
 data class TerminalFontBuildSpec(
     val id: String,
     val taskStem: String,
