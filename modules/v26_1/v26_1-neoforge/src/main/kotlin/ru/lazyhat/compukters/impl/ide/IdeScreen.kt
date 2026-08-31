@@ -28,6 +28,7 @@ import org.joml.Matrix3x2fStack
 import org.lwjgl.glfw.GLFW
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
+import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticInteraction
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
@@ -95,6 +96,9 @@ internal class IdeScreen(
     private var selectedTreePath: ProjectPath? = null
     private var returningToParent = false
     private var sessionClosed = false
+    private var controlDown = false
+    private var pointerX: Double? = null
+    private var pointerY: Double? = null
 
     override fun setInitialFocus() = Unit
 
@@ -213,7 +217,34 @@ internal class IdeScreen(
             super.mouseScrolled(uiMouseX, uiMouseY, scrollX, scrollY)
     }
 
+    override fun mouseMoved(
+        mouseX: Double,
+        mouseY: Double,
+    ) {
+        val viewport = viewport()
+        if (viewport.supported) {
+            val uiX = viewport.toVirtualX(mouseX)
+            val uiY = viewport.toVirtualY(mouseY)
+            pointerX = uiX
+            pointerY = uiY
+            val modifiers = if (controlDown) GLFW.GLFW_MOD_CONTROL else 0
+            input.pointerMoved(
+                uiX,
+                uiY,
+                modifiers,
+                pointerContext(geometry()),
+            )
+        }
+        super.mouseMoved(mouseX, mouseY)
+    }
+
     override fun keyPressed(event: KeyEvent): Boolean {
+        if (
+            event.key() == GLFW.GLFW_KEY_LEFT_CONTROL || event.key() == GLFW.GLFW_KEY_RIGHT_CONTROL ||
+            event.modifiers() and GLFW.GLFW_MOD_CONTROL != 0
+        ) {
+            controlDown = true
+        }
         if (!viewport().supported) return if (event.key() == GLFW.GLFW_KEY_ESCAPE) super.keyPressed(event) else true
         if (prompt.state != null) {
             return when {
@@ -228,13 +259,23 @@ internal class IdeScreen(
         if (event.key() == GLFW.GLFW_KEY_ESCAPE && input.cancelExplorerDrag()) return true
         if (splitters.captured) return true
         if (focusArea == IdeFocusArea.Terminal && terminalOverlay.keyPressed(event, minecraft.keyboardHandler.clipboard)) return true
+        if (
+            focusArea == IdeFocusArea.Editor &&
+            (event.key() == GLFW.GLFW_KEY_LEFT_CONTROL || event.key() == GLFW.GLFW_KEY_RIGHT_CONTROL)
+        ) {
+            val x = pointerX
+            val y = pointerY
+            if (x != null && y != null) input.pointerMoved(x, y, GLFW.GLFW_MOD_CONTROL, pointerContext(geometry()))
+        }
         return input.keyPressed(event, focusState()) || super.keyPressed(event)
     }
 
     override fun keyReleased(event: KeyEvent): Boolean {
+        if (event.key() == GLFW.GLFW_KEY_LEFT_CONTROL || event.key() == GLFW.GLFW_KEY_RIGHT_CONTROL) controlDown = false
         if (!viewport().supported) return true
+        val semanticHandled = input.keyReleased(event)
         if (focusArea == IdeFocusArea.Terminal && terminalOverlay.keyReleased(event.key())) return true
-        return super.keyReleased(event)
+        return semanticHandled || super.keyReleased(event)
     }
 
     override fun charTyped(event: CharacterEvent): Boolean {
@@ -389,7 +430,9 @@ internal class IdeScreen(
         val state = application.controller.viewState()
         val editor = ((state.page as? IdePageState.Workspace)?.value?.editor as? IdeEditorView.Text)
         val completion = (editor?.analysis as? IdeAnalysisState.Active)?.completion != null
-        return IdeFocusState(focusArea, completion, state.dialog)
+        val chooser =
+            ((editor?.analysis as? IdeAnalysisState.Active)?.interaction as? IdeSemanticInteraction.Chooser) != null
+        return IdeFocusState(focusArea, completion, chooser, state.dialog)
     }
 
     private fun pointerContext(geometry: IdeRenderGeometry): IdePointerContext {
