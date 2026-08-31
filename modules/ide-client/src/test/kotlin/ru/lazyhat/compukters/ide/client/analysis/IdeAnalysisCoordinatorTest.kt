@@ -29,8 +29,11 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
+import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
+import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnostic
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
+import ru.lazyhat.compukters.ide.analysis.EditorExpressionInfo
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
 import ru.lazyhat.compukters.ide.analysis.SemanticToken
 import ru.lazyhat.compukters.ide.analysis.SnapshotPresentation
@@ -51,6 +54,7 @@ import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ProjectHandle
 import ru.lazyhat.compukters.ide.project.ProjectManifestCodec
+import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import java.util.concurrent.CompletableFuture
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -60,6 +64,116 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class IdeAnalysisCoordinatorTest {
+    @Test
+    fun `hover link and explicit declaration admit only their exact anchors`() {
+        val fixture = fixture("val answer = 42\nprintln(answer)")
+        val active = fixture.open()
+        val token = EditorRange(4, 10)
+
+        fixture.coordinator.pointerMoved(token, offsetUtf16 = 6, controlDown = false)
+        fixture.requests.completeHover(expressionInfo(active.identity, token))
+        assertIs<IdeSemanticInteraction.Hover>(activeState(fixture).interaction)
+
+        fixture.coordinator.pointerMoved(token, offsetUtf16 = 6, controlDown = true)
+        fixture.requests.completeProbe(declaration(active.identity, projectLocation(4, 10)))
+        assertIs<IdeSemanticInteraction.Link>(activeState(fixture).interaction)
+
+        fixture.coordinator.pointerMoved(EditorRange(24, 30), offsetUtf16 = 26, controlDown = false)
+        val pending = fixture.coordinator.goToDeclaration(token, offsetUtf16 = 6)
+        fixture.coordinator.pointerMoved(EditorRange(24, 30), offsetUtf16 = 27, controlDown = true)
+        fixture.requests.completeNavigation(declaration(active.identity, projectLocation(0, 3)))
+
+        val outcome = assertIs<IdeDeclarationOutcome.Targets>(pending.join())
+        assertEquals(listOf(IdeDeclarationTarget.Project(ProjectPath.file("src/main.kt"), EditorRange(0, 3))), outcome.values)
+    }
+
+    @Test
+    fun `confirmed Ctrl probe is reused for declaration navigation`() {
+        val fixture = fixture("val answer = 42")
+        val active = fixture.open()
+        val token = EditorRange(4, 10)
+        fixture.coordinator.pointerMoved(token, offsetUtf16 = 6, controlDown = true)
+        fixture.requests.completeProbe(declaration(active.identity, projectLocation(4, 10)))
+
+        val outcome = fixture.coordinator.goToDeclaration(token, offsetUtf16 = 6).join()
+
+        assertIs<IdeDeclarationOutcome.Targets>(outcome)
+        assertTrue(fixture.requests.navigationRequests.isEmpty())
+    }
+
+    @Test
+    fun `edits invalidate semantic interaction and reject late pointer results`() {
+        val fixture = fixture("val answer = 42")
+        val active = fixture.open()
+        fixture.coordinator.pointerMoved(EditorRange(4, 10), offsetUtf16 = 6, controlDown = false)
+
+        fixture.coordinator.sourceChanged(
+            fixture.project,
+            path(),
+            "xval answer = 42",
+            documentRevision = 1,
+            insertedText = "x",
+            caretOffsetUtf16 = 1,
+            change = insertion(0, 0, 1),
+        )
+        fixture.requests.completeHover(expressionInfo(active.identity, EditorRange(4, 10)))
+
+        assertIs<IdeSemanticInteraction.None>(activeState(fixture).interaction)
+        assertTrue(fixture.requests.pointerCancelCount > 0)
+    }
+
+    @Test
+    fun `multiple declarations publish a bounded chooser and selection can be dismissed`() {
+        val fixture = fixture("fun one() = Unit\nfun two() = Unit\nval ref = ::one")
+        val active = fixture.open()
+        val token = EditorRange(46, 49)
+        val pending = fixture.coordinator.goToDeclaration(token, offsetUtf16 = 47)
+        fixture.requests.completeNavigation(
+            AnalysisClientResult.Success(
+                AnalysisResult.Declaration.create(
+                    active.identity,
+                    listOf(projectLocation(4, 7), projectLocation(21, 24)),
+                    mapOf(path() to fixture.text.length),
+                ),
+            ),
+        )
+
+        assertIs<IdeDeclarationOutcome.Targets>(pending.join())
+        assertEquals(0, assertIs<IdeSemanticInteraction.Chooser>(activeState(fixture).interaction).selectedIndex)
+        fixture.coordinator.moveDeclarationChoice(1)
+        assertEquals(1, assertIs<IdeSemanticInteraction.Chooser>(activeState(fixture).interaction).selectedIndex)
+        assertEquals(
+            IdeDeclarationTarget.Project(ProjectPath.file("src/main.kt"), EditorRange(21, 24)),
+            fixture.coordinator.acceptDeclarationChoice(),
+        )
+        assertIs<IdeSemanticInteraction.None>(activeState(fixture).interaction)
+    }
+
+    @Test
+    fun `unavailable and failed declaration requests produce explicit bounded outcomes`() {
+        val fixture = fixture("val answer = 42")
+        val active = fixture.open()
+        val bundle =
+            ru.lazyhat.compukters.ide.analysis
+                .AnalysisBundleIdentity("std.core", hash(9))
+
+        val unavailable = fixture.coordinator.goToDeclaration(EditorRange(4, 10), 6)
+        fixture.requests.completeNavigation(
+            AnalysisClientResult.Success(
+                AnalysisResult.Declaration.create(
+                    active.identity,
+                    listOf(DeclarationLocation.SourceUnavailable(DeclarationOrigin.Bundle(bundle))),
+                    mapOf(path() to fixture.text.length),
+                ),
+            ),
+        )
+        assertEquals(IdeDeclarationOutcome.SourceUnavailable(bundle), unavailable.join())
+
+        val failed = fixture.coordinator.goToDeclaration(EditorRange(4, 10), 6)
+        fixture.requests.completeNavigation(AnalysisClientResult.Failure(AnalysisFailureKind.InternalAnalysis, "x".repeat(5_000)))
+        assertTrue(assertIs<IdeDeclarationOutcome.Failed>(failed.join()).detail.length <= 4_096)
+    }
+
     @Test
     fun `presentation rebases compatible semantic tokens and drops transient diagnostics`() {
         val otherPath = VirtualSourcePath.kotlin("src/other.kt")
@@ -549,6 +663,31 @@ class IdeAnalysisCoordinatorTest {
         newAffectedLines = 0..0,
         origin = EditorChangeOrigin.User,
     )
+
+    private fun expressionInfo(
+        identity: AnalysisSnapshotIdentity,
+        range: EditorRange,
+    ) = AnalysisClientResult.Success(
+        AnalysisResult.ExpressionInfo.create(
+            identity,
+            EditorExpressionInfo(path(), range, "kotlin.Int", "val answer: kotlin.Int", DeclarationOrigin.Project),
+            mapOf(path() to 64),
+        ),
+    )
+
+    private fun declaration(
+        identity: AnalysisSnapshotIdentity,
+        location: DeclarationLocation,
+    ) = AnalysisClientResult.Success(
+        AnalysisResult.Declaration.create(identity, listOf(location), mapOf(path() to 64)),
+    )
+
+    private fun projectLocation(
+        start: Int,
+        end: Int,
+    ) = DeclarationLocation.Source(DeclarationOrigin.Project, path(), EditorRange(start, end))
+
+    private fun activeState(fixture: AnalysisFixture) = assertIs<IdeAnalysisState.Active>(fixture.coordinator.state())
 }
 
 private class AnalysisFixture(
@@ -620,6 +759,10 @@ private class RecordingRequests : AnalysisRequestCoordinator {
     val snapshots = mutableListOf<AdmittedAnalysisSnapshot>()
     val automaticOffsets = mutableListOf<Int>()
     val manualOffsets = mutableListOf<Int>()
+    val hoverRequests = mutableListOf<CompletableFuture<AnalysisClientResult>>()
+    val probeRequests = mutableListOf<CompletableFuture<AnalysisClientResult>>()
+    val navigationRequests = mutableListOf<CompletableFuture<AnalysisClientResult>>()
+    var pointerCancelCount = 0
     var onSourceChanged: ((AdmittedAnalysisSnapshot) -> Unit)? = null
 
     override fun sourceChanged(
@@ -643,6 +786,37 @@ private class RecordingRequests : AnalysisRequestCoordinator {
     ): CompletableFuture<AnalysisClientResult> {
         manualOffsets += offsetUtf16
         return CompletableFuture()
+    }
+
+    override fun hoverInfo(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> = CompletableFuture<AnalysisClientResult>().also(hoverRequests::add)
+
+    override fun declarationProbe(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> = CompletableFuture<AnalysisClientResult>().also(probeRequests::add)
+
+    override fun declaration(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> = CompletableFuture<AnalysisClientResult>().also(navigationRequests::add)
+
+    override fun cancelPointerInteraction() {
+        pointerCancelCount++
+    }
+
+    fun completeHover(result: AnalysisClientResult) {
+        hoverRequests.last().complete(result)
+    }
+
+    fun completeProbe(result: AnalysisClientResult) {
+        probeRequests.last().complete(result)
+    }
+
+    fun completeNavigation(result: AnalysisClientResult) {
+        navigationRequests.last().complete(result)
     }
 
     override fun close() = Unit

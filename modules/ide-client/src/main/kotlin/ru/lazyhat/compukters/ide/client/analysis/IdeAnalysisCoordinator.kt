@@ -21,6 +21,8 @@ package ru.lazyhat.compukters.ide.client.analysis
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
+import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
+import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnostic
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
 import ru.lazyhat.compukters.ide.analysis.SemanticToken
@@ -29,12 +31,14 @@ import ru.lazyhat.compukters.ide.analysis.controller.AdmittedAnalysisSnapshot
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisClientResult
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisRequestCoordinator
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisResultSink
+import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
 import ru.lazyhat.compukters.ide.editor.EditorChange
 import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
 import ru.lazyhat.compukters.ide.project.ProjectHandle
+import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import java.util.Collections
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicReference
@@ -135,6 +139,7 @@ sealed interface IdeAnalysisState {
         val documentRevision: Long,
         val presentation: IdeAnalysisPresentation,
         val completion: IdeCompletionState?,
+        val interaction: IdeSemanticInteraction = IdeSemanticInteraction.None,
     ) : IdeAnalysisState
 
     data class Unavailable(
@@ -150,6 +155,7 @@ class IdeAnalysisCoordinator(
     private val snapshotFactory: IdeAnalysisSnapshotFactory,
     requestFactory: IdeAnalysisRequestFactory,
     private val visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
+    private val limits: IdeClientLimits = IdeClientLimits(),
 ) : AnalysisResultSink,
     AutoCloseable {
     private val lock = Any()
@@ -157,6 +163,9 @@ class IdeAnalysisCoordinator(
     private val requests = requestFactory.create(this)
     private var session: Session? = null
     private var version = 0L
+    private var semanticOperation = 0L
+    private var pointer: PointerInteraction? = null
+    private var navigationResult: CompletableFuture<IdeDeclarationOutcome>? = null
     private var closed = false
 
     fun state(): IdeAnalysisState = publishedState.get()
@@ -172,11 +181,13 @@ class IdeAnalysisCoordinator(
         val expectedVersion: Long
         synchronized(lock) {
             check(!closed) { "analysis coordinator is closed" }
+            invalidateSemanticLocked()
             version = Math.incrementExact(version)
             expectedVersion = version
             session = Session(project, admittedPath, text, documentRevision, text.length, null, null)
             publishedState.set(IdeAnalysisState.Loading(admittedPath, documentRevision))
         }
+        requests.cancelPointerInteraction()
         inputLoader.load(project).whenComplete { input, failure ->
             if (failure == null && input != null) {
                 acceptInput(expectedVersion, input)
@@ -201,6 +212,7 @@ class IdeAnalysisCoordinator(
         val rebuild: Rebuild?
         synchronized(lock) {
             check(!closed) { "analysis coordinator is closed" }
+            invalidateSemanticLocked()
             val current = session
             if (current == null || current.project !== project || current.path != path) {
                 open(project, path, text, documentRevision)
@@ -226,6 +238,7 @@ class IdeAnalysisCoordinator(
             publishedState.set(IdeAnalysisState.Loading(updated.path, documentRevision))
             rebuild = updated.input?.let { Rebuild(version, updated) }
         }
+        requests.cancelPointerInteraction()
         if (trigger) visibleLatency.automaticCompletionExpected(documentRevision)
         rebuild?.let { pending -> rebuild(pending.version, requireNotNull(pending.session.input)) }
     }
@@ -236,12 +249,14 @@ class IdeAnalysisCoordinator(
         synchronized(lock) {
             check(!closed) { "analysis coordinator is closed" }
             val current = session ?: return
+            invalidateSemanticLocked()
             version = Math.incrementExact(version)
             expectedVersion = version
             project = current.project
             session = current.copy(input = null, snapshot = null)
             publishedState.set(IdeAnalysisState.Loading(current.path, current.documentRevision))
         }
+        requests.cancelPointerInteraction()
         inputLoader.load(project).whenComplete { input, failure ->
             if (failure == null && input != null) {
                 acceptInput(expectedVersion, input)
@@ -262,6 +277,128 @@ class IdeAnalysisCoordinator(
         request?.let { requests.manualCompletion(it.path, it.offsetUtf16) }
     }
 
+    fun pointerMoved(
+        tokenRange: EditorRange?,
+        offsetUtf16: Int?,
+        controlDown: Boolean,
+    ) {
+        val request: PointerInteraction?
+        synchronized(lock) {
+            check(!closed) { "analysis coordinator is closed" }
+            val current = session
+            val snapshot = current?.snapshot
+            val active = publishedState.get() as? IdeAnalysisState.Active
+            if (
+                tokenRange == null || offsetUtf16 == null || current == null || snapshot == null || active == null ||
+                active.identity != snapshot.identity || active.path != current.path ||
+                active.documentRevision != current.documentRevision || !validToken(current.text, tokenRange, offsetUtf16)
+            ) {
+                invalidatePointerLocked()
+                request = null
+            } else {
+                val anchor =
+                    IdeSemanticAnchor(
+                        snapshot.identity,
+                        current.path,
+                        current.documentRevision,
+                        offsetUtf16,
+                        tokenRange,
+                    )
+                val prior = pointer
+                if (
+                    prior != null && prior.snapshot === snapshot && sameToken(prior.anchor, anchor) &&
+                    prior.controlDown == controlDown
+                ) {
+                    return
+                }
+                request = PointerInteraction(Math.incrementExact(semanticOperation), snapshot, anchor, controlDown)
+                pointer = request
+                publishedState.set(active.copy(interaction = IdeSemanticInteraction.None))
+            }
+        }
+        requests.cancelPointerInteraction()
+        request ?: return
+        val future =
+            if (request.controlDown) {
+                requests.declarationProbe(request.anchor.path, request.anchor.offsetUtf16)
+            } else {
+                requests.hoverInfo(request.anchor.path, request.anchor.offsetUtf16)
+            }
+        future.whenComplete { result, failure -> acceptPointer(request, result, failure) }
+    }
+
+    fun controlReleased() {
+        val current = synchronized(lock) { pointer?.takeIf(PointerInteraction::controlDown) } ?: return
+        pointerMoved(current.anchor.tokenRange, current.anchor.offsetUtf16, controlDown = false)
+    }
+
+    fun goToDeclaration(
+        tokenRange: EditorRange,
+        offsetUtf16: Int,
+    ): CompletableFuture<IdeDeclarationOutcome> {
+        val request: NavigationInteraction
+        synchronized(lock) {
+            check(!closed) { "analysis coordinator is closed" }
+            val current = session
+            val snapshot = current?.snapshot
+            val active = publishedState.get() as? IdeAnalysisState.Active
+            if (
+                current == null || snapshot == null || active == null || active.identity != snapshot.identity ||
+                active.path != current.path || active.documentRevision != current.documentRevision ||
+                !validToken(current.text, tokenRange, offsetUtf16)
+            ) {
+                return CompletableFuture.completedFuture(IdeDeclarationOutcome.Failed("Declaration target is stale"))
+            }
+            val anchor = IdeSemanticAnchor(snapshot.identity, current.path, current.documentRevision, offsetUtf16, tokenRange)
+            val link = active.interaction as? IdeSemanticInteraction.Link
+            if (link != null && sameToken(link.anchor, anchor)) {
+                return CompletableFuture.completedFuture(declarationOutcome(anchor, link.locations, publishChooser = true))
+            }
+            navigationResult?.cancel(false)
+            val result = CompletableFuture<IdeDeclarationOutcome>()
+            navigationResult = result
+            request = NavigationInteraction(Math.incrementExact(semanticOperation), snapshot, anchor, result)
+        }
+        requests.declaration(request.anchor.path, request.anchor.offsetUtf16).whenComplete { result, failure ->
+            acceptNavigation(request, result, failure)
+        }
+        return request.result
+    }
+
+    fun moveDeclarationChoice(delta: Int) {
+        synchronized(lock) {
+            val active = publishedState.get() as? IdeAnalysisState.Active ?: return
+            val chooser = active.interaction as? IdeSemanticInteraction.Chooser ?: return
+            val selected = (chooser.selectedIndex.toLong() + delta).coerceIn(0, chooser.targets.lastIndex.toLong()).toInt()
+            publishedState.set(
+                active.copy(
+                    interaction =
+                        IdeSemanticInteraction.Chooser(
+                            chooser.anchor,
+                            chooser.targets,
+                            selected,
+                            limits.declarationChoices,
+                        ),
+                ),
+            )
+        }
+    }
+
+    fun acceptDeclarationChoice(): IdeDeclarationTarget? =
+        synchronized(lock) {
+            val active = publishedState.get() as? IdeAnalysisState.Active ?: return@synchronized null
+            val chooser = active.interaction as? IdeSemanticInteraction.Chooser ?: return@synchronized null
+            publishedState.set(active.copy(interaction = IdeSemanticInteraction.None))
+            chooser.targets[chooser.selectedIndex]
+        }
+
+    fun dismissSemanticInteraction() {
+        synchronized(lock) {
+            invalidatePointerLocked()
+        }
+        requests.cancelPointerInteraction()
+    }
+
     fun moveCompletion(delta: Int) = updateCompletion { it.move(delta) }
 
     fun moveCompletionPage(
@@ -269,7 +406,10 @@ class IdeAnalysisCoordinator(
         pageSize: Int,
     ) = updateCompletion { it.movePage(pages, pageSize) }
 
-    fun focusLost() = dismissCompletion()
+    fun focusLost() {
+        dismissCompletion()
+        dismissSemanticInteraction()
+    }
 
     fun dismissCompletion() = updateCompletion { null }
 
@@ -307,10 +447,12 @@ class IdeAnalysisCoordinator(
     fun closeFile() {
         synchronized(lock) {
             if (closed) return
+            invalidateSemanticLocked()
             version = Math.incrementExact(version)
             session = null
             publishedState.set(IdeAnalysisState.Idle)
         }
+        requests.cancelPointerInteraction()
     }
 
     override fun publish(result: AnalysisClientResult) {
@@ -348,6 +490,7 @@ class IdeAnalysisCoordinator(
     override fun close() {
         synchronized(lock) {
             if (closed) return
+            invalidateSemanticLocked()
             closed = true
             version = Math.incrementExact(version)
             session = null
@@ -420,14 +563,15 @@ class IdeAnalysisCoordinator(
                     visibleLatency.resultUnavailable(IdeVisibleLatencyKind.Presentation, current.documentRevision)
                     return
                 }
-                val priorCompletion = (publishedState.get() as? IdeAnalysisState.Active)?.completion
+                val prior = publishedState.get() as? IdeAnalysisState.Active
                 val next =
                     IdeAnalysisState.Active(
                         snapshot.identity,
                         current.path,
                         current.documentRevision,
                         IdeAnalysisPresentation.of(accepted.diagnostics, accepted.semanticTokens),
-                        priorCompletion,
+                        prior?.completion,
+                        prior?.interaction ?: IdeSemanticInteraction.None,
                     )
                 visibleLatency.analysisPublished(IdeVisibleLatencyKind.Presentation, current.documentRevision)
                 publishedState.set(next)
@@ -471,6 +615,179 @@ class IdeAnalysisCoordinator(
             publishedState.set(active.copy(completion = transform(completion)))
         }
     }
+
+    private fun acceptPointer(
+        expected: PointerInteraction,
+        result: AnalysisClientResult?,
+        failure: Throwable?,
+    ) {
+        synchronized(lock) {
+            if (!currentPointer(expected)) return
+            val active = publishedState.get() as? IdeAnalysisState.Active ?: return
+            val interaction =
+                if (failure != null) {
+                    IdeSemanticInteraction.None
+                } else {
+                    when (result) {
+                        is AnalysisClientResult.Success -> pointerInteraction(expected, result.result)
+
+                        is AnalysisClientResult.Failure,
+                        AnalysisClientResult.Cancelled,
+                        AnalysisClientResult.Stale,
+                        null,
+                        -> IdeSemanticInteraction.None
+                    }
+                }
+            publishedState.set(active.copy(interaction = interaction))
+        }
+    }
+
+    private fun pointerInteraction(
+        expected: PointerInteraction,
+        result: AnalysisResult,
+    ): IdeSemanticInteraction {
+        if (result.identity != expected.snapshot.identity) return IdeSemanticInteraction.None
+        return if (expected.controlDown) {
+            val declaration = result as? AnalysisResult.Declaration ?: return IdeSemanticInteraction.None
+            val available = declaration.locations.filterIsInstance<DeclarationLocation.Source>()
+            if (available.isEmpty()) IdeSemanticInteraction.None else IdeSemanticInteraction.Link(expected.anchor, available)
+        } else {
+            val info = (result as? AnalysisResult.ExpressionInfo)?.value ?: return IdeSemanticInteraction.None
+            if (
+                info.path != expected.anchor.path ||
+                expected.anchor.offsetUtf16 !in info.range.startUtf16 until info.range.endUtf16
+            ) {
+                IdeSemanticInteraction.None
+            } else {
+                IdeSemanticInteraction.Hover(expected.anchor, info)
+            }
+        }
+    }
+
+    private fun acceptNavigation(
+        expected: NavigationInteraction,
+        result: AnalysisClientResult?,
+        failure: Throwable?,
+    ) {
+        synchronized(lock) {
+            if (!currentNavigation(expected)) return
+            navigationResult = null
+            val outcome =
+                when {
+                    failure != null -> {
+                        IdeDeclarationOutcome.Failed(boundedDetail(failure.message ?: "declaration request failed"))
+                    }
+
+                    result is AnalysisClientResult.Success && result.result is AnalysisResult.Declaration -> {
+                        val declaration = result.result as AnalysisResult.Declaration
+                        if (declaration.identity != expected.snapshot.identity) {
+                            IdeDeclarationOutcome.Failed("Declaration result is stale")
+                        } else {
+                            declarationOutcome(expected.anchor, declaration.locations, publishChooser = true)
+                        }
+                    }
+
+                    result is AnalysisClientResult.Failure -> {
+                        IdeDeclarationOutcome.Failed(boundedDetail(result.detail))
+                    }
+
+                    result === AnalysisClientResult.Stale -> {
+                        IdeDeclarationOutcome.Failed("Declaration result is stale")
+                    }
+
+                    else -> {
+                        IdeDeclarationOutcome.Failed("Declaration request was cancelled")
+                    }
+                }
+            expected.result.complete(outcome)
+        }
+    }
+
+    private fun declarationOutcome(
+        anchor: IdeSemanticAnchor,
+        locations: List<DeclarationLocation>,
+        publishChooser: Boolean,
+    ): IdeDeclarationOutcome {
+        val targets =
+            locations
+                .mapNotNull { location ->
+                    when (location) {
+                        is DeclarationLocation.Source -> {
+                            when (val origin = location.origin) {
+                                DeclarationOrigin.Project -> {
+                                    IdeDeclarationTarget.Project(ProjectPath.file(location.path.value), location.range)
+                                }
+
+                                is DeclarationOrigin.Bundle -> {
+                                    IdeDeclarationTarget.AttachedSource(origin.identity, location.path, location.range)
+                                }
+                            }
+                        }
+
+                        is DeclarationLocation.SourceUnavailable -> {
+                            null
+                        }
+                    }
+                }.take(limits.declarationChoices)
+        if (targets.isEmpty()) {
+            val unavailable =
+                locations
+                    .filterIsInstance<DeclarationLocation.SourceUnavailable>()
+                    .mapNotNull { it.origin as? DeclarationOrigin.Bundle }
+                    .firstOrNull()
+            return unavailable?.let { IdeDeclarationOutcome.SourceUnavailable(it.identity) } ?: IdeDeclarationOutcome.NotFound
+        }
+        if (publishChooser && targets.size > 1) {
+            val active = publishedState.get() as? IdeAnalysisState.Active
+            if (active != null && sameAnchor(active, anchor)) {
+                publishedState.set(
+                    active.copy(
+                        interaction = IdeSemanticInteraction.Chooser(anchor, targets, 0, limits.declarationChoices),
+                    ),
+                )
+            }
+        }
+        return IdeDeclarationOutcome.Targets(anchor, targets)
+    }
+
+    private fun currentPointer(expected: PointerInteraction): Boolean {
+        val current = session ?: return false
+        return !closed && pointer?.operation == expected.operation && current.snapshot === expected.snapshot &&
+            current.path == expected.anchor.path && current.documentRevision == expected.anchor.documentRevision &&
+            current.snapshot.identity == expected.anchor.identity
+    }
+
+    private fun currentNavigation(expected: NavigationInteraction): Boolean {
+        val current = session ?: return false
+        return !closed && navigationResult === expected.result && current.snapshot === expected.snapshot &&
+            current.path == expected.anchor.path && current.documentRevision == expected.anchor.documentRevision &&
+            current.snapshot.identity == expected.anchor.identity
+    }
+
+    private fun invalidateSemanticLocked() {
+        invalidatePointerLocked()
+        navigationResult?.cancel(false)
+        navigationResult = null
+    }
+
+    private fun invalidatePointerLocked() {
+        semanticOperation = Math.incrementExact(semanticOperation)
+        pointer = null
+        val active = publishedState.get() as? IdeAnalysisState.Active ?: return
+        publishedState.set(active.copy(interaction = IdeSemanticInteraction.None))
+    }
+
+    private fun sameAnchor(
+        active: IdeAnalysisState.Active,
+        anchor: IdeSemanticAnchor,
+    ): Boolean = active.identity == anchor.identity && active.path == anchor.path && active.documentRevision == anchor.documentRevision
+
+    private fun sameToken(
+        left: IdeSemanticAnchor,
+        right: IdeSemanticAnchor,
+    ): Boolean =
+        left.identity == right.identity && left.path == right.path && left.documentRevision == right.documentRevision &&
+            left.tokenRange == right.tokenRange
 
     private fun unavailable(
         expectedVersion: Long,
@@ -520,6 +837,20 @@ class IdeAnalysisCoordinator(
         val session: Session,
     )
 
+    private data class PointerInteraction(
+        val operation: Long,
+        val snapshot: AdmittedAnalysisSnapshot,
+        val anchor: IdeSemanticAnchor,
+        val controlDown: Boolean,
+    )
+
+    private data class NavigationInteraction(
+        val operation: Long,
+        val snapshot: AdmittedAnalysisSnapshot,
+        val anchor: IdeSemanticAnchor,
+        val result: CompletableFuture<IdeDeclarationOutcome>,
+    )
+
     private data class CompletionRequest(
         val path: VirtualSourcePath,
         val offsetUtf16: Int,
@@ -539,6 +870,14 @@ private fun validRange(
     start: Int,
     end: Int,
 ): Boolean = start in 0..text.length && end in start..text.length && caretBoundary(text, start) && caretBoundary(text, end)
+
+private fun validToken(
+    text: String,
+    range: EditorRange,
+    offsetUtf16: Int,
+): Boolean =
+    range.length > 0 && range.endUtf16 <= text.length && offsetUtf16 in range.startUtf16 until range.endUtf16 &&
+        caretBoundary(text, range.startUtf16) && caretBoundary(text, range.endUtf16) && caretBoundary(text, offsetUtf16)
 
 private fun caretBoundary(
     text: String,
