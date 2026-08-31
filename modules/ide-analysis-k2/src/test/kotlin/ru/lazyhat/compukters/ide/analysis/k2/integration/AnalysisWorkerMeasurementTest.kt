@@ -276,7 +276,7 @@ class AnalysisWorkerMeasurementTest {
                 scheduler,
                 PRESENTATION_DEBOUNCE_NANOS,
                 COMPLETION_DEBOUNCE_NANOS,
-                matchingSink<AnalysisResult.Presentation>(published),
+                resultSink = matchingSink<AnalysisResult.Presentation>(published),
             ).use { coordinator ->
                 val started = System.nanoTime()
                 coordinator.sourceChanged(revision.snapshot, revision.path)
@@ -298,7 +298,7 @@ class AnalysisWorkerMeasurementTest {
                 scheduler,
                 PRESENTATION_DEBOUNCE_NANOS,
                 COMPLETION_DEBOUNCE_NANOS,
-                matchingSink<AnalysisResult.Completion>(published),
+                resultSink = matchingSink<AnalysisResult.Completion>(published),
             ).use { coordinator ->
                 val started = System.nanoTime()
                 coordinator.sourceChanged(revision.snapshot, revision.path)
