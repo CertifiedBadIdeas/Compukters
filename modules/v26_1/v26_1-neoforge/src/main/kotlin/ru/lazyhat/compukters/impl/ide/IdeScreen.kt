@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.impl.ide
 
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.client.gui.components.events.GuiEventListener
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.input.CharacterEvent
 import net.minecraft.client.input.KeyEvent
@@ -82,6 +83,7 @@ internal class IdeScreen(
     private val parent: Screen?,
 ) : Screen(Component.literal("Compukters IDE")) {
     private val application = session.application
+    private val editorKeyboardFocus = IdeEditorKeyboardFocus(font)
     private val prompt = IdePromptController()
     private val input =
         IdeInputAdapter(
@@ -101,6 +103,8 @@ internal class IdeScreen(
     private var pointerY: Double? = null
 
     override fun setInitialFocus() = Unit
+
+    override fun getFocused(): GuiEventListener? = editorKeyboardFocus.resolve(focusArea, super.getFocused())
 
     override fun mouseClicked(
         event: MouseButtonEvent,

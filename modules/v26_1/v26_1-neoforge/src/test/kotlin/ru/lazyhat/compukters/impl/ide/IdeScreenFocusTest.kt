@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.impl.ide
 
+import net.minecraft.client.gui.Font
+import net.minecraft.client.gui.components.events.GuiEventListener
 import net.minecraft.client.input.CharacterEvent
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload
@@ -41,10 +43,13 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import java.lang.reflect.Proxy
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class IdeScreenFocusTest {
@@ -96,9 +101,42 @@ class IdeScreenFocusTest {
     }
 
     @Test
+    fun `editor keyboard focus is an input rejecting Minecraft text focus`() {
+        val font =
+            Font(
+                Proxy.newProxyInstance(
+                    Font.Provider::class.java.classLoader,
+                    arrayOf(Font.Provider::class.java),
+                ) { _, method, _ -> error("Unexpected test font call: ${method.name}") } as Font.Provider,
+            )
+        val proxy = IdeEditorKeyboardFocus(font)
+        val fallback =
+            object : GuiEventListener {
+                private var focused = false
+
+                override fun setFocused(focused: Boolean) {
+                    this.focused = focused
+                }
+
+                override fun isFocused(): Boolean = focused
+            }
+
+        assertTrue(proxy.canConsumeInput())
+        assertSame(proxy, proxy.resolve(IdeFocusArea.Editor, fallback))
+        assertSame(fallback, proxy.resolve(IdeFocusArea.Tree, fallback))
+        assertFalse(proxy.keyPressed(KeyEvent(GLFW.GLFW_KEY_B, 0, GLFW.GLFW_MOD_CONTROL)))
+        assertFalse(proxy.charTyped(CharacterEvent('x'.code)))
+        assertEquals("", proxy.value)
+    }
+
+    @Test
     fun `IDE screen owns mouse focus policy`() {
         assertNotNull(IdeScreen::class.java.declaredMethods.singleOrNull { it.name == "mouseClicked" && it.parameterCount == 2 })
         assertNotNull(IdeScreen::class.java.declaredMethods.singleOrNull { it.name == "mouseMoved" && it.parameterCount == 2 })
+        assertNotNull(IdeScreen::class.java.declaredMethods.singleOrNull { it.name == "getFocused" && it.parameterCount == 0 })
+        assertTrue(
+            IdeScreen::class.java.declaredFields.any { it.type == IdeEditorKeyboardFocus::class.java },
+        )
     }
 
     @Test
