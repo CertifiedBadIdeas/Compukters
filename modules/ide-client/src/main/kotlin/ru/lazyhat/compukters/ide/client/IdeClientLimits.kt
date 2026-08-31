@@ -29,6 +29,8 @@ data class IdeClientLimits(
     val clipboardUtf8Bytes: Int = 256 * 1024,
     val statusUtf8Bytes: Int = 4 * 1024,
     val dialogUtf8Bytes: Int = 16 * 1024,
+    val declarationChoices: Int = 64,
+    val navigationHistory: Int = 128,
 ) {
     init {
         require(eventQueueCapacity > 0) { "event queue capacity must be positive" }
@@ -41,5 +43,7 @@ data class IdeClientLimits(
         require(clipboardUtf8Bytes >= 0) { "clipboard byte limit must be non-negative" }
         require(statusUtf8Bytes >= 0) { "status byte limit must be non-negative" }
         require(dialogUtf8Bytes >= 0) { "dialog byte limit must be non-negative" }
+        require(declarationChoices > 0) { "declaration choice limit must be positive" }
+        require(navigationHistory > 0) { "navigation history limit must be positive" }
     }
 }
