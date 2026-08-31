@@ -130,7 +130,10 @@ class AnalysisServiceLifetime(
     private inner class ManagedClient : AnalysisClient {
         override fun open(snapshot: AdmittedAnalysisSnapshot): CompletableFuture<SnapshotOpenResult> = delegate().open(snapshot)
 
-        override fun query(query: AnalysisQuery): CompletableFuture<AnalysisClientResult> = delegate().query(query)
+        override fun query(
+            snapshot: AdmittedAnalysisSnapshot,
+            query: AnalysisQuery,
+        ): CompletableFuture<AnalysisClientResult> = delegate().query(snapshot, query)
 
         override fun cancel(future: CompletableFuture<AnalysisClientResult>): Boolean = delegate().cancel(future)
 

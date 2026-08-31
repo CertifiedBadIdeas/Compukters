@@ -208,7 +208,7 @@ class SnapshotAdmissionTest {
 
             val presentation =
                 assertIs<AnalysisClientResult.Success>(
-                    controller.query(AnalysisQuery.Presentation(admitted.identity)).get(90, TimeUnit.SECONDS),
+                    controller.query(admitted, AnalysisQuery.Presentation(admitted.identity)).get(90, TimeUnit.SECONDS),
                 ).result as AnalysisResult.Presentation
             val active = assertIs<SnapshotPresentationAcceptance.Active>(presentation.value.accept(admitted.identity))
             assertTrue(active.diagnostics.any { it.path?.value == "demo/Main.kt" })
@@ -218,6 +218,7 @@ class SnapshotAdmissionTest {
                 assertIs<AnalysisClientResult.Success>(
                     controller
                         .query(
+                            admitted,
                             AnalysisQuery.ExpressionInfo(
                                 admitted.identity,
                                 VirtualSourcePath.kotlin("demo/Main.kt"),

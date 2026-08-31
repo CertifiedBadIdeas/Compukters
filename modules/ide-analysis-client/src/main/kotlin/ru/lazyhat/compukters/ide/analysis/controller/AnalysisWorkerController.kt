@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.ide.analysis.controller
 
 import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
+import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
@@ -44,6 +45,9 @@ import ru.lazyhat.compukters.ide.analysis.protocol.CloseSnapshotRequest
 import ru.lazyhat.compukters.ide.analysis.protocol.OpenSnapshotRequest
 import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotClosed
 import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotReady
+import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotReopenRequired
+import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotUpdated
+import ru.lazyhat.compukters.ide.analysis.protocol.UpdateSnapshotRequest
 import ru.lazyhat.compukters.worker.process.WorkerDeadlineExceededException
 import ru.lazyhat.compukters.worker.process.WorkerLaunch
 import ru.lazyhat.compukters.worker.process.WorkerProcess
@@ -97,7 +101,10 @@ sealed interface AnalysisClientResult {
 interface AnalysisClient : AutoCloseable {
     fun open(snapshot: AdmittedAnalysisSnapshot): CompletableFuture<SnapshotOpenResult>
 
-    fun query(query: AnalysisQuery): CompletableFuture<AnalysisClientResult>
+    fun query(
+        snapshot: AdmittedAnalysisSnapshot,
+        query: AnalysisQuery,
+    ): CompletableFuture<AnalysisClientResult>
 
     fun cancel(future: CompletableFuture<AnalysisClientResult>): Boolean
 
@@ -120,7 +127,7 @@ class AnalysisWorkerController(
     private val scheduler = AnalysisScheduler<Pending>()
     private var retainedSnapshot: AdmittedAnalysisSnapshot? = null
     private var process: WorkerProcess? = null
-    private var workerSnapshot: AnalysisSnapshotIdentity? = null
+    private var workerSnapshot: AdmittedAnalysisSnapshot? = null
     private var nextRequestId = 1uL
     private var draining = false
     private var closed = false
@@ -145,21 +152,20 @@ class AnalysisWorkerController(
         return future
     }
 
-    override fun query(query: AnalysisQuery): CompletableFuture<AnalysisClientResult> {
+    override fun query(
+        snapshot: AdmittedAnalysisSnapshot,
+        query: AnalysisQuery,
+    ): CompletableFuture<AnalysisClientResult> {
+        require(snapshot.identity == query.identity) { "analysis query identity does not match its snapshot" }
         val future = CompletableFuture<AnalysisClientResult>()
         val stale: List<Pending>
-        val accepted: Boolean
         synchronized(lock) {
             if (closed) return failedFuture("analysis controller is closed")
-            if (retainedSnapshot?.identity != query.identity) {
-                stale = emptyList()
-                accepted = false
-            } else {
-                stale = enqueueLocked(Pending.Query(nextRequestId(), query, workKind(query), future))
-                accepted = true
-            }
+            retainedSnapshot = snapshot
+            stale =
+                scheduler.dropQueuedExcept(snapshot.identity).map { it.value } +
+                enqueueLocked(Pending.Query(nextRequestId(), snapshot, query, workKind(query), future))
         }
-        if (!accepted) future.complete(AnalysisClientResult.Stale)
         stale.forEach(::completeStale)
         return future
     }
@@ -171,19 +177,18 @@ class AnalysisWorkerController(
         synchronized(lock) {
             if (future.isDone) return false
             pending = schedulerItems().filterIsInstance<Pending.Query>().firstOrNull { it.future === future } ?: return false
-            pending.cancelled = true
             active = scheduler.active?.value === pending
+            if (active && pending.querySent && !pending.awaitingResponse) return false
+            pending.cancelled = true
             if (active) {
-                scheduler.completeActive()
-                child = detachProcess()
+                child = process.takeIf { pending.awaitingResponse }
             } else {
                 scheduler.remove(pending)
                 child = null
             }
         }
         if (active) child?.let { safelySendCancel(it, pending.requestId) }
-        pending.future.complete(AnalysisClientResult.Cancelled)
-        child?.terminate(policy.terminationGraceMillis)
+        if (!active || child == null) pending.future.complete(AnalysisClientResult.Cancelled)
         return true
     }
 
@@ -283,7 +288,7 @@ class AnalysisWorkerController(
         }
         val result =
             synchronized(lock) {
-                workerSnapshot = pending.snapshot.identity
+                workerSnapshot = pending.snapshot
                 if (retainedSnapshot?.identity == pending.snapshot.identity) {
                     SnapshotOpenResult.Opened(pending.snapshot.identity)
                 } else {
@@ -294,23 +299,51 @@ class AnalysisWorkerController(
     }
 
     private fun runQuery(pending: Pending.Query) {
-        val snapshot = synchronized(lock) { retainedSnapshot }
-        if (snapshot?.identity != pending.query.identity) {
+        if (synchronized(lock) { retainedSnapshot?.identity } != pending.snapshot.identity) {
             pending.future.complete(AnalysisClientResult.Stale)
             return
         }
+        if (pending.cancelled) {
+            pending.future.complete(AnalysisClientResult.Cancelled)
+            return
+        }
         val child = ensureWorker()
-        ensureSnapshot(child, snapshot)
-        val queryContext = context(snapshot).forQuery(pending.query)
-        send(child, AnalysisQueryRequest(pending.requestId, pending.query), queryContext)
-        when (val response = receive(child, policy.requestTimeoutNanos, queryContext)) {
+        if (pending.cancelled) {
+            pending.future.complete(AnalysisClientResult.Cancelled)
+            return
+        }
+        ensureSnapshot(child, pending.snapshot)
+        if (synchronized(lock) { workerSnapshot?.identity } != pending.snapshot.identity) {
+            pending.future.complete(AnalysisClientResult.Stale)
+            return
+        }
+        val queryContext = context(pending.snapshot).forQuery(pending.query)
+        val sent =
+            synchronized(lock) {
+                if (pending.cancelled) {
+                    false
+                } else {
+                    send(child, AnalysisQueryRequest(pending.requestId, pending.query), queryContext)
+                    pending.querySent = true
+                    pending.awaitingResponse = true
+                    true
+                }
+            }
+        if (!sent) {
+            pending.future.complete(AnalysisClientResult.Cancelled)
+            return
+        }
+        val response = receiveQueryResponse(child, pending, queryContext)
+        when (response) {
             is AnalysisQuerySuccess -> {
                 if (response.requestId != pending.requestId || response.result.identity != pending.query.identity) {
                     throw ControllerFault(AnalysisFailureKind.Protocol, "analysis result response mismatch")
                 }
                 val result =
                     synchronized(lock) {
-                        if (retainedSnapshot?.identity == pending.query.identity) {
+                        if (pending.cancelled) {
+                            AnalysisClientResult.Cancelled
+                        } else if (retainedSnapshot?.identity == pending.query.identity) {
                             AnalysisClientResult.Success(response.result)
                         } else {
                             AnalysisClientResult.Stale
@@ -320,11 +353,80 @@ class AnalysisWorkerController(
             }
 
             is AnalysisCancelled -> {
+                if (response.requestId != pending.requestId || response.identity != pending.query.identity) {
+                    throw ControllerFault(AnalysisFailureKind.Protocol, "analysis cancellation response mismatch")
+                }
                 pending.future.complete(AnalysisClientResult.Cancelled)
             }
 
             is AnalysisFailure -> {
-                pending.future.complete(AnalysisClientResult.Failure(response.failure, response.detail))
+                if (response.requestId != pending.requestId || response.identity != pending.query.identity) {
+                    throw ControllerFault(AnalysisFailureKind.Protocol, "analysis failure response mismatch")
+                }
+                if (pending.cancelled) {
+                    pending.future.complete(AnalysisClientResult.Cancelled)
+                } else {
+                    pending.future.complete(AnalysisClientResult.Failure(response.failure, response.detail))
+                }
+            }
+
+            else -> {
+                throw ControllerFault(AnalysisFailureKind.Protocol, "unexpected analysis response")
+            }
+        }
+    }
+
+    private fun receiveQueryResponse(
+        child: WorkerProcess,
+        pending: Pending.Query,
+        queryContext: AnalysisProtocolContext,
+    ): AnalysisMessage {
+        try {
+            var response = receive(child, policy.requestTimeoutNanos, queryContext)
+            validateQueryResponse(pending, response)
+            val awaitCancellation =
+                synchronized(lock) {
+                    if (pending.cancelled && response !is AnalysisCancelled) {
+                        true
+                    } else {
+                        pending.awaitingResponse = false
+                        false
+                    }
+                }
+            if (awaitCancellation) {
+                response = receive(child, policy.requestTimeoutNanos, queryContext)
+                validateQueryResponse(pending, response)
+                if (response !is AnalysisCancelled) {
+                    throw ControllerFault(AnalysisFailureKind.Protocol, "expected analysis cancellation response")
+                }
+            }
+            return response
+        } finally {
+            synchronized(lock) { pending.awaitingResponse = false }
+        }
+    }
+
+    private fun validateQueryResponse(
+        pending: Pending.Query,
+        response: AnalysisMessage,
+    ) {
+        when (response) {
+            is AnalysisQuerySuccess -> {
+                if (response.requestId != pending.requestId || response.result.identity != pending.query.identity) {
+                    throw ControllerFault(AnalysisFailureKind.Protocol, "analysis result response mismatch")
+                }
+            }
+
+            is AnalysisCancelled -> {
+                if (response.requestId != pending.requestId || response.identity != pending.query.identity) {
+                    throw ControllerFault(AnalysisFailureKind.Protocol, "analysis cancellation response mismatch")
+                }
+            }
+
+            is AnalysisFailure -> {
+                if (response.requestId != pending.requestId || response.identity != pending.query.identity) {
+                    throw ControllerFault(AnalysisFailureKind.Protocol, "analysis failure response mismatch")
+                }
             }
 
             else -> {
@@ -335,7 +437,7 @@ class AnalysisWorkerController(
 
     private fun runClose(pending: Pending.Close) {
         val child = synchronized(lock) { process }
-        if (child == null || workerSnapshot != pending.identity) {
+        if (child == null || workerSnapshot?.identity != pending.identity) {
             synchronized(lock) {
                 if (retainedSnapshot?.identity == pending.identity) retainedSnapshot = null
             }
@@ -388,16 +490,91 @@ class AnalysisWorkerController(
         child: WorkerProcess,
         snapshot: AdmittedAnalysisSnapshot,
     ) {
-        synchronized(lock) { if (workerSnapshot == snapshot.identity) return }
+        val confirmed = synchronized(lock) { workerSnapshot }
+        val snapshotTransition = if (confirmed == null) AnalysisSnapshotTransition.FullOpen else transition(confirmed, snapshot)
+        when (snapshotTransition) {
+            AnalysisSnapshotTransition.AlreadyCurrent -> {}
+
+            AnalysisSnapshotTransition.FullOpen -> {
+                openWorkerSnapshot(child, snapshot)
+            }
+
+            is AnalysisSnapshotTransition.Incremental -> {
+                updateWorkerSnapshot(child, checkNotNull(confirmed), snapshot, snapshotTransition.changedSources)
+            }
+        }
+    }
+
+    private fun updateWorkerSnapshot(
+        child: WorkerProcess,
+        confirmed: AdmittedAnalysisSnapshot,
+        target: AdmittedAnalysisSnapshot,
+        changedSources: List<ProjectSource>,
+    ) {
+        val requestId = synchronized(lock) { nextRequestId() }
+        send(
+            child,
+            UpdateSnapshotRequest(requestId, confirmed.identity, target.identity, changedSources),
+            context(confirmed),
+        )
+        when (val response = receive(child, policy.requestTimeoutNanos, context(confirmed))) {
+            is SnapshotUpdated -> {
+                if (response.requestId != requestId || response.targetIdentity != target.identity) {
+                    throw ControllerFault(AnalysisFailureKind.Protocol, "snapshot-updated response mismatch")
+                }
+                synchronized(lock) { workerSnapshot = target }
+            }
+
+            is SnapshotReopenRequired -> {
+                if (response.requestId != requestId || response.targetIdentity != target.identity) {
+                    throw ControllerFault(AnalysisFailureKind.Protocol, "snapshot reopen-required response mismatch")
+                }
+                val newest =
+                    synchronized(lock) {
+                        workerSnapshot = null
+                        retainedSnapshot ?: target
+                    }
+                openWorkerSnapshot(child, newest)
+            }
+
+            is AnalysisFailure -> {
+                if (response.requestId != requestId || response.identity != target.identity) {
+                    throw ControllerFault(AnalysisFailureKind.Protocol, "snapshot update failure response mismatch")
+                }
+                throw ControllerFault(response.failure, response.detail)
+            }
+
+            else -> {
+                throw ControllerFault(AnalysisFailureKind.Protocol, "expected snapshot update response")
+            }
+        }
+    }
+
+    private fun openWorkerSnapshot(
+        child: WorkerProcess,
+        snapshot: AdmittedAnalysisSnapshot,
+    ) {
         val requestId = synchronized(lock) { nextRequestId() }
         send(child, OpenSnapshotRequest(requestId, snapshot.identity, snapshot.sources, snapshot.profile, limits), context(snapshot))
-        val ready =
-            receive(child, policy.requestTimeoutNanos, context(snapshot)) as? SnapshotReady
-                ?: throw ControllerFault(AnalysisFailureKind.Protocol, "expected snapshot-ready response")
-        if (ready.requestId != requestId || ready.identity != snapshot.identity) {
-            throw ControllerFault(AnalysisFailureKind.Protocol, "snapshot reopen response mismatch")
+        when (val response = receive(child, policy.requestTimeoutNanos, context(snapshot))) {
+            is SnapshotReady -> {
+                if (response.requestId != requestId || response.identity != snapshot.identity) {
+                    throw ControllerFault(AnalysisFailureKind.Protocol, "snapshot reopen response mismatch")
+                }
+                synchronized(lock) { workerSnapshot = snapshot }
+            }
+
+            is AnalysisFailure -> {
+                if (response.requestId != requestId || response.identity != snapshot.identity) {
+                    throw ControllerFault(AnalysisFailureKind.Protocol, "snapshot reopen failure response mismatch")
+                }
+                throw ControllerFault(response.failure, response.detail)
+            }
+
+            else -> {
+                throw ControllerFault(AnalysisFailureKind.Protocol, "expected snapshot-ready response")
+            }
         }
-        synchronized(lock) { workerSnapshot = snapshot.identity }
     }
 
     private fun send(
@@ -495,9 +672,21 @@ class AnalysisWorkerController(
     ) {
         if (pending.isDone()) return
         when (pending) {
-            is Pending.Open -> pending.future.complete(SnapshotOpenResult.Failure(kind, detail))
-            is Pending.Query -> pending.future.complete(AnalysisClientResult.Failure(kind, detail))
-            is Pending.Close -> pending.future.completeExceptionally(IllegalStateException(detail))
+            is Pending.Open -> {
+                pending.future.complete(SnapshotOpenResult.Failure(kind, detail))
+            }
+
+            is Pending.Query -> {
+                if (pending.cancelled) {
+                    pending.future.complete(AnalysisClientResult.Cancelled)
+                } else {
+                    pending.future.complete(AnalysisClientResult.Failure(kind, detail))
+                }
+            }
+
+            is Pending.Close -> {
+                pending.future.completeExceptionally(IllegalStateException(detail))
+            }
         }
     }
 
@@ -571,11 +760,16 @@ class AnalysisWorkerController(
 
         class Query(
             override val requestId: RequestId,
+            val snapshot: AdmittedAnalysisSnapshot,
             val query: AnalysisQuery,
             override val kind: AnalysisWorkKind,
             val future: CompletableFuture<AnalysisClientResult>,
         ) : Pending() {
             override val identity = query.identity
+
+            @Volatile var querySent = false
+
+            @Volatile var awaitingResponse = false
 
             override fun isDone() = future.isDone
         }

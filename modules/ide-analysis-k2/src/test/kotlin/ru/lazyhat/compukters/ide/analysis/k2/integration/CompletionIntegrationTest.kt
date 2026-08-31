@@ -68,6 +68,7 @@ class CompletionIntegrationTest {
                 assertIs<AnalysisClientResult.Success>(
                     controller
                         .query(
+                            admitted,
                             AnalysisQuery.Completion(identity, path, source.lastIndexOf("can") + 3, CompletionTrigger.Automatic),
                         ).get(90, TimeUnit.SECONDS),
                 ).result as AnalysisResult.Completion

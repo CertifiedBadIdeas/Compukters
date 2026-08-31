@@ -59,7 +59,7 @@ class IdeScreenAnalysisIntegrationTest {
             val presentation =
                 assertIs<AnalysisResult.Presentation>(
                     assertIs<AnalysisClientResult.Success>(
-                        controller.query(AnalysisQuery.Presentation(identity)).get(90, TimeUnit.SECONDS),
+                        controller.query(admitted, AnalysisQuery.Presentation(identity)).get(90, TimeUnit.SECONDS),
                     ).result,
                 )
             val active = assertIs<SnapshotPresentationAcceptance.Active>(presentation.value.accept(identity))
@@ -70,6 +70,7 @@ class IdeScreenAnalysisIntegrationTest {
                     assertIs<AnalysisClientResult.Success>(
                         controller
                             .query(
+                                admitted,
                                 AnalysisQuery.Completion(
                                     identity,
                                     path,

@@ -76,13 +76,14 @@ class HostileAnalysisWorkerTest {
     fun `query timeout and ignored cancellation permit clean restart`() {
         withHostileThenHealthy("query-hang") { controller, snapshot ->
             assertIs<SnapshotOpenResult.Opened>(controller.open(snapshot).get(90, TimeUnit.SECONDS))
-            val failed = controller.query(AnalysisQuery.Presentation(snapshot.identity))
+            val failed = controller.query(snapshot, AnalysisQuery.Presentation(snapshot.identity))
             assertEquals(AnalysisFailureKind.Timeout, assertIs<AnalysisClientResult.Failure>(failed.get(90, TimeUnit.SECONDS)).kind)
         }
         withHostileThenHealthy("query-hang") { controller, snapshot ->
             assertIs<SnapshotOpenResult.Opened>(controller.open(snapshot).get(90, TimeUnit.SECONDS))
             val cancelled =
                 controller.query(
+                    snapshot,
                     AnalysisQuery.Completion(
                         snapshot.identity,
                         VirtualSourcePath.kotlin("main.kt"),
@@ -174,7 +175,7 @@ class HostileAnalysisWorkerTest {
             block(controller, snapshot)
             val recovered =
                 assertIs<AnalysisClientResult.Success>(
-                    controller.query(AnalysisQuery.Presentation(snapshot.identity)).get(90, TimeUnit.SECONDS),
+                    controller.query(snapshot, AnalysisQuery.Presentation(snapshot.identity)).get(90, TimeUnit.SECONDS),
                 )
             assertEquals(snapshot.identity, recovered.result.identity)
         } finally {
@@ -192,6 +193,7 @@ class HostileAnalysisWorkerTest {
         val failed =
             controller
                 .query(
+                    snapshot,
                     AnalysisQuery.Completion(
                         snapshot.identity,
                         VirtualSourcePath.kotlin("main.kt"),
