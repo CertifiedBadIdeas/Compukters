@@ -30,6 +30,7 @@ import com.intellij.psi.PsiFile
 import com.intellij.psi.impl.BlockSupportImpl
 import com.intellij.psi.impl.PsiDocumentManagerBase
 import com.intellij.psi.impl.source.PsiFileImpl
+import com.intellij.psi.impl.source.tree.FileElement
 import org.jetbrains.kotlin.psi.KtPsiFactory
 
 /** Supplies the commit scope missing from IntelliJ's read-only core VFS. */
@@ -57,28 +58,38 @@ internal class StandalonePsiDocumentManager(
 
 /** Reconciles a changed standalone document with its existing physical PSI identity. */
 internal object StandaloneDocumentSynchronizer {
+    fun capture(psiFile: PsiFile): StandaloneDocumentBaseline {
+        val file = psiFile as? PsiFileImpl ?: error("standalone Kotlin PSI file has an unsupported implementation")
+        val oldTree = file.calcTreeElement()
+        return StandaloneDocumentBaseline(oldTree, oldTree.chars)
+    }
+
     fun synchronize(
         document: Document,
         project: Project,
         psiFile: PsiFile,
+        baseline: StandaloneDocumentBaseline,
     ) {
         val file = psiFile as? PsiFileImpl ?: error("standalone Kotlin PSI file has an unsupported implementation")
-        val oldTree = file.calcTreeElement()
-        val oldText = oldTree.chars
         val replacement = KtPsiFactory(project).createFile(file.name, document.immutableCharSequence.toString())
         val changes =
             BlockSupportImpl.mergeTrees(
                 file,
-                oldTree,
+                baseline.oldTree,
                 replacement.node,
                 EmptyProgressIndicator(),
-                oldText,
+                baseline.oldText,
             )
         file.beforeAstChange()
         changes.performActualPsiChange(file)
         file.viewProvider.contentsSynchronized()
     }
 }
+
+internal data class StandaloneDocumentBaseline(
+    val oldTree: FileElement,
+    val oldText: CharSequence,
+)
 
 /** Minimal POM model required by IntelliJ's public tree-diff application path. */
 internal class StandalonePomModel :

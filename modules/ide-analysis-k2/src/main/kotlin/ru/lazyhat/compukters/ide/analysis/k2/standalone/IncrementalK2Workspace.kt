@@ -122,7 +122,12 @@ internal class IncrementalK2Workspace(
         } catch (exception: Exception) {
             poisoned = true
             dispose()
-            throw K2WorkspaceReopenRequiredException("incremental K2 workspace mutation failed", exception)
+            val detail =
+                exception.message
+                    ?.takeIf(String::isNotBlank)
+                    ?.let { ": $it" }
+                    .orEmpty()
+            throw K2WorkspaceReopenRequiredException("incremental K2 workspace mutation failed$detail", exception)
         }
 
         sources = candidate
@@ -176,6 +181,7 @@ internal object DocumentK2SourceUpdater : K2SourceUpdater {
                     "whole-file modification was not classified as out-of-block"
                 }
                 val document = requireNotNull(documents.getDocument(file)) { "Kotlin PSI has no document: ${path.value}" }
+                val baseline = StandaloneDocumentSynchronizer.capture(file)
                 CommandProcessor
                     .getInstance()
                     .executeCommand(
@@ -189,6 +195,7 @@ internal object DocumentK2SourceUpdater : K2SourceUpdater {
                         document,
                         environment.session.project,
                         file,
+                        baseline,
                     )
                 }
                 modifications.handleInvalidation(file, locality)
