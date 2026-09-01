@@ -21,6 +21,9 @@ package ru.lazyhat.compukters.compiler.k2.engine
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
+import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
+import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
+import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalTrustedIntrinsics
 import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryCompiler
 import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryFragmentCodec
@@ -32,6 +35,7 @@ import ru.lazyhat.compukters.platform.k2.build.PlatformLibraryDeclarationKind
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -150,7 +154,24 @@ class CompuktersFir2IrPipelineTest {
             val library =
                 environment.compile(
                     PlatformModuleId("stdlib", "core"),
-                    listOf(source("Answer.kt", "package sample\nfun answer(): Int = 42")),
+                    listOf(
+                        source(
+                            "Answer.kt",
+                            """
+                            package sample
+
+                            interface Result
+
+                            class Ok(val code: Int) : Result
+
+                            enum class Reason {
+                                MISSING,
+                            }
+
+                            fun answer(): Int = 42
+                            """.trimIndent(),
+                        ),
+                    ),
                     listOf(builtins),
                 )
 
@@ -175,6 +196,46 @@ class CompuktersFir2IrPipelineTest {
                                 39,
                                 PlatformLibraryDeclarationKind.FUNCTION,
                             ),
+                            PlatformLibraryDeclaration(
+                                "sample.Result",
+                                "interface()",
+                                "Answer.kt",
+                                0,
+                                1,
+                                PlatformLibraryDeclarationKind.TYPE,
+                            ),
+                            PlatformLibraryDeclaration(
+                                "sample.Ok",
+                                "class(Int)",
+                                "Answer.kt",
+                                0,
+                                1,
+                                PlatformLibraryDeclarationKind.TYPE,
+                            ),
+                            PlatformLibraryDeclaration(
+                                "sample.Ok.code",
+                                "val():Int",
+                                "Answer.kt",
+                                0,
+                                1,
+                                PlatformLibraryDeclarationKind.FIELD,
+                            ),
+                            PlatformLibraryDeclaration(
+                                "sample.Reason",
+                                "enum()",
+                                "Answer.kt",
+                                0,
+                                1,
+                                PlatformLibraryDeclarationKind.TYPE,
+                            ),
+                            PlatformLibraryDeclaration(
+                                "sample.Reason.MISSING",
+                                "enum-entry",
+                                "Answer.kt",
+                                0,
+                                1,
+                                PlatformLibraryDeclarationKind.FIELD,
+                            ),
                         ),
                         result.irModuleFragment,
                         result.pluginContext,
@@ -191,6 +252,19 @@ class CompuktersFir2IrPipelineTest {
             val artifact = PlatformLibraryFragmentCodec.decode(fragment).artifact.toByteArray()
             assertEquals("CPKT", artifact.copyOfRange(0, 4).decodeToString())
             kotlin.test.assertFalse(artifact.decodeToString().contains("fun answer"))
+            val libraryModule =
+                ArtifactReader.read(artifact).modules.single { module ->
+                    module.kind == ModuleKind.LIBRARY &&
+                        module.exports.any { export ->
+                            export.kind == SymbolKind.FUNCTION &&
+                                module.strings[export.name.value.toInt()].toString() == "answer"
+                        }
+                }
+            val exports = libraryModule.exports.associateBy { libraryModule.strings[it.name.value.toInt()].toString() }
+            assertEquals(SymbolKind.TYPE, exports.getValue("sample.Ok").kind)
+            assertEquals(SymbolKind.FIELD, exports.getValue("sample.Ok.code").kind)
+            assertEquals(SymbolKind.FIELD, exports.getValue("sample.Reason.MISSING").kind)
+            assertFalse(exports.containsKey("code"))
         }
     }
 

@@ -32,6 +32,8 @@ import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.EntryArguments
 import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
+import ru.lazyhat.compukters.compiler.artifact.model.Export
+import ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility
 import ru.lazyhat.compukters.compiler.artifact.model.Function
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
@@ -39,6 +41,8 @@ import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
+import ru.lazyhat.compukters.compiler.artifact.model.StringId
+import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
@@ -111,7 +115,7 @@ class PlatformLibraryCompiler {
                     unsupported,
                 )
             }
-        val wrapper = artifact.withLibraryFragmentEntry()
+        val wrapper = artifact.withLibraryFragmentEntry(declarations)
         val bytes =
             when (val result = ArtifactWriter.write(wrapper)) {
                 is ArtifactWriteResult.Success -> {
@@ -157,26 +161,75 @@ class PlatformLibraryCompiler {
     }
 }
 
-private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFragmentEntry():
+private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFragmentEntry(
+    declarations: List<PlatformLibraryDeclaration>,
+):
     ru.lazyhat.compukters.compiler.artifact.model.Artifact {
     val lowered = modules.first()
+    val typeDeclarations =
+        declarations
+            .filter { it.exported && it.kind == PlatformLibraryDeclarationKind.TYPE }
+            .associateBy(PlatformLibraryDeclaration::symbol)
+    val fieldDeclarations =
+        declarations
+            .filter { it.exported && it.kind == PlatformLibraryDeclarationKind.FIELD }
+            .associateBy(PlatformLibraryDeclaration::symbol)
+    val fieldSymbols =
+        lowered.fields.mapIndexedNotNull { index, field ->
+            val owner = field.owner as? TypeRef.Local ?: return@mapIndexedNotNull null
+            val ownerName = lowered.strings[lowered.types[owner.id.value.toInt()].name.value.toInt()].toString()
+            val fieldName = lowered.strings[field.name.value.toInt()].toString()
+            "$ownerName.$fieldName" to index
+        }.toMap()
+    val libraryStrings = lowered.strings
+    val stringIds = libraryStrings.withIndex().associate { (index, value) -> value.toString() to StringId.of(index.toUInt()) }
+    val missingFieldNames = fieldDeclarations.keys.filterNot(stringIds::containsKey)
+    require(missingFieldNames.isEmpty()) { "platform field ABI names are absent from canonical metadata: $missingFieldNames" }
+    val typeExports =
+        typeDeclarations.keys.sorted().map { symbol ->
+            val matches =
+                lowered.types.withIndex().filter { (_, type) ->
+                    lowered.strings[type.name.value.toInt()].toString() == symbol
+                }
+            val match = matches.singleOrNull() ?: error("cannot uniquely match platform type $symbol: $matches")
+            Export(
+                SymbolKind.TYPE,
+                ExportVisibility.PUBLIC_LIBRARY,
+                requireNotNull(stringIds[symbol]),
+                match.index.toUInt(),
+                TypeRef.Local(TypeId.of(match.index.toUInt())),
+            )
+        }
+    val functionExports =
+        lowered.functions.mapIndexed { index, function ->
+            Export(
+                SymbolKind.FUNCTION,
+                ExportVisibility.PUBLIC_LIBRARY,
+                function.name,
+                index.toUInt(),
+                function.signature,
+            )
+        }
+    val fieldExports =
+        fieldDeclarations.keys.sorted().map { symbol ->
+            val fieldIndex = requireNotNull(fieldSymbols[symbol]) { "cannot match platform field $symbol" }
+            Export(
+                SymbolKind.FIELD,
+                ExportVisibility.PUBLIC_LIBRARY,
+                requireNotNull(stringIds[symbol]),
+                fieldIndex.toUInt(),
+                lowered.fields[fieldIndex].owner,
+            )
+        }
     val library =
         lowered.copy(
             kind = ru.lazyhat.compukters.compiler.artifact.model.ModuleKind.LIBRARY,
+            strings = libraryStrings,
             imports =
                 lowered.imports.map { value ->
                     value.copy(targetModule = ModuleId.of(value.targetModule.value + 1u))
                 },
-            exports =
-                lowered.functions.mapIndexed { index, function ->
-                    ru.lazyhat.compukters.compiler.artifact.model.Export(
-                        ru.lazyhat.compukters.compiler.artifact.model.SymbolKind.FUNCTION,
-                        ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility.PUBLIC_LIBRARY,
-                        function.name,
-                        index.toUInt(),
-                        function.signature,
-                    )
-                },
+            exports = typeExports + functionExports + fieldExports,
         )
     val functionId = FunctionId.of(0u)
     val typeId = TypeId.of(0u)

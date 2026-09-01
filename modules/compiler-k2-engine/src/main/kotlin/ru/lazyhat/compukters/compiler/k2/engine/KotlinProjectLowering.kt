@@ -729,8 +729,16 @@ internal object KotlinProjectLowering {
                     userFunctions.map { requireNotNull(functionArtifactNames[it.symbol]) } +
                     userClasses.map { it.fqNameWhenAvailable?.asString() ?: it.name.asString() } +
                     userClasses.flatMap { declaration ->
-                        declaration.declarations.filterIsInstance<IrProperty>().map { it.name.asString() } +
-                            declaration.declarations.filterIsInstance<IrEnumEntry>().map { it.name.asString() }
+                        val owner = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
+                        val fieldNames =
+                            declaration.declarations.filterIsInstance<IrProperty>().map { it.name.asString() } +
+                                declaration.declarations.filterIsInstance<IrEnumEntry>().map { it.name.asString() }
+                        fieldNames +
+                            if (includeTrustedPlatformBodies) {
+                                fieldNames.map { field -> "$owner.$field" }
+                            } else {
+                                emptyList()
+                            }
                     } + constructorClasses.map(::constructorName)
             ).distinct()
                 .map(MetadataText::of)
