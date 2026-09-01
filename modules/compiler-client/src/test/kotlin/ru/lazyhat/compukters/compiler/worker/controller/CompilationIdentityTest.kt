@@ -66,7 +66,7 @@ class CompilationIdentityTest {
                 base.copy(expectedIdentity = base.expectedIdentity.copy(compilerVersion = "2.4.11")),
                 base.copy(expectedIdentity = base.expectedIdentity.copy(payloadHash = hash(1))),
                 base.copy(expectedIdentity = base.expectedIdentity.copy(codegenAbi = 2u)),
-                base.copy(expectedIdentity = base.expectedIdentity.copy(standardLibraryAbi = hash(2))),
+                base.copy(expectedIdentity = base.expectedIdentity.copy(platformAbi = hash(2))),
                 base.copy(expectedIdentity = base.expectedIdentity.copy(artifactWriterVersion = 2u)),
                 base.copy(trustedApiBundles = listOf(TrustedBundleIdentity.of("api", hash(5)))),
                 base.copy(trustedAddonBundles = listOf(TrustedBundleIdentity.of("addon", hash(6)))),
@@ -106,7 +106,7 @@ class CompilationIdentityTest {
         assertNotEquals(CompilationIdentity.compute(firstRequest), CompilationIdentity.compute(changedRequest))
         assertEquals(firstPayload.identity.codegenAbi, changedPayload.identity.codegenAbi)
         assertEquals(firstPayload.identity.artifactWriterVersion, changedPayload.identity.artifactWriterVersion)
-        assertEquals(firstPayload.identity.standardLibraryAbi, changedPayload.identity.standardLibraryAbi)
+        assertEquals(firstPayload.identity.platformAbi, changedPayload.identity.platformAbi)
     }
 
     @Test

@@ -154,7 +154,7 @@ private class MessageSink {
         u32(value.codegenAbi)
         u32(value.artifactWriterVersion)
         hash(value.payloadHash)
-        hash(value.standardLibraryAbi)
+        hash(value.platformAbi)
     }
 
     fun sources(values: List<ProjectSource>) {

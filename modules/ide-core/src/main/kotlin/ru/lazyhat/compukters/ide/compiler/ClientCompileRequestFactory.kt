@@ -60,7 +60,7 @@ object ClientCompileRequestFactory {
                         toolchain.codegenAbi,
                         toolchain.artifactWriterVersion,
                         toolchain.payloadHash,
-                        toolchain.standardLibraryAbi,
+                        toolchain.platformAbi,
                     ),
                 limits = input.profile.limits,
                 trustedApiBundles = input.profile.apiBundles.map(::trustedIdentity),

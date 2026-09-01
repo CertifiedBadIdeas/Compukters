@@ -53,10 +53,10 @@ class Manifest(
     val maximumBlockCost: UInt,
     val minimumSliceCost: UInt,
     compilerAbi: ByteArray,
-    standardLibraryAbi: ByteArray,
+    platformAbi: ByteArray,
 ) {
     val compilerAbi: ByteArray = compilerAbi.copyOf()
-    val standardLibraryAbi: ByteArray = standardLibraryAbi.copyOf()
+    val platformAbi: ByteArray = platformAbi.copyOf()
 
     companion object {
         fun minimal(
@@ -73,7 +73,7 @@ class Manifest(
                 maximumBlockCost = maximumBlockCost,
                 minimumSliceCost = minimumSliceCost,
                 compilerAbi = ByteArray(32),
-                standardLibraryAbi = ByteArray(32),
+                platformAbi = ByteArray(32),
             )
     }
 }

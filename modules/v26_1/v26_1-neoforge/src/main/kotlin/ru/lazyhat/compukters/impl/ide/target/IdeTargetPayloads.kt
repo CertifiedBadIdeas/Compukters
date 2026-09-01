@@ -811,7 +811,7 @@ private fun RegistryFriendlyByteBuf.writeToolchain(toolchain: ToolchainLockIdent
     writeInt(toolchain.artifactAbi.toInt())
     writeInt(toolchain.artifactWriterVersion.toInt())
     writeHash(toolchain.payloadHash)
-    writeHash(toolchain.standardLibraryAbi)
+    writeHash(toolchain.platformAbi)
 }
 
 private fun RegistryFriendlyByteBuf.readToolchain(): ToolchainLockIdentity =

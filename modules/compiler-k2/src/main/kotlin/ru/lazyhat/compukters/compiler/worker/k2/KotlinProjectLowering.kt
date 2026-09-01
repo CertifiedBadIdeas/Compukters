@@ -982,7 +982,7 @@ internal object KotlinProjectLowering {
                     maximumBlockCost = 64u,
                     minimumSliceCost = 64u,
                     compilerAbi = ByteArray(32),
-                    standardLibraryAbi = ByteArray(32),
+                    platformAbi = ByteArray(32),
                 ),
             entry =
                 EntryPoint(

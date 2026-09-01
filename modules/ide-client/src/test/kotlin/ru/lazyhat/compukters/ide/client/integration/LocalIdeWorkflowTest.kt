@@ -90,7 +90,7 @@ class LocalIdeWorkflowTest {
                     1u,
                     identity.artifactWriterVersion,
                     identity.payloadHash,
-                    identity.standardLibraryAbi,
+                    identity.platformAbi,
                 )
             val manifestBytes =
                 project.handle.canonicalPath

@@ -27,7 +27,7 @@ data class TargetCompileProfileIdentity(
             digest.uint(toolchain.artifactAbi)
             digest.uint(toolchain.artifactWriterVersion)
             digest.field(toolchain.payloadHash.toByteArray())
-            digest.field(toolchain.standardLibraryAbi.toByteArray())
+            digest.field(toolchain.platformAbi.toByteArray())
             digest.int(profile.modules.size)
             profile.modules.forEach { module ->
                 digest.field(module.id.provider)
@@ -50,7 +50,7 @@ data class TargetCompileProfileIdentity(
             return TargetCompileProfileIdentity(Hash256.of(digest.digest()))
         }
 
-        private val DOMAIN = "Compukters target compile profile v1\u0000".encodeToByteArray()
+        private val DOMAIN = "Compukters target compile profile v2\u0000".encodeToByteArray()
     }
 }
 

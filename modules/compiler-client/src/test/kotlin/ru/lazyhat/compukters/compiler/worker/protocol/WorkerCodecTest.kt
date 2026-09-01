@@ -92,7 +92,7 @@ class WorkerCodecTest {
                 codegenAbi = UInt.MAX_VALUE,
                 artifactWriterVersion = 0x8000_0000u,
                 payloadHash = Hash256.zero(),
-                standardLibraryAbi = Hash256.of(ByteArray(32) { 1 }),
+                platformAbi = Hash256.of(ByteArray(32) { 1 }),
             )
         val limits = WorkerLimits(sourceBytes = 1024, artifactBytes = 2048, diagnostics = 8)
         val diagnostic =

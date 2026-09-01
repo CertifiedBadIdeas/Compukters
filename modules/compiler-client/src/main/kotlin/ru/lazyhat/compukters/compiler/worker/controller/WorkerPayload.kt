@@ -99,7 +99,7 @@ class WorkerPayloadManifest private constructor(
                 codegenAbi = properties.getValue(CODEGEN_ABI).toUInt(),
                 artifactWriterVersion = properties.getValue(ARTIFACT_WRITER).toUInt(),
                 payloadHash = payloadHash,
-                standardLibraryAbi = Hash256.fromHex(properties.getValue(STANDARD_LIBRARY_ABI)),
+                platformAbi = Hash256.fromHex(properties.getValue(PLATFORM_ABI)),
             )
         }
 
@@ -116,7 +116,7 @@ class WorkerPayloadManifest private constructor(
                         LANGUAGE to identity.languageVersion,
                         CODEGEN_ABI to identity.codegenAbi.toString(),
                         ARTIFACT_WRITER to identity.artifactWriterVersion.toString(),
-                        STANDARD_LIBRARY_ABI to identity.standardLibraryAbi.hex(),
+                        PLATFORM_ABI to identity.platformAbi.hex(),
                     ),
                 mainClass = mainClass,
                 files = files,
@@ -127,8 +127,8 @@ class WorkerPayloadManifest private constructor(
         private const val LANGUAGE = "language"
         private const val CODEGEN_ABI = "codegenAbi"
         private const val ARTIFACT_WRITER = "artifactWriter"
-        private const val STANDARD_LIBRARY_ABI = "standardLibraryAbi"
-        private val IDENTITY_KEYS = setOf(COMPILER, LANGUAGE, CODEGEN_ABI, ARTIFACT_WRITER, STANDARD_LIBRARY_ABI)
+        private const val PLATFORM_ABI = "platformAbi"
+        private val IDENTITY_KEYS = setOf(COMPILER, LANGUAGE, CODEGEN_ABI, ARTIFACT_WRITER, PLATFORM_ABI)
     }
 }
 

@@ -69,5 +69,5 @@ object ClientCompilationIdentity {
 
     private fun UInt.toLittleEndian() = ByteArray(UInt.SIZE_BYTES) { index -> (this shr (index * 8)).toByte() }
 
-    private val DOMAIN = "Compukters client compilation identity v1\u0000".encodeToByteArray()
+    private val DOMAIN = "Compukters client compilation identity v2\u0000".encodeToByteArray()
 }

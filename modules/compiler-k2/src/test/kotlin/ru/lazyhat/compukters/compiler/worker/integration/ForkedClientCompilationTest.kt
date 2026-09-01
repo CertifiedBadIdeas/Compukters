@@ -128,7 +128,7 @@ class ForkedClientCompilationTest {
                 1u,
                 payload.manifest.identity.artifactWriterVersion,
                 payload.manifest.identity.payloadHash,
-                payload.manifest.identity.standardLibraryAbi,
+                payload.manifest.identity.platformAbi,
             )
         val lock = ProjectLock.of(toolchain, emptyList())
         val resolver = CompileProfileResolver(toolchain, GuestApiBundleCatalog.of(emptyList()), limits)

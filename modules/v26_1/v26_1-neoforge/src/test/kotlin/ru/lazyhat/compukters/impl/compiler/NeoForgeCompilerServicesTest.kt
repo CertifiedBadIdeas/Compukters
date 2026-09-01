@@ -44,7 +44,7 @@ class NeoForgeCompilerServicesTest {
         assertEquals(2u, profile.toolchain.artifactAbi)
         assertEquals(identity.artifactWriterVersion, profile.toolchain.artifactWriterVersion)
         assertEquals(identity.payloadHash, profile.toolchain.payloadHash)
-        assertEquals(identity.standardLibraryAbi, profile.toolchain.standardLibraryAbi)
+        assertEquals(identity.platformAbi, profile.toolchain.platformAbi)
         assertEquals(limits, profile.limits)
         assertEquals(emptyList(), profile.modules)
         assertEquals(TargetCompileProfileIdentity.of(profile), TargetCompileProfileIdentity.of(serverTargetProfile(identity, limits)))

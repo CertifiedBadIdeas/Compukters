@@ -154,7 +154,7 @@ class ProjectLockService(
         compare("artifact_abi", expected.artifactAbi.toString(), available.artifactAbi.toString())
         compare("artifact_writer", expected.artifactWriterVersion.toString(), available.artifactWriterVersion.toString())
         compare("payload_sha256", expected.payloadHash.hex(), available.payloadHash.hex())
-        compare("stdlib_abi_sha256", expected.standardLibraryAbi.hex(), available.standardLibraryAbi.hex())
+        compare("platform_abi_sha256", expected.platformAbi.hex(), available.platformAbi.hex())
     }
 
     private fun MutableList<ProjectLockMismatch>.compare(

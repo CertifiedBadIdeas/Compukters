@@ -103,14 +103,14 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
             payloadDigest.update(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(bytes.size).array())
             payloadDigest.update(bytes)
         }
-        val standardLibraryAbi = ByteArray(32).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        val platformAbi = ByteArray(32).joinToString("") { "%02x".format(it.toInt() and 0xff) }
         val identityProperties =
             sortedMapOf(
                 "artifactWriter" to "1",
                 "codegenAbi" to "1",
                 "compiler" to pinnedKotlinVersion,
                 "language" to "2.4",
-                "standardLibraryAbi" to standardLibraryAbi,
+                "platformAbi" to platformAbi,
             )
         payloadDigest.update("Compukters worker payload v1\u0000".toByteArray())
         payloadDigest.update(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(1).array())

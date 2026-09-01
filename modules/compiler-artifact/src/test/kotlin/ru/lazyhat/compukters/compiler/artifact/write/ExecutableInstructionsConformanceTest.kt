@@ -314,7 +314,7 @@ private fun executableInstructionsArtifact(): Artifact {
                 maximumBlockCost = 32u,
                 minimumSliceCost = 32u,
                 compilerAbi = ByteArray(32),
-                standardLibraryAbi = ByteArray(32),
+                platformAbi = ByteArray(32),
             ),
         entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
         modules = listOf(app, library),
