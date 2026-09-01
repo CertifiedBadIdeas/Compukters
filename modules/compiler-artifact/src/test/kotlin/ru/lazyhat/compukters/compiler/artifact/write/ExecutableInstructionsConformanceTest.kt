@@ -95,7 +95,7 @@ private fun executableInstructionsArtifact(): Artifact {
         Module(
             name = StringId.of(0u),
             kind = ModuleKind.APPLICATION,
-            strings = listOf("app", "callee", "entry", "host", "terminal").map(MetadataText::of),
+            strings = listOf("app", "callee", "entry", "host", "kotlin.String", "terminal").map(MetadataText::of),
             utf16Literals = listOf(Utf16Literal.fromString("x")),
             types =
                 listOf(
@@ -119,7 +119,7 @@ private fun executableInstructionsArtifact(): Artifact {
                     Import(
                         SymbolKind.TYPE,
                         ModuleId.of(1u),
-                        StringId.of(0u),
+                        StringId.of(4u),
                         TypeRef.Imported(ImportId.of(0u)),
                         libraryHash,
                     ),
@@ -318,6 +318,6 @@ private fun executableInstructionsArtifact(): Artifact {
             ),
         entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
         modules = listOf(app, library),
-        capabilities = listOf(Capability(StringId.of(3u), StringId.of(4u), AbiVersion(1u, 0u), true, 1u)),
+        capabilities = listOf(Capability(StringId.of(3u), StringId.of(5u), AbiVersion(1u, 0u), true, 1u)),
     )
 }

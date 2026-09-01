@@ -85,8 +85,11 @@ internal fun validateArtifact(
                     val targetModuleIndex = import.targetModule.value.toInt()
                     targetModule
                         ?.exports
-                        ?.singleOrNull { it.kind == SymbolKind.TYPE && it.name == import.targetName }
-                        ?.localSymbol
+                        ?.singleOrNull {
+                            it.kind == SymbolKind.TYPE &&
+                                artifact.modules[sourceModule].strings.getOrNull(import.targetName.value.toInt()) ==
+                                targetModule.strings.getOrNull(it.name.value.toInt())
+                        }?.localSymbol
                         ?.toInt()
                         ?.takeIf { it in targetModule.types.indices }
                         ?.let { TypeIdentity(targetModuleIndex, it) }
@@ -213,7 +216,8 @@ internal fun validateArtifact(
                         ?.exports
                         ?.singleOrNull {
                             it.kind == SymbolKind.FUNCTION &&
-                                it.name == import.targetName &&
+                                artifact.modules[sourceModule].strings.getOrNull(import.targetName.value.toInt()) ==
+                                targetModule.strings.getOrNull(it.name.value.toInt()) &&
                                 signaturesMatch(sourceModule, import.expectedSignature, targetModuleIndex, it.signature)
                         }?.localSymbol
                         ?.toInt()
@@ -243,8 +247,11 @@ internal fun validateArtifact(
                     val targetModuleIndex = import.targetModule.value.toInt()
                     targetModule
                         ?.exports
-                        ?.singleOrNull { it.kind == SymbolKind.FIELD && it.name == import.targetName }
-                        ?.localSymbol
+                        ?.singleOrNull {
+                            it.kind == SymbolKind.FIELD &&
+                                artifact.modules[sourceModule].strings.getOrNull(import.targetName.value.toInt()) ==
+                                targetModule.strings.getOrNull(it.name.value.toInt())
+                        }?.localSymbol
                         ?.toInt()
                         ?.takeIf { it in targetModule.fields.indices }
                         ?.let { FieldIdentity(targetModuleIndex, it) }
