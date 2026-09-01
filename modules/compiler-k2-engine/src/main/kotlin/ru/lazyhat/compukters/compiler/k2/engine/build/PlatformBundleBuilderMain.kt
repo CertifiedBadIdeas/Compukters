@@ -139,6 +139,8 @@ class PlatformBundleBuilder(
                         libraryFragment,
                         sources,
                         metadata.declarations,
+                        metadata.scalarTypes,
+                        metadata.scalarConstants,
                     )
             }
         }
