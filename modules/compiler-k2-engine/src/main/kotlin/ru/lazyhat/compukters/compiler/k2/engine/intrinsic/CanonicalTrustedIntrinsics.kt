@@ -88,10 +88,25 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "String.get", "fun(Int):Char")
             primitive("kotlin", "builtins", "kotlin", "String.length", "val():Int")
             primitive("kotlin", "builtins", "kotlin", "String.plus", "fun(Any?):String")
+            primitive("kotlin", "builtins", "kotlin", "String.substring", "fun(Int,Int):String")
             primitive("kotlin", "builtins", "kotlin", "Unit.toString", "fun():String")
             primitive("kotlin", "builtins", "kotlin", "arrayOf", "fun(T):Array<T>")
             primitive("kotlin", "builtins", "kotlin", "arrayOfNulls", "fun(Int):Array<T?>")
             primitive("kotlin", "builtins", "kotlin", "toString", "fun(T?.):String")
+            primitive(
+                "kotlin",
+                "builtins",
+                "kotlin.collections",
+                "copyOfRange",
+                "fun(Array<T>.Int,Int):Array<T>",
+            )
+            primitive(
+                "kotlin",
+                "builtins",
+                "kotlin.text",
+                "concatToString",
+                "fun(CharArray.Int,Int):String",
+            )
             primitive("stdlib", "core", "kotlin", "emptyArray", "fun():Array<T>")
 
             capability("compukter", "compiler", "compukter.compiler", "Compiler.compile", "fun(String,String):Int", compiler, 0u, true)

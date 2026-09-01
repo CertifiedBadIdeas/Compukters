@@ -89,4 +89,6 @@ public class String : Comparable<String>, CharSequence {
     public external override operator fun compareTo(other: String): Int
 
     public external operator fun plus(other: Any?): String
+
+    public external fun substring(startIndex: Int, endIndex: Int): String
 }
