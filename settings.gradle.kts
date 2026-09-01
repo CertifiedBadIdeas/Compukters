@@ -58,6 +58,7 @@ fun include(
 
 include("native-runtime", modulesDir)
 include("platform-bundle", modulesDir)
+include("platform-k2", modulesDir)
 include("compiler-artifact", modulesDir)
 include("worker-client", modulesDir)
 include("tooling-runtime", modulesDir)
