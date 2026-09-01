@@ -40,7 +40,7 @@ import ru.lazyhat.compukters.ide.compiler.ClientCompilerBackend
 import ru.lazyhat.compukters.ide.compiler.ControllerClientCompilerBackend
 import ru.lazyhat.compukters.ide.compiler.DefaultClientCompilationService
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
-import ru.lazyhat.compukters.ide.compiler.profile.GuestApiBundleCatalog
+import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ProjectLock
@@ -48,6 +48,13 @@ import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectManifest
 import ru.lazyhat.compukters.ide.project.ProjectManifestCodec
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
+import ru.lazyhat.compukters.platform.bundle.PlatformBundle
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
+import ru.lazyhat.compukters.platform.bundle.PlatformIdentity
+import ru.lazyhat.compukters.platform.bundle.PlatformModule
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
+import ru.lazyhat.compukters.worker.value.ImmutableBytes
+import ru.lazyhat.compukters.worker.value.Sha256
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
@@ -131,7 +138,7 @@ class ForkedClientCompilationTest {
                 payload.manifest.identity.platformAbi,
             )
         val lock = ProjectLock.of(toolchain, emptyList())
-        val resolver = CompileProfileResolver(toolchain, GuestApiBundleCatalog.of(emptyList()), limits)
+        val resolver = CompileProfileResolver(toolchain, emptyPlatformCatalog(toolchain), limits)
         val profile = assertIs<ProfileResolution.Resolved>(resolver.resolveLocal(lock)).profile
         val manifest = ProjectManifest.of("forked-client", emptyMap())
         try {
@@ -154,6 +161,27 @@ class ForkedClientCompilationTest {
             root.toFile().deleteRecursively()
         }
     }
+
+    private fun emptyPlatformCatalog(toolchain: ToolchainLockIdentity): PlatformCatalog =
+        PlatformCatalog.of(
+            PlatformBundle(
+                PlatformIdentity(
+                    toolchain.languageVersion,
+                    PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
+                    Sha256.of(toolchain.platformAbi.toByteArray()),
+                ),
+                PlatformModule(
+                    PlatformModuleId("compukters", "builtins"),
+                    "1.0.0",
+                    emptyList(),
+                    ImmutableBytes.of(byteArrayOf()),
+                    null,
+                    emptyList(),
+                    emptyList(),
+                ),
+                emptyList(),
+            ),
+        )
 
     private class Fixture(
         val service: DefaultClientCompilationService,

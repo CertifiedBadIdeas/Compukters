@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package ru.lazyhat.compukters.compiler.worker.k2
+package ru.lazyhat.compukters.compiler.k2.engine
 
 internal enum class TrustedValueType {
     UNIT,
@@ -78,12 +78,6 @@ internal fun interface TrustedIntrinsicProvider {
     fun resolve(callable: TrustedCallableIdentity): TrustedIntrinsic?
 }
 
-internal data class TrustedApiSourceBundle(
-    val identity: String,
-    val resource: String,
-    val fileName: String,
-)
-
 internal object TrustedIntrinsicRegistry {
     const val KOTLIN_STDLIB_BUNDLE_ID = "kotlin-stdlib@2.4.10"
     const val STDIO_BUNDLE_ID = "compukter.stdio-api@1"
@@ -92,39 +86,6 @@ internal object TrustedIntrinsicRegistry {
     const val FILESYSTEM_BUNDLE_ID = "compukter.filesystem-api@1"
     const val COMPILER_BUNDLE_ID = "compukter.compiler-api@1"
     const val REDSTONE_BUNDLE_ID = "compukter.redstone-api@1"
-    val CORE_SOURCE_BUNDLES =
-        listOf(
-            TrustedApiSourceBundle(
-                STDIO_BUNDLE_ID,
-                "/compukter-guest-api/compukter/io/Stderr.kt",
-                "stdio.kt",
-            ),
-            TrustedApiSourceBundle(
-                TERMINAL_BUNDLE_ID,
-                "/compukter-guest-api/compukter/terminal/Terminal.kt",
-                "terminal.kt",
-            ),
-            TrustedApiSourceBundle(
-                PROCESS_BUNDLE_ID,
-                "/compukter-guest-api/compukter/process/Process.kt",
-                "process.kt",
-            ),
-            TrustedApiSourceBundle(
-                FILESYSTEM_BUNDLE_ID,
-                "/compukter-guest-api/compukter/filesystem/FileSystem.kt",
-                "filesystem.kt",
-            ),
-            TrustedApiSourceBundle(
-                COMPILER_BUNDLE_ID,
-                "/compukter-guest-api/compukter/compiler/Compiler.kt",
-                "compiler.kt",
-            ),
-            TrustedApiSourceBundle(
-                REDSTONE_BUNDLE_ID,
-                "/compukter-guest-api/compukter/redstone/Redstone.kt",
-                "redstone.kt",
-            ),
-        )
     val TERMINAL_CAPABILITY = TrustedCapabilityIdentity("compukter", "terminal", 2u.toUShort(), 0u.toUShort(), 14u)
     val STDIO_CAPABILITY = TrustedCapabilityIdentity("compukter", "stdio", 1u.toUShort(), 0u.toUShort(), 3u)
     val PROCESS_CAPABILITY = TrustedCapabilityIdentity("compukter", "process", 2u.toUShort(), 0u.toUShort(), 3u)
@@ -157,21 +118,41 @@ private object RedstoneIntrinsicProvider : TrustedIntrinsicProvider {
         }
         val binding = "compukter.redstone.RedstoneBindings."
         return when (callable.name) {
-            "${binding}input" -> operation(0u, callable, listOf(TrustedValueType.INT), TrustedValueType.INT, BlockingMode.NONE)
-            "${binding}awaitInputChange" ->
+            "${binding}input" -> {
+                operation(0u, callable, listOf(TrustedValueType.INT), TrustedValueType.INT, BlockingMode.NONE)
+            }
+
+            "${binding}awaitInputChange" -> {
                 operation(1u, callable, listOf(TrustedValueType.INT), TrustedValueType.INT, BlockingMode.VM_TASK)
-            "${binding}awaitInput" ->
+            }
+
+            "${binding}awaitInput" -> {
                 operation(2u, callable, listOf(TrustedValueType.INT, TrustedValueType.INT), TrustedValueType.INT, BlockingMode.VM_TASK)
-            "${binding}awaitAtLeastInput" ->
+            }
+
+            "${binding}awaitAtLeastInput" -> {
                 operation(3u, callable, listOf(TrustedValueType.INT, TrustedValueType.INT), TrustedValueType.INT, BlockingMode.VM_TASK)
-            "${binding}awaitAtMostInput" ->
+            }
+
+            "${binding}awaitAtMostInput" -> {
                 operation(4u, callable, listOf(TrustedValueType.INT, TrustedValueType.INT), TrustedValueType.INT, BlockingMode.VM_TASK)
-            "${binding}outputs" -> operation(5u, callable, emptyList(), TrustedValueType.INT, BlockingMode.NONE)
-            "${binding}setOutput" ->
+            }
+
+            "${binding}outputs" -> {
+                operation(5u, callable, emptyList(), TrustedValueType.INT, BlockingMode.NONE)
+            }
+
+            "${binding}setOutput" -> {
                 operation(6u, callable, listOf(TrustedValueType.INT, TrustedValueType.INT), TrustedValueType.UNIT, BlockingMode.VM_TASK)
-            "${binding}setOutputs" ->
+            }
+
+            "${binding}setOutputs" -> {
                 operation(7u, callable, listOf(TrustedValueType.INT), TrustedValueType.UNIT, BlockingMode.VM_TASK)
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     }
 

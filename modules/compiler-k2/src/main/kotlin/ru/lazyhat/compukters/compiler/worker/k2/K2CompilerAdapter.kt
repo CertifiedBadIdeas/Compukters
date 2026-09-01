@@ -21,6 +21,9 @@ package ru.lazyhat.compukters.compiler.worker.k2
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
 import org.jetbrains.kotlin.config.Services
+import ru.lazyhat.compukters.compiler.k2.engine.CompilationBridge
+import ru.lazyhat.compukters.compiler.k2.engine.CompilationSession
+import ru.lazyhat.compukters.compiler.k2.engine.CompukterCompilerPluginRegistrar
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryBudget
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryUsage
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
@@ -87,7 +90,7 @@ class K2CompilerAdapter(
         }
         val temporaryBudget = TemporaryBudget(inputs.temporaryRoot, request.limits)
         val trustedApis =
-            TrustedIntrinsicRegistry.CORE_SOURCE_BUNDLES.map { bundle ->
+            CORE_SOURCE_BUNDLES.map { bundle ->
                 bundle to loadTrustedApi(bundle)
             }
         temporaryBudget.requireCapacity(
@@ -134,7 +137,7 @@ class K2CompilerAdapter(
                             },
                         trustedApiSourceIdentities =
                             trustedApiSources.associate { (bundle, source) -> source.toString() to bundle.identity },
-                        trustedStandardLibraryIdentity = TrustedIntrinsicRegistry.KOTLIN_STDLIB_BUNDLE_ID,
+                        trustedStandardLibraryIdentity = KOTLIN_STDLIB_BUNDLE_ID,
                         limits = request.limits,
                     ),
                 ) {
@@ -183,10 +186,34 @@ class K2CompilerAdapter(
         jdkHome = inputs.jdkHome.toString()
         noStdlib = true
         noReflect = true
-        pluginClasspaths = arrayOf(inputs.workerJar.toString())
+        pluginClasspaths = arrayOf(engineJar().toString())
     }
 
-    private companion object {
+    private fun engineJar(): Path =
+        Path.of(checkNotNull(CompukterCompilerPluginRegistrar::class.java.protectionDomain.codeSource).location.toURI())
+
+    internal companion object {
         val DEPENDENCY_ANNOTATION = Regex("(?m)^\\s*@file:(DependsOn|Repository)\\b")
+        const val KOTLIN_STDLIB_BUNDLE_ID = "kotlin-stdlib@2.4.10"
+        private val CORE_SOURCE_BUNDLES =
+            listOf(
+                TrustedApiSourceBundle("compukter.stdio-api@1", "/compukter-guest-api/compukter/io/Stderr.kt", "stdio.kt"),
+                TrustedApiSourceBundle("compukter.terminal-api@1", "/compukter-guest-api/compukter/terminal/Terminal.kt", "terminal.kt"),
+                TrustedApiSourceBundle("compukter.process-api@2", "/compukter-guest-api/compukter/process/Process.kt", "process.kt"),
+                TrustedApiSourceBundle(
+                    "compukter.filesystem-api@1",
+                    "/compukter-guest-api/compukter/filesystem/FileSystem.kt",
+                    "filesystem.kt",
+                ),
+                TrustedApiSourceBundle("compukter.compiler-api@1", "/compukter-guest-api/compukter/compiler/Compiler.kt", "compiler.kt"),
+                TrustedApiSourceBundle("compukter.redstone-api@1", "/compukter-guest-api/compukter/redstone/Redstone.kt", "redstone.kt"),
+            )
+        val trustedApiSourceResources: List<String> = CORE_SOURCE_BUNDLES.map(TrustedApiSourceBundle::resource)
     }
 }
+
+private data class TrustedApiSourceBundle(
+    val identity: String,
+    val resource: String,
+    val fileName: String,
+)

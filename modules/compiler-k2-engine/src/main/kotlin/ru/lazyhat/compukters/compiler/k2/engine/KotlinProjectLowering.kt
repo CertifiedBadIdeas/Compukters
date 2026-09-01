@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package ru.lazyhat.compukters.compiler.worker.k2
+package ru.lazyhat.compukters.compiler.k2.engine
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.descriptors.ClassKind
@@ -195,24 +195,25 @@ private class InlineValueClassRegistry private constructor(
                         layoutsByClass.containsKey((declaration.parent as? IrClass)?.symbol)
                 }
             val constants =
-                companions.flatMap { companion ->
-                    companion.declarations.filterIsInstance<IrProperty>().map { property ->
-                        if (property.isVar || property.getter == null || property.backingField == null) {
-                            throw UnsupportedKotlinIr(property, "value class companion properties must be immutable scalar constants")
+                companions
+                    .flatMap { companion ->
+                        companion.declarations.filterIsInstance<IrProperty>().map { property ->
+                            if (property.isVar || property.getter == null || property.backingField == null) {
+                                throw UnsupportedKotlinIr(property, "value class companion properties must be immutable scalar constants")
+                            }
+                            val initializer =
+                                requireNotNull(property.backingField).initializer?.expression
+                                    ?: throw UnsupportedKotlinIr(property, "value class companion constant requires an initializer")
+                            requireNotNull(property.getter).symbol to
+                                InlineScalarConstant(
+                                    scalarConstant(
+                                        initializer,
+                                        layouts.associateBy(InlineValueClassLayout::constructor),
+                                        pluginContext,
+                                    ),
+                                )
                         }
-                        val initializer =
-                            requireNotNull(property.backingField).initializer?.expression
-                                ?: throw UnsupportedKotlinIr(property, "value class companion constant requires an initializer")
-                        requireNotNull(property.getter).symbol to
-                            InlineScalarConstant(
-                                scalarConstant(
-                                    initializer,
-                                    layouts.associateBy(InlineValueClassLayout::constructor),
-                                    pluginContext,
-                                ),
-                            )
-                    }
-                }.toMap()
+                    }.toMap()
             return InlineValueClassRegistry(
                 byClass = layoutsByClass,
                 byConstructor = layouts.associateBy(InlineValueClassLayout::constructor),
@@ -229,9 +230,10 @@ private class InlineValueClassRegistry private constructor(
             pluginContext: IrPluginContext,
         ): Any =
             when (expression) {
-                is IrConst ->
+                is IrConst -> {
                     expression.value
                         ?: throw UnsupportedKotlinIr(expression, "null companion constants are not supported")
+                }
 
                 is IrConstructorCall -> {
                     val layout =
@@ -261,7 +263,9 @@ private class InlineValueClassRegistry private constructor(
                     value
                 }
 
-                else -> throw UnsupportedKotlinIr(expression, "value class companion initializer must be a scalar constant")
+                else -> {
+                    throw UnsupportedKotlinIr(expression, "value class companion initializer must be a scalar constant")
+                }
             }
 
         @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -270,7 +274,8 @@ private class InlineValueClassRegistry private constructor(
             pluginContext: IrPluginContext,
         ): InlineValueClassLayout {
             if (declaration.annotations.none {
-                    it.symbol.owner.parentAsClass.fqNameWhenAvailable?.asString() == "kotlin.jvm.JvmInline"
+                    it.symbol.owner.parentAsClass.fqNameWhenAvailable
+                        ?.asString() == "kotlin.jvm.JvmInline"
                 }
             ) {
                 throw UnsupportedKotlinIr(declaration, "value class must be annotated with @JvmInline")
@@ -335,13 +340,17 @@ private class InlineValueClassRegistry private constructor(
             val requireCall =
                 initializer.body.statements.singleOrNull() as? IrCall
                     ?: throw UnsupportedKotlinIr(initializer, "value class initializer must be one require call")
-            if (requireCall.symbol.owner.fqNameWhenAvailable?.asString() != "kotlin.require") {
+            if (requireCall.symbol.owner.fqNameWhenAvailable
+                    ?.asString() != "kotlin.require"
+            ) {
                 throw UnsupportedKotlinIr(initializer, "value class initializer must be one require call")
             }
             val contains =
                 requireCall.arguments.filterNotNull().singleOrNull() as? IrCall
                     ?: throw UnsupportedKotlinIr(initializer, "value class require must check one inclusive Int range")
-            if (contains.symbol.owner.fqNameWhenAvailable?.asString() != "kotlin.ranges.IntRange.contains") {
+            if (contains.symbol.owner.fqNameWhenAvailable
+                    ?.asString() != "kotlin.ranges.IntRange.contains"
+            ) {
                 throw UnsupportedKotlinIr(initializer, "value class require must check one inclusive Int range")
             }
             val containsArguments = contains.arguments.filterNotNull()
@@ -349,7 +358,9 @@ private class InlineValueClassRegistry private constructor(
                 containsArguments.getOrNull(0) as? IrCall
                     ?: throw UnsupportedKotlinIr(initializer, "value class require must use a constant Int range")
             val value = containsArguments.getOrNull(1) as? IrCall
-            if (range.symbol.owner.name.asString() != "rangeTo" || value?.symbol != getter) {
+            if (range.symbol.owner.name
+                    .asString() != "rangeTo" || value?.symbol != getter
+            ) {
                 throw UnsupportedKotlinIr(initializer, "value class require must check its underlying property")
             }
             val bounds = range.arguments.filterNotNull().map { (it as? IrConst)?.value }
@@ -386,8 +397,7 @@ internal object KotlinProjectLowering {
                             inlineValueClasses.contains((function.parent as? IrClass)?.symbol) &&
                                 function.origin == IrDeclarationOrigin.DEFINED
                         )
-                }
-                .filterNot { function -> session.trustedApiIdentity(function.file.fileEntry.name) != null }
+                }.filterNot { function -> session.trustedApiIdentity(function.file.fileEntry.name) != null }
         val processFacadeNames = setOf("compukter.process.Process.run", "compukter.process.Process.exit")
         val usesProcessFacade =
             playerFunctions.any { function ->
@@ -623,7 +633,9 @@ internal object KotlinProjectLowering {
                     }
 
                     override fun visitCall(expression: IrCall) {
-                        if (expression.symbol.owner.fqNameWhenAvailable?.asString() == "kotlin.Int.inv") {
+                        if (expression.symbol.owner.fqNameWhenAvailable
+                                ?.asString() == "kotlin.Int.inv"
+                        ) {
                             needsAllBitsI32 = true
                         }
                         super.visitCall(expression)
@@ -646,8 +658,7 @@ internal object KotlinProjectLowering {
                 Constant.I32(0) +
                 listOfNotNull(Constant.I32(-1).takeIf { needsAllBitsI32 }) +
                 Constant.Bool(false)
-        )
-            .forEach(constantPool::intern)
+        ).forEach(constantPool::intern)
         val constants = constantPool.freeze().records
         val constantIds = constants.withIndex().associate { (index, value) -> value to ConstantId.of(index.toUInt()) }
 
@@ -1033,11 +1044,26 @@ internal object KotlinProjectLowering {
         inlineValueClasses: InlineValueClassRegistry,
     ): String =
         when (type) {
-            pluginContext.irBuiltIns.unitType -> "kotlin.Unit"
-            pluginContext.irBuiltIns.intType -> "kotlin.Int"
-            pluginContext.irBuiltIns.booleanType -> "kotlin.Boolean"
-            pluginContext.irBuiltIns.charType -> "kotlin.Char"
-            pluginContext.irBuiltIns.stringType -> "kotlin.String"
+            pluginContext.irBuiltIns.unitType -> {
+                "kotlin.Unit"
+            }
+
+            pluginContext.irBuiltIns.intType -> {
+                "kotlin.Int"
+            }
+
+            pluginContext.irBuiltIns.booleanType -> {
+                "kotlin.Boolean"
+            }
+
+            pluginContext.irBuiltIns.charType -> {
+                "kotlin.Char"
+            }
+
+            pluginContext.irBuiltIns.stringType -> {
+                "kotlin.String"
+            }
+
             else -> {
                 val classifier = requireNotNull((type as? IrSimpleType)?.classifier as? IrClassSymbol)
                 inlineValueClasses[classifier]
@@ -2319,17 +2345,23 @@ private fun IrType.isExactClass(symbol: IrClassSymbol): Boolean = (this as? IrSi
 private fun loweredParameters(
     function: IrSimpleFunction,
     session: CompilationSession,
-) =
-    when (session.trustedApiIdentity(function.file.fileEntry.name)) {
-        TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID -> function.parameters.filter { it.kind == IrParameterKind.Regular }
-        TrustedIntrinsicRegistry.REDSTONE_BUNDLE_ID ->
-            if ((function.parent as? IrClass)?.name?.asString() == "Redstone") {
-                function.parameters.filter { it.kind == IrParameterKind.Regular }
-            } else {
-                function.parameters
-            }
-        else -> function.parameters
+) = when (session.trustedApiIdentity(function.file.fileEntry.name)) {
+    TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID -> {
+        function.parameters.filter { it.kind == IrParameterKind.Regular }
     }
+
+    TrustedIntrinsicRegistry.REDSTONE_BUNDLE_ID -> {
+        if ((function.parent as? IrClass)?.name?.asString() == "Redstone") {
+            function.parameters.filter { it.kind == IrParameterKind.Regular }
+        } else {
+            function.parameters
+        }
+    }
+
+    else -> {
+        function.parameters
+    }
+}
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private class LiteralCollector : IrVisitorVoid() {
@@ -2423,11 +2455,26 @@ private fun resolveTrustedIntrinsic(
 
     fun IrType.trustedType(): TrustedValueType =
         when (this) {
-            unitType -> TrustedValueType.UNIT
-            stringType -> TrustedValueType.STRING
-            intType -> TrustedValueType.INT
-            booleanType -> TrustedValueType.BOOL
-            charType -> TrustedValueType.CHAR
+            unitType -> {
+                TrustedValueType.UNIT
+            }
+
+            stringType -> {
+                TrustedValueType.STRING
+            }
+
+            intType -> {
+                TrustedValueType.INT
+            }
+
+            booleanType -> {
+                TrustedValueType.BOOL
+            }
+
+            charType -> {
+                TrustedValueType.CHAR
+            }
+
             else -> {
                 val classifier = (this as? IrSimpleType)?.classifier as? IrClassSymbol
                 val inline = classifier?.let(inlineValueClasses::get)
