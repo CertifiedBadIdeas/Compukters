@@ -37,9 +37,11 @@ import org.jetbrains.kotlin.psi.KtConstantExpression
 import org.jetbrains.kotlin.psi.KtConstructor
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtDeclarationContainer
+import org.jetbrains.kotlin.psi.KtEnumEntry
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
+import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.psi.KtTypeAlias
@@ -75,10 +77,13 @@ data class PlatformLibraryDeclaration(
     val startUtf16: Int,
     val endUtf16: Int,
     val kind: PlatformLibraryDeclarationKind,
+    val exported: Boolean = true,
 )
 
 enum class PlatformLibraryDeclarationKind {
+    TYPE,
     FUNCTION,
+    FIELD,
     PROPERTY,
 }
 
@@ -140,7 +145,17 @@ class PlatformMetadataCompiler {
             PlatformMetadataCodec.encode(decoded),
             publicDeclarations,
             exports,
-            declarations.filter(ParsedDeclaration::hasBody).map { parsed ->
+            declarations.filter { parsed ->
+                parsed.hasBody ||
+                    (
+                        !parsed.private &&
+                            parsed.libraryKind in
+                            setOf(
+                                PlatformLibraryDeclarationKind.TYPE,
+                                PlatformLibraryDeclarationKind.FIELD,
+                            )
+                    )
+            }.map { parsed ->
                 val declaration = parsed.declaration
                 PlatformLibraryDeclaration(
                     declaration.symbol,
@@ -149,6 +164,7 @@ class PlatformMetadataCompiler {
                     declaration.startUtf16,
                     declaration.endUtf16,
                     requireNotNull(parsed.libraryKind),
+                    !parsed.private,
                 )
             },
             parsedPlatform.scalarTypes.sortedBy(PlatformScalarType::symbol),
@@ -223,7 +239,7 @@ class PlatformMetadataCompiler {
                     }
                     val packageName = file.packageFqName.asString()
                     file.declarations.forEach { declaration ->
-                        declarations += collect(module, source.path, packageName, emptyList(), declaration)
+                        declarations += collect(module, source.path, packageName, emptyList(), declaration = declaration)
                         collectScalars(source.path, packageName, emptyList(), declaration)?.let { scalar ->
                             scalarTypes += scalar.type
                             scalarConstants += scalar.constants
@@ -357,6 +373,7 @@ class PlatformMetadataCompiler {
         sourcePath: String,
         packageName: String,
         owners: List<String>,
+        inheritedPrivate: Boolean = false,
         declaration: KtDeclaration,
     ): List<ParsedDeclaration> {
         val named = declaration as? KtNamedDeclaration ?: return emptyList()
@@ -378,12 +395,20 @@ class PlatformMetadataCompiler {
                 endUtf16 = declaration.textRange.endOffset,
                 trustedExternal = external,
             )
+        val private =
+            inheritedPrivate || declaration.hasModifier(KtTokens.PRIVATE_KEYWORD) || declaration.hasModifier(KtTokens.INTERNAL_KEYWORD)
+        val propertyParameters =
+            (declaration as? KtClass)
+                ?.takeUnless { it.hasModifier(KtTokens.VALUE_KEYWORD) }
+                ?.primaryConstructorParameters
+                .orEmpty()
+                .filter(KtParameter::hasValOrVar)
         val nested =
             (
                 (declaration as? KtDeclarationContainer)?.declarations.orEmpty() +
-                    listOfNotNull((declaration as? KtClass)?.primaryConstructor)
-            ).flatMap { child -> collect(module, sourcePath, packageName, owners + name, child) }
-        val private = declaration.hasModifier(KtTokens.PRIVATE_KEYWORD) || declaration.hasModifier(KtTokens.INTERNAL_KEYWORD)
+                    listOfNotNull((declaration as? KtClass)?.primaryConstructor) +
+                    propertyParameters
+            ).flatMap { child -> collect(module, sourcePath, packageName, owners + name, private, child) }
         val parsed =
             ParsedDeclaration(
                 platformDeclaration,
@@ -395,7 +420,10 @@ class PlatformMetadataCompiler {
                 },
                 when (declaration) {
                     is KtNamedFunction -> PlatformLibraryDeclarationKind.FUNCTION
+                    is KtEnumEntry -> PlatformLibraryDeclarationKind.FIELD
+                    is KtParameter -> PlatformLibraryDeclarationKind.FIELD.takeIf { declaration.hasValOrVar() }
                     is KtProperty -> PlatformLibraryDeclarationKind.PROPERTY
+                    is KtClass -> PlatformLibraryDeclarationKind.TYPE.takeUnless { declaration.hasModifier(KtTokens.VALUE_KEYWORD) }
                     else -> null
                 },
             )
@@ -438,6 +466,15 @@ class PlatformMetadataCompiler {
                         ?.plus(".")
                         .orEmpty()
                 "${if (declaration.isVar) "var" else "val"}($receiver):${declaration.typeReference?.text?.canonicalType() ?: "?"}"
+            }
+
+            is KtParameter -> {
+                val mutability = if (declaration.valOrVarKeyword?.node?.elementType == KtTokens.VAR_KEYWORD) "var" else "val"
+                "$mutability():${declaration.typeReference?.text?.canonicalType() ?: "?"}"
+            }
+
+            is KtEnumEntry -> {
+                "enum-entry"
             }
 
             is KtTypeAlias -> {

@@ -114,6 +114,7 @@ class PlatformMetadataCompilerTest {
                 "sample.Token.<get-doubled>" to "fun():Int",
                 "sample.Token.<init>" to "constructor(Int)",
                 "sample.Token.doubled" to "val():Int",
+                "sample.Token.value" to "val():Int",
             ),
             result.declarations.map { it.symbol to it.signature },
         )
