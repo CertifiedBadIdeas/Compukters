@@ -112,7 +112,7 @@ class K2CompilerAdapter(
                     )
             }
         }
-        if (diagnostics.isNotEmpty()) return failure(diagnostics, reachedIr = false)
+        if (diagnostics.isNotEmpty()) return failure(diagnostics, reachedIr = false, request.limits)
         val selected = selectModules(request)
         val libraries = loadLibraries(selected)
         val budget = TemporaryBudget(inputs.temporaryRoot, request.limits)
@@ -137,9 +137,14 @@ class K2CompilerAdapter(
             var reachedIr = false
             var artifact: BinaryValue? = null
             val sourcePaths =
-                request.sources.associate { source ->
-                    Path.of(source.path.value).fileName.toString() to source.path
-                }
+                request.sources
+                    .flatMap { source ->
+                        listOf(
+                            Path.of(source.path.value).fileName.toString(),
+                            source.path.value,
+                            sourceRoot.resolve(source.path.value).normalize().toString(),
+                        ).map { physical -> physical to source.path }
+                    }.toMap()
             CompuktersFirBuildEnvironment.create().use { environment ->
                 val output =
                     environment.compileGuest(
@@ -157,7 +162,10 @@ class K2CompilerAdapter(
                                     Severity.INFO -> DiagnosticSeverity.INFO
                                     else -> DiagnosticSeverity.WARNING
                                 },
-                                if (diagnostic.factoryName.contains("SYNTAX") || diagnostic.renderMessage().contains("Expecting")) {
+                                if (
+                                    diagnostic.factoryName.contains("SYNTAX") ||
+                                    diagnostic.renderMessage().contains("expecting", ignoreCase = true)
+                                ) {
                                     DiagnosticCategory.SYNTAX
                                 } else {
                                     DiagnosticCategory.TYPE
@@ -174,7 +182,14 @@ class K2CompilerAdapter(
                     val session =
                         CompilationSession(
                             irSink = { _, _ -> reachedIr = true },
-                            diagnosticSink = diagnostics::add,
+                            diagnosticSink = { diagnostic ->
+                                diagnostics +=
+                                    if (diagnostic.path == null && request.sources.size == 1) {
+                                        diagnostic.copy(path = request.sources.single().path)
+                                    } else {
+                                        diagnostic
+                                    }
+                            },
                             sourcePaths = sourcePaths,
                             canonicalIntrinsicRegistry = CanonicalTrustedIntrinsics.registry,
                             selectedPlatformModules = selected.mapTo(mutableSetOf(), PlatformModule::id),
@@ -222,7 +237,7 @@ class K2CompilerAdapter(
             val failed = diagnostics.any { it.severity == DiagnosticSeverity.ERROR }
             K2CompilationResult(
                 if (failed) ExitCode.COMPILATION_ERROR else ExitCode.OK,
-                diagnostics,
+                diagnostics.bounded(request.limits),
                 reachedIr,
                 artifact?.takeIf { !failed },
                 failed,
@@ -366,7 +381,8 @@ class K2CompilerAdapter(
     private fun failure(
         diagnostics: List<WorkerDiagnostic>,
         reachedIr: Boolean,
-    ) = K2CompilationResult(ExitCode.COMPILATION_ERROR, diagnostics, reachedIr, null, true)
+        limits: WorkerLimits,
+    ) = K2CompilationResult(ExitCode.COMPILATION_ERROR, diagnostics.bounded(limits), reachedIr, null, true)
 
     private fun targetDiagnostic(
         path: VirtualSourcePath,

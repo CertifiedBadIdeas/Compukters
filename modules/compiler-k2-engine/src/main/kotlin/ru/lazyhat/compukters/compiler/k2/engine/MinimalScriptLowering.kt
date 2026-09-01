@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.IrBlockBody
+import org.jetbrains.kotlin.ir.expressions.IrErrorExpression
 import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
@@ -86,7 +87,7 @@ internal object MinimalScriptLowering {
             try {
                 return KotlinProjectLowering.lower(functions, declarations.classes, entry, pluginContext, session)
             } catch (unsupported: UnsupportedKotlinIr) {
-                session.diagnosticSink(unsupported(session, unsupported.element, unsupported.message))
+                session.diagnosticSink(unsupported(session, unsupported.element, unsupported.message, entry))
                 return null
             }
         }
@@ -112,13 +113,17 @@ internal object MinimalScriptLowering {
         session: CompilationSession,
         element: IrElement?,
         detail: String? = null,
+        fallback: IrSimpleFunction? = null,
     ) = WorkerDiagnostic(
         DiagnosticSeverity.ERROR,
-        DiagnosticCategory.TARGET,
-        "UNSUPPORTED_IR",
+        if (element is IrErrorExpression) DiagnosticCategory.SYNTAX else DiagnosticCategory.TARGET,
+        if (element is IrErrorExpression) "SYNTAX_ERROR" else "UNSUPPORTED_IR",
         detail?.let { "source IR is outside the minimal script subset: $it" }
             ?: "source IR is outside the minimal script subset",
-        session.virtualSourcePath((element as? org.jetbrains.kotlin.ir.declarations.IrDeclaration)?.file?.fileEntry?.name),
+        session.virtualSourcePath(
+            (element as? org.jetbrains.kotlin.ir.declarations.IrDeclaration)?.file?.fileEntry?.name
+                ?: fallback?.file?.fileEntry?.name,
+        ),
         element?.startOffset?.takeIf { it >= 0 }?.toUInt(),
         element?.endOffset?.takeIf { it >= 0 }?.toUInt(),
     )

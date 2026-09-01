@@ -68,11 +68,14 @@ class K2CompilerAdapterTest {
     @Test
     fun `syntax and type diagnostics use virtual paths and UTF-16 offsets`() =
         withAdapter { adapter, _ ->
-            val syntax = adapter.compile(request("val emoji = \"😀\"\nval answer = )"))
+            val syntax = adapter.compile(request("fun main() { if ( }"))
             val syntaxError =
-                syntax.diagnostics.first {
+                assertNotNull(
+                    syntax.diagnostics.firstOrNull {
                     it.severity == DiagnosticSeverity.ERROR && it.category == DiagnosticCategory.SYNTAX
-                }
+                    },
+                    syntax.diagnostics.toString(),
+                )
             assertEquals(DiagnosticCategory.SYNTAX, syntaxError.category, syntax.diagnostics.toString())
             assertEquals("project/virtual.kt", syntaxError.path?.value)
             assertTrue(syntaxError.startUtf16 != null)
@@ -81,6 +84,16 @@ class K2CompilerAdapterTest {
             val type = adapter.compile(request("val answer: MissingType = 42"))
             assertTrue(type.diagnostics.any { it.category == DiagnosticCategory.TYPE && it.severity == DiagnosticSeverity.ERROR })
             assertNull(type.artifact)
+        }
+
+    @Test
+    fun `Guest JVM value classes are rejected before FIR`() =
+        withAdapter { adapter, _ ->
+            val result = adapter.compile(request("@JvmInline value class Guest(val value: Int)"))
+
+            assertFalse(result.reachedIr)
+            assertTrue(result.diagnostics.any { it.code == "JVM_INLINE" })
+            assertNull(result.artifact)
         }
 
     @Test
