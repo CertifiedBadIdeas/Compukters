@@ -1,0 +1,47 @@
+[[module]]
+id = "kotlin:builtins"
+version = "1.0.0"
+dependencies = []
+sources = ["builtins/kotlin/**/*.kt"]
+
+[[module]]
+id = "stdlib:core"
+version = "1.0.0"
+dependencies = ["kotlin:builtins"]
+sources = ["libraries/stdlib-core/**/*.kt"]
+
+[[module]]
+id = "stdlib:ranges"
+version = "1.0.0"
+dependencies = ["stdlib:core"]
+sources = ["libraries/stdlib-ranges/**/*.kt"]
+
+[[module]]
+id = "std:terminal"
+version = "1.0.0"
+dependencies = ["stdlib:core"]
+sources = ["libraries/std-terminal/**/*.kt"]
+
+[[module]]
+id = "std:filesystem"
+version = "1.0.0"
+dependencies = ["stdlib:core"]
+sources = ["libraries/std-filesystem/**/*.kt"]
+
+[[module]]
+id = "compukter:compiler"
+version = "1.0.0"
+dependencies = ["stdlib:core"]
+sources = ["libraries/compukter-compiler/**/*.kt"]
+
+[[module]]
+id = "compukter:process"
+version = "2.0.0"
+dependencies = ["stdlib:core"]
+sources = ["libraries/compukter-process/**/*.kt"]
+
+[[module]]
+id = "compukter:redstone"
+version = "1.0.0"
+dependencies = ["stdlib:core", "stdlib:ranges"]
+sources = ["libraries/compukter-redstone/**/*.kt"]

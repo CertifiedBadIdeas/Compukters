@@ -219,7 +219,7 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
 }
 
 tasks.test {
-    val guestApiJar = project(":guest-api-core").tasks.named<Jar>("jar")
+    val guestApiJar = project(":guest-platform").tasks.named<Jar>("jar")
     dependsOn(guestApiJar)
     doFirst {
         systemProperty("compukters.test.guestApi", guestApiJar.get().archiveFile.get().asFile.absolutePath)

@@ -112,7 +112,7 @@ class IdeClientServicesTest {
                     .of(guestApi.classRoot)
                     .fileName
                     .toString()
-                    .startsWith("guest-api-core-"),
+                    .startsWith("guest-platform-"),
             )
             assertEquals(guestApi.classRoot, guestApi.sourceRoot)
 

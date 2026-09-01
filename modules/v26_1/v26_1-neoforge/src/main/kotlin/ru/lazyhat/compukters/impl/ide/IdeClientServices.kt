@@ -260,7 +260,7 @@ internal object ProductionIdeApplicationFactory {
         }
         val guestApi =
             compilerProfile.classpath.single { path ->
-                path.fileName.toString().startsWith("guest-api-core-")
+                path.fileName.toString().startsWith("guest-platform-")
             }
         val guestApiHash = Hash256.of(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(guestApi)))
         val analysisBundles =
