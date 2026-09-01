@@ -145,7 +145,7 @@ val verifyToolingRuntimeLicenses =
                     "compiler-artifact-",
                     "compiler-client-",
                     "compiler-k2-",
-                    "guest-api-core-",
+                    "guest-platform-",
                     "ide-analysis-client-",
                     "ide-analysis-k2-",
                     "ide-core-",

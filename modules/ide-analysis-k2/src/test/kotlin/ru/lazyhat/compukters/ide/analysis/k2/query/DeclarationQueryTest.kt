@@ -187,7 +187,7 @@ class DeclarationQueryTest {
     @Test
     fun `navigation maps an attached Guest API declaration to its source`() {
         val source = "import compukter.terminal.Terminal\nfun main() = Terminal.write(\"ok\")"
-        val sourcePath = "compukter-guest-api/compukter/terminal/Terminal.kt"
+        val sourcePath = "compukters-platform/sources/libraries/std-terminal/compukter/terminal/Terminal.kt"
         val guestApi = Path.of(requireNotNull(System.getProperty("compukters.test.guestApi")))
         val guestSource =
             ZipFile(guestApi.toFile()).use { archive ->

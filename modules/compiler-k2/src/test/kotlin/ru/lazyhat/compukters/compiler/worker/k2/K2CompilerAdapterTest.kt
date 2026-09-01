@@ -48,9 +48,9 @@ class K2CompilerAdapterTest {
     @Test
     fun `core guest API sources are supplied by the dedicated module`() {
         listOf(
-            "/compukter-guest-api/compukter/terminal/Terminal.kt",
-            "/compukter-guest-api/compukter/process/Process.kt",
-            "/compukter-guest-api/compukter/filesystem/FileSystem.kt",
+            "/compukters-platform/sources/libraries/std-terminal/compukter/terminal/Terminal.kt",
+            "/compukters-platform/sources/libraries/compukter-process/compukter/process/Process.kt",
+            "/compukters-platform/sources/libraries/std-filesystem/compukter/filesystem/FileSystem.kt",
         ).forEach { resource ->
             assertNotNull(K2CompilerAdapter::class.java.getResourceAsStream(resource), resource).use { }
         }

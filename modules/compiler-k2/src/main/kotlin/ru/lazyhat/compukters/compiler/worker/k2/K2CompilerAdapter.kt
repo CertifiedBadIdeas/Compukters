@@ -197,16 +197,36 @@ class K2CompilerAdapter(
         const val KOTLIN_STDLIB_BUNDLE_ID = "kotlin-stdlib@2.4.10"
         private val CORE_SOURCE_BUNDLES =
             listOf(
-                TrustedApiSourceBundle("compukter.stdio-api@1", "/compukter-guest-api/compukter/io/Stderr.kt", "stdio.kt"),
-                TrustedApiSourceBundle("compukter.terminal-api@1", "/compukter-guest-api/compukter/terminal/Terminal.kt", "terminal.kt"),
-                TrustedApiSourceBundle("compukter.process-api@2", "/compukter-guest-api/compukter/process/Process.kt", "process.kt"),
+                TrustedApiSourceBundle(
+                    "compukter.stdio-api@1",
+                    "/compukters-platform/sources/libraries/std-terminal/compukter/io/Stderr.kt",
+                    "stdio.kt",
+                ),
+                TrustedApiSourceBundle(
+                    "compukter.terminal-api@1",
+                    "/compukters-platform/sources/libraries/std-terminal/compukter/terminal/Terminal.kt",
+                    "terminal.kt",
+                ),
+                TrustedApiSourceBundle(
+                    "compukter.process-api@2",
+                    "/compukters-platform/sources/libraries/compukter-process/compukter/process/Process.kt",
+                    "process.kt",
+                ),
                 TrustedApiSourceBundle(
                     "compukter.filesystem-api@1",
-                    "/compukter-guest-api/compukter/filesystem/FileSystem.kt",
+                    "/compukters-platform/sources/libraries/std-filesystem/compukter/filesystem/FileSystem.kt",
                     "filesystem.kt",
                 ),
-                TrustedApiSourceBundle("compukter.compiler-api@1", "/compukter-guest-api/compukter/compiler/Compiler.kt", "compiler.kt"),
-                TrustedApiSourceBundle("compukter.redstone-api@1", "/compukter-guest-api/compukter/redstone/Redstone.kt", "redstone.kt"),
+                TrustedApiSourceBundle(
+                    "compukter.compiler-api@1",
+                    "/compukters-platform/sources/libraries/compukter-compiler/compukter/compiler/Compiler.kt",
+                    "compiler.kt",
+                ),
+                TrustedApiSourceBundle(
+                    "compukter.redstone-api@1",
+                    "/compukters-platform/sources/libraries/compukter-redstone/compukter/redstone/Redstone.kt",
+                    "redstone.kt",
+                ),
             )
         val trustedApiSourceResources: List<String> = CORE_SOURCE_BUNDLES.map(TrustedApiSourceBundle::resource)
     }

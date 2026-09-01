@@ -30,7 +30,7 @@ plugins {
 
 dependencies {
     implementation(projects.compilerK2Engine)
-    implementation(projects.guestApiCore)
+    implementation(projects.guestPlatform)
     implementation(projects.compilerClient)
     implementation(projects.compilerArtifact)
     implementation(libs.kotlin.stdlib)
@@ -201,7 +201,7 @@ val verifyCompilerWorkerLicenses =
                     "compiler-client-",
                     "compiler-k2-",
                     "compiler-k2-engine-",
-                    "guest-api-core-",
+                    "guest-platform-",
                     "platform-bundle-",
                     "platform-k2-",
                     "worker-client-",
