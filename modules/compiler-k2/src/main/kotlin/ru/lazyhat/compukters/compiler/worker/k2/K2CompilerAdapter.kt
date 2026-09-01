@@ -31,6 +31,8 @@ import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.CompilationSession
 import ru.lazyhat.compukters.compiler.k2.engine.CompuktersFir2IrPipeline
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformFunctionLink
+import ru.lazyhat.compukters.compiler.k2.engine.PlatformFieldLink
+import ru.lazyhat.compukters.compiler.k2.engine.PlatformTypeLink
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalTrustedIntrinsics
 import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryFragmentCodec
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryBudget
@@ -177,6 +179,8 @@ class K2CompilerAdapter(
                             canonicalIntrinsicRegistry = CanonicalTrustedIntrinsics.registry,
                             selectedPlatformModules = selected.mapTo(mutableSetOf(), PlatformModule::id),
                             platformFunctions = libraries.functions,
+                            platformTypes = libraries.types,
+                            platformFields = libraries.fields,
                             platformScalarTypes = selected.flatMap(PlatformModule::scalarTypes),
                             platformScalarConstants = selected.flatMap(PlatformModule::scalarConstants),
                             limits = request.limits,
@@ -252,14 +256,17 @@ class K2CompilerAdapter(
                     module to ArtifactReader.read(fragment.artifact.toByteArray())
                 }
             }
-        val functions =
-            artifacts.flatMap { (platformModule, artifact) ->
+        val functions = mutableListOf<PlatformFunctionLink>()
+        val types = mutableListOf<PlatformTypeLink>()
+        val fields = mutableListOf<PlatformFieldLink>()
+        artifacts.forEach { (platformModule, artifact) ->
                 val library =
                     artifact.modules.single { module ->
                         module.kind == ModuleKind.LIBRARY && module.exports.any { it.kind == SymbolKind.FUNCTION }
                     }
                 val moduleHash = ArtifactWriter.moduleSemanticHash(library)
-                platformModule.declarations
+                functions +=
+                    platformModule.declarations
                     .filter { declaration -> !declaration.trustedExternal && declaration.signature.startsWith("fun(") }
                     .map { declaration ->
                         val simpleName = declaration.symbol.substringAfterLast('.')
@@ -298,11 +305,37 @@ class K2CompilerAdapter(
                             declaration.symbol,
                             declaration.signature,
                             library.strings[export.name.value.toInt()].toString(),
-                            moduleHash,
+                            moduleHash.copyOf(),
                         )
                     }
+                library.exports.filter { it.kind == SymbolKind.TYPE }.forEach { export ->
+                    val exportName = library.strings[export.name.value.toInt()].toString()
+                    types += PlatformTypeLink(exportName, exportName, moduleHash.copyOf())
+                }
+                library.exports.filter { it.kind == SymbolKind.FIELD }.forEach { export ->
+                    val exportName = library.strings[export.name.value.toInt()].toString()
+                    val field = library.fields[export.localSymbol.toInt()]
+                    val owner = field.owner as? TypeRef.Local ?: error("platform field $exportName has an imported owner")
+                    val ownerSymbol = library.strings[library.types[owner.id.value.toInt()].name.value.toInt()].toString()
+                    fields +=
+                        PlatformFieldLink(
+                            exportName,
+                            ownerSymbol,
+                            exportName,
+                            field.static,
+                            moduleHash.copyOf(),
+                        )
+                }
             }
-        return LoadedLibraries(functions, artifacts.map(Pair<PlatformModule, Artifact>::second))
+        val linkOrder = compareBy<PlatformFunctionLink>({ it.moduleHash.toHex() }, PlatformFunctionLink::exportName, PlatformFunctionLink::symbol)
+        val typeOrder = compareBy<PlatformTypeLink>({ it.moduleHash.toHex() }, PlatformTypeLink::exportName, PlatformTypeLink::symbol)
+        val fieldOrder = compareBy<PlatformFieldLink>({ it.moduleHash.toHex() }, PlatformFieldLink::exportName, PlatformFieldLink::symbol)
+        return LoadedLibraries(
+            functions.sortedWith(linkOrder),
+            types.distinctBy { "${it.moduleHash.toHex()}:${it.exportName}" }.sortedWith(typeOrder),
+            fields.distinctBy { "${it.moduleHash.toHex()}:${it.exportName}" }.sortedWith(fieldOrder),
+            artifacts.map(Pair<PlatformModule, Artifact>::second),
+        )
     }
 
     private fun linkLibraries(
@@ -353,6 +386,8 @@ class K2CompilerAdapter(
 
 private data class LoadedLibraries(
     val functions: List<PlatformFunctionLink>,
+    val types: List<PlatformTypeLink>,
+    val fields: List<PlatformFieldLink>,
     val artifacts: List<Artifact>,
 )
 
@@ -394,7 +429,11 @@ private fun Module.canonicalType(type: ValueType): String =
         is ValueType.Ref -> {
             val name =
                 when (val reference = type.type) {
-                    is TypeRef.Local -> strings[types[reference.id.value.toInt()].name.value.toInt()].toString()
+                    is TypeRef.Local -> {
+                        val nominal = types[reference.id.value.toInt()]
+                        val base = strings[nominal.name.value.toInt()].toString()
+                        if (nominal is NominalType.Array) "$base<${canonicalType(nominal.element)}>" else base
+                    }
                     is TypeRef.Imported -> strings[imports[reference.id.value.toInt()].targetName.value.toInt()].toString()
                 }
             name + if (type.nullable) "?" else ""

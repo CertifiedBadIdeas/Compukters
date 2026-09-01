@@ -7,7 +7,9 @@
 package compukter.process
 
 public object Process {
-    public fun run(path: String, args: Array<String> = emptyArray()): ProcessResult {
+    public fun run(path: String): ProcessResult = run(path, arrayOf<String>())
+
+    public fun run(path: String, args: Array<String>): ProcessResult {
         val raw = ProcessBindings.run(path, encodeArgs(args))
         if (raw >= 0) return ProcessResult.Exited(raw)
         return ProcessResult.Failed(failureReason(-raw), ProcessBindings.takeFailureDiagnostic())

@@ -35,9 +35,11 @@ import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
+import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
+import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.project.ProjectSource
@@ -981,12 +983,17 @@ class MinimalScriptLoweringTest {
             val source =
                 """
                 import compukter.process.Process
+                import compukter.process.ProcessFailureReason
                 import compukter.process.ProcessResult
 
                 fun main() {
                     when (val result = Process.run("/rom/tool", arrayOf("a", ""))) {
                         is ProcessResult.Exited -> if (result.code != 0) Process.exit(result.code)
-                        is ProcessResult.Failed -> Process.exit(1)
+                        is ProcessResult.Failed -> if (result.reason == ProcessFailureReason.NOT_FOUND) {
+                            Process.exit(2)
+                        } else if (result.diagnostic != "") {
+                            Process.exit(1)
+                        }
                     }
                 }
                 """.trimIndent()
@@ -997,6 +1004,16 @@ class MinimalScriptLoweringTest {
 
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            val application = ArtifactReader.read(artifact).modules.single { it.kind == ModuleKind.APPLICATION }
+            val imports = application.imports.groupBy { it.kind }.mapValues { (_, values) ->
+                values.map { application.strings[it.targetName.value.toInt()].toString() }.toSet()
+            }
+            assertTrue("compukter.process.ProcessResult" in imports.getValue(SymbolKind.TYPE))
+            assertTrue("compukter.process.ProcessResult.Exited" in imports.getValue(SymbolKind.TYPE))
+            assertTrue("compukter.process.ProcessResult.Exited.code" in imports.getValue(SymbolKind.FIELD))
+            assertTrue("compukter.process.ProcessResult.Failed.reason" in imports.getValue(SymbolKind.FIELD))
+            assertTrue("compukter.process.ProcessResult.Failed.diagnostic" in imports.getValue(SymbolKind.FIELD))
+            assertTrue("compukter.process.ProcessFailureReason.NOT_FOUND" in imports.getValue(SymbolKind.FIELD))
 
             listOf(
                 "import compukter.process.Process\nfun main() { Process.run(\"/rom/tool\", 1) }",

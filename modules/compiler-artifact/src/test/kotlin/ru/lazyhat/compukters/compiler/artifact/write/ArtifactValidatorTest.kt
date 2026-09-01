@@ -553,6 +553,30 @@ class ArtifactValidatorTest {
     }
 
     @Test
+    fun `imported fields require the expected owner signature`() {
+        val artifact = importedFieldArtifact()
+
+        assertEquals(emptyList(), validateArtifact(artifact, ArtifactWriteLimits()))
+
+        val application = artifact.modules[0]
+        val invalid =
+            artifact.copy(
+                modules =
+                    listOf(
+                        application.copy(
+                            imports =
+                                application.imports.toMutableList().also {
+                                    it[4] = it[4].copy(expectedSignature = TypeRef.Imported(ImportId.of(2u)))
+                                },
+                        ),
+                        artifact.modules[1],
+                    ),
+            )
+
+        assertTrue(validateArtifact(invalid, ArtifactWriteLimits()).any { it.detail.contains("field reference") })
+    }
+
+    @Test
     fun `direct calls validate signature arity argument types and result destination`() {
         val cases =
             listOf(
@@ -1509,6 +1533,56 @@ private fun executableArtifact(
                 artifact.modules[1],
             ),
     )
+}
+
+private fun importedFieldArtifact(): Artifact {
+    val base = executableArtifact(Instruction.Const(RegisterId.of(0u), ConstantId.of(0u)))
+    val application = base.modules[0]
+    val library = base.modules[1]
+    val applicationStrings = application.strings + listOf(MetadataText.of("zz.Left"), MetadataText.of("zz.Right"), MetadataText.of("zz.Right.code"))
+    val libraryStrings = library.strings + listOf(MetadataText.of("zz.Left"), MetadataText.of("zz.Left.code"), MetadataText.of("zz.Right"), MetadataText.of("zz.Right.code"))
+    val leftType = TypeRef.Local(TypeId.of(2u))
+    val rightType = TypeRef.Local(TypeId.of(3u))
+    val expandedLibrary =
+        library.copy(
+            strings = libraryStrings,
+            types =
+                library.types +
+                    listOf(
+                        NominalType.Class(StringId.of(2u), final = true, fieldStart = 0u, fieldCount = 1u),
+                        NominalType.Class(StringId.of(4u), final = true, fieldStart = 1u, fieldCount = 1u),
+                    ),
+            fields =
+                listOf(
+                    Field(leftType, StringId.of(3u), ValueType.I32, mutable = false, static = true),
+                    Field(rightType, StringId.of(5u), ValueType.I32, mutable = false, static = true),
+                ),
+            exports =
+                library.exports +
+                    listOf(
+                        Export(SymbolKind.TYPE, ExportVisibility.PUBLIC_LIBRARY, StringId.of(2u), 2u, leftType),
+                        Export(SymbolKind.TYPE, ExportVisibility.PUBLIC_LIBRARY, StringId.of(4u), 3u, rightType),
+                        Export(SymbolKind.FIELD, ExportVisibility.PUBLIC_LIBRARY, StringId.of(3u), 0u, leftType),
+                        Export(SymbolKind.FIELD, ExportVisibility.PUBLIC_LIBRARY, StringId.of(5u), 1u, rightType),
+                    ),
+        )
+    val targetHash = encodeModuleSections(expandedLibrary, ArtifactWriteLimits()).semanticHash
+    val expandedApplication =
+        application.copy(
+            strings = applicationStrings,
+            imports =
+                application.imports.map { it.copy(targetModuleHash = targetHash) } +
+                    listOf(
+                        Import(SymbolKind.TYPE, ModuleId.of(1u), StringId.of(5u), TypeRef.Imported(ImportId.of(2u)), targetHash),
+                        Import(SymbolKind.TYPE, ModuleId.of(1u), StringId.of(6u), TypeRef.Imported(ImportId.of(3u)), targetHash),
+                        Import(SymbolKind.FIELD, ModuleId.of(1u), StringId.of(7u), TypeRef.Imported(ImportId.of(3u)), targetHash),
+                    ),
+            blocks =
+                application.blocks.toMutableList().also {
+                    it[0] = it[0].copy(instructions = listOf(Instruction.StaticGet(RegisterId.of(0u), FieldRef.Imported(ImportId.of(4u))), Instruction.Jump(BlockId.of(1u))))
+                },
+        )
+    return base.copy(modules = listOf(expandedApplication, expandedLibrary))
 }
 
 private fun charArrayArtifact(

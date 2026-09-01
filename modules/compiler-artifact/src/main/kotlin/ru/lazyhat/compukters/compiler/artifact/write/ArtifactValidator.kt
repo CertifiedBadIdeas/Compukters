@@ -139,7 +139,26 @@ internal fun validateArtifact(
                     resolveType(sourceModule, source.type)
                         ?.let { sourceIdentity ->
                             resolveType(destinationModule, destination.type)
-                                ?.let { destinationIdentity -> nominalAssignable(sourceIdentity, destinationIdentity) }
+                                ?.let { destinationIdentity ->
+                                    val sourceType = artifact.modules[sourceIdentity.module].types[sourceIdentity.type]
+                                    val destinationType = artifact.modules[destinationIdentity.module].types[destinationIdentity.type]
+                                    if (sourceType is NominalType.Array && destinationType is NominalType.Array) {
+                                        valueAssignable(
+                                            sourceIdentity.module,
+                                            sourceType.element,
+                                            destinationIdentity.module,
+                                            destinationType.element,
+                                        ) &&
+                                            valueAssignable(
+                                                destinationIdentity.module,
+                                                destinationType.element,
+                                                sourceIdentity.module,
+                                                sourceType.element,
+                                            )
+                                    } else {
+                                        nominalAssignable(sourceIdentity, destinationIdentity)
+                                    }
+                                }
                         } == true
             }
 
@@ -160,7 +179,19 @@ internal fun validateArtifact(
     ): Boolean =
         when {
             left is ValueType.Ref && right is ValueType.Ref -> {
-                left.nullable == right.nullable && resolveType(leftModule, left.type) == resolveType(rightModule, right.type)
+                if (left.nullable != right.nullable) {
+                    false
+                } else {
+                    val leftIdentity = resolveType(leftModule, left.type) ?: return false
+                    val rightIdentity = resolveType(rightModule, right.type) ?: return false
+                    val leftType = artifact.modules[leftIdentity.module].types[leftIdentity.type]
+                    val rightType = artifact.modules[rightIdentity.module].types[rightIdentity.type]
+                    if (leftType is NominalType.Array && rightType is NominalType.Array) {
+                        valueTypesMatch(leftIdentity.module, leftType.element, rightIdentity.module, rightType.element)
+                    } else {
+                        leftIdentity == rightIdentity
+                    }
+                }
             }
 
             left is ValueType.Ref || right is ValueType.Ref -> {
@@ -250,7 +281,8 @@ internal fun validateArtifact(
                         ?.singleOrNull {
                             it.kind == SymbolKind.FIELD &&
                                 artifact.modules[sourceModule].strings.getOrNull(import.targetName.value.toInt()) ==
-                                targetModule.strings.getOrNull(it.name.value.toInt())
+                                targetModule.strings.getOrNull(it.name.value.toInt()) &&
+                                signaturesMatch(sourceModule, import.expectedSignature, targetModuleIndex, it.signature)
                         }?.localSymbol
                         ?.toInt()
                         ?.takeIf { it in targetModule.fields.indices }

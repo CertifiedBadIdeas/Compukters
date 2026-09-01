@@ -47,6 +47,8 @@ class CompilationSession(
     val canonicalIntrinsicRegistry: CanonicalIntrinsicRegistry? = null,
     val selectedPlatformModules: Set<PlatformModuleId> = emptySet(),
     val platformFunctions: List<PlatformFunctionLink> = emptyList(),
+    val platformTypes: List<PlatformTypeLink> = emptyList(),
+    val platformFields: List<PlatformFieldLink> = emptyList(),
     val platformScalarTypes: List<PlatformScalarType> = emptyList(),
     val platformScalarConstants: List<PlatformScalarConstant> = emptyList(),
     val trustedStandardLibraryIdentity: String? = null,
@@ -80,6 +82,28 @@ data class PlatformFunctionLink(
 ) {
     init {
         require(moduleHash.size == 32) { "platform function module hash must be SHA-256" }
+    }
+}
+
+data class PlatformTypeLink(
+    val symbol: String,
+    val exportName: String,
+    val moduleHash: ByteArray,
+) {
+    init {
+        require(moduleHash.size == 32) { "platform type module hash must be SHA-256" }
+    }
+}
+
+data class PlatformFieldLink(
+    val symbol: String,
+    val ownerSymbol: String,
+    val exportName: String,
+    val static: Boolean,
+    val moduleHash: ByteArray,
+) {
+    init {
+        require(moduleHash.size == 32) { "platform field module hash must be SHA-256" }
     }
 }
 
