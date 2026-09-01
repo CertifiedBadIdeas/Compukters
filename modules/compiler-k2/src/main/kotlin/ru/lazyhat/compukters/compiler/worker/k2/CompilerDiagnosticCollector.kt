@@ -128,7 +128,19 @@ class CompilerDiagnosticCollector(
         }
 }
 
-private fun truncateUtf8(
+internal fun Iterable<WorkerDiagnostic>.bounded(limits: WorkerLimits): List<WorkerDiagnostic> {
+    val result = mutableListOf<WorkerDiagnostic>()
+    var remaining = limits.diagnosticTextBytes
+    for (diagnostic in this) {
+        if (result.size >= limits.diagnostics || remaining <= 0) break
+        val message = truncateUtf8(diagnostic.message, remaining)
+        remaining -= message.encodeToByteArray().size
+        result += diagnostic.copy(message = message)
+    }
+    return result
+}
+
+internal fun truncateUtf8(
     value: String,
     maximumBytes: Int,
 ): String {

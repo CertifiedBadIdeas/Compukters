@@ -1600,7 +1600,6 @@ private fun collectGuestClasses(
     val references =
         object : IrVisitorVoid() {
             override fun visitElement(element: IrElement) {
-                if (element is IrExpression) considerType(element.type)
                 element.acceptChildren(this, null)
             }
 
@@ -1705,6 +1704,7 @@ private fun linkedPlatformSymbols(
     val visitor =
         object : IrVisitorVoid() {
             override fun visitElement(element: IrElement) {
+                if (element is IrExpression) considerType(element.type)
                 element.acceptChildren(this, null)
             }
 

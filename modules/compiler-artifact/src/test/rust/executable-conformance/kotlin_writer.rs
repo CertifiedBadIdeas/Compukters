@@ -27,13 +27,13 @@ fn entry_argument_limits() -> EntryArgumentLimits {
 }
 
 #[test]
-fn k2_value_class_precondition_traps_before_publishing_a_value() {
-    let Ok(path) = std::env::var("COMPUKTER_KOTLIN_VALUE_CLASS_ARTIFACT") else {
+fn k2_platform_scalar_precondition_traps_before_publishing_a_value() {
+    let Ok(path) = std::env::var("COMPUKTER_KOTLIN_PLATFORM_SCALAR_ARTIFACT") else {
         return;
     };
-    let bytes = fs::read(path).expect("K2 value-class output must exist");
+    let bytes = fs::read(path).expect("K2 platform-scalar output must exist");
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
-        .expect("pinned VM must verify K2 value-class output");
+        .expect("pinned VM must verify K2 platform-scalar output");
     let profile = ExecutionProfile {
         heap_bytes: 1024 * 1024,
         frame_storage_bytes: 1024 * 1024,
@@ -50,17 +50,17 @@ fn k2_value_class_precondition_traps_before_publishing_a_value() {
         maximum_accepted_responses: 64,
         entry_argument_limits: entry_argument_limits(),
     };
-    let mut session = Session::admit(verified, profile, &[]).expect("value-class artifact must admit");
-    session.start(&[]).expect("value-class artifact must start");
+    let mut session = Session::admit(verified, profile, &[]).expect("platform-scalar artifact must admit");
+    session.start(&[]).expect("platform-scalar artifact must start");
 
     loop {
-        match session.advance(64, 64).expect("value-class artifact must advance") {
+        match session.advance(64, 64).expect("platform-scalar artifact must advance") {
             AdvanceOutcome::SliceExhausted => {}
             AdvanceOutcome::Crashed(GuestTrap::DivisionByZero) => break,
             AdvanceOutcome::HostRequestBatch(_) => {
-                panic!("invalid value class construction must trap before a host request")
+                panic!("invalid platform scalar construction must trap before a host request")
             }
-            outcome => panic!("unexpected value-class precondition outcome: {outcome:?}"),
+            outcome => panic!("unexpected platform-scalar precondition outcome: {outcome:?}"),
         }
     }
 }
