@@ -140,6 +140,7 @@ dependencies {
     common(project(path = projects.v261Common.path)) { isTransitive = false }
     shadowBundle(project(path = projects.v261Common.path, configuration = "transformProductionNeoForge"))
     testImplementation(project(path = projects.v261Common.path))
+    implementation(projects.platformBundle)
 
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
     add(gameTest.implementationConfigurationName, project(path = projects.v261Common.path))

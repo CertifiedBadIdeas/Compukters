@@ -29,12 +29,14 @@ import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
 import ru.lazyhat.compukters.ide.client.controller.IdeControllerClock
+import ru.lazyhat.compukters.ide.client.controller.TEST_PLATFORM_CATALOG
+import ru.lazyhat.compukters.ide.client.controller.TEST_PROJECT_RESOLUTION
+import ru.lazyhat.compukters.ide.client.controller.TEST_TOOLCHAIN
 import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
 import ru.lazyhat.compukters.ide.compiler.ClientBuildResult
 import ru.lazyhat.compukters.ide.compiler.ClientBuildSnapshot
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationService
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
-import ru.lazyhat.compukters.ide.compiler.profile.GuestApiBundleCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ProjectDescriptor
@@ -42,7 +44,6 @@ import ru.lazyhat.compukters.ide.project.ProjectLock
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectLockService
 import ru.lazyhat.compukters.ide.project.ProjectManifestCodec
-import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -222,16 +223,15 @@ class IdeBuildCoordinatorTest {
 
 private class BuildFixture {
     val limits = WorkerLimits(sourceFiles = 8, sourceFileBytes = 4096, sourceBytes = 8192)
-    val toolchain = ToolchainLockIdentity("2.4.10", "2.4", 1u, 1u, 1u, hash(1), hash(2))
-    val catalog = GuestApiBundleCatalog.of(emptyList())
+    val toolchain = TEST_TOOLCHAIN
+    val catalog = TEST_PLATFORM_CATALOG
     val descriptor: ProjectDescriptor = ProjectCatalog.open(createTempDirectory("compukters-build-")).create("demo")
     val lockPath = descriptor.handle.canonicalPath.resolve("compukter.lock")
     val compilation = ControlledCompilationService()
     val coordinator =
         IdeBuildCoordinator(
             IdeBuildServices(
-                toolchain,
-                catalog,
+                TEST_PROJECT_RESOLUTION,
                 CompileProfileResolver(toolchain, catalog, limits),
                 { project -> ProjectLockService(project.lockFileWriter()) },
                 compilation,

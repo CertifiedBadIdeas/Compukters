@@ -42,12 +42,19 @@ val compuktersPlatformBundle = configurations.create("compuktersPlatformBundle")
     isCanBeConsumed = false
     isCanBeResolved = true
 }
+val guestPlatformSources = configurations.create("guestPlatformSources") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
 
 dependencies {
     add(
         compuktersPlatformBundle.name,
         project(path = ":guest-platform", configuration = "compuktersPlatformBundle"),
     )
+    add(guestPlatformSources.name, project(path = ":guest-platform")) {
+        isTransitive = false
+    }
 }
 
 tasks.processResources {
@@ -85,6 +92,9 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
         into("lib")
     }
     from(workerRuntimeClasspath) {
+        into("lib")
+    }
+    from(guestPlatformSources) {
         into("lib")
     }
     from(rootProject.layout.projectDirectory.file("licenses/project/Apache-2.0.txt")) {

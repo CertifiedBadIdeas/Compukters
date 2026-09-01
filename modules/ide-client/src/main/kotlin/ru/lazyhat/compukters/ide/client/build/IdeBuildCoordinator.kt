@@ -33,17 +33,14 @@ import ru.lazyhat.compukters.ide.compiler.ClientBuildSnapshot
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationService
 import ru.lazyhat.compukters.ide.compiler.ClientCompileRequestFactory
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
-import ru.lazyhat.compukters.ide.compiler.profile.GuestApiBundleCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.project.ProjectHandle
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectLockService
-import ru.lazyhat.compukters.ide.project.ProjectManifest
 import ru.lazyhat.compukters.ide.project.ProjectManifestCodec
 import ru.lazyhat.compukters.ide.project.ProjectResolution
-import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
@@ -62,8 +59,7 @@ fun interface ProjectLockServiceFactory {
 }
 
 class IdeBuildServices(
-    val localToolchain: ToolchainLockIdentity,
-    val bundles: GuestApiBundleCatalog,
+    val localResolution: ProjectResolution,
     val profileResolver: CompileProfileResolver,
     val lockServices: ProjectLockServiceFactory,
     val compilation: ClientCompilationService,
@@ -150,7 +146,7 @@ class IdeBuildCoordinator(
     ): IdeResolveResult =
         try {
             val manifest = ProjectManifestCodec.decode(decodeStrict(input.manifestBytes))
-            val resolution = localResolution(manifest)
+            val resolution = services.localResolution
             val lockService = services.lockServices.create(input.project)
             val proposed = lockService.resolve(manifest, resolution)
             if (target != null) {
@@ -247,7 +243,7 @@ class IdeBuildCoordinator(
             }
         val resolution =
             try {
-                localResolution(manifest)
+                services.localResolution
             } catch (failure: Throwable) {
                 throw BuildPreparationFailure(IdeBuildFailureKind.UnsatisfiedProfile, "local Guest API profile is unsatisfied", failure)
             }
@@ -280,18 +276,6 @@ class IdeBuildCoordinator(
             )
         val prepared = ClientCompileRequestFactory.prepare(snapshot)
         return PreparedBuild(snapshot, prepared.identity, prepared.sourceSnapshotId, manifest.name)
-    }
-
-    private fun localResolution(manifest: ProjectManifest): ProjectResolution {
-        val modules =
-            manifest.modules.map { (id, requiredMajor) ->
-                val available = requireNotNull(services.bundles.find(id)) { "Guest API bundle ${id.value} is unavailable" }
-                require(available.module.major == requiredMajor) {
-                    "Guest API bundle ${id.value} has major ${available.module.major.value}, expected ${requiredMajor.value}"
-                }
-                available.module
-            }
-        return ProjectResolution(services.localToolchain, modules)
     }
 
     private fun mapResult(

@@ -149,6 +149,8 @@ val verifyToolingRuntimeLicenses =
                     "ide-analysis-client-",
                     "ide-analysis-k2-",
                     "ide-core-",
+                    "platform-bundle-",
+                    "platform-k2-",
                     "worker-client-",
                 )
             val actualExternal =

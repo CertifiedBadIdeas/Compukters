@@ -37,6 +37,7 @@ import ru.lazyhat.compukters.ide.client.workspace.IdeMutationRequest
 import ru.lazyhat.compukters.ide.client.workspace.IdeSaveRequest
 import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
 import ru.lazyhat.compukters.ide.compiler.profile.COMPUKTER_ARTIFACT_ABI
+import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.project.ProjectLockService
 import ru.lazyhat.compukters.ide.project.ProjectManifestCodec
 import ru.lazyhat.compukters.ide.project.ProjectResolution
@@ -322,7 +323,8 @@ class IdeVisibleLatencyPerformanceTest {
                     payloadHash = identity.payloadHash,
                     platformAbi = identity.platformAbi,
                 )
-            ProjectLockService(project.handle.lockFileWriter()).createLock(manifest, ProjectResolution(toolchain, emptyList()))
+            ProjectLockService(project.handle.lockFileWriter())
+                .createLock(manifest, ProjectResolution(toolchain, PlatformCatalog.of(prepared.platform)))
         }
     }
 
