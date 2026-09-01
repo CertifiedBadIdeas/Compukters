@@ -96,7 +96,7 @@ internal data class WorkerBootstrap(
                     CODEGEN_ABI,
                     ARTIFACT_WRITER_VERSION,
                     payloadHash,
-                    Hash256.fromHex(properties.getValue("standardLibraryAbi")),
+                    Hash256.fromHex(properties.getValue("platformAbi")),
                 ),
                 workerJar,
                 standardLibrary,

@@ -29,7 +29,7 @@ import java.security.MessageDigest
 object CompilationIdentity {
     fun compute(request: CompileRequest): Hash256 {
         val digest = MessageDigest.getInstance("SHA-256")
-        digest.update("Compukter compilation identity v3\u0000".encodeToByteArray())
+        digest.update("Compukter compilation identity v4\u0000".encodeToByteArray())
         val identity = request.expectedIdentity
         request.sources.forEach { source ->
             digest.field(1, entry(source.path.value.encodeToByteArray(), source.content.toByteArray()))
@@ -39,7 +39,7 @@ object CompilationIdentity {
         digest.field(4, identity.languageVersion.encodeToByteArray())
         digest.field(5, identity.codegenAbi.littleEndian())
         digest.field(6, identity.payloadHash.toByteArray())
-        digest.field(7, identity.standardLibraryAbi.toByteArray())
+        digest.field(7, identity.platformAbi.toByteArray())
         digest.field(8, identity.artifactWriterVersion.littleEndian())
         request.trustedApiBundles.forEach { bundle -> digest.field(9, entry(bundle.name.encodeToByteArray(), bundle.hash.toByteArray())) }
         request.trustedAddonBundles.forEach { bundle ->

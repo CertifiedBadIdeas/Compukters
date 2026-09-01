@@ -113,7 +113,7 @@ class SecureProjectFilesTest {
                 artifactAbi = 1u,
                 artifactWriterVersion = 1u,
                 payloadHash = hash(seed),
-                standardLibraryAbi = hash(seed + 1),
+                platformAbi = hash(seed + 1),
             ),
             emptyList<ResolvedModule>(),
         )

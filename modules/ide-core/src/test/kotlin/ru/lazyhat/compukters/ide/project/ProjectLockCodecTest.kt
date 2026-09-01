@@ -48,7 +48,7 @@ class ProjectLockCodecTest {
             artifact_abi = 2
             artifact_writer = 3
             payload_sha256 = "0101010101010101010101010101010101010101010101010101010101010101"
-            stdlib_abi_sha256 = "0202020202020202020202020202020202020202020202020202020202020202"
+            platform_abi_sha256 = "0202020202020202020202020202020202020202020202020202020202020202"
 
             [[modules]]
             id = "create:kinetics"
@@ -113,7 +113,7 @@ class ProjectLockCodecTest {
             artifactAbi = 2u,
             artifactWriterVersion = 3u,
             payloadHash = hash(1),
-            standardLibraryAbi = hash(2),
+            platformAbi = hash(2),
         )
 
     private fun module(

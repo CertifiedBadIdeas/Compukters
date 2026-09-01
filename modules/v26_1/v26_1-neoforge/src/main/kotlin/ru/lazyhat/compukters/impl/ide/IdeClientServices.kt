@@ -422,7 +422,7 @@ internal object ProductionIdeApplicationFactory {
                 artifactAbi = COMPUKTER_ARTIFACT_ABI,
                 artifactWriterVersion = compilerIdentity.artifactWriterVersion,
                 payloadHash = compilerIdentity.payloadHash,
-                standardLibraryAbi = compilerIdentity.standardLibraryAbi,
+                platformAbi = compilerIdentity.platformAbi,
             )
         val bundles = GuestApiBundleCatalog.of(emptyList())
         val profileResolver = CompileProfileResolver(toolchain, bundles, workerLimits)

@@ -320,7 +320,7 @@ class IdeVisibleLatencyPerformanceTest {
                     artifactAbi = COMPUKTER_ARTIFACT_ABI,
                     artifactWriterVersion = identity.artifactWriterVersion,
                     payloadHash = identity.payloadHash,
-                    standardLibraryAbi = identity.standardLibraryAbi,
+                    platformAbi = identity.platformAbi,
                 )
             ProjectLockService(project.handle.lockFileWriter()).createLock(manifest, ProjectResolution(toolchain, emptyList()))
         }

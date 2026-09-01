@@ -127,7 +127,7 @@ class ProjectLockServiceTest {
             artifactAbi = 2u,
             artifactWriterVersion = 3u,
             payloadHash = hash(1),
-            standardLibraryAbi = hash(2),
+            platformAbi = hash(2),
         )
 
     private fun module(

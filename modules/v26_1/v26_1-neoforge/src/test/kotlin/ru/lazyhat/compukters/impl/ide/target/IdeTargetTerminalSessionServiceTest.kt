@@ -244,7 +244,7 @@ class IdeTargetTerminalSessionServiceTest {
                 artifactAbi = 2u,
                 artifactWriterVersion = 1u,
                 payloadHash = Hash256.zero(),
-                standardLibraryAbi = Hash256.zero(),
+                platformAbi = Hash256.zero(),
             )
     }
 }

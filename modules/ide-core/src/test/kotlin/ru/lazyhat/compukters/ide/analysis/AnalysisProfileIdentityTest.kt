@@ -84,7 +84,7 @@ class AnalysisProfileIdentityTest {
             artifactAbi = 1u,
             artifactWriterVersion = 1u,
             payloadHash = hash(payload),
-            standardLibraryAbi = hash(2),
+            platformAbi = hash(2),
         )
 
     private fun hash(value: Int) = Hash256.of(ByteArray(32) { value.toByte() })

@@ -184,7 +184,7 @@ internal fun serverTargetProfile(
             artifactAbi = COMPUKTER_ARTIFACT_ABI,
             artifactWriterVersion = identity.artifactWriterVersion,
             payloadHash = identity.payloadHash,
-            standardLibraryAbi = identity.standardLibraryAbi,
+            platformAbi = identity.platformAbi,
         ),
         modules = emptyList(),
         limits = limits,

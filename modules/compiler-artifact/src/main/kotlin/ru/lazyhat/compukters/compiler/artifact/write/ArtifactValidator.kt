@@ -562,7 +562,7 @@ internal fun validateArtifact(
     if (artifact.modules.count { it.kind == ModuleKind.APPLICATION } != 1) {
         add(ArtifactWriteErrorCode.INCONSISTENT_RANGE, "artifact must contain exactly one application module")
     }
-    if (artifact.manifest.compilerAbi.size != 32 || artifact.manifest.standardLibraryAbi.size != 32) {
+    if (artifact.manifest.compilerAbi.size != 32 || artifact.manifest.platformAbi.size != 32) {
         add(ArtifactWriteErrorCode.INVALID_RANGE, "manifest ABI identities must contain 32 bytes")
     }
     if (artifact.manifest.minimumSliceCost < artifact.manifest.maximumBlockCost) {

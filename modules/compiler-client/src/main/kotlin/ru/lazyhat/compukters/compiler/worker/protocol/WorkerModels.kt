@@ -123,7 +123,7 @@ data class WorkerIdentity(
     val codegenAbi: UInt,
     val artifactWriterVersion: UInt,
     val payloadHash: Hash256,
-    val standardLibraryAbi: Hash256,
+    val platformAbi: Hash256,
 )
 
 enum class WorkerFeature { PROJECT_SNAPSHOT, KOTLIN_IR }

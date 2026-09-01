@@ -54,7 +54,7 @@ object ProjectLockCodec {
                     artifactAbi = requiredUInt(toolchain, "artifact_abi", "toolchain"),
                     artifactWriterVersion = requiredUInt(toolchain, "artifact_writer", "toolchain"),
                     payloadHash = requiredHash(toolchain, "payload_sha256", "toolchain"),
-                    standardLibraryAbi = requiredHash(toolchain, "stdlib_abi_sha256", "toolchain"),
+                    platformAbi = requiredHash(toolchain, "platform_abi_sha256", "toolchain"),
                 )
             }
         val modules = parseModules(parsed["modules"], limits)
@@ -71,7 +71,7 @@ object ProjectLockCodec {
             append("artifact_abi = ").append(lock.toolchain.artifactAbi).append('\n')
             append("artifact_writer = ").append(lock.toolchain.artifactWriterVersion).append('\n')
             append("payload_sha256 = ").append(TomlSupport.quoted(lock.toolchain.payloadHash.hex())).append('\n')
-            append("stdlib_abi_sha256 = ").append(TomlSupport.quoted(lock.toolchain.standardLibraryAbi.hex())).append('\n')
+            append("platform_abi_sha256 = ").append(TomlSupport.quoted(lock.toolchain.platformAbi.hex())).append('\n')
             lock.modules.forEach { module ->
                 append("\n[[modules]]\n")
                 append("id = ").append(TomlSupport.quoted(module.id.value)).append('\n')
@@ -154,6 +154,6 @@ object ProjectLockCodec {
 
     private val ROOT_FIELDS = setOf("format", "toolchain", "modules")
     private val TOOLCHAIN_FIELDS =
-        setOf("compiler", "language", "codegen_abi", "artifact_abi", "artifact_writer", "payload_sha256", "stdlib_abi_sha256")
+        setOf("compiler", "language", "codegen_abi", "artifact_abi", "artifact_writer", "payload_sha256", "platform_abi_sha256")
     private val MODULE_FIELDS = setOf("id", "major", "version", "content_sha256")
 }

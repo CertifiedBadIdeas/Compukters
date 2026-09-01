@@ -65,7 +65,7 @@ data class AnalysisProfileIdentity(
             digest.uint(toolchain.artifactAbi)
             digest.uint(toolchain.artifactWriterVersion)
             digest.field(toolchain.payloadHash.toByteArray())
-            digest.field(toolchain.standardLibraryAbi.toByteArray())
+            digest.field(toolchain.platformAbi.toByteArray())
             digest.field(canonicalLock.toByteArray())
             digest.int(bundles.size)
             bundles.forEach { bundle ->
@@ -78,7 +78,7 @@ data class AnalysisProfileIdentity(
             return AnalysisProfileIdentity(Hash256.of(digest.digest()))
         }
 
-        private val DOMAIN = "Compukters analysis profile v1\u0000".encodeToByteArray()
+        private val DOMAIN = "Compukters analysis profile v2\u0000".encodeToByteArray()
     }
 }
 

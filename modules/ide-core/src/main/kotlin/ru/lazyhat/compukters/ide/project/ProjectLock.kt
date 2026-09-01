@@ -28,7 +28,7 @@ data class ToolchainLockIdentity(
     val artifactAbi: UInt,
     val artifactWriterVersion: UInt,
     val payloadHash: Hash256,
-    val standardLibraryAbi: Hash256,
+    val platformAbi: Hash256,
 ) {
     init {
         validateLockText("compiler version", compilerVersion)

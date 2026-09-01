@@ -38,7 +38,7 @@ import kotlin.test.assertTrue
 class WorkerPayloadTest {
     @Test
     fun `compiler tooling profile reconstructs typed identity and exact ordered files`() {
-        val standardLibraryAbi = Hash256.zero().hex()
+        val platformAbi = Hash256.zero().hex()
         val files =
             linkedMapOf(
                 "common/lib/compiler.jar" to byteArrayOf(1),
@@ -56,7 +56,7 @@ class WorkerPayloadTest {
                                 "codegenAbi" to "1",
                                 "compiler" to "2.4.10",
                                 "language" to "2.4",
-                                "standardLibraryAbi" to standardLibraryAbi,
+                                "platformAbi" to platformAbi,
                             ),
                             "example.CompilerMain",
                             listOf("compiler/lib/compiler-worker.jar", "common/lib/compiler.jar"),

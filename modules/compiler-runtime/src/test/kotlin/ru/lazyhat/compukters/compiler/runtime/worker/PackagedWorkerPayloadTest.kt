@@ -131,7 +131,7 @@ class PackagedWorkerPayloadTest {
                                     "codegenAbi" to "1",
                                     "compiler" to "2.4.10",
                                     "language" to "2.4",
-                                    "standardLibraryAbi" to Hash256.zero().hex(),
+                                    "platformAbi" to Hash256.zero().hex(),
                                 ),
                                 MAIN_CLASS,
                                 listOf("compiler/lib/worker.jar"),

@@ -178,7 +178,7 @@ private fun encodeManifest(
             writeU32(requiredCapabilities)
             writeU32(optionalCapabilities)
             writeBytes(manifest.compilerAbi)
-            writeBytes(manifest.standardLibraryAbi)
+            writeBytes(manifest.platformAbi)
             writeU64(0u)
         }.toByteArray()
 }
