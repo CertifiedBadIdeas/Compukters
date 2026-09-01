@@ -26,6 +26,7 @@ import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class TrustedIntrinsicContractTest {
@@ -97,6 +98,33 @@ class TrustedIntrinsicContractTest {
             }
 
         assertTrue(failure.message.orEmpty().contains("unavailable capability"))
+    }
+
+    @Test
+    fun `native string and array externals have exact compiler primitive handlers`() {
+        val builtins = PlatformModuleId("kotlin", "builtins")
+        val expected =
+            listOf(
+                TrustedIntrinsicKey(
+                    builtins,
+                    CallableId(FqName("kotlin"), FqName("String"), Name.identifier("substring")),
+                    CanonicalCallableSignature("fun(Int,Int):String"),
+                ),
+                TrustedIntrinsicKey(
+                    builtins,
+                    callable("kotlin.collections", "copyOfRange"),
+                    CanonicalCallableSignature("fun(Array<T>.Int,Int):Array<T>"),
+                ),
+                TrustedIntrinsicKey(
+                    builtins,
+                    callable("kotlin.text", "concatToString"),
+                    CanonicalCallableSignature("fun(CharArray.Int,Int):String"),
+                ),
+            )
+
+        expected.forEach { key ->
+            assertIs<CompilerPrimitiveHandler>(CanonicalTrustedIntrinsics.registry.handlers[key], key.toString())
+        }
     }
 
     private fun declaration(external: Boolean): PlatformDeclaration =

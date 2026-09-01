@@ -553,6 +553,30 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `native builtins expose only the supported string and array operations`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        fun main(args: Array<String>) {
+                            val values = arrayOf(args[0], "")
+                            val tail = values.copyOfRange(1, values.size)
+                            val chars = CharArray(2)
+                            chars[0] = 'o'
+                            chars[1] = 'k'
+                            val text = chars.concatToString(0, chars.size)
+                            if (text.substring(0, 1) == tail[0]) return
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+        }
+
+    @Test
     fun `string arrays support copyOfRange and supported default arguments`() =
         withAdapter { adapter ->
             val source =

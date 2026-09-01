@@ -44,6 +44,6 @@ internal class UIntArray private constructor()
 
 internal class ULongArray private constructor()
 
-internal external fun <T> arrayOf(vararg elements: T): Array<T>
+public external fun <T> arrayOf(vararg elements: T): Array<T>
 
 internal external fun <T> arrayOfNulls(size: Int): Array<T?>
