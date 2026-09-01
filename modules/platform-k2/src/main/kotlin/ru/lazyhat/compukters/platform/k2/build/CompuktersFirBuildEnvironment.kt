@@ -26,34 +26,36 @@ import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.compiler.VfsBasedProjectEnvironment
+import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
+import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
-import org.jetbrains.kotlin.diagnostics.impl.DiagnosticsCollectorImpl
 import org.jetbrains.kotlin.diagnostics.KtRegisteredDiagnosticFactoriesStorage
-import org.jetbrains.kotlin.fir.FirModuleData
+import org.jetbrains.kotlin.diagnostics.impl.DiagnosticsCollectorImpl
 import org.jetbrains.kotlin.fir.FirBinaryDependenciesModuleData
+import org.jetbrains.kotlin.fir.FirModuleData
 import org.jetbrains.kotlin.fir.FirSourceModuleData
 import org.jetbrains.kotlin.fir.deserialization.SingleModuleDataProvider
-import org.jetbrains.kotlin.fir.moduleData
 import org.jetbrains.kotlin.fir.extensions.FirExtensionRegistrar
+import org.jetbrains.kotlin.fir.moduleData
 import org.jetbrains.kotlin.fir.pipeline.SingleModuleFrontendOutput
 import org.jetbrains.kotlin.fir.pipeline.buildResolveAndCheckFirFromKtFiles
 import org.jetbrains.kotlin.fir.session.AbstractFirMetadataSessionFactory
 import org.jetbrains.kotlin.fir.session.IncrementalCompilationContext
 import org.jetbrains.kotlin.fir.session.environment.AbstractProjectFileSearchScope
-import org.jetbrains.kotlin.load.kotlin.PackagePartProvider
 import org.jetbrains.kotlin.load.kotlin.PackageAndMetadataPartProvider
+import org.jetbrains.kotlin.load.kotlin.PackagePartProvider
 import org.jetbrains.kotlin.name.ClassId
-import org.jetbrains.kotlin.serialization.deserialization.ClassData
-import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
-import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPsiFactory
+import org.jetbrains.kotlin.serialization.deserialization.ClassData
+import ru.lazyhat.compukters.platform.bundle.PlatformModule
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.platform.k2.CompuktersFirSessionFactory
+import ru.lazyhat.compukters.platform.k2.CompuktersMetadataSymbolProvider
 import ru.lazyhat.compukters.platform.k2.CompuktersPlatforms
 
 data class CompuktersFirModuleOutput(
@@ -103,7 +105,7 @@ class CompuktersFirBuildEnvironment private constructor(
         val configuration = configuration(module)
         val moduleData =
             FirSourceModuleData(
-                Name.special("<${module}>"),
+                Name.special("<$module>"),
                 listOf(baseModuleData) + dependencies.map(CompuktersFirModuleOutput::moduleData),
                 emptyList(),
                 emptyList(),
@@ -120,16 +122,59 @@ class CompuktersFirBuildEnvironment private constructor(
                 context,
                 false,
             ) {}
-        val psiFactory = KtPsiFactory(environment.project, markGenerated = false)
-        val files =
-            sources.sortedBy(PlatformSource::path).map { source ->
-                psiFactory.createPhysicalFile(
-                    source.path.substringAfterLast('/'),
-                    source.content.toByteArray().decodeToString(throwOnInvalidSequence = true),
-                )
-            }
+        val files = sourceFiles(sources)
         val diagnostics = DiagnosticsCollectorImpl()
         val output = buildResolveAndCheckFirFromKtFiles(session, files, diagnostics)
+        return CompuktersFirModuleOutput(moduleData, output, diagnostics)
+    }
+
+    fun compileGuest(
+        module: PlatformModuleId,
+        sources: List<PlatformSource>,
+        platformModules: List<PlatformModule>,
+    ): CompuktersFirModuleOutput {
+        require(platformModules.isNotEmpty()) { "Guest FIR requires Compukters built-ins metadata" }
+        val libraryModuleData = FirBinaryDependenciesModuleData(Name.special("<compukters-platform-binaries>"))
+        factory.createLibrarySession(
+            sharedLibrarySession,
+            SingleModuleDataProvider(libraryModuleData),
+            emptyList(),
+            null,
+            emptyList(),
+            LanguageVersionSettingsImpl.DEFAULT,
+            context,
+        ) { session, moduleDataProvider, scopeProvider, _ ->
+            listOf(
+                CompuktersMetadataSymbolProvider(
+                    session,
+                    moduleDataProvider,
+                    scopeProvider,
+                    platformModules,
+                    libraryModuleData,
+                ),
+            )
+        }
+        val moduleData =
+            FirSourceModuleData(
+                Name.special("<$module>"),
+                listOf(libraryModuleData),
+                emptyList(),
+                emptyList(),
+                CompuktersPlatforms.default,
+                false,
+            )
+        val session =
+            factory.createSourceSession(
+                moduleData,
+                projectEnvironment,
+                IncrementalCompilationContext(emptyList(), EMPTY_METADATA_PROVIDER, AbstractProjectFileSearchScope.EMPTY),
+                emptyList<FirExtensionRegistrar>(),
+                configuration(module),
+                context,
+                false,
+            ) {}
+        val diagnostics = DiagnosticsCollectorImpl()
+        val output = buildResolveAndCheckFirFromKtFiles(session, sourceFiles(sources), diagnostics)
         return CompuktersFirModuleOutput(moduleData, output, diagnostics)
     }
 
@@ -146,6 +191,16 @@ class CompuktersFirBuildEnvironment private constructor(
             put(FrontendConfigurationKeys.DIAGNOSTIC_FACTORIES_STORAGE, KtRegisteredDiagnosticFactoriesStorage())
             put(FrontendConfigurationKeys.EXTENSIONS_STORAGE, CompilerPluginRegistrar.ExtensionStorage())
         }
+
+    private fun sourceFiles(sources: List<PlatformSource>): List<KtFile> {
+        val psiFactory = KtPsiFactory(environment.project, markGenerated = false)
+        return sources.sortedBy(PlatformSource::path).map { source ->
+            psiFactory.createPhysicalFile(
+                source.path.substringAfterLast('/'),
+                source.content.toByteArray().decodeToString(throwOnInvalidSequence = true),
+            )
+        }
+    }
 
     companion object {
         private val EMPTY_METADATA_PROVIDER =
@@ -170,7 +225,12 @@ class CompuktersFirBuildEnvironment private constructor(
                     put(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE)
                     put(CommonConfigurationKeys.TARGET_PLATFORM, CompuktersPlatforms.default)
                 }
-            val environment = KotlinCoreEnvironment.createForProduction(disposable, configuration, EnvironmentConfigFiles.METADATA_CONFIG_FILES)
+            val environment =
+                KotlinCoreEnvironment.createForProduction(
+                    disposable,
+                    configuration,
+                    EnvironmentConfigFiles.METADATA_CONFIG_FILES,
+                )
             return CompuktersFirBuildEnvironment(disposable, environment)
         }
     }

@@ -24,11 +24,9 @@ import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
-import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
-import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
-import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
+import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
@@ -44,6 +42,8 @@ import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
+import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
+import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.CompilationSession
 import ru.lazyhat.compukters.compiler.k2.engine.KotlinProjectLowering
 import ru.lazyhat.compukters.compiler.k2.engine.UnsupportedKotlinIr
@@ -114,14 +114,32 @@ class PlatformLibraryCompiler {
         val wrapper = artifact.withLibraryFragmentEntry()
         val bytes =
             when (val result = ArtifactWriter.write(wrapper)) {
-                is ArtifactWriteResult.Success -> result.bytes
+                is ArtifactWriteResult.Success -> {
+                    result.bytes
+                }
+
                 is ArtifactWriteResult.Failure -> {
                     val application = wrapper.modules.first()
                     error(
                         "artifact writer rejected platform module $module: ${result.errors.joinToString { error ->
-                            val block = error.location?.record?.toInt()?.let(application.blocks::getOrNull)
-                            val function = block?.owner?.value?.toInt()?.let(application.functions::getOrNull)
-                            "${error.location}: ${error.detail}; instruction=${error.location?.instruction?.toInt()?.let { block?.instructions?.getOrNull(it) }}; registers=${function?.registers}"
+                            val block =
+                                error.location
+                                    ?.record
+                                    ?.toInt()
+                                    ?.let(application.blocks::getOrNull)
+                            val function =
+                                block
+                                    ?.owner
+                                    ?.value
+                                    ?.toInt()
+                                    ?.let(application.functions::getOrNull)
+                            "${error.location}: ${error.detail}; instruction=${error.location?.instruction?.toInt()?.let {
+                                block
+                                    ?.instructions
+                                    ?.getOrNull(
+                                        it,
+                                    )
+                            }}; registers=${function?.registers}"
                         }}",
                     )
                 }
@@ -141,14 +159,32 @@ class PlatformLibraryCompiler {
 
 private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFragmentEntry():
     ru.lazyhat.compukters.compiler.artifact.model.Artifact {
-    val application = modules.first()
-    val functionId = FunctionId.of(application.functions.size.toUInt())
-    val typeId = TypeId.of(application.types.size.toUInt())
-    val blockId = BlockId.of(application.blocks.size.toUInt())
+    val lowered = modules.first()
+    val library =
+        lowered.copy(
+            kind = ru.lazyhat.compukters.compiler.artifact.model.ModuleKind.LIBRARY,
+            imports =
+                lowered.imports.map { value ->
+                    value.copy(targetModule = ModuleId.of(value.targetModule.value + 1u))
+                },
+            exports =
+                lowered.functions.mapIndexed { index, function ->
+                    ru.lazyhat.compukters.compiler.artifact.model.Export(
+                        ru.lazyhat.compukters.compiler.artifact.model.SymbolKind.FUNCTION,
+                        ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility.PUBLIC_LIBRARY,
+                        function.name,
+                        index.toUInt(),
+                        function.signature,
+                    )
+                },
+        )
+    val functionId = FunctionId.of(0u)
+    val typeId = TypeId.of(0u)
+    val blockId = BlockId.of(0u)
     val anchor =
         Function(
             owner = null,
-            name = application.name,
+            name = library.name,
             signature = TypeRef.Local(typeId),
             flags = setOf(FunctionFlag.STATIC),
             registers = emptyList(),
@@ -158,25 +194,26 @@ private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFr
             firstException = 0u,
             exceptionCount = 0u,
         )
-    val wrappedApplication =
-        application.copy(
-            types =
-                application.types +
-                    NominalType.Function(application.name, suspending = false, result = ValueType.Unit, parameters = emptyList()),
-            functions = application.functions + anchor,
-            blocks = application.blocks + Block(functionId, false, listOf(Instruction.Return(Destination.Unit))),
+    val wrapperApplication =
+        ru.lazyhat.compukters.compiler.artifact.model.Module(
+            name = library.name,
+            kind = ru.lazyhat.compukters.compiler.artifact.model.ModuleKind.APPLICATION,
+            strings = library.strings,
+            types = listOf(NominalType.Function(library.name, suspending = false, result = ValueType.Unit, parameters = emptyList())),
+            functions = listOf(anchor),
+            blocks = listOf(Block(functionId, false, listOf(Instruction.Return(Destination.Unit)))),
         )
     val features =
         semanticFeatures +
             listOfNotNull(
                 SemanticFeature.EXCEPTIONS.takeIf {
-                    wrappedApplication.blocks.any { block -> block.instructions.any { it is Instruction.Throw } }
+                    library.blocks.any { block -> block.instructions.any { it is Instruction.Throw } }
                 },
             )
     return copy(
         semanticFeatures = features,
         entry = EntryPoint(ModuleId.of(0u), functionId, EntryArguments.NONE),
-        modules = listOf(wrappedApplication) + modules.drop(1),
+        modules = listOf(wrapperApplication, library) + modules.drop(1),
     )
 }
 
@@ -208,7 +245,13 @@ object PlatformLibraryFragmentCodec {
             val length = source.readInt().also { require(it in 1..16_777_216) { "invalid platform library artifact length" } }
             val artifact = source.readNBytes(length)
             require(artifact.size == length) { "truncated platform library artifact" }
-            require(artifact.take(4).toByteArray().contentEquals(byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'K'.code.toByte(), 'T'.code.toByte()))) {
+            require(
+                artifact
+                    .take(
+                        4,
+                    ).toByteArray()
+                    .contentEquals(byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'K'.code.toByte(), 'T'.code.toByte())),
+            ) {
                 "platform library payload is not a Compukters artifact"
             }
             require(source.read() == -1) { "trailing platform library fragment bytes" }

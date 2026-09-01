@@ -46,14 +46,13 @@ import kotlin.test.assertTrue
 
 class K2CompilerAdapterTest {
     @Test
-    fun `core guest API sources are supplied by the dedicated module`() {
-        listOf(
-            "/compukters-platform/sources/libraries/std-terminal/compukter/terminal/Terminal.kt",
-            "/compukters-platform/sources/libraries/compukter-process/compukter/process/Process.kt",
-            "/compukters-platform/sources/libraries/std-filesystem/compukter/filesystem/FileSystem.kt",
-        ).forEach { resource ->
-            assertNotNull(K2CompilerAdapter::class.java.getResourceAsStream(resource), resource).use { }
-        }
+    fun `worker packages one compiled platform bundle instead of trusted source inputs`() {
+        assertTrue(K2CompilerAdapter.loadPackagedPlatform().modules.isNotEmpty())
+        assertNull(
+            K2CompilerAdapter::class.java.getResourceAsStream(
+                "/compukters-platform/sources/libraries/std-terminal/compukter/terminal/Terminal.kt",
+            ),
+        )
     }
 
     @Test
@@ -182,19 +181,14 @@ class K2CompilerAdapterTest {
     fun `IR compilation writes no temporary output beyond its exact source footprint`() =
         withAdapter { adapter, root ->
             val source = "fun main() { val answer: Int = 42 }"
-            val trustedApiBytes =
-                K2CompilerAdapter.trustedApiSourceResources.sumOf { resource ->
-                    checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream(resource))
-                        .use { it.readBytes().size }
-                }
             val result =
                 adapter.compile(
                     request(
                         source,
                         WorkerLimits(
-                            temporaryBytes = source.encodeToByteArray().size.toLong() + trustedApiBytes,
-                            // source/, source/project/, trusted/, the user source, and every trusted API source.
-                            temporaryFiles = K2CompilerAdapter.trustedApiSourceResources.size + 4,
+                            temporaryBytes = source.encodeToByteArray().size.toLong(),
+                            // source/, source/project/, and the user source.
+                            temporaryFiles = 3,
                         ),
                     ),
                 )
@@ -213,12 +207,6 @@ class K2CompilerAdapterTest {
                     K2CompilerInputs(
                         temporaryRoot = root,
                         workerJar = Path.of(checkNotNull(System.getProperty("compukters.worker.jar"))),
-                        standardLibrary =
-                            Path.of(
-                                Unit::class.java.protectionDomain.codeSource.location
-                                    .toURI(),
-                            ),
-                        jdkHome = Path.of(System.getProperty("java.home")),
                         expectedIdentity = identity(),
                     ),
                 )
@@ -250,5 +238,18 @@ class K2CompilerAdapterTest {
         content: String,
     ) = ProjectSource(VirtualSourcePath.kotlin(path), BinaryValue.of(content.encodeToByteArray()))
 
-    private fun identity() = WorkerIdentity("2.4.10", "2.4", 1u, 1u, Hash256.zero(), Hash256.zero())
+    private fun identity() =
+        WorkerIdentity(
+            "2.4.10",
+            "2.4",
+            1u,
+            1u,
+            Hash256.zero(),
+            Hash256.of(
+                K2CompilerAdapter
+                    .loadPackagedPlatform()
+                    .identity.contentHash
+                    .toByteArray(),
+            ),
+        )
 }

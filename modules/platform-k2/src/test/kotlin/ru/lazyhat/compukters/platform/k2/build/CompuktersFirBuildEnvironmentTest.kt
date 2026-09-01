@@ -31,8 +31,18 @@ class CompuktersFirBuildEnvironmentTest {
     @Test
     fun `source modules use native Compukters FIR sessions in dependency order`() {
         CompuktersFirBuildEnvironment.create().use { environment ->
-            val builtins = environment.compile(PlatformModuleId("kotlin", "builtins"), listOf(source("Builtins.kt", "package kotlin")), emptyList())
-            val library = environment.compile(PlatformModuleId("test", "library"), listOf(source("Library.kt", "package sample")), listOf(builtins))
+            val builtins =
+                environment.compile(
+                    PlatformModuleId("kotlin", "builtins"),
+                    listOf(source("Builtins.kt", "package kotlin")),
+                    emptyList(),
+                )
+            val library =
+                environment.compile(
+                    PlatformModuleId("test", "library"),
+                    listOf(source("Library.kt", "package sample")),
+                    listOf(builtins),
+                )
 
             assertEquals(CompuktersPlatforms.default, builtins.moduleData.platform)
             assertEquals(CompuktersPlatforms.default, library.moduleData.platform)
@@ -43,6 +53,8 @@ class CompuktersFirBuildEnvironmentTest {
         }
     }
 
-    private fun source(path: String, content: String): PlatformSource =
-        PlatformSource(path, ImmutableBytes.of(content.encodeToByteArray()))
+    private fun source(
+        path: String,
+        content: String,
+    ): PlatformSource = PlatformSource(path, ImmutableBytes.of(content.encodeToByteArray()))
 }

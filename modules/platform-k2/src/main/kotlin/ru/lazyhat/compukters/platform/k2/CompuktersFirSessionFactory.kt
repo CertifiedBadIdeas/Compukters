@@ -23,8 +23,8 @@ import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.SessionConfiguration
 import org.jetbrains.kotlin.fir.resolve.providers.FirSymbolProvider
 import org.jetbrains.kotlin.fir.resolve.providers.impl.FirEmptySymbolProvider
-import org.jetbrains.kotlin.fir.scopes.FirKotlinScopeProvider
 import org.jetbrains.kotlin.fir.scopes.FirDefaultImportsProviderHolder
+import org.jetbrains.kotlin.fir.scopes.FirKotlinScopeProvider
 import org.jetbrains.kotlin.fir.scopes.impl.FirEnumEntriesSupport
 import org.jetbrains.kotlin.fir.session.AbstractFirMetadataSessionFactory
 import org.jetbrains.kotlin.fir.session.FirSessionConfigurator

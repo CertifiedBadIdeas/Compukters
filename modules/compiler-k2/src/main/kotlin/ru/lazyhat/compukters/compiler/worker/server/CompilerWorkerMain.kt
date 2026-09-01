@@ -42,8 +42,6 @@ fun main() {
                 K2CompilerInputs(
                     temporaryRoot = bootstrap.temporaryRoot,
                     workerJar = bootstrap.workerJar,
-                    standardLibrary = bootstrap.standardLibrary,
-                    jdkHome = Path.of(System.getProperty("java.home")),
                     expectedIdentity = bootstrap.identity,
                 ),
             )
@@ -65,7 +63,6 @@ fun main() {
 internal data class WorkerBootstrap(
     val identity: WorkerIdentity,
     val workerJar: Path,
-    val standardLibrary: Path,
     val temporaryRoot: Path,
 ) {
     companion object {
@@ -85,9 +82,6 @@ internal data class WorkerBootstrap(
             }
             require(profile.manifest.mainClass == MAIN_CLASS) { "worker main class mismatch" }
             val payloadHash = Hash256.of(profile.manifest.payloadHash.toByteArray())
-            val standardLibrary =
-                profile.classpath.singleOrNull { it.fileName.toString() == "kotlin-stdlib-$COMPILER_VERSION.jar" }
-                    ?: error("fixed Kotlin standard library is missing")
             val temporaryRoot = Path.of(System.getProperty("java.io.tmpdir")).resolve("requests").normalize()
             return WorkerBootstrap(
                 WorkerIdentity(
@@ -99,7 +93,6 @@ internal data class WorkerBootstrap(
                     Hash256.fromHex(properties.getValue("platformAbi")),
                 ),
                 workerJar,
-                standardLibrary,
                 temporaryRoot,
             )
         }

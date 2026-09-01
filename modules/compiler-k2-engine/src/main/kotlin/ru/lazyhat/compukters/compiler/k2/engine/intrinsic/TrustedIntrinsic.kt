@@ -119,9 +119,10 @@ object TrustedIntrinsicContract {
             }
             val declaration = candidates.singleOrNull { it.signature == key.signature.value }
             if (declaration == null) {
-                violations += "intrinsic signature mismatch for ${key.module} $symbol: handler ${key.signature}, declarations ${candidates.map(
-                    PlatformDeclaration::signature,
-                )}"
+                violations +=
+                    "intrinsic signature mismatch for ${key.module} $symbol: handler ${key.signature}, declarations ${candidates.map(
+                        PlatformDeclaration::signature,
+                    )}"
                 return@forEach
             }
             if (!declaration.trustedExternal) {

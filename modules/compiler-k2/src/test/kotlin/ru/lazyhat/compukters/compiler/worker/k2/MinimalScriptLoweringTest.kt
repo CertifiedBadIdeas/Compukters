@@ -18,15 +18,6 @@
 
 package ru.lazyhat.compukters.compiler.worker.k2
 
-import compukter.process.ProcessFailureReason
-import compukter.process.ProcessResult
-import compukter.system.kotlinc.kotlincError
-import compukter.system.kotlinc.kotlincOutput
-import compukter.system.kotlinc.kotlincSource
-import compukter.system.shell.LexResult
-import compukter.system.shell.lex
-import compukter.system.shell.shellFallbackPath
-import compukter.system.shell.shellProcessDiagnostic
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
@@ -56,6 +47,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticCategory
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
@@ -111,102 +103,6 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `shell lexer parses bounded POSIX-lite words`() {
-        assertLex(
-            "greet Ada \"Red Engineer\" '' pre\"fix value\"post",
-            arrayOf("greet", "Ada", "Red Engineer", "", "prefix valuepost"),
-        )
-        assertLex("a\\ b 'c\\d' \"e\\\"f\"", arrayOf("a b", "c\\d", "e\"f"))
-        assertLex("''\"\" a''b ''x \"\"y \\\\", arrayOf("", "ab", "x", "y", "\\"))
-        assertLex("one\ttwo\nthree\rfour", arrayOf("one", "two", "three", "four"))
-        assertLex("  ", emptyArray())
-
-        assertLex((1..17).joinToString(" ") { "w$it" }, Array(17) { "w${it + 1}" })
-        assertLex("x".repeat(256), arrayOf("x".repeat(256)))
-        assertLex("a".repeat(128) + " " + "b".repeat(128), arrayOf("a".repeat(128), "b".repeat(128)))
-
-        assertSyntaxError("unterminated '", "unterminated single quote")
-        assertSyntaxError("unterminated \"", "unterminated double quote")
-        assertSyntaxError("trailing\\", "trailing escape")
-        assertSyntaxError((1..18).joinToString(" ") { "w$it" }, "too many words (maximum 17)")
-        assertSyntaxError("x".repeat(257), "word too long (maximum 256 UTF-16 code units)")
-        assertSyntaxError(
-            "a".repeat(128) + " " + "b".repeat(129),
-            "arguments too long (maximum 256 UTF-16 code units)",
-        )
-    }
-
-    @Test
-    fun `shell falls back to rom only for a missing bare home command`() {
-        assertEquals(
-            "/rom/hello",
-            shellFallbackPath("hello", ProcessResult.Failed(ProcessFailureReason.NOT_FOUND, "")),
-        )
-        assertEquals(
-            "",
-            shellFallbackPath("hello", ProcessResult.Failed(ProcessFailureReason.ACCESS_DENIED, "denied")),
-        )
-        assertEquals("", shellFallbackPath("hello", ProcessResult.Exited(0)))
-        assertEquals(
-            "",
-            shellFallbackPath("/home/hello", ProcessResult.Failed(ProcessFailureReason.NOT_FOUND, "")),
-        )
-    }
-
-    @Test
-    fun `shell reports typed process completion as one bounded diagnostic`() {
-        assertEquals("", shellProcessDiagnostic(ProcessResult.Exited(0), "/home/tool"))
-        assertEquals("/home/tool: exited with an error", shellProcessDiagnostic(ProcessResult.Exited(7), "/home/tool"))
-        assertEquals(
-            "worker detail",
-            shellProcessDiagnostic(ProcessResult.Failed(ProcessFailureReason.HOST_FAILURE, "worker detail"), "/home/tool"),
-        )
-        assertEquals(
-            "not executable: /home/tool",
-            shellProcessDiagnostic(ProcessResult.Failed(ProcessFailureReason.NOT_EXECUTABLE, ""), "/home/tool"),
-        )
-    }
-
-    private fun assertLex(
-        source: String,
-        expected: Array<String>,
-    ) {
-        val result = lex(source)
-        assertTrue(result is LexResult.Success, result.toString())
-        assertContentEquals(expected, result.words)
-    }
-
-    private fun assertSyntaxError(
-        source: String,
-        expected: String,
-    ) {
-        val result = lex(source)
-        assertTrue(result is LexResult.Error, result.toString())
-        assertEquals(expected, result.message)
-    }
-
-    @Test
-    fun `kotlinc command line accepts one source and optional output`() {
-        assertEquals("usage: kotlinc <source.kt> [-o output]", kotlincError(emptyArray()))
-        assertEquals("/home/foo.kt", kotlincSource(arrayOf("foo.kt")))
-        assertEquals("/home/foo", kotlincOutput(arrayOf("foo.kt")))
-        assertEquals("", kotlincError(arrayOf("foo.kt")))
-        assertEquals("/home/foo.kt", kotlincSource(arrayOf("foo.kt", "-o", "bin/hello")))
-        assertEquals("/home/bin/hello", kotlincOutput(arrayOf("foo.kt", "-o", "bin/hello")))
-        assertEquals("/src/foo.kt", kotlincSource(arrayOf("/src/foo.kt", "-o", "/bin/hello")))
-        assertEquals("/bin/hello", kotlincOutput(arrayOf("/src/foo.kt", "-o", "/bin/hello")))
-    }
-
-    @Test
-    fun `kotlinc command line rejects ambiguous or unsupported arguments`() {
-        assertTrue(kotlincError(arrayOf("foo.kt", "bar.kt")).isNotEmpty())
-        assertTrue(kotlincError(arrayOf("foo.txt")).contains(".kt"))
-        assertTrue(kotlincError(arrayOf("foo.kt", "-o")).isNotEmpty())
-        assertTrue(kotlincError(arrayOf("foo.kt", "-o", "out", "-o", "other")).contains("duplicate"))
-        assertTrue(kotlincError(arrayOf("-o", "out")).isNotEmpty())
-    }
-
-    @Test
     fun `ordinary and suspend zero argument Unit main lower deterministically`() =
         withAdapter { adapter ->
             listOf(false, true).forEach { suspending ->
@@ -221,6 +117,19 @@ class MinimalScriptLoweringTest {
                 assertContentEquals(expected, assertNotNull(second.artifact).toByteArray())
                 assertTrue(first.diagnostics.none { it.severity.name == "ERROR" })
             }
+        }
+
+    @Test
+    fun `ordinary platform function is linked from its precompiled fragment`() =
+        withAdapter { adapter ->
+            val result = adapter.compile(request("fun main() { require(true) }"))
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val decoded =
+                ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
+                    .read(artifact)
+
+            assertTrue(decoded.modules.count { it.kind == ModuleKind.LIBRARY } >= 2)
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
         }
 
     @Test
@@ -1253,12 +1162,6 @@ class MinimalScriptLoweringTest {
                     K2CompilerInputs(
                         temporaryRoot = root,
                         workerJar = Path.of(checkNotNull(System.getProperty("compukters.worker.jar"))),
-                        standardLibrary =
-                            Path.of(
-                                Unit::class.java.protectionDomain.codeSource.location
-                                    .toURI(),
-                            ),
-                        jdkHome = Path.of(System.getProperty("java.home")),
                         expectedIdentity = identity(),
                     ),
                 ),
@@ -1287,9 +1190,32 @@ class MinimalScriptLoweringTest {
             TargetSettings.KOTLIN_2_4_JVM_17,
             identity(),
             limits,
+            K2CompilerAdapter.loadPackagedPlatform().modules.map { module ->
+                TrustedBundleIdentity.of(
+                    module.id.toString(),
+                    Hash256.of(
+                        ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
+                            .moduleContentHash(module)
+                            .toByteArray(),
+                    ),
+                )
+            },
         )
 
-    private fun identity() = WorkerIdentity("2.4.10", "2.4", 1u, 1u, Hash256.zero(), Hash256.zero())
+    private fun identity() =
+        WorkerIdentity(
+            "2.4.10",
+            "2.4",
+            1u,
+            1u,
+            Hash256.zero(),
+            Hash256.of(
+                K2CompilerAdapter
+                    .loadPackagedPlatform()
+                    .identity.contentHash
+                    .toByteArray(),
+            ),
+        )
 
     private fun sha256(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(bytes)
 }

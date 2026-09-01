@@ -24,9 +24,9 @@ import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
-import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicRegistry as CanonicalIntrinsicRegistry
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import java.nio.file.Path
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicRegistry as CanonicalIntrinsicRegistry
 
 fun interface CompilationIrSink {
     fun accept(
@@ -43,6 +43,8 @@ class CompilationSession(
     trustedApiSourceIdentities: Map<String, String> = emptyMap(),
     trustedPlatformSourceModules: Map<String, PlatformModuleId> = emptyMap(),
     val canonicalIntrinsicRegistry: CanonicalIntrinsicRegistry? = null,
+    val selectedPlatformModules: Set<PlatformModuleId> = emptySet(),
+    val platformFunctions: List<PlatformFunctionLink> = emptyList(),
     val trustedStandardLibraryIdentity: String? = null,
     val limits: WorkerLimits = WorkerLimits(),
 ) {
@@ -54,8 +56,7 @@ class CompilationSession(
 
     fun trustedApiIdentity(physicalPath: String?): String? = physicalPath?.let { trustedApiSourceIdentities[normalize(it)] }
 
-    fun trustedPlatformModule(physicalPath: String?): PlatformModuleId? =
-        physicalPath?.let { trustedPlatformSourceModules[normalize(it)] }
+    fun trustedPlatformModule(physicalPath: String?): PlatformModuleId? = physicalPath?.let { trustedPlatformSourceModules[normalize(it)] }
 
     private fun normalize(path: String): String =
         runCatching {
@@ -65,6 +66,17 @@ class CompilationSession(
                 .normalize()
                 .toString()
         }.getOrDefault(path)
+}
+
+data class PlatformFunctionLink(
+    val symbol: String,
+    val signature: String,
+    val exportName: String,
+    val moduleHash: ByteArray,
+) {
+    init {
+        require(moduleHash.size == 32) { "platform function module hash must be SHA-256" }
+    }
 }
 
 object CompilationBridge {

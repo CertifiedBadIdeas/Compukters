@@ -21,14 +21,14 @@ package ru.lazyhat.compukters.compiler.k2.engine
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalTrustedIntrinsics
+import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryCompiler
+import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryFragmentCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.platform.k2.build.CompuktersFirBuildEnvironment
 import ru.lazyhat.compukters.platform.k2.build.PlatformLibraryDeclaration
 import ru.lazyhat.compukters.platform.k2.build.PlatformLibraryDeclarationKind
-import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalTrustedIntrinsics
-import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryCompiler
-import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryFragmentCodec
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
