@@ -654,6 +654,7 @@ internal object KotlinProjectLowering {
                     ),
                 )
         val externalFunctions = linkedPlatformFunctions(userFunctions, session)
+        val linkedSymbols = linkedPlatformSymbols(userFunctions, session)
         require(userFunctions.firstOrNull() === entry)
         val userClasses =
             collectGuestClasses(
@@ -726,6 +727,9 @@ internal object KotlinProjectLowering {
                     listOfNotNull("kotlin.Array".takeIf { usesStringArray }) +
                     capabilityIdentities.flatMap { listOf(it.namespace, it.name) } +
                     externalFunctions.values.map(ExternalFunctionTarget::exportName) +
+                    linkedSymbols.types.values.map(ExternalTypeTarget::exportName) +
+                    linkedSymbols.fieldsByGetter.values.map(ExternalFieldTarget::exportName) +
+                    linkedSymbols.enumEntries.values.map(ExternalFieldTarget::exportName) +
                     userFunctions.map { requireNotNull(functionArtifactNames[it.symbol]) } +
                     userClasses.map { it.fqNameWhenAvailable?.asString() ?: it.name.asString() } +
                     userClasses.flatMap { declaration ->
@@ -808,12 +812,38 @@ internal object KotlinProjectLowering {
             userClasses.withIndex().associate { (index, declaration) ->
                 declaration.symbol to TypeId.of((userFunctions.size + constructorClasses.size + index).toUInt())
             }
+        val externalTypeImports =
+            linkedSymbols.types.entries
+                .sortedBy { (_, target) -> target.sortKey }
+                .mapIndexed { index, (symbol, target) ->
+                    symbol to target.copy(importId = ImportId.of((runtimeTypeNames.size + index).toUInt()))
+                }.toMap()
+        val externalClassTypes = externalTypeImports.mapValues { (_, target) -> TypeRef.Imported(target.importId) }
+        val externalFieldImports =
+            (linkedSymbols.fieldsByGetter.values + linkedSymbols.enumEntries.values)
+                .distinctBy(ExternalFieldTarget::sortKey)
+                .sortedBy(ExternalFieldTarget::sortKey)
+                .mapIndexed { index, target ->
+                    target.copy(importId = ImportId.of((runtimeTypeNames.size + externalTypeImports.size + index).toUInt()))
+                }
+        val externalFieldsBySortKey = externalFieldImports.associateBy(ExternalFieldTarget::sortKey)
+        val externalGetterFieldImports =
+            linkedSymbols.fieldsByGetter.mapValues { (_, target) -> requireNotNull(externalFieldsBySortKey[target.sortKey]) }
+        val externalEnumFieldImports =
+            linkedSymbols.enumEntries.mapValues { (_, target) -> requireNotNull(externalFieldsBySortKey[target.sortKey]) }
+        val externalFieldImportCount = externalFieldImports.size
         val externalFunctionTypeBase = userFunctions.size + constructorClasses.size + userClasses.size + if (usesStringArray) 1 else 0
         val externalFunctionImports =
             externalFunctions.entries
                 .sortedBy { (_, target) -> target.sortKey }
                 .mapIndexed { index, (symbol, target) ->
-                    symbol to target.copy(importId = ImportId.of((runtimeTypeNames.size + index).toUInt()))
+                    symbol to
+                        target.copy(
+                            importId =
+                                ImportId.of(
+                                    (runtimeTypeNames.size + externalTypeImports.size + externalFieldImportCount + index).toUInt(),
+                                ),
+                        )
                 }.toMap()
         val stringArrayType =
             ValueType.Ref(
@@ -821,7 +851,7 @@ internal object KotlinProjectLowering {
                 type = TypeRef.Local(TypeId.of((userFunctions.size + constructorClasses.size + userClasses.size).toUInt())),
             )
         userFunctions.forEach {
-            validateFunction(it, pluginContext, guestTypes, classTypeIds, inlineValueClasses, platformScalars, session)
+            validateFunction(it, pluginContext, guestTypes, classTypeIds, externalClassTypes, inlineValueClasses, platformScalars, session)
         }
         val classLayouts =
             buildClassLayouts(
@@ -834,6 +864,7 @@ internal object KotlinProjectLowering {
                 stringArrayType,
                 inlineValueClasses,
                 platformScalars,
+                externalClassTypes,
             )
         val classLayoutsBySymbol = classLayouts.associateBy { it.declaration.symbol }
         val blocks = mutableListOf<Block>()
@@ -864,6 +895,7 @@ internal object KotlinProjectLowering {
                     session = session,
                     capabilityIds = capabilityIds,
                     classTypeIds = classTypeIds,
+                    externalClassTypes = externalClassTypes,
                     inlineValueClasses = inlineValueClasses,
                     platformScalars = platformScalars,
                     constructorLayouts =
@@ -880,6 +912,8 @@ internal object KotlinProjectLowering {
                             }.toMap(),
                     enumEntries =
                         classLayouts.flatMap { layout -> layout.enumEntries }.associateBy { it.declaration.symbol },
+                    externalFieldsByGetter = externalGetterFieldImports,
+                    externalEnumEntries = externalEnumFieldImports,
                     entryEnumInitializers =
                         if (function === entry) classLayouts.flatMap { it.enumEntries } else emptyList(),
                     externalFunctions = externalFunctionImports,
@@ -895,6 +929,7 @@ internal object KotlinProjectLowering {
                     charArrayType,
                     stringArrayType,
                     classTypeIds,
+                    externalClassTypes,
                     inlineValueClasses,
                     platformScalars,
                     function,
@@ -909,6 +944,7 @@ internal object KotlinProjectLowering {
                         charArrayType,
                         stringArrayType,
                         classTypeIds,
+                        externalClassTypes,
                         inlineValueClasses,
                         platformScalars,
                         it,
@@ -982,6 +1018,7 @@ internal object KotlinProjectLowering {
                             charArrayType,
                             stringArrayType,
                             classTypeIds,
+                            externalClassTypes,
                             inlineValueClasses,
                             platformScalars,
                             function,
@@ -996,6 +1033,7 @@ internal object KotlinProjectLowering {
                                 charArrayType,
                                 stringArrayType,
                                 classTypeIds,
+                                externalClassTypes,
                                 inlineValueClasses,
                                 platformScalars,
                                 it,
@@ -1082,6 +1120,7 @@ internal object KotlinProjectLowering {
                                 charArrayType,
                                 stringArrayType,
                                 classTypeIds,
+                                externalClassTypes,
                                 inlineValueClasses,
                                 platformScalars,
                                 function,
@@ -1096,6 +1135,7 @@ internal object KotlinProjectLowering {
                                     charArrayType,
                                     stringArrayType,
                                     classTypeIds,
+                                    externalClassTypes,
                                     inlineValueClasses,
                                     platformScalars,
                                     parameter,
@@ -1129,12 +1169,32 @@ internal object KotlinProjectLowering {
                     runtimeTypeNames.indices.map { index ->
                         runtimeTypeImport(index, requireNotNull(metadataIds[runtimeTypeNames[index]]), libraryHash)
                     } +
+                        externalTypeImports.entries
+                            .sortedBy { (_, target) -> target.sortKey }
+                            .mapIndexed { index, (_, target) ->
+                                Import(
+                                    kind = SymbolKind.TYPE,
+                                    targetModule = ModuleId.of((2 + index).toUInt()),
+                                    targetName = requireNotNull(metadataIds[target.exportName]),
+                                    expectedSignature = TypeRef.Imported(target.importId),
+                                    targetModuleHash = target.moduleHash,
+                                )
+                            } +
+                        externalFieldImports.mapIndexed { index, target ->
+                            Import(
+                                kind = SymbolKind.FIELD,
+                                targetModule = ModuleId.of((2 + externalTypeImports.size + index).toUInt()),
+                                targetName = requireNotNull(metadataIds[target.exportName]),
+                                expectedSignature = requireNotNull(externalClassTypes[target.ownerSymbol]),
+                                targetModuleHash = target.moduleHash,
+                            )
+                        } +
                         externalFunctionImports.entries
                             .sortedBy { (_, target) -> target.sortKey }
                             .mapIndexed { index, (_, target) ->
                                 Import(
                                     kind = SymbolKind.FUNCTION,
-                                    targetModule = ModuleId.of((2 + index).toUInt()),
+                                    targetModule = ModuleId.of((2 + externalTypeImports.size + externalFieldImportCount + index).toUInt()),
                                     targetName = requireNotNull(metadataIds[target.exportName]),
                                     expectedSignature = TypeRef.Local(TypeId.of((externalFunctionTypeBase + index).toUInt())),
                                     targetModuleHash = target.moduleHash,
@@ -1253,6 +1313,7 @@ internal object KotlinProjectLowering {
         pluginContext: IrPluginContext,
         guestTypes: GuestTypeRegistry,
         classTypeIds: Map<IrClassSymbol, TypeId>,
+        externalClassTypes: Map<IrClassSymbol, TypeRef.Imported>,
         inlineValueClasses: InlineValueClassRegistry,
         platformScalars: PlatformScalarRegistry,
         session: CompilationSession,
@@ -1275,7 +1336,8 @@ internal object KotlinProjectLowering {
                         inlineValueClasses.contains((type as? IrSimpleType)?.classifier as? IrClassSymbol)
                 ) ||
                 (!type.isNullable() && platformScalars.representation(type) != null) ||
-                classTypeIds.containsKey((type as? IrSimpleType)?.classifier)
+                classTypeIds.containsKey((type as? IrSimpleType)?.classifier) ||
+                externalClassTypes.containsKey((type as? IrSimpleType)?.classifier)
         if (loweredParameters(function, session).any { !isSupported(it.type) } ||
             !isSupported(function.returnType)
         ) {
@@ -1291,6 +1353,7 @@ internal object KotlinProjectLowering {
         charArrayType: ValueType,
         stringArrayType: ValueType,
         classTypeIds: Map<IrClassSymbol, TypeId>,
+        externalClassTypes: Map<IrClassSymbol, TypeRef.Imported>,
         inlineValueClasses: InlineValueClassRegistry,
         platformScalars: PlatformScalarRegistry,
         element: IrElement,
@@ -1327,6 +1390,7 @@ internal object KotlinProjectLowering {
                     val classifier = type.classifier as IrClassSymbol
                     val inline = inlineValueClasses[classifier]
                     val id = classTypeIds[classifier]
+                    val external = externalClassTypes[classifier]
                     val platformScalar = platformScalars.representation(type)
                     if (platformScalar != null) {
                         if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable platform scalar types are not supported")
@@ -1345,12 +1409,15 @@ internal object KotlinProjectLowering {
                             charArrayType,
                             stringArrayType,
                             classTypeIds,
+                            externalClassTypes,
                             inlineValueClasses,
                             platformScalars,
                             element,
                         )
                     } else if (id != null) {
                         ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Local(id))
+                    } else if (external != null) {
+                        ValueType.Ref(nullable = type.isNullable(), type = external)
                     } else {
                         throw UnsupportedKotlinIr(element, "unsupported value type")
                     }
@@ -1370,6 +1437,7 @@ internal object KotlinProjectLowering {
         stringArrayType: ValueType,
         inlineValueClasses: InlineValueClassRegistry,
         platformScalars: PlatformScalarRegistry,
+        externalClassTypes: Map<IrClassSymbol, TypeRef.Imported>,
     ): List<GuestClassLayout> {
         var nextField = 0u
         return classes.map { declaration ->
@@ -1423,6 +1491,7 @@ internal object KotlinProjectLowering {
                             charArrayType,
                             stringArrayType,
                             classTypeIds,
+                            externalClassTypes,
                             inlineValueClasses,
                             platformScalars,
                             property,
@@ -1531,6 +1600,7 @@ private fun collectGuestClasses(
     val references =
         object : IrVisitorVoid() {
             override fun visitElement(element: IrElement) {
+                if (element is IrExpression) considerType(element.type)
                 element.acceptChildren(this, null)
             }
 
@@ -1575,6 +1645,112 @@ private data class ExternalFunctionTarget(
     val importId: ImportId = ImportId.of(0u),
 ) {
     val sortKey: String get() = "${moduleHash.joinToString("") { "%02x".format(it) }}:$exportName"
+}
+
+private data class ExternalTypeTarget(
+    val exportName: String,
+    val moduleHash: ByteArray,
+    val importId: ImportId = ImportId.of(0u),
+) {
+    val sortKey: String get() = "${moduleHash.joinToString("") { "%02x".format(it) }}:$exportName"
+}
+
+private data class ExternalFieldTarget(
+    val exportName: String,
+    val ownerSymbol: IrClassSymbol,
+    val moduleHash: ByteArray,
+    val static: Boolean,
+    val importId: ImportId = ImportId.of(0u),
+) {
+    val sortKey: String get() = "${moduleHash.joinToString("") { "%02x".format(it) }}:$exportName"
+}
+
+private data class LinkedPlatformSymbols(
+    val types: Map<IrClassSymbol, ExternalTypeTarget>,
+    val fieldsByGetter: Map<IrSimpleFunctionSymbol, ExternalFieldTarget>,
+    val enumEntries: Map<IrEnumEntrySymbol, ExternalFieldTarget>,
+)
+
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+private fun linkedPlatformSymbols(
+    functions: List<IrSimpleFunction>,
+    session: CompilationSession,
+): LinkedPlatformSymbols {
+    val typeLinks = session.platformTypes.associateBy { it.symbol }
+    val fieldLinks = session.platformFields.associateBy { it.symbol }
+    val types = linkedMapOf<IrClassSymbol, ExternalTypeTarget>()
+    val fieldsByGetter = linkedMapOf<IrSimpleFunctionSymbol, ExternalFieldTarget>()
+    val enumEntries = linkedMapOf<IrEnumEntrySymbol, ExternalFieldTarget>()
+
+    fun considerTypeSymbol(symbol: IrClassSymbol) {
+        val fqName = symbol.owner.fqNameWhenAvailable?.asString() ?: return
+        val link = typeLinks[fqName] ?: return
+        types[symbol] = ExternalTypeTarget(link.exportName, link.moduleHash.copyOf())
+    }
+
+    fun considerType(type: IrType) {
+        val symbol = (type as? IrSimpleType)?.classifier as? IrClassSymbol ?: return
+        considerTypeSymbol(symbol)
+    }
+
+    fun fieldTarget(
+        symbol: String,
+        owner: IrClassSymbol,
+    ): ExternalFieldTarget? {
+        val link = fieldLinks[symbol] ?: return null
+        considerTypeSymbol(owner)
+        return ExternalFieldTarget(link.exportName, owner, link.moduleHash.copyOf(), link.static)
+    }
+
+    val visitor =
+        object : IrVisitorVoid() {
+            override fun visitElement(element: IrElement) {
+                element.acceptChildren(this, null)
+            }
+
+            override fun visitCall(expression: IrCall) {
+                considerType(expression.type)
+                val target = expression.symbol.owner
+                considerType(target.returnType)
+                target.parameters.forEach { considerType(it.type) }
+                val property = target.correspondingPropertySymbol?.owner ?: target.parent as? IrProperty
+                val owner = property?.parent as? IrClass
+                val fieldSymbol = property?.fqNameWhenAvailable?.asString()
+                if (owner != null && fieldSymbol != null) {
+                    fieldTarget(fieldSymbol, owner.symbol)?.let { field ->
+                        if (field.static) throw UnsupportedKotlinIr(expression, "platform property getter resolves to a static field")
+                        fieldsByGetter[target.symbol] = field
+                    }
+                }
+                super.visitCall(expression)
+            }
+
+            override fun visitGetEnumValue(expression: IrGetEnumValue) {
+                considerType(expression.type)
+                val entry = expression.symbol.owner
+                val owner = entry.parent as? IrClass
+                val fieldSymbol = entry.fqNameWhenAvailable?.asString()
+                if (owner != null && fieldSymbol != null) {
+                    fieldTarget(fieldSymbol, owner.symbol)?.let { field ->
+                        if (!field.static) throw UnsupportedKotlinIr(expression, "platform enum entry resolves to an instance field")
+                        enumEntries[expression.symbol] = field
+                    }
+                }
+                super.visitGetEnumValue(expression)
+            }
+
+            override fun visitTypeOperator(expression: IrTypeOperatorCall) {
+                considerType(expression.typeOperand)
+                considerType(expression.type)
+                super.visitTypeOperator(expression)
+            }
+        }
+    functions.forEach { function ->
+        considerType(function.returnType)
+        function.parameters.forEach { considerType(it.type) }
+        function.accept(visitor, null)
+    }
+    return LinkedPlatformSymbols(types, fieldsByGetter, enumEntries)
 }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -1628,11 +1804,14 @@ private class FunctionCompiler(
     private val session: CompilationSession,
     private val capabilityIds: Map<TrustedCapabilityIdentity, CapabilityId>,
     private val classTypeIds: Map<IrClassSymbol, TypeId>,
+    private val externalClassTypes: Map<IrClassSymbol, TypeRef.Imported>,
     private val inlineValueClasses: InlineValueClassRegistry,
     private val platformScalars: PlatformScalarRegistry,
     private val constructorLayouts: Map<IrConstructorSymbol, GuestConstructorTarget>,
     private val fieldsByGetter: Map<IrSimpleFunctionSymbol, GuestFieldLayout>,
     private val enumEntries: Map<IrEnumEntrySymbol, GuestEnumEntryLayout>,
+    private val externalFieldsByGetter: Map<IrSimpleFunctionSymbol, ExternalFieldTarget>,
+    private val externalEnumEntries: Map<IrEnumEntrySymbol, ExternalFieldTarget>,
     private val entryEnumInitializers: List<GuestEnumEntryLayout>,
     private val externalFunctions: Map<IrSimpleFunctionSymbol, ExternalFunctionTarget>,
 ) {
@@ -1755,9 +1934,16 @@ private class FunctionCompiler(
             }
 
             is IrGetEnumValue -> {
-                val entry = enumEntries[expression.symbol] ?: throw UnsupportedKotlinIr(expression, "unknown enum entry")
-                allocate(ValueType.Ref(nullable = false, type = entry.ownerType)).also { destination ->
-                    emit(Instruction.StaticGet(destination, FieldRef.Local(entry.fieldId)))
+                val entry = enumEntries[expression.symbol]
+                if (entry != null) {
+                    allocate(ValueType.Ref(nullable = false, type = entry.ownerType)).also { destination ->
+                        emit(Instruction.StaticGet(destination, FieldRef.Local(entry.fieldId)))
+                    }
+                } else {
+                    val external = externalEnumEntries[expression.symbol] ?: throw UnsupportedKotlinIr(expression, "unknown enum entry")
+                    allocate(valueType(expression.type, expression)).also { destination ->
+                        emit(Instruction.StaticGet(destination, FieldRef.Imported(external.importId)))
+                    }
                 }
             }
 
@@ -1968,6 +2154,18 @@ private class FunctionCompiler(
                 emit(Instruction.FieldGet(destination, receiver, FieldRef.Local(field.id)))
             }
         }
+        externalFieldsByGetter[target.symbol]?.let { field ->
+            val receiverExpression =
+                target.parameters
+                    .mapIndexedNotNull { index, parameter ->
+                        call.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.DispatchReceiver }
+                    }.singleOrNull()
+                    ?: throw UnsupportedKotlinIr(call, "platform property getter receiver is missing")
+            val receiver = compileExpression(receiverExpression)
+            return allocate(valueType(call.type, call)).also { destination ->
+                emit(Instruction.FieldGet(destination, receiver, FieldRef.Imported(field.importId)))
+            }
+        }
         compileStringArrayFactory(call, target)?.let { return it }
         trustedIntrinsic(target)?.let { intrinsic ->
             if (intrinsic is TrustedIntrinsic.StandardOutput) {
@@ -2093,9 +2291,11 @@ private class FunctionCompiler(
             }
 
             "kotlin.arrayOf" -> {
-                (call.arguments.filterNotNull().singleOrNull() as? IrVararg)
-                    ?.elements
-                    ?.all { it is IrExpression } == true
+                val arguments = call.arguments.filterNotNull()
+                arguments.isEmpty() ||
+                    (arguments.singleOrNull() as? IrVararg)
+                        ?.elements
+                        ?.all { it is IrExpression } == true
             }
 
             else -> {
@@ -2121,12 +2321,17 @@ private class FunctionCompiler(
                 }
 
                 "kotlin.arrayOf" -> {
-                    val vararg =
-                        call.arguments.filterNotNull().singleOrNull() as? IrVararg
-                            ?: throw UnsupportedKotlinIr(call, "arrayOf requires a direct vararg")
-                    vararg.elements.map { element ->
-                        element as? IrExpression
-                            ?: throw UnsupportedKotlinIr(call, "spread arrayOf arguments are outside the project subset")
+                    val arguments = call.arguments.filterNotNull()
+                    if (arguments.isEmpty()) {
+                        emptyList()
+                    } else {
+                        val vararg =
+                            arguments.singleOrNull() as? IrVararg
+                                ?: throw UnsupportedKotlinIr(call, "arrayOf requires a direct vararg")
+                        vararg.elements.map { element ->
+                            element as? IrExpression
+                                ?: throw UnsupportedKotlinIr(call, "spread arrayOf arguments are outside the project subset")
+                        }
                     }
                 }
 
@@ -2579,6 +2784,7 @@ private class FunctionCompiler(
                     val classifier = type.classifier as IrClassSymbol
                     val inline = inlineValueClasses[classifier]
                     val id = classTypeIds[classifier]
+                    val external = externalClassTypes[classifier]
                     val platformScalar = platformScalars.representation(type)
                     if (platformScalar != null) {
                         if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable platform scalar types are not supported")
@@ -2592,6 +2798,8 @@ private class FunctionCompiler(
                         valueType(inline.underlyingType, element)
                     } else if (id != null) {
                         ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Local(id))
+                    } else if (external != null) {
+                        ValueType.Ref(nullable = type.isNullable(), type = external)
                     } else {
                         throw UnsupportedKotlinIr(element, "unsupported value type")
                     }

@@ -229,11 +229,13 @@ internal class ReachabilityGraph(
                         .getOrNull(export.name.value.toInt())
                         ?.toString() == expectedName &&
                     (
-                        import.kind != SymbolKind.FUNCTION ||
+                        import.kind == SymbolKind.TYPE ||
                             signaturesMatch(moduleIndex, import.expectedSignature, targetModule, export.signature)
                     )
             }
-        require(candidates.size == 1) { "import $moduleIndex:$importIndex resolves to ${candidates.size} exports" }
+        require(candidates.size == 1) {
+            "import $moduleIndex:$importIndex ${import.kind} $expectedName resolves to ${candidates.size} exports"
+        }
         val (exportIndex, export) = candidates.single()
         importTargets[moduleIndex to importIndex] = targetModule
         reachable[targetModule].exports += exportIndex
@@ -320,7 +322,19 @@ internal class ReachabilityGraph(
         right: ValueType,
     ): Boolean =
         if (left is ValueType.Ref && right is ValueType.Ref) {
-            left.nullable == right.nullable && resolveType(leftModule, left.type) == resolveType(rightModule, right.type)
+            if (left.nullable != right.nullable) {
+                false
+            } else {
+                val leftIdentity = resolveType(leftModule, left.type) ?: return false
+                val rightIdentity = resolveType(rightModule, right.type) ?: return false
+                val leftType = artifact.modules[leftIdentity.first].types[leftIdentity.second]
+                val rightType = artifact.modules[rightIdentity.first].types[rightIdentity.second]
+                if (leftType is NominalType.Array && rightType is NominalType.Array) {
+                    valueTypesMatch(leftIdentity.first, leftType.element, rightIdentity.first, rightType.element)
+                } else {
+                    leftIdentity == rightIdentity
+                }
+            }
         } else {
             left !is ValueType.Ref && right !is ValueType.Ref && left == right
         }
