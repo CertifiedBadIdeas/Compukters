@@ -21,3 +21,29 @@ public class CharArray external constructor(size: Int) {
 
     public external operator fun set(index: Int, value: Char): Unit
 }
+
+internal class BooleanArray private constructor()
+
+internal class ByteArray private constructor()
+
+internal class ShortArray private constructor()
+
+internal class IntArray private constructor()
+
+internal class LongArray private constructor()
+
+internal class FloatArray private constructor()
+
+internal class DoubleArray private constructor()
+
+internal class UByteArray private constructor()
+
+internal class UShortArray private constructor()
+
+internal class UIntArray private constructor()
+
+internal class ULongArray private constructor()
+
+internal external fun <T> arrayOf(vararg elements: T): Array<T>
+
+internal external fun <T> arrayOfNulls(size: Int): Array<T?>

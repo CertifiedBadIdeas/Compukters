@@ -44,6 +44,7 @@ import org.jetbrains.kotlin.ir.expressions.IrGetValue
 import org.jetbrains.kotlin.ir.expressions.IrReturn
 import org.jetbrains.kotlin.ir.expressions.IrSetValue
 import org.jetbrains.kotlin.ir.expressions.IrStringConcatenation
+import org.jetbrains.kotlin.ir.expressions.IrThrow
 import org.jetbrains.kotlin.ir.expressions.IrTypeOperator
 import org.jetbrains.kotlin.ir.expressions.IrTypeOperatorCall
 import org.jetbrains.kotlin.ir.expressions.IrVararg
@@ -54,9 +55,11 @@ import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
 import org.jetbrains.kotlin.ir.symbols.IrEnumEntrySymbol
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
+import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.IrTypeProjection
 import org.jetbrains.kotlin.ir.types.isNothing
 import org.jetbrains.kotlin.ir.util.constructors
 import org.jetbrains.kotlin.ir.util.file
@@ -106,6 +109,8 @@ import ru.lazyhat.compukters.compiler.artifact.model.Utf16LiteralId
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.pool.ConstantPoolBuilder
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CapabilityOperationHandler
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.IntrinsicBlockingMode
 
 internal class UnsupportedKotlinIr(
     val element: IrElement,
@@ -273,13 +278,6 @@ private class InlineValueClassRegistry private constructor(
             declaration: IrClass,
             pluginContext: IrPluginContext,
         ): InlineValueClassLayout {
-            if (declaration.annotations.none {
-                    it.symbol.owner.parentAsClass.fqNameWhenAvailable
-                        ?.asString() == "kotlin.jvm.JvmInline"
-                }
-            ) {
-                throw UnsupportedKotlinIr(declaration, "value class must be annotated with @JvmInline")
-            }
             if (declaration.typeParameters.isNotEmpty()) {
                 throw UnsupportedKotlinIr(declaration, "generic value classes are not supported")
             }
@@ -376,28 +374,50 @@ private class InlineValueClassRegistry private constructor(
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 internal object KotlinProjectLowering {
+    private const val CHAR_ARRAY_RUNTIME_TYPE = 0u
+    private const val STRING_RUNTIME_TYPE = 1u
+    private val runtimeTypeNames =
+        listOf(
+            "kotlin.CharArray",
+            "kotlin.String",
+            "kotlin.Throwable",
+            "runtime.IllegalArgumentException",
+        )
+
     fun lower(
         functions: List<IrSimpleFunction>,
         classes: List<IrClass>,
         entry: IrSimpleFunction,
         pluginContext: IrPluginContext,
         session: CompilationSession,
+        includeTrustedPlatformBodies: Boolean = false,
     ): Artifact {
         val guestTypes = GuestTypeRegistry(pluginContext)
         val sourceClasses =
             classes
-                .filterNot { session.trustedApiIdentity(it.file.fileEntry.name) != null }
+                .filterNot { includeTrustedPlatformBodies && it.kind == ClassKind.OBJECT }
+                .filterNot {
+                    !includeTrustedPlatformBodies &&
+                        (session.trustedApiIdentity(it.file.fileEntry.name) != null ||
+                            session.trustedPlatformModule(it.file.fileEntry.name) != null)
+                }
                 .sortedBy { it.fqNameWhenAvailable?.asString().orEmpty() }
         val inlineValueClasses = InlineValueClassRegistry.build(classes, pluginContext)
         val playerFunctions =
             functions
                 .filter { function ->
-                    function.parent is IrFile ||
+                    includeTrustedPlatformBodies ||
+                        function.parent is IrFile ||
                         (
                             inlineValueClasses.contains((function.parent as? IrClass)?.symbol) &&
                                 function.origin == IrDeclarationOrigin.DEFINED
                         )
-                }.filterNot { function -> session.trustedApiIdentity(function.file.fileEntry.name) != null }
+                }.filter { function -> function.body != null }
+                .filterNot { function ->
+                    !includeTrustedPlatformBodies &&
+                        (session.trustedApiIdentity(function.file.fileEntry.name) != null ||
+                            session.trustedPlatformModule(function.file.fileEntry.name) != null)
+                }
         val processFacadeNames = setOf("compukter.process.Process.run", "compukter.process.Process.exit")
         val usesProcessFacade =
             playerFunctions.any { function ->
@@ -664,8 +684,8 @@ internal object KotlinProjectLowering {
 
         val library = kotlinLibrary()
         val libraryHash = ArtifactWriter.moduleSemanticHash(library)
-        val charArrayType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(0u)))
-        val stringType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(1u)))
+        val charArrayType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(CHAR_ARRAY_RUNTIME_TYPE)))
+        val stringType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(STRING_RUNTIME_TYPE)))
         val functionIds = userFunctions.withIndex().associate { (index, function) -> function.symbol to FunctionId.of(index.toUInt()) }
         val functionIdsByName =
             userFunctions.associate { function ->
@@ -950,23 +970,7 @@ internal object KotlinProjectLowering {
                         },
                 constants = constants,
                 fields = artifactFields,
-                imports =
-                    listOf(
-                        Import(
-                            kind = SymbolKind.TYPE,
-                            targetModule = ModuleId.of(1u),
-                            targetName = StringId.of(0u),
-                            expectedSignature = TypeRef.Imported(ImportId.of(0u)),
-                            targetModuleHash = libraryHash,
-                        ),
-                        Import(
-                            kind = SymbolKind.TYPE,
-                            targetModule = ModuleId.of(1u),
-                            targetName = StringId.of(1u),
-                            expectedSignature = TypeRef.Imported(ImportId.of(1u)),
-                            targetModuleHash = libraryHash,
-                        ),
-                    ),
+                imports = runtimeTypeNames.indices.map { index -> runtimeTypeImport(index, libraryHash) },
                 functions = loweredFunctions,
                 blocks = blocks,
             )
@@ -1258,11 +1262,14 @@ internal object KotlinProjectLowering {
         Module(
             name = StringId.of(0u),
             kind = ModuleKind.LIBRARY,
-            strings = listOf(MetadataText.of("kotlin.CharArray"), MetadataText.of("kotlin.String")),
+            strings =
+                runtimeTypeNames.map(MetadataText::of),
             types =
                 listOf(
                     NominalType.Array(name = StringId.of(0u), element = ValueType.Char),
                     NominalType.Class(name = StringId.of(1u), final = true),
+                    NominalType.Class(name = StringId.of(2u)),
+                    NominalType.Class(name = StringId.of(3u), final = true, superType = TypeRef.Local(TypeId.of(2u))),
                 ),
             exports =
                 listOf(
@@ -1280,8 +1287,36 @@ internal object KotlinProjectLowering {
                         localSymbol = 1u,
                         signature = TypeRef.Local(TypeId.of(1u)),
                     ),
+                    Export(
+                        kind = SymbolKind.TYPE,
+                        visibility = ExportVisibility.PUBLIC_LIBRARY,
+                        name = StringId.of(2u),
+                        localSymbol = 2u,
+                        signature = TypeRef.Local(TypeId.of(2u)),
+                    ),
+                    Export(
+                        kind = SymbolKind.TYPE,
+                        visibility = ExportVisibility.PUBLIC_LIBRARY,
+                        name = StringId.of(3u),
+                        localSymbol = 3u,
+                        signature = TypeRef.Local(TypeId.of(3u)),
+                    ),
                 ),
         )
+
+    private fun runtimeTypeImport(
+        index: Int,
+        libraryHash: ByteArray,
+    ): Import {
+        val id = index.toUInt()
+        return Import(
+            kind = SymbolKind.TYPE,
+            targetModule = ModuleId.of(1u),
+            targetName = StringId.of(id),
+            expectedSignature = TypeRef.Imported(ImportId.of(id)),
+            targetModuleHash = libraryHash,
+        )
+    }
 }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -1461,6 +1496,10 @@ private class FunctionCompiler(
                 }
             }
 
+            is IrThrow -> {
+                emit(Instruction.Throw(compileExpression(statement.value)))
+            }
+
             is IrExpression -> {
                 compileExpression(statement)
             }
@@ -1537,6 +1576,20 @@ private class FunctionCompiler(
             val value = compileExpression(argument)
             layout.intRange?.let { emitIntRangePrecondition(value, it, call) }
             return value
+        }
+        val exceptionImport =
+            when (target.parentAsClass.fqNameWhenAvailable?.asString()) {
+                "kotlin.Throwable", "kotlin.Exception", "kotlin.RuntimeException" -> ImportId.of(2u)
+                "kotlin.IllegalArgumentException" -> ImportId.of(3u)
+                else -> null
+            }
+        if (exceptionImport != null) {
+            arguments.forEach(::compileExpression)
+            prepareAllocationBlock()
+            val type = TypeRef.Imported(exceptionImport)
+            return allocate(ValueType.Ref(nullable = false, type = type)).also { destination ->
+                emit(Instruction.NewObject(destination, type))
+            }
         }
         if (target.parentAsClass.symbol == kotlinCharArrayClass &&
             call.type.isExactClass(kotlinCharArrayClass) &&
@@ -2345,7 +2398,12 @@ private fun IrType.isExactClass(symbol: IrClassSymbol): Boolean = (this as? IrSi
 private fun loweredParameters(
     function: IrSimpleFunction,
     session: CompilationSession,
-) = when (session.trustedApiIdentity(function.file.fileEntry.name)) {
+) = if (
+    session.trustedPlatformModule(function.file.fileEntry.name) != null &&
+    (function.parent as? IrClass)?.kind == ClassKind.OBJECT
+) {
+    function.parameters.filter { it.kind != IrParameterKind.DispatchReceiver }
+} else when (session.trustedApiIdentity(function.file.fileEntry.name)) {
     TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID -> {
         function.parameters.filter { it.kind == IrParameterKind.Regular }
     }
@@ -2487,6 +2545,43 @@ private fun resolveTrustedIntrinsic(
                 }
             }
         }
+    val platformModule = (parent as? IrFile)?.let { session.trustedPlatformModule(it.fileEntry.name) }
+    if (platformModule != null) {
+        val fqName = function.fqNameWhenAvailable?.asString() ?: return null
+        val parameterTypes =
+            function.parameters
+                .filter { it.kind == IrParameterKind.ExtensionReceiver || it.kind == IrParameterKind.Regular }
+                .joinToString(",") { it.type.canonicalPlatformType() }
+        val signature = "fun($parameterTypes):${function.returnType.canonicalPlatformType()}"
+        val handler =
+            session.canonicalIntrinsicRegistry
+                ?.handlers
+                ?.entries
+                ?.singleOrNull { (key, _) ->
+                    key.module == platformModule &&
+                        key.callableId.asSingleFqName().asString() == fqName &&
+                        key.signature.value == signature
+                }?.value
+        return when (handler) {
+            is CapabilityOperationHandler -> {
+                val capability = handler.requiredCapability
+                TrustedIntrinsic.CapabilityOperation(
+                    TrustedCapabilityIdentity(
+                        capability.namespace,
+                        capability.name,
+                        capability.abiMajor.toUShort(),
+                        0u.toUShort(),
+                        capabilityOperationCount(capability.namespace, capability.name),
+                    ),
+                    handler.operation,
+                    if (handler.blocking == IntrinsicBlockingMode.VM_TASK) BlockingMode.VM_TASK else BlockingMode.NONE,
+                    handler.terminal,
+                )
+            }
+
+            else -> null
+        }
+    }
     val identity =
         TrustedCallableIdentity(
             bundleIdentity = bundleIdentity,
@@ -2501,6 +2596,38 @@ private fun resolveTrustedIntrinsic(
         )
     return TrustedIntrinsicRegistry.resolve(identity)
 }
+
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+private fun IrType.canonicalPlatformType(): String {
+    val simple = this as? IrSimpleType ?: return toString()
+    val classifier = simple.classifier
+    val name =
+        when (classifier) {
+            is IrClassSymbol -> classifier.owner.name.asString()
+            is IrTypeParameterSymbol -> classifier.owner.name.asString()
+            else -> classifier.toString()
+        }
+    val arguments =
+        simple.arguments.mapNotNull { (it as? IrTypeProjection)?.type?.canonicalPlatformType() }
+            .takeIf(List<String>::isNotEmpty)
+            ?.joinToString(prefix = "<", postfix = ">", separator = ",")
+            .orEmpty()
+    return name + arguments + if (simple.isNullable()) "?" else ""
+}
+
+private fun capabilityOperationCount(
+    namespace: String,
+    name: String,
+): UInt =
+    when (namespace to name) {
+        "compukter" to "terminal" -> 14u
+        "compukter" to "stdio" -> 3u
+        "compukter" to "process" -> 3u
+        "compukter" to "filesystem" -> 7u
+        "compukter" to "compiler" -> 2u
+        "compukter" to "redstone" -> 8u
+        else -> error("unknown Compukters capability $namespace:$name")
+    }
 
 private fun standardOutputHelperName(
     intrinsic: TrustedIntrinsic.StandardOutput,
