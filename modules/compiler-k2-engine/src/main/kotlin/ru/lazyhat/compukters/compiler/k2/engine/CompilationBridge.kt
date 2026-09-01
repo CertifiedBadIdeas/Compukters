@@ -25,6 +25,8 @@ import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
+import ru.lazyhat.compukters.platform.bundle.PlatformScalarConstant
+import ru.lazyhat.compukters.platform.bundle.PlatformScalarType
 import java.nio.file.Path
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicRegistry as CanonicalIntrinsicRegistry
 
@@ -45,6 +47,8 @@ class CompilationSession(
     val canonicalIntrinsicRegistry: CanonicalIntrinsicRegistry? = null,
     val selectedPlatformModules: Set<PlatformModuleId> = emptySet(),
     val platformFunctions: List<PlatformFunctionLink> = emptyList(),
+    val platformScalarTypes: List<PlatformScalarType> = emptyList(),
+    val platformScalarConstants: List<PlatformScalarConstant> = emptyList(),
     val trustedStandardLibraryIdentity: String? = null,
     val limits: WorkerLimits = WorkerLimits(),
 ) {

@@ -133,6 +133,61 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `platform scalar constant lowers without object or static state`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.redstone.RedstoneSignal
+
+                fun main() {
+                    RedstoneSignal.MAX.level
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val opcodes = applicationCodeOpcodes(artifact)
+
+            assertTrue(0x30 !in opcodes, "platform scalar constant must not allocate: $opcodes")
+            assertTrue(0x38 !in opcodes, "platform scalar constant must not read static state: $opcodes")
+        }
+
+    @Test
+    fun `platform scalar constructor preserves its bounded Int precondition`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.redstone.RedstoneSignal
+
+                fun main() {
+                    RedstoneSignal(16)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val opcodes = applicationCodeOpcodes(artifact)
+
+            assertTrue(0x13 in opcodes, "platform scalar range failure must remain observable: $opcodes")
+            assertTrue(0x30 !in opcodes, "platform scalar construction must not allocate: $opcodes")
+        }
+
+    @Test
+    fun `platform scalar computed getter remains an ordinary library call`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.redstone.RedstoneOutput
+
+                fun main() {
+                    RedstoneOutput.MAX.signal
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+
+            assertTrue(0x40 in applicationCodeOpcodes(artifact), "computed getter must call its library implementation")
+        }
+
+    @Test
     fun `guest object subset lowers sealed results data values enum identity and type branches`() =
         withAdapter { adapter ->
             val source =

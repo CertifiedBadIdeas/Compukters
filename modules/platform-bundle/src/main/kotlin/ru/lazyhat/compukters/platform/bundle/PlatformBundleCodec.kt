@@ -182,6 +182,15 @@ object PlatformBundleCodec {
             require(scalarTypes.size == module.scalarTypes.size) { "platform module ${module.id} has duplicate scalar types" }
             module.scalarTypes.forEach { type ->
                 strictUtf8(type.symbol, "platform scalar type symbol")
+                strictUtf8(type.underlyingProperty, "platform scalar underlying property")
+                require((type.minimumInt == null) == (type.maximumInt == null)) {
+                    "platform scalar type ${type.symbol} has an incomplete Int range"
+                }
+                if (type.minimumInt != null) {
+                    require(type.representation == PlatformScalarRepresentation.INT && type.minimumInt <= requireNotNull(type.maximumInt)) {
+                        "platform scalar type ${type.symbol} has an invalid Int range"
+                    }
+                }
                 val sourceLength =
                     requireNotNull(sourceLengths[type.sourcePath]) {
                         "platform scalar type ${type.symbol} references unknown source ${type.sourcePath}"
@@ -206,6 +215,11 @@ object PlatformBundleCodec {
                     }
                 require(type.representation.accepts(constant.value)) {
                     "platform scalar constant ${constant.symbol} does not match ${type.representation}"
+                }
+                if (constant.value is PlatformScalarValue.IntValue && type.minimumInt != null) {
+                    require(constant.value.value in type.minimumInt..requireNotNull(type.maximumInt)) {
+                        "platform scalar constant ${constant.symbol} is outside ${type.symbol}'s Int range"
+                    }
                 }
             }
         }
@@ -294,9 +308,17 @@ object PlatformBundleCodec {
             value.scalarTypes.forEach { type ->
                 string(type.symbol)
                 output.write(type.representation.ordinal + 1)
+                string(type.underlyingProperty)
                 string(type.sourcePath)
                 u32(type.startUtf16)
                 u32(type.endUtf16)
+                if (type.minimumInt == null) {
+                    output.write(0)
+                } else {
+                    output.write(1)
+                    i32(type.minimumInt)
+                    i32(requireNotNull(type.maximumInt))
+                }
             }
             count(value.scalarConstants.size)
             value.scalarConstants.forEach { constant ->
@@ -411,17 +433,30 @@ object PlatformBundleCodec {
                 }
             val scalarTypes =
                 List(count(MAX_SCALAR_TYPES, "platform scalar type")) {
-                    PlatformScalarType(
-                        string("platform scalar type symbol"),
+                    val symbol = string("platform scalar type symbol")
+                    val representation =
                         when (val tag = u8()) {
                             1 -> PlatformScalarRepresentation.INT
                             2 -> PlatformScalarRepresentation.BOOLEAN
                             3 -> PlatformScalarRepresentation.CHAR
                             else -> throw IllegalArgumentException("invalid platform scalar representation: $tag")
-                        },
-                        string("platform scalar type source path"),
-                        u32(),
-                        u32(),
+                        }
+                    val underlyingProperty = string("platform scalar underlying property")
+                    val sourcePath = string("platform scalar type source path")
+                    val startUtf16 = u32()
+                    val endUtf16 = u32()
+                    val hasRange = u8().also { require(it in 0..1) }
+                    val minimumInt = if (hasRange == 1) i32() else null
+                    val maximumInt = if (hasRange == 1) i32() else null
+                    PlatformScalarType(
+                        symbol,
+                        representation,
+                        underlyingProperty,
+                        sourcePath,
+                        startUtf16,
+                        endUtf16,
+                        minimumInt,
+                        maximumInt,
                     )
                 }
             val scalarConstants =

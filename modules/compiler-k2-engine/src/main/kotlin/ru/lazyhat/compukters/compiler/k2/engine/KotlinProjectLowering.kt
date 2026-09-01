@@ -111,6 +111,10 @@ import ru.lazyhat.compukters.compiler.artifact.pool.ConstantPoolBuilder
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CapabilityOperationHandler
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.IntrinsicBlockingMode
+import ru.lazyhat.compukters.platform.bundle.PlatformScalarConstant
+import ru.lazyhat.compukters.platform.bundle.PlatformScalarRepresentation
+import ru.lazyhat.compukters.platform.bundle.PlatformScalarType
+import ru.lazyhat.compukters.platform.bundle.PlatformScalarValue
 
 internal class UnsupportedKotlinIr(
     val element: IrElement,
@@ -159,6 +163,73 @@ private data class InlineIntRange(
 private data class InlineScalarConstant(
     val value: Any,
 )
+
+private class PlatformScalarRegistry(
+    scalarTypes: List<PlatformScalarType>,
+    scalarConstants: List<PlatformScalarConstant>,
+) {
+    private val typesBySymbol = scalarTypes.associateBy(PlatformScalarType::symbol)
+    private val constantsBySymbol = scalarConstants.associateBy(PlatformScalarConstant::symbol)
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    fun representation(type: IrType): PlatformScalarRepresentation? =
+        ((type as? IrSimpleType)?.classifier as? IrClassSymbol)
+            ?.owner
+            ?.fqNameWhenAvailable
+            ?.asString()
+            ?.let(typesBySymbol::get)
+            ?.representation
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    fun constructor(symbol: IrConstructorSymbol): PlatformScalarType? =
+        symbol.owner.parentAsClass.fqNameWhenAvailable
+            ?.asString()
+            ?.let(typesBySymbol::get)
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    fun isUnderlyingGetter(function: IrSimpleFunction): Boolean {
+        val propertyName =
+            function.name
+                .asString()
+                .removePrefix("<get-")
+                .removeSuffix(">")
+        return (function.parent as? IrClass)
+            ?.fqNameWhenAvailable
+            ?.asString()
+            ?.let(typesBySymbol::get)
+            ?.underlyingProperty == propertyName
+    }
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    fun constant(function: IrSimpleFunction): PlatformScalarValue? {
+        val owner = function.parent as? IrClass ?: return null
+        val scalarOwner =
+            if (owner.name.asString() == "Companion") {
+                owner.parent as? IrClass
+            } else {
+                owner
+            } ?: return null
+        val scalarSymbol = scalarOwner.fqNameWhenAvailable?.asString() ?: return null
+        if (scalarSymbol !in typesBySymbol) return null
+        val propertyName =
+            function.name
+                .asString()
+                .removePrefix("<get-")
+                .removeSuffix(">")
+        return constantsBySymbol["$scalarSymbol.$propertyName"]?.value
+    }
+
+    fun constantValues(): List<Any> =
+        constantsBySymbol.values.map { it.value.scalarValue() } +
+            typesBySymbol.values.flatMap { type -> listOfNotNull(type.minimumInt, type.maximumInt) }
+}
+
+private fun PlatformScalarValue.scalarValue(): Any =
+    when (this) {
+        is PlatformScalarValue.IntValue -> value
+        is PlatformScalarValue.BooleanValue -> value
+        is PlatformScalarValue.CharValue -> value
+    }
 
 private class InlineValueClassRegistry private constructor(
     private val byClass: Map<IrClassSymbol, InlineValueClassLayout>,
@@ -393,6 +464,7 @@ internal object KotlinProjectLowering {
         includeTrustedPlatformBodies: Boolean = false,
     ): Artifact {
         val guestTypes = GuestTypeRegistry(pluginContext)
+        val platformScalars = PlatformScalarRegistry(session.platformScalarTypes, session.platformScalarConstants)
         val sourceClasses =
             classes
                 .filterNot { includeTrustedPlatformBodies && it.kind == ClassKind.OBJECT }
@@ -614,7 +686,24 @@ internal object KotlinProjectLowering {
                 )
             }
         userFunctions.forEach { function -> function.accept(intrinsicCollector, null) }
-        val capabilityIdentities = intrinsicCollector.capabilities.distinct().sorted()
+        val capabilityIdentities =
+            (
+                intrinsicCollector.capabilities +
+                    session.canonicalIntrinsicRegistry
+                        ?.handlers
+                        ?.values
+                        ?.filterIsInstance<CapabilityOperationHandler>()
+                        ?.map { handler ->
+                            val capability = handler.requiredCapability
+                            TrustedCapabilityIdentity(
+                                capability.namespace,
+                                capability.name,
+                                capability.abiMajor.toUShort(),
+                                0u.toUShort(),
+                                capabilityOperationCount(capability.namespace, capability.name),
+                            )
+                        }.orEmpty()
+            ).distinct().sorted()
         val capabilityIds =
             capabilityIdentities.withIndex().associate { (index, identity) -> identity to CapabilityId.of(index.toUInt()) }
 
@@ -679,7 +768,7 @@ internal object KotlinProjectLowering {
         val literalIds = literals.withIndex().associate { (index, value) -> value to Utf16LiteralId.of(index.toUInt()) }
         val constantPool = ConstantPoolBuilder()
         (
-            (literalCollector.values + inlineValueClasses.constantValues())
+            (literalCollector.values + inlineValueClasses.constantValues() + platformScalars.constantValues())
                 .map { value -> value.toArtifactConstant(literalIds) } +
                 Constant.I32(0) +
                 listOfNotNull(Constant.I32(-1).takeIf { needsAllBitsI32 }) +
@@ -724,7 +813,7 @@ internal object KotlinProjectLowering {
                 type = TypeRef.Local(TypeId.of((userFunctions.size + constructorClasses.size + userClasses.size).toUInt())),
             )
         userFunctions.forEach {
-            validateFunction(it, pluginContext, guestTypes, classTypeIds, inlineValueClasses, session)
+            validateFunction(it, pluginContext, guestTypes, classTypeIds, inlineValueClasses, platformScalars, session)
         }
         val classLayouts =
             buildClassLayouts(
@@ -736,6 +825,7 @@ internal object KotlinProjectLowering {
                 charArrayType,
                 stringArrayType,
                 inlineValueClasses,
+                platformScalars,
             )
         val classLayoutsBySymbol = classLayouts.associateBy { it.declaration.symbol }
         val blocks = mutableListOf<Block>()
@@ -767,6 +857,7 @@ internal object KotlinProjectLowering {
                     capabilityIds = capabilityIds,
                     classTypeIds = classTypeIds,
                     inlineValueClasses = inlineValueClasses,
+                    platformScalars = platformScalars,
                     constructorLayouts =
                         classLayouts
                             .mapNotNull { layout ->
@@ -797,6 +888,7 @@ internal object KotlinProjectLowering {
                     stringArrayType,
                     classTypeIds,
                     inlineValueClasses,
+                    platformScalars,
                     function,
                 )
             val parameterTypes =
@@ -810,6 +902,7 @@ internal object KotlinProjectLowering {
                         stringArrayType,
                         classTypeIds,
                         inlineValueClasses,
+                        platformScalars,
                         it,
                     )
                 }
@@ -882,6 +975,7 @@ internal object KotlinProjectLowering {
                             stringArrayType,
                             classTypeIds,
                             inlineValueClasses,
+                            platformScalars,
                             function,
                         ),
                     parameters =
@@ -895,6 +989,7 @@ internal object KotlinProjectLowering {
                                 stringArrayType,
                                 classTypeIds,
                                 inlineValueClasses,
+                                platformScalars,
                                 it,
                             )
                         },
@@ -980,6 +1075,7 @@ internal object KotlinProjectLowering {
                                 stringArrayType,
                                 classTypeIds,
                                 inlineValueClasses,
+                                platformScalars,
                                 function,
                             ),
                         parameters =
@@ -993,6 +1089,7 @@ internal object KotlinProjectLowering {
                                     stringArrayType,
                                     classTypeIds,
                                     inlineValueClasses,
+                                    platformScalars,
                                     parameter,
                                 )
                             },
@@ -1149,6 +1246,7 @@ internal object KotlinProjectLowering {
         guestTypes: GuestTypeRegistry,
         classTypeIds: Map<IrClassSymbol, TypeId>,
         inlineValueClasses: InlineValueClassRegistry,
+        platformScalars: PlatformScalarRegistry,
         session: CompilationSession,
     ) {
         val supported =
@@ -1168,6 +1266,7 @@ internal object KotlinProjectLowering {
                     !type.isNullable() &&
                         inlineValueClasses.contains((type as? IrSimpleType)?.classifier as? IrClassSymbol)
                 ) ||
+                (!type.isNullable() && platformScalars.representation(type) != null) ||
                 classTypeIds.containsKey((type as? IrSimpleType)?.classifier)
         if (loweredParameters(function, session).any { !isSupported(it.type) } ||
             !isSupported(function.returnType)
@@ -1185,6 +1284,7 @@ internal object KotlinProjectLowering {
         stringArrayType: ValueType,
         classTypeIds: Map<IrClassSymbol, TypeId>,
         inlineValueClasses: InlineValueClassRegistry,
+        platformScalars: PlatformScalarRegistry,
         element: IrElement,
     ): ValueType =
         when (type) {
@@ -1219,7 +1319,15 @@ internal object KotlinProjectLowering {
                     val classifier = type.classifier as IrClassSymbol
                     val inline = inlineValueClasses[classifier]
                     val id = classTypeIds[classifier]
-                    if (inline != null) {
+                    val platformScalar = platformScalars.representation(type)
+                    if (platformScalar != null) {
+                        if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable platform scalar types are not supported")
+                        when (platformScalar) {
+                            PlatformScalarRepresentation.INT -> ValueType.I32
+                            PlatformScalarRepresentation.BOOLEAN -> ValueType.Bool
+                            PlatformScalarRepresentation.CHAR -> ValueType.Char
+                        }
+                    } else if (inline != null) {
                         if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable value classes are not supported")
                         valueType(
                             inline.underlyingType,
@@ -1230,6 +1338,7 @@ internal object KotlinProjectLowering {
                             stringArrayType,
                             classTypeIds,
                             inlineValueClasses,
+                            platformScalars,
                             element,
                         )
                     } else if (id != null) {
@@ -1252,6 +1361,7 @@ internal object KotlinProjectLowering {
         charArrayType: ValueType,
         stringArrayType: ValueType,
         inlineValueClasses: InlineValueClassRegistry,
+        platformScalars: PlatformScalarRegistry,
     ): List<GuestClassLayout> {
         var nextField = 0u
         return classes.map { declaration ->
@@ -1306,6 +1416,7 @@ internal object KotlinProjectLowering {
                             stringArrayType,
                             classTypeIds,
                             inlineValueClasses,
+                            platformScalars,
                             property,
                         )
                     GuestFieldLayout(property, parameterIndex, FieldId.of(nextField++), fieldType)
@@ -1510,6 +1621,7 @@ private class FunctionCompiler(
     private val capabilityIds: Map<TrustedCapabilityIdentity, CapabilityId>,
     private val classTypeIds: Map<IrClassSymbol, TypeId>,
     private val inlineValueClasses: InlineValueClassRegistry,
+    private val platformScalars: PlatformScalarRegistry,
     private val constructorLayouts: Map<IrConstructorSymbol, GuestConstructorTarget>,
     private val fieldsByGetter: Map<IrSimpleFunctionSymbol, GuestFieldLayout>,
     private val enumEntries: Map<IrEnumEntrySymbol, GuestEnumEntryLayout>,
@@ -1667,6 +1779,19 @@ private class FunctionCompiler(
     private fun compileConstructor(call: IrConstructorCall): RegisterId {
         val target = call.symbol.owner
         val arguments = call.arguments.filterNotNull()
+        platformScalars.constructor(call.symbol)?.let { scalarType ->
+            val argument =
+                target.parameters
+                    .mapIndexedNotNull { index, parameter ->
+                        call.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.Regular }
+                    }.singleOrNull()
+                    ?: throw UnsupportedKotlinIr(call, "platform scalar constructor requires one argument")
+            val value = compileExpression(argument)
+            scalarType.minimumInt?.let { minimum ->
+                emitIntRangePrecondition(value, InlineIntRange(minimum, requireNotNull(scalarType.maximumInt)), call)
+            }
+            return value
+        }
         inlineValueClasses.constructor(call.symbol)?.let { layout ->
             val argument =
                 target.parameters
@@ -1787,6 +1912,24 @@ private class FunctionCompiler(
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun compileCall(call: IrCall): RegisterId? {
         val target = call.symbol.owner
+        platformScalars.constant(target)?.let { value ->
+            val artifactConstant = value.scalarValue().toArtifactConstant(literalIds)
+            val constantId =
+                constantIds[artifactConstant]
+                    ?: throw UnsupportedKotlinIr(call, "platform scalar constant is absent from canonical pool")
+            return allocate(valueType(call.type, call)).also { destination ->
+                emit(Instruction.Const(destination, constantId))
+            }
+        }
+        if (platformScalars.isUnderlyingGetter(target)) {
+            val receiver =
+                target.parameters
+                    .mapIndexedNotNull { index, parameter ->
+                        call.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.DispatchReceiver }
+                    }.singleOrNull()
+                    ?: throw UnsupportedKotlinIr(call, "platform scalar property getter receiver is missing")
+            return compileExpression(receiver)
+        }
         inlineValueClasses.constant(target.symbol)?.let { constant ->
             val artifactConstant = constant.value.toArtifactConstant(literalIds)
             val constantId =
@@ -1872,11 +2015,7 @@ private class FunctionCompiler(
             return (destination as? Destination.Register)?.id
         }
         externalFunctions[target.symbol]?.let { external ->
-            val argumentExpressions =
-                target.parameters
-                    .zip(call.arguments)
-                    .filter { (parameter, _) -> parameter.kind != IrParameterKind.DispatchReceiver }
-                    .map { (_, argument) -> requireNotNull(argument) }
+            val argumentExpressions = resolveProjectCallArguments(call, target)
             val arguments = argumentExpressions.map(::compileExpression)
             val destination = destinationFor(target.returnType, call)
             if (target.isSuspend) {
@@ -2432,7 +2571,15 @@ private class FunctionCompiler(
                     val classifier = type.classifier as IrClassSymbol
                     val inline = inlineValueClasses[classifier]
                     val id = classTypeIds[classifier]
-                    if (inline != null) {
+                    val platformScalar = platformScalars.representation(type)
+                    if (platformScalar != null) {
+                        if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable platform scalar types are not supported")
+                        when (platformScalar) {
+                            PlatformScalarRepresentation.INT -> ValueType.I32
+                            PlatformScalarRepresentation.BOOLEAN -> ValueType.Bool
+                            PlatformScalarRepresentation.CHAR -> ValueType.Char
+                        }
+                    } else if (inline != null) {
                         if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable value classes are not supported")
                         valueType(inline.underlyingType, element)
                     } else if (id != null) {

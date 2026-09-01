@@ -177,6 +177,8 @@ class K2CompilerAdapter(
                             canonicalIntrinsicRegistry = CanonicalTrustedIntrinsics.registry,
                             selectedPlatformModules = selected.mapTo(mutableSetOf(), PlatformModule::id),
                             platformFunctions = libraries.functions,
+                            platformScalarTypes = selected.flatMap(PlatformModule::scalarTypes),
+                            platformScalarConstants = selected.flatMap(PlatformModule::scalarConstants),
                             limits = request.limits,
                         )
                     CompuktersFir2IrPipeline.lowerGuest(output, session)?.let { lowered ->
