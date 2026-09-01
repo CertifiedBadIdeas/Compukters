@@ -31,6 +31,7 @@ import org.jetbrains.kotlin.fir.pipeline.Fir2KlibMetadataSerializer
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtClassInitializer
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtConstantExpression
 import org.jetbrains.kotlin.psi.KtConstructor
@@ -258,6 +259,21 @@ class PlatformMetadataCompiler {
                 "Char", "kotlin.Char" -> PlatformScalarRepresentation.CHAR
                 else -> throw IllegalArgumentException("platform scalar type $symbol must use Int, Boolean, or Char")
             }
+        val initializers = klass.declarations.filterIsInstance<KtClassInitializer>()
+        val intRange =
+            if (initializers.isEmpty()) {
+                null
+            } else {
+                require(representation == PlatformScalarRepresentation.INT && initializers.size == 1) {
+                    "platform scalar type $symbol must use one bounded Int precondition"
+                }
+                val propertyName = requireNotNull(parameter.name)
+                val match =
+                    Regex("require\\s*\\(\\s*${Regex.escape(propertyName)}\\s+in\\s+([^.]*)\\.\\.([^)]*)\\)")
+                        .find(requireNotNull(initializers.single().body).text)
+                        ?: throw IllegalArgumentException("platform scalar type $symbol must use one bounded Int precondition")
+                parseIntLiteral(match.groupValues[1].trim()) to parseIntLiteral(match.groupValues[2].trim())
+            }
         val companion = klass.declarations.filterIsInstance<KtObjectDeclaration>().singleOrNull(KtObjectDeclaration::isCompanion)
         val constants =
             companion?.declarations.orEmpty().filterIsInstance<KtProperty>().map { property ->
@@ -277,9 +293,12 @@ class PlatformMetadataCompiler {
             PlatformScalarType(
                 symbol,
                 representation,
+                requireNotNull(parameter.name),
                 sourcePath,
                 klass.declarationStartOffset(),
                 klass.textRange.endOffset,
+                intRange?.first,
+                intRange?.second,
             ),
             constants,
         )
@@ -364,10 +383,11 @@ class PlatformMetadataCompiler {
                 (declaration as? KtDeclarationContainer)?.declarations.orEmpty() +
                     listOfNotNull((declaration as? KtClass)?.primaryConstructor)
             ).flatMap { child -> collect(module, sourcePath, packageName, owners + name, child) }
-        return listOf(
+        val private = declaration.hasModifier(KtTokens.PRIVATE_KEYWORD) || declaration.hasModifier(KtTokens.INTERNAL_KEYWORD)
+        val parsed =
             ParsedDeclaration(
                 platformDeclaration,
-                declaration.hasModifier(KtTokens.PRIVATE_KEYWORD) || declaration.hasModifier(KtTokens.INTERNAL_KEYWORD),
+                private,
                 when (declaration) {
                     is KtNamedFunction -> declaration.hasBody()
                     is KtProperty -> declaration.hasInitializer() || declaration.accessors.any { it.hasBody() }
@@ -378,8 +398,22 @@ class PlatformMetadataCompiler {
                     is KtProperty -> PlatformLibraryDeclarationKind.PROPERTY
                     else -> null
                 },
-            ),
-        ) + nested
+            )
+        val getter =
+            (declaration as? KtProperty)
+                ?.takeIf { property -> property.getter?.hasBody() == true }
+                ?.let { property ->
+                    ParsedDeclaration(
+                        platformDeclaration.copy(
+                            symbol = (listOf(packageName).filter(String::isNotEmpty) + owners + "<get-$name>").joinToString("."),
+                            signature = "fun():${property.typeReference?.text?.canonicalType() ?: "?"}",
+                        ),
+                        private,
+                        hasBody = true,
+                        libraryKind = PlatformLibraryDeclarationKind.FUNCTION,
+                    )
+                }
+        return listOf(parsed) + listOfNotNull(getter) + nested
     }
 
     private fun signature(declaration: KtDeclaration): String =

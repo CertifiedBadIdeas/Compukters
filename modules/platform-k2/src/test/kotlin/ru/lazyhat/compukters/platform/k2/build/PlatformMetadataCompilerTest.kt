@@ -111,6 +111,7 @@ class PlatformMetadataCompilerTest {
         assertEquals(
             listOf(
                 "sample.Token" to "class(Int)",
+                "sample.Token.<get-doubled>" to "fun():Int",
                 "sample.Token.<init>" to "constructor(Int)",
                 "sample.Token.doubled" to "val():Int",
             ),
@@ -124,6 +125,9 @@ class PlatformMetadataCompilerTest {
             """
             package sample
             value class Port(val value: Int) {
+                init {
+                    require(value in 0..15)
+                }
                 companion object {
                     val MIN: Port = Port(0)
                     val MAX: Port = Port(15)
@@ -135,11 +139,14 @@ class PlatformMetadataCompilerTest {
         assertEquals(
             listOf(
                 PlatformScalarType(
-                    "sample.Port",
-                    PlatformScalarRepresentation.INT,
-                    "Port.kt",
-                    text.indexOf("value class Port"),
-                    text.length,
+                    symbol = "sample.Port",
+                    representation = PlatformScalarRepresentation.INT,
+                    underlyingProperty = "value",
+                    sourcePath = "Port.kt",
+                    startUtf16 = text.indexOf("value class Port"),
+                    endUtf16 = text.length,
+                    minimumInt = 0,
+                    maximumInt = 15,
                 ),
             ),
             result.scalarTypes,

@@ -6,13 +6,19 @@
 
 package compukter.redstone
 
-public enum class RedstoneSide {
-    FRONT,
-    BACK,
-    LEFT,
-    RIGHT,
-    TOP,
-    BOTTOM,
+public value class RedstoneSide internal constructor(internal val index: Int) {
+    init {
+        require(index in 0..5)
+    }
+
+    public companion object {
+        public val FRONT: RedstoneSide = RedstoneSide(0)
+        public val BACK: RedstoneSide = RedstoneSide(1)
+        public val LEFT: RedstoneSide = RedstoneSide(2)
+        public val RIGHT: RedstoneSide = RedstoneSide(3)
+        public val TOP: RedstoneSide = RedstoneSide(4)
+        public val BOTTOM: RedstoneSide = RedstoneSide(5)
+    }
 }
 
 public value class RedstoneSignal(public val level: Int) {
@@ -69,7 +75,9 @@ public object Redstone {
     public fun awaitAtMostInput(side: RedstoneSide, signal: RedstoneSignal): RedstoneSignal =
         RedstoneSignal(RedstoneBindings.awaitAtMostInput(redstoneSideIndex(side), signal.level))
 
-    public fun output(signal: RedstoneSignal, direct: Boolean = false): RedstoneOutput =
+    public fun output(signal: RedstoneSignal): RedstoneOutput = output(signal, false)
+
+    public fun output(signal: RedstoneSignal, direct: Boolean): RedstoneOutput =
         RedstoneOutput(signal.level or if (direct) 0x10 else 0)
 
     public fun outputs(): RedstoneOutputs = RedstoneOutputs(RedstoneBindings.outputs())
@@ -103,12 +111,4 @@ private object RedstoneBindings {
     external fun setOutputs(outputs: Int)
 }
 
-private fun redstoneSideIndex(side: RedstoneSide): Int =
-    when (side) {
-        RedstoneSide.FRONT -> 0
-        RedstoneSide.BACK -> 1
-        RedstoneSide.LEFT -> 2
-        RedstoneSide.RIGHT -> 3
-        RedstoneSide.TOP -> 4
-        RedstoneSide.BOTTOM -> 5
-    }
+private fun redstoneSideIndex(side: RedstoneSide): Int = side.index

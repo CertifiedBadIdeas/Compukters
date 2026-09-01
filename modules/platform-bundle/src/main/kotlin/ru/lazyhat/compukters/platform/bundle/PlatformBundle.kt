@@ -69,9 +69,12 @@ enum class PlatformScalarRepresentation {
 data class PlatformScalarType(
     val symbol: String,
     val representation: PlatformScalarRepresentation,
+    val underlyingProperty: String,
     val sourcePath: String,
     val startUtf16: Int,
     val endUtf16: Int,
+    val minimumInt: Int? = null,
+    val maximumInt: Int? = null,
 )
 
 sealed interface PlatformScalarValue {

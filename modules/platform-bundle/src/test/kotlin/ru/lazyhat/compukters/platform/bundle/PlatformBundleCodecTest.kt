@@ -191,9 +191,12 @@ class PlatformBundleCodecTest {
             PlatformScalarType(
                 symbol = "example.Port",
                 representation = PlatformScalarRepresentation.INT,
+                underlyingProperty = "value",
                 sourcePath = base.sources.first().path,
                 startUtf16 = 0,
                 endUtf16 = 4,
+                minimumInt = 0,
+                maximumInt = 15,
             )
         val minimum = PlatformScalarConstant("example.Port.MIN", "example.Port", PlatformScalarValue.IntValue(0))
         val maximum = PlatformScalarConstant("example.Port.MAX", "example.Port", PlatformScalarValue.IntValue(15))
@@ -213,7 +216,7 @@ class PlatformBundleCodecTest {
     fun `assembly rejects duplicate or mismatched scalar descriptors`() {
         val base = terminal()
         val scalarType =
-            PlatformScalarType("example.Port", PlatformScalarRepresentation.INT, base.sources.first().path, 0, 4)
+            PlatformScalarType("example.Port", PlatformScalarRepresentation.INT, "value", base.sources.first().path, 0, 4)
         val duplicate = base.copy(scalarTypes = listOf(scalarType, scalarType))
         val mismatched =
             base.copy(
