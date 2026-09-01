@@ -99,7 +99,19 @@ object LibraryModuleLinker {
         val moduleIds = ordered.withIndex().associate { (new, old) -> old to new }
         val capabilityMap = reachability.capabilities.withIndex().associate { (new, old) -> old to new }
         val relocations =
-            ordered.associateWith { old -> ModuleRelocation(reachability.modules[old], capabilityMap) }
+            ordered.associateWith { old ->
+                ModuleRelocation(
+                    reachability.modules[old],
+                    capabilityMap,
+                    canonicalImportOrder(
+                        combined.modules[old],
+                        old,
+                        reachability.modules[old],
+                        moduleIds,
+                        reachability.importTargets,
+                    ),
+                )
+            }
         val baseModules =
             ordered.associateWith { old ->
                 relocateModule(
@@ -176,12 +188,13 @@ private data class DenseIds(
 private class ModuleRelocation(
     reachable: ModuleReachability,
     private val capabilityMap: Map<Int, Int>,
+    importOrder: List<Int>,
 ) {
     val strings = DenseIds(reachable.strings.toList())
     val literals = DenseIds(reachable.literals.toList())
     val types = DenseIds(reachable.types.toList())
     val constants = DenseIds(reachable.constants.toList())
-    val imports = DenseIds(reachable.imports.toList())
+    val imports = DenseIds(importOrder)
     val exports = DenseIds(reachable.exports.toList())
     val fields = DenseIds(reachable.fields.toList())
     val functions = DenseIds(reachable.functions.toList())
@@ -228,6 +241,44 @@ private class ModuleRelocation(
             is FieldRef.Local -> FieldRef.Local(field(ref.id))
             is FieldRef.Imported -> FieldRef.Imported(import(ref.id))
         }
+}
+
+private fun canonicalImportOrder(
+    module: Module,
+    oldModule: Int,
+    reachable: ModuleReachability,
+    moduleIds: Map<Int, Int>,
+    importTargets: Map<Pair<Int, Int>, Int>,
+): List<Int> {
+    val typeIds = DenseIds(reachable.types.toList())
+    val primaryComparator =
+        compareBy<Int>(
+            { oldImport ->
+                val target = requireNotNull(importTargets[oldModule to oldImport])
+                requireNotNull(moduleIds[target])
+            },
+            { oldImport -> module.imports[oldImport].kind.ordinal },
+            { oldImport ->
+                val targetName = module.imports[oldImport].targetName
+                module.strings[targetName.value.toInt()]
+            },
+        )
+    var order = reachable.imports.sortedWith(primaryComparator)
+    repeat(order.size + 1) {
+        val importIds = DenseIds(order)
+        val next =
+            reachable.imports.sortedWith(
+                primaryComparator.thenBy { oldImport ->
+                    when (val signature = module.imports[oldImport].expectedSignature) {
+                        is TypeRef.Local -> typeIds.get(signature.id.value.toInt(), "type").toUInt()
+                        is TypeRef.Imported -> importIds.get(signature.id.value.toInt(), "import").toUInt() or 0x8000_0000u
+                    }
+                },
+            )
+        if (next == order) return order
+        order = next
+    }
+    error("canonical import relocation did not converge for module $oldModule")
 }
 
 private fun relocateModule(

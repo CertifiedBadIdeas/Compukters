@@ -94,6 +94,42 @@ class LibraryModuleLinkerTest {
     }
 
     @Test
+    fun `imports follow canonical target module order after libraries are reordered`() {
+        val sample = libraryModule()
+        val zeta = sample.copy(strings = listOf("dead", "live", "zeta-library").map(MetadataText::of))
+        val source = application(zeta)
+        val app = source.modules.single()
+        val input =
+            source.copy(
+                modules =
+                    listOf(
+                        app.copy(
+                            imports =
+                                app.imports +
+                                    app.imports.single().copy(
+                                        targetModuleHash = ArtifactWriter.moduleSemanticHash(sample),
+                                    ),
+                            blocks =
+                                listOf(
+                                    app.blocks.single().copy(
+                                        instructions =
+                                            listOf(
+                                                Instruction.Call(Destination.Unit, FunctionRef.Imported(ImportId.of(0u)), emptyList()),
+                                                Instruction.Call(Destination.Unit, FunctionRef.Imported(ImportId.of(1u)), emptyList()),
+                                                Instruction.Return(Destination.Unit),
+                                            ),
+                                    ),
+                                ),
+                        ),
+                    ),
+            )
+
+        val linked = LibraryModuleLinker.link(input, mapOf("sample" to sample, "zeta" to zeta))
+
+        assertEquals(listOf(1u, 2u), linked.modules.first().imports.map { it.targetModule.value })
+    }
+
+    @Test
     fun `only capabilities reached through retained functions survive`() {
         val library =
             libraryModule().let { source ->
