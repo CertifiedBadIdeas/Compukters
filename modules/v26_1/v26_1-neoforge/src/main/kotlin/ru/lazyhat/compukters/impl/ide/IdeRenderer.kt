@@ -636,7 +636,7 @@ internal object IdeRenderer {
                         add(
                             when (origin) {
                                 DeclarationOrigin.Project -> "Origin: Project"
-                                is DeclarationOrigin.Bundle -> "Origin: ${origin.identity.name}"
+                                is DeclarationOrigin.Platform -> "Origin: ${origin.identity.name}"
                             },
                         )
                     }
@@ -747,7 +747,7 @@ internal object IdeRenderer {
         private fun declarationLabel(target: IdeDeclarationTarget): String =
             when (target) {
                 is IdeDeclarationTarget.Project -> "Project · ${target.path.value}"
-                is IdeDeclarationTarget.AttachedSource -> "${target.bundle.name} · ${target.path.value}"
+                is IdeDeclarationTarget.AttachedSource -> "${target.module.name} · ${target.path.value}"
             }
 
         private fun popupText(value: String): String {

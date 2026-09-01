@@ -114,6 +114,8 @@ class AnalysisWorkerMeasurementTest {
                 payload.manifest.identityProperties.getValue("compiler"),
                 payload.manifest.identityProperties.getValue("language"),
                 Hash256.of(payload.manifest.payloadHash.toByteArray()),
+                ru.lazyhat.compukters.ide.analysis.k2
+                    .testPlatformAbi(),
             )
         val factory = MeasuringWorkerFactory()
         val service =
@@ -392,7 +394,16 @@ class AnalysisWorkerMeasurementTest {
             )
         val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 31 }))
         val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
-        return AdmittedAnalysisSnapshot(identity, sources, AdmittedAnalysisProfile(profile, emptyList()), limits)
+        return AdmittedAnalysisSnapshot(
+            identity,
+            sources,
+            AdmittedAnalysisProfile(
+                profile,
+                ru.lazyhat.compukters.ide.analysis.k2
+                    .testAdmittedPlatform(),
+            ),
+            limits,
+        )
     }
 
     private fun successful(result: AnalysisClientResult): AnalysisResult = assertIs<AnalysisClientResult.Success>(result).result

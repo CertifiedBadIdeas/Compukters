@@ -20,8 +20,6 @@ package ru.lazyhat.compukters.ide.analysis.k2.query
 
 import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
 import org.jetbrains.kotlin.analysis.api.KaSession
-import org.jetbrains.kotlin.analysis.api.analyze
-import org.jetbrains.kotlin.analysis.api.components.containingModule
 import org.jetbrains.kotlin.analysis.api.components.render
 import org.jetbrains.kotlin.analysis.api.renderer.declarations.impl.KaDeclarationRendererForSource
 import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
@@ -30,10 +28,8 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaConstructorSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaDeclarationSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.findClass
-import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.symbol
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
-import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
@@ -43,7 +39,7 @@ internal object DeclarationOriginMapper {
     fun MappedDeclaration.origin(): DeclarationOrigin =
         when (this) {
             is MappedDeclaration.Location -> value.origin
-            is MappedDeclaration.BundleTarget -> DeclarationOrigin.Bundle(identity)
+            is MappedDeclaration.PlatformTarget -> DeclarationOrigin.Platform(identity)
         }
 
     @OptIn(KaExperimentalApi::class)
@@ -67,57 +63,54 @@ internal object DeclarationOriginMapper {
                 ),
             )
         }
-        val module = navigableSymbol.containingModule
-        val binaryRoot =
-            snapshot.environment.binaryModules.entries
-                .firstOrNull { (_, candidate) -> candidate == module }
-                ?.key
-        val bundle = snapshot.bundles.singleOrNull { it.classRoot == binaryRoot } ?: return null
-        val targetName = (navigableSymbol as? KaNamedSymbol)?.name?.asString()
+        val stableId = navigableSymbol.stableId()?.replace('/', '.') ?: return null
         val targetSignature =
             (navigableSymbol as? KaDeclarationSymbol)?.render(KaDeclarationRendererForSource.WITH_QUALIFIED_NAMES)
-        return if (targetName != null && targetSignature != null && snapshot.bundleSourceFiles[bundle.identity].orEmpty().isNotEmpty()) {
-            MappedDeclaration.BundleTarget(bundle.identity, targetName, navigableSymbol.stableId(), targetSignature)
+        val candidates = snapshot.platform.declarations.filter { it.symbol == stableId }
+        val platformDeclaration =
+            candidates.singleOrNull()
+                ?: candidates.firstOrNull { declaration -> declaration.signature == targetSignature }
+                ?: return null
+        val identity = snapshot.moduleIdentities[platformDeclaration.module] ?: return null
+        val sourcePath =
+            snapshot.platformSourceFiles.keys.singleOrNull { path ->
+                path.value == platformDeclaration.sourcePath || path.value.endsWith("/${platformDeclaration.sourcePath}")
+            }
+        return if (sourcePath != null) {
+            MappedDeclaration.PlatformTarget(
+                identity,
+                sourcePath,
+                platformDeclaration.startUtf16,
+                platformDeclaration.endUtf16,
+            )
         } else {
-            MappedDeclaration.Location(DeclarationLocation.SourceUnavailable(DeclarationOrigin.Bundle(bundle.identity)))
+            MappedDeclaration.Location(DeclarationLocation.SourceUnavailable(DeclarationOrigin.Platform(identity)))
         }
     }
 
     @OptIn(KaExperimentalApi::class)
-    fun resolveBundleSource(
-        target: MappedDeclaration.BundleTarget,
+    fun resolvePlatformSource(
+        target: MappedDeclaration.PlatformTarget,
         snapshot: AdmittedK2Snapshot,
     ): DeclarationLocation {
-        snapshot.bundleSourceFiles[target.identity].orEmpty().entries.sortedBy { it.key.value }.forEach { (sourcePath, file) ->
-            val match =
-                analyze(file) {
-                    var match: DeclarationLocation.Source? = null
-                    file.accept(
-                        object : KtTreeVisitorVoid() {
-                            override fun visitNamedDeclaration(declaration: KtNamedDeclaration) {
-                                if (match == null && declaration.name == target.name) {
-                                    val candidateSignature = declaration.symbol.render(KaDeclarationRendererForSource.WITH_QUALIFIED_NAMES)
-                                    val identifier = declaration.nameIdentifier
-                                    if (declaration.symbol.stableId() == target.stableId && candidateSignature == target.signature &&
-                                        identifier != null
-                                    ) {
-                                        match =
-                                            DeclarationLocation.Source(
-                                                DeclarationOrigin.Bundle(target.identity),
-                                                sourcePath,
-                                                EditorRange(identifier.textRange.startOffset, identifier.textRange.endOffset),
-                                            )
-                                    }
-                                }
-                                if (match == null) super.visitNamedDeclaration(declaration)
-                            }
-                        },
-                    )
-                    match
+        val file =
+            snapshot.platformSourceFiles[target.sourcePath]
+                ?: return DeclarationLocation.SourceUnavailable(DeclarationOrigin.Platform(target.identity))
+        val declaration =
+            generateSequence(file.findElementAt(target.startUtf16.coerceAtMost(file.textLength - 1))) { it.parent }
+                .filterIsInstance<KtNamedDeclaration>()
+                .firstOrNull {
+                    it.textRange.startOffset <= target.startUtf16 && it.textRange.endOffset >= target.endUtf16
                 }
-            match?.let { return it }
-        }
-        return DeclarationLocation.SourceUnavailable(DeclarationOrigin.Bundle(target.identity))
+                ?: return DeclarationLocation.SourceUnavailable(DeclarationOrigin.Platform(target.identity))
+        val identifier =
+            declaration.nameIdentifier
+                ?: return DeclarationLocation.SourceUnavailable(DeclarationOrigin.Platform(target.identity))
+        return DeclarationLocation.Source(
+            DeclarationOrigin.Platform(target.identity),
+            target.sourcePath,
+            EditorRange(identifier.textRange.startOffset, identifier.textRange.endOffset),
+        )
     }
 }
 
@@ -133,10 +126,10 @@ internal sealed interface MappedDeclaration {
         val value: DeclarationLocation,
     ) : MappedDeclaration
 
-    data class BundleTarget(
-        val identity: ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity,
-        val name: String,
-        val stableId: String?,
-        val signature: String,
+    data class PlatformTarget(
+        val identity: ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity,
+        val sourcePath: ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath,
+        val startUtf16: Int,
+        val endUtf16: Int,
     ) : MappedDeclaration
 }

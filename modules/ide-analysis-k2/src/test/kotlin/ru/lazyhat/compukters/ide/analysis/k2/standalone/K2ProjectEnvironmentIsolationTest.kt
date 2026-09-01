@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.components.KaDiagnosticCheckerFilter
 import org.jetbrains.kotlin.analysis.api.components.collectDiagnostics
 import org.jetbrains.kotlin.psi.KtFile
+import ru.lazyhat.compukters.ide.analysis.k2.testPlatform
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
@@ -46,9 +47,8 @@ class K2ProjectEnvironmentIsolationTest {
         val environment =
             K2ProjectEnvironment.create(
                 source,
-                standardLibrary(),
-                emptyList(),
-                Path.of(System.getProperty("java.home")),
+                testPlatform(),
+                emptySet(),
             )
         try {
             val diagnostics =
@@ -70,12 +70,4 @@ class K2ProjectEnvironmentIsolationTest {
             root.toFile().deleteRecursively()
         }
     }
-
-    private fun standardLibrary(): Path =
-        Path
-            .of(
-                Unit::class.java.protectionDomain.codeSource.location
-                    .toURI(),
-            ).toAbsolutePath()
-            .normalize()
 }

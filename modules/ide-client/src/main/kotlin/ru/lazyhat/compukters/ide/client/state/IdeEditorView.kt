@@ -19,7 +19,7 @@
 package ru.lazyhat.compukters.ide.client.state
 
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
@@ -43,7 +43,7 @@ sealed interface IdeEditorSource {
     }
 
     data class AttachedApi(
-        val bundle: AnalysisBundleIdentity,
+        val module: AnalysisModuleIdentity,
         val path: VirtualSourcePath,
     ) : IdeEditorSource
 }
@@ -76,7 +76,7 @@ sealed interface IdeEditorView {
             when (source) {
                 is IdeEditorSource.Project -> source.path.value
                 is IdeEditorSource.Computer -> "Computer · ${source.path.value} · Read-only"
-                is IdeEditorSource.AttachedApi -> "${source.bundle.name} · ${source.path.value} · Read-only"
+                is IdeEditorSource.AttachedApi -> "${source.module.name} · ${source.path.value} · Read-only"
             }
 
         init {

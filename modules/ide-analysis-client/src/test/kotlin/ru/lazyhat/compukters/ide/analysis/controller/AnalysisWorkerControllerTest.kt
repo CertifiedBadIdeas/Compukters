@@ -388,7 +388,7 @@ class AnalysisWorkerControllerTest {
     ) {
         val processes = List(processCount) { FakeAnalysisWorkerProcess() }
         val factory = FakeAnalysisWorkerProcessFactory(processes)
-        val identity = AnalysisWorkerIdentity("2.4.10", "2.4", hash(8))
+        val identity = AnalysisWorkerIdentity("2.4.10", "2.4", hash(8), hash(9))
         val limits = AnalysisLimits()
         val launch = WorkerLaunch(Path.of("java"), listOf(Path.of("worker.jar")), "example.AnalysisMain", 256, 128, Path.of("tmp"))
         val policy = AnalysisWorkerPolicy(startupTimeoutNanos = 11, requestTimeoutNanos = 23, terminationGraceMillis = 37)
@@ -409,7 +409,16 @@ class AnalysisWorkerControllerTest {
                 WorkerLimits(),
             )
         val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), AnalysisProfileIdentity(hash(profileByte)))
-        return AdmittedAnalysisSnapshot(identity, sources, AdmittedAnalysisProfile(identity.profile, emptyList()), limits)
+        return AdmittedAnalysisSnapshot(
+            identity,
+            sources,
+            AdmittedAnalysisProfile(
+                identity.profile,
+                ru.lazyhat.compukters.ide.analysis.protocol
+                    .AdmittedAnalysisPlatform(Hash256.zero(), emptyList()),
+            ),
+            limits,
+        )
     }
 
     private fun handshake(

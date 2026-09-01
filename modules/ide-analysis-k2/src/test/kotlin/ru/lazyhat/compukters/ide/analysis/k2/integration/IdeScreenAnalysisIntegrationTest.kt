@@ -52,7 +52,17 @@ class IdeScreenAnalysisIntegrationTest {
         val sources = ProjectSnapshot.of(listOf(ProjectSource(path, BinaryValue.of(source.encodeToByteArray()))), WorkerLimits())
         val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 17 }))
         val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
-        val admitted = AdmittedAnalysisSnapshot(identity, sources, AdmittedAnalysisProfile(profile, emptyList()), AnalysisLimits())
+        val admitted =
+            AdmittedAnalysisSnapshot(
+                identity,
+                sources,
+                AdmittedAnalysisProfile(
+                    profile,
+                    ru.lazyhat.compukters.ide.analysis.k2
+                        .testAdmittedPlatform(),
+                ),
+                AnalysisLimits(),
+            )
 
         withController { controller ->
             assertEquals(SnapshotOpenResult.Opened(identity), controller.open(admitted).get(90, TimeUnit.SECONDS))
@@ -96,6 +106,8 @@ class IdeScreenAnalysisIntegrationTest {
                 payload.manifest.identityProperties.getValue("compiler"),
                 payload.manifest.identityProperties.getValue("language"),
                 Hash256.of(payload.manifest.payloadHash.toByteArray()),
+                ru.lazyhat.compukters.ide.analysis.k2
+                    .testPlatformAbi(),
             )
         val controller =
             AnalysisWorkerController(

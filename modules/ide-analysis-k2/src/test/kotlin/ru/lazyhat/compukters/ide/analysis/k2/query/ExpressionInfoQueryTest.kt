@@ -59,8 +59,8 @@ class ExpressionInfoQueryTest {
                     ),
                 ) as AnalysisResult.ExpressionInfo
 
-            val bundle = assertIs<DeclarationOrigin.Bundle>(assertNotNull(result.value).origin)
-            assertEquals("std.core", bundle.identity.name)
+            val bundle = assertIs<DeclarationOrigin.Platform>(assertNotNull(result.value).origin)
+            assertEquals("std:terminal", bundle.identity.name)
         }
     }
 

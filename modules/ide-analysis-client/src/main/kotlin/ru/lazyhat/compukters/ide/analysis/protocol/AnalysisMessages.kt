@@ -23,7 +23,7 @@ import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
@@ -36,12 +36,13 @@ import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Collections
 
-const val ANALYSIS_PROTOCOL_VERSION: UInt = 3u
+const val ANALYSIS_PROTOCOL_VERSION: UInt = 4u
 
 data class AnalysisWorkerIdentity(
     val compilerVersion: String,
     val languageVersion: String,
     val payloadHash: Hash256,
+    val platformAbi: Hash256,
 ) {
     init {
         validateWireText("compiler version", compilerVersion)
@@ -57,31 +58,36 @@ enum class AnalysisFeature {
     References,
 }
 
-data class AdmittedAnalysisBundle(
-    val identity: AnalysisBundleIdentity,
-    val classRoot: String,
+data class AdmittedAnalysisModule(
+    val identity: AnalysisModuleIdentity,
+)
+
+class AdmittedAnalysisPlatform(
+    val abi: Hash256,
+    modules: List<AdmittedAnalysisModule>,
     val sourceRoot: String? = null,
 ) {
+    val modules: List<AdmittedAnalysisModule> = immutableCopy(modules)
+
     init {
-        validateRoot("bundle class root", classRoot)
-        sourceRoot?.let { validateRoot("bundle source root", it) }
+        require(modules.size <= ProtocolLimits.MAX_MODULES) { "analysis module count exceeds protocol limit" }
+        requireCanonicalModules(this.modules)
+        sourceRoot?.let { validateRoot("platform source root", it) }
     }
+
+    override fun equals(other: Any?): Boolean =
+        other is AdmittedAnalysisPlatform && abi == other.abi && modules == other.modules && sourceRoot == other.sourceRoot
+
+    override fun hashCode(): Int = listOf(abi, modules, sourceRoot).hashCode()
 }
 
 class AdmittedAnalysisProfile(
     val identity: AnalysisProfileIdentity,
-    bundles: List<AdmittedAnalysisBundle>,
+    val platform: AdmittedAnalysisPlatform,
 ) {
-    val bundles: List<AdmittedAnalysisBundle> = immutableCopy(bundles)
+    override fun equals(other: Any?): Boolean = other is AdmittedAnalysisProfile && identity == other.identity && platform == other.platform
 
-    init {
-        require(bundles.size <= ProtocolLimits.MAX_BUNDLES) { "analysis bundle count exceeds protocol limit" }
-        requireCanonicalBundles(this.bundles)
-    }
-
-    override fun equals(other: Any?): Boolean = other is AdmittedAnalysisProfile && identity == other.identity && bundles == other.bundles
-
-    override fun hashCode(): Int = 31 * identity.hashCode() + bundles.hashCode()
+    override fun hashCode(): Int = 31 * identity.hashCode() + platform.hashCode()
 }
 
 sealed interface AnalysisMessage
@@ -122,7 +128,7 @@ data class OpenSnapshotRequest(
         require(sources.totalSourceBytes <= limits.sourceBytes.toLong()) { "source bytes exceed analysis limit" }
         require(sources.sources.all { it.content.size <= limits.sourceFileBytes }) { "source file exceeds analysis limit" }
         sources.sources.forEach { source -> validateProtocolSourcePath(source.path.value) }
-        require(profile.bundles.size <= limits.bundles) { "bundle count exceeds analysis limit" }
+        require(profile.platform.modules.size <= limits.modules) { "module count exceeds analysis limit" }
     }
 }
 
@@ -279,10 +285,10 @@ internal fun validateProtocolSourcePath(value: String) {
     require(strictUtf8Size(value) <= ProtocolLimits.MAX_PATH_BYTES) { "virtual source path exceeds protocol limit" }
 }
 
-private fun requireCanonicalBundles(bundles: List<AdmittedAnalysisBundle>) {
-    bundles.zipWithNext().forEach { (left, right) ->
+private fun requireCanonicalModules(modules: List<AdmittedAnalysisModule>) {
+    modules.zipWithNext().forEach { (left, right) ->
         require(compareUnsigned(left.identity.name.encodeToByteArray(), right.identity.name.encodeToByteArray()) < 0) {
-            "analysis bundles must be uniquely ordered by UTF-8 name"
+            "analysis modules must be uniquely ordered by UTF-8 name"
         }
     }
 }

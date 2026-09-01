@@ -20,7 +20,7 @@ package ru.lazyhat.compukters.ide.client.analysis
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
@@ -36,8 +36,8 @@ import kotlin.test.assertNull
 class IdeSemanticInteractionTest {
     @Test
     fun `attached source catalog copies text and requires exact bundle identity`() {
-        val bundle = AnalysisBundleIdentity("std.core", hash(3))
-        val replacement = AnalysisBundleIdentity("std.core", hash(4))
+        val bundle = AnalysisModuleIdentity("std.core", hash(3))
+        val replacement = AnalysisModuleIdentity("std.core", hash(4))
         val path = VirtualSourcePath.kotlin("compukter/api/Sample.kt")
         val files = mutableMapOf(path to "class Sample")
         val sources = mutableMapOf(bundle to files)
@@ -52,7 +52,7 @@ class IdeSemanticInteractionTest {
 
     @Test
     fun `attached source catalog enforces strict UTF-8 budgets`() {
-        val bundle = AnalysisBundleIdentity("std.core", hash(3))
+        val bundle = AnalysisModuleIdentity("std.core", hash(3))
         val first = VirtualSourcePath.kotlin("first.kt")
         val second = VirtualSourcePath.kotlin("second.kt")
 

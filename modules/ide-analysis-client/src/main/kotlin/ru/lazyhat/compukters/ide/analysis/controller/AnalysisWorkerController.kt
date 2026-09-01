@@ -639,7 +639,7 @@ class AnalysisWorkerController(
         try {
             snapshot.protocolContext
         } catch (exception: Exception) {
-            throw ControllerFault(AnalysisFailureKind.InvalidSnapshot, exception.message ?: "invalid attached bundle sources")
+            throw ControllerFault(AnalysisFailureKind.InvalidSnapshot, exception.message ?: "invalid attached platform sources")
         }
 
     private fun schedulerItems(): List<Pending> = scheduler.values().map { it.value }

@@ -22,31 +22,25 @@ import com.intellij.core.CoreApplicationEnvironment
 import com.intellij.mock.MockComponentManager
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.editor.impl.DocumentWriteAccessGuard
-import com.intellij.openapi.module.Module
 import com.intellij.openapi.util.Disposer
-import com.intellij.openapi.vfs.StandardFileSystems
-import com.intellij.openapi.vfs.VfsUtilCore
-import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.pom.PomModel
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiTreeChangeListener
-import com.intellij.psi.search.GlobalSearchScope
-import org.jetbrains.kotlin.analysis.api.projectStructure.KaLibraryModule
 import org.jetbrains.kotlin.analysis.api.standalone.StandaloneAnalysisAPISession
 import org.jetbrains.kotlin.analysis.api.standalone.buildStandaloneAnalysisAPISession
 import org.jetbrains.kotlin.analysis.project.structure.builder.buildKtLibraryModule
-import org.jetbrains.kotlin.analysis.project.structure.builder.buildKtLibrarySourceModule
-import org.jetbrains.kotlin.analysis.project.structure.builder.buildKtSdkModule
 import org.jetbrains.kotlin.analysis.project.structure.builder.buildKtSourceModule
 import org.jetbrains.kotlin.cli.common.CliModuleVisibilityManagerImpl
 import org.jetbrains.kotlin.load.kotlin.ModuleVisibilityManager
-import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
+import ru.lazyhat.compukters.platform.bundle.PlatformBundle
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
+import ru.lazyhat.compukters.platform.k2.CompuktersLLFirSessionConfigurator
+import ru.lazyhat.compukters.platform.k2.CompuktersPlatforms
 import java.nio.file.Path
 
 internal class K2ProjectEnvironment private constructor(
     private val disposable: Disposable,
     val session: StandaloneAnalysisAPISession,
-    val binaryModules: Map<Path, KaLibraryModule>,
 ) : AutoCloseable {
     override fun close() {
         session.application.runWriteAction { Disposer.dispose(disposable) }
@@ -55,14 +49,12 @@ internal class K2ProjectEnvironment private constructor(
     companion object {
         fun create(
             sourceRoot: Path,
-            standardLibrary: Path,
-            bundles: List<AdmittedK2Bundle>,
-            jdkHome: Path,
+            platformBundle: PlatformBundle,
+            selectedModules: Set<PlatformModuleId>,
         ): K2ProjectEnvironment {
             val disposable = Disposer.newDisposable("Compukters analysis snapshot")
             return try {
-                val platform = JvmPlatforms.defaultJvmPlatform
-                val binaryModules = linkedMapOf<Path, KaLibraryModule>()
+                val platform = CompuktersPlatforms.default
                 val session =
                     buildStandaloneAnalysisAPISession(disposable, unitTestMode = false) {
                         val area = application.extensionArea
@@ -90,6 +82,7 @@ internal class K2ProjectEnvironment private constructor(
                         registerProjectService(PsiDocumentManager::class.java, StandalonePsiDocumentManager(project))
                         mockProject.picoContainer.unregisterComponent(PomModel::class.java.name)
                         registerProjectService(PomModel::class.java, StandalonePomModel())
+                        CompuktersLLFirSessionConfigurator.register(project, platformBundle, selectedModules)
                         buildKtModuleProvider {
                             this.platform = platform
                             addModule(
@@ -97,67 +90,23 @@ internal class K2ProjectEnvironment private constructor(
                                     this.platform = platform
                                     moduleName = "compukters-snapshot"
                                     addSourceRoot(sourceRoot)
-                                    addRegularDependency(
-                                        buildKtLibraryModule {
-                                            this.platform = platform
-                                            libraryName = "kotlin-stdlib"
-                                            addBinaryRoot(standardLibrary)
-                                        },
-                                    )
-                                    bundles.forEachIndexed { index, bundle ->
-                                        val root = bundle.classRoot
-                                        val module =
+                                    if (selectedModules.isNotEmpty()) {
+                                        addRegularDependency(
                                             buildKtLibraryModule {
                                                 this.platform = platform
-                                                libraryName = "guest-bundle-$index"
-                                                addBinaryRoot(root)
-                                            }
-                                        binaryModules[root] = module
-                                        addRegularDependency(
-                                            module,
+                                                libraryName = CompuktersLLFirSessionConfigurator.PLATFORM_LIBRARY_NAME
+                                            },
                                         )
-                                        bundle.sourceRoot?.let { attachedRoot ->
-                                            val virtualRoot =
-                                                requireNotNull(
-                                                    StandardFileSystems.jar().findFileByPath("$attachedRoot!/"),
-                                                ) { "bundle source archive is not visible to the standalone VFS" }
-                                            val sourceModule =
-                                                buildKtLibrarySourceModule {
-                                                    this.platform = platform
-                                                    libraryName = "guest-bundle-$index-sources"
-                                                    binaryLibrary = module
-                                                    contentScope = DescendantScope(project, virtualRoot)
-                                                }
-                                            addModule(sourceModule)
-                                        }
                                     }
-                                    addRegularDependency(
-                                        buildKtSdkModule {
-                                            this.platform = platform
-                                            libraryName = "jdk"
-                                            addBinaryRootsFromJdkHome(jdkHome, isJre = false)
-                                        },
-                                    )
                                 },
                             )
                         }
                     }
-                K2ProjectEnvironment(disposable, session, binaryModules.toMap())
+                K2ProjectEnvironment(disposable, session)
             } catch (exception: Exception) {
                 Disposer.dispose(disposable)
                 throw exception
             }
         }
     }
-}
-
-private class DescendantScope(
-    project: com.intellij.openapi.project.Project,
-    private val root: VirtualFile,
-) : GlobalSearchScope(project) {
-    override fun contains(file: VirtualFile): Boolean = VfsUtilCore.isAncestor(root, file, false)
-
-    override fun isSearchInModuleContent(module: Module): Boolean = false
-
-    override fun isSearchInLibraries(): Boolean = true
 }

@@ -23,7 +23,7 @@ object ProtocolLimits {
     const val MAX_SOURCE_FILES = 4 * 1024
     const val MAX_SOURCE_FILE_BYTES = 4 * 1024 * 1024
     const val MAX_SOURCE_BYTES = 16 * 1024 * 1024
-    const val MAX_BUNDLES = 1024
+    const val MAX_MODULES = 1024
     const val MAX_DIAGNOSTICS = 4 * 1024
     const val MAX_SEMANTIC_TOKENS = 64 * 1024
     const val MAX_COMPLETION_ITEMS = 256
@@ -38,7 +38,7 @@ data class AnalysisLimits(
     val sourceFileBytes: Int = 256 * 1024,
     val sourceBytes: Int = 1024 * 1024,
     val frameBytes: Int = ProtocolLimits.MAX_FRAME_PAYLOAD_BYTES,
-    val bundles: Int = 128,
+    val modules: Int = 128,
     val diagnostics: Int = 64,
     val diagnosticTextBytes: Int = 64 * 1024,
     val semanticTokens: Int = 16 * 1024,
@@ -52,7 +52,7 @@ data class AnalysisLimits(
         requireBounded("source file bytes", sourceFileBytes, ProtocolLimits.MAX_SOURCE_FILE_BYTES)
         requireBounded("source bytes", sourceBytes, ProtocolLimits.MAX_SOURCE_BYTES)
         requireBounded("frame bytes", frameBytes, ProtocolLimits.MAX_FRAME_PAYLOAD_BYTES)
-        requireBounded("bundle count", bundles, ProtocolLimits.MAX_BUNDLES)
+        requireBounded("module count", modules, ProtocolLimits.MAX_MODULES)
         requireBounded("diagnostic count", diagnostics, ProtocolLimits.MAX_DIAGNOSTICS)
         requireBounded("diagnostic text bytes", diagnosticTextBytes, ProtocolLimits.MAX_TEXT_BYTES)
         requireBounded("semantic token count", semanticTokens, ProtocolLimits.MAX_SEMANTIC_TOKENS)

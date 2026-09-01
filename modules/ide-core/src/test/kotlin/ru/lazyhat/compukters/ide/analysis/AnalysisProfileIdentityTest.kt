@@ -28,7 +28,7 @@ import kotlin.test.assertNotEquals
 
 class AnalysisProfileIdentityTest {
     @Test
-    fun `identity covers exact lock bundles toolchain and semantic settings`() {
+    fun `identity covers exact lock modules toolchain and semantic settings`() {
         val base = identity()
 
         assertEquals(base, identity())
@@ -37,42 +37,42 @@ class AnalysisProfileIdentityTest {
         assertNotEquals(base, identity(settings = AnalysisSemanticSettings("2.4", "2.4", true)))
         assertNotEquals(
             base,
-            identity(bundles = listOf(AnalysisBundleIdentity("std.fs", hash(3)), AnalysisBundleIdentity("std.terminal", hash(1)))),
+            identity(modules = listOf(AnalysisModuleIdentity("std.fs", hash(3)), AnalysisModuleIdentity("std.terminal", hash(1)))),
         )
     }
 
     @Test
-    fun `bundle identity input must already be canonical unique and strict utf8`() {
+    fun `module identity input must already be canonical unique and strict utf8`() {
         assertFailsWith<IllegalArgumentException> {
             identity(
-                bundles =
+                modules =
                     listOf(
-                        AnalysisBundleIdentity("std.terminal", hash(1)),
-                        AnalysisBundleIdentity("std.fs", hash(2)),
+                        AnalysisModuleIdentity("std.terminal", hash(1)),
+                        AnalysisModuleIdentity("std.fs", hash(2)),
                     ),
             )
         }
         assertFailsWith<IllegalArgumentException> {
-            identity(bundles = List(2) { AnalysisBundleIdentity("std.fs", hash(1)) })
+            identity(modules = List(2) { AnalysisModuleIdentity("std.fs", hash(1)) })
         }
-        assertFailsWith<IllegalArgumentException> { AnalysisBundleIdentity("bad\uD800", hash(1)) }
+        assertFailsWith<IllegalArgumentException> { AnalysisModuleIdentity("bad\uD800", hash(1)) }
         assertFailsWith<IllegalArgumentException> { AnalysisSemanticSettings("2.4", "bad\uDC00", false) }
     }
 
     private fun identity(
         lock: ByteArray = byteArrayOf(1),
         toolchain: ToolchainLockIdentity = toolchain(),
-        bundles: List<AnalysisBundleIdentity> =
+        modules: List<AnalysisModuleIdentity> =
             listOf(
-                AnalysisBundleIdentity("std.fs", hash(2)),
-                AnalysisBundleIdentity("std.terminal", hash(1)),
+                AnalysisModuleIdentity("std.fs", hash(2)),
+                AnalysisModuleIdentity("std.terminal", hash(1)),
             ),
         settings: AnalysisSemanticSettings = AnalysisSemanticSettings("2.4", "2.4", false),
     ): AnalysisProfileIdentity =
         AnalysisProfileIdentity.of(
             toolchain = toolchain,
             canonicalLock = BinaryValue.of(lock),
-            bundles = bundles,
+            modules = modules,
             settings = settings,
         )
 

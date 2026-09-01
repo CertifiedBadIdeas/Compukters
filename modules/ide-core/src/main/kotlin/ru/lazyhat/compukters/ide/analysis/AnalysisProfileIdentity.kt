@@ -23,13 +23,13 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import java.security.MessageDigest
 
-data class AnalysisBundleIdentity(
+data class AnalysisModuleIdentity(
     val name: String,
     val hash: Hash256,
 ) {
     init {
-        require(name.isNotEmpty()) { "analysis bundle name must not be empty" }
-        require(strictUtf8Size(name) <= MAX_IDENTITY_TEXT_UTF8_BYTES) { "analysis bundle name exceeds limit" }
+        require(name.isNotEmpty()) { "analysis module name must not be empty" }
+        require(strictUtf8Size(name) <= MAX_IDENTITY_TEXT_UTF8_BYTES) { "analysis module name exceeds limit" }
     }
 }
 
@@ -51,11 +51,11 @@ data class AnalysisProfileIdentity(
         fun of(
             toolchain: ToolchainLockIdentity,
             canonicalLock: BinaryValue,
-            bundles: List<AnalysisBundleIdentity>,
+            modules: List<AnalysisModuleIdentity>,
             settings: AnalysisSemanticSettings,
         ): AnalysisProfileIdentity {
-            require(bundles.zipWithNext().all { (left, right) -> compareBundleIdentities(left, right) < 0 }) {
-                "analysis bundle identities must be strictly sorted and unique"
+            require(modules.zipWithNext().all { (left, right) -> compareModuleIdentities(left, right) < 0 }) {
+                "analysis module identities must be strictly sorted and unique"
             }
             val digest = MessageDigest.getInstance("SHA-256")
             digest.update(DOMAIN)
@@ -67,10 +67,10 @@ data class AnalysisProfileIdentity(
             digest.field(toolchain.payloadHash.toByteArray())
             digest.field(toolchain.platformAbi.toByteArray())
             digest.field(canonicalLock.toByteArray())
-            digest.int(bundles.size)
-            bundles.forEach { bundle ->
-                digest.field(bundle.name)
-                digest.field(bundle.hash.toByteArray())
+            digest.int(modules.size)
+            modules.forEach { module ->
+                digest.field(module.name)
+                digest.field(module.hash.toByteArray())
             }
             digest.field(settings.languageVersion)
             digest.field(settings.apiVersion)
@@ -78,7 +78,7 @@ data class AnalysisProfileIdentity(
             return AnalysisProfileIdentity(Hash256.of(digest.digest()))
         }
 
-        private val DOMAIN = "Compukters analysis profile v2\u0000".encodeToByteArray()
+        private val DOMAIN = "Compukters analysis profile v3\u0000".encodeToByteArray()
     }
 }
 
@@ -90,9 +90,9 @@ private fun validateIdentityText(
     require(strictUtf8Size(value) <= MAX_IDENTITY_TEXT_UTF8_BYTES) { "$label exceeds limit" }
 }
 
-private fun compareBundleIdentities(
-    left: AnalysisBundleIdentity,
-    right: AnalysisBundleIdentity,
+private fun compareModuleIdentities(
+    left: AnalysisModuleIdentity,
+    right: AnalysisModuleIdentity,
 ): Int {
     val name = compareUnsigned(left.name.encodeToByteArray(), right.name.encodeToByteArray())
     return if (name != 0) name else compareUnsigned(left.hash.toByteArray(), right.hash.toByteArray())

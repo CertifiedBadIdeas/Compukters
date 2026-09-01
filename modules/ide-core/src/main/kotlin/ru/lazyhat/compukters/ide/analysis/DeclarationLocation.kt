@@ -24,8 +24,8 @@ import ru.lazyhat.compukters.ide.editor.EditorRange
 sealed interface DeclarationOrigin {
     data object Project : DeclarationOrigin
 
-    data class Bundle(
-        val identity: AnalysisBundleIdentity,
+    data class Platform(
+        val identity: AnalysisModuleIdentity,
     ) : DeclarationOrigin
 }
 
@@ -47,7 +47,7 @@ sealed interface DeclarationLocation {
         override val origin: DeclarationOrigin,
     ) : DeclarationLocation {
         init {
-            require(origin is DeclarationOrigin.Bundle) { "only a bundle declaration may have unavailable source" }
+            require(origin is DeclarationOrigin.Platform) { "only a platform declaration may have unavailable source" }
         }
     }
 }

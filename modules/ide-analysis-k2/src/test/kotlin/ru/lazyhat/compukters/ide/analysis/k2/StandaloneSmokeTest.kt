@@ -18,14 +18,29 @@
 
 package ru.lazyhat.compukters.ide.analysis.k2
 
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
+import ru.lazyhat.compukters.ide.analysis.AnalysisResult
+import ru.lazyhat.compukters.ide.analysis.k2.query.K2QueryFixture
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 class StandaloneSmokeTest {
     @Test
-    fun `pinned standalone session resolves an inferred string type`() {
-        StandaloneFixture.source("main.kt", "val answer = \"ok\"").use { fixture ->
-            assertEquals("kotlin.String", fixture.analyzeInitializerType("answer"))
+    fun `native standalone session resolves an inferred string type`() {
+        val source = "val answer = \"ok\""
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val result =
+                fixture.execute(
+                    AnalysisQuery.ExpressionInfo(
+                        fixture.identity,
+                        VirtualSourcePath.kotlin("main.kt"),
+                        source.indexOf("\"ok\"") + 1,
+                    ),
+                ) as AnalysisResult.ExpressionInfo
+
+            assertEquals("kotlin.String", assertNotNull(result.value).renderedType)
         }
     }
 }

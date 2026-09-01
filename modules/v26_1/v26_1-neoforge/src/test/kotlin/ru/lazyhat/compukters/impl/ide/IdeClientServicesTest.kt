@@ -20,8 +20,7 @@ package ru.lazyhat.compukters.impl.ide
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
-import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisBundle
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyKind
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
@@ -55,12 +54,13 @@ class IdeClientServicesTest {
             output.write(byteArrayOf(1, 2, 3))
             output.closeEntry()
         }
-        val identity = AnalysisBundleIdentity("std.core", Hash256.of(ByteArray(32) { 7 }))
+        val identity = AnalysisModuleIdentity("std.core", Hash256.of(ByteArray(32) { 7 }))
 
         val catalog =
             ProductionIdeApplicationFactory.loadAttachedSources(
-                listOf(AdmittedAnalysisBundle(identity, archive.toString(), archive.toString())),
-                AnalysisLimits(sourceFiles = 2, sourceFileBytes = 128, sourceBytes = 128, bundles = 1),
+                mapOf(identity to setOf("compukter/api/Sample.kt")),
+                archive,
+                AnalysisLimits(sourceFiles = 2, sourceFileBytes = 128, sourceBytes = 128, modules = 1),
             )
 
         assertEquals(text, catalog.text(identity, VirtualSourcePath.kotlin("compukter/api/Sample.kt")))
@@ -102,7 +102,7 @@ class IdeClientServicesTest {
             val prepared = ProductionIdeApplicationFactory.prepare(paths)
             val compiler = prepared.compilerPayload
             val analysis = prepared.analysisPayload
-            val guestApi = prepared.analysisBundles.single()
+            val guestApi = prepared.platformSourceRoot
             val platform = prepared.platform
 
             assertEquals(compiler.root, analysis.root)
@@ -110,12 +110,15 @@ class IdeClientServicesTest {
             assertNotEquals(compiler.manifest.mainClass, analysis.manifest.mainClass)
             assertTrue(
                 Path
-                    .of(guestApi.classRoot)
+                    .of(guestApi.toString())
                     .fileName
                     .toString()
                     .startsWith("guest-platform-"),
             )
-            assertEquals(guestApi.classRoot, guestApi.sourceRoot)
+            assertTrue(
+                java.nio.file.Files
+                    .isRegularFile(guestApi),
+            )
             assertEquals(compiler.manifest.identity.languageVersion, platform.identity.languageVersion)
             assertEquals(
                 compiler.manifest.identity.platformAbi,

@@ -25,7 +25,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
@@ -60,7 +60,7 @@ import java.util.zip.ZipFile
 
 class AnalysisProtocolContext private constructor(
     internal val sourceLengthsUtf16: Map<VirtualSourcePath, Int>?,
-    internal val bundleSourceLengthsUtf16: Map<AnalysisBundleIdentity, Map<VirtualSourcePath, Int>>,
+    internal val platformSourceLengthsUtf16: Map<AnalysisModuleIdentity, Map<VirtualSourcePath, Int>>,
     internal val limits: AnalysisLimits,
     private val validatePositions: Boolean,
     internal val expectedQuery: AnalysisQuery?,
@@ -89,7 +89,7 @@ class AnalysisProtocolContext private constructor(
     fun forQuery(query: AnalysisQuery): AnalysisProtocolContext {
         require(validatePositions) { "an unchecked analysis context cannot correlate a query" }
         validateQuery(query, this)
-        return AnalysisProtocolContext(sourceLengthsUtf16, bundleSourceLengthsUtf16, limits, true, query)
+        return AnalysisProtocolContext(sourceLengthsUtf16, platformSourceLengthsUtf16, limits, true, query)
     }
 
     internal fun isUnchecked(): Boolean = !validatePositions
@@ -115,7 +115,7 @@ class AnalysisProtocolContext private constructor(
             val project = of(snapshot, limits)
             return AnalysisProtocolContext(
                 project.sourceLengthsUtf16,
-                loadBundleSourceLengths(profile, limits),
+                loadPlatformSourceLengths(profile, limits),
                 limits,
                 true,
                 null,
@@ -130,37 +130,35 @@ class AnalysisProtocolContext private constructor(
     }
 }
 
-private fun loadBundleSourceLengths(
+private fun loadPlatformSourceLengths(
     profile: AdmittedAnalysisProfile,
     limits: AnalysisLimits,
-): Map<AnalysisBundleIdentity, Map<VirtualSourcePath, Int>> {
+): Map<AnalysisModuleIdentity, Map<VirtualSourcePath, Int>> {
+    val sourceRoot = profile.platform.sourceRoot ?: return emptyMap()
     var sourceCount = 0
     var totalBytes = 0L
-    return profile.bundles
-        .mapNotNull { bundle ->
-            val sourceRoot = bundle.sourceRoot ?: return@mapNotNull null
-            val path = Path.of(sourceRoot)
-            require(path.isAbsolute && path.normalize() == path) { "bundle source root must be absolute and normalized" }
-            require(!Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
-                "bundle source root is missing or is not a regular file"
+    val path = Path.of(sourceRoot)
+    require(path.isAbsolute && path.normalize() == path) { "platform source root must be absolute and normalized" }
+    require(!Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+        "platform source root is missing or is not a regular file"
+    }
+    val lengths = linkedMapOf<VirtualSourcePath, Int>()
+    ZipFile(path.toFile()).use { archive ->
+        archive.entries().asSequence().filterNot { it.isDirectory }.filter { it.name.endsWith(".kt") }.forEach { entry ->
+            require(sourceCount < limits.sourceFiles) { "platform source count exceeds analysis limit" }
+            val bytes = archive.getInputStream(entry).use { it.readNBytes(limits.sourceFileBytes + 1) }
+            require(bytes.size <= limits.sourceFileBytes) { "platform source file exceeds analysis limit" }
+            sourceCount += 1
+            totalBytes += bytes.size
+            require(totalBytes <= limits.sourceBytes) { "platform source bytes exceed analysis limit" }
+            val sourcePath = VirtualSourcePath.kotlin(entry.name)
+            require(lengths.put(sourcePath, decodeStrictUtf8(BinaryValue.of(bytes)).length) == null) {
+                "duplicate platform source path: ${entry.name}"
             }
-            val lengths = linkedMapOf<VirtualSourcePath, Int>()
-            ZipFile(path.toFile()).use { archive ->
-                archive.entries().asSequence().filterNot { it.isDirectory }.filter { it.name.endsWith(".kt") }.forEach { entry ->
-                    require(sourceCount < limits.sourceFiles) { "bundle source count exceeds analysis limit" }
-                    val bytes = archive.getInputStream(entry).use { it.readNBytes(limits.sourceFileBytes + 1) }
-                    require(bytes.size <= limits.sourceFileBytes) { "bundle source file exceeds analysis limit" }
-                    sourceCount += 1
-                    totalBytes += bytes.size
-                    require(totalBytes <= limits.sourceBytes) { "bundle source bytes exceed analysis limit" }
-                    val sourcePath = VirtualSourcePath.kotlin(entry.name)
-                    require(lengths.put(sourcePath, decodeStrictUtf8(BinaryValue.of(bytes)).length) == null) {
-                        "duplicate bundle source path: ${entry.name}"
-                    }
-                }
-            }
-            bundle.identity to lengths.toMap()
-        }.toMap()
+        }
+    }
+    val immutableLengths = lengths.toMap()
+    return profile.platform.modules.associate { module -> module.identity to immutableLengths }
 }
 
 object AnalysisMessageCodec {
@@ -430,7 +428,7 @@ private fun validateResult(
                 result.locations,
                 sourceLengths,
                 limits.resultLimits(),
-                context.bundleSourceLengthsUtf16,
+                context.platformSourceLengthsUtf16,
             )
         }
 
@@ -489,6 +487,7 @@ private class MessageSink {
         string(value.compilerVersion)
         string(value.languageVersion)
         hash(value.payloadHash)
+        hash(value.platformAbi)
     }
 
     fun limits(value: AnalysisLimits) {
@@ -496,7 +495,7 @@ private class MessageSink {
         u32(value.sourceFileBytes)
         u32(value.sourceBytes)
         u32(value.frameBytes)
-        u32(value.bundles)
+        u32(value.modules)
         u32(value.diagnostics)
         u32(value.diagnosticTextBytes)
         u32(value.semanticTokens)
@@ -524,12 +523,12 @@ private class MessageSink {
 
     fun profile(value: AdmittedAnalysisProfile) {
         hash(value.identity.hash)
-        u32(value.bundles.size)
-        value.bundles.forEach { bundle ->
-            bundleIdentity(bundle.identity)
-            string(bundle.classRoot)
-            nullableString(bundle.sourceRoot)
+        hash(value.platform.abi)
+        u32(value.platform.modules.size)
+        value.platform.modules.forEach { module ->
+            moduleIdentity(module.identity)
         }
+        nullableString(value.platform.sourceRoot)
     }
 
     fun query(value: AnalysisQuery) {
@@ -675,9 +674,9 @@ private class MessageSink {
                 enum(OriginKind.Project)
             }
 
-            is DeclarationOrigin.Bundle -> {
-                enum(OriginKind.Bundle)
-                bundleIdentity(value.identity)
+            is DeclarationOrigin.Platform -> {
+                enum(OriginKind.Platform)
+                moduleIdentity(value.identity)
             }
         }
     }
@@ -687,7 +686,7 @@ private class MessageSink {
         value?.let(::origin)
     }
 
-    fun bundleIdentity(value: AnalysisBundleIdentity) {
+    fun moduleIdentity(value: AnalysisModuleIdentity) {
         string(value.name)
         hash(value.hash)
     }
@@ -795,7 +794,7 @@ private class MessageSource(
 
     fun nullableIdentity(): AnalysisSnapshotIdentity? = optional(::identity)
 
-    fun workerIdentity() = AnalysisWorkerIdentity(string(), string(), hash())
+    fun workerIdentity() = AnalysisWorkerIdentity(string(), string(), hash(), hash())
 
     fun features(): Set<AnalysisFeature> {
         val bits = u64()
@@ -810,7 +809,7 @@ private class MessageSource(
             sourceFileBytes = u32(),
             sourceBytes = u32(),
             frameBytes = u32(),
-            bundles = u32(),
+            modules = u32(),
             diagnostics = u32(),
             diagnosticTextBytes = u32(),
             semanticTokens = u32(),
@@ -883,16 +882,14 @@ private class MessageSource(
     ): AdmittedAnalysisProfile {
         val wireIdentity = AnalysisProfileIdentity(hash())
         if (wireIdentity != identity) fail(AnalysisProtocolError.InvalidMessageValue, "profile identity mismatch")
-        val count = boundedCount(limits.bundles, "bundle")
-        val bundles =
+        val platformAbi = hash()
+        val count = boundedCount(limits.modules, "module")
+        val modules =
             List(count) {
-                AdmittedAnalysisBundle(
-                    bundleIdentity(),
-                    string(ProtocolLimits.MAX_PATH_BYTES),
-                    nullableString(ProtocolLimits.MAX_PATH_BYTES),
-                )
+                AdmittedAnalysisModule(moduleIdentity())
             }
-        return AdmittedAnalysisProfile(wireIdentity, bundles)
+        val sourceRoot = nullableString(ProtocolLimits.MAX_PATH_BYTES)
+        return AdmittedAnalysisProfile(wireIdentity, AdmittedAnalysisPlatform(platformAbi, modules, sourceRoot))
     }
 
     fun query(): AnalysisQuery {
@@ -951,7 +948,7 @@ private class MessageSource(
                     locations(context.limits.declarationLocations),
                     sourceLengths,
                     context.limits.resultLimits(),
-                    context.bundleSourceLengthsUtf16,
+                    context.platformSourceLengthsUtf16,
                 )
             }
 
@@ -1025,12 +1022,12 @@ private class MessageSource(
     fun origin(): DeclarationOrigin =
         when (enumValue<OriginKind>()) {
             OriginKind.Project -> DeclarationOrigin.Project
-            OriginKind.Bundle -> DeclarationOrigin.Bundle(bundleIdentity())
+            OriginKind.Platform -> DeclarationOrigin.Platform(moduleIdentity())
         }
 
     fun nullableOrigin(): DeclarationOrigin? = optional(::origin)
 
-    fun bundleIdentity() = AnalysisBundleIdentity(string(), hash())
+    fun moduleIdentity() = AnalysisModuleIdentity(string(), hash())
 
     fun kotlinPath(): VirtualSourcePath =
         try {
@@ -1095,7 +1092,7 @@ private enum class QueryKind { Presentation, Completion, ExpressionInfo, Declara
 
 private enum class ResultKind { Presentation, Completion, ExpressionInfo, Declaration, References }
 
-private enum class OriginKind { Project, Bundle }
+private enum class OriginKind { Project, Platform }
 
 private enum class LocationKind { Source, SourceUnavailable }
 

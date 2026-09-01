@@ -19,7 +19,7 @@
 package ru.lazyhat.compukters.ide.client.analysis
 
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
 import ru.lazyhat.compukters.ide.analysis.EditorExpressionInfo
@@ -61,7 +61,7 @@ sealed interface IdeDeclarationTarget {
     }
 
     data class AttachedSource(
-        val bundle: AnalysisBundleIdentity,
+        val module: AnalysisModuleIdentity,
         val path: VirtualSourcePath,
         override val range: EditorRange,
     ) : IdeDeclarationTarget {
@@ -76,7 +76,7 @@ sealed interface IdeDeclarationOutcome {
     data object NotFound : IdeDeclarationOutcome
 
     data class SourceUnavailable(
-        val bundle: AnalysisBundleIdentity,
+        val module: AnalysisModuleIdentity,
     ) : IdeDeclarationOutcome
 
     class Targets(
@@ -136,34 +136,34 @@ sealed interface IdeSemanticInteraction {
 }
 
 class IdeAttachedSourceCatalog private constructor(
-    private val sources: Map<AnalysisBundleIdentity, Map<VirtualSourcePath, String>>,
+    private val sources: Map<AnalysisModuleIdentity, Map<VirtualSourcePath, String>>,
 ) {
     fun text(
-        bundle: AnalysisBundleIdentity,
+        module: AnalysisModuleIdentity,
         path: VirtualSourcePath,
-    ): String? = sources[bundle]?.get(path)
+    ): String? = sources[module]?.get(path)
 
     companion object {
         fun empty(): IdeAttachedSourceCatalog = IdeAttachedSourceCatalog(emptyMap())
 
         fun of(
-            sources: Map<AnalysisBundleIdentity, Map<VirtualSourcePath, String>>,
-            maximumBundles: Int,
+            sources: Map<AnalysisModuleIdentity, Map<VirtualSourcePath, String>>,
+            maximumModules: Int,
             maximumFiles: Int,
             maximumFileBytes: Int,
             maximumTotalBytes: Int,
         ): IdeAttachedSourceCatalog {
-            require(maximumBundles >= 0) { "attached source bundle limit must not be negative" }
+            require(maximumModules >= 0) { "attached source module limit must not be negative" }
             require(maximumFiles >= 0) { "attached source file limit must not be negative" }
             require(maximumFileBytes >= 0) { "attached source file byte limit must not be negative" }
             require(maximumTotalBytes >= 0) { "attached source total byte limit must not be negative" }
-            require(sources.size <= maximumBundles) { "attached source bundle count exceeds limit" }
+            require(sources.size <= maximumModules) { "attached source module count exceeds limit" }
             var files = 0
             var totalBytes = 0L
-            val admitted = linkedMapOf<AnalysisBundleIdentity, Map<VirtualSourcePath, String>>()
-            sources.forEach { (bundle, bundleSources) ->
+            val admitted = linkedMapOf<AnalysisModuleIdentity, Map<VirtualSourcePath, String>>()
+            sources.forEach { (module, moduleSources) ->
                 val copied = linkedMapOf<VirtualSourcePath, String>()
-                bundleSources.forEach { (path, text) ->
+                moduleSources.forEach { (path, text) ->
                     VirtualSourcePath.kotlin(path.value)
                     files = Math.incrementExact(files)
                     require(files <= maximumFiles) { "attached source file count exceeds limit" }
@@ -173,7 +173,7 @@ class IdeAttachedSourceCatalog private constructor(
                     require(totalBytes <= maximumTotalBytes.toLong()) { "attached source bytes exceed limit" }
                     require(copied.put(path, text) == null) { "duplicate attached source path: ${path.value}" }
                 }
-                admitted[bundle] = Collections.unmodifiableMap(copied)
+                admitted[module] = Collections.unmodifiableMap(copied)
             }
             return IdeAttachedSourceCatalog(Collections.unmodifiableMap(admitted))
         }

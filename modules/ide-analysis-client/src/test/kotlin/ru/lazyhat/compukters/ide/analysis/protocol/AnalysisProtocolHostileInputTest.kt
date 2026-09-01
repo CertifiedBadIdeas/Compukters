@@ -93,7 +93,7 @@ class AnalysisProtocolHostileInputTest {
             AnalysisMessageCodec.encode(
                 AnalysisHandshake(
                     ANALYSIS_PROTOCOL_VERSION,
-                    AnalysisWorkerIdentity("2.4.10", "2.4", hash(3)),
+                    AnalysisWorkerIdentity("2.4.10", "2.4", hash(3), hash(4)),
                     emptySet(),
                     AnalysisLimits(),
                 ),
@@ -242,7 +242,11 @@ class AnalysisProtocolHostileInputTest {
                 RequestId.of(1uL),
                 identity,
                 snapshot,
-                AdmittedAnalysisProfile(identity.profile, emptyList()),
+                AdmittedAnalysisProfile(
+                    identity.profile,
+                    ru.lazyhat.compukters.ide.analysis.protocol
+                        .AdmittedAnalysisPlatform(Hash256.zero(), emptyList()),
+                ),
                 AnalysisLimits(),
             )
         val openFrame = AnalysisMessageCodec.encode(open, context)
@@ -262,13 +266,15 @@ class AnalysisProtocolHostileInputTest {
         assertFailsWith<IllegalArgumentException> {
             AdmittedAnalysisProfile(
                 identity.profile,
-                List(ProtocolLimits.MAX_BUNDLES + 1) { index ->
-                    AdmittedAnalysisBundle(
-                        ru.lazyhat.compukters.ide.analysis
-                            .AnalysisBundleIdentity("b$index", hash(index)),
-                        "/safe/$index.jar",
-                    )
-                },
+                AdmittedAnalysisPlatform(
+                    hash(3),
+                    List(ProtocolLimits.MAX_MODULES + 1) { index ->
+                        AdmittedAnalysisModule(
+                            ru.lazyhat.compukters.ide.analysis
+                                .AnalysisModuleIdentity("b$index", hash(index)),
+                        )
+                    },
+                ),
             )
         }
     }
@@ -285,23 +291,28 @@ class AnalysisProtocolHostileInputTest {
                             .SourceSnapshotId(hash(9)),
                 ),
                 snapshot,
-                AdmittedAnalysisProfile(profile, emptyList()),
+                AdmittedAnalysisProfile(
+                    profile,
+                    ru.lazyhat.compukters.ide.analysis.protocol
+                        .AdmittedAnalysisPlatform(Hash256.zero(), emptyList()),
+                ),
                 AnalysisLimits(),
             )
         }
         assertFailsWith<IllegalArgumentException> {
             AdmittedAnalysisProfile(
                 profile,
-                listOf(
-                    AdmittedAnalysisBundle(
-                        ru.lazyhat.compukters.ide.analysis
-                            .AnalysisBundleIdentity("z", hash(1)),
-                        "/z.jar",
-                    ),
-                    AdmittedAnalysisBundle(
-                        ru.lazyhat.compukters.ide.analysis
-                            .AnalysisBundleIdentity("a", hash(2)),
-                        "/a.jar",
+                AdmittedAnalysisPlatform(
+                    hash(3),
+                    listOf(
+                        AdmittedAnalysisModule(
+                            ru.lazyhat.compukters.ide.analysis
+                                .AnalysisModuleIdentity("z", hash(1)),
+                        ),
+                        AdmittedAnalysisModule(
+                            ru.lazyhat.compukters.ide.analysis
+                                .AnalysisModuleIdentity("a", hash(2)),
+                        ),
                     ),
                 ),
             )
@@ -316,7 +327,11 @@ class AnalysisProtocolHostileInputTest {
                 RequestId.of(2uL),
                 AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(oversizedPathSnapshot), profile),
                 oversizedPathSnapshot,
-                AdmittedAnalysisProfile(profile, emptyList()),
+                AdmittedAnalysisProfile(
+                    profile,
+                    ru.lazyhat.compukters.ide.analysis.protocol
+                        .AdmittedAnalysisPlatform(Hash256.zero(), emptyList()),
+                ),
                 AnalysisLimits(),
             )
         }

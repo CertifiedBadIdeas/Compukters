@@ -25,7 +25,6 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
@@ -35,14 +34,15 @@ import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.IncrementalK2Workspace
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.K2SourceUpdater
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.SnapshotAdmission
-import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisBundle
+import ru.lazyhat.compukters.ide.analysis.k2.testAdmittedPlatform
+import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisPlatform
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.analysis.protocol.OpenSnapshotRequest
 import ru.lazyhat.compukters.ide.analysis.protocol.UpdateSnapshotRequest
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import java.nio.file.Files
 import java.nio.file.Path
-import java.security.MessageDigest
 import kotlin.io.path.createTempDirectory
 
 internal class K2QueryFixture private constructor(
@@ -95,39 +95,30 @@ internal class K2QueryFixture private constructor(
     }
 
     companion object {
-        fun source(vararg sources: Pair<String, String>): K2QueryFixture = create(emptyList(), *sources)
+        fun source(vararg sources: Pair<String, String>): K2QueryFixture = create(testAdmittedPlatform(), *sources)
 
         fun sourceWithUpdater(
             sourceUpdater: K2SourceUpdater,
             vararg sources: Pair<String, String>,
-        ): K2QueryFixture = create(emptyList(), sourceUpdater, *sources)
+        ): K2QueryFixture = create(testAdmittedPlatform(), sourceUpdater, *sources)
 
         fun sourceWithGuestApi(
             attachedSources: Boolean,
             vararg sources: Pair<String, String>,
-        ): K2QueryFixture {
-            val jar = Path.of(requireNotNull(System.getProperty("compukters.test.guestApi"))).toAbsolutePath().normalize()
-            val hash = Hash256.of(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(jar)))
-            return create(
-                listOf(
-                    AdmittedAnalysisBundle(
-                        AnalysisBundleIdentity("std.core", hash),
-                        jar.toString(),
-                        jar.toString().takeIf { attachedSources },
-                    ),
-                ),
+        ): K2QueryFixture =
+            create(
+                testAdmittedPlatform(selectAllModules = true, attachedSources = attachedSources),
                 sourceUpdater = null,
                 sources = sources,
             )
-        }
 
         private fun create(
-            bundles: List<AdmittedAnalysisBundle>,
+            platform: AdmittedAnalysisPlatform,
             vararg sources: Pair<String, String>,
-        ): K2QueryFixture = create(bundles, null, *sources)
+        ): K2QueryFixture = create(platform, null, *sources)
 
         private fun create(
-            bundles: List<AdmittedAnalysisBundle>,
+            platform: AdmittedAnalysisPlatform,
             sourceUpdater: K2SourceUpdater?,
             vararg sources: Pair<String, String>,
         ): K2QueryFixture {
@@ -141,24 +132,20 @@ internal class K2QueryFixture private constructor(
                     RequestId.of(1uL),
                     identity,
                     project,
-                    AdmittedAnalysisProfile(profile, bundles),
+                    AdmittedAnalysisProfile(profile, platform),
                     AnalysisLimits(),
                 )
-            val standardLibrary =
-                Path
-                    .of(
-                        Unit::class.java.protectionDomain.codeSource.location
-                            .toURI(),
-                    ).toAbsolutePath()
-                    .normalize()
+            val platform =
+                PlatformBundleCodec.decode(
+                    Files.readAllBytes(Path.of(requireNotNull(System.getProperty("compukters.test.platformBundle")))),
+                )
             val admission =
                 if (sourceUpdater == null) {
-                    SnapshotAdmission(root.resolve("snapshots"), standardLibrary, Path.of(System.getProperty("java.home")))
+                    SnapshotAdmission(root.resolve("snapshots"), platform)
                 } else {
                     SnapshotAdmission(
                         root.resolve("snapshots"),
-                        standardLibrary,
-                        Path.of(System.getProperty("java.home")),
+                        platform,
                         sourceUpdater,
                     )
                 }

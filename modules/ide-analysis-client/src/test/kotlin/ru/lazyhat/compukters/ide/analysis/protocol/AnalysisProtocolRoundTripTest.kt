@@ -25,7 +25,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
@@ -68,13 +68,17 @@ class AnalysisProtocolRoundTripTest {
         val profile =
             AdmittedAnalysisProfile(
                 identity.profile,
-                listOf(AdmittedAnalysisBundle(AnalysisBundleIdentity("std", hash(3)), "/safe/std.jar", "/safe/std-sources.jar")),
+                AdmittedAnalysisPlatform(
+                    hash(5),
+                    listOf(AdmittedAnalysisModule(AnalysisModuleIdentity("std", hash(3)))),
+                    "/safe/std-sources.jar",
+                ),
             )
         val messages =
             listOf<AnalysisMessage>(
                 AnalysisHandshake(
                     ANALYSIS_PROTOCOL_VERSION,
-                    AnalysisWorkerIdentity("2.4.10", "2.4", hash(4)),
+                    AnalysisWorkerIdentity("2.4.10", "2.4", hash(4), hash(5)),
                     AnalysisFeature.entries.toSet(),
                     AnalysisLimits(),
                 ),
@@ -119,7 +123,7 @@ class AnalysisProtocolRoundTripTest {
         val handshake =
             AnalysisHandshake(
                 ANALYSIS_PROTOCOL_VERSION,
-                AnalysisWorkerIdentity("2.4.10", "2.4", hash(4)),
+                AnalysisWorkerIdentity("2.4.10", "2.4", hash(4), hash(5)),
                 features,
                 AnalysisLimits(),
             )
@@ -131,7 +135,7 @@ class AnalysisProtocolRoundTripTest {
 
     @Test
     fun `all stable result variants round trip`() {
-        val origin = DeclarationOrigin.Bundle(AnalysisBundleIdentity("std", hash(3)))
+        val origin = DeclarationOrigin.Platform(AnalysisModuleIdentity("std", hash(3)))
         val results =
             listOf(
                 AnalysisQuery.Completion(identity, path(), 6, CompletionTrigger.Manual) to
@@ -167,7 +171,7 @@ class AnalysisProtocolRoundTripTest {
     }
 
     @Test
-    fun `attached bundle declaration round trips against the admitted source archive`() {
+    fun `attached platform declaration round trips against the admitted source archive`() {
         val sourcePath = VirtualSourcePath.kotlin("api/Terminal.kt")
         val sourceText = "package api\nobject Terminal { fun write(value: String) = Unit }"
         val sourceArchive = Files.createTempFile("compukters-analysis-sources-", ".jar")
@@ -177,11 +181,11 @@ class AnalysisProtocolRoundTripTest {
                 output.write(sourceText.encodeToByteArray())
                 output.closeEntry()
             }
-            val bundle = AnalysisBundleIdentity("std", hash(3))
+            val bundle = AnalysisModuleIdentity("std", hash(3))
             val profile =
                 AdmittedAnalysisProfile(
                     identity.profile,
-                    listOf(AdmittedAnalysisBundle(bundle, "/safe/std.jar", sourceArchive.toString())),
+                    AdmittedAnalysisPlatform(hash(5), listOf(AdmittedAnalysisModule(bundle)), sourceArchive.toString()),
                 )
             val protocolContext = AnalysisProtocolContext.of(snapshot, profile).forQuery(AnalysisQuery.Declaration(identity, path(), 6))
             val start = sourceText.indexOf("write")
@@ -190,13 +194,13 @@ class AnalysisProtocolRoundTripTest {
                     identity,
                     listOf(
                         DeclarationLocation.Source(
-                            DeclarationOrigin.Bundle(bundle),
+                            DeclarationOrigin.Platform(bundle),
                             sourcePath,
                             EditorRange(start, start + "write".length),
                         ),
                     ),
                     sourceLengths(),
-                    bundleSourceLengthsUtf16 = mapOf(bundle to mapOf(sourcePath to sourceText.length)),
+                    platformSourceLengthsUtf16 = mapOf(bundle to mapOf(sourcePath to sourceText.length)),
                 )
 
             assertEquals(AnalysisQuerySuccess(requestId, result), roundTrip(AnalysisQuerySuccess(requestId, result), protocolContext))

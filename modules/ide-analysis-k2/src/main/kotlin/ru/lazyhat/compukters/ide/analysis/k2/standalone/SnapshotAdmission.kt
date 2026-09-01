@@ -23,16 +23,20 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
 import org.jetbrains.kotlin.psi.KtFile
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.protocol.OpenSnapshotRequest
+import ru.lazyhat.compukters.platform.bundle.PlatformBundle
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleGraph
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
+import ru.lazyhat.compukters.platform.k2.CompuktersAnalysisPlatformContext
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
-import java.security.MessageDigest
 import java.util.UUID
 import kotlin.io.path.createDirectories
 
@@ -41,33 +45,47 @@ internal class AdmittedK2Snapshot(
     val environment: K2ProjectEnvironment,
     val files: Map<VirtualSourcePath, KtFile>,
     val sourceLengthsUtf16: Map<VirtualSourcePath, Int>,
-    val bundles: List<AdmittedK2Bundle>,
-    val bundleSourceFiles: Map<AnalysisBundleIdentity, Map<VirtualSourcePath, KtFile>>,
-)
-
-internal data class AdmittedK2Bundle(
-    val identity: AnalysisBundleIdentity,
-    val classRoot: Path,
-    val sourceRoot: Path?,
+    val moduleIdentities: Map<PlatformModuleId, AnalysisModuleIdentity>,
+    val platformSourceFiles: Map<VirtualSourcePath, KtFile>,
+    val platform: CompuktersAnalysisPlatformContext,
 )
 
 internal class SnapshotAdmission(
     private val temporaryRoot: Path,
-    private val standardLibrary: Path,
-    private val jdkHome: Path,
+    private val platformBundle: PlatformBundle,
     private val sourceUpdater: K2SourceUpdater = DocumentK2SourceUpdater,
 ) {
     fun admit(request: OpenSnapshotRequest): IncrementalK2Workspace {
-        val bundles =
-            request.profile.bundles.map { bundle ->
-                val classRoot = validatedRegularFile(bundle.classRoot, "bundle class root")
-                val actualHash = sha256(classRoot)
-                require(actualHash.contentEquals(bundle.identity.hash.toByteArray())) {
-                    "bundle class root hash mismatch: ${bundle.identity.name}"
+        require(
+            request.profile.platform.abi
+                .toByteArray()
+                .contentEquals(platformBundle.identity.contentHash.toByteArray()),
+        ) {
+            "analysis platform ABI does not match worker platform"
+        }
+        val requestedModules =
+            request.profile.platform.modules.associate { admitted ->
+                val id = platformModuleId(admitted.identity.name)
+                val module =
+                    platformBundle.modules.singleOrNull { it.id == id }
+                        ?: error("analysis platform module is unavailable: $id")
+                require(
+                    admitted.identity.hash
+                        .toByteArray()
+                        .contentEquals(PlatformBundleCodec.moduleContentHash(module).toByteArray()),
+                ) {
+                    "analysis platform module hash mismatch: $id"
                 }
-                val sourceRoot = bundle.sourceRoot?.let { validatedRegularFile(it, "bundle source root") }
-                AdmittedK2Bundle(bundle.identity, classRoot, sourceRoot)
+                id to admitted.identity
             }
+        val selectedModules = requestedModules.keys
+        val resolvedModules = PlatformModuleGraph(platformBundle).resolve(selectedModules).modules
+        require(resolvedModules.mapTo(mutableSetOf()) { it.id } == selectedModules) {
+            "analysis platform module selection is not dependency-closed"
+        }
+        val attachedSourceRoot =
+            request.profile.platform.sourceRoot
+                ?.let { validatedRegularFile(it, "platform source root") }
         val root = temporaryRoot.resolve("snapshot-${UUID.randomUUID()}").toAbsolutePath().normalize()
         val sourceRoot = root.resolve("source")
         sourceRoot.createDirectories()
@@ -82,7 +100,11 @@ internal class SnapshotAdmission(
                 target.parent.createDirectories()
                 Files.writeString(target, text, StandardCharsets.UTF_8)
             }
-            environment = K2ProjectEnvironment.create(sourceRoot, standardLibrary, bundles, jdkHome)
+            environment = K2ProjectEnvironment.create(sourceRoot, platformBundle, selectedModules)
+            val platform =
+                CompuktersAnalysisPlatformContext(
+                    resolvedModules,
+                )
             val files =
                 environment.session.modulesWithFiles.values
                     .flatten()
@@ -93,17 +115,8 @@ internal class SnapshotAdmission(
                         VirtualSourcePath.kotlin(sourceRoot.relativize(physical).toString().replace('\\', '/'))
                     }
             require(files.keys == sourceLengths.keys) { "standalone K2 source mapping differs from admitted snapshot" }
-            val bundleSourceFiles =
-                BundleSourceBudget().let { budget ->
-                    bundles.associate { bundle ->
-                        val attachedFiles =
-                            bundle.sourceRoot
-                                ?.let { attachedRoot ->
-                                    loadBundleSourceFiles(environment, attachedRoot, request, budget)
-                                }.orEmpty()
-                        bundle.identity to attachedFiles
-                    }
-                }
+            val platformSourceFiles =
+                attachedSourceRoot?.let { loadPlatformSourceFiles(environment, it, request) }.orEmpty()
             return IncrementalK2Workspace(
                 request.identity,
                 root,
@@ -111,8 +124,9 @@ internal class SnapshotAdmission(
                 files.toMap(),
                 request.sources,
                 sourceLengths.toMap(),
-                bundles.toList(),
-                bundleSourceFiles,
+                requestedModules,
+                platformSourceFiles,
+                platform,
                 sourceUpdater,
             )
         } catch (exception: Exception) {
@@ -130,17 +144,18 @@ internal class SnapshotAdmission(
             .decode(ByteBuffer.wrap(bytes))
             .toString()
 
-    private fun loadBundleSourceFiles(
+    private fun loadPlatformSourceFiles(
         environment: K2ProjectEnvironment,
         sourceArchive: Path,
         request: OpenSnapshotRequest,
-        budget: BundleSourceBudget,
     ): Map<VirtualSourcePath, KtFile> {
         val root =
             requireNotNull(StandardFileSystems.jar().findFileByPath("$sourceArchive!/")) {
-                "bundle source archive is not visible to the standalone VFS"
+                "platform source archive is not visible to the standalone VFS"
             }
         val files = linkedMapOf<VirtualSourcePath, KtFile>()
+        var sourceCount = 0
+        var totalBytes = 0L
 
         fun visit(file: VirtualFile) {
             if (file.isDirectory) {
@@ -148,17 +163,17 @@ internal class SnapshotAdmission(
                 return
             }
             if (file.extension != "kt") return
-            require(budget.sourceCount < request.limits.sourceFiles) { "bundle source count exceeds analysis limit" }
-            require(file.length <= request.limits.sourceFileBytes) { "bundle source file exceeds analysis limit" }
-            budget.sourceCount += 1
-            budget.totalBytes += file.length
-            require(budget.totalBytes <= request.limits.sourceBytes) { "bundle source bytes exceed analysis limit" }
+            require(sourceCount < request.limits.sourceFiles) { "platform source count exceeds analysis limit" }
+            require(file.length <= request.limits.sourceFileBytes) { "platform source file exceeds analysis limit" }
+            sourceCount += 1
+            totalBytes += file.length
+            require(totalBytes <= request.limits.sourceBytes) { "platform source bytes exceed analysis limit" }
             val path = VirtualSourcePath.kotlin(file.path.removePrefix(root.path).removePrefix("/"))
             val psi = PsiManager.getInstance(environment.session.project).findFile(file) as? KtFile
-            requireNotNull(psi) { "bundle source is not Kotlin PSI: ${path.value}" }
+            requireNotNull(psi) { "platform source is not Kotlin PSI: ${path.value}" }
             val decoded = file.inputStream.use { input -> decodeStrict(input.readAllBytes()) }
-            require(decoded == psi.text) { "bundle source PSI differs from strict UTF-8 content: ${path.value}" }
-            require(files.put(path, psi) == null) { "duplicate bundle source path: ${path.value}" }
+            require(decoded == psi.text) { "platform source PSI differs from strict UTF-8 content: ${path.value}" }
+            require(files.put(path, psi) == null) { "duplicate platform source path: ${path.value}" }
         }
         visit(root)
         return files.toMap()
@@ -176,25 +191,9 @@ internal class SnapshotAdmission(
         return path
     }
 
-    private fun sha256(path: Path): ByteArray {
-        val digest = MessageDigest.getInstance("SHA-256")
-        Files.newInputStream(path).use { input ->
-            val buffer = ByteArray(HASH_BUFFER_BYTES)
-            while (true) {
-                val read = input.read(buffer)
-                if (read < 0) break
-                if (read > 0) digest.update(buffer, 0, read)
-            }
-        }
-        return digest.digest()
-    }
-
-    private companion object {
-        const val HASH_BUFFER_BYTES = 16 * 1024
+    private fun platformModuleId(value: String): PlatformModuleId {
+        val components = value.split(':')
+        require(components.size == 2) { "invalid analysis platform module ID: $value" }
+        return PlatformModuleId(components[0], components[1])
     }
 }
-
-private class BundleSourceBudget(
-    var sourceCount: Int = 0,
-    var totalBytes: Long = 0,
-)

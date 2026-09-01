@@ -147,6 +147,8 @@ class HostileAnalysisWorkerTest {
                 payload.manifest.identityProperties.getValue("compiler"),
                 payload.manifest.identityProperties.getValue("language"),
                 Hash256.of(payload.manifest.payloadHash.toByteArray()),
+                ru.lazyhat.compukters.ide.analysis.k2
+                    .testPlatformAbi(),
             )
         val healthyLaunch =
             WorkerLaunch(
@@ -163,7 +165,12 @@ class HostileAnalysisWorkerTest {
         Files.createDirectories(hostileRoot)
         Files.writeString(
             hostileRoot.resolve("identity.txt"),
-            listOf(identity.compilerVersion, identity.languageVersion, identity.payloadHash.hex()).joinToString("\n", postfix = "\n"),
+            listOf(
+                identity.compilerVersion,
+                identity.languageVersion,
+                identity.payloadHash.hex(),
+                identity.platformAbi.hex(),
+            ).joinToString("\n", postfix = "\n"),
         )
         val factory = HostileThenHealthyFactory(testClasspath, hostileRoot)
         val controller =
@@ -221,7 +228,16 @@ class HostileAnalysisWorkerTest {
             )
         val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 5 }))
         val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
-        return AdmittedAnalysisSnapshot(identity, sources, AdmittedAnalysisProfile(profile, emptyList()), limits)
+        return AdmittedAnalysisSnapshot(
+            identity,
+            sources,
+            AdmittedAnalysisProfile(
+                profile,
+                ru.lazyhat.compukters.ide.analysis.k2
+                    .testAdmittedPlatform(),
+            ),
+            limits,
+        )
     }
 }
 

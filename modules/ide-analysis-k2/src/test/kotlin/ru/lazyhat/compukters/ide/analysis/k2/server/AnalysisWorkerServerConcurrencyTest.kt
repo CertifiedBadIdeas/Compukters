@@ -31,6 +31,7 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.K2SourceUpdater
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.SnapshotAdmission
+import ru.lazyhat.compukters.ide.analysis.k2.testPlatform
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisCancelled
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFailure
@@ -225,11 +226,17 @@ class AnalysisWorkerServerConcurrencyTest {
         val limits = AnalysisLimits()
         val server =
             AnalysisWorkerServer(
-                AnalysisWorkerIdentity("2.4.10", "2.4", hash(3)),
+                AnalysisWorkerIdentity(
+                    "2.4.10",
+                    "2.4",
+                    hash(3),
+                    ru.lazyhat.compukters.ide.analysis.k2
+                        .testPlatformAbi(),
+                ),
                 limits,
                 ByteArrayInputStream(ByteArray(0)),
                 output,
-                SnapshotAdmission(root, standardLibrary(), Path.of(System.getProperty("java.home"))),
+                SnapshotAdmission(root, testPlatform()),
                 queryHandler =
                     AnalysisQueryHandler { request, _, _ ->
                         invoked.set(true)
@@ -268,11 +275,17 @@ class AnalysisWorkerServerConcurrencyTest {
         val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
         val server =
             AnalysisWorkerServer(
-                AnalysisWorkerIdentity("2.4.10", "2.4", hash(3)),
+                AnalysisWorkerIdentity(
+                    "2.4.10",
+                    "2.4",
+                    hash(3),
+                    ru.lazyhat.compukters.ide.analysis.k2
+                        .testPlatformAbi(),
+                ),
                 AnalysisLimits(),
                 ByteArrayInputStream(ByteArray(0)),
                 output,
-                SnapshotAdmission(root, standardLibrary(), Path.of(System.getProperty("java.home"))),
+                SnapshotAdmission(root, testPlatform()),
                 queryHandler =
                     AnalysisQueryHandler { request, _, cancellation ->
                         if (invocations.incrementAndGet() == 1) {
@@ -297,7 +310,11 @@ class AnalysisWorkerServerConcurrencyTest {
                         RequestId.of(6uL),
                         identity,
                         sources,
-                        AdmittedAnalysisProfile(profile, emptyList()),
+                        AdmittedAnalysisProfile(
+                            profile,
+                            ru.lazyhat.compukters.ide.analysis.k2
+                                .testAdmittedPlatform(),
+                        ),
                         AnalysisLimits(),
                     ),
                 ),
@@ -335,14 +352,20 @@ class AnalysisWorkerServerConcurrencyTest {
         handler: AnalysisQueryHandler,
     ): AnalysisWorkerServer =
         AnalysisWorkerServer(
-            AnalysisWorkerIdentity("2.4.10", "2.4", hash(3)),
+            AnalysisWorkerIdentity(
+                "2.4.10",
+                "2.4",
+                hash(3),
+                ru.lazyhat.compukters.ide.analysis.k2
+                    .testPlatformAbi(),
+            ),
             AnalysisLimits(),
             ByteArrayInputStream(ByteArray(0)),
             output,
             if (updater == null) {
-                SnapshotAdmission(root, standardLibrary(), Path.of(System.getProperty("java.home")))
+                SnapshotAdmission(root, testPlatform())
             } else {
-                SnapshotAdmission(root, standardLibrary(), Path.of(System.getProperty("java.home")), updater)
+                SnapshotAdmission(root, testPlatform(), updater)
             },
             handler,
         )
@@ -356,7 +379,11 @@ class AnalysisWorkerServerConcurrencyTest {
             requestId,
             identity,
             sources,
-            AdmittedAnalysisProfile(identity.profile, emptyList()),
+            AdmittedAnalysisProfile(
+                identity.profile,
+                ru.lazyhat.compukters.ide.analysis.k2
+                    .testAdmittedPlatform(),
+            ),
             AnalysisLimits(),
         )
 
