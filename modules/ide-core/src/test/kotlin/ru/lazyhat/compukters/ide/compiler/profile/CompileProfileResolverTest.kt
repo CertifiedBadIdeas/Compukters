@@ -18,116 +18,102 @@
 
 package ru.lazyhat.compukters.ide.compiler.profile
 
-import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.project.ApiMajor
+import ru.lazyhat.compukters.ide.project.LockedModule
 import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ProjectLock
-import ru.lazyhat.compukters.ide.project.ResolvedModule
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
-import java.security.MessageDigest
+import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class CompileProfileResolverTest {
     @Test
     fun `local profile requires every exact locked module`() {
-        val terminal = bundle("std:terminal", byteArrayOf(1), ApiBundleKind.API)
-        val sensors = bundle("create:sensors", byteArrayOf(2), ApiBundleKind.ADDON)
-        val lock = lock(terminal.module, sensors.module)
-        val resolver = resolver(listOf(terminal))
+        val fixture = fixture()
+        val sensors = fixture.catalog.require(ModuleId.parse("create:sensors")).identity
+        val missing = ProjectLock.of(fixture.toolchain, fixture.lock.modules + LockedModule(sensors, true))
 
+        val limited = PlatformCatalog.forTarget(fixture.bundle, fixture.lock.modules.map { it.identity })
         assertEquals(
             ProfileResolution.Failure.MissingModule(ModuleId.parse("create:sensors")),
-            resolver.resolveLocal(lock),
+            CompileProfileResolver(fixture.toolchain, limited, WorkerLimits()).resolveLocal(missing),
         )
     }
 
     @Test
-    fun `local profile rejects toolchain version and content differences`() {
-        val terminal = bundle("std:terminal", byteArrayOf(1), ApiBundleKind.API)
-        val changedVersion = terminal.copy(module = terminal.module.copy(version = "2.2.0"))
-        val resolver = resolver(listOf(changedVersion))
+    fun `local profile rejects toolchain version and module content differences`() {
+        val fixture = fixture()
+        val terminalIndex = fixture.lock.modules.indexOfFirst { it.identity.id == ModuleId.parse("std:terminal") }
+        val changed = fixture.lock.modules.toMutableList()
+        changed[terminalIndex] = changed[terminalIndex].copy(identity = changed[terminalIndex].identity.copy(version = "2.2.0"))
 
-        assertIs<ProfileResolution.Failure.VersionMismatch>(resolver.resolveLocal(lock(terminal.module)))
+        assertIs<ProfileResolution.Failure.VersionMismatch>(fixture.resolver.resolveLocal(ProjectLock.of(fixture.toolchain, changed)))
         assertIs<ProfileResolution.Failure.ToolchainMismatch>(
-            resolver(toolchain = toolchain().copy(languageVersion = "2.5")).resolveLocal(lock(terminal.module)),
+            CompileProfileResolver(fixture.toolchain.copy(artifactAbi = 9u), fixture.catalog, WorkerLimits()).resolveLocal(fixture.lock),
         )
     }
 
     @Test
-    fun `target profile rejects same major with different content hash`() {
-        val terminal = bundle("std:terminal", byteArrayOf(1), ApiBundleKind.API)
-        val lock = lock(terminal.module)
-        val changed = terminal.module.copy(contentHash = hash(byteArrayOf(9)))
-        val target = TargetCompileProfile(toolchain(), listOf(changed), WorkerLimits())
+    fun `target permits available extras but rejects missing closure and changed content`() {
+        val fixture = fixture()
+        val extras = fixture.catalog.entries.map { it.identity }
+        assertIs<ProfileResolution.Resolved>(
+            fixture.resolver.resolveTarget(fixture.lock, TargetCompileProfile(fixture.toolchain, extras, WorkerLimits())),
+        )
 
-        assertIs<ProfileResolution.Failure.ContentMismatch>(resolver(listOf(terminal)).resolveTarget(lock, target))
+        val withoutRanges = extras.filterNot { it.id == ModuleId.parse("stdlib:ranges") }
+        assertIs<ProfileResolution.Failure.MissingModule>(
+            fixture.resolver.resolveTarget(fixture.lock, TargetCompileProfile(fixture.toolchain, withoutRanges, WorkerLimits())),
+        )
+
+        val changed = extras.map { if (it.id == ModuleId.parse("std:terminal")) it.copy(contentHash = it.contentHash.reversed()) else it }
+        assertIs<ProfileResolution.Failure.ContentMismatch>(
+            fixture.resolver.resolveTarget(fixture.lock, TargetCompileProfile(fixture.toolchain, changed, WorkerLimits())),
+        )
     }
 
     @Test
-    fun `target rejects limits below required compilation policy`() {
-        val terminal = bundle("std:terminal", byteArrayOf(1), ApiBundleKind.API)
-        val required = WorkerLimits(sourceFiles = 4)
-        val target = TargetCompileProfile(toolchain(), listOf(terminal.module), required.copy(sourceFiles = 3))
+    fun `target rejects limits below compilation policy`() {
+        val fixture = fixture(WorkerLimits(sourceFiles = 4))
+        val target = TargetCompileProfile(fixture.toolchain, fixture.catalog.entries.map { it.identity }, WorkerLimits(sourceFiles = 3))
 
         assertEquals(
             ProfileResolution.Failure.TargetLimitMismatch("sourceFiles", 4, 3),
-            resolver(listOf(terminal), requiredLimits = required).resolveTarget(lock(terminal.module), target),
+            fixture.resolver.resolveTarget(fixture.lock, target),
         )
     }
 
     @Test
-    fun `resolved profile separates canonical API and addon bundles`() {
-        val terminal = bundle("std:terminal", byteArrayOf(1), ApiBundleKind.API)
-        val sensors = bundle("create:sensors", byteArrayOf(2), ApiBundleKind.ADDON)
-        val limits = WorkerLimits(sourceFiles = 4)
-        val resolution =
-            assertIs<ProfileResolution.Resolved>(
-                resolver(listOf(terminal, sensors), requiredLimits = limits).resolveLocal(lock(sensors.module, terminal.module)),
-            )
+    fun `resolved profile retains topological modules and direct roots`() {
+        val fixture = fixture()
+        val profile = assertIs<ProfileResolution.Resolved>(fixture.resolver.resolveLocal(fixture.lock)).profile
 
-        assertEquals(listOf("std:terminal"), resolution.profile.apiBundles.map { it.module.id.value })
-        assertEquals(listOf("create:sensors"), resolution.profile.addonBundles.map { it.module.id.value })
-        assertEquals(limits, resolution.profile.limits)
+        assertEquals(listOf("stdlib:core", "stdlib:ranges", "std:terminal"), profile.modules.map { it.identity.id.value })
+        assertEquals(setOf(ModuleId.parse("std:terminal")), profile.directModules)
+        assertTrue(profile.modules.single { it.identity.id == ModuleId.parse("std:terminal") }.direct)
     }
 
-    @Test
-    fun `compile profile rejects duplicate IDs across bundle kinds`() {
-        val terminal = bundle("std:terminal", byteArrayOf(1), ApiBundleKind.API)
-
-        assertFailsWith<IllegalArgumentException> {
-            CompileProfile(
-                toolchain(),
-                listOf(terminal),
-                listOf(terminal.copy(kind = ApiBundleKind.ADDON)),
-                WorkerLimits(),
-            )
-        }
+    private fun fixture(requiredLimits: WorkerLimits = WorkerLimits()): Fixture {
+        val bundle = platformBundle()
+        val catalog = platformCatalog(bundle)
+        val toolchain = platformToolchain(bundle)
+        val selection = catalog.resolve(mapOf(ModuleId.parse("std:terminal") to ApiMajor(2)))
+        val lock = ProjectLock.of(toolchain, selection.modules.map { LockedModule(it.identity, it.direct) })
+        return Fixture(bundle, catalog, toolchain, lock, CompileProfileResolver(toolchain, catalog, requiredLimits))
     }
 
-    private fun resolver(
-        bundles: List<ResolvedApiBundle> = emptyList(),
-        toolchain: ToolchainLockIdentity = toolchain(),
-        requiredLimits: WorkerLimits = WorkerLimits(),
-    ) = CompileProfileResolver(toolchain, GuestApiBundleCatalog.of(bundles), requiredLimits)
+    private fun Hash256.reversed() = Hash256.of(toByteArray().reversedArray())
 
-    private fun lock(vararg modules: ResolvedModule) = ProjectLock.of(toolchain(), modules.toList())
-
-    private fun bundle(
-        id: String,
-        bytes: ByteArray,
-        kind: ApiBundleKind,
-    ) = ResolvedApiBundle(
-        ResolvedModule(ModuleId.parse(id), ApiMajor(2), "2.1.0", hash(bytes)),
-        kind,
-        BinaryValue.of(bytes),
+    private data class Fixture(
+        val bundle: PlatformBundle,
+        val catalog: PlatformCatalog,
+        val toolchain: ToolchainLockIdentity,
+        val lock: ProjectLock,
+        val resolver: CompileProfileResolver,
     )
-
-    private fun toolchain() = ToolchainLockIdentity("2.4.10", "2.4", 1u, 1u, 1u, hash(byteArrayOf(3)), hash(byteArrayOf(4)))
-
-    private fun hash(bytes: ByteArray) = Hash256.of(MessageDigest.getInstance("SHA-256").digest(bytes))
 }

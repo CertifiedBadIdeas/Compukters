@@ -53,6 +53,7 @@ plugins {
 
 dependencies {
     implementation(projects.compilerClient)
+    implementation(projects.platformBundle)
     implementation(libs.tomlj)
     implementation(libs.kotlin.stdlib)
     testImplementation(kotlin("test"))
@@ -61,6 +62,7 @@ dependencies {
 val allowedIdeCoreRuntimeModules =
     setOf(
         ":compiler-client",
+        ":platform-bundle",
         ":worker-client",
         "org.jetbrains.kotlin:kotlin-stdlib",
         "org.jetbrains:annotations",

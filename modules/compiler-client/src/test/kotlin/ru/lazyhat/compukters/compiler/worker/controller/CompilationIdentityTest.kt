@@ -68,8 +68,8 @@ class CompilationIdentityTest {
                 base.copy(expectedIdentity = base.expectedIdentity.copy(codegenAbi = 2u)),
                 base.copy(expectedIdentity = base.expectedIdentity.copy(platformAbi = hash(2))),
                 base.copy(expectedIdentity = base.expectedIdentity.copy(artifactWriterVersion = 2u)),
-                base.copy(trustedApiBundles = listOf(TrustedBundleIdentity.of("api", hash(5)))),
-                base.copy(trustedAddonBundles = listOf(TrustedBundleIdentity.of("addon", hash(6)))),
+                base.copy(platformModules = listOf(TrustedBundleIdentity.of("api", hash(5)))),
+                base.copy(platformModules = listOf(TrustedBundleIdentity.of("addon", hash(6)))),
             )
 
         variants.forEach { variant -> assertNotEquals(baseKey, CompilationIdentity.compute(variant)) }

@@ -45,8 +45,7 @@ object WorkerMessageCodec {
                 sink.u16(message.target.ordinal)
                 sink.identity(message.expectedIdentity)
                 sink.limits(message.limits)
-                sink.bundles(message.trustedApiBundles)
-                sink.bundles(message.trustedAddonBundles)
+                sink.bundles(message.platformModules)
             }
 
             is CompileSuccess -> {
@@ -309,10 +308,9 @@ private class MessageSource(
         val target = enumValue<TargetSettings>()
         val identity = identity()
         val limits = limits()
-        val apiBundles = bundles()
-        val addonBundles = bundles()
+        val platformModules = bundles()
         return try {
-            CompileRequest(requestId, sources, target, identity, limits, apiBundles, addonBundles)
+            CompileRequest(requestId, sources, target, identity, limits, platformModules)
         } catch (exception: IllegalArgumentException) {
             fail(WorkerProtocolError.INVALID_MESSAGE_VALUE, exception.message ?: "invalid compile request")
         }

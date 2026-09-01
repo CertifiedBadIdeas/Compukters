@@ -18,28 +18,22 @@
 
 package ru.lazyhat.compukters.ide.project
 
-import java.util.Collections
+import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 
-class ProjectResolution(
+data class ProjectResolution(
     val toolchain: ToolchainLockIdentity,
-    modules: List<ResolvedModule>,
+    val catalog: PlatformCatalog,
 ) {
-    val modules: List<ResolvedModule>
-
     init {
-        val sorted = modules.sortedWith(RESOLVED_MODULE_COMPARATOR)
-        require(sorted.zipWithNext().none { (left, right) -> left.id == right.id }) { "resolved module IDs must be unique" }
-        this.modules = Collections.unmodifiableList(sorted)
+        require(toolchain.languageVersion == catalog.bundle.identity.languageVersion) {
+            "toolchain language version does not match platform bundle"
+        }
+        val toolchainPlatformAbi = toolchain.platformAbi.toByteArray()
+        val bundlePlatformAbi =
+            catalog.bundle.identity.contentHash
+                .toByteArray()
+        require(toolchainPlatformAbi.contentEquals(bundlePlatformAbi)) {
+            "toolchain platform ABI does not match platform bundle"
+        }
     }
-
-    fun copy(
-        toolchain: ToolchainLockIdentity = this.toolchain,
-        modules: List<ResolvedModule> = this.modules,
-    ): ProjectResolution = ProjectResolution(toolchain, modules)
-
-    override fun equals(other: Any?): Boolean = other is ProjectResolution && toolchain == other.toolchain && modules == other.modules
-
-    override fun hashCode(): Int = 31 * toolchain.hashCode() + modules.hashCode()
-
-    override fun toString(): String = "ProjectResolution(toolchain=$toolchain, modules=$modules)"
 }

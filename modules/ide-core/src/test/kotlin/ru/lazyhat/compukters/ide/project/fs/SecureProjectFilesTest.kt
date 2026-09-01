@@ -19,12 +19,13 @@
 package ru.lazyhat.compukters.ide.project.fs
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.ide.compiler.profile.platformBundle
+import ru.lazyhat.compukters.ide.compiler.profile.platformCatalog
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectLockService
 import ru.lazyhat.compukters.ide.project.ProjectManifest
 import ru.lazyhat.compukters.ide.project.ProjectResolution
-import ru.lazyhat.compukters.ide.project.ResolvedModule
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
@@ -105,18 +106,20 @@ class SecureProjectFilesTest {
     }
 
     private fun resolution(seed: Int): ProjectResolution =
-        ProjectResolution(
-            ToolchainLockIdentity(
-                compilerVersion = "2.4.10",
-                languageVersion = "2.4",
-                codegenAbi = seed.toUInt(),
-                artifactAbi = 1u,
-                artifactWriterVersion = 1u,
-                payloadHash = hash(seed),
-                platformAbi = hash(seed + 1),
-            ),
-            emptyList<ResolvedModule>(),
-        )
+        platformBundle().let { platform ->
+            ProjectResolution(
+                ToolchainLockIdentity(
+                    compilerVersion = "2.4.10",
+                    languageVersion = platform.identity.languageVersion,
+                    codegenAbi = seed.toUInt(),
+                    artifactAbi = 1u,
+                    artifactWriterVersion = 1u,
+                    payloadHash = hash(seed),
+                    platformAbi = Hash256.of(platform.identity.contentHash.toByteArray()),
+                ),
+                platformCatalog(platform),
+            )
+        }
 
     private fun hash(seed: Int) = Hash256.of(ByteArray(32) { seed.toByte() })
 }

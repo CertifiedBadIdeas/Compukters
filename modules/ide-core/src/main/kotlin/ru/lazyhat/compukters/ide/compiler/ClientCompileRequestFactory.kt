@@ -29,7 +29,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotId
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
-import ru.lazyhat.compukters.ide.compiler.profile.ResolvedApiBundle
+import ru.lazyhat.compukters.ide.compiler.profile.ResolvedPlatformModule
 
 data class ClientBuildSnapshot(
     val sources: ProjectSnapshot,
@@ -63,8 +63,7 @@ object ClientCompileRequestFactory {
                         toolchain.platformAbi,
                     ),
                 limits = input.profile.limits,
-                trustedApiBundles = input.profile.apiBundles.map(::trustedIdentity),
-                trustedAddonBundles = input.profile.addonBundles.map(::trustedIdentity),
+                platformModules = input.profile.modules.map(::trustedIdentity),
             )
         return PreparedClientCompilation(
             request,
@@ -73,7 +72,8 @@ object ClientCompileRequestFactory {
         )
     }
 
-    private fun trustedIdentity(bundle: ResolvedApiBundle) = TrustedBundleIdentity.of(bundle.module.id.value, bundle.module.contentHash)
+    private fun trustedIdentity(module: ResolvedPlatformModule) =
+        TrustedBundleIdentity.of(module.identity.id.value, module.identity.contentHash)
 
     private val IDENTITY_REQUEST_ID = RequestId.of(1uL)
 }

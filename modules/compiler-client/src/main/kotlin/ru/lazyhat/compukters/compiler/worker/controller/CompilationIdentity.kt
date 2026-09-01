@@ -41,10 +41,7 @@ object CompilationIdentity {
         digest.field(6, identity.payloadHash.toByteArray())
         digest.field(7, identity.platformAbi.toByteArray())
         digest.field(8, identity.artifactWriterVersion.littleEndian())
-        request.trustedApiBundles.forEach { bundle -> digest.field(9, entry(bundle.name.encodeToByteArray(), bundle.hash.toByteArray())) }
-        request.trustedAddonBundles.forEach { bundle ->
-            digest.field(10, entry(bundle.name.encodeToByteArray(), bundle.hash.toByteArray()))
-        }
+        request.platformModules.forEach { bundle -> digest.field(9, entry(bundle.name.encodeToByteArray(), bundle.hash.toByteArray())) }
         digest.field(
             11,
             request.limits.sourceFiles

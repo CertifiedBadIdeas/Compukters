@@ -23,7 +23,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
-import ru.lazyhat.compukters.ide.compiler.profile.ResolvedApiBundle
+import ru.lazyhat.compukters.ide.compiler.profile.ResolvedPlatformModule
 import java.security.MessageDigest
 
 object ClientCompilationIdentity {
@@ -39,27 +39,23 @@ object ClientCompilationIdentity {
         digest.field(manifestBytes.toByteArray())
         digest.field(lockBytes.toByteArray())
         digest.field(profile.toolchain.artifactAbi.toLittleEndian())
-        profile.apiBundles.forEach { bundle -> digest.bundle(1, bundle) }
-        profile.addonBundles.forEach { bundle -> digest.bundle(2, bundle) }
+        profile.modules.forEach { module -> digest.module(module) }
         return Hash256.of(digest.digest())
     }
 
-    private fun MessageDigest.bundle(
-        kind: Int,
-        bundle: ResolvedApiBundle,
-    ) {
-        field(byteArrayOf(kind.toByte()))
+    private fun MessageDigest.module(module: ResolvedPlatformModule) {
+        field(byteArrayOf(if (module.direct) 1 else 0))
         field(
-            bundle.module.id.value
+            module.identity.id.value
                 .encodeToByteArray(),
         )
         field(
-            bundle.module.major.value
+            module.identity.major.value
                 .toUInt()
                 .toLittleEndian(),
         )
-        field(bundle.module.version.encodeToByteArray())
-        field(bundle.module.contentHash.toByteArray())
+        field(module.identity.version.encodeToByteArray())
+        field(module.identity.contentHash.toByteArray())
     }
 
     private fun MessageDigest.field(bytes: ByteArray) {

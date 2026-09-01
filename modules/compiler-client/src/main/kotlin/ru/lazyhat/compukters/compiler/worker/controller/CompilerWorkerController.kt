@@ -86,8 +86,7 @@ class CompilerWorkerController(
     fun compile(
         snapshot: ProjectSnapshot,
         target: TargetSettings = TargetSettings.KOTLIN_2_4_JVM_17,
-        trustedApiBundles: List<TrustedBundleIdentity> = emptyList(),
-        trustedAddonBundles: List<TrustedBundleIdentity> = emptyList(),
+        platformModules: List<TrustedBundleIdentity> = emptyList(),
     ): CompletableFuture<CompileResult> {
         val future = CompletableFuture<CompileResult>()
         var startDrain = false
@@ -111,8 +110,7 @@ class CompilerWorkerController(
                         target,
                         launch.expectedIdentity,
                         limits,
-                        trustedApiBundles,
-                        trustedAddonBundles,
+                        platformModules,
                     ),
                     future,
                 )

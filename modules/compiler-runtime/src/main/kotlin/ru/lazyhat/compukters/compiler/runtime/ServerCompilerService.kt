@@ -230,8 +230,7 @@ class ServerCompilerService(
             configuration.target,
             configuration.workerIdentity,
             configuration.limits,
-            configuration.trustedApiBundles,
-            configuration.trustedAddonBundles,
+            configuration.platformModules,
         )
 
     private fun complete(
