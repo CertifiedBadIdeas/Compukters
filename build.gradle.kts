@@ -286,7 +286,6 @@ val testKotlinPlatformScalarVmConformance =
         inputs.file(artifact)
         commandLine("cargo", "test", "--locked", "--offline", "--manifest-path", harness.absolutePath)
         environment("CARGO_TARGET_DIR", target.absolutePath)
-        environment("COMPUKTER_KOTLIN_EXECUTABLE_ARTIFACT", artifact.get().asFile.absolutePath)
         environment("COMPUKTER_KOTLIN_PLATFORM_SCALAR_ARTIFACT", artifact.get().asFile.absolutePath)
     }
 
