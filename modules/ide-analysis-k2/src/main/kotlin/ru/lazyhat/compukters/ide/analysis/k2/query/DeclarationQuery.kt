@@ -55,7 +55,7 @@ internal object DeclarationQuery {
                 .map { declaration ->
                     when (declaration) {
                         is MappedDeclaration.Location -> declaration.value
-                        is MappedDeclaration.BundleTarget -> DeclarationOriginMapper.resolveBundleSource(declaration, snapshot)
+                        is MappedDeclaration.PlatformTarget -> DeclarationOriginMapper.resolvePlatformSource(declaration, snapshot)
                     }
                 }.distinct()
                 .sortedWith(declarationLocationOrder)
@@ -67,8 +67,10 @@ internal object DeclarationQuery {
             locations,
             snapshot.sourceLengthsUtf16,
             AnalysisResultLimits(maxDeclarationLocations = limits.declarationLocations),
-            bundleSourceLengthsUtf16 =
-                snapshot.bundleSourceFiles.mapValues { (_, files) -> files.mapValues { (_, file) -> file.textLength } },
+            platformSourceLengthsUtf16 =
+                snapshot.moduleIdentities.values.associateWith {
+                    snapshot.platformSourceFiles.mapValues { (_, file) -> file.textLength }
+                },
         )
     }
 }

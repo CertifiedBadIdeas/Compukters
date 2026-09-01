@@ -99,7 +99,7 @@ internal object CompletionQuery {
             val origin =
                 when (val mapped = DeclarationOriginMapper.run { map(symbol, snapshot) }) {
                     is MappedDeclaration.Location -> mapped.value.origin
-                    is MappedDeclaration.BundleTarget -> DeclarationOrigin.Bundle(mapped.identity)
+                    is MappedDeclaration.PlatformTarget -> DeclarationOrigin.Platform(mapped.identity)
                     null -> null
                 }
             val item = CompletionItem(completionLabel(symbol, name), name, symbol.completionKind(), detail, origin)

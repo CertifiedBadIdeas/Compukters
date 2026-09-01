@@ -24,7 +24,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
@@ -436,7 +436,7 @@ class IdeClientControllerTest {
 
     @Test
     fun `attached declaration opens a read-only bundle-qualified preview`() {
-        val bundle = AnalysisBundleIdentity("std.core", Hash256.of(ByteArray(32) { 9 }))
+        val bundle = AnalysisModuleIdentity("std.core", Hash256.of(ByteArray(32) { 9 }))
         val path = VirtualSourcePath.kotlin("compukter/api/Sample.kt")
         val text = "class Sample"
         val catalog = IdeAttachedSourceCatalog.of(mapOf(bundle to mapOf(path to text)), 1, 1, 64, 64)
@@ -449,7 +449,7 @@ class IdeClientControllerTest {
 
         fixture.controller.dispatch(IdeCommand.GoToDeclaration())
         requests.completeNavigation(
-            listOf(DeclarationLocation.Source(DeclarationOrigin.Bundle(bundle), path, EditorRange(6, 12))),
+            listOf(DeclarationLocation.Source(DeclarationOrigin.Platform(bundle), path, EditorRange(6, 12))),
             bundleLengths = mapOf(bundle to mapOf(path to text.length)),
         )
         fixture.controller.tick()
@@ -466,7 +466,7 @@ class IdeClientControllerTest {
 
     @Test
     fun `unavailable declaration reports status while multiple targets stay in chooser`() {
-        val bundle = AnalysisBundleIdentity("missing.api", Hash256.of(ByteArray(32) { 7 }))
+        val bundle = AnalysisModuleIdentity("missing.api", Hash256.of(ByteArray(32) { 7 }))
         val requests = ControllerRecordingAnalysisRequests()
         val fixture = navigationFixture(requests)
         activateNavigation(fixture, requests)
@@ -475,7 +475,7 @@ class IdeClientControllerTest {
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(token + 1, extendSelection = false)))
 
         fixture.controller.dispatch(IdeCommand.GoToDeclaration())
-        requests.completeNavigation(listOf(DeclarationLocation.SourceUnavailable(DeclarationOrigin.Bundle(bundle))))
+        requests.completeNavigation(listOf(DeclarationLocation.SourceUnavailable(DeclarationOrigin.Platform(bundle))))
         fixture.controller.tick()
         assertTrue(requireNotNull(fixture.workspaceView().status).message.contains("missing.api"))
 
@@ -836,7 +836,7 @@ private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
     fun completeNavigation(
         locations: List<DeclarationLocation>,
         additionalLengths: Map<VirtualSourcePath, Int> = emptyMap(),
-        bundleLengths: Map<AnalysisBundleIdentity, Map<VirtualSourcePath, Int>> = emptyMap(),
+        bundleLengths: Map<AnalysisModuleIdentity, Map<VirtualSourcePath, Int>> = emptyMap(),
     ) {
         val snapshot = snapshots.last()
         val lengths =
@@ -853,7 +853,7 @@ private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
                     snapshot.identity,
                     locations,
                     lengths,
-                    bundleSourceLengthsUtf16 = bundleLengths,
+                    platformSourceLengthsUtf16 = bundleLengths,
                 ),
             ),
         )
@@ -911,5 +911,14 @@ private fun latencyAnalysisSnapshot(
         )
     val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 5 }))
     val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
-    return AdmittedAnalysisSnapshot(identity, sources, AdmittedAnalysisProfile(profile, emptyList()), AnalysisLimits())
+    return AdmittedAnalysisSnapshot(
+        identity,
+        sources,
+        AdmittedAnalysisProfile(
+            profile,
+            ru.lazyhat.compukters.ide.analysis.protocol
+                .AdmittedAnalysisPlatform(Hash256.zero(), emptyList()),
+        ),
+        AnalysisLimits(),
+    )
 }

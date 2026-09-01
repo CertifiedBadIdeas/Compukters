@@ -20,13 +20,16 @@ package ru.lazyhat.compukters.ide.analysis.k2.server
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisWorkerIdentity
+import ru.lazyhat.compukters.platform.bundle.PlatformBundle
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.worker.payload.ToolingBundleLoader
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.zip.ZipFile
 
 internal data class AnalysisWorkerBootstrap(
     val identity: AnalysisWorkerIdentity,
-    val standardLibrary: Path,
+    val platform: PlatformBundle,
     val temporaryRoot: Path,
 ) {
     companion object {
@@ -39,16 +42,37 @@ internal data class AnalysisWorkerBootstrap(
                     ).toAbsolutePath()
                     .normalize()
             require(Files.isRegularFile(workerJar)) { "analysis worker code source is not a jar" }
-            val payload = ToolingBundleLoader.load(toolingRoot(workerJar)).profile("analysis")
+            val tooling = ToolingBundleLoader.load(toolingRoot(workerJar))
+            val payload = tooling.profile("analysis")
             require(payload.manifest.mainClass == MAIN_CLASS) { "analysis worker main class mismatch" }
             val compiler = payload.manifest.identityProperties.getValue("compiler")
             val language = payload.manifest.identityProperties.getValue("language")
-            val standardLibrary =
-                payload.classpath.singleOrNull { it.fileName.toString() == "kotlin-stdlib-$compiler.jar" }
-                    ?: error("fixed Kotlin standard library is missing")
+            val platform =
+                tooling
+                    .profile("compiler")
+                    .classpath
+                    .mapNotNull { path ->
+                        if (!path.fileName.toString().startsWith("compiler-k2-")) return@mapNotNull null
+                        ZipFile(path.toFile()).use { archive ->
+                            val entry = archive.getEntry(PLATFORM_ENTRY) ?: return@use null
+                            require(entry.size in 0..MAX_PLATFORM_BYTES) { "packaged Compukters platform exceeds its byte limit" }
+                            archive.getInputStream(entry).use { input ->
+                                val bytes = input.readNBytes((MAX_PLATFORM_BYTES + 1).toInt())
+                                require(bytes.size.toLong() <= MAX_PLATFORM_BYTES) {
+                                    "packaged Compukters platform exceeds its byte limit"
+                                }
+                                PlatformBundleCodec.decode(bytes)
+                            }
+                        }
+                    }.single()
             return AnalysisWorkerBootstrap(
-                AnalysisWorkerIdentity(compiler, language, Hash256.of(payload.manifest.payloadHash.toByteArray())),
-                standardLibrary,
+                AnalysisWorkerIdentity(
+                    compiler,
+                    language,
+                    Hash256.of(payload.manifest.payloadHash.toByteArray()),
+                    Hash256.of(platform.identity.contentHash.toByteArray()),
+                ),
+                platform,
                 Path
                     .of(System.getProperty("java.io.tmpdir"))
                     .resolve("snapshots")
@@ -68,5 +92,7 @@ internal data class AnalysisWorkerBootstrap(
         }
 
         private const val MAIN_CLASS = "ru.lazyhat.compukters.ide.analysis.k2.server.AnalysisWorkerMainKt"
+        private const val PLATFORM_ENTRY = "compukters-platform/compukters-platform.cpb"
+        private const val MAX_PLATFORM_BYTES = 128L * 1024 * 1024
     }
 }

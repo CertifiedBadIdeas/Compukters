@@ -27,7 +27,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSemanticSettings
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
@@ -39,7 +39,8 @@ import ru.lazyhat.compukters.ide.analysis.controller.AnalysisServiceLifetime
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisTaskScheduler
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisWorkerController
 import ru.lazyhat.compukters.ide.analysis.controller.DefaultAnalysisRequestCoordinator
-import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisBundle
+import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisModule
+import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisPlatform
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisWorkerIdentity
@@ -83,7 +84,6 @@ import ru.lazyhat.compukters.worker.process.WorkerProcessFactory
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
-import java.security.MessageDigest
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -233,7 +233,7 @@ internal object ProductionIdeApplicationFactory {
         val compilerPayload: ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload,
         val analysisPayload: ru.lazyhat.compukters.worker.payload.PublishedToolingProfile,
         val platform: PlatformBundle,
-        val analysisBundles: List<AdmittedAnalysisBundle>,
+        val platformSourceRoot: Path,
         val attachedSources: IdeAttachedSourceCatalog,
         val java: Path,
         val workerLimits: WorkerLimits,
@@ -268,18 +268,16 @@ internal object ProductionIdeApplicationFactory {
             compilerProfile.classpath.single { path ->
                 path.fileName.toString().startsWith("guest-platform-")
             }
-        val guestApiHash = Hash256.of(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(guestApi)))
-        val analysisBundles =
-            listOf(
-                AdmittedAnalysisBundle(
-                    AnalysisBundleIdentity(CORE_GUEST_API_BUNDLE, guestApiHash),
-                    guestApi.toString(),
-                    guestApi.toString(),
-                ),
+        val attachedSources =
+            loadAttachedSources(
+                platform.modules.associate { module ->
+                    analysisModule(module).identity to module.sources.mapTo(mutableSetOf()) { it.path }
+                },
+                guestApi,
+                analysisLimits,
             )
-        val attachedSources = loadAttachedSources(analysisBundles, analysisLimits)
         val java = javaExecutable()
-        return PreparedWorkers(compilerPayload, analysisPayload, platform, analysisBundles, attachedSources, java, workerLimits, analysisLimits)
+        return PreparedWorkers(compilerPayload, analysisPayload, platform, guestApi, attachedSources, java, workerLimits, analysisLimits)
     }
 
     fun createTooling(
@@ -320,6 +318,7 @@ internal object ProductionIdeApplicationFactory {
                 compilerIdentity.compilerVersion,
                 compilerIdentity.languageVersion,
                 Hash256.of(analysisPayload.manifest.payloadHash.toByteArray()),
+                compilerIdentity.platformAbi,
             )
         val analysisLaunch = analysisLaunch(paths, prepared)
         val analysisService =
@@ -339,7 +338,7 @@ internal object ProductionIdeApplicationFactory {
                     prepared.platform,
                     workerLimits,
                     analysisLimits,
-                    prepared.analysisBundles,
+                    prepared.platformSourceRoot,
                     prepared.attachedSources,
                     compilation,
                     analysisService,
@@ -415,7 +414,7 @@ internal object ProductionIdeApplicationFactory {
         platform: PlatformBundle,
         workerLimits: WorkerLimits,
         analysisLimits: AnalysisLimits,
-        analysisBundles: List<AdmittedAnalysisBundle>,
+        platformSourceRoot: Path,
         attachedSources: IdeAttachedSourceCatalog,
         compilation: DefaultClientCompilationService,
         analysisService: AnalysisServiceLifetime,
@@ -452,7 +451,7 @@ internal object ProductionIdeApplicationFactory {
                 inputLoader = IdeAnalysisInputLoader(workspace::buildInput),
                 snapshotFactory =
                     IdeAnalysisSnapshotFactory { input, activePath, activeText ->
-                        analysisSnapshot(input, activePath, activeText, profileResolver, analysisLimits, analysisBundles)
+                        analysisSnapshot(input, activePath, activeText, profileResolver, analysisLimits, platformSourceRoot)
                     },
                 requestFactory =
                     IdeAnalysisRequestFactory { sink ->
@@ -477,46 +476,42 @@ internal object ProductionIdeApplicationFactory {
     }
 
     internal fun loadAttachedSources(
-        bundles: List<AdmittedAnalysisBundle>,
+        moduleSources: Map<AnalysisModuleIdentity, Set<String>>,
+        sourceRoot: Path,
         limits: AnalysisLimits,
     ): IdeAttachedSourceCatalog {
-        require(bundles.size <= limits.bundles) { "attached source bundle count exceeds analysis limit" }
+        require(moduleSources.size <= limits.modules) { "attached source module count exceeds analysis limit" }
         var sourceCount = 0
         var totalBytes = 0L
-        val sources = linkedMapOf<AnalysisBundleIdentity, Map<VirtualSourcePath, String>>()
-        bundles.forEach { bundle ->
-            val sourceRoot = bundle.sourceRoot ?: return@forEach
-            val archivePath = Path.of(sourceRoot)
-            require(archivePath.isAbsolute && archivePath.normalize() == archivePath) {
-                "bundle source root must be absolute and normalized"
-            }
-            require(!Files.isSymbolicLink(archivePath) && Files.isRegularFile(archivePath, LinkOption.NOFOLLOW_LINKS)) {
-                "bundle source root is missing or is not a regular file"
-            }
-            val bundleSources = linkedMapOf<VirtualSourcePath, String>()
-            ZipFile(archivePath.toFile()).use { archive ->
-                archive
-                    .entries()
-                    .asSequence()
-                    .filterNot { it.isDirectory }
-                    .filter { it.name.endsWith(".kt") }
-                    .forEach { entry ->
-                        require(sourceCount < limits.sourceFiles) { "bundle source count exceeds analysis limit" }
-                        val bytes = archive.getInputStream(entry).use { it.readNBytes(limits.sourceFileBytes + 1) }
-                        require(bytes.size <= limits.sourceFileBytes) { "bundle source file exceeds analysis limit" }
-                        sourceCount = Math.incrementExact(sourceCount)
-                        totalBytes = Math.addExact(totalBytes, bytes.size.toLong())
-                        require(totalBytes <= limits.sourceBytes.toLong()) { "bundle source bytes exceed analysis limit" }
-                        val path = VirtualSourcePath.kotlin(entry.name)
-                        val text = bytes.decodeToString(throwOnInvalidSequence = true)
-                        require(bundleSources.put(path, text) == null) { "duplicate bundle source path: ${entry.name}" }
-                    }
-            }
-            sources[bundle.identity] = bundleSources
+        require(sourceRoot.isAbsolute && sourceRoot.normalize() == sourceRoot) {
+            "platform source root must be absolute and normalized"
         }
+        require(!Files.isSymbolicLink(sourceRoot) && Files.isRegularFile(sourceRoot, LinkOption.NOFOLLOW_LINKS)) {
+            "platform source root is missing or is not a regular file"
+        }
+        val platformSources = linkedMapOf<VirtualSourcePath, String>()
+        ZipFile(sourceRoot.toFile()).use { archive ->
+            archive.entries().asSequence().filterNot { it.isDirectory }.filter { it.name.endsWith(".kt") }.forEach { entry ->
+                require(sourceCount < limits.sourceFiles) { "platform source count exceeds analysis limit" }
+                val bytes = archive.getInputStream(entry).use { it.readNBytes(limits.sourceFileBytes + 1) }
+                require(bytes.size <= limits.sourceFileBytes) { "platform source file exceeds analysis limit" }
+                sourceCount = Math.incrementExact(sourceCount)
+                totalBytes = Math.addExact(totalBytes, bytes.size.toLong())
+                require(totalBytes <= limits.sourceBytes.toLong()) { "platform source bytes exceed analysis limit" }
+                val path = VirtualSourcePath.kotlin(entry.name)
+                val text = bytes.decodeToString(throwOnInvalidSequence = true)
+                require(platformSources.put(path, text) == null) { "duplicate platform source path: ${entry.name}" }
+            }
+        }
+        val sources =
+            moduleSources.mapValues { (_, expectedPaths) ->
+                platformSources.filterKeys { path ->
+                    expectedPaths.any { expected -> path.value == expected || path.value.endsWith("/$expected") }
+                }
+            }
         return IdeAttachedSourceCatalog.of(
             sources,
-            limits.bundles,
+            limits.modules,
             limits.sourceFiles,
             limits.sourceFileBytes,
             limits.sourceBytes,
@@ -529,16 +524,13 @@ internal object ProductionIdeApplicationFactory {
         activeText: String,
         resolver: CompileProfileResolver,
         limits: AnalysisLimits,
-        coreBundles: List<AdmittedAnalysisBundle>,
+        platformSourceRoot: Path,
     ): AdmittedAnalysisSnapshot {
         val lockBytes = checkNotNull(input.lockBytes) { "resolve compukter.lock before analysis" }
         val lock = ProjectLockCodec.decode(lockBytes.decodeToString())
         val resolved = resolver.resolveLocal(lock)
         val profile =
             (resolved as? ProfileResolution.Resolved)?.profile ?: error("analysis profile does not match local toolchain: $resolved")
-        check(profile.modules.isEmpty()) {
-            "analysis bundle materialization is not configured"
-        }
         val sources =
             ProjectSnapshot.of(
                 input.sources.sources.map { source ->
@@ -551,12 +543,14 @@ internal object ProductionIdeApplicationFactory {
                     frameBytes = limits.frameBytes,
                 ),
             )
-        val admittedBundles = coreBundles
-        val profileIdentity = analysisProfile(profile, ProjectLockCodec.encode(lock).encodeToByteArray(), admittedBundles)
+        val admittedModules = profile.modules.map { module -> analysisModule(module.descriptor) }
+        val profileIdentity = analysisProfile(profile, ProjectLockCodec.encode(lock).encodeToByteArray(), admittedModules)
+        val admittedPlatform =
+            AdmittedAnalysisPlatform(profile.toolchain.platformAbi, admittedModules, platformSourceRoot.toString())
         return AdmittedAnalysisSnapshot(
             AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profileIdentity),
             sources,
-            AdmittedAnalysisProfile(profileIdentity, admittedBundles),
+            AdmittedAnalysisProfile(profileIdentity, admittedPlatform),
             limits,
         )
     }
@@ -564,13 +558,21 @@ internal object ProductionIdeApplicationFactory {
     private fun analysisProfile(
         profile: CompileProfile,
         lockBytes: ByteArray,
-        bundles: List<AdmittedAnalysisBundle>,
+        modules: List<AdmittedAnalysisModule>,
     ): AnalysisProfileIdentity =
         AnalysisProfileIdentity.of(
             profile.toolchain,
             BinaryValue.of(lockBytes),
-            bundles.map { bundle -> AnalysisBundleIdentity(bundle.identity.name, bundle.identity.hash) },
+            modules.map(AdmittedAnalysisModule::identity),
             AnalysisSemanticSettings(profile.toolchain.languageVersion, profile.toolchain.languageVersion, false),
+        )
+
+    private fun analysisModule(module: ru.lazyhat.compukters.platform.bundle.PlatformModule): AdmittedAnalysisModule =
+        AdmittedAnalysisModule(
+            AnalysisModuleIdentity(
+                module.id.toString(),
+                Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()),
+            ),
         )
 
     internal fun loadPackagedPlatform(
@@ -620,7 +622,6 @@ internal object ProductionIdeApplicationFactory {
     private const val TOOLING_WORKER_RESOURCE = "/tooling/workers/k2-tooling-workers.zip"
     private const val PLATFORM_ENTRY = "compukters-platform/compukters-platform.cpb"
     private const val MAX_PLATFORM_BYTES = 128L * 1024 * 1024
-    private const val CORE_GUEST_API_BUNDLE = "compukter.core-api@1"
     private const val COMPILER_HEAP_MIB = 256
     private const val COMPILER_METASPACE_MIB = 256
     private const val ANALYSIS_HEAP_MIB = 384

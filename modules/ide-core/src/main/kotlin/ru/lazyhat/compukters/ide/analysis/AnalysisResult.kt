@@ -126,10 +126,10 @@ sealed interface AnalysisResult {
                 locations: List<DeclarationLocation>,
                 sourceLengthsUtf16: Map<VirtualSourcePath, Int>,
                 limits: AnalysisResultLimits = AnalysisResultLimits(),
-                bundleSourceLengthsUtf16: Map<AnalysisBundleIdentity, Map<VirtualSourcePath, Int>> = emptyMap(),
+                platformSourceLengthsUtf16: Map<AnalysisModuleIdentity, Map<VirtualSourcePath, Int>> = emptyMap(),
             ): Declaration {
                 require(locations.size <= limits.maxDeclarationLocations) { "declaration-location count exceeds limit" }
-                validateLocations(locations, sourceLengthsUtf16, bundleSourceLengthsUtf16, allowUnavailable = true)
+                validateLocations(locations, sourceLengthsUtf16, platformSourceLengthsUtf16, allowUnavailable = true)
                 return Declaration(identity, immutableCopy(locations))
             }
         }
@@ -158,12 +158,12 @@ sealed interface AnalysisResult {
 private fun validateLocations(
     locations: List<DeclarationLocation>,
     sourceLengthsUtf16: Map<VirtualSourcePath, Int>,
-    bundleSourceLengthsUtf16: Map<AnalysisBundleIdentity, Map<VirtualSourcePath, Int>>,
+    platformSourceLengthsUtf16: Map<AnalysisModuleIdentity, Map<VirtualSourcePath, Int>>,
     allowUnavailable: Boolean,
 ) {
     val sourceLengths = validateSourceLengths(sourceLengthsUtf16)
-    val bundleSourceLengths =
-        bundleSourceLengthsUtf16.mapValues { (_, lengths) -> validateSourceLengths(lengths) }
+    val platformSourceLengths =
+        platformSourceLengthsUtf16.mapValues { (_, lengths) -> validateSourceLengths(lengths) }
     locations.forEach { location ->
         when (location) {
             is DeclarationLocation.Source -> {
@@ -172,8 +172,11 @@ private fun validateLocations(
                         validateSourceRange(sourceLengths, location.path, location.range)
                     }
 
-                    is DeclarationOrigin.Bundle -> {
-                        val lengths = requireNotNull(bundleSourceLengths[origin.identity]) { "analysis bundle has no attached sources" }
+                    is DeclarationOrigin.Platform -> {
+                        val lengths =
+                            requireNotNull(platformSourceLengths[origin.identity]) {
+                                "analysis platform module has no attached sources"
+                            }
                         validateSourceRange(lengths, location.path, location.range)
                     }
                 }

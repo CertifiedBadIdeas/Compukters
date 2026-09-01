@@ -46,6 +46,8 @@ repositories {
 dependencies {
     implementation(projects.ideAnalysisClient) { isTransitive = false }
     implementation(projects.ideCore) { isTransitive = false }
+    implementation(projects.platformBundle) { isTransitive = false }
+    implementation(projects.platformK2) { isTransitive = false }
     implementation(projects.compilerClient) { isTransitive = false }
     implementation(projects.workerClient) { isTransitive = false }
     implementation(libs.kotlin.stdlib)
@@ -98,9 +100,6 @@ val prepareAnalysisWorkerPayload = tasks.register<Sync>("prepareAnalysisWorkerPa
         into("lib")
     }
     from(configurations.runtimeClasspath) {
-        into("lib")
-    }
-    from(guestPlatformSources) {
         into("lib")
     }
     from(rootProject.layout.projectDirectory.file("licenses/project/Apache-2.0.txt")) {
@@ -227,6 +226,8 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
                         "ide-analysis-k2-",
                         "ide-analysis-client-",
                         "ide-core-",
+                        "platform-bundle-",
+                        "platform-k2-",
                         "compiler-client-",
                         "worker-client-",
                     )
@@ -241,9 +242,14 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
 
 tasks.test {
     val guestApiJar = project(":guest-platform").tasks.named<Jar>("jar")
-    dependsOn(guestApiJar)
+    val platformBundle = project(":guest-platform").tasks.named("assemblePlatformBundle")
+    dependsOn(guestApiJar, platformBundle)
     doFirst {
         systemProperty("compukters.test.guestApi", guestApiJar.get().archiveFile.get().asFile.absolutePath)
+        systemProperty(
+            "compukters.test.platformBundle",
+            project(":guest-platform").layout.buildDirectory.file("platform/compukters-platform.cpb").get().asFile.absolutePath,
+        )
     }
     filter.excludeTestsMatching("ru.lazyhat.compukters.ide.analysis.k2.integration.*")
 }
@@ -251,7 +257,7 @@ tasks.test {
 val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
     description = "Runs forked K2 analysis worker integration tests."
     group = "verification"
-    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle")
+    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle", ":guest-platform:jar", ":guest-platform:assemblePlatformBundle")
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
@@ -268,13 +274,21 @@ val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
             "compukters.analysis.payload",
             project(":tooling-runtime").layout.buildDirectory.dir("tooling-bundle/content").get().asFile.absolutePath,
         )
+        systemProperty(
+            "compukters.test.platformBundle",
+            project(":guest-platform").layout.buildDirectory.file("platform/compukters-platform.cpb").get().asFile.absolutePath,
+        )
+        systemProperty(
+            "compukters.test.guestApi",
+            project(":guest-platform").tasks.named<Jar>("jar").get().archiveFile.get().asFile.absolutePath,
+        )
     }
 }
 
 val incrementalAnalysisPerformanceTest = tasks.register<Test>("incrementalAnalysisPerformanceTest") {
     description = "Runs machine-sensitive incremental IDE analysis SLO checks."
     group = "verification"
-    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle")
+    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle", ":guest-platform:jar", ":guest-platform:assemblePlatformBundle")
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
@@ -292,6 +306,14 @@ val incrementalAnalysisPerformanceTest = tasks.register<Test>("incrementalAnalys
         systemProperty(
             "compukters.analysis.payload",
             project(":tooling-runtime").layout.buildDirectory.dir("tooling-bundle/content").get().asFile.absolutePath,
+        )
+        systemProperty(
+            "compukters.test.platformBundle",
+            project(":guest-platform").layout.buildDirectory.file("platform/compukters-platform.cpb").get().asFile.absolutePath,
+        )
+        systemProperty(
+            "compukters.test.guestApi",
+            project(":guest-platform").tasks.named<Jar>("jar").get().archiveFile.get().asFile.absolutePath,
         )
     }
 }

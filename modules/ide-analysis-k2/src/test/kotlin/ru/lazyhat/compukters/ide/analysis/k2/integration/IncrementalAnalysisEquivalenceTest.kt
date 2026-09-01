@@ -239,7 +239,16 @@ class IncrementalAnalysisEquivalenceTest {
             )
         val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 27 }))
         val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(project), profile)
-        return AdmittedAnalysisSnapshot(identity, project, AdmittedAnalysisProfile(profile, emptyList()), limits)
+        return AdmittedAnalysisSnapshot(
+            identity,
+            project,
+            AdmittedAnalysisProfile(
+                profile,
+                ru.lazyhat.compukters.ide.analysis.k2
+                    .testAdmittedPlatform(),
+            ),
+            limits,
+        )
     }
 
     private fun successful(result: AnalysisClientResult): AnalysisResult = assertIs<AnalysisClientResult.Success>(result).result
@@ -285,6 +294,8 @@ class IncrementalAnalysisEquivalenceTest {
                 payload.manifest.identityProperties.getValue("compiler"),
                 payload.manifest.identityProperties.getValue("language"),
                 Hash256.of(payload.manifest.payloadHash.toByteArray()),
+                ru.lazyhat.compukters.ide.analysis.k2
+                    .testPlatformAbi(),
             )
 
         fun controller(

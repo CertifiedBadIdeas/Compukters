@@ -21,7 +21,7 @@ package ru.lazyhat.compukters.impl.ide
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
@@ -219,12 +219,12 @@ class IdeRendererStateTest {
     fun `hover popup contains signature type and bundle origin below modal dialogs`() {
         val source = "val answer = sample"
         val range = EditorRange(4, 10)
-        val bundle = AnalysisBundleIdentity("std.core", Hash256.of(ByteArray(32) { 4 }))
+        val bundle = AnalysisModuleIdentity("std.core", Hash256.of(ByteArray(32) { 4 }))
         val editor =
             semanticEditor(source) { identity, path ->
                 IdeSemanticInteraction.Hover(
                     IdeSemanticAnchor(identity, path, 0, 6, range),
-                    EditorExpressionInfo(path, range, "kotlin.Int", "val answer: kotlin.Int", DeclarationOrigin.Bundle(bundle)),
+                    EditorExpressionInfo(path, range, "kotlin.Int", "val answer: kotlin.Int", DeclarationOrigin.Platform(bundle)),
                 )
             }
         val state =

@@ -31,11 +31,13 @@ import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.analysis.protocol.UpdateSnapshotRequest
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
+import ru.lazyhat.compukters.platform.k2.CompuktersAnalysisPlatformContext
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
@@ -48,16 +50,17 @@ internal class IncrementalK2Workspace(
     files: Map<VirtualSourcePath, KtFile>,
     initialSources: ProjectSnapshot,
     initialSourceLengthsUtf16: Map<VirtualSourcePath, Int>,
-    bundles: List<AdmittedK2Bundle>,
-    bundleSourceFiles: Map<AnalysisBundleIdentity, Map<VirtualSourcePath, KtFile>>,
+    moduleIdentities: Map<PlatformModuleId, AnalysisModuleIdentity>,
+    platformSourceFiles: Map<VirtualSourcePath, KtFile>,
+    private val platform: CompuktersAnalysisPlatformContext,
     private val sourceUpdater: K2SourceUpdater,
 ) : AutoCloseable {
     private var currentIdentity = initialIdentity
     private val files = files.toMap()
     private var sources = initialSources
     private var sourceLengthsUtf16 = initialSourceLengthsUtf16.toMap()
-    private val bundles = bundles.toList()
-    private val bundleSourceFiles = bundleSourceFiles.mapValues { (_, value) -> value.toMap() }
+    private val moduleIdentities = moduleIdentities.toMap()
+    private val platformSourceFiles = platformSourceFiles.toMap()
     private var poisoned = false
     private var closed = false
 
@@ -74,8 +77,9 @@ internal class IncrementalK2Workspace(
             environment,
             files,
             sourceLengthsUtf16,
-            bundles,
-            bundleSourceFiles,
+            moduleIdentities,
+            platformSourceFiles,
+            platform,
         )
     }
 

@@ -102,7 +102,11 @@ class AnalysisSnapshotTransitionTest {
         return AdmittedAnalysisSnapshot(
             AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(project), profile),
             project,
-            AdmittedAnalysisProfile(profile, emptyList()),
+            AdmittedAnalysisProfile(
+                profile,
+                ru.lazyhat.compukters.ide.analysis.protocol
+                    .AdmittedAnalysisPlatform(Hash256.zero(), emptyList()),
+            ),
             AnalysisLimits(),
         )
     }

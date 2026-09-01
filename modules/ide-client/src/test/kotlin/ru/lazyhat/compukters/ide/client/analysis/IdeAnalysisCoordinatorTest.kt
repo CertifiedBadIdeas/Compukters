@@ -155,14 +155,14 @@ class IdeAnalysisCoordinatorTest {
         val active = fixture.open()
         val bundle =
             ru.lazyhat.compukters.ide.analysis
-                .AnalysisBundleIdentity("std.core", hash(9))
+                .AnalysisModuleIdentity("std.core", hash(9))
 
         val unavailable = fixture.coordinator.goToDeclaration(EditorRange(4, 10), 6)
         fixture.requests.completeNavigation(
             AnalysisClientResult.Success(
                 AnalysisResult.Declaration.create(
                     active.identity,
-                    listOf(DeclarationLocation.SourceUnavailable(DeclarationOrigin.Bundle(bundle))),
+                    listOf(DeclarationLocation.SourceUnavailable(DeclarationOrigin.Platform(bundle))),
                     mapOf(path() to fixture.text.length),
                 ),
             ),
@@ -175,10 +175,10 @@ class IdeAnalysisCoordinatorTest {
     }
 
     @Test
-    fun `bundle declaration becomes a lightweight target only when exact source was admitted`() {
+    fun `platform declaration becomes a lightweight target only when exact source was admitted`() {
         val bundle =
             ru.lazyhat.compukters.ide.analysis
-                .AnalysisBundleIdentity("std.core", hash(9))
+                .AnalysisModuleIdentity("std.core", hash(9))
         val sourcePath = VirtualSourcePath.kotlin("compukter/api/Sample.kt")
         val sourceText = "class Sample"
         val catalog = IdeAttachedSourceCatalog.of(mapOf(bundle to mapOf(sourcePath to sourceText)), 1, 1, 64, 64)
@@ -192,13 +192,13 @@ class IdeAnalysisCoordinatorTest {
                     active.identity,
                     listOf(
                         DeclarationLocation.Source(
-                            DeclarationOrigin.Bundle(bundle),
+                            DeclarationOrigin.Platform(bundle),
                             sourcePath,
                             EditorRange(6, 12),
                         ),
                     ),
                     mapOf(path() to fixture.text.length),
-                    bundleSourceLengthsUtf16 = mapOf(bundle to mapOf(sourcePath to sourceText.length)),
+                    platformSourceLengthsUtf16 = mapOf(bundle to mapOf(sourcePath to sourceText.length)),
                 ),
             ),
         )
@@ -209,10 +209,10 @@ class IdeAnalysisCoordinatorTest {
     }
 
     @Test
-    fun `bundle declaration with no exact catalog entry reports source unavailable`() {
+    fun `platform declaration with no exact catalog entry reports source unavailable`() {
         val bundle =
             ru.lazyhat.compukters.ide.analysis
-                .AnalysisBundleIdentity("std.core", hash(9))
+                .AnalysisModuleIdentity("std.core", hash(9))
         val sourcePath = VirtualSourcePath.kotlin("compukter/api/Sample.kt")
         val fixture = fixture("val answer = 42")
         val active = fixture.open()
@@ -222,9 +222,9 @@ class IdeAnalysisCoordinatorTest {
             AnalysisClientResult.Success(
                 AnalysisResult.Declaration.create(
                     active.identity,
-                    listOf(DeclarationLocation.Source(DeclarationOrigin.Bundle(bundle), sourcePath, EditorRange(6, 12))),
+                    listOf(DeclarationLocation.Source(DeclarationOrigin.Platform(bundle), sourcePath, EditorRange(6, 12))),
                     mapOf(path() to fixture.text.length),
-                    bundleSourceLengthsUtf16 = mapOf(bundle to mapOf(sourcePath to 12)),
+                    platformSourceLengthsUtf16 = mapOf(bundle to mapOf(sourcePath to 12)),
                 ),
             ),
         )
@@ -811,7 +811,16 @@ private class AnalysisFixture(
                 ANALYSIS_LIMITS,
             )
         val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
-        return AdmittedAnalysisSnapshot(identity, sources, AdmittedAnalysisProfile(profile, emptyList()), AnalysisLimits())
+        return AdmittedAnalysisSnapshot(
+            identity,
+            sources,
+            AdmittedAnalysisProfile(
+                profile,
+                ru.lazyhat.compukters.ide.analysis.protocol
+                    .AdmittedAnalysisPlatform(Hash256.zero(), emptyList()),
+            ),
+            AnalysisLimits(),
+        )
     }
 }
 

@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.ide.analysis.k2.server
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.K2ProjectEnvironment
+import ru.lazyhat.compukters.ide.analysis.k2.testPlatform
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
@@ -43,9 +44,8 @@ class K2ProgressCancellationTest {
         val environment =
             K2ProjectEnvironment.create(
                 source,
-                standardLibrary(),
-                emptyList(),
-                Path.of(System.getProperty("java.home")),
+                testPlatform(),
+                emptySet(),
             )
         val executor = Executors.newSingleThreadExecutor()
         try {
@@ -70,12 +70,4 @@ class K2ProgressCancellationTest {
             root.toFile().deleteRecursively()
         }
     }
-
-    private fun standardLibrary(): Path =
-        Path
-            .of(
-                Unit::class.java.protectionDomain.codeSource.location
-                    .toURI(),
-            ).toAbsolutePath()
-            .normalize()
 }

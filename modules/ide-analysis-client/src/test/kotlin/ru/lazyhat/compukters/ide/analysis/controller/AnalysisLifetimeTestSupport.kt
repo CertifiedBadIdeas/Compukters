@@ -99,7 +99,16 @@ internal class RecordingAnalysisClient : AnalysisClient {
 internal fun admittedSnapshot(text: String): AdmittedAnalysisSnapshot {
     val source = ProjectSnapshot.of(listOf(ProjectSource(testPath(), BinaryValue.of(text.encodeToByteArray()))), WorkerLimits())
     val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(source), AnalysisProfileIdentity(testHash(text.length)))
-    return AdmittedAnalysisSnapshot(identity, source, AdmittedAnalysisProfile(identity.profile, emptyList()), AnalysisLimits())
+    return AdmittedAnalysisSnapshot(
+        identity,
+        source,
+        AdmittedAnalysisProfile(
+            identity.profile,
+            ru.lazyhat.compukters.ide.analysis.protocol
+                .AdmittedAnalysisPlatform(Hash256.zero(), emptyList()),
+        ),
+        AnalysisLimits(),
+    )
 }
 
 internal fun testSnapshot(): AdmittedAnalysisSnapshot = admittedSnapshot("val test = true")

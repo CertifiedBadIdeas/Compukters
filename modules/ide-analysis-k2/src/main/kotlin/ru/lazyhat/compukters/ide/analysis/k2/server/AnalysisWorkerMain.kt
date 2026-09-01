@@ -23,7 +23,6 @@ import ru.lazyhat.compukters.ide.analysis.k2.standalone.SnapshotAdmission
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
-import java.nio.file.Path
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.system.exitProcess
@@ -34,7 +33,7 @@ fun main() {
     try {
         val bootstrap = AnalysisWorkerBootstrap.load()
         val limits = AnalysisLimits()
-        val admission = SnapshotAdmission(bootstrap.temporaryRoot, bootstrap.standardLibrary, Path.of(System.getProperty("java.home")))
+        val admission = SnapshotAdmission(bootstrap.temporaryRoot, bootstrap.platform)
         AnalysisWorkerServer(
             bootstrap.identity,
             limits,

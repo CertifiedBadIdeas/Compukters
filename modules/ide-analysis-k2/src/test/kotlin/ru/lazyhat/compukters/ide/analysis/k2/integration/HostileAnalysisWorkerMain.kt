@@ -155,7 +155,7 @@ private fun success(
 
 private fun identity(root: Path): AnalysisWorkerIdentity {
     val lines = Files.readAllLines(root.resolve("identity.txt"))
-    return AnalysisWorkerIdentity(lines[0], lines[1], Hash256.fromHex(lines[2]))
+    return AnalysisWorkerIdentity(lines[0], lines[1], Hash256.fromHex(lines[2]), Hash256.fromHex(lines[3]))
 }
 
 private fun next(requestId: RequestId) = RequestId.of(requestId.value + 1uL)

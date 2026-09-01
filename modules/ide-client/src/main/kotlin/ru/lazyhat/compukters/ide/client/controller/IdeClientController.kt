@@ -19,7 +19,7 @@
 package ru.lazyhat.compukters.ide.client.controller
 
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
@@ -1545,7 +1545,7 @@ class IdeClientController(
             conflict = false,
             lexical = highlighter.snapshot(),
             analysis = IdeAnalysisState.Idle,
-            source = IdeEditorSource.AttachedApi(bundle, path),
+            source = IdeEditorSource.AttachedApi(module, path),
             readOnly = true,
         )
     }
@@ -1595,7 +1595,7 @@ class IdeClientController(
             }
 
             is IdeDeclarationOutcome.SourceUnavailable -> {
-                publishStatus("Source for ${outcome.bundle.name} is unavailable", IdeProblemSeverity.Warning)
+                publishStatus("Source for ${outcome.module.name} is unavailable", IdeProblemSeverity.Warning)
             }
 
             is IdeDeclarationOutcome.Failed -> {
@@ -1628,7 +1628,7 @@ class IdeClientController(
 
             is IdeDeclarationTarget.AttachedSource -> {
                 navigateToAttached(
-                    target.bundle,
+                    target.module,
                     target.path,
                     target.range.startUtf16,
                     firstVisibleLine = null,
@@ -1662,7 +1662,7 @@ class IdeClientController(
 
             is IdeNavigationSource.Attached -> {
                 navigateToAttached(
-                    source.bundle,
+                    source.module,
                     source.path,
                     target.caretUtf16,
                     target.firstVisibleLine,
@@ -1700,7 +1700,7 @@ class IdeClientController(
     }
 
     private fun navigateToAttached(
-        bundle: AnalysisBundleIdentity,
+        module: AnalysisModuleIdentity,
         path: VirtualSourcePath,
         caretUtf16: Int,
         firstVisibleLine: Int?,
@@ -1710,7 +1710,7 @@ class IdeClientController(
         pendingFile = null
         pendingProjectNavigation = null
         val navigation =
-            PendingAttachedNavigation(bundle, path, caretUtf16, firstVisibleLine, firstVisibleColumn, transition)
+            PendingAttachedNavigation(module, path, caretUtf16, firstVisibleLine, firstVisibleColumn, transition)
         if (editor?.dirty == true) {
             pendingAttachedNavigation = navigation
             requestSave()
@@ -1720,16 +1720,16 @@ class IdeClientController(
     }
 
     private fun openAttached(navigation: PendingAttachedNavigation) {
-        val bundle = navigation.bundle
+        val module = navigation.module
         val path = navigation.path
-        val text = analysisCoordinator?.attachedSource(bundle, path)
+        val text = analysisCoordinator?.attachedSource(module, path)
         if (text == null) {
-            publishStatus("Source for ${bundle.name} is unavailable", IdeProblemSeverity.Warning)
+            publishStatus("Source for ${module.name} is unavailable", IdeProblemSeverity.Warning)
             return
         }
         closeComputerPreview()
         closeAttachedSourcePreview()
-        val preview = AttachedSourcePreviewSession(bundle, path, text)
+        val preview = AttachedSourcePreviewSession(module, path, text)
         restoreCaret(preview.document, navigation.caretUtf16)
         preview.firstVisibleLine = navigation.firstVisibleLine ?: preview.document.lineContaining(preview.document.caretOffset)
         preview.firstVisibleColumn = navigation.firstVisibleColumn
@@ -1762,7 +1762,7 @@ class IdeClientController(
     private fun currentNavigationPosition(): IdeNavigationPosition? {
         attachedSourcePreview?.let { preview ->
             return IdeNavigationPosition(
-                IdeNavigationSource.Attached(preview.bundle, preview.path),
+                IdeNavigationSource.Attached(preview.module, preview.path),
                 preview.document.caretOffset,
                 preview.firstVisibleLine,
                 preview.firstVisibleColumn,
@@ -2191,7 +2191,7 @@ class IdeClientController(
     }
 
     private class AttachedSourcePreviewSession(
-        val bundle: AnalysisBundleIdentity,
+        val module: AnalysisModuleIdentity,
         val path: VirtualSourcePath,
         text: String,
     ) {
@@ -2215,7 +2215,7 @@ class IdeClientController(
     )
 
     private data class PendingAttachedNavigation(
-        val bundle: AnalysisBundleIdentity,
+        val module: AnalysisModuleIdentity,
         val path: VirtualSourcePath,
         val caretUtf16: Int,
         val firstVisibleLine: Int?,

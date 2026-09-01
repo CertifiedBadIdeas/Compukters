@@ -25,7 +25,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
@@ -37,7 +37,11 @@ import ru.lazyhat.compukters.ide.analysis.controller.AnalysisClientResult
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisWorkerController
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisWorkerPolicy
 import ru.lazyhat.compukters.ide.analysis.controller.SnapshotOpenResult
-import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisBundle
+import ru.lazyhat.compukters.ide.analysis.k2.testAdmittedPlatform
+import ru.lazyhat.compukters.ide.analysis.k2.testPlatform
+import ru.lazyhat.compukters.ide.analysis.k2.testPlatformAbi
+import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisModule
+import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisPlatform
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFailureKind
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFrameCodec
@@ -53,6 +57,7 @@ import ru.lazyhat.compukters.ide.analysis.protocol.OpenSnapshotRequest
 import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotReady
 import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotUpdated
 import ru.lazyhat.compukters.ide.analysis.protocol.UpdateSnapshotRequest
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.worker.payload.ToolingBundleLoader
 import ru.lazyhat.compukters.worker.process.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.worker.process.WorkerLaunch
@@ -133,49 +138,72 @@ class SnapshotAdmissionTest {
     }
 
     @Test
-    fun `forked worker rejects a bundle whose content does not match its hash`() {
-        val bundle = Files.createTempFile("compukters-mismatched-bundle-", ".jar")
-        Files.write(bundle, byteArrayOf(1, 2, 3))
-        try {
-            val admitted =
-                AdmittedAnalysisBundle(
-                    AnalysisBundleIdentity("mismatched", Hash256.of(ByteArray(32) { 9 })),
-                    bundle.toAbsolutePath().normalize().toString(),
+    fun `forked worker rejects a platform module whose content does not match its hash`() {
+        val module = testPlatform().modules.first()
+        val platform =
+            AdmittedAnalysisPlatform(
+                testPlatformAbi(),
+                listOf(AdmittedAnalysisModule(AnalysisModuleIdentity(module.id.toString(), Hash256.of(ByteArray(32) { 9 })))),
+            )
+        withController { controller ->
+            val failure =
+                assertIs<SnapshotOpenResult.Failure>(
+                    controller.open(snapshot(profileByte = 1, platform = platform)).get(90, TimeUnit.SECONDS),
                 )
-            withController { controller ->
-                val failure =
-                    assertIs<SnapshotOpenResult.Failure>(
-                        controller.open(snapshot(profileByte = 1, bundles = listOf(admitted))).get(90, TimeUnit.SECONDS),
-                    )
-                assertEquals(AnalysisFailureKind.InvalidSnapshot, failure.kind)
-            }
-        } finally {
-            Files.deleteIfExists(bundle)
+            assertEquals(AnalysisFailureKind.InvalidSnapshot, failure.kind)
         }
     }
 
     @Test
-    fun `forked worker rejects a missing bundle`() {
-        val missing =
-            createTempDirectory("compukters-missing-bundle-")
-                .resolve("missing.jar")
-                .toAbsolutePath()
-                .normalize()
-        val admitted =
-            AdmittedAnalysisBundle(
-                AnalysisBundleIdentity("missing", Hash256.of(ByteArray(32) { 7 })),
-                missing.toString(),
+    fun `forked worker rejects an unavailable platform module`() {
+        val platform =
+            AdmittedAnalysisPlatform(
+                testPlatformAbi(),
+                listOf(AdmittedAnalysisModule(AnalysisModuleIdentity("missing:module", Hash256.of(ByteArray(32) { 7 })))),
             )
-        try {
-            withController { controller ->
-                val failure =
-                    assertIs<SnapshotOpenResult.Failure>(
-                        controller.open(snapshot(profileByte = 1, bundles = listOf(admitted))).get(90, TimeUnit.SECONDS),
-                    )
-                assertEquals(AnalysisFailureKind.InvalidSnapshot, failure.kind)
+        withController { controller ->
+            val failure =
+                assertIs<SnapshotOpenResult.Failure>(
+                    controller.open(snapshot(profileByte = 1, platform = platform)).get(90, TimeUnit.SECONDS),
+                )
+            assertEquals(AnalysisFailureKind.InvalidSnapshot, failure.kind)
+        }
+    }
+
+    @Test
+    fun `forked worker rejects a foreign platform ABI`() {
+        val platform = AdmittedAnalysisPlatform(Hash256.of(ByteArray(32) { 6 }), emptyList())
+        withController { controller ->
+            val failure =
+                assertIs<SnapshotOpenResult.Failure>(
+                    controller.open(snapshot(profileByte = 1, platform = platform)).get(90, TimeUnit.SECONDS),
+                )
+            assertEquals(AnalysisFailureKind.InvalidSnapshot, failure.kind)
+        }
+    }
+
+    @Test
+    fun `forked worker rejects a module selection without dependencies`() {
+        val platform = testPlatform()
+        val candidate =
+            requireNotNull(platform.modules.firstOrNull { it.dependencies.any { dependency -> dependency != platform.builtins.id } }) {
+                "native analysis fixture must contain a module with a non-builtins dependency"
             }
-        } finally {
-            missing.parent.toFile().deleteRecursively()
+        val admitted =
+            AdmittedAnalysisModule(
+                AnalysisModuleIdentity(
+                    candidate.id.toString(),
+                    Hash256.of(PlatformBundleCodec.moduleContentHash(candidate).toByteArray()),
+                ),
+            )
+        withController { controller ->
+            val failure =
+                assertIs<SnapshotOpenResult.Failure>(
+                    controller
+                        .open(snapshot(profileByte = 1, platform = AdmittedAnalysisPlatform(testPlatformAbi(), listOf(admitted))))
+                        .get(90, TimeUnit.SECONDS),
+                )
+            assertEquals(AnalysisFailureKind.InvalidSnapshot, failure.kind)
         }
     }
 
@@ -243,6 +271,8 @@ class SnapshotAdmissionTest {
                 payload.manifest.identityProperties.getValue("compiler"),
                 payload.manifest.identityProperties.getValue("language"),
                 Hash256.of(payload.manifest.payloadHash.toByteArray()),
+                ru.lazyhat.compukters.ide.analysis.k2
+                    .testPlatformAbi(),
             )
         val controller =
             AnalysisWorkerController(
@@ -299,7 +329,7 @@ class SnapshotAdmissionTest {
     private fun snapshot(
         profileByte: Int,
         main: ByteArray = "package demo\nfun answer() = helper()".encodeToByteArray(),
-        bundles: List<AdmittedAnalysisBundle> = emptyList(),
+        platform: AdmittedAnalysisPlatform = testAdmittedPlatform(),
     ): AdmittedAnalysisSnapshot {
         val sources =
             ProjectSnapshot.of(
@@ -314,7 +344,7 @@ class SnapshotAdmissionTest {
             )
         val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { profileByte.toByte() }))
         val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
-        return AdmittedAnalysisSnapshot(identity, sources, AdmittedAnalysisProfile(profile, bundles), AnalysisLimits())
+        return AdmittedAnalysisSnapshot(identity, sources, AdmittedAnalysisProfile(profile, platform), AnalysisLimits())
     }
 }
 

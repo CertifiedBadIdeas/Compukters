@@ -145,16 +145,16 @@ class CompletionQueryTest {
     }
 
     @Test
-    fun `completion gives standard library overloads distinct argument labels`() {
+    fun `completion gives platform println overloads distinct argument labels`() {
         val source = "fun main() { printl }"
-        K2QueryFixture.source("main.kt" to source).use { fixture ->
+        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
             val items = fixture.complete("main.kt", source.indexOf("printl") + "printl".length).items
             val printlnItems = items.filter { it.insertText == "println" }
 
             assertTrue(printlnItems.size > 1, printlnItems.toString())
             assertEquals(printlnItems.size, printlnItems.map { it.label }.distinct().size, printlnItems.joinToString("\n"))
             assertTrue(printlnItems.any { it.label == "println()" }, printlnItems.toString())
-            assertTrue(printlnItems.any { it.label == "println(message: Int)" }, printlnItems.toString())
+            assertTrue(printlnItems.any { it.label == "println(value: Int)" }, printlnItems.toString())
             assertTrue(printlnItems.all { it.insertText == "println" }, printlnItems.toString())
         }
     }

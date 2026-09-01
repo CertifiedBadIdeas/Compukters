@@ -179,8 +179,8 @@ class DeclarationQueryTest {
                 ) as AnalysisResult.Declaration
 
             val unavailable = assertIs<DeclarationLocation.SourceUnavailable>(result.locations.single())
-            val bundle = assertIs<DeclarationOrigin.Bundle>(unavailable.origin)
-            assertEquals("std.core", bundle.identity.name)
+            val bundle = assertIs<DeclarationOrigin.Platform>(unavailable.origin)
+            assertEquals("std:terminal", bundle.identity.name)
         }
     }
 
@@ -206,10 +206,9 @@ class DeclarationQueryTest {
             assertEquals(
                 listOf(
                     DeclarationLocation.Source(
-                        DeclarationOrigin.Bundle(
-                            fixture.snapshot.bundles
-                                .single()
-                                .identity,
+                        DeclarationOrigin.Platform(
+                            fixture.snapshot.moduleIdentities.values
+                                .single { it.name == "std:terminal" },
                         ),
                         VirtualSourcePath.kotlin(sourcePath),
                         EditorRange(

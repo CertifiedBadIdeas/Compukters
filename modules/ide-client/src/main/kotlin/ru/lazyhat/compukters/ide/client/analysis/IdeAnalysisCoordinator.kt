@@ -172,9 +172,9 @@ class IdeAnalysisCoordinator(
     fun state(): IdeAnalysisState = publishedState.get()
 
     fun attachedSource(
-        bundle: ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity,
+        module: ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity,
         path: VirtualSourcePath,
-    ): String? = attachedSources.text(bundle, path)
+    ): String? = attachedSources.text(module, path)
 
     fun open(
         project: ProjectHandle,
@@ -714,7 +714,7 @@ class IdeAnalysisCoordinator(
         locations: List<DeclarationLocation>,
         publishChooser: Boolean,
     ): IdeDeclarationOutcome {
-        val unavailableBundles = mutableListOf<ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity>()
+        val unavailableModules = mutableListOf<ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity>()
         val targets =
             locations
                 .mapNotNull { location ->
@@ -725,11 +725,11 @@ class IdeAnalysisCoordinator(
                                     IdeDeclarationTarget.Project(ProjectPath.file(location.path.value), location.range)
                                 }
 
-                                is DeclarationOrigin.Bundle -> {
+                                is DeclarationOrigin.Platform -> {
                                     if (attachedSources.text(origin.identity, location.path) != null) {
                                         IdeDeclarationTarget.AttachedSource(origin.identity, location.path, location.range)
                                     } else {
-                                        unavailableBundles += origin.identity
+                                        unavailableModules += origin.identity
                                         null
                                     }
                                 }
@@ -737,13 +737,14 @@ class IdeAnalysisCoordinator(
                         }
 
                         is DeclarationLocation.SourceUnavailable -> {
-                            unavailableBundles += (location.origin as DeclarationOrigin.Bundle).identity
+                            unavailableModules += (location.origin as DeclarationOrigin.Platform).identity
                             null
                         }
                     }
                 }.take(limits.declarationChoices)
         if (targets.isEmpty()) {
-            return unavailableBundles.firstOrNull()?.let(IdeDeclarationOutcome::SourceUnavailable) ?: IdeDeclarationOutcome.NotFound
+            return unavailableModules.firstOrNull()?.let(IdeDeclarationOutcome::SourceUnavailable)
+                ?: IdeDeclarationOutcome.NotFound
         }
         if (publishChooser && targets.size > 1) {
             val active = publishedState.get() as? IdeAnalysisState.Active

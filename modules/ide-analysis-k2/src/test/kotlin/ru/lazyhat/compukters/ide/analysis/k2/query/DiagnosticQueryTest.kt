@@ -31,6 +31,27 @@ import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
     @Test
+    fun `foreign JVM declarations are outside the native analysis platform`() {
+        K2QueryFixture.source("main.kt" to "val forbidden: java.lang.String? = null").use { fixture ->
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+            val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+
+            assertTrue(active.diagnostics.any { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+        }
+    }
+
+    @Test
+    fun `optional platform module is unresolved until selected`() {
+        val source = "import compukter.redstone.Redstone\nval outputs = Redstone.outputs()"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+            val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+
+            assertTrue(active.diagnostics.any { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+        }
+    }
+
+    @Test
     fun `core guest API resolves redstone facade without errors`() {
         val source =
             """

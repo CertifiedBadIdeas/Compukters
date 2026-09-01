@@ -19,7 +19,7 @@
 package ru.lazyhat.compukters.ide.client.navigation
 
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
-import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 
 sealed interface IdeNavigationSource {
@@ -28,7 +28,7 @@ sealed interface IdeNavigationSource {
     ) : IdeNavigationSource
 
     data class Attached(
-        val bundle: AnalysisBundleIdentity,
+        val module: AnalysisModuleIdentity,
         val path: VirtualSourcePath,
     ) : IdeNavigationSource {
         init {

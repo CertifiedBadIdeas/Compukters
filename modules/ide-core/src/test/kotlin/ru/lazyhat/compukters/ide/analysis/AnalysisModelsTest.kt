@@ -82,7 +82,7 @@ class AnalysisModelsTest {
     fun `locations distinguish source availability and enforce source membership ranges and caps`() {
         val unavailable =
             DeclarationLocation
-                .SourceUnavailable(DeclarationOrigin.Bundle(AnalysisBundleIdentity("std.fs", hash(3))))
+                .SourceUnavailable(DeclarationOrigin.Platform(AnalysisModuleIdentity("std.fs", hash(3))))
         val available = DeclarationLocation.Source(DeclarationOrigin.Project, main, EditorRange(1, 3))
         val sourceLengths = mapOf(main to 3)
 
@@ -110,9 +110,9 @@ class AnalysisModelsTest {
     }
 
     @Test
-    fun `attached bundle declarations require their exact source catalog range`() {
-        val bundle = AnalysisBundleIdentity("std.core", hash(4))
-        val origin = DeclarationOrigin.Bundle(bundle)
+    fun `attached platform declarations require their exact source catalog range`() {
+        val bundle = AnalysisModuleIdentity("std.core", hash(4))
+        val origin = DeclarationOrigin.Platform(bundle)
         val path = VirtualSourcePath.kotlin("compukter/terminal/Terminal.kt")
         val location = DeclarationLocation.Source(origin, path, EditorRange(3, 8))
 
@@ -123,7 +123,7 @@ class AnalysisModelsTest {
                     identity,
                     listOf(location),
                     sourceLengthsUtf16 = emptyMap(),
-                    bundleSourceLengthsUtf16 = mapOf(bundle to mapOf(path to 8)),
+                    platformSourceLengthsUtf16 = mapOf(bundle to mapOf(path to 8)),
                 ).locations,
         )
         assertFailsWith<IllegalArgumentException> {
@@ -131,7 +131,7 @@ class AnalysisModelsTest {
                 identity,
                 listOf(location),
                 sourceLengthsUtf16 = emptyMap(),
-                bundleSourceLengthsUtf16 = mapOf(bundle to mapOf(path to 7)),
+                platformSourceLengthsUtf16 = mapOf(bundle to mapOf(path to 7)),
             )
         }
     }

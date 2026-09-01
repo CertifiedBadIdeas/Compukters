@@ -147,5 +147,14 @@ private fun analysisSnapshot(
         )
     val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 3 }))
     val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
-    return AdmittedAnalysisSnapshot(identity, sources, AdmittedAnalysisProfile(profile, emptyList()), AnalysisLimits())
+    return AdmittedAnalysisSnapshot(
+        identity,
+        sources,
+        AdmittedAnalysisProfile(
+            profile,
+            ru.lazyhat.compukters.ide.analysis.protocol
+                .AdmittedAnalysisPlatform(Hash256.zero(), emptyList()),
+        ),
+        AnalysisLimits(),
+    )
 }
