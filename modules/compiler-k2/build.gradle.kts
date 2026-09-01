@@ -29,6 +29,7 @@ plugins {
 }
 
 dependencies {
+    implementation(projects.compilerK2Engine)
     implementation(projects.guestApiCore)
     implementation(projects.compilerClient)
     implementation(projects.compilerArtifact)
@@ -195,7 +196,16 @@ val verifyCompilerWorkerLicenses =
                     .map { (_, component, version, _) -> "$component-$version.jar" }
                     .sorted()
             val projectPrefixes =
-                listOf("compiler-artifact-", "compiler-client-", "compiler-k2-", "guest-api-core-", "worker-client-")
+                listOf(
+                    "compiler-artifact-",
+                    "compiler-client-",
+                    "compiler-k2-",
+                    "compiler-k2-engine-",
+                    "guest-api-core-",
+                    "platform-bundle-",
+                    "platform-k2-",
+                    "worker-client-",
+                )
             val actualExternal =
                 entries
                     .filter { it.startsWith("lib/") && it.endsWith(".jar") }
@@ -456,7 +466,16 @@ val compilerModuleNames =
     )
 val nonWorkerIsolationChecks =
     rootProject.allprojects
-        .filter { it != project && it.path !in setOf(":compiler-client", ":ide-analysis-k2") }
+        .filter {
+            it != project &&
+                it.path !in
+                setOf(
+                    ":compiler-client",
+                    ":compiler-k2-engine",
+                    ":ide-analysis-k2",
+                    ":platform-k2",
+                )
+        }
         .map { candidate ->
             candidate.tasks.register("assertNoK2CompilerRuntime") {
                 doLast {
@@ -495,10 +514,7 @@ val assertCompilerWorkerIsolation = tasks.register("assertCompilerWorkerIsolatio
 
         val registrarPath = "META-INF/services/org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar"
         val registrars = zipTree(workerJar.get().asFile).matching { include(registrarPath) }.files
-        check(registrars.size == 1) { "worker jar must contain exactly one compiler registrar service" }
-        check(registrars.single().readLines().filter(String::isNotBlank) == listOf("ru.lazyhat.compukters.compiler.worker.k2.CompukterCompilerPluginRegistrar")) {
-            "worker jar contains an unexpected compiler registrar"
-        }
+        check(registrars.isEmpty()) { "worker adapter jar must not duplicate the compiler engine registrar" }
 
         val payloadLibraries = workerPayloadDirectory.get().asFile.toPath().resolve("lib")
         val actualNames = Files.list(payloadLibraries).use { paths -> paths.map { it.fileName.toString() }.toList().toSet() }

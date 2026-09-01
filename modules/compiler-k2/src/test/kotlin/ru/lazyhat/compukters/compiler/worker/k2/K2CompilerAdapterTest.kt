@@ -183,8 +183,8 @@ class K2CompilerAdapterTest {
         withAdapter { adapter, root ->
             val source = "fun main() { val answer: Int = 42 }"
             val trustedApiBytes =
-                TrustedIntrinsicRegistry.CORE_SOURCE_BUNDLES.sumOf { bundle ->
-                    checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream(bundle.resource))
+                K2CompilerAdapter.trustedApiSourceResources.sumOf { resource ->
+                    checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream(resource))
                         .use { it.readBytes().size }
                 }
             val result =
@@ -194,7 +194,7 @@ class K2CompilerAdapterTest {
                         WorkerLimits(
                             temporaryBytes = source.encodeToByteArray().size.toLong() + trustedApiBytes,
                             // source/, source/project/, trusted/, the user source, and every trusted API source.
-                            temporaryFiles = TrustedIntrinsicRegistry.CORE_SOURCE_BUNDLES.size + 4,
+                            temporaryFiles = K2CompilerAdapter.trustedApiSourceResources.size + 4,
                         ),
                     ),
                 )

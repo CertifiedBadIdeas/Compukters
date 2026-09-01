@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package ru.lazyhat.compukters.compiler.worker.k2
+package ru.lazyhat.compukters.compiler.k2.engine
 
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar

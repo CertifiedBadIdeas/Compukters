@@ -33,7 +33,9 @@ repositories {
 dependencies {
     api(projects.platformBundle)
     implementation(libs.kotlin.compiler)
-    implementation(libs.kotlin.analysis.api) { isTransitive = false }
-    implementation(libs.kotlin.analysis.low.level.fir) { isTransitive = false }
+    compileOnly(libs.kotlin.analysis.api) { isTransitive = false }
+    compileOnly(libs.kotlin.analysis.low.level.fir) { isTransitive = false }
+    testImplementation(libs.kotlin.analysis.api) { isTransitive = false }
+    testImplementation(libs.kotlin.analysis.low.level.fir) { isTransitive = false }
     testImplementation(kotlin("test"))
 }

@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package ru.lazyhat.compukters.compiler.worker.k2
+package ru.lazyhat.compukters.compiler.k2.engine
 
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
@@ -57,7 +57,7 @@ class IrExtensionSmokeTest {
                     apiVersion = "2.4"
                     jvmTarget = "17"
                     noReflect = true
-                    pluginClasspaths = arrayOf(checkNotNull(System.getProperty("compukters.worker.jar")))
+                    pluginClasspaths = arrayOf(checkNotNull(System.getProperty("compukters.engine.jar")))
                 }
 
             val exitCode =

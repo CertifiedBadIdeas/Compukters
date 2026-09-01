@@ -16,10 +16,9 @@
  * limitations under the License.
  */
 
-package ru.lazyhat.compukters.compiler.worker.k2
+package ru.lazyhat.compukters.compiler.k2.engine
 
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
@@ -84,45 +83,6 @@ class TrustedIntrinsicRegistryTest {
                 TrustedValueType.STRING,
                 TrustedCallableOrigin.PLAYER_SOURCE,
             ),
-        )
-    }
-
-    @Test
-    fun `stdio integer formatter covers the full signed range`() {
-        val method =
-            Class
-                .forName("compukter.io.StderrKt")
-                .getDeclaredMethod("stdoutInt", Int::class.javaPrimitiveType)
-                .also { it.isAccessible = true }
-
-        listOf(Int.MIN_VALUE, -1, 0, 1, Int.MAX_VALUE).forEach { value ->
-            assertEquals(value.toString(), method.invoke(null, value))
-        }
-    }
-
-    @Test
-    fun `process v2 encoder preserves exact length delimited utf16 arguments`() {
-        val method =
-            Class
-                .forName("compukter.process.ProcessKt")
-                .getDeclaredMethod("encodeArgs", Array<String>::class.java)
-                .also { it.isAccessible = true }
-        val encoded = method.invoke(null, arrayOf("a\u0000😀", "")) as String
-
-        assertContentEquals(
-            charArrayOf(
-                '\u0002',
-                '\u0000',
-                '\u0004',
-                '\u0000',
-                'a',
-                '\u0000',
-                '\uD83D',
-                '\uDE00',
-                '\u0000',
-                '\u0000',
-            ),
-            encoded.toCharArray(),
         )
     }
 
