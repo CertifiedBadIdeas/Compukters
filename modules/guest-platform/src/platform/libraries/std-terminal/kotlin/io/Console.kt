@@ -6,22 +6,25 @@
 
 package kotlin.io
 
-public external fun print(value: Any?)
+import compukter.io.stdoutPrint
+import compukter.io.stdoutPrintln
 
-public external fun print(value: Int)
+public fun print(value: String): Unit = stdoutPrint(value)
 
-public external fun print(value: Boolean)
+public fun print(value: Int): Unit = stdoutPrint(value)
 
-public external fun print(value: Char)
+public fun print(value: Boolean): Unit = stdoutPrint(value)
 
-public external fun println()
+public fun print(value: Char): Unit = stdoutPrint(value)
 
-public external fun println(value: Any?)
+public fun println(): Unit = stdoutPrintln()
 
-public external fun println(value: Int)
+public fun println(value: String): Unit = stdoutPrintln(value)
 
-public external fun println(value: Boolean)
+public fun println(value: Int): Unit = stdoutPrintln(value)
 
-public external fun println(value: Char)
+public fun println(value: Boolean): Unit = stdoutPrintln(value)
+
+public fun println(value: Char): Unit = stdoutPrintln(value)
 
 public external fun readln(): String

@@ -24,6 +24,8 @@ import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicRegistry as CanonicalIntrinsicRegistry
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import java.nio.file.Path
 
 fun interface CompilationIrSink {
@@ -39,15 +41,21 @@ class CompilationSession(
     val diagnosticSink: (WorkerDiagnostic) -> Unit = {},
     sourcePaths: Map<String, VirtualSourcePath> = emptyMap(),
     trustedApiSourceIdentities: Map<String, String> = emptyMap(),
+    trustedPlatformSourceModules: Map<String, PlatformModuleId> = emptyMap(),
+    val canonicalIntrinsicRegistry: CanonicalIntrinsicRegistry? = null,
     val trustedStandardLibraryIdentity: String? = null,
     val limits: WorkerLimits = WorkerLimits(),
 ) {
     private val sourcePaths = sourcePaths.mapKeys { (path, _) -> normalize(path) }
     private val trustedApiSourceIdentities = trustedApiSourceIdentities.mapKeys { (path, _) -> normalize(path) }
+    private val trustedPlatformSourceModules = trustedPlatformSourceModules.mapKeys { (path, _) -> normalize(path) }
 
     fun virtualSourcePath(physicalPath: String?): VirtualSourcePath? = physicalPath?.let { sourcePaths[normalize(it)] }
 
     fun trustedApiIdentity(physicalPath: String?): String? = physicalPath?.let { trustedApiSourceIdentities[normalize(it)] }
+
+    fun trustedPlatformModule(physicalPath: String?): PlatformModuleId? =
+        physicalPath?.let { trustedPlatformSourceModules[normalize(it)] }
 
     private fun normalize(path: String): String =
         runCatching {

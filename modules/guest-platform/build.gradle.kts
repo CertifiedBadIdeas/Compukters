@@ -24,6 +24,48 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
+val platformBuilder = configurations.create("platformBuilder") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+dependencies {
+    add(platformBuilder.name, projects.compilerK2Engine)
+}
+
+val platformSourceRoot = layout.projectDirectory.dir("src/platform")
+val platformDescriptor = platformSourceRoot.file("modules.toml")
+val platformBundle = layout.buildDirectory.file("platform/compukters-platform.cpb")
+val assemblePlatformBundle = tasks.register<JavaExec>("assemblePlatformBundle") {
+    group = "build"
+    description = "Builds the deterministic native Compukters platform bundle."
+    classpath = platformBuilder
+    mainClass = "ru.lazyhat.compukters.compiler.k2.engine.build.PlatformBundleBuilderMainKt"
+    inputs.dir(platformSourceRoot)
+    inputs.file(platformDescriptor)
+    outputs.file(platformBundle)
+    args(
+        "--sources",
+        platformSourceRoot.asFile.absolutePath,
+        "--descriptor",
+        platformDescriptor.asFile.absolutePath,
+        "--output",
+        platformBundle.get().asFile.absolutePath,
+    )
+}
+
+val compuktersPlatformBundle = configurations.create("compuktersPlatformBundle") {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+}
+
+artifacts {
+    add(compuktersPlatformBundle.name, platformBundle) {
+        builtBy(assemblePlatformBundle)
+        type = "cpb"
+    }
+}
+
 tasks.processResources {
     from("src/platform") {
         into("compukters-platform/sources")
@@ -36,6 +78,10 @@ tasks.test {
         systemProperty("compukters.platform.source-root", layout.projectDirectory.dir("src/platform").asFile.absolutePath)
         systemProperty("compukters.platform.source-archive", tasks.jar.get().archiveFile.get().asFile.absolutePath)
     }
+}
+
+tasks.check {
+    dependsOn(assemblePlatformBundle)
 }
 
 tasks.withType<Jar>().configureEach {

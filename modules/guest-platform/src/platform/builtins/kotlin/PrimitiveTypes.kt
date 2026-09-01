@@ -6,8 +6,12 @@
 
 package kotlin
 
+public abstract class Number
+
 public class Boolean private constructor() : Comparable<Boolean> {
     public external override operator fun compareTo(other: Boolean): Int
+
+    public external operator fun not(): Boolean
 }
 
 public class Char private constructor() : Comparable<Char> {
@@ -16,7 +20,7 @@ public class Char private constructor() : Comparable<Char> {
     public external fun toInt(): Int
 }
 
-public class Int private constructor() : Comparable<Int> {
+public class Int private constructor() : Number(), Comparable<Int> {
     public external override operator fun compareTo(other: Int): Int
 
     public external operator fun plus(other: Int): Int
@@ -52,6 +56,24 @@ public class Int private constructor() : Comparable<Int> {
         public const val MAX_VALUE: Int = 2147483647
     }
 }
+
+internal class Byte private constructor() : Number()
+
+internal class Short private constructor() : Number()
+
+internal class Long private constructor() : Number()
+
+internal class Float private constructor() : Number()
+
+internal class Double private constructor() : Number()
+
+internal class UByte private constructor()
+
+internal class UShort private constructor()
+
+internal class UInt private constructor()
+
+internal class ULong private constructor()
 
 public class String : Comparable<String>, CharSequence {
     public external constructor()

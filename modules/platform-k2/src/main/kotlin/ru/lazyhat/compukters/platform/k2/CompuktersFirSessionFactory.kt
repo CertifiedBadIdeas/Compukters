@@ -20,10 +20,15 @@ package ru.lazyhat.compukters.platform.k2
 
 import org.jetbrains.kotlin.fir.FirModuleData
 import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.SessionConfiguration
 import org.jetbrains.kotlin.fir.resolve.providers.FirSymbolProvider
+import org.jetbrains.kotlin.fir.resolve.providers.impl.FirEmptySymbolProvider
 import org.jetbrains.kotlin.fir.scopes.FirKotlinScopeProvider
+import org.jetbrains.kotlin.fir.scopes.FirDefaultImportsProviderHolder
+import org.jetbrains.kotlin.fir.scopes.impl.FirEnumEntriesSupport
 import org.jetbrains.kotlin.fir.session.AbstractFirMetadataSessionFactory
 import org.jetbrains.kotlin.fir.session.FirSessionConfigurator
+import org.jetbrains.kotlin.resolve.DefaultImportsProvider
 
 /** K2 session factory whose target identity cannot route through a foreign platform factory. */
 class CompuktersFirSessionFactory : AbstractFirMetadataSessionFactory(CompuktersPlatforms.default) {
@@ -34,9 +39,19 @@ class CompuktersFirSessionFactory : AbstractFirMetadataSessionFactory(Compukters
         moduleData: FirModuleData,
         scopeProvider: FirKotlinScopeProvider,
         context: Context,
-    ): List<FirSymbolProvider> = emptyList()
+    ): List<FirSymbolProvider> = listOf(FirEmptySymbolProvider(session))
 
     override fun FirSessionConfigurator.registerPlatformCheckers() = Unit
 
     override fun FirSessionConfigurator.registerExtraPlatformCheckers() = Unit
+
+    @OptIn(SessionConfiguration::class)
+    override fun FirSession.registerSourceSessionComponents(c: Context) {
+        register(FirEnumEntriesSupport(this))
+        register(FirDefaultImportsProviderHolder.Single(CompuktersDefaultImportsProvider))
+    }
+}
+
+private object CompuktersDefaultImportsProvider : DefaultImportsProvider() {
+    override val platformSpecificDefaultImports = emptyList<org.jetbrains.kotlin.resolve.ImportPath>()
 }
