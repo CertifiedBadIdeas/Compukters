@@ -29,8 +29,10 @@ import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
 import org.jetbrains.kotlin.fir.pipeline.Fir2KlibMetadataSerializer
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
+import org.jetbrains.kotlin.psi.KtConstantExpression
 import org.jetbrains.kotlin.psi.KtConstructor
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtDeclarationContainer
@@ -43,6 +45,10 @@ import org.jetbrains.kotlin.psi.KtTypeAlias
 import org.jetbrains.kotlin.psi.psiUtil.collectDescendantsOfType
 import ru.lazyhat.compukters.platform.bundle.PlatformDeclaration
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
+import ru.lazyhat.compukters.platform.bundle.PlatformScalarConstant
+import ru.lazyhat.compukters.platform.bundle.PlatformScalarRepresentation
+import ru.lazyhat.compukters.platform.bundle.PlatformScalarType
+import ru.lazyhat.compukters.platform.bundle.PlatformScalarValue
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import java.io.ByteArrayInputStream
@@ -57,6 +63,8 @@ data class CompiledPlatformMetadata(
     val declarations: List<PlatformDeclaration>,
     val exportedSymbols: List<String>,
     val libraryDeclarations: List<PlatformLibraryDeclaration>,
+    val scalarTypes: List<PlatformScalarType> = emptyList(),
+    val scalarConstants: List<PlatformScalarConstant> = emptyList(),
 )
 
 data class PlatformLibraryDeclaration(
@@ -109,7 +117,8 @@ class PlatformMetadataCompiler {
         sources: List<PlatformSource>,
     ): CompiledPlatformMetadata {
         require(sources.map(PlatformSource::path).toSet().size == sources.size) { "duplicate platform source paths" }
-        val declarations = parse(module, sources).sortedWith(DECLARATION_ORDER)
+        val parsedPlatform = parse(module, sources)
+        val declarations = parsedPlatform.declarations.sortedWith(DECLARATION_ORDER)
         val keys = mutableSetOf<Pair<String, String>>()
         declarations.forEach { parsed ->
             val declaration = parsed.declaration
@@ -141,6 +150,8 @@ class PlatformMetadataCompiler {
                     requireNotNull(parsed.libraryKind),
                 )
             },
+            parsedPlatform.scalarTypes.sortedBy(PlatformScalarType::symbol),
+            parsedPlatform.scalarConstants.sortedBy(PlatformScalarConstant::symbol),
         )
     }
 
@@ -182,7 +193,7 @@ class PlatformMetadataCompiler {
     private fun parse(
         module: PlatformModuleId,
         sources: List<PlatformSource>,
-    ): List<ParsedDeclaration> {
+    ): ParsedPlatform {
         val disposable = Disposer.newDisposable("Compukters platform metadata compiler")
         return try {
             val configuration =
@@ -197,9 +208,12 @@ class PlatformMetadataCompiler {
                     EnvironmentConfigFiles.METADATA_CONFIG_FILES,
                 )
             val factory = KtPsiFactory(environment.project, markGenerated = false)
+            val declarations = mutableListOf<ParsedDeclaration>()
+            val scalarTypes = mutableListOf<PlatformScalarType>()
+            val scalarConstants = mutableListOf<PlatformScalarConstant>()
             sources
                 .sortedBy(PlatformSource::path)
-                .flatMap { source ->
+                .forEach { source ->
                     val content = strictUtf8(source.content.toByteArray(), source.path)
                     val file = factory.createFile(source.path.substringAfterLast('/'), content)
                     val errors = file.collectDescendantsOfType<PsiErrorElement>()
@@ -207,13 +221,116 @@ class PlatformMetadataCompiler {
                         "invalid Kotlin platform source ${source.path}: ${errors.joinToString { it.errorDescription }}"
                     }
                     val packageName = file.packageFqName.asString()
-                    file.declarations.flatMap { declaration ->
-                        collect(module, source.path, packageName, emptyList(), declaration)
+                    file.declarations.forEach { declaration ->
+                        declarations += collect(module, source.path, packageName, emptyList(), declaration)
+                        collectScalars(source.path, packageName, emptyList(), declaration)?.let { scalar ->
+                            scalarTypes += scalar.type
+                            scalarConstants += scalar.constants
+                        }
                     }
                 }
+            ParsedPlatform(declarations, scalarTypes, scalarConstants)
         } finally {
             Disposer.dispose(disposable)
         }
+    }
+
+    private fun collectScalars(
+        sourcePath: String,
+        packageName: String,
+        owners: List<String>,
+        declaration: KtDeclaration,
+    ): ScalarExtraction? {
+        val klass = declaration as? KtClass ?: return null
+        if (!klass.hasModifier(KtTokens.VALUE_KEYWORD)) return null
+        val name = requireNotNull(klass.name) { "value class must have a name" }
+        val symbol = (listOf(packageName).filter(String::isNotEmpty) + owners + name).joinToString(".")
+        val parameter =
+            klass.primaryConstructorParameters.singleOrNull()
+                ?: throw IllegalArgumentException("platform scalar type $symbol must have one constructor property")
+        require(parameter.hasValOrVar() && parameter.valOrVarKeyword?.node?.elementType == KtTokens.VAL_KEYWORD) {
+            "platform scalar type $symbol must have one immutable property"
+        }
+        val representation =
+            when (parameter.typeReference?.text?.canonicalType()) {
+                "Int", "kotlin.Int" -> PlatformScalarRepresentation.INT
+                "Boolean", "kotlin.Boolean" -> PlatformScalarRepresentation.BOOLEAN
+                "Char", "kotlin.Char" -> PlatformScalarRepresentation.CHAR
+                else -> throw IllegalArgumentException("platform scalar type $symbol must use Int, Boolean, or Char")
+            }
+        val companion = klass.declarations.filterIsInstance<KtObjectDeclaration>().singleOrNull(KtObjectDeclaration::isCompanion)
+        val constants =
+            companion?.declarations.orEmpty().filterIsInstance<KtProperty>().map { property ->
+                require(!property.isVar && property.getter == null) {
+                    "platform scalar constant $symbol.${property.name} must be an immutable initialized property"
+                }
+                require(property.typeReference?.text?.canonicalType() in setOf(name, symbol)) {
+                    "platform scalar constant $symbol.${property.name} must have type $symbol"
+                }
+                PlatformScalarConstant(
+                    "$symbol.${requireNotNull(property.name)}",
+                    symbol,
+                    scalarValue(symbol, representation, property),
+                )
+            }
+        return ScalarExtraction(
+            PlatformScalarType(
+                symbol,
+                representation,
+                sourcePath,
+                klass.declarationStartOffset(),
+                klass.textRange.endOffset,
+            ),
+            constants,
+        )
+    }
+
+    private fun scalarValue(
+        type: String,
+        representation: PlatformScalarRepresentation,
+        property: KtProperty,
+    ): PlatformScalarValue {
+        val call =
+            property.initializer as? KtCallExpression
+                ?: throw IllegalArgumentException("platform scalar constant $type.${property.name} must call its value class constructor")
+        require(call.calleeExpression?.text in setOf(type, type.substringAfterLast('.'))) {
+            "platform scalar constant $type.${property.name} must call $type"
+        }
+        val literal =
+            call.valueArguments.singleOrNull()?.getArgumentExpression() as? KtConstantExpression
+                ?: throw IllegalArgumentException("platform scalar constant $type.${property.name} must contain one literal")
+        return when (representation) {
+            PlatformScalarRepresentation.INT -> {
+                PlatformScalarValue.IntValue(parseIntLiteral(literal.text))
+            }
+
+            PlatformScalarRepresentation.BOOLEAN -> {
+                PlatformScalarValue.BooleanValue(
+                    when (literal.text) {
+                        "true" -> true
+                        "false" -> false
+                        else -> throw IllegalArgumentException("invalid Boolean scalar literal ${literal.text}")
+                    },
+                )
+            }
+
+            PlatformScalarRepresentation.CHAR -> {
+                val value = literal.text
+                require(value.length == 3 && value.first() == '\'' && value.last() == '\'') { "invalid Char scalar literal $value" }
+                PlatformScalarValue.CharValue(value[1])
+            }
+        }
+    }
+
+    private fun parseIntLiteral(text: String): Int {
+        val normalized = text.replace("_", "")
+        val negative = normalized.startsWith('-')
+        val unsigned = normalized.removePrefix("-")
+        val (radix, digits) = if (unsigned.startsWith("0x", ignoreCase = true)) 16 to unsigned.drop(2) else 10 to unsigned
+        val value = digits.toLong(radix)
+        val signed = if (negative) -value else value
+        require(signed in Int.MIN_VALUE..Int.MAX_VALUE) { "Int scalar literal is out of range: $text" }
+        return signed.toInt()
     }
 
     private fun collect(
@@ -331,6 +448,17 @@ class PlatformMetadataCompiler {
         val private: Boolean,
         val hasBody: Boolean,
         val libraryKind: PlatformLibraryDeclarationKind?,
+    )
+
+    private data class ParsedPlatform(
+        val declarations: List<ParsedDeclaration>,
+        val scalarTypes: List<PlatformScalarType>,
+        val scalarConstants: List<PlatformScalarConstant>,
+    )
+
+    private data class ScalarExtraction(
+        val type: PlatformScalarType,
+        val constants: List<PlatformScalarConstant>,
     )
 
     private companion object {

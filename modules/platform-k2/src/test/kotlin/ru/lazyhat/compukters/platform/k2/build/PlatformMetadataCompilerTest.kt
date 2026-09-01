@@ -23,6 +23,10 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
+import ru.lazyhat.compukters.platform.bundle.PlatformScalarConstant
+import ru.lazyhat.compukters.platform.bundle.PlatformScalarRepresentation
+import ru.lazyhat.compukters.platform.bundle.PlatformScalarType
+import ru.lazyhat.compukters.platform.bundle.PlatformScalarValue
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import kotlin.test.Test
@@ -112,6 +116,59 @@ class PlatformMetadataCompilerTest {
             ),
             result.declarations.map { it.symbol to it.signature },
         )
+    }
+
+    @Test
+    fun `value class scalar types and literal companion constants are derived from canonical sources`() {
+        val text =
+            """
+            package sample
+            value class Port(val value: Int) {
+                companion object {
+                    val MIN: Port = Port(0)
+                    val MAX: Port = Port(15)
+                }
+            }
+            """.trimIndent()
+        val result = compiler.compile(module, listOf(source("Port.kt", text)))
+
+        assertEquals(
+            listOf(
+                PlatformScalarType(
+                    "sample.Port",
+                    PlatformScalarRepresentation.INT,
+                    "Port.kt",
+                    text.indexOf("value class Port"),
+                    text.length,
+                ),
+            ),
+            result.scalarTypes,
+        )
+        assertEquals(
+            listOf(
+                PlatformScalarConstant("sample.Port.MAX", "sample.Port", PlatformScalarValue.IntValue(15)),
+                PlatformScalarConstant("sample.Port.MIN", "sample.Port", PlatformScalarValue.IntValue(0)),
+            ),
+            result.scalarConstants,
+        )
+    }
+
+    @Test
+    fun `mutable and computed value class constants are not scalar metadata`() {
+        val text =
+            """
+            package sample
+            value class Port(val value: Int) {
+                companion object {
+                    var mutable: Port = Port(1)
+                    val computed: Port get() = Port(2)
+                }
+            }
+            """.trimIndent()
+
+        assertFailsWith<IllegalArgumentException> {
+            compiler.compile(module, listOf(source("Port.kt", text)))
+        }
     }
 
     @Test
