@@ -30,13 +30,31 @@ plugins {
 
 dependencies {
     implementation(projects.compilerK2Engine)
-    implementation(projects.guestPlatform)
     implementation(projects.compilerClient)
     implementation(projects.compilerArtifact)
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlin.compiler)
     testImplementation(projects.ideCore)
     testImplementation(kotlin("test"))
+}
+
+val compuktersPlatformBundle = configurations.create("compuktersPlatformBundle") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+dependencies {
+    add(
+        compuktersPlatformBundle.name,
+        project(path = ":guest-platform", configuration = "compuktersPlatformBundle"),
+    )
+}
+
+tasks.processResources {
+    from(compuktersPlatformBundle) {
+        into("compukters-platform")
+        rename { "compukters-platform.cpb" }
+    }
 }
 
 application {
@@ -56,9 +74,11 @@ val workerRuntimeClasspath = configurations.create("workerRuntimeClasspath") {
 
 val workerPayloadDirectory = layout.buildDirectory.dir("worker-payload/content")
 val pinnedKotlinVersion = libs.versions.kotlin.asProvider().get()
+val platformBundleFile = compuktersPlatformBundle.elements.map { files -> files.single().asFile }
 
 val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPayload") {
     dependsOn(tasks.jar)
+    inputs.file(platformBundleFile)
     into(workerPayloadDirectory)
     duplicatesStrategy = DuplicatesStrategy.FAIL
     from(tasks.jar) {
@@ -104,7 +124,15 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
             payloadDigest.update(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(bytes.size).array())
             payloadDigest.update(bytes)
         }
-        val platformAbi = ByteArray(32).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        val platformBytes = Files.readAllBytes(platformBundleFile.get().toPath())
+        check(platformBytes.size >= 40) { "Compukters platform bundle is truncated" }
+        check(platformBytes.copyOfRange(0, 4).contentEquals("CPBF".encodeToByteArray())) {
+            "invalid Compukters platform bundle magic"
+        }
+        val platformAbi =
+            platformBytes
+                .copyOfRange(8, 40)
+                .joinToString("") { "%02x".format(it.toInt() and 0xff) }
         val identityProperties =
             sortedMapOf(
                 "artifactWriter" to "1",
@@ -231,15 +259,6 @@ tasks.test {
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     }
-}
-
-tasks.named<KotlinCompile>("compileTestKotlin") {
-    source(
-        rootProject.file("system/programs/edit.kt"),
-        rootProject.file("system/programs/kotlinc.kt"),
-        rootProject.file("system/programs/shell/Lexer.kt"),
-        rootProject.file("system/programs/shell.kt"),
-    )
 }
 
 val kotlinSubsetConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")

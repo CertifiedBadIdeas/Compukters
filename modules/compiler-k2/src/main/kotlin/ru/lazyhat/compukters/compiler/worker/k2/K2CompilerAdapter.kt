@@ -16,22 +16,31 @@
  * limitations under the License.
  */
 
+@file:Suppress("ktlint:standard:no-wildcard-imports")
+
 package ru.lazyhat.compukters.compiler.worker.k2
 
 import org.jetbrains.kotlin.cli.common.ExitCode
-import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
-import org.jetbrains.kotlin.config.Services
-import ru.lazyhat.compukters.compiler.k2.engine.CompilationBridge
+import org.jetbrains.kotlin.diagnostics.Severity
+import ru.lazyhat.compukters.compiler.artifact.link.LibraryModuleLinker
+import ru.lazyhat.compukters.compiler.artifact.model.*
+import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
+import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteLimits
+import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
+import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.CompilationSession
-import ru.lazyhat.compukters.compiler.k2.engine.CompukterCompilerPluginRegistrar
+import ru.lazyhat.compukters.compiler.k2.engine.CompuktersFir2IrPipeline
+import ru.lazyhat.compukters.compiler.k2.engine.PlatformFunctionLink
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalTrustedIntrinsics
+import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryFragmentCodec
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryBudget
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryUsage
-import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
-import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
-import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticCategory
-import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticSeverity
-import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
-import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.*
+import ru.lazyhat.compukters.platform.bundle.*
+import ru.lazyhat.compukters.platform.k2.CompuktersPlatformCheckers
+import ru.lazyhat.compukters.platform.k2.CompuktersPlatformDiagnosticCode
+import ru.lazyhat.compukters.platform.k2.build.CompuktersFirBuildEnvironment
+import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
@@ -40,8 +49,6 @@ import kotlin.io.path.writeBytes
 data class K2CompilerInputs(
     val temporaryRoot: Path,
     val workerJar: Path,
-    val standardLibrary: Path,
-    val jdkHome: Path,
     val expectedIdentity: WorkerIdentity,
 )
 
@@ -57,103 +64,260 @@ data class K2CompilationResult(
 
 class K2CompilerAdapter(
     private val inputs: K2CompilerInputs,
+    private val platform: PlatformBundle = loadPackagedPlatform(),
 ) {
+    init {
+        require(Files.isRegularFile(inputs.workerJar)) { "validated worker jar is missing" }
+        require(platform.identity.languageVersion == inputs.expectedIdentity.languageVersion) { "worker/platform language mismatch" }
+        require(platform.identity.platformAbi == PlatformBundleCodec.SUPPORTED_PLATFORM_ABI) { "unsupported Compukters platform ABI" }
+        require(
+            platform.identity.contentHash
+                .toByteArray()
+                .contentEquals(inputs.expectedIdentity.platformAbi.toByteArray()),
+        ) { "worker identity does not match the packaged Compukters platform" }
+    }
+
     fun compile(request: CompileRequest): K2CompilationResult {
         require(request.expectedIdentity == inputs.expectedIdentity) { "compile request identity does not match pinned worker" }
-        require(Files.isRegularFile(inputs.workerJar)) { "validated worker jar is missing" }
-        require(Files.isRegularFile(inputs.standardLibrary)) { "fixed standard library is missing" }
-        require(Files.isDirectory(inputs.jdkHome)) { "fixed JDK home is missing" }
-        val forbiddenSource =
-            request.sources.firstOrNull {
-                DEPENDENCY_ANNOTATION.containsMatchIn(
-                    it.content.toByteArray().decodeToString(),
-                )
+        val diagnostics = mutableListOf<WorkerDiagnostic>()
+        request.sources.forEach { source ->
+            val text = source.content.toByteArray().decodeToString(throwOnInvalidSequence = true)
+            if (DEPENDENCY_ANNOTATION.containsMatchIn(text)) {
+                diagnostics += targetDiagnostic(source.path, "script dependency refinement is unsupported")
             }
-        if (forbiddenSource != null) {
-            return K2CompilationResult(
-                ExitCode.COMPILATION_ERROR,
-                listOf(
+            CompuktersPlatformCheckers.checkGuestSource(text).forEach { diagnostic ->
+                diagnostics +=
                     WorkerDiagnostic(
                         DiagnosticSeverity.ERROR,
                         DiagnosticCategory.TARGET,
-                        null,
-                        "script dependency refinement is unsupported",
-                        forbiddenSource.path,
-                        0u,
-                        0u,
-                    ),
-                ),
-                false,
-                null,
-                true,
-            )
-        }
-        val temporaryBudget = TemporaryBudget(inputs.temporaryRoot, request.limits)
-        val trustedApis =
-            CORE_SOURCE_BUNDLES.map { bundle ->
-                bundle to loadTrustedApi(bundle)
+                        diagnostic.code.name,
+                        when (diagnostic.code) {
+                            CompuktersPlatformDiagnosticCode.FOREIGN_PLATFORM_REFERENCE -> {
+                                "foreign platform references are unsupported"
+                            }
+
+                            CompuktersPlatformDiagnosticCode.JVM_INLINE -> {
+                                "@JvmInline is not part of the Compukters platform"
+                            }
+
+                            CompuktersPlatformDiagnosticCode.GUEST_EXTERNAL_DECLARATION -> {
+                                "Guest external declarations are unsupported"
+                            }
+                        },
+                        source.path,
+                        diagnostic.startUtf16.toUInt(),
+                        diagnostic.endUtf16.toUInt(),
+                    )
             }
-        temporaryBudget.requireCapacity(
-            sourceFootprint(
-                request,
-                trustedApis.sumOf { (_, bytes) -> bytes.size },
-                trustedApis.size,
-            ),
-        )
-        return temporaryBudget.useRequestDirectory { requestRoot ->
-            val sourceRoot = requestRoot.resolve("source").toAbsolutePath().normalize()
-            val trustedRoot = requestRoot.resolve("trusted").toAbsolutePath().normalize()
-            val output = requestRoot.resolve("output").toAbsolutePath().normalize()
+        }
+        if (diagnostics.isNotEmpty()) return failure(diagnostics, reachedIr = false)
+        val selected = selectModules(request)
+        val libraries = loadLibraries(selected)
+        val budget = TemporaryBudget(inputs.temporaryRoot, request.limits)
+        budget.requireCapacity(sourceFootprint(request))
+        return budget.useRequestDirectory { requestRoot ->
+            val sourceRoot =
+                requestRoot
+                    .resolve("source")
+                    .toAbsolutePath()
+                    .normalize()
+                    .also(Path::createDirectories)
+            request.sources.forEach { source ->
+                val physical = sourceRoot.resolve(source.path.value).normalize()
+                require(physical.startsWith(sourceRoot)) { "source path escapes request tree" }
+                physical.parent.createDirectories()
+                physical.writeBytes(source.content.toByteArray())
+            }
+            val platformSources =
+                request.sources.map { source ->
+                    PlatformSource(source.path.value, ImmutableBytes.of(source.content.toByteArray()))
+                }
             var reachedIr = false
             var artifact: BinaryValue? = null
-            sourceRoot.createDirectories()
-            val physicalSources =
-                request.sources.map { source ->
-                    val physical = sourceRoot.resolve(source.path.value).normalize()
-                    require(physical.startsWith(sourceRoot)) { "source path escapes request tree" }
-                    physical.parent.createDirectories()
-                    physical.writeBytes(source.content.toByteArray())
-                    physical to DiagnosticSource(source.content.toByteArray().decodeToString(), source.path)
+            val sourcePaths =
+                request.sources.associate { source ->
+                    Path.of(source.path.value).fileName.toString() to source.path
                 }
-            val trustedApiSources =
-                trustedApis.map { (bundle, bytes) ->
-                    val source = trustedRoot.resolve(bundle.fileName).normalize()
-                    require(source.startsWith(trustedRoot)) { "trusted API path escapes request tree" }
-                    source.parent.createDirectories()
-                    source.writeBytes(bytes)
-                    bundle to source
+            CompuktersFirBuildEnvironment.create().use { environment ->
+                val output =
+                    environment.compileGuest(
+                        PlatformModuleId("guest", "application"),
+                        platformSources,
+                        selected,
+                    )
+                output.diagnostics.diagnosticsByFile.forEach { (file, fileDiagnostics) ->
+                    val path = file?.name?.let(sourcePaths::get)
+                    fileDiagnostics.forEach { diagnostic ->
+                        diagnostics +=
+                            WorkerDiagnostic(
+                                when (diagnostic.severity) {
+                                    Severity.ERROR -> DiagnosticSeverity.ERROR
+                                    Severity.INFO -> DiagnosticSeverity.INFO
+                                    else -> DiagnosticSeverity.WARNING
+                                },
+                                if (diagnostic.factoryName.contains("SYNTAX") || diagnostic.renderMessage().contains("Expecting")) {
+                                    DiagnosticCategory.SYNTAX
+                                } else {
+                                    DiagnosticCategory.TYPE
+                                },
+                                diagnostic.factoryName,
+                                diagnostic.renderMessage(),
+                                path,
+                                diagnostic.firstRange.startOffset.toUInt(),
+                                diagnostic.firstRange.endOffset.toUInt(),
+                            )
+                    }
                 }
-            val collector = CompilerDiagnosticCollector(physicalSources.toMap(), request.limits)
-            val arguments = fixedArguments(physicalSources.map { it.first } + trustedApiSources.map { (_, source) -> source }, output)
-            val exitCode =
-                CompilationBridge.withSession(
-                    CompilationSession(
-                        irSink = { _, _ -> reachedIr = true },
-                        artifactSink = { artifact = it },
-                        diagnosticSink = collector::report,
-                        sourcePaths =
-                            physicalSources.associate { (physical, source) ->
-                                physical.toString() to source.virtualPath
-                            },
-                        trustedApiSourceIdentities =
-                            trustedApiSources.associate { (bundle, source) -> source.toString() to bundle.identity },
-                        trustedStandardLibraryIdentity = KOTLIN_STDLIB_BUNDLE_ID,
-                        limits = request.limits,
-                    ),
-                ) {
-                    IrOnlyJvmCliPipeline().execute(arguments, Services.EMPTY, collector)
+                if (!output.diagnostics.hasErrors) {
+                    val session =
+                        CompilationSession(
+                            irSink = { _, _ -> reachedIr = true },
+                            diagnosticSink = diagnostics::add,
+                            sourcePaths = sourcePaths,
+                            canonicalIntrinsicRegistry = CanonicalTrustedIntrinsics.registry,
+                            selectedPlatformModules = selected.mapTo(mutableSetOf(), PlatformModule::id),
+                            platformFunctions = libraries.functions,
+                            limits = request.limits,
+                        )
+                    CompuktersFir2IrPipeline.lowerGuest(output, session)?.let { lowered ->
+                        val linked = linkLibraries(lowered, libraries.artifacts)
+                        when (
+                            val result =
+                                ArtifactWriter.write(
+                                    linked,
+                                    ArtifactWriteLimits(
+                                        artifactBytes = request.limits.artifactBytes,
+                                        diagnostics = request.limits.diagnostics,
+                                    ),
+                                )
+                        ) {
+                            is ArtifactWriteResult.Success -> {
+                                artifact = BinaryValue.of(result.bytes)
+                            }
+
+                            is ArtifactWriteResult.Failure -> {
+                                result.errors.forEach { error ->
+                                    diagnostics +=
+                                        WorkerDiagnostic(
+                                            DiagnosticSeverity.ERROR,
+                                            DiagnosticCategory.INTERNAL,
+                                            "ARTIFACT_WRITE_${error.code}",
+                                            "artifact writer rejected lowered IR: ${error.detail}",
+                                            null,
+                                            null,
+                                            null,
+                                        )
+                                }
+                            }
+                        }
+                    }
                 }
-            val failed = collector.hasErrors() || exitCode != ExitCode.OK
-            K2CompilationResult(exitCode, collector.diagnostics, reachedIr, artifact?.takeIf { !failed }, failed)
+            }
+            val failed = diagnostics.any { it.severity == DiagnosticSeverity.ERROR }
+            K2CompilationResult(
+                if (failed) ExitCode.COMPILATION_ERROR else ExitCode.OK,
+                diagnostics,
+                reachedIr,
+                artifact?.takeIf { !failed },
+                failed,
+            )
         }
     }
 
-    private fun sourceFootprint(
-        request: CompileRequest,
-        trustedApiBytes: Int,
-        trustedApiFiles: Int,
-    ): TemporaryUsage {
-        val directories = mutableSetOf("source", "trusted")
+    private fun selectModules(request: CompileRequest): List<PlatformModule> {
+        val byName = platform.modules.associateBy { it.id.toString() }
+        val requested =
+            request.platformModules.map { identity ->
+                val module = requireNotNull(byName[identity.name]) { "unknown platform module ${identity.name}" }
+                require(PlatformBundleCodec.moduleContentHash(module).toByteArray().contentEquals(identity.hash.toByteArray())) {
+                    "platform module ${identity.name} content hash mismatch"
+                }
+                module
+            }
+        val resolved = PlatformModuleGraph(platform).resolve(requested.mapTo(mutableSetOf(), PlatformModule::id)).modules
+        require(resolved.map(PlatformModule::id).toSet() == requested.map(PlatformModule::id).toSet()) {
+            "compile request platform module closure is incomplete"
+        }
+        return listOf(platform.builtins) + resolved
+    }
+
+    private fun loadLibraries(modules: List<PlatformModule>): LoadedLibraries {
+        val artifacts =
+            modules.mapNotNull { module ->
+                module.libraryFragment?.let { fragmentBytes ->
+                    val fragment = PlatformLibraryFragmentCodec.decode(fragmentBytes)
+                    require(fragment.module == module.id) { "platform library fragment identity mismatch" }
+                    module to ArtifactReader.read(fragment.artifact.toByteArray())
+                }
+            }
+        val functions =
+            artifacts.flatMap { (platformModule, artifact) ->
+                val library =
+                    artifact.modules.single { module ->
+                        module.kind == ModuleKind.LIBRARY && module.exports.any { it.kind == SymbolKind.FUNCTION }
+                    }
+                val moduleHash = ArtifactWriter.moduleSemanticHash(library)
+                platformModule.declarations
+                    .filter { declaration -> !declaration.trustedExternal && declaration.signature.startsWith("fun(") }
+                    .map { declaration ->
+                        val simpleName = declaration.symbol.substringAfterLast('.')
+                        val candidates =
+                            library.exports.filter { export ->
+                                export.kind == SymbolKind.FUNCTION &&
+                                    library.strings[export.name.value.toInt()].toString().let { name ->
+                                        name == simpleName || name.startsWith("$simpleName#")
+                                    }
+                            }
+                        val matching =
+                            candidates.filter { export ->
+                                library.functionSignature(export.signature).shortTypeNames() == declaration.signature.shortTypeNames()
+                            }
+                        val exactName = candidates.filter { export -> library.strings[export.name.value.toInt()].toString() == simpleName }
+                        val sourceShape =
+                            declaration.signature
+                                .removePrefix("fun")
+                                .replaceFirst(":", "->")
+                                .shortTypeNames()
+                        val mangled =
+                            candidates.filter { export ->
+                                library.strings[export.name.value.toInt()]
+                                    .toString()
+                                    .substringAfter('#', "")
+                                    .shortTypeNames() ==
+                                    sourceShape
+                            }
+                        val export =
+                            matching.singleOrNull() ?: mangled.singleOrNull() ?: exactName.singleOrNull() ?: candidates.singleOrNull()
+                                ?: error(
+                                    "cannot uniquely match ${declaration.symbol} ${declaration.signature} to a platform export: " +
+                                        candidates.joinToString { library.strings[it.name.value.toInt()].toString() },
+                                )
+                        PlatformFunctionLink(
+                            declaration.symbol,
+                            declaration.signature,
+                            library.strings[export.name.value.toInt()].toString(),
+                            moduleHash,
+                        )
+                    }
+            }
+        return LoadedLibraries(functions, artifacts.map(Pair<PlatformModule, Artifact>::second))
+    }
+
+    private fun linkLibraries(
+        application: Artifact,
+        libraryArtifacts: List<Artifact>,
+    ): Artifact {
+        val seen = application.modules.mapTo(mutableSetOf()) { ArtifactWriter.moduleSemanticHash(it).toHex() }
+        val libraries = linkedMapOf<String, Module>()
+        libraryArtifacts.flatMap(Artifact::modules).filter { it.kind == ModuleKind.LIBRARY }.forEach { module ->
+            val hash = ArtifactWriter.moduleSemanticHash(module).toHex()
+            if (seen.add(hash)) libraries[hash] = module
+        }
+        return LibraryModuleLinker.link(application, libraries)
+    }
+
+    private fun sourceFootprint(request: CompileRequest): TemporaryUsage {
+        val directories = mutableSetOf("source")
         request.sources.forEach { source ->
             var parent = Path.of(source.path.value).parent
             while (parent != null) {
@@ -161,79 +325,81 @@ class K2CompilerAdapter(
                 parent = parent.parent
             }
         }
-        return TemporaryUsage(
-            files = Math.addExact(Math.addExact(request.sources.size, trustedApiFiles), directories.size),
-            bytes = Math.addExact(request.sources.sumOf { it.content.size.toLong() }, trustedApiBytes.toLong()),
-        )
+        return TemporaryUsage(request.sources.size + directories.size, request.sources.sumOf { it.content.size.toLong() })
     }
 
-    private fun loadTrustedApi(bundle: TrustedApiSourceBundle): ByteArray =
-        checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream(bundle.resource)) {
-            "fixed trusted API source ${bundle.resource} is missing from the worker payload"
-        }.use { it.readBytes() }
+    private fun failure(
+        diagnostics: List<WorkerDiagnostic>,
+        reachedIr: Boolean,
+    ) = K2CompilationResult(ExitCode.COMPILATION_ERROR, diagnostics, reachedIr, null, true)
 
-    private fun fixedArguments(
-        sources: List<Path>,
-        output: Path,
-    ) = K2JVMCompilerArguments().apply {
-        freeArgs = sources.map(Path::toString)
-        destination = output.toString()
-        moduleName = "compukter-project"
-        languageVersion = "2.4"
-        apiVersion = "2.4"
-        jvmTarget = "17"
-        classpath = inputs.standardLibrary.toString()
-        jdkHome = inputs.jdkHome.toString()
-        noStdlib = true
-        noReflect = true
-        pluginClasspaths = arrayOf(engineJar().toString())
-    }
-
-    private fun engineJar(): Path =
-        Path.of(checkNotNull(CompukterCompilerPluginRegistrar::class.java.protectionDomain.codeSource).location.toURI())
+    private fun targetDiagnostic(
+        path: VirtualSourcePath,
+        message: String,
+    ) = WorkerDiagnostic(DiagnosticSeverity.ERROR, DiagnosticCategory.TARGET, null, message, path, 0u, 0u)
 
     internal companion object {
         val DEPENDENCY_ANNOTATION = Regex("(?m)^\\s*@file:(DependsOn|Repository)\\b")
-        const val KOTLIN_STDLIB_BUNDLE_ID = "kotlin-stdlib@2.4.10"
-        private val CORE_SOURCE_BUNDLES =
-            listOf(
-                TrustedApiSourceBundle(
-                    "compukter.stdio-api@1",
-                    "/compukters-platform/sources/libraries/std-terminal/compukter/io/Stderr.kt",
-                    "stdio.kt",
-                ),
-                TrustedApiSourceBundle(
-                    "compukter.terminal-api@1",
-                    "/compukters-platform/sources/libraries/std-terminal/compukter/terminal/Terminal.kt",
-                    "terminal.kt",
-                ),
-                TrustedApiSourceBundle(
-                    "compukter.process-api@2",
-                    "/compukters-platform/sources/libraries/compukter-process/compukter/process/Process.kt",
-                    "process.kt",
-                ),
-                TrustedApiSourceBundle(
-                    "compukter.filesystem-api@1",
-                    "/compukters-platform/sources/libraries/std-filesystem/compukter/filesystem/FileSystem.kt",
-                    "filesystem.kt",
-                ),
-                TrustedApiSourceBundle(
-                    "compukter.compiler-api@1",
-                    "/compukters-platform/sources/libraries/compukter-compiler/compukter/compiler/Compiler.kt",
-                    "compiler.kt",
-                ),
-                TrustedApiSourceBundle(
-                    "compukter.redstone-api@1",
-                    "/compukters-platform/sources/libraries/compukter-redstone/compukter/redstone/Redstone.kt",
-                    "redstone.kt",
-                ),
-            )
-        val trustedApiSourceResources: List<String> = CORE_SOURCE_BUNDLES.map(TrustedApiSourceBundle::resource)
+        private const val PLATFORM_RESOURCE = "/compukters-platform/compukters-platform.cpb"
+
+        fun loadPackagedPlatform(): PlatformBundle =
+            checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream(PLATFORM_RESOURCE)) {
+                "packaged Compukters platform is missing"
+            }.use { PlatformBundleCodec.decode(it.readBytes()) }
     }
 }
 
-private data class TrustedApiSourceBundle(
-    val identity: String,
-    val resource: String,
-    val fileName: String,
+private data class LoadedLibraries(
+    val functions: List<PlatformFunctionLink>,
+    val artifacts: List<Artifact>,
 )
+
+private fun Module.functionSignature(reference: TypeRef): String {
+    val type = types[(reference as TypeRef.Local).id.value.toInt()] as NominalType.Function
+    return "fun(${type.parameters.joinToString(",", transform = ::canonicalType)}):${canonicalType(type.result)}"
+}
+
+private fun Module.canonicalType(type: ValueType): String =
+    when (type) {
+        ValueType.Unit -> {
+            "kotlin.Unit"
+        }
+
+        ValueType.I32 -> {
+            "kotlin.Int"
+        }
+
+        ValueType.I64 -> {
+            "kotlin.Long"
+        }
+
+        ValueType.F32 -> {
+            "kotlin.Float"
+        }
+
+        ValueType.F64 -> {
+            "kotlin.Double"
+        }
+
+        ValueType.Bool -> {
+            "kotlin.Boolean"
+        }
+
+        ValueType.Char -> {
+            "kotlin.Char"
+        }
+
+        is ValueType.Ref -> {
+            val name =
+                when (val reference = type.type) {
+                    is TypeRef.Local -> strings[types[reference.id.value.toInt()].name.value.toInt()].toString()
+                    is TypeRef.Imported -> strings[imports[reference.id.value.toInt()].targetName.value.toInt()].toString()
+                }
+            name + if (type.nullable) "?" else ""
+        }
+    }
+
+private fun ByteArray.toHex(): String = joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+
+private fun String.shortTypeNames(): String =
+    Regex("[A-Za-z_][A-Za-z0-9_.]*").replace(this) { match -> match.value.substringAfterLast('.') }

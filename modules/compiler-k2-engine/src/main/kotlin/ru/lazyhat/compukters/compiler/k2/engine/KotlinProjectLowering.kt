@@ -54,8 +54,8 @@ import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
 import org.jetbrains.kotlin.ir.symbols.IrEnumEntrySymbol
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
-import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
+import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
@@ -398,10 +398,11 @@ internal object KotlinProjectLowering {
                 .filterNot { includeTrustedPlatformBodies && it.kind == ClassKind.OBJECT }
                 .filterNot {
                     !includeTrustedPlatformBodies &&
-                        (session.trustedApiIdentity(it.file.fileEntry.name) != null ||
-                            session.trustedPlatformModule(it.file.fileEntry.name) != null)
-                }
-                .sortedBy { it.fqNameWhenAvailable?.asString().orEmpty() }
+                        (
+                            session.trustedApiIdentity(it.file.fileEntry.name) != null ||
+                                session.trustedPlatformModule(it.file.fileEntry.name) != null
+                        )
+                }.sortedBy { it.fqNameWhenAvailable?.asString().orEmpty() }
         val inlineValueClasses = InlineValueClassRegistry.build(classes, pluginContext)
         val playerFunctions =
             functions
@@ -415,8 +416,10 @@ internal object KotlinProjectLowering {
                 }.filter { function -> function.body != null }
                 .filterNot { function ->
                     !includeTrustedPlatformBodies &&
-                        (session.trustedApiIdentity(function.file.fileEntry.name) != null ||
-                            session.trustedPlatformModule(function.file.fileEntry.name) != null)
+                        (
+                            session.trustedApiIdentity(function.file.fileEntry.name) != null ||
+                                session.trustedPlatformModule(function.file.fileEntry.name) != null
+                        )
                 }
         val processFacadeNames = setOf("compukter.process.Process.run", "compukter.process.Process.exit")
         val usesProcessFacade =
@@ -578,6 +581,7 @@ internal object KotlinProjectLowering {
                         { it.name.asString() },
                     ),
                 )
+        val externalFunctions = linkedPlatformFunctions(userFunctions, session)
         require(userFunctions.firstOrNull() === entry)
         val userClasses =
             collectGuestClasses(
@@ -629,8 +633,10 @@ internal object KotlinProjectLowering {
         val metadataValues =
             (
                 listOf("app") +
+                    runtimeTypeNames +
                     listOfNotNull("kotlin.Array".takeIf { usesStringArray }) +
                     capabilityIdentities.flatMap { listOf(it.namespace, it.name) } +
+                    externalFunctions.values.map(ExternalFunctionTarget::exportName) +
                     userFunctions.map { requireNotNull(functionArtifactNames[it.symbol]) } +
                     userClasses.map { it.fqNameWhenAvailable?.asString() ?: it.name.asString() } +
                     userClasses.flatMap { declaration ->
@@ -705,6 +711,13 @@ internal object KotlinProjectLowering {
             userClasses.withIndex().associate { (index, declaration) ->
                 declaration.symbol to TypeId.of((userFunctions.size + constructorClasses.size + index).toUInt())
             }
+        val externalFunctionTypeBase = userFunctions.size + constructorClasses.size + userClasses.size + if (usesStringArray) 1 else 0
+        val externalFunctionImports =
+            externalFunctions.entries
+                .sortedBy { (_, target) -> target.sortKey }
+                .mapIndexed { index, (symbol, target) ->
+                    symbol to target.copy(importId = ImportId.of((runtimeTypeNames.size + index).toUInt()))
+                }.toMap()
         val stringArrayType =
             ValueType.Ref(
                 nullable = false,
@@ -770,6 +783,7 @@ internal object KotlinProjectLowering {
                         classLayouts.flatMap { layout -> layout.enumEntries }.associateBy { it.declaration.symbol },
                     entryEnumInitializers =
                         if (function === entry) classLayouts.flatMap { it.enumEntries } else emptyList(),
+                    externalFunctions = externalFunctionImports,
                 )
             val compiled = compiler.compile()
             blocks += compiled.blocks
@@ -948,6 +962,42 @@ internal object KotlinProjectLowering {
                         )
                     }
             }
+        val externalFunctionTypes =
+            externalFunctionImports.entries
+                .sortedBy { (_, target) -> target.sortKey }
+                .map { (symbol, target) ->
+                    val function = symbol.owner
+                    NominalType.Function(
+                        name = requireNotNull(metadataIds[target.exportName]),
+                        suspending = function.isSuspend,
+                        result =
+                            valueType(
+                                function.returnType,
+                                pluginContext,
+                                guestTypes,
+                                stringType,
+                                charArrayType,
+                                stringArrayType,
+                                classTypeIds,
+                                inlineValueClasses,
+                                function,
+                            ),
+                        parameters =
+                            loweredParameters(function, session).map { parameter ->
+                                valueType(
+                                    parameter.type,
+                                    pluginContext,
+                                    guestTypes,
+                                    stringType,
+                                    charArrayType,
+                                    stringArrayType,
+                                    classTypeIds,
+                                    inlineValueClasses,
+                                    parameter,
+                                )
+                            },
+                    )
+                }
         val app =
             Module(
                 name = requireNotNull(metadataIds["app"]),
@@ -967,10 +1017,24 @@ internal object KotlinProjectLowering {
                             )
                         } else {
                             emptyList()
-                        },
+                        } + externalFunctionTypes,
                 constants = constants,
                 fields = artifactFields,
-                imports = runtimeTypeNames.indices.map { index -> runtimeTypeImport(index, libraryHash) },
+                imports =
+                    runtimeTypeNames.indices.map { index ->
+                        runtimeTypeImport(index, requireNotNull(metadataIds[runtimeTypeNames[index]]), libraryHash)
+                    } +
+                        externalFunctionImports.entries
+                            .sortedBy { (_, target) -> target.sortKey }
+                            .mapIndexed { index, (_, target) ->
+                                Import(
+                                    kind = SymbolKind.FUNCTION,
+                                    targetModule = ModuleId.of((2 + index).toUInt()),
+                                    targetName = requireNotNull(metadataIds[target.exportName]),
+                                    expectedSignature = TypeRef.Local(TypeId.of((externalFunctionTypeBase + index).toUInt())),
+                                    targetModuleHash = target.moduleHash,
+                                )
+                            },
                 functions = loweredFunctions,
                 blocks = blocks,
             )
@@ -1306,13 +1370,14 @@ internal object KotlinProjectLowering {
 
     private fun runtimeTypeImport(
         index: Int,
+        targetName: StringId,
         libraryHash: ByteArray,
     ): Import {
         val id = index.toUInt()
         return Import(
             kind = SymbolKind.TYPE,
             targetModule = ModuleId.of(1u),
-            targetName = StringId.of(id),
+            targetName = targetName,
             expectedSignature = TypeRef.Imported(ImportId.of(id)),
             targetModuleHash = libraryHash,
         )
@@ -1385,6 +1450,44 @@ private data class CompiledFunction(
     val blocks: List<Block>,
 )
 
+private data class ExternalFunctionTarget(
+    val exportName: String,
+    val moduleHash: ByteArray,
+    val importId: ImportId = ImportId.of(0u),
+) {
+    val sortKey: String get() = "${moduleHash.joinToString("") { "%02x".format(it) }}:$exportName"
+}
+
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+private fun linkedPlatformFunctions(
+    functions: List<IrSimpleFunction>,
+    session: CompilationSession,
+): Map<IrSimpleFunctionSymbol, ExternalFunctionTarget> {
+    val result = linkedMapOf<IrSimpleFunctionSymbol, ExternalFunctionTarget>()
+    val visitor =
+        object : IrVisitorVoid() {
+            override fun visitElement(element: IrElement) {
+                element.acceptChildren(this, null)
+            }
+
+            override fun visitCall(expression: IrCall) {
+                val target = expression.symbol.owner
+                val symbol = target.fqNameWhenAvailable?.asString()
+                if (symbol != null) {
+                    val signature = target.canonicalPlatformSignature()
+                    session.platformFunctions
+                        .singleOrNull { link -> link.symbol == symbol && link.signature == signature }
+                        ?.let { link ->
+                            result[target.symbol] = ExternalFunctionTarget(link.exportName, link.moduleHash.copyOf())
+                        }
+                }
+                super.visitCall(expression)
+            }
+        }
+    functions.forEach { it.accept(visitor, null) }
+    return result
+}
+
 private class FunctionCompiler(
     private val function: IrSimpleFunction,
     private val functionId: FunctionId,
@@ -1411,6 +1514,7 @@ private class FunctionCompiler(
     private val fieldsByGetter: Map<IrSimpleFunctionSymbol, GuestFieldLayout>,
     private val enumEntries: Map<IrEnumEntrySymbol, GuestEnumEntryLayout>,
     private val entryEnumInitializers: List<GuestEnumEntryLayout>,
+    private val externalFunctions: Map<IrSimpleFunctionSymbol, ExternalFunctionTarget>,
 ) {
     private val localTypes = mutableListOf<ValueType>()
     private val values = mutableMapOf<IrValueSymbol, RegisterId>()
@@ -1765,6 +1869,24 @@ private class FunctionCompiler(
                 emit(Instruction.CapabilityCallSync(destination, capability, intrinsic.operation, arguments))
             }
             if (intrinsic.terminal) emit(Instruction.Unreachable)
+            return (destination as? Destination.Register)?.id
+        }
+        externalFunctions[target.symbol]?.let { external ->
+            val argumentExpressions =
+                target.parameters
+                    .zip(call.arguments)
+                    .filter { (parameter, _) -> parameter.kind != IrParameterKind.DispatchReceiver }
+                    .map { (_, argument) -> requireNotNull(argument) }
+            val arguments = argumentExpressions.map(::compileExpression)
+            val destination = destinationFor(target.returnType, call)
+            if (target.isSuspend) {
+                val resume = createBlock()
+                emit(Instruction.CallSuspend(destination, FunctionRef.Imported(external.importId), arguments, blockId(resume)))
+                currentBlock = resume
+            } else {
+                emit(Instruction.Call(destination, FunctionRef.Imported(external.importId), arguments))
+            }
+            if (target.returnType.isNothing()) emit(Instruction.Unreachable)
             return (destination as? Destination.Register)?.id
         }
         compileCompareToPredicate(call, target.name.asString())?.let { return it }
@@ -2399,26 +2521,46 @@ private fun loweredParameters(
     function: IrSimpleFunction,
     session: CompilationSession,
 ) = if (
+    session.platformFunctions.any { link ->
+        link.symbol == function.fqNameWhenAvailable?.asString() && link.signature == function.canonicalPlatformSignature()
+    }
+) {
+    if ((function.parent as? IrClass)?.kind == ClassKind.OBJECT) {
+        function.parameters.filter { it.kind != IrParameterKind.DispatchReceiver }
+    } else {
+        function.parameters
+    }
+} else if (
     session.trustedPlatformModule(function.file.fileEntry.name) != null &&
     (function.parent as? IrClass)?.kind == ClassKind.OBJECT
 ) {
     function.parameters.filter { it.kind != IrParameterKind.DispatchReceiver }
-} else when (session.trustedApiIdentity(function.file.fileEntry.name)) {
-    TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID -> {
-        function.parameters.filter { it.kind == IrParameterKind.Regular }
-    }
-
-    TrustedIntrinsicRegistry.REDSTONE_BUNDLE_ID -> {
-        if ((function.parent as? IrClass)?.name?.asString() == "Redstone") {
+} else {
+    when (session.trustedApiIdentity(function.file.fileEntry.name)) {
+        TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID -> {
             function.parameters.filter { it.kind == IrParameterKind.Regular }
-        } else {
+        }
+
+        TrustedIntrinsicRegistry.REDSTONE_BUNDLE_ID -> {
+            if ((function.parent as? IrClass)?.name?.asString() == "Redstone") {
+                function.parameters.filter { it.kind == IrParameterKind.Regular }
+            } else {
+                function.parameters
+            }
+        }
+
+        else -> {
             function.parameters
         }
     }
+}
 
-    else -> {
-        function.parameters
-    }
+private fun IrSimpleFunction.canonicalPlatformSignature(): String {
+    val parameters =
+        parameters
+            .filter { it.kind == IrParameterKind.ExtensionReceiver || it.kind == IrParameterKind.Regular }
+            .joinToString(",") { it.type.canonicalPlatformType() }
+    return "fun($parameters):${returnType.canonicalPlatformType()}"
 }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -2494,6 +2636,36 @@ private fun resolveTrustedIntrinsic(
     charType: IrType,
     inlineValueClasses: InlineValueClassRegistry,
 ): TrustedIntrinsic? {
+    val fqName = function.fqNameWhenAvailable?.asString()
+    val parameterTypes =
+        function.parameters
+            .filter { it.kind == IrParameterKind.ExtensionReceiver || it.kind == IrParameterKind.Regular }
+            .joinToString(",") { it.type.canonicalPlatformType() }
+    val signature = "fun($parameterTypes):${function.returnType.canonicalPlatformType()}"
+    val canonicalHandler =
+        session.canonicalIntrinsicRegistry
+            ?.handlers
+            ?.entries
+            ?.singleOrNull { (key, _) ->
+                key.module in session.selectedPlatformModules &&
+                    key.callableId.asSingleFqName().asString() == fqName &&
+                    key.signature.value == signature
+            }?.value
+    if (canonicalHandler is CapabilityOperationHandler) {
+        val capability = canonicalHandler.requiredCapability
+        return TrustedIntrinsic.CapabilityOperation(
+            TrustedCapabilityIdentity(
+                capability.namespace,
+                capability.name,
+                capability.abiMajor.toUShort(),
+                0u.toUShort(),
+                capabilityOperationCount(capability.namespace, capability.name),
+            ),
+            canonicalHandler.operation,
+            if (canonicalHandler.blocking == IntrinsicBlockingMode.VM_TASK) BlockingMode.VM_TASK else BlockingMode.NONE,
+            canonicalHandler.terminal,
+        )
+    }
     var parent = function.parent
     while (parent !is IrFile) {
         parent = (parent as? IrDeclaration)?.parent ?: break
@@ -2579,7 +2751,9 @@ private fun resolveTrustedIntrinsic(
                 )
             }
 
-            else -> null
+            else -> {
+                null
+            }
         }
     }
     val identity =
@@ -2608,7 +2782,8 @@ private fun IrType.canonicalPlatformType(): String {
             else -> classifier.toString()
         }
     val arguments =
-        simple.arguments.mapNotNull { (it as? IrTypeProjection)?.type?.canonicalPlatformType() }
+        simple.arguments
+            .mapNotNull { (it as? IrTypeProjection)?.type?.canonicalPlatformType() }
             .takeIf(List<String>::isNotEmpty)
             ?.joinToString(prefix = "<", postfix = ">", separator = ",")
             .orEmpty()

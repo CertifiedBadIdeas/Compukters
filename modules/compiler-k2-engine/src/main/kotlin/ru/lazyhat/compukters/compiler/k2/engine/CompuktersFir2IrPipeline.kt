@@ -27,10 +27,11 @@ import org.jetbrains.kotlin.diagnostics.impl.DiagnosticsCollectorImpl
 import org.jetbrains.kotlin.fir.backend.Fir2IrConfiguration
 import org.jetbrains.kotlin.fir.backend.Fir2IrExtensions
 import org.jetbrains.kotlin.fir.backend.Fir2IrVisibilityConverter
-import org.jetbrains.kotlin.fir.pipeline.Fir2IrActualizedResult
 import org.jetbrains.kotlin.fir.pipeline.AllModulesFrontendOutput
+import org.jetbrains.kotlin.fir.pipeline.Fir2IrActualizedResult
 import org.jetbrains.kotlin.fir.pipeline.convertToIrAndActualize
 import org.jetbrains.kotlin.ir.types.IrTypeSystemContextImpl
+import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.platform.k2.build.CompuktersFirModuleOutput
 
 /** Converts resolved Compukters FIR through the common K2 FIR-to-IR implementation. */
@@ -55,5 +56,14 @@ object CompuktersFir2IrPipeline {
             specialAnnotationsProvider = null,
             extraActualDeclarationExtractorsInitializer = { emptyList() },
         )
+    }
+
+    fun lowerGuest(
+        output: CompuktersFirModuleOutput,
+        session: CompilationSession,
+    ): Artifact? {
+        val converted = convert(listOf(output))
+        session.irSink.accept(converted.irModuleFragment, converted.pluginContext)
+        return MinimalScriptLowering.lower(converted.irModuleFragment, converted.pluginContext, session)
     }
 }

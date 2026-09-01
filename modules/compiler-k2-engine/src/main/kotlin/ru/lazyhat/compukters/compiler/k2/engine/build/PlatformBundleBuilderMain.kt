@@ -18,12 +18,12 @@
 
 package ru.lazyhat.compukters.compiler.k2.engine.build
 
-import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
+import ru.lazyhat.compukters.compiler.k2.engine.CompuktersFir2IrPipeline
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalTrustedIntrinsics
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicContract
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicRegistry
 import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryCompiler
-import ru.lazyhat.compukters.compiler.k2.engine.CompuktersFir2IrPipeline
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
@@ -74,12 +74,13 @@ class PlatformBundleBuilder(
         val modules = linkedMapOf<PlatformModuleId, PlatformModule>()
         val firOutputs = linkedMapOf<PlatformModuleId, CompuktersFirModuleOutput>()
         val metadataByModule =
-            ordered.associate { descriptorModule ->
-                val sources = sourceByModule.getValue(descriptorModule.id)
-                val metadata = metadataCompiler.compile(descriptorModule.id, sources)
-                PlatformMetadataCodec.validateAgainstSources(PlatformMetadataCodec.decode(metadata.metadata), sources)
-                descriptorModule.id to metadata
-            }
+            ordered
+                .associate { descriptorModule ->
+                    val sources = sourceByModule.getValue(descriptorModule.id)
+                    val metadata = metadataCompiler.compile(descriptorModule.id, sources)
+                    PlatformMetadataCodec.validateAgainstSources(PlatformMetadataCodec.decode(metadata.metadata), sources)
+                    descriptorModule.id to metadata
+                }.toMutableMap()
         CompuktersFirBuildEnvironment.create().use { fir ->
             ordered.forEach { descriptorModule ->
                 val sources = sourceByModule.getValue(descriptorModule.id)
@@ -92,9 +93,18 @@ class PlatformBundleBuilder(
                             diagnostic.renderMessage() == "Modifier 'external' is not applicable to 'constructor'."
                     }
                 require(rejectedDiagnostics.isEmpty()) {
-                    "Compukters FIR rejected ${descriptorModule.id}: ${rejectedDiagnostics.joinToString { "${it.factoryName}@${it.firstRange}: ${it.renderMessage()}" }}"
+                    "Compukters FIR rejected ${descriptorModule.id}: ${rejectedDiagnostics.joinToString {
+                        "${it.factoryName}@${it.firstRange}: ${it.renderMessage()}"
+                    }}"
                 }
                 firOutputs[descriptorModule.id] = firOutput
+            }
+            ordered.forEach { descriptorModule ->
+                metadataByModule[descriptorModule.id] =
+                    metadataCompiler.attachResolvedMetadata(
+                        metadataByModule.getValue(descriptorModule.id),
+                        firOutputs.getValue(descriptorModule.id),
+                    )
             }
             val ir =
                 metadataByModule.values
@@ -182,6 +192,7 @@ private data class PlatformSourceCatalog(
     fun transitiveDependencies(module: PlatformModuleId): List<PlatformModuleId> {
         val byId = modules.associateBy(PlatformSourceModule::id)
         val resolved = linkedSetOf<PlatformModuleId>()
+
         fun visit(id: PlatformModuleId) {
             byId.getValue(id).dependencies.sorted().forEach { dependency ->
                 visit(dependency)

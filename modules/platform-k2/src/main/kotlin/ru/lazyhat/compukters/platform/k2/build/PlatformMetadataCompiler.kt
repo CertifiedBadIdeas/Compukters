@@ -20,11 +20,14 @@ package ru.lazyhat.compukters.platform.k2.build
 
 import com.intellij.openapi.util.Disposer
 import com.intellij.psi.PsiErrorElement
+import org.jetbrains.kotlin.backend.common.serialization.metadata.serializeKlibHeader
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
+import org.jetbrains.kotlin.fir.pipeline.Fir2KlibMetadataSerializer
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
@@ -74,7 +77,25 @@ data class DecodedPlatformMetadata(
     val module: PlatformModuleId,
     val declarations: List<PlatformDeclaration>,
     val exportedSymbols: List<String>,
+    val moduleHeader: ByteArray = ByteArray(0),
+    val fragments: List<PlatformMetadataFragment> = emptyList(),
 )
+
+class PlatformMetadataFragment(
+    val packageName: String,
+    val partName: String,
+    bytes: ByteArray,
+) {
+    val bytes: ByteArray = bytes.copyOf()
+
+    override fun equals(other: Any?): Boolean =
+        other is PlatformMetadataFragment &&
+            packageName == other.packageName &&
+            partName == other.partName &&
+            bytes.contentEquals(other.bytes)
+
+    override fun hashCode(): Int = 31 * (31 * packageName.hashCode() + partName.hashCode()) + bytes.contentHashCode()
+}
 
 /**
  * Compiles canonical declarations with Kotlin's common parser under the Compukters target identity.
@@ -121,6 +142,41 @@ class PlatformMetadataCompiler {
                 )
             },
         )
+    }
+
+    fun attachResolvedMetadata(
+        parsed: CompiledPlatformMetadata,
+        output: CompuktersFirModuleOutput,
+    ): CompiledPlatformMetadata {
+        val decoded = PlatformMetadataCodec.decode(parsed.metadata)
+        val configuration =
+            CompilerConfiguration().apply {
+                put(CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS, LanguageVersionSettingsImpl.DEFAULT)
+            }
+        val serializer = Fir2KlibMetadataSerializer(configuration, listOf(output.frontendOutput), null, false)
+        val fragments = mutableListOf<PlatformMetadataFragment>()
+        serializer.forEachFile { index, _, file, _, packageName ->
+            fragments +=
+                PlatformMetadataFragment(
+                    packageName.asString(),
+                    index.toString().padStart(8, '0'),
+                    serializer.serializeSingleFileMetadata(file).toByteArray(),
+                )
+        }
+        val ordered = fragments.sortedWith(compareBy(PlatformMetadataFragment::packageName, PlatformMetadataFragment::partName))
+        val packageNames = ordered.map(PlatformMetadataFragment::packageName).distinct()
+        val resolved =
+            decoded.copy(
+                moduleHeader =
+                    serializeKlibHeader(
+                        LanguageVersionSettingsImpl.DEFAULT,
+                        decoded.module.toString(),
+                        packageNames,
+                        emptyList(),
+                    ).toByteArray(),
+                fragments = ordered,
+            )
+        return parsed.copy(metadata = PlatformMetadataCodec.encode(resolved))
     }
 
     private fun parse(
@@ -190,8 +246,7 @@ class PlatformMetadataCompiler {
             (
                 (declaration as? KtDeclarationContainer)?.declarations.orEmpty() +
                     listOfNotNull((declaration as? KtClass)?.primaryConstructor)
-            )
-                .flatMap { child -> collect(module, sourcePath, packageName, owners + name, child) }
+            ).flatMap { child -> collect(module, sourcePath, packageName, owners + name, child) }
         return listOf(
             ParsedDeclaration(
                 platformDeclaration,
@@ -290,7 +345,7 @@ class PlatformMetadataCompiler {
 }
 
 object PlatformMetadataCodec {
-    private const val FORMAT = 1
+    private const val FORMAT = 2
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'M'.code.toByte(), 'D'.code.toByte())
 
     fun encode(metadata: DecodedPlatformMetadata): ImmutableBytes {
@@ -312,6 +367,13 @@ object PlatformMetadataCodec {
                     }
                     sink.writeInt(metadata.exportedSymbols.size)
                     metadata.exportedSymbols.forEach(sink::string)
+                    sink.bytes(metadata.moduleHeader)
+                    sink.writeInt(metadata.fragments.size)
+                    metadata.fragments.forEach { fragment ->
+                        sink.string(fragment.packageName)
+                        sink.string(fragment.partName)
+                        sink.bytes(fragment.bytes)
+                    }
                 }
                 output.toByteArray()
             }
@@ -336,10 +398,24 @@ object PlatformMetadataCodec {
                     )
                 }
             val exports = List(source.count("export")) { source.string() }
+            val moduleHeader = source.bytes("module header")
+            val fragments =
+                List(source.count("fragment")) {
+                    PlatformMetadataFragment(
+                        source.string(),
+                        source.string(),
+                        source.bytes("fragment"),
+                    )
+                }
             require(source.read() == -1) { "trailing platform metadata bytes" }
             require(declarations == declarations.sortedWith(DECLARATION_ORDER)) { "platform metadata declarations are not canonical" }
             require(exports == exports.distinct().sorted()) { "platform metadata exports are not canonical" }
-            DecodedPlatformMetadata(module, declarations, exports)
+            require(
+                fragments == fragments.sortedWith(compareBy(PlatformMetadataFragment::packageName, PlatformMetadataFragment::partName)),
+            ) {
+                "platform metadata fragments are not canonical"
+            }
+            DecodedPlatformMetadata(module, declarations, exports, moduleHeader, fragments)
         }
 
     fun validateAgainstSources(
@@ -366,6 +442,11 @@ private fun DataOutputStream.string(value: String) {
     write(bytes)
 }
 
+private fun DataOutputStream.bytes(value: ByteArray) {
+    writeInt(value.size)
+    write(value)
+}
+
 private fun DataInputStream.string(): String {
     val length = readInt()
     require(length in 0..1_048_576) { "invalid platform metadata string length" }
@@ -376,6 +457,12 @@ private fun DataInputStream.string(): String {
 
 private fun DataInputStream.count(label: String): Int =
     readInt().also { require(it in 0..262_144) { "invalid platform metadata $label count" } }
+
+private fun DataInputStream.bytes(label: String): ByteArray {
+    val length = readInt()
+    require(length in 0..16_777_216) { "invalid platform metadata $label length" }
+    return readNBytes(length).also { require(it.size == length) { "truncated platform metadata $label" } }
+}
 
 private fun String.canonicalType(): String = replace(Regex("\\s+"), "")
 

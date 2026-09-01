@@ -47,10 +47,6 @@ import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
-import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteLimits
-import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
-import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
-import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticCategory
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticSeverity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
@@ -60,7 +56,7 @@ internal object MinimalScriptLowering {
         module: IrModuleFragment,
         pluginContext: IrPluginContext,
         session: CompilationSession,
-    ) {
+    ): Artifact? {
         val declarations = SourceDeclarationCollector().also { module.accept(it, null) }
         val functions = declarations.functions
         val guestTypes = GuestTypeRegistry(pluginContext)
@@ -76,61 +72,28 @@ internal object MinimalScriptLowering {
                 }
             if (validMain.size != 1 || namedMain.size != 1) {
                 session.diagnosticSink(invalidEntry(session, namedMain.firstOrNull()))
-                return
+                return null
             }
             val entry = validMain.single()
             val body = entry.body as? IrBlockBody
             if (body == null) {
                 session.diagnosticSink(unsupported(session, entry))
-                return
+                return null
             }
             if (body.statements.isEmpty() && entry.parameters.isEmpty()) {
-                writeArtifact(session, mainArtifact(entry.isSuspend))
-                return
+                return mainArtifact(entry.isSuspend)
             }
             try {
-                writeArtifact(session, KotlinProjectLowering.lower(functions, declarations.classes, entry, pluginContext, session))
+                return KotlinProjectLowering.lower(functions, declarations.classes, entry, pluginContext, session)
             } catch (unsupported: UnsupportedKotlinIr) {
                 session.diagnosticSink(unsupported(session, unsupported.element, unsupported.message))
+                return null
             }
-            return
         }
 
         session.diagnosticSink(invalidEntry(session, null))
+        return null
     }
-
-    private fun writeArtifact(
-        session: CompilationSession,
-        artifact: Artifact,
-    ) {
-        when (val result = ArtifactWriter.write(artifact, writeLimits(session))) {
-            is ArtifactWriteResult.Success -> {
-                session.artifactSink(BinaryValue.of(result.bytes))
-            }
-
-            is ArtifactWriteResult.Failure -> {
-                result.errors.forEach { error ->
-                    session.diagnosticSink(
-                        WorkerDiagnostic(
-                            DiagnosticSeverity.ERROR,
-                            DiagnosticCategory.INTERNAL,
-                            "ARTIFACT_WRITE_${error.code}",
-                            "artifact writer rejected lowered IR: ${error.detail}",
-                            null,
-                            null,
-                            null,
-                        ),
-                    )
-                }
-            }
-        }
-    }
-
-    private fun writeLimits(session: CompilationSession) =
-        ArtifactWriteLimits(
-            artifactBytes = session.limits.artifactBytes,
-            diagnostics = session.limits.diagnostics,
-        )
 
     private fun invalidEntry(
         session: CompilationSession,

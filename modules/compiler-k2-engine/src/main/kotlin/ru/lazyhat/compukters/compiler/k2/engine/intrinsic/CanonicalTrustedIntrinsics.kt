@@ -98,7 +98,16 @@ object CanonicalTrustedIntrinsics {
             capability("compukter", "compiler", "compukter.compiler", "Compiler.diagnostics", "fun():String", compiler, 1u)
             capability("compukter", "process", "compukter.process", "ProcessBindings.run", "fun(String,String):Int", process, 0u, true)
             capability("compukter", "process", "compukter.process", "ProcessBindings.takeFailureDiagnostic", "fun():String", process, 1u)
-            capability("compukter", "process", "compukter.process", "ProcessBindings.exit", "fun(Int):Nothing", process, 2u, terminalCall = true)
+            capability(
+                "compukter",
+                "process",
+                "compukter.process",
+                "ProcessBindings.exit",
+                "fun(Int):Nothing",
+                process,
+                2u,
+                terminalCall = true,
+            )
 
             listOf(
                 Triple("input", "fun(Int):Int", false),
@@ -110,7 +119,16 @@ object CanonicalTrustedIntrinsics {
                 Triple("setOutput", "fun(Int,Int):Unit", true),
                 Triple("setOutputs", "fun(Int):Unit", true),
             ).forEachIndexed { operation, (name, signature, blocking) ->
-                capability("compukter", "redstone", "compukter.redstone", "RedstoneBindings.$name", signature, redstone, operation.toUInt(), blocking)
+                capability(
+                    "compukter",
+                    "redstone",
+                    "compukter.redstone",
+                    "RedstoneBindings.$name",
+                    signature,
+                    redstone,
+                    operation.toUInt(),
+                    blocking,
+                )
             }
 
             listOf(

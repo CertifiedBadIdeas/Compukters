@@ -18,6 +18,10 @@
 
 package ru.lazyhat.compukters.platform.k2.build
 
+import org.jetbrains.kotlin.fir.resolve.providers.symbolProvider
+import org.jetbrains.kotlin.name.ClassId
+import org.jetbrains.kotlin.name.FqName
+import ru.lazyhat.compukters.platform.bundle.PlatformModule
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
@@ -25,6 +29,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class PlatformMetadataCompilerTest {
@@ -107,6 +112,62 @@ class PlatformMetadataCompilerTest {
             ),
             result.declarations.map { it.symbol to it.signature },
         )
+    }
+
+    @Test
+    fun `resolved FIR metadata is deterministic and contains no source text`() {
+        val sources = listOf(source("Builtins.kt", "package kotlin\nopen class Any\nclass Int private constructor()"))
+        val parsed = compiler.compile(module, sources)
+        val first =
+            CompuktersFirBuildEnvironment.create().use { environment ->
+                val output = environment.compile(module, sources, emptyList())
+                compiler.attachResolvedMetadata(parsed, output)
+            }
+        val second =
+            CompuktersFirBuildEnvironment.create().use { environment ->
+                val output = environment.compile(module, sources, emptyList())
+                compiler.attachResolvedMetadata(parsed, output)
+            }
+
+        assertContentEquals(first.metadata.toByteArray(), second.metadata.toByteArray())
+        val decoded = PlatformMetadataCodec.decode(first.metadata)
+        assertTrue(decoded.moduleHeader.isNotEmpty())
+        assertTrue(decoded.fragments.isNotEmpty())
+        assertFalse(
+            first.metadata
+                .toByteArray()
+                .decodeToString()
+                .contains("open class Any"),
+        )
+    }
+
+    @Test
+    fun `resolved metadata supplies platform classes without replaying platform sources`() {
+        val sources = listOf(source("Builtins.kt", "package kotlin\nopen class Any\nclass Int private constructor()"))
+        val compiled =
+            CompuktersFirBuildEnvironment.create().use { environment ->
+                compiler.attachResolvedMetadata(compiler.compile(module, sources), environment.compile(module, sources, emptyList()))
+            }
+        val platformModule =
+            PlatformModule(
+                module,
+                "1.0.0",
+                emptyList(),
+                compiled.metadata,
+                null,
+                sources,
+                compiled.declarations,
+            )
+
+        CompuktersFirBuildEnvironment.create().use { environment ->
+            val guest = environment.compileGuest(PlatformModuleId("guest", "application"), emptyList(), listOf(platformModule))
+            val symbol =
+                guest.frontendOutput.session.symbolProvider.getClassLikeSymbolByClassId(
+                    ClassId.topLevel(FqName("kotlin.Int")),
+                )
+
+            assertTrue(symbol != null)
+        }
     }
 
     private fun source(
