@@ -31,7 +31,7 @@ import java.security.MessageDigest
 object PlatformBundleCodec {
     const val SUPPORTED_PLATFORM_ABI = 1
 
-    private const val FORMAT_VERSION = 1
+    private const val FORMAT_VERSION = 2
     private const val MAX_BUNDLE_BYTES = 128 * 1024 * 1024
     private const val MAX_BINARY_BYTES = 64 * 1024 * 1024
     private const val MAX_TEXT_BYTES = 1024 * 1024
@@ -39,6 +39,8 @@ object PlatformBundleCodec {
     private const val MAX_DEPENDENCIES = 4096
     private const val MAX_SOURCES = 65_536
     private const val MAX_DECLARATIONS = 262_144
+    private const val MAX_SCALAR_TYPES = 65_536
+    private const val MAX_SCALAR_CONSTANTS = 262_144
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'B'.code.toByte(), 'F'.code.toByte())
 
     fun assemble(
@@ -121,6 +123,8 @@ object PlatformBundleCodec {
                         PlatformDeclaration::endUtf16,
                     ),
                 ),
+            scalarTypes = module.scalarTypes.sortedBy(PlatformScalarType::symbol),
+            scalarConstants = module.scalarConstants.sortedBy(PlatformScalarConstant::symbol),
         )
 
     private fun validate(bundle: PlatformBundle) {
@@ -144,6 +148,10 @@ object PlatformBundleCodec {
             }
             require(module.sources.size <= MAX_SOURCES) { "platform module ${module.id} has too many sources" }
             require(module.declarations.size <= MAX_DECLARATIONS) { "platform module ${module.id} has too many declarations" }
+            require(module.scalarTypes.size <= MAX_SCALAR_TYPES) { "platform module ${module.id} has too many scalar types" }
+            require(module.scalarConstants.size <= MAX_SCALAR_CONSTANTS) {
+                "platform module ${module.id} has too many scalar constants"
+            }
             val sourceLengths = mutableMapOf<String, Int>()
             module.sources.forEach { source ->
                 validatePath(source.path)
@@ -168,6 +176,36 @@ object PlatformBundleCodec {
                 }
                 require(declarationKeys.add(declaration.symbol to declaration.signature)) {
                     "duplicate platform declaration ${declaration.symbol} ${declaration.signature}"
+                }
+            }
+            val scalarTypes = module.scalarTypes.associateBy(PlatformScalarType::symbol)
+            require(scalarTypes.size == module.scalarTypes.size) { "platform module ${module.id} has duplicate scalar types" }
+            module.scalarTypes.forEach { type ->
+                strictUtf8(type.symbol, "platform scalar type symbol")
+                val sourceLength =
+                    requireNotNull(sourceLengths[type.sourcePath]) {
+                        "platform scalar type ${type.symbol} references unknown source ${type.sourcePath}"
+                    }
+                require(type.startUtf16 in 0..type.endUtf16 && type.endUtf16 <= sourceLength) {
+                    "platform scalar type ${type.symbol} has an invalid UTF-16 source range"
+                }
+            }
+            require(
+                module.scalarConstants
+                    .map(PlatformScalarConstant::symbol)
+                    .toSet()
+                    .size == module.scalarConstants.size,
+            ) {
+                "platform module ${module.id} has duplicate scalar constants"
+            }
+            module.scalarConstants.forEach { constant ->
+                strictUtf8(constant.symbol, "platform scalar constant symbol")
+                val type =
+                    requireNotNull(scalarTypes[constant.typeSymbol]) {
+                        "platform scalar constant ${constant.symbol} references unknown type ${constant.typeSymbol}"
+                    }
+                require(type.representation.accepts(constant.value)) {
+                    "platform scalar constant ${constant.symbol} does not match ${type.representation}"
                 }
             }
         }
@@ -252,6 +290,43 @@ object PlatformBundleCodec {
                 u32(declaration.endUtf16)
                 output.write(if (declaration.trustedExternal) 1 else 0)
             }
+            count(value.scalarTypes.size)
+            value.scalarTypes.forEach { type ->
+                string(type.symbol)
+                output.write(type.representation.ordinal + 1)
+                string(type.sourcePath)
+                u32(type.startUtf16)
+                u32(type.endUtf16)
+            }
+            count(value.scalarConstants.size)
+            value.scalarConstants.forEach { constant ->
+                string(constant.symbol)
+                string(constant.typeSymbol)
+                scalarValue(constant.value)
+            }
+        }
+
+        private fun scalarValue(value: PlatformScalarValue) {
+            when (value) {
+                is PlatformScalarValue.IntValue -> {
+                    output.write(1)
+                    i32(value.value)
+                }
+
+                is PlatformScalarValue.BooleanValue -> {
+                    output.write(2)
+                    output.write(if (value.value) 1 else 0)
+                }
+
+                is PlatformScalarValue.CharValue -> {
+                    output.write(3)
+                    u32(value.value.code)
+                }
+            }
+        }
+
+        private fun i32(value: Int) {
+            repeat(4) { shift -> output.write(value ushr (shift * 8)) }
         }
     }
 
@@ -276,6 +351,13 @@ object PlatformBundleCodec {
                 }
             require(unsigned <= Int.MAX_VALUE.toUInt()) { "platform wire integer exceeds supported range" }
             return unsigned.toInt()
+        }
+
+        fun i32(): Int {
+            val value = raw(4)
+            return value.indices.fold(0) { result, index ->
+                result or ((value[index].toInt() and 0xff) shl (index * 8))
+            }
         }
 
         fun count(
@@ -327,8 +409,66 @@ object PlatformBundleCodec {
                             },
                     )
                 }
-            return PlatformModule(id, version, dependencies, metadata, libraryFragment, sources, declarations)
+            val scalarTypes =
+                List(count(MAX_SCALAR_TYPES, "platform scalar type")) {
+                    PlatformScalarType(
+                        string("platform scalar type symbol"),
+                        when (val tag = u8()) {
+                            1 -> PlatformScalarRepresentation.INT
+                            2 -> PlatformScalarRepresentation.BOOLEAN
+                            3 -> PlatformScalarRepresentation.CHAR
+                            else -> throw IllegalArgumentException("invalid platform scalar representation: $tag")
+                        },
+                        string("platform scalar type source path"),
+                        u32(),
+                        u32(),
+                    )
+                }
+            val scalarConstants =
+                List(count(MAX_SCALAR_CONSTANTS, "platform scalar constant")) {
+                    PlatformScalarConstant(
+                        string("platform scalar constant symbol"),
+                        string("platform scalar constant type symbol"),
+                        scalarValue(),
+                    )
+                }
+            return PlatformModule(
+                id,
+                version,
+                dependencies,
+                metadata,
+                libraryFragment,
+                sources,
+                declarations,
+                scalarTypes,
+                scalarConstants,
+            )
         }
+
+        private fun scalarValue(): PlatformScalarValue =
+            when (val tag = u8()) {
+                1 -> {
+                    PlatformScalarValue.IntValue(i32())
+                }
+
+                2 -> {
+                    PlatformScalarValue.BooleanValue(
+                        when (val value = u8()) {
+                            0 -> false
+                            1 -> true
+                            else -> throw IllegalArgumentException("invalid platform scalar Boolean value: $value")
+                        },
+                    )
+                }
+
+                3 -> {
+                    PlatformScalarValue.CharValue(u32().also { require(it <= Char.MAX_VALUE.code) }.toChar())
+                }
+
+                else -> {
+                    throw IllegalArgumentException("invalid platform scalar value tag: $tag")
+                }
+            }
 
         fun requireEnd() {
             require(offset == bytes.size) { "platform bundle contains trailing bytes" }
@@ -367,3 +507,10 @@ object PlatformBundleCodec {
             throw IllegalArgumentException("$description must be strict UTF-8", failure)
         }
 }
+
+private fun PlatformScalarRepresentation.accepts(value: PlatformScalarValue): Boolean =
+    when (this) {
+        PlatformScalarRepresentation.INT -> value is PlatformScalarValue.IntValue
+        PlatformScalarRepresentation.BOOLEAN -> value is PlatformScalarValue.BooleanValue
+        PlatformScalarRepresentation.CHAR -> value is PlatformScalarValue.CharValue
+    }

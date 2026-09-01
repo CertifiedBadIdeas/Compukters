@@ -76,7 +76,8 @@ class PlatformBundleCodecTest {
     fun `stored content hash covers every semantic byte`() {
         val encoded = PlatformBundleCodec.encode(fixture())
         val changed = encoded.copyOf()
-        changed[changed.lastIndex] = (changed.last().toInt() xor 1).toByte()
+        val sourceByte = (40..changed.lastIndex).first { changed[it] == 'p'.code.toByte() }
+        changed[sourceByte] = (changed[sourceByte].toInt() xor 1).toByte()
 
         val failure = assertFailsWith<IllegalArgumentException> { PlatformBundleCodec.decode(changed) }
 
@@ -88,7 +89,7 @@ class PlatformBundleCodecTest {
         val encoded = PlatformBundleCodec.encode(fixture())
         assertFailsWith<IllegalArgumentException> { PlatformBundleCodec.decode(encoded + 0) }
 
-        val unsupportedFormat = encoded.copyOf().also { it[4] = 2 }
+        val unsupportedFormat = encoded.copyOf().also { it[4] = 99 }
         assertFailsWith<IllegalArgumentException> { PlatformBundleCodec.decode(unsupportedFormat) }
 
         val languageOffset = 4 + 4 + 32 + 4
@@ -181,6 +182,58 @@ class PlatformBundleCodecTest {
             }
 
         assertNotEquals(first.identity.contentHash, second.identity.contentHash)
+    }
+
+    @Test
+    fun `scalar types and constants round trip canonically and affect module identity`() {
+        val base = terminal()
+        val scalarType =
+            PlatformScalarType(
+                symbol = "example.Port",
+                representation = PlatformScalarRepresentation.INT,
+                sourcePath = base.sources.first().path,
+                startUtf16 = 0,
+                endUtf16 = 4,
+            )
+        val minimum = PlatformScalarConstant("example.Port.MIN", "example.Port", PlatformScalarValue.IntValue(0))
+        val maximum = PlatformScalarConstant("example.Port.MAX", "example.Port", PlatformScalarValue.IntValue(15))
+        val ordered = base.copy(scalarTypes = listOf(scalarType), scalarConstants = listOf(minimum, maximum))
+        val reversed = ordered.copy(scalarConstants = ordered.scalarConstants.reversed())
+
+        val first = PlatformBundleCodec.assemble("2.4", PlatformBundleCodec.SUPPORTED_PLATFORM_ABI, builtins(), listOf(ranges(), ordered))
+        val second = PlatformBundleCodec.assemble("2.4", PlatformBundleCodec.SUPPORTED_PLATFORM_ABI, builtins(), listOf(ranges(), reversed))
+        val decoded = PlatformBundleCodec.decode(PlatformBundleCodec.encode(first))
+
+        assertEquals(first, second)
+        assertEquals(listOf(maximum, minimum), decoded.modules.single { it.id == ordered.id }.scalarConstants)
+        assertNotEquals(PlatformBundleCodec.moduleContentHash(base), PlatformBundleCodec.moduleContentHash(ordered))
+    }
+
+    @Test
+    fun `assembly rejects duplicate or mismatched scalar descriptors`() {
+        val base = terminal()
+        val scalarType =
+            PlatformScalarType("example.Port", PlatformScalarRepresentation.INT, base.sources.first().path, 0, 4)
+        val duplicate = base.copy(scalarTypes = listOf(scalarType, scalarType))
+        val mismatched =
+            base.copy(
+                scalarTypes = listOf(scalarType),
+                scalarConstants =
+                    listOf(
+                        PlatformScalarConstant(
+                            "example.Port.INVALID",
+                            "example.Missing",
+                            PlatformScalarValue.IntValue(16),
+                        ),
+                    ),
+            )
+
+        assertFailsWith<IllegalArgumentException> {
+            PlatformBundleCodec.assemble("2.4", PlatformBundleCodec.SUPPORTED_PLATFORM_ABI, builtins(), listOf(duplicate))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            PlatformBundleCodec.assemble("2.4", PlatformBundleCodec.SUPPORTED_PLATFORM_ABI, builtins(), listOf(mismatched))
+        }
     }
 
     private fun fixture(reverse: Boolean = false): PlatformBundle {

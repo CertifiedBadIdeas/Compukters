@@ -60,6 +60,40 @@ data class PlatformDeclaration(
     val trustedExternal: Boolean,
 )
 
+enum class PlatformScalarRepresentation {
+    INT,
+    BOOLEAN,
+    CHAR,
+}
+
+data class PlatformScalarType(
+    val symbol: String,
+    val representation: PlatformScalarRepresentation,
+    val sourcePath: String,
+    val startUtf16: Int,
+    val endUtf16: Int,
+)
+
+sealed interface PlatformScalarValue {
+    data class IntValue(
+        val value: Int,
+    ) : PlatformScalarValue
+
+    data class BooleanValue(
+        val value: Boolean,
+    ) : PlatformScalarValue
+
+    data class CharValue(
+        val value: Char,
+    ) : PlatformScalarValue
+}
+
+data class PlatformScalarConstant(
+    val symbol: String,
+    val typeSymbol: String,
+    val value: PlatformScalarValue,
+)
+
 data class PlatformModule(
     val id: PlatformModuleId,
     val version: String,
@@ -68,6 +102,8 @@ data class PlatformModule(
     val libraryFragment: ImmutableBytes?,
     val sources: List<PlatformSource>,
     val declarations: List<PlatformDeclaration>,
+    val scalarTypes: List<PlatformScalarType> = emptyList(),
+    val scalarConstants: List<PlatformScalarConstant> = emptyList(),
 )
 
 data class PlatformBundle(
