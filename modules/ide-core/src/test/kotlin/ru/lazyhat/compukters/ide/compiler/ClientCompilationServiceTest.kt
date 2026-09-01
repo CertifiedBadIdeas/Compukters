@@ -34,6 +34,8 @@ import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
+import ru.lazyhat.compukters.ide.compiler.profile.platformBundle
+import ru.lazyhat.compukters.ide.compiler.profile.platformToolchain
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import java.nio.file.Files
 import java.security.MessageDigest
@@ -126,6 +128,7 @@ class ClientCompilationServiceTest {
 
     private fun input(source: String): ClientBuildSnapshot {
         val limits = WorkerLimits(sourceFiles = 4, sourceFileBytes = 1024, sourceBytes = 2048)
+        val platform = platformBundle()
         return ClientBuildSnapshot(
             ProjectSnapshot.of(
                 listOf(ProjectSource(VirtualSourcePath.kotlin("project/main.kt"), BinaryValue.of(source.encodeToByteArray()))),
@@ -133,7 +136,7 @@ class ClientCompilationServiceTest {
             ),
             BinaryValue.of("manifest".encodeToByteArray()),
             BinaryValue.of("lock".encodeToByteArray()),
-            CompileProfile(toolchain(), emptyList(), emptyList(), limits),
+            CompileProfile(platformToolchain(platform), platform.identity, emptySet(), emptyList(), limits),
         )
     }
 
@@ -148,10 +151,6 @@ class ClientCompilationServiceTest {
             emptyList(),
             CompilationMetrics(1uL, 1uL, 1uL),
         )
-
-    private fun toolchain() = ToolchainLockIdentity("2.4.10", "2.4", 1u, 1u, 1u, hash(3), hash(4))
-
-    private fun hash(value: Int) = Hash256.of(ByteArray(32) { value.toByte() })
 
     private class FakeBackend : ClientCompilerBackend {
         val requests = mutableListOf<CompileRequest>()

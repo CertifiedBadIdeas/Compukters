@@ -24,22 +24,29 @@ import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ResolvedModule
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
+import ru.lazyhat.compukters.platform.bundle.PlatformIdentity
 import java.util.Collections
 
 class CompileProfile(
     val toolchain: ToolchainLockIdentity,
-    apiBundles: List<ResolvedApiBundle>,
-    addonBundles: List<ResolvedApiBundle>,
+    val platform: PlatformIdentity,
+    directModules: Set<ModuleId>,
+    modules: List<ResolvedPlatformModule>,
     val limits: WorkerLimits,
 ) {
-    val apiBundles: List<ResolvedApiBundle> = Collections.unmodifiableList(apiBundles.sortedWith(API_BUNDLE_COMPARATOR))
-    val addonBundles: List<ResolvedApiBundle> = Collections.unmodifiableList(addonBundles.sortedWith(API_BUNDLE_COMPARATOR))
+    val directModules: Set<ModuleId> = Collections.unmodifiableSet(directModules.toSet())
+    val modules: List<ResolvedPlatformModule> = Collections.unmodifiableList(modules.toList())
 
     init {
-        require(this.apiBundles.all { bundle -> bundle.kind == ApiBundleKind.API }) { "API bundle list contains an add-on" }
-        require(this.addonBundles.all { bundle -> bundle.kind == ApiBundleKind.ADDON }) { "add-on bundle list contains an API" }
-        val ids = (this.apiBundles + this.addonBundles).map { bundle -> bundle.module.id }
-        require(ids.size == ids.toSet().size) { "compile profile bundle IDs must be unique" }
+        require(toolchain.languageVersion == platform.languageVersion) { "compile profile language version does not match platform" }
+        require(toolchain.platformAbi.toByteArray().contentEquals(platform.contentHash.toByteArray())) {
+            "compile profile platform ABI does not match platform"
+        }
+        val ids = this.modules.map { it.identity.id }
+        require(ids.size == ids.toSet().size) { "compile profile module IDs must be unique" }
+        require(this.directModules == this.modules.filter(ResolvedPlatformModule::direct).mapTo(mutableSetOf()) { it.identity.id }) {
+            "compile profile direct module set does not match resolved modules"
+        }
     }
 }
 
@@ -54,7 +61,7 @@ class TargetCompileProfile(
                 left,
                 right,
                 ->
-                compareModuleIds(left.id, right.id)
+                compareValuesBy(left.id, right.id, ModuleId::provider, ModuleId::module)
             },
         )
 
@@ -80,10 +87,6 @@ sealed interface ProfileResolution {
         ) : Failure
 
         data class MissingModule(
-            val id: ModuleId,
-        ) : Failure
-
-        data class UnexpectedModule(
             val id: ModuleId,
         ) : Failure
 

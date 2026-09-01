@@ -39,6 +39,17 @@ sealed interface ProjectLockMismatch {
         val locked: ApiMajor,
     ) : ProjectLockMismatch
 
+    data class ModuleDirect(
+        val id: ModuleId,
+        val expected: Boolean,
+        val locked: Boolean,
+    ) : ProjectLockMismatch
+
+    data class ModuleOrder(
+        val expected: List<ModuleId>,
+        val locked: List<ModuleId>,
+    ) : ProjectLockMismatch
+
     data class UnexpectedLockedModule(
         val id: ModuleId,
     ) : ProjectLockMismatch
@@ -79,23 +90,16 @@ class ProjectLockService(
         manifest: ProjectManifest,
         resolution: ProjectResolution,
     ): ProjectLock {
-        val required = manifest.modules
-        val available = resolution.modules.associateBy(ResolvedModule::id)
-        if (available.keys != required.keys) {
-            val missing = required.keys - available.keys
-            val extra = available.keys - required.keys
-            throw ProjectResolutionException(
-                "resolution does not exactly match manifest; missing=${missing.joinToString { it.value }}, " +
-                    "extra=${extra.joinToString { it.value }}",
-            )
-        }
-        required.forEach { (id, major) ->
-            val resolved = available.getValue(id)
-            if (resolved.major != major) {
-                throw ProjectResolutionException("module ${id.value} requires major ${major.value}, resolved ${resolved.major.value}")
+        val selected =
+            try {
+                resolution.catalog.resolve(manifest.modules)
+            } catch (failure: IllegalArgumentException) {
+                throw ProjectResolutionException(failure.message ?: "platform module resolution failed")
             }
-        }
-        return ProjectLock.of(resolution.toolchain, resolution.modules)
+        return ProjectLock.of(
+            resolution.toolchain,
+            selected.modules.map { module -> LockedModule(module.identity, module.direct) },
+        )
     }
 
     fun validate(
@@ -105,19 +109,22 @@ class ProjectLockService(
     ): List<ProjectLockMismatch> =
         buildList {
             compareToolchain(lock.toolchain, availableProfile.toolchain)
-            val locked = lock.modules.associateBy(ResolvedModule::id)
+            val locked = lock.modules.associateBy { it.identity.id }
             manifest.modules.forEach { (id, requiredMajor) ->
-                val lockedModule = locked[id]
+                val lockedModule = locked[id]?.identity
                 if (lockedModule == null) {
                     add(ProjectLockMismatch.ManifestModuleMissing(id))
                 } else if (lockedModule.major != requiredMajor) {
                     add(ProjectLockMismatch.ManifestModuleMajor(id, requiredMajor, lockedModule.major))
                 }
             }
-            (locked.keys - manifest.modules.keys).forEach { add(ProjectLockMismatch.UnexpectedLockedModule(it)) }
-            val available = availableProfile.modules.associateBy(ResolvedModule::id)
-            lock.modules.forEach { expected ->
-                val actual = available[expected.id]
+            lock.modules.filter { it.direct && it.identity.id !in manifest.modules }.forEach {
+                add(ProjectLockMismatch.UnexpectedLockedModule(it.identity.id))
+            }
+            val available = availableProfile.catalog.entries.associateBy { it.identity.id }
+            lock.modules.forEach { lockedModule ->
+                val expected = lockedModule.identity
+                val actual = available[expected.id]?.identity
                 if (actual == null) {
                     add(ProjectLockMismatch.ModuleUnavailable(expected.id))
                 } else {
@@ -129,6 +136,24 @@ class ProjectLockService(
                     }
                     if (actual.contentHash != expected.contentHash) {
                         add(ProjectLockMismatch.ModuleContent(expected.id, expected.contentHash.hex(), actual.contentHash.hex()))
+                    }
+                }
+            }
+            val expectedClosure = runCatching { availableProfile.catalog.resolve(manifest.modules) }.getOrNull()
+            if (expectedClosure != null) {
+                val expectedIds = expectedClosure.modules.map { it.identity.id }
+                val lockedIds = lock.modules.map { it.identity.id }
+                (expectedIds - lockedIds.toSet()).forEach { add(ProjectLockMismatch.ManifestModuleMissing(it)) }
+                (lockedIds - expectedIds.toSet()).forEach { add(ProjectLockMismatch.UnexpectedLockedModule(it)) }
+                if (expectedIds.toSet() == lockedIds.toSet() && expectedIds != lockedIds) {
+                    add(ProjectLockMismatch.ModuleOrder(expectedIds, lockedIds))
+                }
+                val lockedById = lock.modules.associateBy { it.identity.id }
+                expectedClosure.modules.forEach { expected ->
+                    lockedById[expected.identity.id]?.let { actual ->
+                        if (expected.direct != actual.direct) {
+                            add(ProjectLockMismatch.ModuleDirect(expected.identity.id, expected.direct, actual.direct))
+                        }
                     }
                 }
             }

@@ -45,7 +45,7 @@ class WorkerCodecTest {
                 0x50,
                 0x4b,
                 0x57,
-                0x02,
+                0x03,
                 0x00,
                 0x02,
                 0x00,

@@ -19,13 +19,14 @@
 package ru.lazyhat.compukters.ide.compiler.profile
 
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.ide.project.LockedModule
 import ru.lazyhat.compukters.ide.project.ProjectLock
 import ru.lazyhat.compukters.ide.project.ResolvedModule
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 
 class CompileProfileResolver(
     private val localToolchain: ToolchainLockIdentity,
-    private val catalog: GuestApiBundleCatalog,
+    private val catalog: PlatformCatalog,
     private val requiredLimits: WorkerLimits,
 ) {
     fun resolveLocal(lock: ProjectLock): ProfileResolution {
@@ -38,7 +39,7 @@ class CompileProfileResolver(
         target: TargetCompileProfile,
     ): ProfileResolution {
         if (lock.toolchain != target.toolchain) return ProfileResolution.Failure.ToolchainMismatch(lock.toolchain, target.toolchain)
-        compareModules(lock.modules, target.modules)?.let { return it }
+        compareModules(lock.modules.map { it.identity }, target.modules)?.let { return it }
         compareLimits(requiredLimits, target.limits)?.let { return it }
         if (lock.toolchain != localToolchain) return ProfileResolution.Failure.ToolchainMismatch(lock.toolchain, localToolchain)
         return resolveBundles(lock, target.limits)
@@ -49,16 +50,18 @@ class CompileProfileResolver(
         limits: WorkerLimits,
     ): ProfileResolution {
         val resolved =
-            lock.modules.map { expected ->
+            lock.modules.map { locked ->
+                val expected = locked.identity
                 val available = catalog.find(expected.id) ?: return ProfileResolution.Failure.MissingModule(expected.id)
-                compareModule(expected, available.module)?.let { return it }
-                available
+                compareModule(expected, available.identity)?.let { return it }
+                ResolvedPlatformModule(expected, available.descriptor, locked.direct)
             }
         return ProfileResolution.Resolved(
             CompileProfile(
                 lock.toolchain,
-                resolved.filter { bundle -> bundle.kind == ApiBundleKind.API },
-                resolved.filter { bundle -> bundle.kind == ApiBundleKind.ADDON },
+                catalog.bundle.identity,
+                lock.modules.filter(LockedModule::direct).mapTo(mutableSetOf()) { it.identity.id },
+                resolved,
                 limits,
             ),
         )
@@ -72,10 +75,6 @@ class CompileProfileResolver(
         expected.forEach { module ->
             val actual = availableById[module.id] ?: return ProfileResolution.Failure.MissingModule(module.id)
             compareModule(module, actual)?.let { return it }
-        }
-        val expectedIds = expected.mapTo(mutableSetOf(), ResolvedModule::id)
-        available.firstOrNull { module -> module.id !in expectedIds }?.let {
-            return ProfileResolution.Failure.UnexpectedModule(it.id)
         }
         return null
     }

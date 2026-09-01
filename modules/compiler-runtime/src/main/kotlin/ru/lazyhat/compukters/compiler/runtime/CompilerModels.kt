@@ -41,8 +41,7 @@ data class CompilerServiceConfiguration(
     val workerIdentity: WorkerIdentity,
     val limits: WorkerLimits,
     val target: TargetSettings = TargetSettings.KOTLIN_2_4_JVM_17,
-    val trustedApiBundles: List<TrustedBundleIdentity> = emptyList(),
-    val trustedAddonBundles: List<TrustedBundleIdentity> = emptyList(),
+    val platformModules: List<TrustedBundleIdentity> = emptyList(),
 )
 
 data class CompilerServicePolicy(

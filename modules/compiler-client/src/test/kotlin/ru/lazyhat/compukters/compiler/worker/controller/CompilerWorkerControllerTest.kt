@@ -54,13 +54,12 @@ class CompilerWorkerControllerTest {
             val api = TrustedBundleIdentity.of("api", Hash256.of(ByteArray(32) { 1 }))
             val addon = TrustedBundleIdentity.of("addon", Hash256.of(ByteArray(32) { 2 }))
 
-            val future = controller.compile(source("first"), trustedApiBundles = listOf(api), trustedAddonBundles = listOf(addon))
+            val future = controller.compile(source("first"), platformModules = listOf(api, addon))
             val request = assertIs<CompileRequest>(worker.awaitWrite())
             worker.enqueue(success(request.requestId, byteArrayOf(1)))
 
             assertIs<CompileSuccess>(future.get(5, TimeUnit.SECONDS))
-            assertEquals(listOf(api), request.trustedApiBundles)
-            assertEquals(listOf(addon), request.trustedAddonBundles)
+            assertEquals(listOf(api, addon), request.platformModules)
         }
 
     @Test

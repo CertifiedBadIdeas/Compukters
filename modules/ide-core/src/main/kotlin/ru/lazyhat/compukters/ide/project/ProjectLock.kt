@@ -47,12 +47,17 @@ data class ResolvedModule(
     }
 }
 
+data class LockedModule(
+    val identity: ResolvedModule,
+    val direct: Boolean,
+)
+
 class ProjectLock private constructor(
     val format: Int,
     val toolchain: ToolchainLockIdentity,
-    modules: List<ResolvedModule>,
+    modules: List<LockedModule>,
 ) {
-    val modules: List<ResolvedModule> = Collections.unmodifiableList(modules.toList())
+    val modules: List<LockedModule> = Collections.unmodifiableList(modules.toList())
 
     override fun equals(other: Any?): Boolean =
         other is ProjectLock && format == other.format && toolchain == other.toolchain && modules == other.modules
@@ -62,17 +67,17 @@ class ProjectLock private constructor(
     override fun toString(): String = "ProjectLock(format=$format, toolchain=$toolchain, modules=$modules)"
 
     companion object {
-        const val FORMAT = 1
+        const val FORMAT = 2
 
         fun of(
             toolchain: ToolchainLockIdentity,
-            modules: List<ResolvedModule>,
+            modules: List<LockedModule>,
             limits: ProjectLimits = ProjectLimits(),
         ): ProjectLock {
             require(modules.size <= limits.modules) { "project module count exceeds limit" }
-            val sorted = modules.sortedWith(RESOLVED_MODULE_COMPARATOR)
-            require(sorted.zipWithNext().none { (left, right) -> left.id == right.id }) { "resolved module IDs must be unique" }
-            return ProjectLock(FORMAT, toolchain, sorted)
+            val copied = modules.toList()
+            require(copied.map { it.identity.id }.toSet().size == copied.size) { "locked module IDs must be unique" }
+            return ProjectLock(FORMAT, toolchain, copied)
         }
     }
 }

@@ -528,7 +528,7 @@ internal object ProductionIdeApplicationFactory {
         val resolved = resolver.resolveLocal(lock)
         val profile =
             (resolved as? ProfileResolution.Resolved)?.profile ?: error("analysis profile does not match local toolchain: $resolved")
-        check(profile.apiBundles.isEmpty() && profile.addonBundles.isEmpty()) {
+        check(profile.modules.isEmpty()) {
             "analysis bundle materialization is not configured"
         }
         val sources =

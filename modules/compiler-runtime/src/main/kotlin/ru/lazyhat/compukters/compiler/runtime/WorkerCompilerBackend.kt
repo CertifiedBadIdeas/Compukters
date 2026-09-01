@@ -28,14 +28,12 @@ import java.util.concurrent.CompletableFuture
 class WorkerCompilerBackend(
     private val controller: CompilerWorkerController,
     private val target: TargetSettings = TargetSettings.KOTLIN_2_4_JVM_17,
-    trustedApiBundles: List<TrustedBundleIdentity> = emptyList(),
-    trustedAddonBundles: List<TrustedBundleIdentity> = emptyList(),
+    platformModules: List<TrustedBundleIdentity> = emptyList(),
 ) : CompilerBackend {
-    private val trustedApiBundles = trustedApiBundles.toList()
-    private val trustedAddonBundles = trustedAddonBundles.toList()
+    private val platformModules = platformModules.toList()
 
     override fun compile(snapshot: ProjectSnapshot): CompletableFuture<CompileResult> =
-        controller.compile(snapshot, target, trustedApiBundles, trustedAddonBundles)
+        controller.compile(snapshot, target, platformModules)
 
     override fun cancel(future: CompletableFuture<CompileResult>) {
         controller.cancel(future)

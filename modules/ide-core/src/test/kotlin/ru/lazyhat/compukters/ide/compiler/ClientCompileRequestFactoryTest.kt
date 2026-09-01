@@ -26,14 +26,14 @@ import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
-import ru.lazyhat.compukters.ide.compiler.profile.ApiBundleKind
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
-import ru.lazyhat.compukters.ide.compiler.profile.ResolvedApiBundle
+import ru.lazyhat.compukters.ide.compiler.profile.ResolvedPlatformModule
+import ru.lazyhat.compukters.ide.compiler.profile.platformBundle
+import ru.lazyhat.compukters.ide.compiler.profile.platformCatalog
+import ru.lazyhat.compukters.ide.compiler.profile.platformToolchain
 import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
-import ru.lazyhat.compukters.ide.project.ResolvedModule
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
-import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -43,8 +43,7 @@ class ClientCompileRequestFactoryTest {
     fun `factory creates canonical worker request from exact profile`() {
         val prepared = ClientCompileRequestFactory.prepare(baseline())
 
-        assertEquals(listOf("std:terminal"), prepared.request.trustedApiBundles.map { it.name })
-        assertEquals(listOf("create:sensors"), prepared.request.trustedAddonBundles.map { it.name })
+        assertEquals(baseline().profile.modules.map { it.identity.id.value }, prepared.request.platformModules.map { it.name })
         assertEquals(SourceSnapshotIdentity.of(baseline().sources), prepared.sourceSnapshotId)
         assertEquals(baseline().profile.toolchain.payloadHash, prepared.request.expectedIdentity.payloadHash)
         assertEquals(TargetSettings.KOTLIN_2_4_JVM_17, prepared.request.target)
@@ -73,7 +72,7 @@ class ClientCompileRequestFactoryTest {
                 add(baseline.copy(manifestBytes = BinaryValue.of("changed manifest".encodeToByteArray())))
                 add(baseline.copy(lockBytes = BinaryValue.of("changed lock".encodeToByteArray())))
                 add(baseline.copy(profile = baseline.profile.withToolchain(baseline.profile.toolchain.copy(artifactAbi = 9u))))
-                add(baseline.copy(profile = baseline.profile.withChangedApiHash()))
+                add(baseline.copy(profile = baseline.profile.withChangedModuleHash()))
                 changedLimits.forEach { limits -> add(baseline.copy(profile = baseline.profile.withLimits(limits))) }
             }
 
@@ -88,26 +87,38 @@ class ClientCompileRequestFactoryTest {
 
     private fun baseline(): ClientBuildSnapshot {
         val limits = WorkerLimits(sourceFiles = 4, sourceFileBytes = 1024, sourceBytes = 2048)
-        val api = bundle("std:terminal", ApiBundleKind.API, byteArrayOf(1))
-        val addon = bundle("create:sensors", ApiBundleKind.ADDON, byteArrayOf(2))
+        val bundle = platformBundle()
+        val selection =
+            platformCatalog(bundle).resolve(
+                mapOf(ModuleId.parse("std:terminal") to ApiMajor(2), ModuleId.parse("create:sensors") to ApiMajor(1)),
+            )
+        val toolchain = platformToolchain(bundle)
         return ClientBuildSnapshot(
             snapshot("fun main() = 1", limits),
             BinaryValue.of("manifest".encodeToByteArray()),
             BinaryValue.of("lock".encodeToByteArray()),
-            CompileProfile(toolchain(), listOf(api), listOf(addon), limits),
+            CompileProfile(toolchain, bundle.identity, selection.directModules, selection.modules, limits),
             TargetSettings.KOTLIN_2_4_JVM_17,
         )
     }
 
     private fun ClientBuildSnapshot.limits() = profile.limits
 
-    private fun CompileProfile.withLimits(limits: WorkerLimits) = CompileProfile(toolchain, apiBundles, addonBundles, limits)
+    private fun CompileProfile.withLimits(limits: WorkerLimits) = CompileProfile(toolchain, platform, directModules, modules, limits)
 
-    private fun CompileProfile.withToolchain(toolchain: ToolchainLockIdentity) = CompileProfile(toolchain, apiBundles, addonBundles, limits)
+    private fun CompileProfile.withToolchain(toolchain: ToolchainLockIdentity) =
+        CompileProfile(toolchain, platform, directModules, modules, limits)
 
-    private fun CompileProfile.withChangedApiHash(): CompileProfile {
-        val changed = apiBundles.single().copy(module = apiBundles.single().module.copy(contentHash = hash(byteArrayOf(9))))
-        return CompileProfile(toolchain, listOf(changed), addonBundles, limits)
+    private fun CompileProfile.withChangedModuleHash(): CompileProfile {
+        val changed =
+            modules.mapIndexed { index, module ->
+                if (index == modules.lastIndex) {
+                    module.copy(identity = module.identity.copy(contentHash = module.identity.contentHash.reversed()))
+                } else {
+                    module
+                }
+            }
+        return CompileProfile(toolchain, platform, directModules, changed, limits)
     }
 
     private fun snapshot(
@@ -118,17 +129,5 @@ class ClientCompileRequestFactoryTest {
         limits,
     )
 
-    private fun bundle(
-        id: String,
-        kind: ApiBundleKind,
-        bytes: ByteArray,
-    ) = ResolvedApiBundle(
-        ResolvedModule(ModuleId.parse(id), ApiMajor(2), "2.1.0", hash(bytes)),
-        kind,
-        BinaryValue.of(bytes),
-    )
-
-    private fun toolchain() = ToolchainLockIdentity("2.4.10", "2.4", 1u, 1u, 1u, hash(byteArrayOf(3)), hash(byteArrayOf(4)))
-
-    private fun hash(bytes: ByteArray) = Hash256.of(MessageDigest.getInstance("SHA-256").digest(bytes))
+    private fun Hash256.reversed() = Hash256.of(toByteArray().reversedArray())
 }

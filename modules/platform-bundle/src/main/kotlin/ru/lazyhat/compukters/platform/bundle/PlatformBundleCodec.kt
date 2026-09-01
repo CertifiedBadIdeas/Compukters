@@ -99,6 +99,14 @@ object PlatformBundleCodec {
         return assembled
     }
 
+    fun moduleContentHash(module: PlatformModule): Sha256 {
+        val canonical = canonicalize(module)
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update("Compukters platform module v1\u0000".encodeToByteArray())
+        digest.update(Sink().apply { module(canonical) }.result())
+        return Sha256.of(digest.digest())
+    }
+
     private fun canonicalize(module: PlatformModule): PlatformModule =
         module.copy(
             dependencies = module.dependencies.sorted(),

@@ -204,17 +204,14 @@ class CompileRequest(
     val target: TargetSettings,
     val expectedIdentity: WorkerIdentity,
     val limits: WorkerLimits,
-    trustedApiBundles: List<TrustedBundleIdentity> = emptyList(),
-    trustedAddonBundles: List<TrustedBundleIdentity> = emptyList(),
+    platformModules: List<TrustedBundleIdentity> = emptyList(),
 ) : WorkerMessage {
     override val type = WorkerMessageType.COMPILE_REQUEST
     val sources: List<ProjectSource> = ProjectSnapshot.of(sources, limits).sources
-    val trustedApiBundles: List<TrustedBundleIdentity> = trustedApiBundles.toList()
-    val trustedAddonBundles: List<TrustedBundleIdentity> = trustedAddonBundles.toList()
+    val platformModules: List<TrustedBundleIdentity> = platformModules.toList()
 
     init {
-        requireCanonicalBundles(this.trustedApiBundles, "trusted API bundles")
-        requireCanonicalBundles(this.trustedAddonBundles, "trusted add-on bundles")
+        requireUniqueBundles(this.platformModules, "platform modules")
     }
 
     fun copy(
@@ -223,9 +220,8 @@ class CompileRequest(
         target: TargetSettings = this.target,
         expectedIdentity: WorkerIdentity = this.expectedIdentity,
         limits: WorkerLimits = this.limits,
-        trustedApiBundles: List<TrustedBundleIdentity> = this.trustedApiBundles,
-        trustedAddonBundles: List<TrustedBundleIdentity> = this.trustedAddonBundles,
-    ): CompileRequest = CompileRequest(requestId, sources, target, expectedIdentity, limits, trustedApiBundles, trustedAddonBundles)
+        platformModules: List<TrustedBundleIdentity> = this.platformModules,
+    ): CompileRequest = CompileRequest(requestId, sources, target, expectedIdentity, limits, platformModules)
 
     override fun equals(other: Any?): Boolean =
         other is CompileRequest &&
@@ -234,30 +230,16 @@ class CompileRequest(
             target == other.target &&
             expectedIdentity == other.expectedIdentity &&
             limits == other.limits &&
-            trustedApiBundles == other.trustedApiBundles &&
-            trustedAddonBundles == other.trustedAddonBundles
+            platformModules == other.platformModules
 
-    override fun hashCode(): Int =
-        listOf(requestId, sources, target, expectedIdentity, limits, trustedApiBundles, trustedAddonBundles).hashCode()
+    override fun hashCode(): Int = listOf(requestId, sources, target, expectedIdentity, limits, platformModules).hashCode()
 
-    private fun requireCanonicalBundles(
+    private fun requireUniqueBundles(
         bundles: List<TrustedBundleIdentity>,
         description: String,
     ) {
-        bundles.zipWithNext().forEach { (left, right) ->
-            require(left.name.encodeToByteArray().compareUnsigned(right.name.encodeToByteArray()) < 0) {
-                "$description must be uniquely ordered by UTF-8 name"
-            }
-        }
+        require(bundles.map(TrustedBundleIdentity::name).toSet().size == bundles.size) { "$description must have unique names" }
     }
-}
-
-private fun ByteArray.compareUnsigned(other: ByteArray): Int {
-    repeat(minOf(size, other.size)) { index ->
-        val result = (this[index].toInt() and 0xff).compareTo(other[index].toInt() and 0xff)
-        if (result != 0) return result
-    }
-    return size.compareTo(other.size)
 }
 
 data class CompileSuccess(

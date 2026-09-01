@@ -30,8 +30,8 @@ class ProjectLockCodecTest {
             ProjectLock.of(
                 toolchain(),
                 listOf(
-                    module("std:terminal", 2, "2.3.1", 2),
                     module("create:kinetics", 1, "1.4.0", 1),
+                    module("std:terminal", 2, "2.3.1", 2),
                 ),
             )
 
@@ -39,7 +39,7 @@ class ProjectLockCodecTest {
 
         assertEquals(
             """
-            format = 1
+            format = 2
 
             [toolchain]
             compiler = "2.4.10"
@@ -55,12 +55,14 @@ class ProjectLockCodecTest {
             major = 1
             version = "1.4.0"
             content_sha256 = "0101010101010101010101010101010101010101010101010101010101010101"
+            direct = false
 
             [[modules]]
             id = "std:terminal"
             major = 2
             version = "2.3.1"
             content_sha256 = "0202020202020202020202020202020202020202020202020202020202020202"
+            direct = true
             """.trimIndent() + "\n",
             encoded,
         )
@@ -77,8 +79,9 @@ class ProjectLockCodecTest {
 
     @Test
     fun `lock rejects malformed unknown missing and duplicate data`() {
-        invalid("format = 1")
-        invalid(validLock().replace("format = 1", "format = 2"))
+        invalid("format = 2")
+        invalid(validLock().replace("format = 2", "format = 1"))
+        invalid(validLock().replace("platform_abi_sha256", "standard_library_abi_sha256"))
         invalid(validLock() + "unknown = true\n")
         invalid(validLock().replace("compiler = \"2.4.10\"\n", ""))
         invalid(validLock().replace("artifact_abi = 2", "artifact_abi = \"2\""))
@@ -121,7 +124,10 @@ class ProjectLockCodecTest {
         major: Int,
         version: String,
         hashByte: Int,
-    ) = ResolvedModule(ModuleId.parse(id), ApiMajor(major), version, hash(hashByte))
+    ) = LockedModule(
+        identity = ResolvedModule(ModuleId.parse(id), ApiMajor(major), version, hash(hashByte)),
+        direct = id == "std:terminal",
+    )
 
     private fun hash(byte: Int) = Hash256.of(ByteArray(32) { byte.toByte() })
 }

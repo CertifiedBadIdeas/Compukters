@@ -80,8 +80,7 @@ class ControllerClientCompilerBackend(
         controller.compile(
             ProjectSnapshot.of(request.sources, request.limits),
             request.target,
-            request.trustedApiBundles,
-            request.trustedAddonBundles,
+            request.platformModules,
         )
 
     override fun cancel(future: CompletableFuture<CompileResult>): Boolean = controller.cancel(future)

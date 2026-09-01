@@ -33,8 +33,11 @@ class ProjectWorkerProtocolTest {
                 target = TargetSettings.KOTLIN_2_4_JVM_17,
                 expectedIdentity = identity(),
                 limits = WorkerLimits(),
-                trustedApiBundles = listOf(TrustedBundleIdentity.of("core-api", Hash256.of(ByteArray(32) { 1 }))),
-                trustedAddonBundles = listOf(TrustedBundleIdentity.of("redstone", Hash256.of(ByteArray(32) { 2 }))),
+                platformModules =
+                    listOf(
+                        TrustedBundleIdentity.of("core-api", Hash256.of(ByteArray(32) { 1 })),
+                        TrustedBundleIdentity.of("redstone", Hash256.of(ByteArray(32) { 2 })),
+                    ),
             )
 
         assertEquals(request, WorkerMessageCodec.decode(WorkerMessageCodec.encode(request)))
@@ -56,16 +59,16 @@ class ProjectWorkerProtocolTest {
     }
 
     @Test
-    fun `request rejects noncanonical trusted bundle identities`() {
+    fun `request preserves topological platform module order and rejects duplicate identities`() {
         val z = TrustedBundleIdentity.of("z", Hash256.zero())
         val a = TrustedBundleIdentity.of("a", Hash256.zero())
-        assertFailsWith<IllegalArgumentException> { request(listOf(source("main.kt", "x")), WorkerLimits(), listOf(z, a)) }
+        assertEquals(listOf(z, a), request(listOf(source("main.kt", "x")), WorkerLimits(), listOf(z, a)).platformModules)
         assertFailsWith<IllegalArgumentException> { request(listOf(source("main.kt", "x")), WorkerLimits(), listOf(a, a)) }
         assertFailsWith<IllegalArgumentException> { TrustedBundleIdentity.of("", Hash256.zero()) }
     }
 
     @Test
-    fun `protocol v2 explicitly rejects a v1 frame`() {
+    fun `protocol v3 explicitly rejects a v1 frame`() {
         val encoded = WorkerCodec.encodeFrame(WorkerMessageCodec.encode(request(listOf(source("main.kt", "x")), WorkerLimits())))
         val v1 =
             encoded.copyOf().also { bytes ->
@@ -82,7 +85,7 @@ class ProjectWorkerProtocolTest {
         sources: List<ProjectSource>,
         limits: WorkerLimits,
         api: List<TrustedBundleIdentity> = emptyList(),
-    ) = CompileRequest(RequestId.of(1uL), sources, TargetSettings.KOTLIN_2_4_JVM_17, identity(), limits, api, emptyList())
+    ) = CompileRequest(RequestId.of(1uL), sources, TargetSettings.KOTLIN_2_4_JVM_17, identity(), limits, api)
 
     private fun source(
         path: String,
