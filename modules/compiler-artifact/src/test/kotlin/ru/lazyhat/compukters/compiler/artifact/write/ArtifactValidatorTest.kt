@@ -1349,7 +1349,7 @@ private fun executableArtifact(
             isSuspending -> listOf(instruction)
             else -> listOf(instruction, Instruction.Jump(BlockId.of(1u)))
         }
-    val strings = listOf("app", "callee", "entry", "testEntry").map(MetadataText::of)
+    val strings = listOf("app", "callee", "entry", "kotlin.String", "testEntry").map(MetadataText::of)
     val stringType = ValueType.Ref(nullable = false, TypeRef.Imported(ImportId.of(0u)))
     val calleeSuspending = instruction is Instruction.CallSuspend
     val artifact =
@@ -1372,21 +1372,21 @@ private fun executableArtifact(
                                     listOf(ValueType.I32, stringType, stringType, stringType),
                                 ),
                                 NominalType.Function(StringId.of(1u), calleeSuspending, ValueType.I32, listOf(ValueType.I32, stringType)),
-                                NominalType.Function(StringId.of(3u), false, ValueType.Unit, emptyList()),
+                                NominalType.Function(StringId.of(4u), false, ValueType.Unit, emptyList()),
                             ),
                         imports =
                             listOf(
                                 Import(
                                     SymbolKind.TYPE,
                                     ModuleId.of(1u),
-                                    StringId.of(1u),
+                                    StringId.of(3u),
                                     TypeRef.Imported(ImportId.of(0u)),
                                     ByteArray(32),
                                 ),
                                 Import(
                                     SymbolKind.FUNCTION,
                                     ModuleId.of(1u),
-                                    StringId.of(0u),
+                                    StringId.of(1u),
                                     TypeRef.Local(TypeId.of(1u)),
                                     ByteArray(32),
                                 ),
@@ -1419,7 +1419,7 @@ private fun executableArtifact(
                                 ),
                                 Function(
                                     null,
-                                    StringId.of(3u),
+                                    StringId.of(4u),
                                     TypeRef.Local(TypeId.of(2u)),
                                     setOf(FunctionFlag.STATIC),
                                     emptyList(),
