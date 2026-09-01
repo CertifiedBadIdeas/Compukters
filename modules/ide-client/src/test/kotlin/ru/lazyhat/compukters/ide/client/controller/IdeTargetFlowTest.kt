@@ -62,12 +62,10 @@ import ru.lazyhat.compukters.ide.compiler.ClientBuildResult
 import ru.lazyhat.compukters.ide.compiler.ClientBuildSnapshot
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationService
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
-import ru.lazyhat.compukters.ide.compiler.profile.GuestApiBundleCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ProjectLock
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectLockService
-import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -464,19 +462,16 @@ private class TargetPort : IdeTargetPort {
 private fun buildCoordinator(
     compilation: TargetCompilation,
     clock: IdeControllerClock,
-): IdeBuildCoordinator {
-    val catalog = GuestApiBundleCatalog.of(emptyList())
-    return IdeBuildCoordinator(
+): IdeBuildCoordinator =
+    IdeBuildCoordinator(
         IdeBuildServices(
-            toolchain(),
-            catalog,
-            CompileProfileResolver(toolchain(), catalog, LOCAL_LIMITS),
+            TEST_PROJECT_RESOLUTION,
+            CompileProfileResolver(toolchain(), TEST_PLATFORM_CATALOG, LOCAL_LIMITS),
             { project -> ProjectLockService(project.lockFileWriter()) },
             compilation,
         ),
         clock,
     )
-}
 
 private fun target() =
     IdeAttachedTarget(
@@ -494,7 +489,7 @@ private fun target() =
 
 private fun ticket(artifact: IdeTargetArtifact) = IdeVerificationTicket.of(byteArrayOf(4), target(), artifact)
 
-private fun toolchain() = ToolchainLockIdentity("2.4.10", "2.4", 1u, 1u, 1u, hash(5), hash(6))
+private fun toolchain() = TEST_TOOLCHAIN
 
 private fun hash(seed: Int) = Hash256.of(ByteArray(32) { seed.toByte() })
 

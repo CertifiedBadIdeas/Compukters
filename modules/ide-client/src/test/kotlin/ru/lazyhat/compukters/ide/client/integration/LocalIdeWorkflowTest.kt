@@ -28,15 +28,17 @@ import ru.lazyhat.compukters.ide.compiler.ClientCompilationCache
 import ru.lazyhat.compukters.ide.compiler.ControllerClientCompilerBackend
 import ru.lazyhat.compukters.ide.compiler.DefaultClientCompilationService
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
-import ru.lazyhat.compukters.ide.compiler.profile.GuestApiBundleCatalog
+import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
 import ru.lazyhat.compukters.ide.project.ProjectLockService
 import ru.lazyhat.compukters.ide.project.ProjectManifestCodec
 import ru.lazyhat.compukters.ide.project.ProjectResolution
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipFile
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -98,7 +100,18 @@ class LocalIdeWorkflowTest {
                     .toFile()
                     .readBytes()
             val manifest = ProjectManifestCodec.decode(manifestBytes.decodeToString())
-            ProjectLockService(project.handle.lockFileWriter()).createLock(manifest, ProjectResolution(toolchain, emptyList()))
+            val platform =
+                payload.classpath
+                    .mapNotNull { path ->
+                        ZipFile(path.toFile()).use { archive ->
+                            archive.getEntry("compukters-platform/compukters-platform.cpb")?.let { entry ->
+                                archive.getInputStream(entry).use { PlatformBundleCodec.decode(it.readAllBytes()) }
+                            }
+                        }
+                    }.single()
+            val catalog = PlatformCatalog.of(platform)
+            val resolution = ProjectResolution(toolchain, catalog)
+            ProjectLockService(project.handle.lockFileWriter()).createLock(manifest, resolution)
             val input = workspace.buildInput(project.handle).get(10, TimeUnit.SECONDS)
             assertEquals(
                 source,
@@ -110,7 +123,7 @@ class LocalIdeWorkflowTest {
             )
             val profile =
                 assertIs<ProfileResolution.Resolved>(
-                    CompileProfileResolver(toolchain, GuestApiBundleCatalog.of(emptyList()), limits)
+                    CompileProfileResolver(toolchain, catalog, limits)
                         .resolveLocal(
                             ru.lazyhat.compukters.ide.project.ProjectLockCodec
                                 .decode(requireNotNull(input.lockBytes).decodeToString()),

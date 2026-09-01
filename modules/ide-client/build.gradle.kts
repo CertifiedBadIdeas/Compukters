@@ -55,6 +55,7 @@ dependencies {
     implementation(projects.compilerClient)
     implementation(projects.workerClient)
     implementation(libs.kotlin.stdlib)
+    testImplementation(projects.platformBundle)
     testImplementation(kotlin("test"))
 }
 
@@ -82,6 +83,7 @@ val allowedIdeClientRuntimeModules =
         ":compiler-runtime",
         ":compiler-client",
         ":worker-client",
+        ":platform-bundle",
         "org.jetbrains.kotlin:kotlin-stdlib",
         "org.jetbrains:annotations",
         "org.tomlj:tomlj",

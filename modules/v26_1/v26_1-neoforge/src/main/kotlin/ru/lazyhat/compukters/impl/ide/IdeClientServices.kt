@@ -25,6 +25,7 @@ import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisBundleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
@@ -63,15 +64,18 @@ import ru.lazyhat.compukters.ide.compiler.DefaultClientCompilationService
 import ru.lazyhat.compukters.ide.compiler.profile.COMPUKTER_ARTIFACT_ABI
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
-import ru.lazyhat.compukters.ide.compiler.profile.GuestApiBundleCatalog
+import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectLockService
+import ru.lazyhat.compukters.ide.project.ProjectResolution
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetClientNetwork
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalClient
 import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
+import ru.lazyhat.compukters.platform.bundle.PlatformBundle
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.worker.payload.PackagedToolingBundle
 import ru.lazyhat.compukters.worker.process.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.worker.process.WorkerLaunch
@@ -228,6 +232,7 @@ internal object ProductionIdeApplicationFactory {
     data class PreparedWorkers(
         val compilerPayload: ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload,
         val analysisPayload: ru.lazyhat.compukters.worker.payload.PublishedToolingProfile,
+        val platform: PlatformBundle,
         val analysisBundles: List<AdmittedAnalysisBundle>,
         val attachedSources: IdeAttachedSourceCatalog,
         val java: Path,
@@ -251,6 +256,7 @@ internal object ProductionIdeApplicationFactory {
                 compilerProfile.classpath,
             )
         val compilerIdentity = compilerPayload.manifest.identity
+        val platform = loadPackagedPlatform(compilerProfile.classpath, compilerIdentity)
         val analysisPayload = bundle.profile("analysis")
         check(analysisPayload.manifest.identityProperties.getValue("compiler") == compilerIdentity.compilerVersion) {
             "analysis worker compiler identity does not match compiler worker"
@@ -273,7 +279,7 @@ internal object ProductionIdeApplicationFactory {
             )
         val attachedSources = loadAttachedSources(analysisBundles, analysisLimits)
         val java = javaExecutable()
-        return PreparedWorkers(compilerPayload, analysisPayload, analysisBundles, attachedSources, java, workerLimits, analysisLimits)
+        return PreparedWorkers(compilerPayload, analysisPayload, platform, analysisBundles, attachedSources, java, workerLimits, analysisLimits)
     }
 
     fun createTooling(
@@ -330,6 +336,7 @@ internal object ProductionIdeApplicationFactory {
                 composeTooling(
                     workspace,
                     compilerIdentity,
+                    prepared.platform,
                     workerLimits,
                     analysisLimits,
                     prepared.analysisBundles,
@@ -404,7 +411,8 @@ internal object ProductionIdeApplicationFactory {
 
     private fun composeTooling(
         workspace: DefaultIdeWorkspace,
-        compilerIdentity: ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity,
+        compilerIdentity: WorkerIdentity,
+        platform: PlatformBundle,
         workerLimits: WorkerLimits,
         analysisLimits: AnalysisLimits,
         analysisBundles: List<AdmittedAnalysisBundle>,
@@ -424,14 +432,14 @@ internal object ProductionIdeApplicationFactory {
                 payloadHash = compilerIdentity.payloadHash,
                 platformAbi = compilerIdentity.platformAbi,
             )
-        val bundles = GuestApiBundleCatalog.of(emptyList())
-        val profileResolver = CompileProfileResolver(toolchain, bundles, workerLimits)
+        val catalog = PlatformCatalog.of(platform)
+        val resolution = ProjectResolution(toolchain, catalog)
+        val profileResolver = CompileProfileResolver(toolchain, catalog, workerLimits)
         val clock = IdeControllerClock.System
         val build =
             IdeBuildCoordinator(
                 IdeBuildServices(
-                    localToolchain = toolchain,
-                    bundles = bundles,
+                    localResolution = resolution,
                     profileResolver = profileResolver,
                     lockServices = { project -> ProjectLockService(project.lockFileWriter()) },
                     compilation = compilation,
@@ -565,6 +573,40 @@ internal object ProductionIdeApplicationFactory {
             AnalysisSemanticSettings(profile.toolchain.languageVersion, profile.toolchain.languageVersion, false),
         )
 
+    internal fun loadPackagedPlatform(
+        classpath: List<Path>,
+        compilerIdentity: WorkerIdentity,
+    ): PlatformBundle {
+        val candidates =
+            classpath.mapNotNull { path ->
+                if (!path.fileName.toString().endsWith(".jar")) return@mapNotNull null
+                ZipFile(path.toFile()).use { archive ->
+                    val entry = archive.getEntry(PLATFORM_ENTRY) ?: return@use null
+                    check(entry.size in 0..MAX_PLATFORM_BYTES) { "packaged Compukters platform exceeds its byte limit" }
+                    archive.getInputStream(entry).use { input ->
+                        val bytes = input.readNBytes((MAX_PLATFORM_BYTES + 1).toInt())
+                        check(bytes.size.toLong() <= MAX_PLATFORM_BYTES) { "packaged Compukters platform exceeds its byte limit" }
+                        PlatformBundleCodec.decode(bytes)
+                    }
+                }
+            }
+        check(candidates.size == 1) { "compiler payload must contain exactly one Compukters platform bundle" }
+        return admitPlatform(candidates.single(), compilerIdentity)
+    }
+
+    internal fun admitPlatform(
+        platform: PlatformBundle,
+        compilerIdentity: WorkerIdentity,
+    ): PlatformBundle {
+        check(platform.identity.languageVersion == compilerIdentity.languageVersion) {
+            "Compukters platform language identity does not match compiler worker"
+        }
+        check(Hash256.of(platform.identity.contentHash.toByteArray()) == compilerIdentity.platformAbi) {
+            "Compukters platform content identity does not match compiler worker"
+        }
+        return platform
+    }
+
     private fun resource(path: String) =
         checkNotNull(ProductionIdeApplicationFactory::class.java.getResourceAsStream(path)) {
             "packaged IDE worker is missing: $path"
@@ -576,6 +618,8 @@ internal object ProductionIdeApplicationFactory {
     }
 
     private const val TOOLING_WORKER_RESOURCE = "/tooling/workers/k2-tooling-workers.zip"
+    private const val PLATFORM_ENTRY = "compukters-platform/compukters-platform.cpb"
+    private const val MAX_PLATFORM_BYTES = 128L * 1024 * 1024
     private const val CORE_GUEST_API_BUNDLE = "compukter.core-api@1"
     private const val COMPILER_HEAP_MIB = 256
     private const val COMPILER_METASPACE_MIB = 256

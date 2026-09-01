@@ -103,6 +103,7 @@ class IdeClientServicesTest {
             val compiler = prepared.compilerPayload
             val analysis = prepared.analysisPayload
             val guestApi = prepared.analysisBundles.single()
+            val platform = prepared.platform
 
             assertEquals(compiler.root, analysis.root)
             assertNotEquals(compiler.classpath, analysis.classpath)
@@ -115,6 +116,16 @@ class IdeClientServicesTest {
                     .startsWith("guest-platform-"),
             )
             assertEquals(guestApi.classRoot, guestApi.sourceRoot)
+            assertEquals(compiler.manifest.identity.languageVersion, platform.identity.languageVersion)
+            assertEquals(
+                compiler.manifest.identity.platformAbi,
+                Hash256.of(platform.identity.contentHash.toByteArray()),
+            )
+
+            val mismatch = compiler.manifest.identity.copy(platformAbi = Hash256.zero())
+            assertFailsWith<IllegalStateException> {
+                ProductionIdeApplicationFactory.admitPlatform(platform, mismatch)
+            }
 
             val compilerLaunch = ProductionIdeApplicationFactory.compilerLaunch(paths, prepared)
             val analysisLaunch = ProductionIdeApplicationFactory.analysisLaunch(paths, prepared)

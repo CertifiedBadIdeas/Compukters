@@ -32,11 +32,9 @@ import ru.lazyhat.compukters.ide.compiler.ClientBuildResult
 import ru.lazyhat.compukters.ide.compiler.ClientBuildSnapshot
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationService
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
-import ru.lazyhat.compukters.ide.compiler.profile.GuestApiBundleCatalog
 import ru.lazyhat.compukters.ide.project.ProjectLock
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectLockService
-import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -173,12 +171,10 @@ class IdeBuildFlowTest {
 
     private fun fixture(compilation: FlowCompilationService): ControllerFixture =
         ControllerFixture(preferences("demo", "src/main.kt")) { workspace, clock ->
-            val catalog = GuestApiBundleCatalog.of(emptyList())
             IdeBuildCoordinator(
                 IdeBuildServices(
-                    toolchain(),
-                    catalog,
-                    CompileProfileResolver(toolchain(), catalog, BUILD_LIMITS),
+                    TEST_PROJECT_RESOLUTION,
+                    CompileProfileResolver(toolchain(), TEST_PLATFORM_CATALOG, BUILD_LIMITS),
                     { project -> ProjectLockService(project.lockFileWriter()) },
                     compilation,
                 ),
@@ -228,6 +224,6 @@ private class FlowCompilationService : ClientCompilationService {
     override fun close() = Unit
 }
 
-private fun toolchain() = ToolchainLockIdentity("2.4.10", "2.4", 1u, 1u, 1u, buildHash(1), buildHash(2))
+private fun toolchain() = TEST_TOOLCHAIN
 
 private fun buildHash(seed: Int) = Hash256.of(ByteArray(32) { seed.toByte() })

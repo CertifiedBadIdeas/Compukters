@@ -60,6 +60,7 @@ val allowedAnalysisClientRuntimeModules =
     setOf(
         ":compiler-client",
         ":ide-core",
+        ":platform-bundle",
         ":worker-client",
         "org.jetbrains.kotlin:kotlin-stdlib",
         "org.jetbrains:annotations",

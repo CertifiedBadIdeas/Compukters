@@ -70,6 +70,17 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
+val guestPlatformSources = configurations.create("guestPlatformSources") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+dependencies {
+    add(guestPlatformSources.name, project(path = ":guest-platform")) {
+        isTransitive = false
+    }
+}
+
 tasks.withType<Jar>().configureEach {
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
@@ -87,6 +98,9 @@ val prepareAnalysisWorkerPayload = tasks.register<Sync>("prepareAnalysisWorkerPa
         into("lib")
     }
     from(configurations.runtimeClasspath) {
+        into("lib")
+    }
+    from(guestPlatformSources) {
         into("lib")
     }
     from(rootProject.layout.projectDirectory.file("licenses/project/Apache-2.0.txt")) {
@@ -208,7 +222,14 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
                 .filter { it.startsWith("lib/") && it.endsWith(".jar") }
                 .map { it.removePrefix("lib/") }
                 .filterNot { name ->
-                    listOf("ide-analysis-k2-", "ide-analysis-client-", "ide-core-", "compiler-client-", "worker-client-")
+                    listOf(
+                        "guest-platform-",
+                        "ide-analysis-k2-",
+                        "ide-analysis-client-",
+                        "ide-core-",
+                        "compiler-client-",
+                        "worker-client-",
+                    )
                         .any(name::startsWith)
                 }
                 .sorted()
