@@ -23,14 +23,6 @@ plugins {
     alias(libs.plugins.releaseConvention)
 }
 
-val cleanWorkspaceSkipDirs =
-    setOf(
-        ".git",
-        ".gradle",
-        ".gradle-sandbox",
-        ".idea",
-        ".toolchain",
-    )
 val compukterVmBuildJobs =
     providers
         .gradleProperty("compukterVmBuildJobs")
@@ -46,28 +38,15 @@ val compukterVmLock = compukterVmRoot.resolve("Cargo.lock")
 
 registerCompukterVmReleaseTasks(compukterVmRoot)
 
-fun cleanWorkspaceTargets(): List<File> {
-    val repositoryRoot = rootProject.projectDir
-    return repositoryRoot
-        .walkTopDown()
-        .onEnter { file ->
-            file == repositoryRoot ||
-                (file.name !in cleanWorkspaceSkipDirs && !file.resolve(".git").exists())
-        }.filter { file ->
-            file.isDirectory && (file.name == "build" || file.name == "target")
-        }.distinctBy { it.canonicalFile }
-        .toList()
-}
-
 val cleanWorkspace =
     tasks.register("cleanWorkspace") {
         description = "Deletes repo-local build and target outputs while preserving .toolchain."
         group = "build"
 
         doLast {
-            cleanWorkspaceTargets().forEach { target ->
-                if (target.exists()) {
-                    delete(target)
+            workspaceCleanTargets(rootProject.projectDir.toPath()).forEach { target ->
+                if (target.toFile().exists()) {
+                    delete(target.toFile())
                 }
             }
         }
