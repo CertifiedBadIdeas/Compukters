@@ -260,6 +260,13 @@ internal fun encodeInstruction(
             operands.writeRegister(instruction.right)
         }
 
+        is Instruction.StringValueOf -> {
+            opcode = 0x68u
+            form = instruction.type.artifactForm
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.source)
+        }
+
         is Instruction.StringLength -> {
             opcode = 0x60u
             operands.writeRegister(instruction.destination)
@@ -411,6 +418,7 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
         is Instruction.StringSubstring,
         is Instruction.StringFromCharArray,
         is Instruction.StringConcat,
+        is Instruction.StringValueOf,
         is Instruction.Jump,
         is Instruction.Branch,
         is Instruction.Return,

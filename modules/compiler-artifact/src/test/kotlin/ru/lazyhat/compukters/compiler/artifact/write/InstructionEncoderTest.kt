@@ -30,6 +30,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.OrderedScalarValueType
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
 import ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType
+import ru.lazyhat.compukters.compiler.artifact.model.StringValueType
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import kotlin.test.Test
@@ -295,6 +296,24 @@ class InstructionEncoderTest {
 
         assertContentEquals(byteArrayOf(0x65, 0, 10, 0, 2, 0, 3, 0, 4, 0), encoded.bytes)
         assertEquals(1u, encoded.fixedCost)
+    }
+
+    @Test
+    fun `scalar string conversion encodes canonical typed forms`() {
+        listOf(
+            StringValueType.I32 to 1,
+            StringValueType.BOOL to 5,
+            StringValueType.CHAR to 6,
+        ).forEach { (type, form) ->
+            val encoded =
+                encodeInstruction(
+                    Instruction.StringValueOf(type, RegisterId.of(1u), RegisterId.of(2u)),
+                    64,
+                )
+
+            assertContentEquals(byteArrayOf(0x68, form.toByte(), 8, 0, 1, 0, 2, 0), encoded.bytes)
+            assertEquals(1u, encoded.fixedCost)
+        }
     }
 
     @Test

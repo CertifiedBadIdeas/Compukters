@@ -51,6 +51,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
+import ru.lazyhat.compukters.compiler.artifact.model.StringValueType
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
@@ -656,6 +657,43 @@ class ArtifactValidatorTest {
     }
 
     @Test
+    fun `scalar string conversion requires its declared source and string destination`() {
+        val valid =
+            executableArtifact(
+                Instruction.StringValueOf(
+                    StringValueType.I32,
+                    RegisterId.of(3u),
+                    RegisterId.of(0u),
+                ),
+            )
+        assertEquals(emptyList(), validateArtifact(valid, ArtifactWriteLimits()))
+
+        val wrongSource =
+            executableArtifact(
+                Instruction.StringValueOf(
+                    StringValueType.BOOL,
+                    RegisterId.of(3u),
+                    RegisterId.of(0u),
+                ),
+            )
+        assertTrue(
+            validateArtifact(wrongSource, ArtifactWriteLimits()).any { it.detail.contains("string conversion source") },
+        )
+
+        val wrongDestination =
+            executableArtifact(
+                Instruction.StringValueOf(
+                    StringValueType.I32,
+                    RegisterId.of(0u),
+                    RegisterId.of(0u),
+                ),
+            )
+        assertTrue(
+            validateArtifact(wrongDestination, ArtifactWriteLimits()).any { it.detail.contains("kotlin.String") },
+        )
+    }
+
+    @Test
     fun `string concat requires the unique canonical standard library string export`() {
         val artifact = executableArtifact(Instruction.StringConcat(RegisterId.of(3u), RegisterId.of(1u), RegisterId.of(2u)))
         val invalid =
@@ -669,24 +707,32 @@ class ArtifactValidatorTest {
     }
 
     @Test
-    fun `string concat obeys the pinned allocation block placement rule`() {
-        val artifact = executableArtifact(Instruction.StringConcat(RegisterId.of(3u), RegisterId.of(1u), RegisterId.of(2u)))
-        val module = artifact.modules[0]
-        val invalid =
-            artifact.copy(
-                modules =
-                    listOf(
-                        module.copy(
-                            blocks =
-                                module.blocks.toMutableList().also {
-                                    it[0] = it[0].copy(instructions = listOf(Instruction.Null(RegisterId.of(1u))) + it[0].instructions)
-                                },
+    fun `string allocation instructions obey the pinned block placement rule`() {
+        listOf(
+            Instruction.StringConcat(RegisterId.of(3u), RegisterId.of(1u), RegisterId.of(2u)),
+            Instruction.StringValueOf(StringValueType.I32, RegisterId.of(3u), RegisterId.of(0u)),
+        ).forEach { instruction ->
+            val artifact = executableArtifact(instruction)
+            val module = artifact.modules[0]
+            val invalid =
+                artifact.copy(
+                    modules =
+                        listOf(
+                            module.copy(
+                                blocks =
+                                    module.blocks.toMutableList().also {
+                                        it[0] =
+                                            it[0].copy(
+                                                instructions = listOf(Instruction.Null(RegisterId.of(1u))) + it[0].instructions,
+                                            )
+                                    },
+                            ),
+                            artifact.modules[1],
                         ),
-                        artifact.modules[1],
-                    ),
-            )
+                )
 
-        assertTrue(validateArtifact(invalid, ArtifactWriteLimits()).any { it.detail.contains("allocation") })
+            assertTrue(validateArtifact(invalid, ArtifactWriteLimits()).any { it.detail.contains("allocation") })
+        }
     }
 
     @Test
