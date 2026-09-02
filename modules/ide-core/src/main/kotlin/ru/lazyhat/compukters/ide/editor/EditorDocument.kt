@@ -164,6 +164,66 @@ class EditorDocument(
         text: String,
     ): EditorEditResult = replace(range, text, EditorHistoryKind.Atomic, EditorChangeOrigin.User)
 
+    fun replaceRanges(
+        primaryRange: EditorRange,
+        primaryText: String,
+        additionalEdits: List<EditorTextEdit>,
+    ): EditorEditResult {
+        if (additionalEdits.isEmpty()) return replaceRange(primaryRange, primaryText)
+        if (closed) return EditorEditResult.Rejected(EditorRejection.Closed)
+        val edits = listOf(EditorTextEdit(primaryRange, primaryText)) + additionalEdits
+        if (
+            edits.any { edit -> !isCaretBoundary(edit.range.startUtf16) || !isCaretBoundary(edit.range.endUtf16) } ||
+            edits.indices.any { left ->
+                (left + 1 until edits.size).any { right -> edits[left].range.conflictsWith(edits[right].range) }
+            }
+        ) {
+            return EditorEditResult.Rejected(EditorRejection.InvalidRange)
+        }
+        val ordered = edits.sortedBy { it.range.startUtf16 }
+        val preview = EditorBuffer(materialize(), limits)
+        for (edit in ordered.asReversed()) {
+            when (val result = preview.replace(edit.range.startUtf16, edit.range.endUtf16, edit.text)) {
+                BufferReplaceResult.Applied -> Unit
+                is BufferReplaceResult.Rejected -> return EditorEditResult.Rejected(result.reason)
+            }
+        }
+        var delta = 0
+        val historyEdits =
+            ordered.map { edit ->
+                val removed = buffer.copyRange(edit.range.startUtf16, edit.range.endUtf16).concatToString()
+                EditorHistoryEdit(edit.range.startUtf16, edit.range.startUtf16 + delta, removed, edit.text).also {
+                    delta += edit.text.length - edit.range.length
+                }
+            }
+        val primaryIndex = ordered.indexOfFirst { it === edits.first() }
+        val primary = historyEdits[primaryIndex]
+        val before = selection
+        val caret = primary.afterStartUtf16 + primary.inserted.length
+        val after = EditorSelection(caret, caret)
+        val entry = EditorHistoryEntry(historyEdits, before, after, EditorHistoryKind.Atomic)
+        if (!history.canRecord(entry)) return EditorEditResult.Rejected(EditorRejection.UndoLimit)
+        val oldStart = historyEdits.minOf(EditorHistoryEdit::beforeStartUtf16)
+        val oldEnd = historyEdits.maxOf { it.beforeStartUtf16 + it.removed.length }
+        val oldRange = EditorRange(oldStart, oldEnd)
+        val oldLines = lines.affectedLines(oldRange)
+        historyEdits.asReversed().forEach { edit ->
+            check(
+                buffer.replace(
+                    edit.beforeStartUtf16,
+                    edit.beforeStartUtf16 + edit.removed.length,
+                    edit.inserted,
+                ) == BufferReplaceResult.Applied,
+            )
+        }
+        lines.rebuild()
+        selection = after
+        preferredColumn = null
+        history.record(entry)
+        val newEnd = historyEdits.maxOf { it.afterStartUtf16 + it.inserted.length }
+        return publish(oldRange, newEnd - oldStart, oldLines, lines.affectedLines(EditorRange(oldStart, newEnd)), EditorChangeOrigin.User)
+    }
+
     fun cut(): EditorEditResult {
         val range = selectionRange ?: return EditorEditResult.NoChange
         return replace(range, "", EditorHistoryKind.Atomic, EditorChangeOrigin.User)
@@ -272,7 +332,13 @@ class EditorDocument(
         val removed = buffer.copyRange(range.startUtf16, range.endUtf16).concatToString()
         val before = selection
         val after = EditorSelection(range.startUtf16 + text.length, range.startUtf16 + text.length)
-        val entry = EditorHistoryEntry(range.startUtf16, removed, text, before, after, kind)
+        val entry =
+            EditorHistoryEntry(
+                listOf(EditorHistoryEdit(range.startUtf16, range.startUtf16, removed, text)),
+                before,
+                after,
+                kind,
+            )
         if (!history.canRecord(entry)) return EditorEditResult.Rejected(EditorRejection.UndoLimit)
         val oldLines = lines.affectedLines(range)
         when (val result = buffer.replace(range.startUtf16, range.endUtf16, text)) {
@@ -296,19 +362,33 @@ class EditorDocument(
         entry: EditorHistoryEntry,
         undo: Boolean,
     ): EditorEditResult {
-        val removedNow = if (undo) entry.inserted else entry.removed
-        val insertedNow = if (undo) entry.removed else entry.inserted
-        val range = EditorRange(entry.startUtf16, entry.startUtf16 + removedNow.length)
+        val applied =
+            entry.edits.asReversed().map { edit ->
+                if (undo) {
+                    EditorTextEdit(EditorRange(edit.afterStartUtf16, edit.afterStartUtf16 + edit.inserted.length), edit.removed)
+                } else {
+                    EditorTextEdit(EditorRange(edit.beforeStartUtf16, edit.beforeStartUtf16 + edit.removed.length), edit.inserted)
+                }
+            }
+        val range = EditorRange(applied.minOf { it.range.startUtf16 }, applied.maxOf { it.range.endUtf16 })
         val oldLines = lines.affectedLines(range)
-        check(buffer.replace(range.startUtf16, range.endUtf16, insertedNow) == BufferReplaceResult.Applied)
-        lines.rebuildFrom(oldLines.first)
+        applied.forEach { edit ->
+            check(buffer.replace(edit.range.startUtf16, edit.range.endUtf16, edit.text) == BufferReplaceResult.Applied)
+        }
+        lines.rebuild()
         selection = if (undo) entry.beforeSelection else entry.afterSelection
         preferredColumn = null
+        val insertedEnd =
+            if (undo) {
+                entry.edits.maxOf { it.beforeStartUtf16 + it.removed.length }
+            } else {
+                entry.edits.maxOf { it.afterStartUtf16 + it.inserted.length }
+            }
         return publish(
             range,
-            insertedNow.length,
+            insertedEnd - range.startUtf16,
             oldLines,
-            lines.affectedLines(EditorRange(range.startUtf16, range.startUtf16 + insertedNow.length)),
+            lines.affectedLines(EditorRange(range.startUtf16, insertedEnd)),
             EditorChangeOrigin.UndoRedo,
         )
     }
@@ -378,3 +458,7 @@ class EditorDocument(
         return !(Character.isHighSurrogate(buffer.charAt(offset - 1)) && Character.isLowSurrogate(buffer.charAt(offset)))
     }
 }
+
+private fun EditorRange.conflictsWith(other: EditorRange): Boolean =
+    (startUtf16 < other.endUtf16 && other.startUtf16 < endUtf16) ||
+        (startUtf16 == other.startUtf16 && (length == 0 || other.length == 0))

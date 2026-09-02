@@ -179,6 +179,50 @@ class EditorDocumentTest {
         assertEquals(0, editor.undoEntryCount)
     }
 
+    @Test
+    fun `compound replacement applies import and symbol as one undoable edit`() {
+        val initial = "package application\n\nfun main() { Rem }"
+        val editor = EditorDocument(initial)
+        val start = initial.indexOf("Rem")
+
+        assertIs<EditorEditResult.Applied>(
+            editor.replaceRanges(
+                EditorRange(start, start + 3),
+                "RemoteApi",
+                listOf(
+                    EditorTextEdit(
+                        EditorRange("package application".length, "package application".length),
+                        "\n\nimport library.RemoteApi",
+                    ),
+                ),
+            ),
+        )
+        assertEquals("package application\n\nimport library.RemoteApi\n\nfun main() { RemoteApi }", editor.materialize())
+        assertEquals(1, editor.revision)
+        assertEquals(1, editor.undoEntryCount)
+
+        assertIs<EditorEditResult.Applied>(editor.undo())
+        assertEquals(initial, editor.materialize())
+        assertIs<EditorEditResult.Applied>(editor.redo())
+        assertEquals("package application\n\nimport library.RemoteApi\n\nfun main() { RemoteApi }", editor.materialize())
+    }
+
+    @Test
+    fun `compound replacement rejects overlapping edits without changing the document`() {
+        val editor = EditorDocument("abcdef")
+
+        assertEquals(
+            EditorEditResult.Rejected(EditorRejection.InvalidRange),
+            editor.replaceRanges(
+                EditorRange(2, 4),
+                "value",
+                listOf(EditorTextEdit(EditorRange(3, 3), "import")),
+            ),
+        )
+        assertEquals("abcdef", editor.materialize())
+        assertEquals(0, editor.revision)
+    }
+
     private fun limits(
         maxCodeUnits: Int = 128,
         maxUtf8Bytes: Int = 256,

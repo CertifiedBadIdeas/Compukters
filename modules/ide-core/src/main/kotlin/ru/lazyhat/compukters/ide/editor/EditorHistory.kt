@@ -25,16 +25,21 @@ internal enum class EditorHistoryKind {
 }
 
 internal data class EditorHistoryEntry(
-    val startUtf16: Int,
-    val removed: String,
-    val inserted: String,
+    val edits: List<EditorHistoryEdit>,
     val beforeSelection: EditorSelection,
     val afterSelection: EditorSelection,
     val kind: EditorHistoryKind,
 ) {
     val charge: Int
-        get() = removed.length + inserted.length
+        get() = edits.sumOf { it.removed.length + it.inserted.length }
 }
+
+internal data class EditorHistoryEdit(
+    val beforeStartUtf16: Int,
+    val afterStartUtf16: Int,
+    val removed: String,
+    val inserted: String,
+)
 
 internal class EditorHistory(
     private val limits: EditorLimits,
@@ -102,24 +107,35 @@ internal class EditorHistory(
         if (!groupOpen) return null
         val previous = undo.lastOrNull() ?: return null
         if (previous.kind != next.kind) return null
+        val previousEdit = previous.edits.singleOrNull() ?: return null
+        val nextEdit = next.edits.singleOrNull() ?: return null
         return when (next.kind) {
             EditorHistoryKind.Typing -> {
-                if (previous.removed.isEmpty() && next.removed.isEmpty() &&
-                    previous.startUtf16 + previous.inserted.length == next.startUtf16
+                if (previousEdit.removed.isEmpty() && nextEdit.removed.isEmpty() &&
+                    previousEdit.beforeStartUtf16 + previousEdit.inserted.length == nextEdit.beforeStartUtf16
                 ) {
-                    previous.copy(inserted = previous.inserted + next.inserted, afterSelection = next.afterSelection)
+                    previous.copy(
+                        edits = listOf(previousEdit.copy(inserted = previousEdit.inserted + nextEdit.inserted)),
+                        afterSelection = next.afterSelection,
+                    )
                 } else {
                     null
                 }
             }
 
             EditorHistoryKind.Backspace -> {
-                if (previous.inserted.isEmpty() && next.inserted.isEmpty() &&
-                    next.startUtf16 + next.removed.length == previous.startUtf16
+                if (previousEdit.inserted.isEmpty() && nextEdit.inserted.isEmpty() &&
+                    nextEdit.beforeStartUtf16 + nextEdit.removed.length == previousEdit.beforeStartUtf16
                 ) {
                     previous.copy(
-                        startUtf16 = next.startUtf16,
-                        removed = next.removed + previous.removed,
+                        edits =
+                            listOf(
+                                previousEdit.copy(
+                                    beforeStartUtf16 = nextEdit.beforeStartUtf16,
+                                    afterStartUtf16 = nextEdit.afterStartUtf16,
+                                    removed = nextEdit.removed + previousEdit.removed,
+                                ),
+                            ),
                         afterSelection = next.afterSelection,
                     )
                 } else {
