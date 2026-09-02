@@ -222,6 +222,42 @@ class DeclarationQueryTest {
         }
     }
 
+    @Test
+    fun `navigation maps an overloaded platform println to its exact source`() {
+        val source = "fun main() { println(7) }"
+        val sourcePath = "compukters-platform/sources/libraries/std-terminal/kotlin/io/Console.kt"
+        val guestApi = Path.of(requireNotNull(System.getProperty("compukters.test.guestApi")))
+        val guestSource =
+            ZipFile(guestApi.toFile()).use { archive ->
+                archive.getInputStream(requireNotNull(archive.getEntry(sourcePath))).reader().readText()
+            }
+        K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
+            val result =
+                fixture.execute(
+                    AnalysisQuery.Declaration(
+                        fixture.identity,
+                        VirtualSourcePath.kotlin("main.kt"),
+                        source.indexOf("println") + 1,
+                    ),
+                ) as AnalysisResult.Declaration
+            val declarationStart = guestSource.indexOf("println(value: Int)")
+
+            assertEquals(
+                listOf(
+                    DeclarationLocation.Source(
+                        DeclarationOrigin.Platform(
+                            fixture.snapshot.moduleIdentities.values
+                                .single { it.name == "std:terminal" },
+                        ),
+                        VirtualSourcePath.kotlin(sourcePath),
+                        EditorRange(declarationStart, declarationStart + "println".length),
+                    ),
+                ),
+                result.locations,
+            )
+        }
+    }
+
     private fun sourceLocation(
         path: String,
         start: Int,

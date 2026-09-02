@@ -22,14 +22,17 @@ import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
 import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.components.render
 import org.jetbrains.kotlin.analysis.api.renderer.declarations.impl.KaDeclarationRendererForSource
+import org.jetbrains.kotlin.analysis.api.renderer.types.impl.KaTypeRendererForSource
 import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassLikeSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaConstructorSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaDeclarationSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaFunctionSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.findClass
 import org.jetbrains.kotlin.analysis.api.symbols.symbol
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
+import org.jetbrains.kotlin.types.Variance
 import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
@@ -66,9 +69,11 @@ internal object DeclarationOriginMapper {
         val stableId = navigableSymbol.stableId()?.replace('/', '.') ?: return null
         val targetSignature =
             (navigableSymbol as? KaDeclarationSymbol)?.render(KaDeclarationRendererForSource.WITH_QUALIFIED_NAMES)
+        val canonicalSignature = (navigableSymbol as? KaFunctionSymbol)?.let(::canonicalPlatformSignature)
         val candidates = snapshot.platform.declarations.filter { it.symbol == stableId }
         val platformDeclaration =
             candidates.singleOrNull()
+                ?: candidates.singleOrNull { declaration -> declaration.signature == canonicalSignature }
                 ?: candidates.firstOrNull { declaration -> declaration.signature == targetSignature }
                 ?: return null
         val identity = snapshot.moduleIdentities[platformDeclaration.module] ?: return null
@@ -112,6 +117,18 @@ internal object DeclarationOriginMapper {
             EditorRange(identifier.textRange.startOffset, identifier.textRange.endOffset),
         )
     }
+}
+
+@OptIn(KaExperimentalApi::class)
+private fun KaSession.canonicalPlatformSignature(symbol: KaFunctionSymbol): String {
+    val parameters =
+        listOfNotNull(symbol.receiverParameter?.returnType)
+            .plus(symbol.valueParameters.map { it.returnType })
+            .joinToString(",") { type ->
+                type.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT)
+            }
+    val result = symbol.returnType.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT)
+    return "fun($parameters):$result"
 }
 
 private fun KaSymbol.stableId(): String? =
