@@ -470,6 +470,7 @@ internal object ProductionIdeApplicationFactory {
                     },
                 limits = clientLimits,
                 attachedSources = attachedSources,
+                platformCatalog = catalog,
                 visibleLatency = visibleLatency,
             )
         return IdeClientTooling(build, analysis, analysisService)
@@ -543,7 +544,7 @@ internal object ProductionIdeApplicationFactory {
                     frameBytes = limits.frameBytes,
                 ),
             )
-        val admittedModules = profile.modules.map { module -> analysisModule(module.descriptor) }
+        val admittedModules = admittedAnalysisModules(profile.modules.map { module -> module.descriptor })
         val profileIdentity = analysisProfile(profile, ProjectLockCodec.encode(lock).encodeToByteArray(), admittedModules)
         val admittedPlatform =
             AdmittedAnalysisPlatform(profile.toolchain.platformAbi, admittedModules, platformSourceRoot.toString())
@@ -574,6 +575,10 @@ internal object ProductionIdeApplicationFactory {
                 Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()),
             ),
         )
+
+    internal fun admittedAnalysisModules(
+        modules: List<ru.lazyhat.compukters.platform.bundle.PlatformModule>,
+    ): List<AdmittedAnalysisModule> = modules.sortedBy { it.id }.map(::analysisModule)
 
     internal fun loadPackagedPlatform(
         classpath: List<Path>,

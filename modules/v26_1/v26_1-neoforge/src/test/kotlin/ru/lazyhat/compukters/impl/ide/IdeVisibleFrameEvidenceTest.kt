@@ -30,6 +30,7 @@ import ru.lazyhat.compukters.ide.analysis.SourceSnapshotId
 import ru.lazyhat.compukters.ide.client.analysis.BoundedIdeVisibleLatencyCollector
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisPresentation
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
+import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionEntry
 import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionState
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyClock
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
@@ -102,8 +103,10 @@ class IdeVisibleFrameEvidenceTest {
             IdeCompletionState.create(
                 IDENTITY,
                 VIRTUAL_PATH,
+                13,
+                0,
                 ANSWER_RANGE,
-                listOf(CompletionItem("answer", "answer", CompletionKind.Property)),
+                listOf(IdeCompletionEntry(CompletionItem("answer", "answer", CompletionKind.Property), null, null)),
             )
         val state = workspaceState(textEditor(revision = 13, completion = completion, caretUtf16 = ANSWER_RANGE.endUtf16))
         val model = IdeRenderer.extract(state, geometry())
