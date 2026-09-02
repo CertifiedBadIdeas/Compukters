@@ -36,6 +36,12 @@ import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
 import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.editor.EditorRange
+import ru.lazyhat.compukters.ide.project.ApiMajor
+import ru.lazyhat.compukters.ide.project.ModuleId
+import ru.lazyhat.compukters.ide.project.ProjectDependencyReceipt
+import ru.lazyhat.compukters.ide.project.ProjectDependencyRollback
+import ru.lazyhat.compukters.ide.project.ProjectDependencyService
+import ru.lazyhat.compukters.ide.project.ProjectDependencyUpdate
 import ru.lazyhat.compukters.ide.project.ProjectHandle
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectLockService
@@ -130,6 +136,46 @@ class IdeBuildCoordinator(
         }
         return IdeBuildJob(control.started, control.result) { cancel(control) }
     }
+
+    fun enableModule(
+        project: ProjectHandle,
+        id: ModuleId,
+        major: ApiMajor,
+        target: TargetCompileProfile? = null,
+    ): CompletableFuture<ProjectDependencyUpdate> =
+        submit(
+            action = {
+                ProjectDependencyService(project, services.localResolution).enableModule(id, major) { proposed ->
+                    val admitted = target?.let { services.profileResolver.resolveTarget(proposed, it) }
+                    if (admitted == null || admitted is ProfileResolution.Resolved) {
+                        null
+                    } else {
+                        "target compile profile is unsatisfied: ${admitted::class.simpleName}"
+                    }
+                }
+            },
+            rejected =
+                ProjectDependencyUpdate.Conflict(
+                    if (closed.get()) "build coordinator is closed" else "build queue is full",
+                ),
+        )
+
+    fun rollbackModule(
+        project: ProjectHandle,
+        receipt: ProjectDependencyReceipt,
+    ): CompletableFuture<ProjectDependencyRollback> =
+        submit(
+            action = { rollbackModuleNow(project, receipt) },
+            rejected =
+                ProjectDependencyRollback.Conflict(
+                    if (closed.get()) "build coordinator is closed" else "build queue is full",
+                ),
+        )
+
+    internal fun rollbackModuleNow(
+        project: ProjectHandle,
+        receipt: ProjectDependencyReceipt,
+    ): ProjectDependencyRollback = ProjectDependencyService(project, services.localResolution).rollback(receipt)
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
