@@ -101,6 +101,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
 import ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
+import ru.lazyhat.compukters.compiler.artifact.model.StringValueType
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
@@ -749,7 +750,7 @@ internal object KotlinProjectLowering {
                 .sorted()
         val metadataIds = metadataValues.withIndex().associate { (index, value) -> value.toString() to StringId.of(index.toUInt()) }
         val literalCollector =
-            LiteralCollector()
+            LiteralCollector(pluginContext.irBuiltIns.unitType)
                 .also { userFunctions.forEach { function -> function.accept(it, null) } }
         var needsAllBitsI32 = false
         userFunctions.forEach { function ->
@@ -2092,15 +2093,45 @@ private class FunctionCompiler(
     private fun compileConcat(expression: IrStringConcatenation): RegisterId {
         val arguments = expression.arguments
         if (arguments.isEmpty()) throw UnsupportedKotlinIr(expression, "empty string concatenation")
-        var result = compileExpression(arguments.first())
+        var result = compileStringPart(arguments.first())
         arguments.drop(1).forEach { argument ->
-            val right = compileExpression(argument)
+            val right = compileStringPart(argument)
             prepareAllocationBlock()
             val destination = allocate(stringType)
             emit(Instruction.StringConcat(destination, result, right))
             result = destination
         }
         return result
+    }
+
+    private fun compileStringPart(expression: IrExpression): RegisterId {
+        if (expression.type == kotlinStringType) return compileExpression(expression)
+        if (expression.type == unitType) {
+            compileStatement(expression)
+            return loadStringLiteral("kotlin.Unit")
+        }
+        val conversionType =
+            when (valueType(expression.type, expression)) {
+                ValueType.I32 -> StringValueType.I32
+                ValueType.Bool -> StringValueType.BOOL
+                ValueType.Char -> StringValueType.CHAR
+                else -> throw UnsupportedKotlinIr(expression, "object string conversion requires virtual dispatch")
+            }
+        val source = compileExpression(expression)
+        prepareAllocationBlock()
+        return allocate(stringType).also { destination ->
+            emit(Instruction.StringValueOf(conversionType, destination, source))
+        }
+    }
+
+    private fun loadStringLiteral(value: String): RegisterId {
+        val constant = value.toArtifactConstant(literalIds)
+        val constantId =
+            constantIds[constant]
+                ?: throw IllegalStateException("canonical string literal is absent from the constant pool")
+        return allocate(stringType).also { destination ->
+            emit(Instruction.Const(destination, constantId))
+        }
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -2927,7 +2958,9 @@ private fun IrSimpleFunction.canonicalPlatformSignature(): String {
 }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
-private class LiteralCollector : IrVisitorVoid() {
+private class LiteralCollector(
+    private val unitType: IrType,
+) : IrVisitorVoid() {
     val values = mutableListOf<Any>()
     val strings: List<String>
         get() = values.filterIsInstance<String>()
@@ -2957,6 +2990,11 @@ private class LiteralCollector : IrVisitorVoid() {
             values.addAll(listOf(0, 1))
         }
         super.visitCall(expression)
+    }
+
+    override fun visitStringConcatenation(expression: IrStringConcatenation) {
+        if (expression.arguments.any { it.type == unitType }) values += "kotlin.Unit"
+        super.visitStringConcatenation(expression)
     }
 }
 
