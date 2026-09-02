@@ -407,6 +407,8 @@ internal fun validateArtifact(
 
             is Instruction.StringConcat -> listOf(left, right)
 
+            is Instruction.StringValueOf -> listOf(source)
+
             is Instruction.StringLength -> listOf(string)
 
             is Instruction.StringGet -> listOf(string, index)
@@ -494,6 +496,8 @@ internal fun validateArtifact(
 
             is Instruction.StringConcat -> listOf(destination)
 
+            is Instruction.StringValueOf -> listOf(destination)
+
             is Instruction.StringLength -> listOf(destination)
 
             is Instruction.StringGet -> listOf(destination)
@@ -545,6 +549,7 @@ internal fun validateArtifact(
             this is Instruction.CapabilityCallAsync ||
             this is Instruction.StringGet ||
             this is Instruction.StringConcat ||
+            this is Instruction.StringValueOf ||
             this is Instruction.StringSubstring ||
             this is Instruction.StringFromCharArray ||
             this is Instruction.Throw
@@ -790,6 +795,7 @@ internal fun validateArtifact(
                         instruction is Instruction.NewObject ||
                             instruction is Instruction.NewArray ||
                             instruction is Instruction.StringConcat ||
+                            instruction is Instruction.StringValueOf ||
                             instruction is Instruction.StringSubstring ||
                             instruction is Instruction.StringFromCharArray
                     }
@@ -1266,6 +1272,30 @@ internal fun validateArtifact(
                                         location,
                                     )
                                 }
+                            }
+                        }
+
+                        is Instruction.StringValueOf -> {
+                            val source = register(instruction.source, "source")
+                            if (source != null && source != instruction.type.valueType) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "string conversion source does not match its declared scalar type",
+                                    location,
+                                )
+                            }
+                            val expected = stringIdentity()
+                            val destination = register(instruction.destination, "destination")
+                            val destinationIdentity =
+                                (destination as? ValueType.Ref)?.takeIf { !it.nullable }?.let {
+                                    resolveType(moduleIndex, it.type)
+                                }
+                            if (destination != null && (expected == null || destinationIdentity != expected)) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "string conversion destination is not the non-null kotlin.String type",
+                                    location,
+                                )
                             }
                         }
 

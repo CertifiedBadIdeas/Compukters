@@ -64,6 +64,16 @@ enum class OrderedScalarValueType(
     CHAR(6u, ValueType.Char),
 }
 
+/** Scalar kinds accepted by Artifact v1 string-value conversion forms. */
+enum class StringValueType(
+    internal val artifactForm: UInt,
+    internal val valueType: ValueType,
+) {
+    I32(1u, ValueType.I32),
+    BOOL(5u, ValueType.Bool),
+    CHAR(6u, ValueType.Char),
+}
+
 sealed interface NominalType {
     val name: StringId
 

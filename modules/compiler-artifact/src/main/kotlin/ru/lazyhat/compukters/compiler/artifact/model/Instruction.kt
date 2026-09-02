@@ -252,6 +252,12 @@ sealed interface Instruction {
         val right: RegisterId,
     ) : Instruction
 
+    data class StringValueOf(
+        val type: StringValueType,
+        val destination: RegisterId,
+        val source: RegisterId,
+    ) : Instruction
+
     data class StringLength(
         val destination: RegisterId,
         val string: RegisterId,

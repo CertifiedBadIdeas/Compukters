@@ -622,6 +622,17 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                     }
                 }
 
+                0x68u -> {
+                    val type =
+                        when (form) {
+                            1u -> StringValueType.I32
+                            5u -> StringValueType.BOOL
+                            6u -> StringValueType.CHAR
+                            else -> error("unsupported string conversion form $form")
+                        }
+                    Instruction.StringValueOf(type, r(), r())
+                }
+
                 0x60u -> {
                     Instruction.StringLength(r(), r())
                 }
