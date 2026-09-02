@@ -24,8 +24,11 @@ import org.jetbrains.kotlin.analysis.api.components.expressionType
 import org.jetbrains.kotlin.analysis.api.components.render
 import org.jetbrains.kotlin.analysis.api.components.resolveSymbol
 import org.jetbrains.kotlin.analysis.api.renderer.declarations.impl.KaDeclarationRendererForSource
+import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.symbol
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtVariableDeclaration
 import org.jetbrains.kotlin.types.Variance
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
@@ -51,9 +54,37 @@ internal object ExpressionInfoQuery {
                 .filterIsInstance<KtExpression>()
                 .filter { it.textRange.length > 0 }
                 .toList()
+        val declaration =
+            generateSequence(element) { it.parent }
+                .filterIsInstance<KtVariableDeclaration>()
+                .firstOrNull { candidate ->
+                    val range = candidate.nameIdentifier?.textRange
+                    range != null && query.offsetUtf16 in range.startOffset until range.endOffset
+                }
         val info =
-            expressions.firstOrNull()?.let {
+            element?.let {
                 analyze(file) {
+                    val declarationSymbol = declaration?.symbol as? KaCallableSymbol
+                    if (declarationSymbol != null) {
+                        val nameRange = requireNotNull(declaration.nameIdentifier).textRange
+                        return@analyze EditorExpressionInfo(
+                            query.path,
+                            EditorRange(nameRange.startOffset, nameRange.endOffset),
+                            requiredBoundedUtf8(
+                                declarationSymbol.returnType.render(position = Variance.INVARIANT),
+                                limits.detailTextBytes,
+                                "rendered type",
+                            ),
+                            signature =
+                                declarationSymbol
+                                    .render(KaDeclarationRendererForSource.WITH_QUALIFIED_NAMES)
+                                    .let { value -> requiredBoundedUtf8(value, limits.detailTextBytes, "callable signature") },
+                            origin =
+                                DeclarationOriginMapper
+                                    .run { map(declarationSymbol, snapshot) }
+                                    ?.let { mapped -> DeclarationOriginMapper.run { mapped.origin() } },
+                        )
+                    }
                     val expression = expressions.firstOrNull { candidate -> candidate.expressionType != null } ?: return@analyze null
                     val rendered =
                         requiredBoundedUtf8(
