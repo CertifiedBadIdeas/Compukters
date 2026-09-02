@@ -146,6 +146,95 @@ internal object SecureProjectFiles {
         hook: (ProjectWriteStep) -> Unit,
     ): SecureWriteResult = writeFile(identity, path, expected, content, maximumBytes, hook)
 
+    internal fun replaceBatch(
+        identity: ProjectRootIdentity,
+        replacements: List<SecureBatchReplacement>,
+        hook: (ProjectPath, SecureBatchWriteStep) -> Unit = { _, _ -> },
+    ): SecureBatchWriteResult =
+        synchronized(identity) {
+            require(replacements.isNotEmpty()) { "secure batch must not be empty" }
+            require(replacements.map(SecureBatchReplacement::path).toSet().size == replacements.size) {
+                "secure batch contains duplicate paths"
+            }
+            require(replacements.all { it.path.components.size == 1 }) { "secure batch supports direct project files only" }
+            withValidProject(identity) { root ->
+                data class Staged(
+                    val replacement: SecureBatchReplacement,
+                    val target: Path,
+                    val temporary: Path?,
+                    val backup: Path,
+                    var backedUp: Boolean = false,
+                    var published: Boolean = false,
+                )
+
+                val token = UUID.randomUUID().toString()
+                val staged =
+                    replacements.mapIndexed { index, replacement ->
+                        require((replacement.content?.size ?: 0) <= replacement.maximumBytes) {
+                            "secure batch content exceeds byte limit: ${replacement.path.value}"
+                        }
+                        val temporary = replacement.content?.let { Path.of(".compukter-batch-$token-$index.tmp") }
+                        if (temporary != null) {
+                            root.newByteChannel(temporary, WRITE_NEW_OPTIONS).use { channel ->
+                                writeFully(channel, requireNotNull(replacement.content))
+                                (channel as? FileChannel)?.force(true)
+                            }
+                        }
+                        hook(replacement.path, SecureBatchWriteStep.STAGED)
+                        Staged(
+                            replacement,
+                            Path.of(replacement.path.value),
+                            temporary,
+                            Path.of(".compukter-batch-$token-$index.bak"),
+                        )
+                    }
+                try {
+                    hook(replacements.first().path, SecureBatchWriteStep.BEFORE_PUBLISH)
+                    if (!isValid(identity)) throw SecureProjectFileException("project root was invalidated")
+                    staged.forEach { item ->
+                        val actual = revision(root, item.target, item.replacement.maximumBytes)
+                        if (actual != item.replacement.expected) {
+                            return@withValidProject SecureBatchWriteResult.Conflict(item.replacement.path, actual)
+                        }
+                    }
+                    staged.forEach { item ->
+                        if (attributesOrNull(root, item.target) != null) {
+                            root.move(item.target, root, item.backup)
+                            item.backedUp = true
+                        }
+                        item.temporary?.let { root.move(it, root, item.target) }
+                        item.published = true
+                        hook(item.replacement.path, SecureBatchWriteStep.PUBLISHED)
+                    }
+                    val revisions =
+                        staged.associate { item ->
+                            item.replacement.path to revision(root, item.target, item.replacement.maximumBytes)
+                        }
+                    staged.forEach { item ->
+                        if (item.backedUp) root.deleteFile(item.backup)
+                        item.backedUp = false
+                    }
+                    SecureBatchWriteResult.Published(revisions)
+                } catch (failure: Throwable) {
+                    staged.asReversed().forEach { item ->
+                        try {
+                            if (item.published && attributesOrNull(root, item.target) != null) root.deleteFile(item.target)
+                            if (item.backedUp) root.move(item.backup, root, item.target)
+                            item.backedUp = false
+                        } catch (rollback: Throwable) {
+                            failure.addSuppressed(rollback)
+                        }
+                    }
+                    throw failure
+                } finally {
+                    staged.forEach { item ->
+                        item.temporary?.let { runCatching { root.deleteFile(it) } }
+                        if (!item.backedUp) runCatching { root.deleteFile(item.backup) }
+                    }
+                }
+            }
+        }
+
     internal fun createFile(
         identity: ProjectRootIdentity,
         path: ProjectPath,
@@ -601,8 +690,34 @@ internal sealed interface SecureWriteResult {
     ) : SecureWriteResult
 }
 
+internal data class SecureBatchReplacement(
+    val path: ProjectPath,
+    val expected: FileRevision,
+    val content: ByteArray?,
+    val maximumBytes: Int,
+)
+
+internal enum class SecureBatchWriteStep {
+    STAGED,
+    BEFORE_PUBLISH,
+    PUBLISHED,
+}
+
+internal sealed interface SecureBatchWriteResult {
+    data class Published(
+        val revisions: Map<ProjectPath, FileRevision>,
+    ) : SecureBatchWriteResult
+
+    data class Conflict(
+        val path: ProjectPath,
+        val actual: FileRevision,
+    ) : SecureBatchWriteResult
+}
+
 internal sealed interface SecureImportResult<out T> {
     data object Conflict : SecureImportResult<Nothing>
 
-    data class Published<T>(val value: T) : SecureImportResult<T>
+    data class Published<T>(
+        val value: T,
+    ) : SecureImportResult<T>
 }
