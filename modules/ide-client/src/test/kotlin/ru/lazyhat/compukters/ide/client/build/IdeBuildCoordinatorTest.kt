@@ -38,9 +38,9 @@ import ru.lazyhat.compukters.ide.compiler.ClientBuildSnapshot
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationService
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
-import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
+import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ProjectDependencyRollback
 import ru.lazyhat.compukters.ide.project.ProjectDependencyUpdate
 import ru.lazyhat.compukters.ide.project.ProjectDescriptor
@@ -177,7 +177,10 @@ class IdeBuildCoordinatorTest {
 
     @Test
     fun `module enablement publishes and rolls back dependency files`() {
-        val manifestBefore = fixture.descriptor.handle.canonicalPath.resolve("compukter.toml").readBytes()
+        val manifestPath =
+            fixture.descriptor.handle.canonicalPath
+                .resolve("compukter.toml")
+        val manifestBefore = manifestPath.readBytes()
         val update =
             fixture.coordinator
                 .enableModule(fixture.descriptor.handle, ModuleId.parse("compukter:redstone"), ApiMajor(1))
@@ -185,20 +188,23 @@ class IdeBuildCoordinatorTest {
 
         val published = assertIs<ProjectDependencyUpdate.Published>(update)
         assertTrue(fixture.lockPath.toFile().exists())
-        assertFalse(manifestBefore.contentEquals(fixture.descriptor.handle.canonicalPath.resolve("compukter.toml").readBytes()))
+        assertFalse(manifestBefore.contentEquals(manifestPath.readBytes()))
 
         val rollback =
             fixture.coordinator
                 .rollbackModule(fixture.descriptor.handle, published.receipt)
                 .get(5, TimeUnit.SECONDS)
         assertEquals(ProjectDependencyRollback.Restored, rollback)
-        assertContentEquals(manifestBefore, fixture.descriptor.handle.canonicalPath.resolve("compukter.toml").readBytes())
+        assertContentEquals(manifestBefore, manifestPath.readBytes())
         assertFalse(fixture.lockPath.toFile().exists())
     }
 
     @Test
     fun `module enablement validates proposed lock against target before publication`() {
-        val manifestBefore = fixture.descriptor.handle.canonicalPath.resolve("compukter.toml").readBytes()
+        val manifestPath =
+            fixture.descriptor.handle.canonicalPath
+                .resolve("compukter.toml")
+        val manifestBefore = manifestPath.readBytes()
         val targetWithoutModule = TargetCompileProfile(fixture.toolchain, emptyList(), fixture.limits)
 
         val update =
@@ -211,7 +217,7 @@ class IdeBuildCoordinatorTest {
                 ).get(5, TimeUnit.SECONDS)
 
         assertIs<ProjectDependencyUpdate.Conflict>(update)
-        assertContentEquals(manifestBefore, fixture.descriptor.handle.canonicalPath.resolve("compukter.toml").readBytes())
+        assertContentEquals(manifestBefore, manifestPath.readBytes())
         assertFalse(fixture.lockPath.toFile().exists())
     }
 
