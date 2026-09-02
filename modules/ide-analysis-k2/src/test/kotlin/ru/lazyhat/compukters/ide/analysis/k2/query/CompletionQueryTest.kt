@@ -23,9 +23,13 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
 import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
+import ru.lazyhat.compukters.ide.editor.EditorDocument
+import ru.lazyhat.compukters.ide.editor.EditorEditResult
 import ru.lazyhat.compukters.ide.editor.EditorRange
+import ru.lazyhat.compukters.ide.editor.EditorTextEdit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class CompletionQueryTest {
@@ -43,6 +47,83 @@ class CompletionQueryTest {
             assertEquals(CompletionKind.LocalVariable, result.items.first().kind)
             assertTrue(result.items.any { it.insertText == "localPackageFunction" })
             assertTrue(result.items.none { it.insertText == "parameter" })
+        }
+    }
+
+    @Test
+    fun `unqualified completion proposes an import for a declaration in another project package`() {
+        val library = "package library\nobject RemoteApi"
+        val source = "package application\n\nfun main() { Rem }"
+        K2QueryFixture.source("library.kt" to library, "main.kt" to source).use { fixture ->
+            val item = fixture.complete("main.kt", source.indexOf("Rem") + 3).items.single { it.insertText == "RemoteApi" }
+
+            assertEquals("library.RemoteApi", item.symbol?.fqName)
+            assertEquals("library.RemoteApi", item.symbol?.importFqName)
+            assertEquals("\n\nimport library.RemoteApi", item.additionalEdits.single().text)
+        }
+    }
+
+    @Test
+    fun `unqualified completion finds inactive platform modules and honors default imports`() {
+        val source = "fun main() { Red }"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val redstone = fixture.complete("main.kt", source.indexOf("Red") + 3).items.single { it.insertText == "Redstone" }
+
+            assertEquals("compukter.redstone.Redstone", redstone.symbol?.fqName)
+            assertEquals("compukter.redstone.Redstone", redstone.symbol?.importFqName)
+            assertTrue(redstone.additionalEdits.isNotEmpty())
+        }
+
+        val defaultSource = "fun main() { printl }"
+        K2QueryFixture.source("main.kt" to defaultSource).use { fixture ->
+            val println = fixture.complete("main.kt", defaultSource.indexOf("printl") + 6).items.first { it.insertText == "println" }
+
+            assertEquals("kotlin.io.println", println.symbol?.fqName)
+            assertEquals(null, println.symbol?.importFqName)
+            assertTrue(println.additionalEdits.isEmpty())
+        }
+    }
+
+    @Test
+    fun `default package import remains separated from a declaration after leading blank lines`() {
+        val source = "\n\nfun main() { Red }"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val result = fixture.complete("main.kt", source.indexOf("Red") + 3)
+            val redstone = result.items.single { it.insertText == "Redstone" }
+            val importEdit = redstone.additionalEdits.single()
+
+            assertEquals(EditorRange(0, 0), importEdit.range)
+            assertEquals("import compukter.redstone.Redstone\n\n", importEdit.text)
+
+            val editor = EditorDocument(source)
+            assertIs<EditorEditResult.Applied>(
+                editor.replaceRanges(
+                    result.replacement,
+                    redstone.insertText,
+                    listOf(EditorTextEdit(importEdit.range, importEdit.text)),
+                ),
+            )
+            assertEquals(
+                "import compukter.redstone.Redstone\n\n\n\nfun main() { Redstone }",
+                editor.materialize(),
+            )
+        }
+    }
+
+    @Test
+    fun `completion inserts a qualified name when an imported short name conflicts`() {
+        val source = "import other.RemoteApi\n\nfun main() { Rem }"
+        val library = "package library\nobject RemoteApi"
+        val other = "package other\nobject RemoteApi"
+        K2QueryFixture.source("library.kt" to library, "other.kt" to other, "main.kt" to source).use { fixture ->
+            val item =
+                fixture.complete("main.kt", source.lastIndexOf("Rem") + 3).items.single {
+                    it.symbol?.fqName == "library.RemoteApi"
+                }
+
+            assertEquals("library.RemoteApi", item.insertText)
+            assertEquals(null, item.symbol?.importFqName)
+            assertTrue(item.additionalEdits.isEmpty())
         }
     }
 

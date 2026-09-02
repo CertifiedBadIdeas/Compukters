@@ -28,7 +28,9 @@ import org.jetbrains.kotlin.analysis.api.components.render
 import org.jetbrains.kotlin.analysis.api.components.scopeContext
 import org.jetbrains.kotlin.analysis.api.renderer.declarations.impl.KaDeclarationRendererForSource
 import org.jetbrains.kotlin.analysis.api.renderer.types.impl.KaTypeRendererForSource
+import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassKind
+import org.jetbrains.kotlin.analysis.api.symbols.KaClassLikeSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaDeclarationSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaFunctionSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaLocalVariableSymbol
@@ -44,6 +46,7 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisResultLimits
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
+import ru.lazyhat.compukters.ide.analysis.CompletionSymbol
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
@@ -64,6 +67,7 @@ internal object CompletionQuery {
             query.identity,
             context.replacement,
             items,
+            source.length,
             AnalysisResultLimits(maxCompletionItems = limits.completionItems, maxDetailUtf8Bytes = limits.detailTextBytes),
         )
     }
@@ -78,7 +82,8 @@ internal object CompletionQuery {
         if (limits.completionItems == 0) return emptyList()
         val visibility = createUseSiteVisibilityChecker(file.symbol, context.receiver, context.position)
         val rankedComparator = Comparator<RankedCompletion> { left, right -> completionRankComparator.compare(left.rank, right.rank) }
-        val ranked = BoundedUniqueBest(limits.completionItems, rankedComparator, RankedCompletion::item)
+        val ranked = BoundedUniqueBest(limits.completionItems, rankedComparator, RankedCompletion::identity)
+        val scopedFqNames = mutableSetOf<String>()
         val nameMatches: (org.jetbrains.kotlin.name.Name) -> Boolean = { name ->
             name.asString().startsWith(context.prefix)
         }
@@ -102,10 +107,21 @@ internal object CompletionQuery {
                     is MappedDeclaration.PlatformTarget -> DeclarationOrigin.Platform(mapped.identity)
                     null -> null
                 }
-            val item = CompletionItem(completionLabel(symbol, name), name, symbol.completionKind(), detail, origin)
+            val fqName = symbol.fqName()
+            fqName?.let(scopedFqNames::add)
+            val item =
+                CompletionItem(
+                    completionLabel(symbol, name),
+                    name,
+                    symbol.completionKind(),
+                    detail,
+                    origin,
+                    fqName?.let { CompletionSymbol(it, null) },
+                )
             ranked.offer(
                 RankedCompletion(
                     item,
+                    fqName?.let { "$it\u0000$detail" } ?: "scope\u0000$name\u0000$detail",
                     CompletionRank(
                         applicability = 1,
                         prefixQuality = if (name == context.prefix) 2 else 1,
@@ -130,6 +146,46 @@ internal object CompletionQuery {
                             }
                     }.forEach { accept(it, locality) }
                 scopeWithKind.scope.classifiers(nameMatches).forEach { accept(it, locality) }
+            }
+            val projectCandidates = snapshot.projectCompletionIndex.lookup(context.prefix, limits.completionItems)
+            val platformCandidates = snapshot.platformCompletionIndex.lookup(context.prefix, limits.completionItems)
+            val exactCandidates = projectCandidates + platformCandidates
+            (projectCandidates + platformCandidates).forEach { declaration ->
+                if (declaration.fqName in scopedFqNames) return@forEach
+                val importPlan =
+                    KotlinImportPlanner.plan(
+                        file,
+                        declaration,
+                        exactCandidates.filter { it.shortName == declaration.shortName },
+                    )
+                val item =
+                    CompletionItem(
+                        declaration.shortName,
+                        importPlan.insertText,
+                        declaration.kind,
+                        declaration.signature,
+                        declaration.origin,
+                        importPlan.symbol,
+                        importPlan.additionalEdits,
+                    )
+                val locality =
+                    when (declaration.origin) {
+                        DeclarationOrigin.Project -> 1_000_000
+                        is DeclarationOrigin.Platform -> if (declaration.origin.identity in snapshot.moduleIdentities.values) 500_000 else 0
+                    }
+                ranked.offer(
+                    RankedCompletion(
+                        item,
+                        "${declaration.fqName}\u0000${declaration.signature}",
+                        CompletionRank(
+                            applicability = 1,
+                            prefixQuality = if (declaration.shortName == context.prefix) 2 else 1,
+                            locality = locality,
+                            nameUtf8 = declaration.shortName.encodeToByteArray(),
+                            signatureUtf8 = declaration.signature.encodeToByteArray(),
+                        ),
+                    ),
+                )
             }
         } else {
             receiverType.scope?.let { memberScope ->
@@ -170,8 +226,16 @@ internal object CompletionQuery {
 
 private data class RankedCompletion(
     val item: CompletionItem,
+    val identity: String,
     val rank: CompletionRank,
 )
+
+private fun KaDeclarationSymbol.fqName(): String? =
+    when (this) {
+        is KaCallableSymbol -> callableId?.asSingleFqName()?.asString()
+        is KaClassLikeSymbol -> classId?.asSingleFqName()?.asString()
+        else -> null
+    }
 
 private fun org.jetbrains.kotlin.analysis.api.symbols.KaDeclarationSymbol.completionKind(): CompletionKind =
     when (this) {

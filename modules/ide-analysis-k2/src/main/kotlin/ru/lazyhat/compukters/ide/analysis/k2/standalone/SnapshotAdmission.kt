@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.psi.KtFile
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
+import ru.lazyhat.compukters.ide.analysis.k2.query.GlobalCompletionIndex
 import ru.lazyhat.compukters.ide.analysis.protocol.OpenSnapshotRequest
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
@@ -48,6 +49,8 @@ internal class AdmittedK2Snapshot(
     val moduleIdentities: Map<PlatformModuleId, AnalysisModuleIdentity>,
     val platformSourceFiles: Map<VirtualSourcePath, KtFile>,
     val platform: CompuktersAnalysisPlatformContext,
+    val projectCompletionIndex: GlobalCompletionIndex,
+    val platformCompletionIndex: GlobalCompletionIndex,
 )
 
 internal class SnapshotAdmission(
@@ -55,6 +58,8 @@ internal class SnapshotAdmission(
     private val platformBundle: PlatformBundle,
     private val sourceUpdater: K2SourceUpdater = DocumentK2SourceUpdater,
 ) {
+    private val platformCompletionIndex = GlobalCompletionIndex.platform(platformBundle)
+
     fun admit(request: OpenSnapshotRequest): IncrementalK2Workspace {
         require(
             request.profile.platform.abi
@@ -115,6 +120,7 @@ internal class SnapshotAdmission(
                         VirtualSourcePath.kotlin(sourceRoot.relativize(physical).toString().replace('\\', '/'))
                     }
             require(files.keys == sourceLengths.keys) { "standalone K2 source mapping differs from admitted snapshot" }
+            val projectCompletionIndex = GlobalCompletionIndex.project(files)
             val platformSourceFiles =
                 attachedSourceRoot?.let { loadPlatformSourceFiles(environment, it, request) }.orEmpty()
             return IncrementalK2Workspace(
@@ -128,6 +134,8 @@ internal class SnapshotAdmission(
                 platformSourceFiles,
                 platform,
                 sourceUpdater,
+                projectCompletionIndex,
+                platformCompletionIndex,
             )
         } catch (exception: Exception) {
             environment?.close()

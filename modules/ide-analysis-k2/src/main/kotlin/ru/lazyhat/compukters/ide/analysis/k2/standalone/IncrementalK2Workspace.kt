@@ -34,6 +34,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
+import ru.lazyhat.compukters.ide.analysis.k2.query.GlobalCompletionIndex
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.analysis.protocol.UpdateSnapshotRequest
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
@@ -54,6 +55,8 @@ internal class IncrementalK2Workspace(
     platformSourceFiles: Map<VirtualSourcePath, KtFile>,
     private val platform: CompuktersAnalysisPlatformContext,
     private val sourceUpdater: K2SourceUpdater,
+    private val projectCompletionIndex: GlobalCompletionIndex,
+    private val platformCompletionIndex: GlobalCompletionIndex,
 ) : AutoCloseable {
     private var currentIdentity = initialIdentity
     private val files = files.toMap()
@@ -80,6 +83,8 @@ internal class IncrementalK2Workspace(
             moduleIdentities,
             platformSourceFiles,
             platform,
+            projectCompletionIndex,
+            platformCompletionIndex,
         )
     }
 
@@ -121,6 +126,7 @@ internal class IncrementalK2Workspace(
                 changedTexts.forEach { (path, text) ->
                     val file = files.getValue(path)
                     check(file.text == text) { "updated Kotlin PSI differs from candidate source: ${path.value}" }
+                    projectCompletionIndex.updateProjectFile(path, file)
                 }
             }
         } catch (exception: Exception) {
