@@ -33,6 +33,8 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisResultLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
+import ru.lazyhat.compukters.ide.analysis.CompletionSymbol
+import ru.lazyhat.compukters.ide.analysis.CompletionTextEdit
 import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
 import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
@@ -413,7 +415,13 @@ private fun validateResult(
         is AnalysisResult.Completion -> {
             require(query is AnalysisQuery.Completion) { "analysis result kind does not match its query" }
             context.validate(query.path, result.replacement)
-            AnalysisResult.Completion.create(result.identity, result.replacement, result.items, limits.resultLimits())
+            AnalysisResult.Completion.create(
+                result.identity,
+                result.replacement,
+                result.items,
+                sourceLengths.getValue(query.path),
+                limits.resultLimits(),
+            )
         }
 
         is AnalysisResult.ExpressionInfo -> {
@@ -636,6 +644,16 @@ private class MessageSink {
         enum(value.kind)
         nullableString(value.detail)
         nullableOrigin(value.origin)
+        u8(if (value.symbol == null) 0 else 1)
+        value.symbol?.let { symbol ->
+            string(symbol.fqName)
+            nullableString(symbol.importFqName)
+        }
+        u32(value.additionalEdits.size)
+        value.additionalEdits.forEach { edit ->
+            range(edit.range)
+            string(edit.text)
+        }
     }
 
     fun nullableExpressionInfo(value: EditorExpressionInfo?) {
@@ -930,10 +948,12 @@ private class MessageSource(
             }
 
             ResultKind.Completion -> {
+                val query = context.expectedQuery as? AnalysisQuery.Completion ?: error("completion result has no completion query")
                 AnalysisResult.Completion.create(
                     identity,
                     range(),
                     List(boundedCount(context.limits.completionItems, "completion item")) { completionItem() },
+                    sourceLengths.getValue(query.path),
                     context.limits.resultLimits(),
                 )
             }
@@ -998,6 +1018,15 @@ private class MessageSource(
             enumValue(),
             nullableString(context.limits.detailTextBytes),
             nullableOrigin(),
+            optional {
+                CompletionSymbol(
+                    string(context.limits.detailTextBytes),
+                    nullableString(context.limits.detailTextBytes),
+                )
+            },
+            List(boundedCount(1, "completion additional edit")) {
+                CompletionTextEdit(range(), string(context.limits.detailTextBytes))
+            },
         )
 
     fun nullableExpressionInfo(): EditorExpressionInfo? =

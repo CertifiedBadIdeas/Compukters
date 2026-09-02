@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.ide.editor.EditorRange
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class AnalysisModelsTest {
     private val main = VirtualSourcePath.kotlin("src/main.kt")
@@ -53,6 +54,7 @@ class AnalysisModelsTest {
                 identity,
                 EditorRange(2, 4),
                 items,
+                4,
                 AnalysisResultLimits(maxCompletionItems = 1),
             )
         items.clear()
@@ -63,6 +65,7 @@ class AnalysisModelsTest {
                 identity,
                 EditorRange(0, 0),
                 List(257) { CompletionItem("v$it", "v$it", CompletionKind.LocalVariable) },
+                0,
             )
         }
         assertFailsWith<IllegalArgumentException> {
@@ -73,9 +76,73 @@ class AnalysisModelsTest {
                 identity,
                 EditorRange(0, 0),
                 listOf(CompletionItem("name", "name", CompletionKind.Property, "😀")),
+                0,
                 AnalysisResultLimits(maxDetailUtf8Bytes = 3),
             )
         }
+    }
+
+    @Test
+    fun `completion proposals own bounded nonoverlapping import edits`() {
+        val edits = mutableListOf(CompletionTextEdit(EditorRange(0, 0), "import sample.Redstone\n\n"))
+        val item =
+            CompletionItem(
+                label = "Redstone",
+                insertText = "Redstone",
+                kind = CompletionKind.Object,
+                symbol = CompletionSymbol("sample.Redstone", "sample.Redstone"),
+                additionalEdits = edits,
+            )
+        edits.clear()
+
+        val result = AnalysisResult.Completion.create(identity, EditorRange(10, 12), listOf(item), 20)
+
+        assertEquals(CompletionKind.TypeAlias, CompletionKind.TypeAlias)
+        assertEquals(
+            1,
+            result.items
+                .single()
+                .additionalEdits.size,
+        )
+        assertFailsWith<UnsupportedOperationException> {
+            (result.items.single().additionalEdits as MutableList).clear()
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AnalysisResult.Completion.create(
+                identity,
+                EditorRange(10, 12),
+                listOf(
+                    CompletionItem(
+                        "Redstone",
+                        "Redstone",
+                        CompletionKind.Object,
+                        symbol = CompletionSymbol("sample.Redstone", "sample.Redstone"),
+                    ),
+                ),
+                20,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AnalysisResult.Completion.create(
+                identity,
+                EditorRange(10, 12),
+                listOf(
+                    CompletionItem(
+                        "Redstone",
+                        "Redstone",
+                        CompletionKind.Object,
+                        additionalEdits = listOf(CompletionTextEdit(EditorRange(11, 11), "import sample.Redstone\n")),
+                    ),
+                ),
+                20,
+            )
+        }
+        assertTrue(
+            result.items
+                .single()
+                .symbol
+                ?.fqName == "sample.Redstone",
+        )
     }
 
     @Test

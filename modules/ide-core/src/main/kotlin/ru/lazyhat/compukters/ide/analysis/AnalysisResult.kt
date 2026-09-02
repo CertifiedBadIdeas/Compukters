@@ -75,14 +75,30 @@ sealed interface AnalysisResult {
                 identity: AnalysisSnapshotIdentity,
                 replacement: EditorRange,
                 items: List<CompletionItem>,
+                sourceLengthUtf16: Int,
                 limits: AnalysisResultLimits = AnalysisResultLimits(),
             ): Completion {
+                require(sourceLengthUtf16 >= 0) { "source UTF-16 length must be non-negative" }
+                require(replacement.endUtf16 <= sourceLengthUtf16) { "completion replacement exceeds its source" }
                 require(items.size <= limits.maxCompletionItems) { "completion-item count exceeds limit" }
                 items.forEach { item ->
                     require(strictUtf8Size(item.label) <= limits.maxDetailUtf8Bytes) { "completion label exceeds limit" }
                     require(strictUtf8Size(item.insertText) <= limits.maxDetailUtf8Bytes) { "completion insert text exceeds limit" }
                     item.detail?.let { detail ->
                         require(strictUtf8Size(detail) <= limits.maxDetailUtf8Bytes) { "completion detail exceeds limit" }
+                    }
+                    item.symbol?.let { symbol ->
+                        require(strictUtf8Size(symbol.fqName) <= limits.maxDetailUtf8Bytes) { "completion symbol name exceeds limit" }
+                        symbol.importFqName?.let { importName ->
+                            require(strictUtf8Size(importName) <= limits.maxDetailUtf8Bytes) { "completion import name exceeds limit" }
+                            require(item.additionalEdits.isNotEmpty()) { "completion import requires an additional edit" }
+                        }
+                    }
+                    require(item.additionalEdits.size <= 1) { "completion additional-edit count exceeds limit" }
+                    item.additionalEdits.forEach { edit ->
+                        require(edit.range.endUtf16 <= sourceLengthUtf16) { "completion additional edit exceeds its source" }
+                        require(!edit.range.overlaps(replacement)) { "completion additional edit overlaps its replacement" }
+                        require(strictUtf8Size(edit.text) <= limits.maxDetailUtf8Bytes) { "completion additional edit text exceeds limit" }
                     }
                 }
                 return Completion(identity, replacement, immutableCopy(items))
@@ -154,6 +170,8 @@ sealed interface AnalysisResult {
         }
     }
 }
+
+private fun EditorRange.overlaps(other: EditorRange): Boolean = startUtf16 < other.endUtf16 && other.startUtf16 < endUtf16
 
 private fun validateLocations(
     locations: List<DeclarationLocation>,

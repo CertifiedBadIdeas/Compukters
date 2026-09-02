@@ -32,6 +32,8 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
+import ru.lazyhat.compukters.ide.analysis.CompletionSymbol
+import ru.lazyhat.compukters.ide.analysis.CompletionTextEdit
 import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
 import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
@@ -142,7 +144,18 @@ class AnalysisProtocolRoundTripTest {
                     AnalysisResult.Completion.create(
                         identity,
                         EditorRange(4, 6),
-                        listOf(CompletionItem("answer", "answer", CompletionKind.Property, "kotlin.Int", origin)),
+                        listOf(
+                            CompletionItem(
+                                "answer",
+                                "answer",
+                                CompletionKind.Property,
+                                "kotlin.Int",
+                                origin,
+                                CompletionSymbol("sample.answer", "sample.answer"),
+                                listOf(CompletionTextEdit(EditorRange(0, 0), "import sample.answer\n\n")),
+                            ),
+                        ),
+                        sourceLengths().getValue(path()),
                     ),
                 AnalysisQuery.ExpressionInfo(identity, path(), 6) to
                     AnalysisResult.ExpressionInfo.create(

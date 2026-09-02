@@ -18,6 +18,9 @@
 
 package ru.lazyhat.compukters.ide.analysis
 
+import ru.lazyhat.compukters.ide.editor.EditorRange
+import java.util.Collections
+
 enum class CompletionKind {
     Class,
     Interface,
@@ -31,15 +34,52 @@ enum class CompletionKind {
     EnumEntry,
     Package,
     Keyword,
+    TypeAlias,
 }
 
-data class CompletionItem(
+data class CompletionTextEdit(
+    val range: EditorRange,
+    val text: String,
+) {
+    init {
+        strictUtf8Size(text)
+    }
+}
+
+data class CompletionSymbol(
+    val fqName: String,
+    val importFqName: String?,
+) {
+    init {
+        require(fqName.isNotEmpty()) { "completion symbol name must not be empty" }
+        strictUtf8Size(fqName)
+        importFqName?.let { importName ->
+            require(importName.isNotEmpty()) { "completion import name must not be empty" }
+            strictUtf8Size(importName)
+        }
+    }
+}
+
+@ConsistentCopyVisibility
+data class CompletionItem private constructor(
     val label: String,
     val insertText: String,
     val kind: CompletionKind,
     val detail: String? = null,
     val origin: DeclarationOrigin? = null,
+    val symbol: CompletionSymbol? = null,
+    val additionalEdits: List<CompletionTextEdit> = emptyList(),
 ) {
+    constructor(
+        label: String,
+        insertText: String,
+        kind: CompletionKind,
+        detail: String? = null,
+        origin: DeclarationOrigin? = null,
+        symbol: CompletionSymbol? = null,
+        additionalEdits: Collection<CompletionTextEdit> = emptyList(),
+    ) : this(label, insertText, kind, detail, origin, symbol, Collections.unmodifiableList(additionalEdits.toList()))
+
     init {
         require(label.isNotEmpty()) { "completion label must not be empty" }
         require(insertText.isNotEmpty()) { "completion insert text must not be empty" }
