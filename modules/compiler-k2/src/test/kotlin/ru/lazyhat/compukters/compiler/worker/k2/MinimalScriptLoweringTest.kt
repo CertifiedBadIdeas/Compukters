@@ -35,9 +35,11 @@ import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
+import ru.lazyhat.compukters.compiler.artifact.model.StringValueType
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
+import ru.lazyhat.compukters.compiler.artifact.model.Utf16Literal
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
@@ -742,6 +744,69 @@ class MinimalScriptLoweringTest {
                 assertTrue(0x51 in endpointOpcodes, "$source: $endpointOpcodes")
                 assertTrue(endpoint.diagnostics.none { it.severity.name == "ERROR" }, endpoint.diagnostics.toString())
             }
+        }
+
+    @Test
+    fun `string templates lower scalar platform and Unit parts to canonical strings`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        import compukter.redstone.RedstoneSignal
+
+                        fun sideEffect(): Unit {}
+
+                        fun main() {
+                            val number = 2
+                            val enabled = true
+                            val marker = 'x'
+                            println("${'$'}number")
+                            println("value=${'$'}number/${'$'}enabled/${'$'}marker")
+                            println("${'$'}{RedstoneSignal.MAX}")
+                            println("${'$'}{sideEffect()}")
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+
+            val artifactBytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val application = ArtifactReader.read(artifactBytes).modules.single { it.kind == ModuleKind.APPLICATION }
+            val conversions =
+                application.blocks
+                    .flatMap(Block::instructions)
+                    .filterIsInstance<Instruction.StringValueOf>()
+
+            assertEquals(
+                listOf(StringValueType.I32, StringValueType.I32, StringValueType.BOOL, StringValueType.CHAR, StringValueType.I32),
+                conversions.map(Instruction.StringValueOf::type),
+            )
+            assertTrue(Utf16Literal.fromString("kotlin.Unit") in application.utf16Literals)
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+        }
+
+    @Test
+    fun `string template rejects arbitrary objects until virtual dispatch exists`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        class Box(val value: Int)
+
+                        fun main() {
+                            println("${'$'}{Box(1)}")
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+
+            assertNull(result.artifact)
+            assertTrue(result.hasErrors)
+            assertTrue(
+                result.diagnostics.any { "object string conversion requires virtual dispatch" in it.message },
+                result.diagnostics.toString(),
+            )
         }
 
     @Test
