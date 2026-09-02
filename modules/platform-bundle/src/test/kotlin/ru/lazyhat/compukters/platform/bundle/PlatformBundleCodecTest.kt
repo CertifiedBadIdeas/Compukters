@@ -28,6 +28,34 @@ import kotlin.test.assertTrue
 
 class PlatformBundleCodecTest {
     @Test
+    fun `completion declarations round trip canonically and affect module identity`() {
+        val base = terminal()
+        val println =
+            PlatformCompletionDeclaration(
+                symbol = "kotlin.io.println",
+                shortName = "println",
+                signature = "fun(Int):Unit",
+                kind = PlatformCompletionKind.FUNCTION,
+                module = base.id,
+                sourcePath = base.sources.first().path,
+                startUtf16 = 0,
+                endUtf16 = 7,
+                defaultImport = true,
+            )
+        val readln = println.copy(symbol = "kotlin.io.readln", shortName = "readln", signature = "fun():String")
+        val ordered = base.copy(completionDeclarations = listOf(readln, println))
+        val reversed = ordered.copy(completionDeclarations = ordered.completionDeclarations.reversed())
+
+        val first = PlatformBundleCodec.assemble("2.4", PlatformBundleCodec.SUPPORTED_PLATFORM_ABI, builtins(), listOf(ranges(), ordered))
+        val second = PlatformBundleCodec.assemble("2.4", PlatformBundleCodec.SUPPORTED_PLATFORM_ABI, builtins(), listOf(ranges(), reversed))
+        val decoded = PlatformBundleCodec.decode(PlatformBundleCodec.encode(first))
+
+        assertEquals(first, second)
+        assertEquals(listOf(println, readln), decoded.modules.single { it.id == ordered.id }.completionDeclarations)
+        assertNotEquals(PlatformBundleCodec.moduleContentHash(base), PlatformBundleCodec.moduleContentHash(ordered))
+    }
+
+    @Test
     fun `encoding canonicalizes module dependency source and declaration order`() {
         val ordered = fixture(reverse = false)
         val reversed = fixture(reverse = true)
@@ -254,6 +282,7 @@ class PlatformBundleCodecTest {
             dependencies = module.dependencies.reversed(),
             sources = module.sources.reversed(),
             declarations = module.declarations.reversed(),
+            completionDeclarations = module.completionDeclarations.reversed(),
         )
 
     private fun builtins(): PlatformModule =
@@ -336,6 +365,7 @@ class PlatformBundleCodecTest {
                         trustedExternal = external,
                     ),
                 ),
+            completionDeclarations = emptyList(),
         )
 
     private companion object {

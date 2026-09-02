@@ -40,8 +40,21 @@ private val TEST_PLATFORM_BUNDLE =
                 libraryFragment = null,
                 sources = emptyList(),
                 declarations = emptyList(),
+                completionDeclarations = emptyList(),
             ),
-        modules = emptyList(),
+        modules =
+            listOf(
+                PlatformModule(
+                    id = PlatformModuleId("compukter", "redstone"),
+                    version = "1.0.0",
+                    dependencies = emptyList(),
+                    metadata = ImmutableBytes.of("redstone".encodeToByteArray()),
+                    libraryFragment = null,
+                    sources = emptyList(),
+                    declarations = emptyList(),
+                    completionDeclarations = emptyList(),
+                ),
+            ),
     )
 
 internal val TEST_PLATFORM_CATALOG = PlatformCatalog.of(TEST_PLATFORM_BUNDLE)

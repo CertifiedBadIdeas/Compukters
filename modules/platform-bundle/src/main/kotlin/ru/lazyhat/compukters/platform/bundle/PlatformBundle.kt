@@ -60,6 +60,27 @@ data class PlatformDeclaration(
     val trustedExternal: Boolean,
 )
 
+enum class PlatformCompletionKind {
+    CLASS,
+    INTERFACE,
+    FUNCTION,
+    PROPERTY,
+    OBJECT,
+    TYPE_ALIAS,
+}
+
+data class PlatformCompletionDeclaration(
+    val symbol: String,
+    val shortName: String,
+    val signature: String,
+    val kind: PlatformCompletionKind,
+    val module: PlatformModuleId,
+    val sourcePath: String,
+    val startUtf16: Int,
+    val endUtf16: Int,
+    val defaultImport: Boolean,
+)
+
 enum class PlatformScalarRepresentation {
     INT,
     BOOLEAN,
@@ -105,6 +126,7 @@ data class PlatformModule(
     val libraryFragment: ImmutableBytes?,
     val sources: List<PlatformSource>,
     val declarations: List<PlatformDeclaration>,
+    val completionDeclarations: List<PlatformCompletionDeclaration>,
     val scalarTypes: List<PlatformScalarType> = emptyList(),
     val scalarConstants: List<PlatformScalarConstant> = emptyList(),
 )

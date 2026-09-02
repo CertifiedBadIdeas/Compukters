@@ -132,15 +132,16 @@ class PlatformBundleBuilder(
                     }
                 modules[descriptorModule.id] =
                     PlatformModule(
-                        descriptorModule.id,
-                        descriptorModule.version,
-                        descriptorModule.dependencies,
-                        metadata.metadata,
-                        libraryFragment,
-                        sources,
-                        metadata.declarations,
-                        metadata.scalarTypes,
-                        metadata.scalarConstants,
+                        id = descriptorModule.id,
+                        version = descriptorModule.version,
+                        dependencies = descriptorModule.dependencies,
+                        metadata = metadata.metadata,
+                        libraryFragment = libraryFragment,
+                        sources = sources,
+                        declarations = metadata.declarations,
+                        completionDeclarations = metadata.completionDeclarations,
+                        scalarTypes = metadata.scalarTypes,
+                        scalarConstants = metadata.scalarConstants,
                     )
             }
         }

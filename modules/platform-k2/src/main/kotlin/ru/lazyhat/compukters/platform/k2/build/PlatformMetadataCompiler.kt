@@ -46,6 +46,9 @@ import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.psi.KtTypeAlias
 import org.jetbrains.kotlin.psi.psiUtil.collectDescendantsOfType
+import ru.lazyhat.compukters.platform.bundle.CompuktersDefaultImports
+import ru.lazyhat.compukters.platform.bundle.PlatformCompletionDeclaration
+import ru.lazyhat.compukters.platform.bundle.PlatformCompletionKind
 import ru.lazyhat.compukters.platform.bundle.PlatformDeclaration
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformScalarConstant
@@ -65,6 +68,7 @@ data class CompiledPlatformMetadata(
     val metadata: ImmutableBytes,
     val declarations: List<PlatformDeclaration>,
     val exportedSymbols: List<String>,
+    val completionDeclarations: List<PlatformCompletionDeclaration>,
     val libraryDeclarations: List<PlatformLibraryDeclaration>,
     val scalarTypes: List<PlatformScalarType> = emptyList(),
     val scalarConstants: List<PlatformScalarConstant> = emptyList(),
@@ -142,10 +146,11 @@ class PlatformMetadataCompiler {
         val publicDeclarations = declarations.map(ParsedDeclaration::declaration)
         val decoded = DecodedPlatformMetadata(module, publicDeclarations, exports)
         return CompiledPlatformMetadata(
-            PlatformMetadataCodec.encode(decoded),
-            publicDeclarations,
-            exports,
-            declarations.filter { parsed ->
+            metadata = PlatformMetadataCodec.encode(decoded),
+            declarations = publicDeclarations,
+            exportedSymbols = exports,
+            completionDeclarations = parsedPlatform.completionDeclarations.sortedWith(COMPLETION_DECLARATION_ORDER),
+            libraryDeclarations = declarations.filter { parsed ->
                 parsed.hasBody ||
                     (
                         !parsed.private &&
@@ -167,8 +172,8 @@ class PlatformMetadataCompiler {
                     !parsed.private,
                 )
             },
-            parsedPlatform.scalarTypes.sortedBy(PlatformScalarType::symbol),
-            parsedPlatform.scalarConstants.sortedBy(PlatformScalarConstant::symbol),
+            scalarTypes = parsedPlatform.scalarTypes.sortedBy(PlatformScalarType::symbol),
+            scalarConstants = parsedPlatform.scalarConstants.sortedBy(PlatformScalarConstant::symbol),
         )
     }
 
@@ -226,6 +231,7 @@ class PlatformMetadataCompiler {
                 )
             val factory = KtPsiFactory(environment.project, markGenerated = false)
             val declarations = mutableListOf<ParsedDeclaration>()
+            val completionDeclarations = mutableListOf<PlatformCompletionDeclaration>()
             val scalarTypes = mutableListOf<PlatformScalarType>()
             val scalarConstants = mutableListOf<PlatformScalarConstant>()
             sources
@@ -240,16 +246,49 @@ class PlatformMetadataCompiler {
                     val packageName = file.packageFqName.asString()
                     file.declarations.forEach { declaration ->
                         declarations += collect(module, source.path, packageName, emptyList(), declaration = declaration)
+                        completionDeclaration(module, source.path, packageName, declaration)?.let(completionDeclarations::add)
                         collectScalars(source.path, packageName, emptyList(), declaration)?.let { scalar ->
                             scalarTypes += scalar.type
                             scalarConstants += scalar.constants
                         }
                     }
                 }
-            ParsedPlatform(declarations, scalarTypes, scalarConstants)
+            ParsedPlatform(declarations, completionDeclarations, scalarTypes, scalarConstants)
         } finally {
             Disposer.dispose(disposable)
         }
+    }
+
+    private fun completionDeclaration(
+        module: PlatformModuleId,
+        sourcePath: String,
+        packageName: String,
+        declaration: KtDeclaration,
+    ): PlatformCompletionDeclaration? {
+        if (declaration.hasModifier(KtTokens.PRIVATE_KEYWORD) || declaration.hasModifier(KtTokens.INTERNAL_KEYWORD)) return null
+        val named = declaration as? KtNamedDeclaration ?: return null
+        val shortName = named.name ?: return null
+        val kind =
+            when (declaration) {
+                is KtObjectDeclaration -> PlatformCompletionKind.OBJECT
+                is KtClass -> if (declaration.isInterface()) PlatformCompletionKind.INTERFACE else PlatformCompletionKind.CLASS
+                is KtNamedFunction -> PlatformCompletionKind.FUNCTION.takeIf { declaration.receiverTypeReference == null }
+                is KtProperty -> PlatformCompletionKind.PROPERTY.takeIf { declaration.receiverTypeReference == null }
+                is KtTypeAlias -> PlatformCompletionKind.TYPE_ALIAS
+                else -> null
+            } ?: return null
+        val symbol = listOf(packageName, shortName).filter(String::isNotEmpty).joinToString(".")
+        return PlatformCompletionDeclaration(
+            symbol = symbol,
+            shortName = shortName,
+            signature = signature(declaration),
+            kind = kind,
+            module = module,
+            sourcePath = sourcePath,
+            startUtf16 = declaration.declarationStartOffset(),
+            endUtf16 = declaration.textRange.endOffset,
+            defaultImport = CompuktersDefaultImports.containsPackage(packageName),
+        )
     }
 
     private fun collectScalars(
@@ -523,6 +562,7 @@ class PlatformMetadataCompiler {
 
     private data class ParsedPlatform(
         val declarations: List<ParsedDeclaration>,
+        val completionDeclarations: List<PlatformCompletionDeclaration>,
         val scalarTypes: List<PlatformScalarType>,
         val scalarConstants: List<PlatformScalarConstant>,
     )
@@ -539,6 +579,14 @@ class PlatformMetadataCompiler {
                 { it.declaration.signature },
                 { it.declaration.sourcePath },
                 { it.declaration.startUtf16 },
+            )
+        val COMPLETION_DECLARATION_ORDER =
+            compareBy<PlatformCompletionDeclaration>(
+                PlatformCompletionDeclaration::shortName,
+                PlatformCompletionDeclaration::symbol,
+                PlatformCompletionDeclaration::signature,
+                PlatformCompletionDeclaration::sourcePath,
+                PlatformCompletionDeclaration::startUtf16,
             )
     }
 }

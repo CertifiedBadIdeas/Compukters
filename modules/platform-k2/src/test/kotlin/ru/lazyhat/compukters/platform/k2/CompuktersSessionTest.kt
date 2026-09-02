@@ -124,6 +124,7 @@ class CompuktersSessionTest {
                         trustedExternal = " external " in " $text ",
                     ),
                 ),
+            completionDeclarations = emptyList(),
         )
     }
 }

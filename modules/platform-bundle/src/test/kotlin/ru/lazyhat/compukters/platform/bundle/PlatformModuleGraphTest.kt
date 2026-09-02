@@ -121,6 +121,7 @@ class PlatformModuleGraphTest {
                         trustedExternal = false,
                     ),
                 ),
+            completionDeclarations = emptyList(),
         )
     }
 

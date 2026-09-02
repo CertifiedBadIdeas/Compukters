@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.platform.k2.build
 import org.jetbrains.kotlin.fir.resolve.providers.symbolProvider
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
+import ru.lazyhat.compukters.platform.bundle.PlatformCompletionKind
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformScalarConstant
@@ -31,6 +32,7 @@ import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -66,6 +68,50 @@ class PlatformMetadataCompilerTest {
         assertEquals(text.indexOf("String") + "String".length, declaration.endUtf16)
         assertTrue(declaration.trustedExternal)
         assertEquals("public external fun ping(value: Int): String", text.substring(declaration.startUtf16, declaration.endUtf16))
+    }
+
+    @Test
+    fun `completion declarations contain only public top-level importable API`() {
+        val text =
+            """
+            package sample
+            class Visible { class Nested; fun member() = Unit }
+            interface Contract
+            object Api
+            typealias Alias = String
+            val property: Int = 1
+            external fun nativeCall(value: Int): String
+            fun overloaded(value: Int): String = "int"
+            fun overloaded(value: String): String = value
+            private class Hidden
+            internal object InternalBinding
+            """.trimIndent()
+
+        val result = compiler.compile(module, listOf(source("api.kt", text)))
+        val symbols = result.completionDeclarations.map { it.symbol }
+
+        assertContains(symbols, "sample.Visible")
+        assertContains(symbols, "sample.Contract")
+        assertContains(symbols, "sample.Api")
+        assertContains(symbols, "sample.Alias")
+        assertContains(symbols, "sample.property")
+        assertContains(symbols, "sample.nativeCall")
+        assertEquals(2, symbols.count { it == "sample.overloaded" })
+        assertFalse(symbols.any { it == "sample.Hidden" || it == "sample.InternalBinding" })
+        assertFalse(symbols.any { it.contains("Nested") || it.contains("member") })
+        assertEquals(PlatformCompletionKind.CLASS, result.completionDeclarations.single { it.symbol == "sample.Visible" }.kind)
+        assertEquals(PlatformCompletionKind.INTERFACE, result.completionDeclarations.single { it.symbol == "sample.Contract" }.kind)
+        assertEquals(PlatformCompletionKind.OBJECT, result.completionDeclarations.single { it.symbol == "sample.Api" }.kind)
+        assertEquals(PlatformCompletionKind.TYPE_ALIAS, result.completionDeclarations.single { it.symbol == "sample.Alias" }.kind)
+        assertTrue(result.completionDeclarations.none { it.defaultImport })
+    }
+
+    @Test
+    fun `completion declarations recognize platform default imports`() {
+        val io = PlatformModuleId("std", "terminal")
+        val result = compiler.compile(io, listOf(source("Console.kt", "package kotlin.io\nexternal fun println(value: Int)")))
+
+        assertTrue(result.completionDeclarations.single().defaultImport)
     }
 
     @Test
@@ -222,6 +268,7 @@ class PlatformMetadataCompilerTest {
                 null,
                 sources,
                 compiled.declarations,
+                compiled.completionDeclarations,
             )
 
         CompuktersFirBuildEnvironment.create().use { environment ->
