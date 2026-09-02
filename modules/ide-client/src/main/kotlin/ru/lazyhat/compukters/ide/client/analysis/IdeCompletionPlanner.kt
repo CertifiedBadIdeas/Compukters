@@ -54,7 +54,7 @@ class IdeCompletionPlanner(
                             candidate.identity.id.value == origin.identity.name && candidate.identity.contentHash == origin.identity.hash
                         } ?: return@mapNotNull null
                     if (target != null && entry.identity !in target.modules) return@mapNotNull null
-                    when (val selectedMajor = manifest.modules[entry.identity.id]) {
+                    when (manifest.modules[entry.identity.id]) {
                         null -> IdeCompletionModuleRequirement(entry.identity.id, entry.identity.major)
                         entry.identity.major -> null
                         else -> return@mapNotNull null
