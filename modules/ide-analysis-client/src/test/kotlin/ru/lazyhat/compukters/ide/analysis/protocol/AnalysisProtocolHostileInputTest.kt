@@ -207,7 +207,7 @@ class AnalysisProtocolHostileInputTest {
             AnalysisMessageCodec.encode(
                 AnalysisQuerySuccess(
                     RequestId.of(2uL),
-                    AnalysisResult.Completion.create(multipleIdentity, EditorRange(0, 20), emptyList()),
+                    AnalysisResult.Completion.create(multipleIdentity, EditorRange(0, 20), emptyList(), 20),
                 ),
                 AnalysisProtocolContext.unchecked(),
             )

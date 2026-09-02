@@ -73,7 +73,7 @@ class AnalysisWorkerControllerTest {
             assertEquals(latest.sources.sources, update.changedSources)
             worker.enqueue(SnapshotUpdated(update.requestId, latest.identity))
             val request = assertIs<AnalysisQueryRequest>(worker.awaitWrite())
-            val completion = AnalysisResult.Completion.create(latest.identity, EditorRange(4, 6), emptyList())
+            val completion = AnalysisResult.Completion.create(latest.identity, EditorRange(4, 6), emptyList(), "val answer = 333".length)
             worker.enqueue(AnalysisQuerySuccess(request.requestId, completion))
 
             assertEquals(AnalysisClientResult.Success(completion), result.get(5, TimeUnit.SECONDS))
@@ -212,7 +212,7 @@ class AnalysisWorkerControllerTest {
             val query = AnalysisQuery.Completion(snapshot.identity, path(), 6, CompletionTrigger.Manual)
             val result = controller.query(snapshot, query)
             val request = assertIs<AnalysisQueryRequest>(worker.awaitWrite())
-            val completion = AnalysisResult.Completion.create(snapshot.identity, EditorRange(4, 6), emptyList())
+            val completion = AnalysisResult.Completion.create(snapshot.identity, EditorRange(4, 6), emptyList(), "val answer = 42".length)
             worker.enqueue(AnalysisQuerySuccess(request.requestId, completion))
 
             assertEquals(AnalysisClientResult.Success(completion), result.get(5, TimeUnit.SECONDS))
