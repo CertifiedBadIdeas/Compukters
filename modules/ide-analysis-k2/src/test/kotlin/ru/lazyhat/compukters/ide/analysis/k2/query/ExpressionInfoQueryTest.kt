@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
+import ru.lazyhat.compukters.ide.editor.EditorRange
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -29,6 +30,44 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class ExpressionInfoQueryTest {
+    @Test
+    fun `expression query renders the inferred type on a local declaration name`() {
+        val source = "fun main() { val k = 2 }"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val start = source.indexOf("k")
+            val result =
+                fixture.execute(
+                    AnalysisQuery.ExpressionInfo(
+                        fixture.identity,
+                        VirtualSourcePath.kotlin("main.kt"),
+                        start,
+                    ),
+                ) as AnalysisResult.ExpressionInfo
+            val info = assertNotNull(result.value)
+
+            assertEquals("kotlin.Int", info.renderedType)
+            assertEquals(EditorRange(start, start + 1), info.range)
+        }
+    }
+
+    @Test
+    fun `expression query renders the explicit type on a local declaration name`() {
+        val source = "fun main() { val message: String = \"ok\" }"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val start = source.indexOf("message")
+            val result =
+                fixture.execute(
+                    AnalysisQuery.ExpressionInfo(
+                        fixture.identity,
+                        VirtualSourcePath.kotlin("main.kt"),
+                        start,
+                    ),
+                ) as AnalysisResult.ExpressionInfo
+
+            assertEquals("kotlin.String", assertNotNull(result.value).renderedType)
+        }
+    }
+
     @Test
     fun `expression query reports project origin`() {
         val source = "fun local() = Unit\nfun main() = local()"
