@@ -49,6 +49,10 @@ Recent history uses concise Conventional Commit-style messages such as `chore(vm
 verification commands, link related issues or roadmap items, and include screenshots or short recordings for visible
 Minecraft/UI changes.
 
+After each verified implementation stage, create a focused commit unless the user explicitly asks not to commit.
+Commit frequently enough that a clean, build, or tooling failure cannot destroy a large body of uncommitted work.
+Stage only files that belong to the current task, and never include unrelated user changes in an agent commit.
+
 ## Agent-Specific Instructions
 
 Respect user changes in the worktree. Prefer focused edits, run the narrowest useful verification, and update docs or
