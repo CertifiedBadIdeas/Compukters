@@ -45,6 +45,7 @@ import ru.lazyhat.compukters.ide.analysis.controller.AnalysisResultSink
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFailureKind
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
+import ru.lazyhat.compukters.ide.client.controller.TEST_PLATFORM_CATALOG
 import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
 import ru.lazyhat.compukters.ide.editor.EditorChange
 import ru.lazyhat.compukters.ide.editor.EditorChangeOrigin
@@ -322,6 +323,7 @@ class IdeAnalysisCoordinatorTest {
                     initial.identity,
                     EditorRange(4, 10),
                     listOf(CompletionItem("answer", "answer", CompletionKind.Property)),
+                    fixture.text.length,
                 ),
             ),
         )
@@ -423,6 +425,7 @@ class IdeAnalysisCoordinatorTest {
                     active.identity,
                     EditorRange(0, 2),
                     listOf(CompletionItem("println", "println", CompletionKind.Function)),
+                    fixture.text.length,
                 ),
             ),
         )
@@ -471,13 +474,14 @@ class IdeAnalysisCoordinatorTest {
                     active.identity,
                     EditorRange(0, 2),
                     listOf(CompletionItem("println", "println", CompletionKind.Function)),
+                    fixture.text.length,
                 ),
             ),
         )
         val document = EditorDocument("pr")
         document.type("x")
 
-        assertIs<IdeCompletionAcceptance.Stale>(fixture.coordinator.acceptCompletion(document, path()))
+        assertEquals(null, fixture.coordinator.selectCompletion(document, path()))
         assertEquals("xpr", document.materialize())
     }
 
@@ -493,7 +497,7 @@ class IdeAnalysisCoordinatorTest {
     }
 
     @Test
-    fun `failed replacement snapshot cannot revive presentation from the previous source`() {
+    fun `completion selection does not mutate the document before controller acceptance`() {
         val fixture = AnalysisFixture("val old = 1", rejectedText = "val broken =")
         val old = fixture.open()
 
@@ -550,6 +554,7 @@ class IdeAnalysisCoordinatorTest {
                     current.identity,
                     EditorRange(insertionOffset - 3, insertionOffset + 1),
                     listOf(CompletionItem("candidate", "candidate", CompletionKind.Function)),
+                    fixture.text.length,
                 ),
             ),
         )
@@ -621,6 +626,7 @@ class IdeAnalysisCoordinatorTest {
                     active.identity,
                     EditorRange(0, 2),
                     listOf(CompletionItem("println", "println", CompletionKind.Function)),
+                    fixture.text.length,
                 ),
             ),
         )
@@ -636,16 +642,12 @@ class IdeAnalysisCoordinatorTest {
             )
         }
 
-        val accepted = assertIs<IdeCompletionAcceptance.Applied>(fixture.coordinator.acceptCompletion(EditorDocument("pr"), path()))
+        val document = EditorDocument("pr")
+        val selected = checkNotNull(fixture.coordinator.selectCompletion(document, path()))
 
-        assertEquals(1, accepted.edit.change.newRevision)
-        assertEquals(
-            listOf(
-                VisibleLatencyEvent.EditApplied(1),
-                VisibleLatencyEvent.AnalysisPublished(IdeVisibleLatencyKind.Presentation, 1),
-            ),
-            latency.events,
-        )
+        assertEquals("println", selected.entry.proposal.insertText)
+        assertEquals("pr", document.materialize())
+        assertEquals(emptyList(), latency.events)
     }
 
     @Test
@@ -665,7 +667,7 @@ class IdeAnalysisCoordinatorTest {
         val current = fixture.requests.snapshots.last()
         fixture.publish(
             AnalysisClientResult.Success(
-                AnalysisResult.Completion.create(current.identity, EditorRange(0, 3), emptyList()),
+                AnalysisResult.Completion.create(current.identity, EditorRange(0, 3), emptyList(), fixture.text.length),
             ),
         )
 
@@ -776,6 +778,7 @@ private class AnalysisFixture(
             requestFactory = IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
             visibleLatency = visibleLatency,
             attachedSources = attachedSources,
+            platformCatalog = TEST_PLATFORM_CATALOG,
         )
 
     fun open(): AdmittedAnalysisSnapshot {

@@ -23,7 +23,7 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
-import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionAcceptance
+import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionSelection
 import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationOutcome
 import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationTarget
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
@@ -73,7 +73,11 @@ import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
 import ru.lazyhat.compukters.ide.editor.EditorChange
 import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorEditResult
+import ru.lazyhat.compukters.ide.editor.EditorTextEdit
 import ru.lazyhat.compukters.ide.highlight.IncrementalKotlinHighlighter
+import ru.lazyhat.compukters.ide.project.ProjectDependencyReceipt
+import ru.lazyhat.compukters.ide.project.ProjectDependencyRollback
+import ru.lazyhat.compukters.ide.project.ProjectDependencyUpdate
 import ru.lazyhat.compukters.ide.project.ProjectDescriptor
 import ru.lazyhat.compukters.ide.project.document.DocumentSaveResult
 import ru.lazyhat.compukters.ide.project.document.FileRevision
@@ -112,6 +116,7 @@ class IdeClientController(
     private var analysisCoordinator = analysisCoordinator
     private var installedTooling: IdeClientTooling? = null
     private val acceptsTooling = AtomicBoolean(true)
+    private val acceptsCompletionResults = AtomicBoolean(true)
     private var generation = 0L
     private var nextOperationId = 1L
     private var started = false
@@ -146,6 +151,7 @@ class IdeClientController(
     private var buildState: IdeBuildState = IdeBuildState.Idle
     private var pendingBuildAction: PendingBuildAction? = null
     private var latestBuildOperation = 0L
+    private var latestCompletionOperation = 0L
     private var activeBuild: IdeBuildJob? = null
     private val buildJobs = mutableMapOf<Long, IdeBuildJob>()
     private var observedAnalysisState: IdeAnalysisState = IdeAnalysisState.Idle
@@ -462,8 +468,14 @@ class IdeClientController(
         if (closed) return
         closed = true
         acceptsTooling.set(false)
+        acceptsCompletionResults.set(false)
         events.drain().forEach { event ->
             if (event is IdeEvent.ToolingReady) event.tooling.close()
+            if (event is IdeEvent.CompletionModuleEnabled) {
+                (event.result as? ProjectDependencyUpdate.Published)?.let { published ->
+                    buildCoordinator?.rollbackModuleNow(event.project, published.receipt)
+                }
+            }
         }
         generation = Math.incrementExact(generation)
         project?.let { persistPreferences(editor?.path ?: binary?.path) }
@@ -601,14 +613,11 @@ class IdeClientController(
         val active = editor ?: return
         if ((input == IdeEditorInput.Tab || input == IdeEditorInput.Enter) && active.path.isKotlinSource) {
             val analysis = analysisCoordinator
-            val accepted = analysis?.acceptCompletion(active.document, VirtualSourcePath.kotlin(active.path.value))
-            if (accepted is IdeCompletionAcceptance.Applied) {
-                active.lastEditMillis = clock.nowMillis()
-                refreshAnalysisState()
-                publishWorkspace()
+            val selection = analysis?.selectCompletion(active.document, VirtualSourcePath.kotlin(active.path.value))
+            if (selection != null) {
+                acceptCompletion(selection)
                 return
             }
-            if (accepted != null) analysis.dismissCompletion()
         }
         if (input is IdeEditorInput.Move && (input.direction == IdeMoveDirection.Up || input.direction == IdeMoveDirection.Down)) {
             val analysis = analysisCoordinator
@@ -683,6 +692,172 @@ class IdeClientController(
             refreshAnalysisState()
         }
         publishWorkspace()
+    }
+
+    private fun acceptCompletion(selection: IdeCompletionSelection) {
+        val requirement = selection.entry.moduleRequirement
+        if (requirement == null) {
+            applyCompletionSelection(selection)
+            refreshAnalysisState()
+            publishWorkspace()
+            return
+        }
+        if (IdeBusyOperation.Resolve in state.busy) {
+            publishStatus("Another dependency operation is already running", IdeProblemSeverity.Warning)
+            return
+        }
+        val selected = project ?: return
+        val coordinator = buildCoordinator
+        if (coordinator == null) {
+            publishStatus("Local dependency resolver is unavailable", IdeProblemSeverity.Warning)
+            return
+        }
+        val operationId = nextOperationId++
+        latestCompletionOperation = operationId
+        val requestGeneration = generation
+        val target = targetCoordinator?.attachedTarget()
+        state = state.copy(busy = state.busy + IdeBusyOperation.Resolve)
+        publishWorkspace()
+        coordinator
+            .enableModule(selected.handle, requirement.id, requirement.major, target?.compileProfile)
+            .whenComplete { result, failure ->
+                val mapped =
+                    if (failure == null) {
+                        result
+                    } else {
+                        ProjectDependencyUpdate.Conflict(failure.message ?: "module enablement failed")
+                    }
+                val event =
+                    IdeEvent.CompletionModuleEnabled(
+                        requestGeneration,
+                        operationId,
+                        selected.handle,
+                        target,
+                        selection,
+                        mapped,
+                    )
+                if (!acceptsCompletionResults.get()) {
+                    (mapped as? ProjectDependencyUpdate.Published)?.let { published ->
+                        coordinator.rollbackModuleNow(selected.handle, published.receipt)
+                    }
+                } else if (!events.offer(event)) {
+                    eventOverflow.set(true)
+                    (mapped as? ProjectDependencyUpdate.Published)?.let { published ->
+                        coordinator.rollbackModuleNow(selected.handle, published.receipt)
+                    }
+                }
+            }
+    }
+
+    private fun acceptCompletionModule(event: IdeEvent.CompletionModuleEnabled) {
+        if (event.operationId != latestCompletionOperation || event.generation != generation || project?.handle != event.project) {
+            rollbackCompletionModule(
+                event.operationId,
+                event.project,
+                (event.result as? ProjectDependencyUpdate.Published)?.receipt,
+                clearBusy = false,
+            )
+            return
+        }
+        val update = event.result
+        if (update is ProjectDependencyUpdate.Conflict) {
+            state = state.copy(busy = state.busy - IdeBusyOperation.Resolve)
+            publishStatus("Cannot enable completion module: ${update.detail}", IdeProblemSeverity.Warning)
+            return
+        }
+        val active = editor
+        val current =
+            event.generation == generation &&
+                project?.handle == event.project &&
+                targetCoordinator?.attachedTarget() == event.target &&
+                active != null &&
+                analysisCoordinator?.isCompletionSelectionCurrent(event.selection, active.document) == true
+        if (!current || !applyCompletionSelection(event.selection)) {
+            rollbackCompletionModule(
+                event.operationId,
+                event.project,
+                (update as? ProjectDependencyUpdate.Published)?.receipt,
+                clearBusy = true,
+            )
+            return
+        }
+        state = state.copy(busy = state.busy - IdeBusyOperation.Resolve)
+        if (update is ProjectDependencyUpdate.Published) {
+            val module =
+                event.selection.entry.moduleRequirement
+                    ?.id
+                    ?.value
+                    .orEmpty()
+            publishStatus("Enabled module $module", IdeProblemSeverity.Info)
+            requestPoll()
+            analysisCoordinator?.reload()
+        } else {
+            refreshAnalysisState()
+            publishWorkspace()
+        }
+    }
+
+    private fun applyCompletionSelection(selection: IdeCompletionSelection): Boolean {
+        val active = editor ?: return false
+        val result =
+            active.document.replaceRanges(
+                selection.replacement,
+                selection.entry.proposal.insertText,
+                selection.entry.proposal.additionalEdits
+                    .map { EditorTextEdit(it.range, it.text) },
+            )
+        if (result !is EditorEditResult.Applied) {
+            publishStatus("Completion edit was rejected", IdeProblemSeverity.Warning)
+            return false
+        }
+        active.lastEditMillis = clock.nowMillis()
+        visibleLatency.editApplied(active.document.revision)
+        updateAnalysis(active, null, result.change)
+        return true
+    }
+
+    private fun rollbackCompletionModule(
+        operationId: Long,
+        project: ru.lazyhat.compukters.ide.project.ProjectHandle,
+        receipt: ProjectDependencyReceipt?,
+        clearBusy: Boolean,
+    ) {
+        if (receipt == null) {
+            if (clearBusy) {
+                state = state.copy(busy = state.busy - IdeBusyOperation.Resolve)
+                publishWorkspace()
+            }
+            return
+        }
+        val coordinator = buildCoordinator
+        if (coordinator == null) {
+            if (clearBusy) {
+                state = state.copy(busy = state.busy - IdeBusyOperation.Resolve)
+                publishStatus("Completion became stale and dependency rollback is unavailable", IdeProblemSeverity.Warning)
+            }
+            return
+        }
+        coordinator.rollbackModule(project, receipt).whenComplete { result, failure ->
+            val mapped =
+                if (failure == null) result else ProjectDependencyRollback.Conflict(failure.message ?: "dependency rollback failed")
+            enqueue(IdeEvent.CompletionModuleRollbackCompleted(operationId, clearBusy, mapped))
+        }
+    }
+
+    private fun acceptCompletionRollback(event: IdeEvent.CompletionModuleRollbackCompleted) {
+        if (!event.clearBusy || event.operationId != latestCompletionOperation) return
+        state = state.copy(busy = state.busy - IdeBusyOperation.Resolve)
+        when (val result = event.result) {
+            ProjectDependencyRollback.Restored -> {
+                publishStatus("Completion was cancelled because its context changed", IdeProblemSeverity.Info)
+            }
+
+            is ProjectDependencyRollback.Conflict -> {
+                publishStatus("Completion was cancelled; dependency rollback conflicted: ${result.detail}", IdeProblemSeverity.Warning)
+            }
+        }
+        requestPoll()
+        analysisCoordinator?.reload()
     }
 
     private fun scrollEditor(
@@ -887,6 +1062,10 @@ class IdeClientController(
             is IdeEvent.BuildStateChanged -> acceptBuildState(event)
 
             is IdeEvent.ResolveCompleted -> acceptResolve(event)
+
+            is IdeEvent.CompletionModuleEnabled -> acceptCompletionModule(event)
+
+            is IdeEvent.CompletionModuleRollbackCompleted -> acceptCompletionRollback(event)
 
             is IdeEvent.ProjectOpened -> acceptProject(event)
 
@@ -1867,6 +2046,7 @@ class IdeClientController(
                 }
             }
         if (state.target != current || state.dialog != dialog) state = state.copy(dialog = dialog, target = current)
+        analysisCoordinator?.updateTargetProfile(targetCoordinator?.attachedTarget()?.compileProfile)
     }
 
     private fun refreshComputerFiles() {
@@ -2263,6 +2443,8 @@ private fun IdeEvent.generationOrNull(): Long? =
     when (this) {
         is IdeEvent.ToolingReady,
         is IdeEvent.ToolingFailed,
+        is IdeEvent.CompletionModuleEnabled,
+        is IdeEvent.CompletionModuleRollbackCompleted,
         -> null
 
         is IdeEvent.ProjectCatalogLoaded -> generation

@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.ide.client.state
 
+import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionSelection
 import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationOutcome
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.build.IdeResolveResult
@@ -27,7 +28,10 @@ import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
 import ru.lazyhat.compukters.ide.client.workspace.IdeMutationRequest
 import ru.lazyhat.compukters.ide.client.workspace.IdeSaveResult
 import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
+import ru.lazyhat.compukters.ide.project.ProjectDependencyRollback
+import ru.lazyhat.compukters.ide.project.ProjectDependencyUpdate
 import ru.lazyhat.compukters.ide.project.ProjectDescriptor
+import ru.lazyhat.compukters.ide.project.ProjectHandle
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.AdmittedProjectDelete
 import ru.lazyhat.compukters.ide.project.tree.ProjectImport
@@ -62,6 +66,21 @@ sealed interface IdeEvent {
         val generation: Long,
         val operationId: Long,
         val result: IdeResolveResult,
+    ) : IdeEvent
+
+    data class CompletionModuleEnabled(
+        val generation: Long,
+        val operationId: Long,
+        val project: ProjectHandle,
+        val target: IdeAttachedTarget?,
+        val selection: IdeCompletionSelection,
+        val result: ProjectDependencyUpdate,
+    ) : IdeEvent
+
+    data class CompletionModuleRollbackCompleted(
+        val operationId: Long,
+        val clearBusy: Boolean,
+        val result: ProjectDependencyRollback,
     ) : IdeEvent
 
     data class ProjectCatalogLoaded(
@@ -177,6 +196,8 @@ internal fun IdeEvent.copyForQueue(): IdeEvent =
         is IdeEvent.ToolingFailed,
         is IdeEvent.BuildStateChanged,
         is IdeEvent.ResolveCompleted,
+        is IdeEvent.CompletionModuleEnabled,
+        is IdeEvent.CompletionModuleRollbackCompleted,
         is IdeEvent.ProjectOpened,
         is IdeEvent.FileOpened,
         is IdeEvent.DeclarationResolved,

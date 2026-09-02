@@ -20,28 +20,36 @@ package ru.lazyhat.compukters.ide.client.analysis
 
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
-import ru.lazyhat.compukters.ide.analysis.CompletionItem
-import ru.lazyhat.compukters.ide.editor.EditorDocument
-import ru.lazyhat.compukters.ide.editor.EditorEditResult
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import java.util.Collections
 
 const val IDE_COMPLETION_VISIBLE_ROWS = 8
 
+data class IdeCompletionSelection(
+    val identity: AnalysisSnapshotIdentity,
+    val path: VirtualSourcePath,
+    val documentRevision: Long,
+    val targetRevision: Long,
+    val replacement: EditorRange,
+    val entry: IdeCompletionEntry,
+)
+
 @ConsistentCopyVisibility
 data class IdeCompletionState private constructor(
     val identity: AnalysisSnapshotIdentity,
     val path: VirtualSourcePath,
+    val documentRevision: Long,
+    val targetRevision: Long,
     val replacement: EditorRange,
-    val items: List<CompletionItem>,
+    val entries: List<IdeCompletionEntry>,
     val selectedIndex: Int,
     val firstVisibleIndex: Int,
 ) {
-    val selectedItem: CompletionItem
-        get() = items[selectedIndex]
+    val selectedEntry: IdeCompletionEntry
+        get() = entries[selectedIndex]
 
-    val visibleItems: List<CompletionItem>
-        get() = items.subList(firstVisibleIndex, minOf(items.size, firstVisibleIndex + IDE_COMPLETION_VISIBLE_ROWS))
+    val visibleEntries: List<IdeCompletionEntry>
+        get() = entries.subList(firstVisibleIndex, minOf(entries.size, firstVisibleIndex + IDE_COMPLETION_VISIBLE_ROWS))
 
     fun move(delta: Int): IdeCompletionState = withSelection(selectedIndex.toLong() + delta)
 
@@ -53,36 +61,28 @@ data class IdeCompletionState private constructor(
         return withSelection(selectedIndex.toLong() + pages.toLong() * pageSize)
     }
 
-    fun accept(
-        document: EditorDocument,
+    fun select(
         currentIdentity: AnalysisSnapshotIdentity,
         currentPath: VirtualSourcePath,
-    ): IdeCompletionAcceptance {
-        if (identity != currentIdentity || path != currentPath) return IdeCompletionAcceptance.Stale
-        return when (val result = document.replaceRange(replacement, selectedItem.insertText)) {
-            is EditorEditResult.Applied -> IdeCompletionAcceptance.Applied(result)
-
-            EditorEditResult.NoChange,
-            is EditorEditResult.Rejected,
-            -> IdeCompletionAcceptance.Rejected(result)
+        currentDocumentRevision: Long,
+        currentTargetRevision: Long,
+    ): IdeCompletionSelection? {
+        if (
+            identity != currentIdentity || path != currentPath || documentRevision != currentDocumentRevision ||
+            targetRevision != currentTargetRevision
+        ) {
+            return null
         }
+        return IdeCompletionSelection(identity, path, documentRevision, targetRevision, replacement, selectedEntry)
     }
 
     private fun withSelection(index: Long): IdeCompletionState {
-        val selected = index.coerceIn(0, items.lastIndex.toLong()).toInt()
+        val selected = index.coerceIn(0, entries.lastIndex.toLong()).toInt()
         val first =
             when {
-                selected < firstVisibleIndex -> {
-                    selected
-                }
-
-                selected >= firstVisibleIndex + IDE_COMPLETION_VISIBLE_ROWS -> {
-                    selected - IDE_COMPLETION_VISIBLE_ROWS + 1
-                }
-
-                else -> {
-                    firstVisibleIndex
-                }
+                selected < firstVisibleIndex -> selected
+                selected >= firstVisibleIndex + IDE_COMPLETION_VISIBLE_ROWS -> selected - IDE_COMPLETION_VISIBLE_ROWS + 1
+                else -> firstVisibleIndex
             }
         return copy(selectedIndex = selected, firstVisibleIndex = first)
     }
@@ -91,32 +91,25 @@ data class IdeCompletionState private constructor(
         fun create(
             identity: AnalysisSnapshotIdentity,
             path: VirtualSourcePath,
+            documentRevision: Long,
+            targetRevision: Long,
             replacement: EditorRange,
-            items: List<CompletionItem>,
+            entries: List<IdeCompletionEntry>,
             selectedIndex: Int = 0,
         ): IdeCompletionState {
-            require(items.isNotEmpty()) { "completion popup must contain at least one item" }
-            require(selectedIndex in items.indices) { "completion selection exceeds item range" }
+            require(documentRevision >= 0 && targetRevision >= 0) { "completion revisions must not be negative" }
+            require(entries.isNotEmpty()) { "completion popup must contain at least one entry" }
+            require(selectedIndex in entries.indices) { "completion selection exceeds entry range" }
             return IdeCompletionState(
                 identity,
                 VirtualSourcePath.kotlin(path.value),
+                documentRevision,
+                targetRevision,
                 replacement,
-                Collections.unmodifiableList(items.toList()),
+                Collections.unmodifiableList(entries.toList()),
                 selectedIndex,
                 (selectedIndex - IDE_COMPLETION_VISIBLE_ROWS + 1).coerceAtLeast(0),
             )
         }
     }
-}
-
-sealed interface IdeCompletionAcceptance {
-    data class Applied(
-        val edit: EditorEditResult.Applied,
-    ) : IdeCompletionAcceptance
-
-    data class Rejected(
-        val edit: EditorEditResult,
-    ) : IdeCompletionAcceptance
-
-    data object Stale : IdeCompletionAcceptance
 }

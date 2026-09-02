@@ -33,11 +33,14 @@ import ru.lazyhat.compukters.ide.analysis.controller.AnalysisRequestCoordinator
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisResultSink
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
+import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.editor.EditorChange
 import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
 import ru.lazyhat.compukters.ide.project.ProjectHandle
+import ru.lazyhat.compukters.ide.project.ProjectManifestCodec
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import java.util.Collections
 import java.util.concurrent.CompletableFuture
@@ -157,17 +160,21 @@ class IdeAnalysisCoordinator(
     private val visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
     private val limits: IdeClientLimits = IdeClientLimits(),
     private val attachedSources: IdeAttachedSourceCatalog = IdeAttachedSourceCatalog.empty(),
+    platformCatalog: PlatformCatalog,
 ) : AnalysisResultSink,
     AutoCloseable {
     private val lock = Any()
     private val publishedState = AtomicReference<IdeAnalysisState>(IdeAnalysisState.Idle)
     private val requests = requestFactory.create(this)
+    private val completionPlanner = IdeCompletionPlanner(platformCatalog)
     private var session: Session? = null
     private var version = 0L
     private var semanticOperation = 0L
     private var pointer: PointerInteraction? = null
     private var navigationResult: CompletableFuture<IdeDeclarationOutcome>? = null
     private var closed = false
+    private var targetProfile: TargetCompileProfile? = null
+    private var targetRevision = 0L
 
     fun state(): IdeAnalysisState = publishedState.get()
 
@@ -419,35 +426,47 @@ class IdeAnalysisCoordinator(
 
     fun dismissCompletion() = updateCompletion { null }
 
-    fun acceptCompletion(
+    fun selectCompletion(
         document: EditorDocument,
         path: VirtualSourcePath,
-    ): IdeCompletionAcceptance? {
+    ): IdeCompletionSelection? {
         val state = publishedState.get() as? IdeAnalysisState.Active ?: return null
         val completion = state.completion ?: return null
-        val current = synchronized(lock) { session }
+        val (current, currentTargetRevision) = synchronized(lock) { (session ?: return null) to targetRevision }
         if (
-            current == null || current.path != path || current.snapshot?.identity != state.identity ||
+            current.path != path || current.snapshot?.identity != state.identity ||
             current.documentRevision != document.revision || !document.contentEquals(current.text)
         ) {
             dismissCompletion()
-            return IdeCompletionAcceptance.Stale
+            return null
         }
-        val result = completion.accept(document, state.identity, path)
-        if (result is IdeCompletionAcceptance.Applied) {
-            dismissCompletion()
-            visibleLatency.editApplied(document.revision)
-            sourceChanged(
-                current.project,
-                current.path,
-                document.materialize(),
-                document.revision,
-                insertedText = null,
-                caretOffsetUtf16 = document.caretOffset,
-                change = result.edit.change,
-            )
+        val selection = completion.select(state.identity, path, document.revision, currentTargetRevision)
+        dismissCompletion()
+        return selection
+    }
+
+    fun isCompletionSelectionCurrent(
+        selection: IdeCompletionSelection,
+        document: EditorDocument,
+    ): Boolean =
+        synchronized(lock) {
+            val current = session ?: return@synchronized false
+            current.path == selection.path &&
+                current.snapshot?.identity == selection.identity &&
+                current.documentRevision == selection.documentRevision &&
+                targetRevision == selection.targetRevision &&
+                document.revision == selection.documentRevision &&
+                document.contentEquals(current.text)
         }
-        return result
+
+    fun updateTargetProfile(profile: TargetCompileProfile?) {
+        synchronized(lock) {
+            if (targetProfile == profile) return
+            targetProfile = profile
+            targetRevision = Math.incrementExact(targetRevision)
+            val active = publishedState.get() as? IdeAnalysisState.Active ?: return
+            publishedState.set(active.copy(completion = null))
+        }
     }
 
     fun closeFile() {
@@ -593,14 +612,29 @@ class IdeAnalysisCoordinator(
                     visibleLatency.resultUnavailable(IdeVisibleLatencyKind.AutomaticCompletion, current.documentRevision)
                     return
                 }
+                val input = current.input ?: return
+                val manifest =
+                    try {
+                        ProjectManifestCodec.decode(input.manifestBytes.toString(Charsets.UTF_8))
+                    } catch (_: IllegalArgumentException) {
+                        visibleLatency.resultUnavailable(IdeVisibleLatencyKind.AutomaticCompletion, current.documentRevision)
+                        return
+                    }
+                val entries = completionPlanner.plan(result.items, manifest, targetProfile)
+                if (entries.isEmpty()) {
+                    visibleLatency.resultUnavailable(IdeVisibleLatencyKind.AutomaticCompletion, current.documentRevision)
+                    return
+                }
                 val next =
                     prior.copy(
                         completion =
                             IdeCompletionState.create(
                                 snapshot.identity,
                                 current.path,
+                                current.documentRevision,
+                                targetRevision,
                                 result.replacement,
-                                result.items,
+                                entries,
                             ),
                     )
                 visibleLatency.analysisPublished(IdeVisibleLatencyKind.AutomaticCompletion, current.documentRevision)
