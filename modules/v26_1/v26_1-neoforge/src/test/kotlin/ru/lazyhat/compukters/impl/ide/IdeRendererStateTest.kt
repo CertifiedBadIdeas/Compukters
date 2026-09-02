@@ -36,6 +36,8 @@ import ru.lazyhat.compukters.ide.analysis.SemanticToken
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotId
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisPresentation
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
+import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionEntry
+import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionModuleRequirement
 import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionState
 import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationTarget
 import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticAnchor
@@ -69,6 +71,8 @@ import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.IncrementalKotlinHighlighter
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
+import ru.lazyhat.compukters.ide.project.ApiMajor
+import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
@@ -449,8 +453,10 @@ class IdeRendererStateTest {
             IdeCompletionState.create(
                 identity,
                 virtualPath,
+                0,
+                0,
                 EditorRange(source.indexOf("printl"), document.caretOffset),
-                listOf(CompletionItem(label, "println", CompletionKind.Function)),
+                listOf(IdeCompletionEntry(CompletionItem(label, "println", CompletionKind.Function), null, null)),
             )
         val editor =
             IdeEditorView.Text(
@@ -475,7 +481,7 @@ class IdeRendererStateTest {
         val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry)
         val popup = model.panels.single { it.kind == IdePanelKind.Dialog }.bounds
 
-        assertTrue(model.text.any { it.kind == IdeTextKind.Completion && it.value == label })
+        assertTrue(model.text.any { it.kind == IdeTextKind.Completion && it.value == "$label · function" })
         assertTrue(popup.width > 220, popup.toString())
         assertTrue(popup.width <= geometry.editor.width, popup.toString())
     }
@@ -489,12 +495,14 @@ class IdeRendererStateTest {
         val identity = AnalysisSnapshotIdentity(SourceSnapshotId(Hash256.zero()), AnalysisProfileIdentity(Hash256.zero()))
         val path = ProjectPath.file("src/main.kt")
         val virtualPath = VirtualSourcePath.kotlin(path.value)
-        val items = (0 until 12).map { CompletionItem("item$it", "item$it", CompletionKind.Function) }
+        val items = (0 until 12).map { IdeCompletionEntry(CompletionItem("item$it", "item$it", CompletionKind.Function), null, null) }
         val completion =
             IdeCompletionState
                 .create(
                     identity,
                     virtualPath,
+                    0,
+                    0,
                     EditorRange(source.indexOf("item"), document.caretOffset),
                     items,
                 ).move(8)
@@ -523,8 +531,64 @@ class IdeRendererStateTest {
                 .text
                 .filter { it.kind == IdeTextKind.Completion }
 
-        assertEquals((1..8).map { "item$it" }, completionText.map { it.value })
+        assertEquals((1..8).map { "item$it · function" }, completionText.map { it.value })
         assertEquals(IdeColors.ACCENT, completionText.last().color)
+    }
+
+    @Test
+    fun `completion popup renders import and module actions`() {
+        val source = "Re"
+        val document = EditorDocument(source)
+        document.setCaret(source.length)
+        val identity = AnalysisSnapshotIdentity(SourceSnapshotId(Hash256.zero()), AnalysisProfileIdentity(Hash256.zero()))
+        val path = ProjectPath.file("src/main.kt")
+        val virtualPath = VirtualSourcePath.kotlin(path.value)
+        val action = "import compukter.redstone.Redstone · enable compukter:redstone"
+        val completion =
+            IdeCompletionState.create(
+                identity,
+                virtualPath,
+                0,
+                0,
+                EditorRange(0, 2),
+                listOf(
+                    IdeCompletionEntry(
+                        CompletionItem("Redstone", "Redstone", CompletionKind.Object),
+                        action,
+                        IdeCompletionModuleRequirement(
+                            ModuleId.parse("compukter:redstone"),
+                            ApiMajor(1),
+                        ),
+                    ),
+                ),
+            )
+        val editor =
+            IdeEditorView.Text(
+                path = path,
+                visibleLines = listOf(source),
+                visibleLineStartsUtf16 = listOf(0),
+                firstVisibleLine = 0,
+                firstVisibleColumn = 0,
+                totalLines = 1,
+                caretUtf16 = document.caretOffset,
+                selectionStartUtf16 = null,
+                selectionEndUtf16 = null,
+                contentRevision = 0,
+                persistedContentRevision = 0,
+                dirty = false,
+                conflict = false,
+                lexical = IncrementalKotlinHighlighter(document).use { it.snapshot() },
+                analysis = IdeAnalysisState.Active(identity, virtualPath, 0, IdeAnalysisPresentation.Empty, completion),
+            )
+
+        val row =
+            IdeRenderer
+                .extract(workspaceState(editor, IdeBuildState.Idle), geometry())
+                .text
+                .single { it.kind == IdeTextKind.Completion }
+
+        assertEquals("Redstone · object · $action", row.value)
+        assertEquals(IdeColors.ACCENT, row.color)
     }
 
     @Test

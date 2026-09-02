@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.impl.ide
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
+import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisPlatform
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyKind
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
@@ -124,6 +125,22 @@ class IdeClientServicesTest {
                 compiler.manifest.identity.platformAbi,
                 Hash256.of(platform.identity.contentHash.toByteArray()),
             )
+
+            val modulesById = platform.modules.associateBy { it.id.toString() }
+            val admittedModules =
+                ProductionIdeApplicationFactory.admittedAnalysisModules(
+                    listOf(
+                        modulesById.getValue("stdlib:core"),
+                        modulesById.getValue("stdlib:ranges"),
+                        modulesById.getValue("compukter:redstone"),
+                        modulesById.getValue("std:terminal"),
+                    ),
+                )
+            assertEquals(
+                listOf("compukter:redstone", "std:terminal", "stdlib:core", "stdlib:ranges"),
+                admittedModules.map { it.identity.name },
+            )
+            AdmittedAnalysisPlatform(compiler.manifest.identity.platformAbi, admittedModules, guestApi.toString())
 
             val mismatch = compiler.manifest.identity.copy(platformAbi = Hash256.zero())
             assertFailsWith<IllegalStateException> {

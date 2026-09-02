@@ -781,8 +781,9 @@ internal object IdeRenderer {
                     codeLeft + (visualColumns(line.substring(0, local)) - editor.firstVisibleColumn) * font.cellWidth + font.cellWidth,
                     geometry.editor.top + (visibleIndex + 1) * font.cellHeight,
                 )
-            val visibleItems = completion.visibleItems
-            val contentWidth = visibleItems.maxOf { visualColumns(it.label) } * font.cellWidth + COMPLETION_HORIZONTAL_PADDING
+            val visibleItems = completion.visibleEntries
+            val rows = visibleItems.map(::completionRow)
+            val contentWidth = rows.maxOf(::visualColumns) * font.cellWidth + COMPLETION_HORIZONTAL_PADDING
             val popup =
                 geometry.completionPopup(
                     caret,
@@ -791,10 +792,10 @@ internal object IdeRenderer {
                 )
             panel(IdePanelKind.Dialog, popup.bounds, IdeColors.PANEL_ALT, Z_POPUP)
             scissors += IdeScissorDraw(IdeScissorKind.Completion, popup.bounds, Z_POPUP)
-            visibleItems.forEachIndexed { index, item ->
+            rows.forEachIndexed { index, row ->
                 ui(
                     IdeTextKind.Completion,
-                    item.label,
+                    row,
                     popup.bounds.left + 4,
                     popup.bounds.top + 3 + index * UI_LINE_HEIGHT,
                     if (completion.firstVisibleIndex + index == completion.selectedIndex) IdeColors.ACCENT else IdeColors.TEXT,
@@ -803,6 +804,21 @@ internal object IdeRenderer {
                 )
             }
         }
+
+        private fun completionRow(entry: ru.lazyhat.compukters.ide.client.analysis.IdeCompletionEntry): String =
+            buildString {
+                append(entry.proposal.label)
+                append(" · ")
+                append(
+                    entry.proposal.kind.name
+                        .replace(Regex("([a-z])([A-Z])"), "$1 $2")
+                        .lowercase(),
+                )
+                entry.actionText?.let {
+                    append(" · ")
+                    append(it)
+                }
+            }
 
         private fun diagnostics(workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView) {
             val bounds = geometry.diagnostics ?: return
