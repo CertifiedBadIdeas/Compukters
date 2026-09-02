@@ -170,7 +170,7 @@ fn k2_string_array_entry_executes_exact_utf16_arguments() {
 }
 
 #[test]
-fn k2_char_array_program_executes_exact_utf16_materialization() {
+fn k2_string_materialization_executes_char_arrays_and_scalar_templates() {
     let Ok(path) = std::env::var("COMPUKTER_KOTLIN_SUBSET_ARTIFACT") else {
         return;
     };
@@ -257,6 +257,18 @@ fn k2_char_array_program_executes_exact_utf16_materialization() {
     session
         .resume(request_id, HostResponse::Success(HostValueInput::Unit))
         .expect("terminal write must resume");
+    let template_request = next_host_request(
+        &mut session,
+        "scalar template write",
+        0,
+        Some(&utf16("2/true/x/15")),
+    );
+    session
+        .resume(
+            template_request,
+            HostResponse::Success(HostValueInput::Unit),
+        )
+        .expect("scalar template write must resume");
     loop {
         match session.advance(64, 64).expect("K2 subset must finish") {
             AdvanceOutcome::SliceExhausted => {}
