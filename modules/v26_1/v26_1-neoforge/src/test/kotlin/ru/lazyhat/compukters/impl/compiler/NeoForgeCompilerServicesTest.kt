@@ -21,22 +21,45 @@ package ru.lazyhat.compukters.impl.compiler
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
+import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
+import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfileIdentity
+import ru.lazyhat.compukters.ide.project.ApiMajor
+import ru.lazyhat.compukters.ide.project.LockedModule
+import ru.lazyhat.compukters.ide.project.ModuleId
+import ru.lazyhat.compukters.ide.project.ProjectLock
+import ru.lazyhat.compukters.platform.bundle.PlatformBundle
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
+import ru.lazyhat.compukters.platform.bundle.PlatformModule
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
+import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 
 class NeoForgeCompilerServicesTest {
     @Test
     fun `server publishes the exact packaged toolchain and limits as its target profile`() {
-        val identity = WorkerIdentity("2.4.0", "2.4", 3u, 4u, hash(5), hash(6))
+        val platform = platform()
+        val identity =
+            WorkerIdentity(
+                "2.4.0",
+                "2.4",
+                3u,
+                4u,
+                hash(5),
+                Hash256.of(platform.identity.contentHash.toByteArray()),
+            )
         val limits = WorkerLimits(sourceFiles = 7, artifactBytes = 8)
 
-        val profile = serverTargetProfile(identity, limits)
+        val profile = serverTargetProfile(identity, platform, limits)
+        val catalog = PlatformCatalog.of(platform)
 
         assertEquals(identity.compilerVersion, profile.toolchain.compilerVersion)
         assertEquals(identity.languageVersion, profile.toolchain.languageVersion)
@@ -46,8 +69,15 @@ class NeoForgeCompilerServicesTest {
         assertEquals(identity.payloadHash, profile.toolchain.payloadHash)
         assertEquals(identity.platformAbi, profile.toolchain.platformAbi)
         assertEquals(limits, profile.limits)
-        assertEquals(emptyList(), profile.modules)
-        assertEquals(TargetCompileProfileIdentity.of(profile), TargetCompileProfileIdentity.of(serverTargetProfile(identity, limits)))
+        assertEquals(catalog.entries.map { it.identity }, profile.modules)
+        assertEquals(
+            TargetCompileProfileIdentity.of(profile),
+            TargetCompileProfileIdentity.of(serverTargetProfile(identity, platform, limits)),
+        )
+
+        val selection = catalog.resolve(mapOf(ModuleId.parse("compukter:redstone") to ApiMajor(1)))
+        val lock = ProjectLock.of(profile.toolchain, selection.modules.map { LockedModule(it.identity, it.direct) })
+        assertIs<ProfileResolution.Resolved>(CompileProfileResolver(profile.toolchain, catalog, limits).resolveTarget(lock, profile))
     }
 
     @Test
@@ -100,4 +130,32 @@ class NeoForgeCompilerServicesTest {
     }
 
     private fun hash(value: Int) = Hash256.of(ByteArray(32) { value.toByte() })
+
+    private fun platform(): PlatformBundle {
+        val builtins = module("kotlin", "builtins")
+        val core = module("stdlib", "core", listOf(builtins.id))
+        val redstone = module("compukter", "redstone", listOf(core.id))
+        return PlatformBundleCodec.assemble(
+            "2.4",
+            PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
+            builtins,
+            listOf(redstone, core),
+        )
+    }
+
+    private fun module(
+        namespace: String,
+        name: String,
+        dependencies: List<PlatformModuleId> = emptyList(),
+    ): PlatformModule =
+        PlatformModule(
+            PlatformModuleId(namespace, name),
+            "1.0.0",
+            dependencies,
+            ImmutableBytes.of("$namespace:$name".encodeToByteArray()),
+            null,
+            emptyList(),
+            emptyList(),
+            emptyList(),
+        )
 }
