@@ -149,6 +149,7 @@ private fun success(
             identity,
             EditorRange(0, 0),
             emptyList(),
+            0,
             AnalysisResultLimits(),
         ),
     )
