@@ -35,9 +35,11 @@ import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.compiler.ServerComputerCompiler
 import ru.lazyhat.compukters.ide.compiler.profile.COMPUKTER_ARTIFACT_ABI
+import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
+import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ExecutorService
@@ -104,6 +106,7 @@ internal class NeoForgeCompilerService private constructor(
                 checkNotNull(NeoForgeCompilerService::class.java.getResourceAsStream(WORKER_RESOURCE)) {
                     "packaged compiler worker is missing: $WORKER_RESOURCE"
                 }.use { archive -> PackagedWorkerPayload.publish(archive, paths.payloadRoot) }
+            val platform = PackagedPlatformLoader.load(packaged.classpath, packaged.manifest.identity)
             val limits = WorkerLimits()
             val launch =
                 WorkerLaunch(
@@ -137,7 +140,7 @@ internal class NeoForgeCompilerService private constructor(
                 val compiler = ServerComputerCompiler(service, limits)
                 return NeoForgeCompilerService(
                     CompilerCompletionRouter(compiler),
-                    serverTargetProfile(packaged.manifest.identity, limits),
+                    serverTargetProfile(packaged.manifest.identity, platform, limits),
                     service,
                     executor,
                 )
@@ -174,6 +177,7 @@ object NeoForgeCompilerServices {
 
 internal fun serverTargetProfile(
     identity: WorkerIdentity,
+    platform: PlatformBundle,
     limits: WorkerLimits,
 ): TargetCompileProfile =
     TargetCompileProfile(
@@ -186,6 +190,6 @@ internal fun serverTargetProfile(
             payloadHash = identity.payloadHash,
             platformAbi = identity.platformAbi,
         ),
-        modules = emptyList(),
+        modules = PlatformCatalog.of(platform).entries.map { it.identity },
         limits = limits,
     )
