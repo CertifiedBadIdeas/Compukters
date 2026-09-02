@@ -492,6 +492,7 @@ class MinimalScriptLoweringTest {
                 request(
                     "project/main.kt" to
                         """
+                        import compukter.redstone.RedstoneSignal
                         import compukter.terminal.Terminal
 
                         fun main() {
@@ -503,6 +504,10 @@ class MinimalScriptLoweringTest {
                             value[4] = '!'
                             val last = value[value.size - 1]
                             if (last == '!') Terminal.write(value.concatToString(0, 4))
+                            val number = 2
+                            val enabled = true
+                            val marker = 'x'
+                            Terminal.write("${'$'}number/${'$'}enabled/${'$'}marker/${'$'}{RedstoneSignal.MAX}")
                         }
                         """.trimIndent(),
                 )
