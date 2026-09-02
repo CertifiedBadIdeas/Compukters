@@ -561,6 +561,7 @@ class IdeClientControllerTest {
         IdeAnalysisSnapshotFactory { input, path, text -> latencyAnalysisSnapshot(input.sources, path, text) },
         IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
         latency,
+        platformCatalog = TEST_PLATFORM_CATALOG,
     )
 
     private fun navigationFixture(
@@ -575,6 +576,7 @@ class IdeClientControllerTest {
                     IdeAnalysisSnapshotFactory { input, path, text -> latencyAnalysisSnapshot(input.sources, path, text) },
                     IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
                     attachedSources = attachedSources,
+                    platformCatalog = TEST_PLATFORM_CATALOG,
                 )
             },
         )

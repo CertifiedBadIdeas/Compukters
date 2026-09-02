@@ -24,11 +24,15 @@ import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
+import ru.lazyhat.compukters.ide.analysis.CompletionSymbol
+import ru.lazyhat.compukters.ide.analysis.CompletionTextEdit
+import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.controller.AdmittedAnalysisSnapshot
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisClientResult
@@ -41,9 +45,19 @@ import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisInputLoader
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisRequestFactory
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisSnapshotFactory
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
+import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
+import ru.lazyhat.compukters.ide.client.build.IdeBuildServices
+import ru.lazyhat.compukters.ide.client.state.IdeBusyOperation
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
+import ru.lazyhat.compukters.ide.compiler.ClientBuildResult
+import ru.lazyhat.compukters.ide.compiler.ClientBuildSnapshot
+import ru.lazyhat.compukters.ide.compiler.ClientCompilationService
+import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
 import ru.lazyhat.compukters.ide.editor.EditorRange
+import ru.lazyhat.compukters.ide.project.ModuleId
+import ru.lazyhat.compukters.ide.project.ProjectLockService
+import ru.lazyhat.compukters.ide.project.ProjectManifestCodec
 import java.util.concurrent.CompletableFuture
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -71,6 +85,7 @@ class IdeAnalysisFlowTest {
                     active.identity,
                     EditorRange(0, 2),
                     listOf(CompletionItem("println", "println", CompletionKind.Function)),
+                    2,
                 ),
             ),
         )
@@ -92,6 +107,126 @@ class IdeAnalysisFlowTest {
         fixture.controller.close()
     }
 
+    @Test
+    fun `import completion applies one undoable compound editor change`() {
+        val requests = FlowAnalysisRequests()
+        val fixture =
+            ControllerFixture(preferences("demo", "src/main.kt"), analysisCoordinatorFactory = { workspace ->
+                coordinator(workspace, requests)
+            })
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("fun main() { Re }")))
+        val active = assertIs<IdeAnalysisState.Active>(fixture.analysisCoordinator?.state())
+        val start = "fun main() { ".length
+        requests.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Completion.create(
+                    active.identity,
+                    EditorRange(start, start + 2),
+                    listOf(
+                        CompletionItem(
+                            "Redstone",
+                            "Redstone",
+                            CompletionKind.Object,
+                            symbol = CompletionSymbol("compukter.redstone.Redstone", "compukter.redstone.Redstone"),
+                            additionalEdits = listOf(CompletionTextEdit(EditorRange(0, 0), "import compukter.redstone.Redstone\n\n")),
+                        ),
+                    ),
+                    "fun main() { Re }".length,
+                ),
+            ),
+        )
+        fixture.controller.tick()
+
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Tab))
+
+        assertEquals("import compukter.redstone.Redstone\n\nfun main() { Redstone }", fixture.textEditor().visibleLines.joinToString("\n"))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Undo))
+        assertEquals("fun main() { Re }", fixture.textEditor().visibleLines.single())
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `undeclared module completion publishes dependencies before applying source`() {
+        val requests = FlowAnalysisRequests()
+        val fixture =
+            ControllerFixture(
+                preferences("demo", "src/main.kt"),
+                analysisCoordinatorFactory = { workspace -> coordinator(workspace, requests) },
+                buildCoordinatorFactory = { _, clock ->
+                    IdeBuildCoordinator(
+                        IdeBuildServices(
+                            TEST_PROJECT_RESOLUTION,
+                            CompileProfileResolver(TEST_TOOLCHAIN, TEST_PLATFORM_CATALOG, WorkerLimits()),
+                            { project -> ProjectLockService(project.lockFileWriter()) },
+                            NoopCompilationService,
+                        ),
+                        clock,
+                    )
+                },
+            )
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("fun main() { Re }")))
+        val active = assertIs<IdeAnalysisState.Active>(fixture.analysisCoordinator?.state())
+        val module = TEST_PLATFORM_CATALOG.entries.single { it.identity.id == ModuleId.parse("compukter:redstone") }
+        val start = "fun main() { ".length
+        requests.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Completion.create(
+                    active.identity,
+                    EditorRange(start, start + 2),
+                    listOf(
+                        CompletionItem(
+                            "Redstone",
+                            "Redstone",
+                            CompletionKind.Object,
+                            origin =
+                                DeclarationOrigin.Platform(
+                                    AnalysisModuleIdentity(module.identity.id.value, module.identity.contentHash),
+                                ),
+                            symbol = CompletionSymbol("compukter.redstone.Redstone", "compukter.redstone.Redstone"),
+                            additionalEdits = listOf(CompletionTextEdit(EditorRange(0, 0), "import compukter.redstone.Redstone\n\n")),
+                        ),
+                    ),
+                    "fun main() { Re }".length,
+                ),
+            ),
+        )
+        fixture.controller.tick()
+
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Tab))
+        assertTrue(IdeBusyOperation.Resolve in fixture.controller.viewState().busy)
+        fixture.tickUntil { IdeBusyOperation.Resolve !in fixture.controller.viewState().busy }
+
+        assertEquals("import compukter.redstone.Redstone\n\nfun main() { Redstone }", fixture.textEditor().visibleLines.joinToString("\n"))
+        val manifest =
+            ProjectManifestCodec.decode(
+                fixture.workspace.descriptor.handle.canonicalPath
+                    .resolve("compukter.toml")
+                    .toFile()
+                    .readText(),
+            )
+        assertEquals(module.identity.major, manifest.modules[module.identity.id])
+        assertTrue(
+            fixture.workspace.descriptor.handle.canonicalPath
+                .resolve("compukter.lock")
+                .toFile()
+                .isFile,
+        )
+        fixture.controller.close()
+    }
+
+    private fun ControllerFixture.tickUntil(predicate: () -> Boolean) {
+        repeat(500) {
+            controller.tick()
+            if (predicate()) return
+            Thread.sleep(5)
+        }
+        error("condition was not reached")
+    }
+
     private fun coordinator(
         workspace: ControlledWorkspace,
         requests: FlowAnalysisRequests,
@@ -99,7 +234,17 @@ class IdeAnalysisFlowTest {
         IdeAnalysisInputLoader(workspace::buildInput),
         IdeAnalysisSnapshotFactory { input, path, text -> analysisSnapshot(input.sources, path, text) },
         IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
+        platformCatalog = TEST_PLATFORM_CATALOG,
     )
+}
+
+private object NoopCompilationService : ClientCompilationService {
+    override fun build(input: ClientBuildSnapshot): CompletableFuture<ClientBuildResult> =
+        CompletableFuture.failedFuture(UnsupportedOperationException("not used"))
+
+    override fun cancel(future: CompletableFuture<ClientBuildResult>): Boolean = false
+
+    override fun close() = Unit
 }
 
 private class FlowAnalysisRequests : AnalysisRequestCoordinator {
