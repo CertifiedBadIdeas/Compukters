@@ -155,6 +155,7 @@ class PlatformCatalogTest {
                         trustedExternal = false,
                     ),
                 ),
+            completionDeclarations = emptyList(),
         )
     }
 

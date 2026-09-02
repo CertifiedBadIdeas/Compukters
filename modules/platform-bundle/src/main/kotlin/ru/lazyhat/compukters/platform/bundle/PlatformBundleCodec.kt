@@ -31,7 +31,7 @@ import java.security.MessageDigest
 object PlatformBundleCodec {
     const val SUPPORTED_PLATFORM_ABI = 1
 
-    private const val FORMAT_VERSION = 2
+    private const val FORMAT_VERSION = 3
     private const val MAX_BUNDLE_BYTES = 128 * 1024 * 1024
     private const val MAX_BINARY_BYTES = 64 * 1024 * 1024
     private const val MAX_TEXT_BYTES = 1024 * 1024
@@ -39,6 +39,7 @@ object PlatformBundleCodec {
     private const val MAX_DEPENDENCIES = 4096
     private const val MAX_SOURCES = 65_536
     private const val MAX_DECLARATIONS = 262_144
+    private const val MAX_COMPLETION_DECLARATIONS = 262_144
     private const val MAX_SCALAR_TYPES = 65_536
     private const val MAX_SCALAR_CONSTANTS = 262_144
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'B'.code.toByte(), 'F'.code.toByte())
@@ -123,6 +124,16 @@ object PlatformBundleCodec {
                         PlatformDeclaration::endUtf16,
                     ),
                 ),
+            completionDeclarations =
+                module.completionDeclarations.sortedWith(
+                    compareBy(
+                        PlatformCompletionDeclaration::shortName,
+                        PlatformCompletionDeclaration::symbol,
+                        PlatformCompletionDeclaration::signature,
+                        PlatformCompletionDeclaration::sourcePath,
+                        PlatformCompletionDeclaration::startUtf16,
+                    ),
+                ),
             scalarTypes = module.scalarTypes.sortedBy(PlatformScalarType::symbol),
             scalarConstants = module.scalarConstants.sortedBy(PlatformScalarConstant::symbol),
         )
@@ -148,6 +159,9 @@ object PlatformBundleCodec {
             }
             require(module.sources.size <= MAX_SOURCES) { "platform module ${module.id} has too many sources" }
             require(module.declarations.size <= MAX_DECLARATIONS) { "platform module ${module.id} has too many declarations" }
+            require(module.completionDeclarations.size <= MAX_COMPLETION_DECLARATIONS) {
+                "platform module ${module.id} has too many completion declarations"
+            }
             require(module.scalarTypes.size <= MAX_SCALAR_TYPES) { "platform module ${module.id} has too many scalar types" }
             require(module.scalarConstants.size <= MAX_SCALAR_CONSTANTS) {
                 "platform module ${module.id} has too many scalar constants"
@@ -176,6 +190,28 @@ object PlatformBundleCodec {
                 }
                 require(declarationKeys.add(declaration.symbol to declaration.signature)) {
                     "duplicate platform declaration ${declaration.symbol} ${declaration.signature}"
+                }
+            }
+            val completionKeys = mutableSetOf<Pair<String, String>>()
+            module.completionDeclarations.forEach { declaration ->
+                require(declaration.module == module.id) {
+                    "platform completion declaration ${declaration.symbol} belongs to ${declaration.module}, expected ${module.id}"
+                }
+                strictUtf8(declaration.symbol, "platform completion declaration symbol")
+                strictUtf8(declaration.shortName, "platform completion declaration short name")
+                strictUtf8(declaration.signature, "platform completion declaration signature")
+                require(declaration.shortName.isNotEmpty() && declaration.symbol.substringAfterLast('.') == declaration.shortName) {
+                    "platform completion declaration ${declaration.symbol} has an invalid short name"
+                }
+                val sourceLength =
+                    requireNotNull(sourceLengths[declaration.sourcePath]) {
+                        "platform completion declaration ${declaration.symbol} references unknown source ${declaration.sourcePath}"
+                    }
+                require(declaration.startUtf16 in 0..declaration.endUtf16 && declaration.endUtf16 <= sourceLength) {
+                    "platform completion declaration ${declaration.symbol} has an invalid UTF-16 source range"
+                }
+                require(completionKeys.add(declaration.symbol to declaration.signature)) {
+                    "duplicate platform completion declaration ${declaration.symbol} ${declaration.signature}"
                 }
             }
             val scalarTypes = module.scalarTypes.associateBy(PlatformScalarType::symbol)
@@ -304,6 +340,18 @@ object PlatformBundleCodec {
                 u32(declaration.endUtf16)
                 output.write(if (declaration.trustedExternal) 1 else 0)
             }
+            count(value.completionDeclarations.size)
+            value.completionDeclarations.forEach { declaration ->
+                string(declaration.symbol)
+                string(declaration.shortName)
+                string(declaration.signature)
+                output.write(declaration.kind.ordinal + 1)
+                moduleId(declaration.module)
+                string(declaration.sourcePath)
+                u32(declaration.startUtf16)
+                u32(declaration.endUtf16)
+                output.write(if (declaration.defaultImport) 1 else 0)
+            }
             count(value.scalarTypes.size)
             value.scalarTypes.forEach { type ->
                 string(type.symbol)
@@ -431,6 +479,29 @@ object PlatformBundleCodec {
                             },
                     )
                 }
+            val completionDeclarations =
+                List(count(MAX_COMPLETION_DECLARATIONS, "platform completion declaration")) {
+                    PlatformCompletionDeclaration(
+                        symbol = string("platform completion declaration symbol"),
+                        shortName = string("platform completion declaration short name"),
+                        signature = string("platform completion declaration signature"),
+                        kind =
+                            u8().let { tag ->
+                                PlatformCompletionKind.entries.getOrNull(tag - 1)
+                                    ?: throw IllegalArgumentException("invalid platform completion declaration kind: $tag")
+                            },
+                        module = moduleId(),
+                        sourcePath = string("platform completion declaration source path"),
+                        startUtf16 = u32(),
+                        endUtf16 = u32(),
+                        defaultImport =
+                            when (val value = u8()) {
+                                0 -> false
+                                1 -> true
+                                else -> throw IllegalArgumentException("invalid platform completion default-import flag: $value")
+                            },
+                    )
+                }
             val scalarTypes =
                 List(count(MAX_SCALAR_TYPES, "platform scalar type")) {
                     val symbol = string("platform scalar type symbol")
@@ -475,6 +546,7 @@ object PlatformBundleCodec {
                 libraryFragment,
                 sources,
                 declarations,
+                completionDeclarations,
                 scalarTypes,
                 scalarConstants,
             )

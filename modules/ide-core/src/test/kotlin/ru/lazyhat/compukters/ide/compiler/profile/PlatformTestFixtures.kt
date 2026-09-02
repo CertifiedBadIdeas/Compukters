@@ -94,5 +94,6 @@ private fun platformModule(
                     trustedExternal = " external " in " $body ",
                 ),
             ),
+        completionDeclarations = emptyList(),
     )
 }

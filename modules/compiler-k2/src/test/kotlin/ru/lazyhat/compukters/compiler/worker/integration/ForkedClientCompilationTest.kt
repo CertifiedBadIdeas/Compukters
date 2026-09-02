@@ -178,6 +178,7 @@ class ForkedClientCompilationTest {
                     null,
                     emptyList(),
                     emptyList(),
+                    emptyList(),
                 ),
                 emptyList(),
             ),
