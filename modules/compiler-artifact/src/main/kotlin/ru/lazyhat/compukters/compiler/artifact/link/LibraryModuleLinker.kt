@@ -334,6 +334,7 @@ private fun relocateType(
                 interfaces = type.interfaces.map(ids::type),
                 fieldStart = relocateStart(type.fieldStart, type.fieldCount, ids.fields, "field"),
                 methodStart = relocateStart(type.methodStart, type.methodCount, ids.functions, "method"),
+                initializer = type.initializer?.let(ids::function),
             )
         }
 

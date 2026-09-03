@@ -18,11 +18,20 @@
 
 package ru.lazyhat.compukters.compiler.artifact.read
 
+import ru.lazyhat.compukters.compiler.artifact.model.Block
+import ru.lazyhat.compukters.compiler.artifact.model.BlockId
+import ru.lazyhat.compukters.compiler.artifact.model.Destination
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
+import ru.lazyhat.compukters.compiler.artifact.model.Instruction
+import ru.lazyhat.compukters.compiler.artifact.model.NominalType
+import ru.lazyhat.compukters.compiler.artifact.model.TypeId
+import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.artifact.write.languageRuntimeArtifact
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
@@ -44,5 +53,42 @@ class ArtifactReaderTest {
 
         assertFailsWith<IllegalArgumentException> { ArtifactReader.read(corrupted) }
         assertFailsWith<IllegalArgumentException> { ArtifactReader.read(encoded + 0) }
+    }
+
+    @Test
+    fun `class initializer survives writer reader round trip`() {
+        val source = languageRuntimeArtifact()
+        val module = source.modules.single()
+        val initializerId = FunctionId.of(1u)
+        val artifact =
+            source.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            types =
+                                module.types.toMutableList().also { types ->
+                                    types[0] = (types[0] as NominalType.Class).copy(initializer = initializerId)
+                                },
+                            functions =
+                                module.functions +
+                                    module.functions.single().copy(
+                                        owner = TypeRef.Local(TypeId.of(0u)),
+                                        firstBlock = BlockId.of(module.blocks.size.toUInt()),
+                                        blockCount = 1u,
+                                        firstException = module.exceptions.size.toUInt(),
+                                        exceptionCount = 0u,
+                                    ),
+                            blocks =
+                                module.blocks +
+                                    Block(initializerId, false, listOf(Instruction.Return(Destination.Unit))),
+                        ),
+                    ),
+            )
+
+        val writeResult = ArtifactWriter.write(artifact)
+        val encoded = assertIs<ArtifactWriteResult.Success>(writeResult, writeResult.toString()).bytes
+        val decoded = ArtifactReader.read(encoded)
+
+        assertEquals(initializerId, (decoded.modules.single().types[0] as NominalType.Class).initializer)
     }
 }

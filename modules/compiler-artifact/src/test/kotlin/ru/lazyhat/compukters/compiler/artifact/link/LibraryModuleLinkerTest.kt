@@ -30,6 +30,9 @@ import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
 import ru.lazyhat.compukters.compiler.artifact.model.Export
 import ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility
+import ru.lazyhat.compukters.compiler.artifact.model.Field
+import ru.lazyhat.compukters.compiler.artifact.model.FieldId
+import ru.lazyhat.compukters.compiler.artifact.model.FieldRef
 import ru.lazyhat.compukters.compiler.artifact.model.Function
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
@@ -60,6 +63,20 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class LibraryModuleLinkerTest {
+    @Test
+    fun `reachable library class retains and relocates its initializer`() {
+        val (application, library) = applicationWithInitializedLibraryClass()
+
+        val linked = LibraryModuleLinker.link(application, mapOf("initialized" to library))
+        val linkedLibrary = linked.modules.single { it.kind == ModuleKind.LIBRARY }
+        val linkedClass = assertIs<NominalType.Class>(linkedLibrary.types.single { it is NominalType.Class })
+
+        assertEquals(1, linkedLibrary.functions.size)
+        assertEquals(FunctionId.of(0u), linkedClass.initializer)
+        assertEquals(TypeRef.Local(TypeId.of(0u)), linkedLibrary.functions.single().owner)
+        assertTrue(linkedLibrary.blocks.single().instructions.any { it is Instruction.StaticSet })
+    }
+
     @Test
     fun `links the recursive reachable function and removes dead library records`() {
         val library = libraryModule()
@@ -353,4 +370,113 @@ class LibraryModuleLinkerTest {
         )
 
     private fun moduleName(module: Module): String = module.strings[module.name.value.toInt()].toString()
+}
+
+private fun applicationWithInitializedLibraryClass(): Pair<Artifact, Module> {
+    val library =
+        Module(
+            name = StringId.of(3u),
+            kind = ModuleKind.LIBRARY,
+            strings = listOf("Box", "Box.VALUE", "init", "library").map(MetadataText::of),
+            types =
+                listOf(
+                    NominalType.Class(
+                        name = StringId.of(0u),
+                        final = true,
+                        fieldCount = 1u,
+                        initializer = FunctionId.of(0u),
+                    ),
+                    NominalType.Function(StringId.of(2u), suspending = false, result = ValueType.Unit, parameters = emptyList()),
+                ),
+            fields =
+                listOf(
+                    Field(
+                        owner = TypeRef.Local(TypeId.of(0u)),
+                        name = StringId.of(1u),
+                        type = ValueType.Ref(nullable = false, TypeRef.Local(TypeId.of(0u))),
+                        mutable = true,
+                        static = true,
+                    ),
+                ),
+            functions =
+                listOf(
+                    Function(
+                        owner = TypeRef.Local(TypeId.of(0u)),
+                        name = StringId.of(2u),
+                        signature = TypeRef.Local(TypeId.of(1u)),
+                        flags = setOf(FunctionFlag.STATIC),
+                        registers = listOf(ValueType.Ref(nullable = false, TypeRef.Local(TypeId.of(0u)))),
+                        parameterCount = 0u,
+                        firstBlock = BlockId.of(0u),
+                        blockCount = 1u,
+                        firstException = 0u,
+                        exceptionCount = 0u,
+                    ),
+                ),
+            blocks =
+                listOf(
+                    Block(
+                        FunctionId.of(0u),
+                        false,
+                        listOf(
+                            Instruction.NewObject(RegisterId.of(0u), TypeRef.Local(TypeId.of(0u))),
+                            Instruction.StaticSet(FieldRef.Local(FieldId.of(0u)), RegisterId.of(0u)),
+                            Instruction.Return(Destination.Unit),
+                        ),
+                    ),
+                ),
+            exports =
+                listOf(
+                    Export(SymbolKind.TYPE, ExportVisibility.PUBLIC_LIBRARY, StringId.of(0u), 0u, TypeRef.Local(TypeId.of(0u))),
+                    Export(SymbolKind.FIELD, ExportVisibility.PUBLIC_LIBRARY, StringId.of(1u), 0u, TypeRef.Local(TypeId.of(0u))),
+                ),
+        )
+    val hash = ArtifactWriter.moduleSemanticHash(library)
+    val app =
+        Module(
+            name = StringId.of(2u),
+            kind = ModuleKind.APPLICATION,
+            strings = listOf("Box", "Box.VALUE", "app", "entry").map(MetadataText::of),
+            types =
+                listOf(
+                    NominalType.Function(StringId.of(3u), suspending = false, result = ValueType.Unit, parameters = emptyList()),
+                ),
+            imports =
+                listOf(
+                    Import(SymbolKind.TYPE, ModuleId.of(1u), StringId.of(0u), TypeRef.Imported(ImportId.of(0u)), hash),
+                    Import(SymbolKind.FIELD, ModuleId.of(1u), StringId.of(1u), TypeRef.Imported(ImportId.of(0u)), hash),
+                ),
+            functions =
+                listOf(
+                    Function(
+                        owner = null,
+                        name = StringId.of(3u),
+                        signature = TypeRef.Local(TypeId.of(0u)),
+                        flags = setOf(FunctionFlag.STATIC),
+                        registers = listOf(ValueType.Ref(nullable = false, TypeRef.Imported(ImportId.of(0u)))),
+                        parameterCount = 0u,
+                        firstBlock = BlockId.of(0u),
+                        blockCount = 1u,
+                        firstException = 0u,
+                        exceptionCount = 0u,
+                    ),
+                ),
+            blocks =
+                listOf(
+                    Block(
+                        FunctionId.of(0u),
+                        false,
+                        listOf(
+                            Instruction.StaticGet(RegisterId.of(0u), FieldRef.Imported(ImportId.of(1u))),
+                            Instruction.Return(Destination.Unit),
+                        ),
+                    ),
+                ),
+        )
+    return Artifact(
+        semanticFeatures = setOf(SemanticFeature.MODULE_IMPORTS),
+        manifest = Manifest.minimal(maximumBlockCost = 16u, minimumSliceCost = 16u),
+        entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
+        modules = listOf(app),
+    ) to library
 }

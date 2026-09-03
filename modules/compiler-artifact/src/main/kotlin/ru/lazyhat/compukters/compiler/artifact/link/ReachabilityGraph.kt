@@ -188,6 +188,7 @@ internal class ReachabilityGraph(
             is NominalType.Class -> {
                 type.superType?.let { markType(module, it) }
                 type.interfaces.forEach { markType(module, it) }
+                type.initializer?.let { markFunction(module, it.value.toInt()) }
                 markRange(type.fieldStart, type.fieldCount) { markField(module, it) }
                 markRange(type.methodStart, type.methodCount) { markFunction(module, it) }
             }

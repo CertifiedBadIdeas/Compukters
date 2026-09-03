@@ -88,6 +88,7 @@ sealed interface NominalType {
         val fieldCount: UInt = 0u,
         val methodStart: UInt = 0u,
         val methodCount: UInt = 0u,
+        val initializer: FunctionId? = null,
     ) : NominalType
 
     data class Interface(
