@@ -263,6 +263,35 @@ class AnalysisWorkerServerConcurrencyTest {
     }
 
     @Test
+    fun `internal analysis failure preserves its cause chain`() {
+        val root = createTempDirectory("compukters-server-failure-detail-")
+        val output = RecordingOutputStream()
+        val sources = projectSources("object ll")
+        val identity = identity(sources)
+        val server =
+            server(root, output) { _, _, _ ->
+                throw AssertionError("diagnostic collector").apply {
+                    initCause(IllegalStateException("broken FIR"))
+                }
+            }
+        try {
+            assertTrue(server.accept(openRequest(RequestId.of(30uL), identity, sources)))
+            assertIs<SnapshotReady>(output.next())
+
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(31uL), AnalysisQuery.Presentation(identity, mainPath()))))
+            val failure = assertIs<AnalysisFailure>(output.next())
+
+            assertEquals(
+                "AssertionError: diagnostic collector\nCaused by: IllegalStateException: broken FIR",
+                failure.detail,
+            )
+        } finally {
+            server.close()
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `server dispatch accepts cancel while analysis handler is occupied`() {
         val root = createTempDirectory("compukters-server-concurrency-")
         val started = CountDownLatch(1)

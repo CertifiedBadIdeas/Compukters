@@ -45,6 +45,8 @@ import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotUpdated
 import ru.lazyhat.compukters.ide.analysis.protocol.UpdateSnapshotRequest
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.Collections
+import java.util.IdentityHashMap
 
 internal enum class AnalysisServerExit { CleanEof, ProtocolError }
 
@@ -197,7 +199,7 @@ internal class AnalysisWorkerServer(
                             requestId,
                             requestIdentity,
                             AnalysisFailureKind.InternalAnalysis,
-                            bounded(throwable.message ?: "analysis request failed", limits.detailTextBytes),
+                            failureDetail(throwable, limits.detailTextBytes),
                         ),
                     )
                 },
@@ -319,9 +321,28 @@ internal class AnalysisWorkerServer(
         return result.toString().ifEmpty { "invalid snapshot" }
     }
 
+    private fun failureDetail(
+        throwable: Throwable,
+        maximumBytes: Int,
+    ): String {
+        val seen = Collections.newSetFromMap(IdentityHashMap<Throwable, Boolean>())
+        val detail = StringBuilder()
+        var current: Throwable? = throwable
+        var depth = 0
+        while (current != null && depth < MAXIMUM_FAILURE_CAUSES && seen.add(current)) {
+            if (depth > 0) detail.append("\nCaused by: ")
+            detail.append(current.javaClass.simpleName.ifBlank { current.javaClass.name })
+            current.message?.takeIf(String::isNotBlank)?.let { detail.append(": ").append(it) }
+            current = current.cause
+            depth++
+        }
+        return bounded(detail.toString().ifBlank { "analysis request failed" }, maximumBytes)
+    }
+
     private companion object {
         const val FRAME_HEADER_BYTES = 12
         const val MAXIMUM_QUEUED_REQUESTS = 2
+        const val MAXIMUM_FAILURE_CAUSES = 8
         val UNSUPPORTED_QUERY_HANDLER =
             AnalysisQueryHandler { request, _, _ ->
                 AnalysisFailure(
