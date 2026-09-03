@@ -27,6 +27,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSemanticSettings
@@ -53,6 +54,7 @@ import ru.lazyhat.compukters.ide.client.analysis.IdeAttachedSourceCatalog
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
 import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
 import ru.lazyhat.compukters.ide.client.build.IdeBuildServices
+import ru.lazyhat.compukters.ide.client.controller.IdeAnalysisFailureReporter
 import ru.lazyhat.compukters.ide.client.controller.IdeClientController
 import ru.lazyhat.compukters.ide.client.controller.IdeClientTooling
 import ru.lazyhat.compukters.ide.client.controller.IdeControllerClock
@@ -403,6 +405,13 @@ internal object ProductionIdeApplicationFactory {
                 targetCoordinator = target,
                 tooling = tooling(workspace),
                 visibleLatency = visibleLatency,
+                analysisFailureReporter =
+                    IdeAnalysisFailureReporter { failure ->
+                        LOGGER.warn {
+                            "IDE analysis unavailable for ${failure.path.value} at document revision " +
+                                "${failure.documentRevision}: ${failure.detail}"
+                        }
+                    },
             )
         controller.start()
         return IdeClientApplication(controller, preferences, targetTerminal, visibleLatency, targetPort)

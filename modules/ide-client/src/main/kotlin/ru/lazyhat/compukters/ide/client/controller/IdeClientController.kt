@@ -90,6 +90,20 @@ import java.util.concurrent.CompletionException
 import java.util.concurrent.CompletionStage
 import java.util.concurrent.atomic.AtomicBoolean
 
+data class IdeAnalysisFailure(
+    val path: VirtualSourcePath,
+    val documentRevision: Long,
+    val detail: String,
+)
+
+fun interface IdeAnalysisFailureReporter {
+    fun report(failure: IdeAnalysisFailure)
+
+    companion object {
+        val None = IdeAnalysisFailureReporter { _ -> }
+    }
+}
+
 class IdeClientController(
     private val workspace: IdeWorkspace,
     private val preferences: IdePreferencesStore,
@@ -101,6 +115,7 @@ class IdeClientController(
     private val targetCoordinator: IdeTargetCoordinator? = null,
     tooling: CompletionStage<IdeClientTooling>? = null,
     private val visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
+    private val analysisFailureReporter: IdeAnalysisFailureReporter = IdeAnalysisFailureReporter.None,
 ) : AutoCloseable {
     private val owner = Thread.currentThread()
     private var state =
@@ -2003,7 +2018,9 @@ class IdeClientController(
         observedAnalysisState = current
         if (current is IdeAnalysisState.Active) visibleLatency.controllerObserved(current.documentRevision)
         if (current is IdeAnalysisState.Unavailable) {
-            publishStatus(current.status, IdeProblemSeverity.Warning)
+            val message = current.detail.takeIf(String::isNotBlank)?.let { "${current.status}: $it" } ?: current.status
+            publishStatus(message, IdeProblemSeverity.Warning)
+            analysisFailureReporter.report(IdeAnalysisFailure(current.path, current.documentRevision, current.detail))
         }
         publishWorkspace()
     }
