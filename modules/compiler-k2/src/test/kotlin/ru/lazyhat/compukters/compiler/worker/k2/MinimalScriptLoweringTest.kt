@@ -217,11 +217,36 @@ class MinimalScriptLoweringTest {
             val first = adapter.compile(request(source))
             val second = adapter.compile(request(source))
             val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            val application = ArtifactReader.read(artifact).modules.single { it.kind == ModuleKind.APPLICATION }
             val typeTags = indexedSectionRecords(artifact, 0x0101).map { it.first().toInt() and 0xff }
             val opcodes = applicationCodeOpcodes(artifact)
 
+            val reasonTypeIndex = application.types.indexOfFirst { type ->
+                type is NominalType.Class && application.strings[type.name.value.toInt()].toString() == "Reason"
+            }
+            val reasonType = assertNotNull(application.types[reasonTypeIndex] as? NominalType.Class)
+            val initializerId = assertNotNull(reasonType.initializer)
+            val initializer = application.functions[initializerId.value.toInt()]
+            val initializerBlocks =
+                application.blocks.subList(
+                    initializer.firstBlock.value.toInt(),
+                    (initializer.firstBlock.value + initializer.blockCount).toInt(),
+                )
+
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
-            assertEquals(3, typeTags.count { it == 3 }, "two source functions and the reachable Exited constructor")
+            assertEquals(TypeRef.Local(TypeId.of(reasonTypeIndex.toUInt())), initializer.owner)
+            assertTrue(FunctionFlag.STATIC in initializer.flags)
+            assertTrue(initializerBlocks.flatMap(Block::instructions).any { it is Instruction.NewObject })
+            assertEquals(2, initializerBlocks.flatMap(Block::instructions).count { it is Instruction.StaticSet })
+            assertTrue(
+                application.functions.filterIndexed { index, _ -> index != initializerId.value.toInt() }.flatMap { function ->
+                    application.blocks.subList(
+                        function.firstBlock.value.toInt(),
+                        (function.firstBlock.value + function.blockCount).toInt(),
+                    )
+                }.flatMap(Block::instructions).none { it is Instruction.StaticSet },
+            )
+            assertEquals(4, typeTags.count { it == 3 }, "two source functions, the reachable Exited constructor and enum initializer")
             assertEquals(3, typeTags.count { it == 0 }, "Exited, Failed and Reason classes")
             assertEquals(1, typeTags.count { it == 1 }, "sealed Result interface")
             assertEquals(5, indexedSectionRecords(artifact, 0x0105).size, "three properties and two enum roots")

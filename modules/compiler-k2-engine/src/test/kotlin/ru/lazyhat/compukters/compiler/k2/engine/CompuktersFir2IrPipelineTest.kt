@@ -22,6 +22,8 @@ import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
+import ru.lazyhat.compukters.compiler.artifact.model.NominalType
+import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalTrustedIntrinsics
@@ -261,9 +263,21 @@ class CompuktersFir2IrPipelineTest {
                         }
                 }
             val exports = libraryModule.exports.associateBy { libraryModule.strings[it.name.value.toInt()].toString() }
+            val reasonType =
+                libraryModule.types.filterIsInstance<NominalType.Class>().single { type ->
+                    libraryModule.strings[type.name.value.toInt()].toString() == "sample.Reason"
+                }
+            val initializer = libraryModule.functions[assertNotNull(reasonType.initializer).value.toInt()]
+            val initializerInstructions =
+                libraryModule.blocks
+                    .subList(
+                        initializer.firstBlock.value.toInt(),
+                        (initializer.firstBlock.value + initializer.blockCount).toInt(),
+                    ).flatMap { it.instructions }
             assertEquals(SymbolKind.TYPE, exports.getValue("sample.Ok").kind)
             assertEquals(SymbolKind.FIELD, exports.getValue("sample.Ok.code").kind)
             assertEquals(SymbolKind.FIELD, exports.getValue("sample.Reason.MISSING").kind)
+            assertEquals(1, initializerInstructions.count { it is Instruction.StaticSet })
             assertFalse(exports.containsKey("code"))
         }
     }

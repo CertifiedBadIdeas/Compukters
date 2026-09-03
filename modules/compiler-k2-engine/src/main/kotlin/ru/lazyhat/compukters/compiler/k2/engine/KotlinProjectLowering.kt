@@ -673,6 +673,10 @@ internal object KotlinProjectLowering {
                     declaration.modality !in setOf(Modality.ABSTRACT, Modality.SEALED) &&
                     declaration.constructors.any { it.isPrimary }
             }
+        val initializerClasses =
+            userClasses.filter { declaration ->
+                declaration.kind == ClassKind.ENUM_CLASS && declaration.declarations.any { it is IrEnumEntry }
+            }
 
         val intrinsicCollector =
             IntrinsicCollector { function ->
@@ -744,7 +748,7 @@ internal object KotlinProjectLowering {
                             } else {
                                 emptyList()
                             }
-                    } + constructorClasses.map(::constructorName)
+                    } + constructorClasses.map(::constructorName) + listOfNotNull("<clinit>".takeIf { initializerClasses.isNotEmpty() })
             ).distinct()
                 .map(MetadataText::of)
                 .sorted()
@@ -809,9 +813,19 @@ internal object KotlinProjectLowering {
             constructorClasses.withIndex().associate { (index, declaration) ->
                 declaration.symbol to TypeId.of((userFunctions.size + index).toUInt())
             }
+        val initializerFunctionIds =
+            initializerClasses.withIndex().associate { (index, declaration) ->
+                declaration.symbol to FunctionId.of((userFunctions.size + constructorClasses.size + index).toUInt())
+            }
         val classTypeIds =
             userClasses.withIndex().associate { (index, declaration) ->
                 declaration.symbol to TypeId.of((userFunctions.size + constructorClasses.size + index).toUInt())
+            }
+        val initializerTypeBase =
+            userFunctions.size + constructorClasses.size + userClasses.size + if (usesStringArray) 1 else 0
+        val initializerTypeIds =
+            initializerClasses.withIndex().associate { (index, declaration) ->
+                declaration.symbol to TypeId.of((initializerTypeBase + index).toUInt())
             }
         val externalTypeImports =
             linkedSymbols.types.entries
@@ -833,7 +847,7 @@ internal object KotlinProjectLowering {
         val externalEnumFieldImports =
             linkedSymbols.enumEntries.mapValues { (_, target) -> requireNotNull(externalFieldsBySortKey[target.sortKey]) }
         val externalFieldImportCount = externalFieldImports.size
-        val externalFunctionTypeBase = userFunctions.size + constructorClasses.size + userClasses.size + if (usesStringArray) 1 else 0
+        val externalFunctionTypeBase = initializerTypeBase + initializerClasses.size
         val externalFunctionImports =
             externalFunctions.entries
                 .sortedBy { (_, target) -> target.sortKey }
@@ -915,8 +929,6 @@ internal object KotlinProjectLowering {
                         classLayouts.flatMap { layout -> layout.enumEntries }.associateBy { it.declaration.symbol },
                     externalFieldsByGetter = externalGetterFieldImports,
                     externalEnumEntries = externalEnumFieldImports,
-                    entryEnumInitializers =
-                        if (function === entry) classLayouts.flatMap { it.enumEntries } else emptyList(),
                     externalFunctions = externalFunctionImports,
                 )
             val compiled = compiler.compile()
@@ -1005,6 +1017,40 @@ internal object KotlinProjectLowering {
                 )
         }
 
+        initializerClasses.forEach { declaration ->
+            val layout = requireNotNull(classLayoutsBySymbol[declaration.symbol])
+            val functionId = requireNotNull(initializerFunctionIds[declaration.symbol])
+            val firstBlock = blocks.size
+            layout.enumEntries.forEachIndexed { index, enumEntry ->
+                val nextBlock = firstBlock + index + 1
+                blocks +=
+                    Block(
+                        owner = functionId,
+                        loopHeaderSafepoint = false,
+                        instructions =
+                            listOf(
+                                Instruction.NewObject(RegisterId.of(index.toUInt()), TypeRef.Local(layout.typeId)),
+                                Instruction.StaticSet(FieldRef.Local(enumEntry.fieldId), RegisterId.of(index.toUInt())),
+                                Instruction.Jump(BlockId.of(nextBlock.toUInt())),
+                            ),
+                    )
+            }
+            blocks += Block(functionId, false, listOf(Instruction.Return(Destination.Unit)))
+            loweredFunctions +=
+                Function(
+                    owner = TypeRef.Local(layout.typeId),
+                    name = requireNotNull(metadataIds["<clinit>"]),
+                    signature = TypeRef.Local(requireNotNull(initializerTypeIds[declaration.symbol])),
+                    flags = setOf(FunctionFlag.STATIC),
+                    registers = List(layout.enumEntries.size) { ValueType.Ref(nullable = false, type = TypeRef.Local(layout.typeId)) },
+                    parameterCount = 0u,
+                    firstBlock = BlockId.of(firstBlock.toUInt()),
+                    blockCount = (layout.enumEntries.size + 1).toUInt(),
+                    firstException = 0u,
+                    exceptionCount = 0u,
+                )
+        }
+
         val functionTypes =
             userFunctions.map { function ->
                 NominalType.Function(
@@ -1052,6 +1098,15 @@ internal object KotlinProjectLowering {
                     parameters = layout.fields.sortedBy { it.constructorParameterIndex }.map { it.type },
                 )
             }
+        val initializerTypes =
+            initializerClasses.map {
+                NominalType.Function(
+                    name = requireNotNull(metadataIds["<clinit>"]),
+                    suspending = false,
+                    result = ValueType.Unit,
+                    parameters = emptyList(),
+                )
+            }
         val classTypes =
             classLayouts.map { layout ->
                 val declaration = layout.declaration
@@ -1079,6 +1134,7 @@ internal object KotlinProjectLowering {
                         interfaces = interfaces,
                         fieldStart = layout.firstField,
                         fieldCount = (layout.fields.size + layout.enumEntries.size).toUInt(),
+                        initializer = initializerFunctionIds[declaration.symbol],
                     )
                 }
             }
@@ -1163,7 +1219,7 @@ internal object KotlinProjectLowering {
                             )
                         } else {
                             emptyList()
-                        } + externalFunctionTypes,
+                        } + initializerTypes + externalFunctionTypes,
                 constants = constants,
                 fields = artifactFields,
                 imports =
@@ -1813,7 +1869,6 @@ private class FunctionCompiler(
     private val enumEntries: Map<IrEnumEntrySymbol, GuestEnumEntryLayout>,
     private val externalFieldsByGetter: Map<IrSimpleFunctionSymbol, ExternalFieldTarget>,
     private val externalEnumEntries: Map<IrEnumEntrySymbol, ExternalFieldTarget>,
-    private val entryEnumInitializers: List<GuestEnumEntryLayout>,
     private val externalFunctions: Map<IrSimpleFunctionSymbol, ExternalFunctionTarget>,
 ) {
     private val localTypes = mutableListOf<ValueType>()
@@ -1824,12 +1879,6 @@ private class FunctionCompiler(
     fun compile(): CompiledFunction {
         loweredParameters(function, session).forEachIndexed { index, parameter ->
             values[parameter.symbol] = RegisterId.of(index.toUInt())
-        }
-        entryEnumInitializers.forEach { entry ->
-            prepareAllocationBlock()
-            val value = allocate(ValueType.Ref(nullable = false, type = entry.ownerType))
-            emit(Instruction.NewObject(value, entry.ownerType))
-            emit(Instruction.StaticSet(FieldRef.Local(entry.fieldId), value))
         }
         val body = function.body as? IrBlockBody ?: throw UnsupportedKotlinIr(function, "function body is not a block")
         body.statements.forEach(::compileStatement)
