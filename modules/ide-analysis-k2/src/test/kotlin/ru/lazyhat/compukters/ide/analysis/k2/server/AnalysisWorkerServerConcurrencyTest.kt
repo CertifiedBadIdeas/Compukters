@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.ide.analysis.k2.server
 
+import com.intellij.openapi.diagnostic.Attachment
+import com.intellij.openapi.diagnostic.ExceptionWithAttachments
 import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
 import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
@@ -270,8 +272,10 @@ class AnalysisWorkerServerConcurrencyTest {
         val identity = identity(sources)
         val server =
             server(root, output) { _, _, _ ->
+                val cause = IllegalStateException("broken FIR").apply { stackTrace = emptyArray() }
                 throw AssertionError("diagnostic collector").apply {
-                    initCause(IllegalStateException("broken FIR"))
+                    stackTrace = emptyArray()
+                    initCause(cause)
                 }
             }
         try {
@@ -284,6 +288,50 @@ class AnalysisWorkerServerConcurrencyTest {
             assertEquals(
                 "AssertionError: diagnostic collector\nCaused by: IllegalStateException: broken FIR",
                 failure.detail,
+            )
+        } finally {
+            server.close()
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `internal analysis failure includes stack frames and attachments`() {
+        val root = createTempDirectory("compukters-server-failure-diagnostics-")
+        val output = RecordingOutputStream()
+        val sources = projectSources("object ll")
+        val identity = identity(sources)
+        val cause =
+            AttachedFailure(
+                "broken FIR cache",
+                arrayOf(Attachment("cache.txt", "classId=ll\ncontext=<null>")),
+            ).apply {
+                stackTrace = arrayOf(StackTraceElement("fir.Cache", "get", "Cache.kt", 42))
+            }
+        val failure =
+            AssertionError("diagnostic collector").apply {
+                stackTrace = arrayOf(StackTraceElement("analysis.Collector", "collect", "Collector.kt", 17))
+                initCause(cause)
+            }
+        val server = server(root, output) { _, _, _ -> throw failure }
+        try {
+            assertTrue(server.accept(openRequest(RequestId.of(32uL), identity, sources)))
+            assertIs<SnapshotReady>(output.next())
+
+            assertTrue(server.accept(AnalysisQueryRequest(RequestId.of(33uL), AnalysisQuery.Presentation(identity, mainPath()))))
+            val response = assertIs<AnalysisFailure>(output.next())
+
+            assertEquals(
+                """
+                AssertionError: diagnostic collector
+                  at analysis.Collector.collect(Collector.kt:17)
+                Caused by: AttachedFailure: broken FIR cache
+                  at fir.Cache.get(Cache.kt:42)
+                  Attachment cache.txt:
+                    classId=ll
+                    context=<null>
+                """.trimIndent(),
+                response.detail,
             )
         } finally {
             server.close()
@@ -447,6 +495,14 @@ class AnalysisWorkerServerConcurrencyTest {
 }
 
 private fun mainPath(): VirtualSourcePath = VirtualSourcePath.kotlin("main.kt")
+
+private class AttachedFailure(
+    message: String,
+    private val diagnosticAttachments: Array<Attachment>,
+) : IllegalStateException(message),
+    ExceptionWithAttachments {
+    override fun getAttachments(): Array<Attachment> = diagnosticAttachments
+}
 
 private class RecordingOutputStream : ByteArrayOutputStream() {
     private val frames = LinkedBlockingQueue<ByteArray>()

@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.ide.analysis.k2.server
 
+import com.intellij.openapi.diagnostic.ExceptionWithAttachments
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.IncrementalK2Workspace
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.K2WorkspaceReopenRequiredException
@@ -45,6 +46,7 @@ import ru.lazyhat.compukters.ide.analysis.protocol.SnapshotUpdated
 import ru.lazyhat.compukters.ide.analysis.protocol.UpdateSnapshotRequest
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.charset.StandardCharsets
 import java.util.Collections
 import java.util.IdentityHashMap
 
@@ -333,6 +335,18 @@ internal class AnalysisWorkerServer(
             if (depth > 0) detail.append("\nCaused by: ")
             detail.append(current.javaClass.simpleName.ifBlank { current.javaClass.name })
             current.message?.takeIf(String::isNotBlank)?.let { detail.append(": ").append(it) }
+            current.stackTrace.take(MAXIMUM_FAILURE_STACK_FRAMES).forEach { frame ->
+                detail.append("\n  at ").append(frame)
+            }
+            if (current is ExceptionWithAttachments) {
+                current.attachments.take(MAXIMUM_FAILURE_ATTACHMENTS).forEach { attachment ->
+                    val name = attachment.path.replace('\n', ' ').replace('\r', ' ')
+                    detail.append("\n  Attachment ").append(name).append(':')
+                    String(attachment.bytes, StandardCharsets.UTF_8).lineSequence().forEach { line ->
+                        detail.append("\n    ").append(line)
+                    }
+                }
+            }
             current = current.cause
             depth++
         }
@@ -343,6 +357,8 @@ internal class AnalysisWorkerServer(
         const val FRAME_HEADER_BYTES = 12
         const val MAXIMUM_QUEUED_REQUESTS = 2
         const val MAXIMUM_FAILURE_CAUSES = 8
+        const val MAXIMUM_FAILURE_STACK_FRAMES = 8
+        const val MAXIMUM_FAILURE_ATTACHMENTS = 8
         val UNSUPPORTED_QUERY_HANDLER =
             AnalysisQueryHandler { request, _, _ ->
                 AnalysisFailure(
