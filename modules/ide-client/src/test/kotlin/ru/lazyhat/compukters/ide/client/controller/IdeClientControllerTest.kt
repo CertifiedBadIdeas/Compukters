@@ -37,6 +37,7 @@ import ru.lazyhat.compukters.ide.analysis.controller.AnalysisClientResult
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisRequestCoordinator
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisResultSink
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
+import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFailureKind
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisInputLoader
@@ -340,6 +341,33 @@ class IdeClientControllerTest {
     }
 
     @Test
+    fun `analysis failure exposes detail once`() {
+        val requests = ControllerRecordingAnalysisRequests()
+        val failures = mutableListOf<IdeAnalysisFailure>()
+        val fixture =
+            ControllerFixture(
+                preferences = preferences("demo", "src/main.kt"),
+                analysisCoordinatorFactory = { workspace ->
+                    latencyCoordinator(workspace, requests, IdeVisibleLatencyTrace.None)
+                },
+                analysisFailureReporter = IdeAnalysisFailureReporter(failures::add),
+            )
+        fixture.startAndTick()
+
+        requests.publishFailure("completion exploded")
+        fixture.controller.tick()
+
+        assertEquals("Analysis unavailable: completion exploded", fixture.workspaceView().status?.message)
+        assertEquals(
+            listOf(IdeAnalysisFailure(VirtualSourcePath.kotlin("src/main.kt"), 0, "completion exploded")),
+            failures,
+        )
+
+        fixture.controller.tick()
+        assertEquals(1, failures.size)
+    }
+
+    @Test
     fun `file switch and controller close drop unfinished latency`() {
         val latency = ControllerRecordingVisibleLatencyTrace()
         val requests = ControllerRecordingAnalysisRequests()
@@ -597,6 +625,7 @@ internal class ControllerFixture(
     targetCoordinatorFactory: ((MutableClock) -> ru.lazyhat.compukters.ide.client.target.IdeTargetCoordinator)? = null,
     tooling: CompletableFuture<IdeClientTooling>? = null,
     visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
+    analysisFailureReporter: IdeAnalysisFailureReporter = IdeAnalysisFailureReporter.None,
     buildCoordinatorFactory: ((ControlledWorkspace, MutableClock) -> IdeBuildCoordinator)? = null,
 ) {
     val clock = MutableClock()
@@ -617,6 +646,7 @@ internal class ControllerFixture(
             targetCoordinator = targetCoordinator,
             tooling = tooling,
             visibleLatency = visibleLatency,
+            analysisFailureReporter = analysisFailureReporter,
         )
 
     fun startAndTick() {
@@ -833,6 +863,10 @@ private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
                 ),
             ),
         )
+    }
+
+    fun publishFailure(detail: String) {
+        sink.publish(AnalysisClientResult.Failure(AnalysisFailureKind.InternalAnalysis, detail))
     }
 
     fun completeNavigation(
