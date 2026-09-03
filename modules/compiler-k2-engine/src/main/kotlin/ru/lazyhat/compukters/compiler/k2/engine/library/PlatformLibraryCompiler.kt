@@ -200,8 +200,10 @@ private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFr
                 TypeRef.Local(TypeId.of(match.index.toUInt())),
             )
         }
+    val initializerFunctions = lowered.types.filterIsInstance<NominalType.Class>().mapNotNullTo(mutableSetOf()) { it.initializer?.value }
     val functionExports =
-        lowered.functions.mapIndexed { index, function ->
+        lowered.functions.mapIndexedNotNull { index, function ->
+            if (index.toUInt() in initializerFunctions) return@mapIndexedNotNull null
             Export(
                 SymbolKind.FUNCTION,
                 ExportVisibility.PUBLIC_LIBRARY,
