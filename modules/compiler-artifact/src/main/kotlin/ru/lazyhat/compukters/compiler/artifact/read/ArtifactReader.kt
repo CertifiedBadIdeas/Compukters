@@ -207,6 +207,7 @@ private fun decodeType(bytes: ByteArray): NominalType {
                         fieldCount,
                         methodStart,
                         methodCount,
+                        if (c.done()) null else FunctionId.of(c.u32()),
                     )
                 } else {
                     NominalType.Interface(name, flags and 1u != 0u, arity, superType, parents, methodStart, methodCount)

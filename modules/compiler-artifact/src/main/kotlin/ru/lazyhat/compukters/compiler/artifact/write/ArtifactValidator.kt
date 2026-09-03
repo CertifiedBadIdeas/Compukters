@@ -33,6 +33,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
+import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 
@@ -686,6 +687,44 @@ internal fun validateArtifact(
                     "import target semantic hash does not match",
                     ArtifactWriteLocation(moduleLocation, "IMPORTS", importIndex.toUInt()),
                 )
+            }
+        }
+        module.types.forEachIndexed { typeIndex, nominal ->
+            val initializer = (nominal as? NominalType.Class)?.initializer ?: return@forEachIndexed
+            val location = ArtifactWriteLocation(moduleLocation, "TYPES", typeIndex.toUInt())
+            val function = module.functions.getOrNull(initializer.value.toInt())
+            if (function == null) {
+                add(ArtifactWriteErrorCode.BAD_REFERENCE, "class initializer is outside the function table", location)
+                return@forEachIndexed
+            }
+            if (function.owner != TypeRef.Local(TypeId.of(typeIndex.toUInt()))) {
+                add(ArtifactWriteErrorCode.BAD_REFERENCE, "class initializer owner does not match its class", location)
+            }
+            val signatureIdentity = resolveType(moduleIndex, function.signature)
+            val signature = signatureIdentity?.let { artifact.modules[it.module].types[it.type] as? NominalType.Function }
+            if (
+                FunctionFlag.STATIC !in function.flags ||
+                FunctionFlag.SUSPENDING in function.flags ||
+                FunctionFlag.ABSTRACT in function.flags ||
+                function.parameterCount != 0u ||
+                signature?.let { !it.suspending && it.parameters.isEmpty() && it.result == ValueType.Unit } != true
+            ) {
+                add(
+                    ArtifactWriteErrorCode.INVALID_RANGE,
+                    "class initializer signature must be static non-suspending () -> Unit",
+                    location,
+                )
+            }
+            val firstBlock = function.firstBlock.value.toLong()
+            val blockEnd = firstBlock + function.blockCount.toLong()
+            if (
+                firstBlock <= module.blocks.size.toLong() &&
+                blockEnd <= module.blocks.size.toLong() &&
+                module.blocks.subList(firstBlock.toInt(), blockEnd.toInt()).any { block ->
+                    block.instructions.any { it is Instruction.CallSuspend || it is Instruction.CapabilityCallAsync }
+                }
+            ) {
+                add(ArtifactWriteErrorCode.INVALID_RANGE, "class initializer cannot suspend", location)
             }
         }
         module.functions.forEachIndexed { functionIndex, function ->

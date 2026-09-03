@@ -63,6 +63,103 @@ import kotlin.test.assertTrue
 
 class ArtifactValidatorTest {
     @Test
+    fun `class initializer must resolve to a static owned non suspending unit function`() {
+        val artifact = classInitializerArtifact()
+        assertEquals(emptyList(), validateArtifact(artifact, ArtifactWriteLimits()))
+
+        fun errors(transform: (Module) -> Module): List<ArtifactWriteError> =
+            validateArtifact(
+                artifact.copy(modules = listOf(transform(artifact.modules.single()))),
+                ArtifactWriteLimits(),
+            )
+
+        assertTrue(
+            errors { module ->
+                module.copy(
+                    types =
+                        module.types.toMutableList().also { types ->
+                            types[1] = (types[1] as NominalType.Class).copy(initializer = FunctionId.of(99u))
+                        },
+                )
+            }.any { it.code == ArtifactWriteErrorCode.BAD_REFERENCE && it.detail.contains("class initializer") },
+        )
+        assertTrue(
+            errors { module ->
+                module.copy(
+                    functions = module.functions.toMutableList().also { functions -> functions[1] = functions[1].copy(owner = null) },
+                )
+            }.any { it.code == ArtifactWriteErrorCode.BAD_REFERENCE && it.detail.contains("class initializer owner") },
+        )
+        assertTrue(
+            errors { module ->
+                module.copy(
+                    functions =
+                        module.functions.toMutableList().also { functions ->
+                            functions[1] = functions[1].copy(flags = emptySet())
+                        },
+                )
+            }.any { it.code == ArtifactWriteErrorCode.INVALID_RANGE && it.detail.contains("class initializer signature") },
+        )
+        assertTrue(
+            errors { module ->
+                module.copy(
+                    types =
+                        module.types +
+                            NominalType.Function(StringId.of(1u), suspending = true, result = ValueType.Unit, parameters = emptyList()),
+                    functions =
+                        module.functions.toMutableList().also { functions ->
+                            functions[1] =
+                                functions[1].copy(
+                                    signature = TypeRef.Local(TypeId.of(2u)),
+                                    flags = setOf(FunctionFlag.STATIC, FunctionFlag.SUSPENDING),
+                                )
+                        },
+                )
+            }.any { it.code == ArtifactWriteErrorCode.INVALID_RANGE && it.detail.contains("class initializer signature") },
+        )
+        val async =
+            artifact.copy(
+                semanticFeatures = setOf(SemanticFeature.CAPABILITIES),
+                manifest = Manifest.minimal(maximumBlockCost = 16u, minimumSliceCost = 16u),
+                capabilities = listOf(Capability(StringId.of(0u), StringId.of(1u), AbiVersion(1u, 0u), true, 1u)),
+                modules =
+                    listOf(
+                        artifact.modules.single().let { module ->
+                            module.copy(
+                                functions =
+                                    module.functions.toMutableList().also { functions ->
+                                        functions[1] = functions[1].copy(blockCount = 2u)
+                                    },
+                                blocks =
+                                    listOf(
+                                        module.blocks[0],
+                                        Block(
+                                            FunctionId.of(1u),
+                                            false,
+                                            listOf(
+                                                Instruction.CapabilityCallAsync(
+                                                    Destination.Unit,
+                                                    CapabilityId.of(0u),
+                                                    0u,
+                                                    emptyList(),
+                                                    BlockId.of(2u),
+                                                ),
+                                            ),
+                                        ),
+                                        Block(FunctionId.of(1u), false, listOf(Instruction.Return(Destination.Unit))),
+                                    ),
+                            )
+                        },
+                    ),
+            )
+        assertTrue(
+            validateArtifact(async, ArtifactWriteLimits()).any {
+                it.code == ArtifactWriteErrorCode.INVALID_RANGE && it.detail.contains("class initializer cannot suspend")
+            },
+        )
+    }
+
+    @Test
     fun `field instructions require resolving references with matching storage kind and mutability`() {
         val artifact = fieldInstructionArtifact()
 
@@ -1226,6 +1323,41 @@ class ArtifactValidatorTest {
         val failure = assertIs<ArtifactWriteResult.Failure>(result)
         assertTrue(failure.errors.any { it.detail.contains("parameter count") })
     }
+}
+
+private fun classInitializerArtifact(): Artifact {
+    val source = minimalArtifact()
+    val module = source.modules.single()
+    val initializer = FunctionId.of(1u)
+    return source.copy(
+        modules =
+            listOf(
+                module.copy(
+                    types =
+                        module.types +
+                            NominalType.Class(
+                                StringId.of(0u),
+                                final = true,
+                                initializer = initializer,
+                            ),
+                    functions =
+                        module.functions +
+                            Function(
+                                owner = TypeRef.Local(TypeId.of(1u)),
+                                name = StringId.of(1u),
+                                signature = TypeRef.Local(TypeId.of(0u)),
+                                flags = setOf(FunctionFlag.STATIC),
+                                registers = emptyList(),
+                                parameterCount = 0u,
+                                firstBlock = BlockId.of(1u),
+                                blockCount = 1u,
+                                firstException = 0u,
+                                exceptionCount = 0u,
+                            ),
+                    blocks = module.blocks + Block(initializer, false, listOf(Instruction.Return(Destination.Unit))),
+                ),
+            ),
+    )
 }
 
 private fun stringArrayEntryArtifact(): Artifact {

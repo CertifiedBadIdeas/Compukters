@@ -152,6 +152,7 @@ private fun encodeType(
                     writeU16(type.genericArity.toUInt())
                     writeU32(type.name.value)
                     writeClassLike(type.superType, type.interfaces, type.fieldStart, type.fieldCount, type.methodStart, type.methodCount)
+                    type.initializer?.let { writeU32(it.value) }
                 }
 
                 is NominalType.Interface -> {
