@@ -28,6 +28,7 @@ dependencies {
     implementation(libs.slf4j.api)
 
     testImplementation(kotlin("test"))
+    testImplementation(projects.platformBundle)
 }
 
 val compukterFfiLibrary =

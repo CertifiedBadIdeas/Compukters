@@ -30,6 +30,7 @@ import ru.lazyhat.compukters.compiler.runtime.worker.PackagedWorkerPayload
 import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
 import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerLaunch
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
@@ -127,6 +128,7 @@ internal class NeoForgeCompilerService private constructor(
                     maximumStderrBytes = limits.stderrBytes,
                 )
             val controller = CompilerWorkerController(packaged, launch, limits, JdkWorkerProcessFactory())
+            val platformModules = platformModules(platform)
             val backend = WorkerCompilerBackend(controller)
             val cache =
                 PersistentCompilationCache.open(
@@ -142,7 +144,7 @@ internal class NeoForgeCompilerService private constructor(
                     ServerCompilerService(
                         cache,
                         backend,
-                        CompilerServiceConfiguration(packaged.manifest.identity, limits),
+                        CompilerServiceConfiguration(packaged.manifest.identity, limits, platformModules = platformModules),
                         executor = executor,
                     )
                 val compiler = ServerComputerCompiler(service, limits)
@@ -201,3 +203,8 @@ internal fun serverTargetProfile(
         modules = PlatformCatalog.of(platform).entries.map { it.identity },
         limits = limits,
     )
+
+private fun platformModules(platform: PlatformBundle): List<TrustedBundleIdentity> =
+    PlatformCatalog.of(platform).entries.map { entry ->
+        TrustedBundleIdentity.of(entry.identity.id.value, entry.identity.contentHash)
+    }

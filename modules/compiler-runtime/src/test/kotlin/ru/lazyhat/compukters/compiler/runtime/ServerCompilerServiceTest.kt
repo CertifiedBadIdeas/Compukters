@@ -29,6 +29,8 @@ import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
+import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
@@ -75,6 +77,26 @@ class ServerCompilerServiceTest {
         }
 
     @Test
+    fun `configured target and platform modules reach the backend`() {
+        val module = TrustedBundleIdentity.of("std:terminal", hash(3))
+        val configuration =
+            CompilerServiceConfiguration(
+                identity(),
+                WorkerLimits(),
+                TargetSettings.KOTLIN_2_4_JVM_17,
+                listOf(module),
+            )
+        fixture(configuration = configuration) { service, backend, executor ->
+            service.submit(target(1), snapshot("fun main() {}"))
+
+            executor.runAll()
+
+            assertEquals(configuration.target, backend.target)
+            assertEquals(configuration.platformModules, backend.platformModules)
+        }
+    }
+
+    @Test
     fun `queue and waiter limits fail closed without unbounded backend work`() =
         fixture(
             policy = CompilerServicePolicy(maximumOutstandingTargets = 2, maximumWaitersPerIdentity = 1),
@@ -110,6 +132,7 @@ class ServerCompilerServiceTest {
 
     private fun fixture(
         policy: CompilerServicePolicy = CompilerServicePolicy(),
+        configuration: CompilerServiceConfiguration = CompilerServiceConfiguration(identity(), WorkerLimits()),
         block: (ServerCompilerService, FakeBackend, ManualExecutor) -> Unit,
     ) {
         val root = Files.createTempDirectory("compukters-service-test-")
@@ -126,7 +149,7 @@ class ServerCompilerServiceTest {
             ServerCompilerService(
                 cache,
                 backend,
-                CompilerServiceConfiguration(identity(), limits),
+                configuration,
                 policy,
                 executor,
             )
@@ -165,10 +188,18 @@ class ServerCompilerServiceTest {
     private class FakeBackend : CompilerBackend {
         var calls = 0
         var cancelled = false
+        lateinit var target: TargetSettings
+        lateinit var platformModules: List<TrustedBundleIdentity>
         private lateinit var pending: CompletableFuture<CompileResult>
 
-        override fun compile(snapshot: ProjectSnapshot): CompletableFuture<CompileResult> {
+        override fun compile(
+            snapshot: ProjectSnapshot,
+            target: TargetSettings,
+            platformModules: List<TrustedBundleIdentity>,
+        ): CompletableFuture<CompileResult> {
             calls++
+            this.target = target
+            this.platformModules = platformModules
             pending = CompletableFuture()
             return pending
         }

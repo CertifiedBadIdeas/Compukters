@@ -27,6 +27,8 @@ import ru.lazyhat.compukters.compiler.runtime.worker.PackagedWorkerPayload
 import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
 import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerLaunch
+import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.core.device.computer.ProgramComputer
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
@@ -47,6 +49,9 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
+import ru.lazyhat.compukters.platform.bundle.PackagedPlatformBundleLoader
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
+import ru.lazyhat.compukters.worker.value.Sha256
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Files
@@ -152,7 +157,8 @@ class ProgramRuntimeHostIntegrationTest {
                             pressEnter(computer)
                             submit(computer, "demo")
                             pressEnter(computer)
-                            assertTrue(terminalText(requireNotNull(computer.terminalFullState())).contains("compiled editor loop"))
+                            val compiledOutput = terminalText(requireNotNull(computer.terminalFullState()))
+                            assertTrue(compiledOutput.contains("compiled editor loop"), compiledOutput)
 
                             assertEquals(ProgramComputerState.Running, computer.reboot())
                             advanceUntil(computer) { it == ProgramComputerState.WaitingForInput }
@@ -415,6 +421,20 @@ class ProgramRuntimeHostIntegrationTest {
                     WorkerCompilerBackend(
                         CompilerWorkerController(payload, launch, limits, JdkWorkerProcessFactory()),
                     )
+                val compilerIdentity = payload.manifest.identity
+                val platform =
+                    PackagedPlatformBundleLoader.load(
+                        payload.classpath,
+                        compilerIdentity.languageVersion,
+                        Sha256.of(compilerIdentity.platformAbi.toByteArray()),
+                    )
+                val platformModules =
+                    platform.modules.map { module ->
+                        TrustedBundleIdentity.of(
+                            module.id.toString(),
+                            Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()),
+                        )
+                    }
                 val cache =
                     PersistentCompilationCache.open(
                         root.resolve("cache"),
@@ -426,7 +446,7 @@ class ProgramRuntimeHostIntegrationTest {
                         ServerCompilerService(
                             cache,
                             backend,
-                            CompilerServiceConfiguration(payload.manifest.identity, limits),
+                            CompilerServiceConfiguration(compilerIdentity, limits, platformModules = platformModules),
                             executor = executor,
                         )
                     return TestCompilerService(
