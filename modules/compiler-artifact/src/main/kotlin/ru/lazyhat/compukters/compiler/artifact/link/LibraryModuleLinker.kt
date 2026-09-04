@@ -38,6 +38,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
 import ru.lazyhat.compukters.compiler.artifact.model.Import
 import ru.lazyhat.compukters.compiler.artifact.model.ImportId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
+import ru.lazyhat.compukters.compiler.artifact.model.MetadataText
 import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
@@ -50,6 +51,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Utf16LiteralId
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
+import ru.lazyhat.compukters.compiler.artifact.write.encodeTypeRef
 
 /** Links named library modules by semantic identity and removes every unreachable record. */
 object LibraryModuleLinker {
@@ -287,11 +289,16 @@ private fun relocateModule(
     ids: ModuleRelocation,
     moduleIds: Map<Int, Int>,
     importTargets: Map<Pair<Int, Int>, Int>,
-): Module =
-    Module(
+): Module {
+    val strings = ids.strings.oldIndices.map(module.strings::get)
+    val exports =
+        ids.exports.oldIndices
+            .map { relocateExport(module.exports[it], ids) }
+            .sortedWith { left, right -> compareExports(strings, left, right) }
+    return Module(
         name = ids.string(module.name),
         kind = module.kind,
-        strings = ids.strings.oldIndices.map(module.strings::get),
+        strings = strings,
         utf16Literals = ids.literals.oldIndices.map(module.utf16Literals::get),
         types = ids.types.oldIndices.map { relocateType(module.types[it], ids) },
         constants = ids.constants.oldIndices.map { relocateConstant(module.constants[it], ids) },
@@ -306,13 +313,41 @@ private fun relocateModule(
                     targetModuleHash = ByteArray(32),
                 )
             },
-        exports = ids.exports.oldIndices.map { relocateExport(module.exports[it], ids) },
+        exports = exports,
         fields = ids.fields.oldIndices.map { relocateField(module.fields[it], ids) },
         functions = ids.functions.oldIndices.map { relocateFunction(module.functions[it], ids) },
         blocks = ids.blocks.oldIndices.map { relocateBlock(module.blocks[it], ids) },
         exceptions = ids.exceptions.oldIndices.map { relocateException(module.exceptions[it], ids) },
         debug = ids.debug.oldIndices.map { relocateDebug(module.debug[it], ids) },
     )
+}
+
+private fun compareExports(
+    strings: List<MetadataText>,
+    left: Export,
+    right: Export,
+): Int {
+    val kind = left.kind.ordinal.compareTo(right.kind.ordinal)
+    if (kind != 0) return kind
+    val name =
+        compareUnsignedBytes(
+            strings[left.name.value.toInt()].toByteArray(),
+            strings[right.name.value.toInt()].toByteArray(),
+        )
+    if (name != 0) return name
+    return encodeTypeRef(left.signature).compareTo(encodeTypeRef(right.signature))
+}
+
+private fun compareUnsignedBytes(
+    left: ByteArray,
+    right: ByteArray,
+): Int {
+    repeat(minOf(left.size, right.size)) { index ->
+        val compared = (left[index].toInt() and 0xff).compareTo(right[index].toInt() and 0xff)
+        if (compared != 0) return compared
+    }
+    return left.size.compareTo(right.size)
+}
 
 private fun relocateType(
     type: NominalType,
