@@ -471,10 +471,7 @@ internal object KotlinProjectLowering {
                 .filterNot { includeTrustedPlatformBodies && it.kind == ClassKind.OBJECT }
                 .filterNot {
                     !includeTrustedPlatformBodies &&
-                        (
-                            session.trustedApiIdentity(it.file.fileEntry.name) != null ||
-                                session.trustedPlatformModule(it.file.fileEntry.name) != null
-                        )
+                        session.trustedPlatformModule(it.file.fileEntry.name) != null
                 }.sortedBy { it.fqNameWhenAvailable?.asString().orEmpty() }
         val inlineValueClasses = InlineValueClassRegistry.build(classes, pluginContext)
         val playerFunctions =
@@ -489,171 +486,17 @@ internal object KotlinProjectLowering {
                 }.filter { function -> function.body != null }
                 .filterNot { function ->
                     !includeTrustedPlatformBodies &&
-                        (
-                            session.trustedApiIdentity(function.file.fileEntry.name) != null ||
-                                session.trustedPlatformModule(function.file.fileEntry.name) != null
-                        )
+                        session.trustedPlatformModule(function.file.fileEntry.name) != null
                 }
-        val processFacadeNames = setOf("compukter.process.Process.run", "compukter.process.Process.exit")
-        val usesProcessFacade =
-            playerFunctions.any { function ->
-                var used = false
-                function.accept(
-                    object : IrVisitorVoid() {
-                        override fun visitElement(element: IrElement) {
-                            element.acceptChildren(this, null)
-                        }
-
-                        override fun visitCall(expression: IrCall) {
-                            if (expression.symbol.owner.fqNameWhenAvailable
-                                    ?.asString() in processFacadeNames
-                            ) {
-                                used = true
-                            }
-                            super.visitCall(expression)
-                        }
-                    },
-                    null,
-                )
-                used
-            }
-        val processSupportNames =
-            processFacadeNames + setOf("compukter.process.failureReason", "compukter.process.encodeArgs")
-        val processSupportFunctions =
-            if (usesProcessFacade) {
-                functions.filter { function ->
-                    session.trustedApiIdentity(function.file.fileEntry.name) == TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID &&
-                        function.fqNameWhenAvailable?.asString() in processSupportNames
-                }
-            } else {
-                emptyList()
-            }
-        var usesRedstoneApi = false
-        playerFunctions.forEach { function ->
-            function.accept(
-                object : IrVisitorVoid() {
-                    override fun visitElement(element: IrElement) {
-                        element.acceptChildren(this, null)
-                    }
-
-                    override fun visitCall(expression: IrCall) {
-                        val bundle =
-                            runCatching { session.trustedApiIdentity(expression.symbol.owner.file.fileEntry.name) }
-                                .getOrNull()
-                        if (bundle == TrustedIntrinsicRegistry.REDSTONE_BUNDLE_ID) {
-                            usesRedstoneApi = true
-                        }
-                        super.visitCall(expression)
-                    }
-
-                    override fun visitConstructorCall(expression: IrConstructorCall) {
-                        val bundle =
-                            runCatching { session.trustedApiIdentity(expression.symbol.owner.file.fileEntry.name) }
-                                .getOrNull()
-                        if (bundle == TrustedIntrinsicRegistry.REDSTONE_BUNDLE_ID) {
-                            usesRedstoneApi = true
-                        }
-                        super.visitConstructorCall(expression)
-                    }
-                },
-                null,
-            )
-        }
-        val redstoneFacadeNames =
-            setOf(
-                "compukter.redstone.Redstone.input",
-                "compukter.redstone.Redstone.awaitInputChange",
-                "compukter.redstone.Redstone.awaitInput",
-                "compukter.redstone.Redstone.awaitAtLeastInput",
-                "compukter.redstone.Redstone.awaitAtMostInput",
-                "compukter.redstone.Redstone.output",
-                "compukter.redstone.Redstone.outputs",
-                "compukter.redstone.Redstone.setOutput",
-                "compukter.redstone.Redstone.setOutputs",
-                "compukter.redstone.redstoneSideIndex",
-            )
-        val redstoneSupportFunctions =
-            if (usesRedstoneApi) {
-                functions.filter { function ->
-                    session.trustedApiIdentity(function.file.fileEntry.name) == TrustedIntrinsicRegistry.REDSTONE_BUNDLE_ID &&
-                        (
-                            function.fqNameWhenAvailable?.asString() in redstoneFacadeNames ||
-                                (
-                                    inlineValueClasses.contains((function.parent as? IrClass)?.symbol) &&
-                                        function.origin == IrDeclarationOrigin.DEFINED
-                                )
-                        )
-                }
-            } else {
-                emptyList()
-            }
-        val stdioSupportNames = mutableSetOf<String>()
-        playerFunctions.forEach { function ->
-            function.accept(
-                object : IrVisitorVoid() {
-                    override fun visitElement(element: IrElement) {
-                        element.acceptChildren(this, null)
-                    }
-
-                    override fun visitCall(expression: IrCall) {
-                        val intrinsic =
-                            resolveTrustedIntrinsic(
-                                expression.symbol.owner,
-                                session,
-                                pluginContext.irBuiltIns.unitType,
-                                pluginContext.irBuiltIns.stringType,
-                                pluginContext.irBuiltIns.intType,
-                                pluginContext.irBuiltIns.booleanType,
-                                pluginContext.irBuiltIns.charType,
-                                inlineValueClasses,
-                            ) as? TrustedIntrinsic.StandardOutput
-                        if (intrinsic != null) {
-                            val argumentType =
-                                expression.symbol.owner.parameters
-                                    .zip(expression.arguments)
-                                    .filter { (parameter, _) -> parameter.kind == IrParameterKind.Regular }
-                                    .singleOrNull()
-                                    ?.second
-                                    ?.type
-                            val helper =
-                                standardOutputHelperName(
-                                    intrinsic,
-                                    argumentType,
-                                    pluginContext.irBuiltIns.stringType,
-                                    pluginContext.irBuiltIns.intType,
-                                    pluginContext.irBuiltIns.booleanType,
-                                    pluginContext.irBuiltIns.charType,
-                                    expression,
-                                )
-                            stdioSupportNames += helper
-                            if (helper.endsWith("Int")) stdioSupportNames += "compukter.io.stdoutInt"
-                            if (helper.endsWith("Char")) stdioSupportNames += "compukter.io.stdoutChar"
-                        }
-                        super.visitCall(expression)
-                    }
-                },
-                null,
-            )
-        }
-        val stdioSupportFunctions =
-            if (stdioSupportNames.isNotEmpty()) {
-                functions.filter { function ->
-                    session.trustedApiIdentity(function.file.fileEntry.name) == TrustedIntrinsicRegistry.STDIO_BUNDLE_ID &&
-                        function.fqNameWhenAvailable?.asString() in stdioSupportNames
-                }
-            } else {
-                emptyList()
-            }
         val userFunctions =
-            (playerFunctions + processSupportFunctions + redstoneSupportFunctions + stdioSupportFunctions)
-                .sortedWith(
-                    compareBy<IrSimpleFunction>(
-                        { if (it === entry) 0 else 1 },
-                        { session.virtualSourcePath(it.file.fileEntry.name)?.value.orEmpty() },
-                        { it.startOffset },
-                        { it.name.asString() },
-                    ),
-                )
+            playerFunctions.sortedWith(
+                compareBy<IrSimpleFunction>(
+                    { if (it === entry) 0 else 1 },
+                    { session.virtualSourcePath(it.file.fileEntry.name)?.value.orEmpty() },
+                    { it.startOffset },
+                    { it.name.asString() },
+                ),
+            )
         val externalFunctions = linkedPlatformFunctions(userFunctions, session)
         val linkedSymbols = linkedPlatformSymbols(userFunctions, session)
         require(userFunctions.firstOrNull() === entry)
@@ -663,7 +506,6 @@ internal object KotlinProjectLowering {
                     inlineValueClasses.contains(it.symbol) || inlineValueClasses.isCompanion(it.symbol)
                 },
                 userFunctions,
-                session,
             ).filterNot {
                 inlineValueClasses.contains(it.symbol) || inlineValueClasses.isCompanion(it.symbol)
             }
@@ -680,16 +522,7 @@ internal object KotlinProjectLowering {
 
         val intrinsicCollector =
             IntrinsicCollector { function ->
-                resolveTrustedIntrinsic(
-                    function,
-                    session,
-                    pluginContext.irBuiltIns.unitType,
-                    pluginContext.irBuiltIns.stringType,
-                    pluginContext.irBuiltIns.intType,
-                    pluginContext.irBuiltIns.booleanType,
-                    pluginContext.irBuiltIns.charType,
-                    inlineValueClasses,
-                )
+                resolveTrustedIntrinsic(function, session)
             }
         userFunctions.forEach { function -> function.accept(intrinsicCollector, null) }
         val capabilityIdentities =
@@ -701,7 +534,7 @@ internal object KotlinProjectLowering {
                         ?.filterIsInstance<CapabilityOperationHandler>()
                         ?.map { handler ->
                             val capability = handler.requiredCapability
-                            TrustedCapabilityIdentity(
+                            LoweredCapabilityIdentity(
                                 capability.namespace,
                                 capability.name,
                                 capability.abiMajor.toUShort(),
@@ -799,10 +632,6 @@ internal object KotlinProjectLowering {
         val charArrayType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(CHAR_ARRAY_RUNTIME_TYPE)))
         val stringType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(STRING_RUNTIME_TYPE)))
         val functionIds = userFunctions.withIndex().associate { (index, function) -> function.symbol to FunctionId.of(index.toUInt()) }
-        val functionIdsByName =
-            userFunctions.associate { function ->
-                requireNotNull(function.fqNameWhenAvailable).asString() to requireNotNull(functionIds[function.symbol])
-            }
         val functionTypeIds = userFunctions.withIndex().associate { (index, function) -> function.symbol to TypeId.of(index.toUInt()) }
         val constructorFunctionIds =
             constructorClasses.withIndex().associate { (index, declaration) ->
@@ -904,7 +733,6 @@ internal object KotlinProjectLowering {
                     booleanType = pluginContext.irBuiltIns.booleanType,
                     charType = pluginContext.irBuiltIns.charType,
                     functionIds = functionIds,
-                    functionIdsByName = functionIdsByName,
                     constantIds = constantIds,
                     literalIds = literalIds,
                     session = session,
@@ -1633,7 +1461,6 @@ internal object KotlinProjectLowering {
 private fun collectGuestClasses(
     sourceClasses: List<IrClass>,
     functions: List<IrSimpleFunction>,
-    session: CompilationSession,
 ): List<IrClass> {
     val sourceSymbols = sourceClasses.mapTo(mutableSetOf()) { it.symbol }
     val collected = linkedMapOf<IrClassSymbol, IrClass>()
@@ -1641,10 +1468,7 @@ private fun collectGuestClasses(
 
     fun consider(declaration: IrClass) {
         val source = declaration.symbol in sourceSymbols
-        val trusted =
-            runCatching { session.trustedApiIdentity(declaration.file.fileEntry.name) != null }
-                .getOrDefault(false)
-        if (source || (trusted && declaration.kind in setOf(ClassKind.CLASS, ClassKind.INTERFACE, ClassKind.ENUM_CLASS))) {
+        if (source) {
             if (collected.putIfAbsent(declaration.symbol, declaration) == null) pending.addLast(declaration)
         }
     }
@@ -1855,11 +1679,10 @@ private class FunctionCompiler(
     private val booleanType: IrType,
     private val charType: IrType,
     private val functionIds: Map<org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol, FunctionId>,
-    private val functionIdsByName: Map<String, FunctionId>,
     private val constantIds: Map<Constant, ConstantId>,
     private val literalIds: Map<Utf16Literal, Utf16LiteralId>,
     private val session: CompilationSession,
-    private val capabilityIds: Map<TrustedCapabilityIdentity, CapabilityId>,
+    private val capabilityIds: Map<LoweredCapabilityIdentity, CapabilityId>,
     private val classTypeIds: Map<IrClassSymbol, TypeId>,
     private val externalClassTypes: Map<IrClassSymbol, TypeRef.Imported>,
     private val inlineValueClasses: InlineValueClassRegistry,
@@ -2248,33 +2071,6 @@ private class FunctionCompiler(
         }
         compileStringArrayFactory(call, target)?.let { return it }
         trustedIntrinsic(target)?.let { intrinsic ->
-            if (intrinsic is TrustedIntrinsic.StandardOutput) {
-                val argumentExpressions =
-                    target.parameters
-                        .zip(call.arguments)
-                        .filter { (parameter, _) -> parameter.kind == IrParameterKind.Regular }
-                        .map { (_, argument) -> requireNotNull(argument) }
-                val arguments = argumentExpressions.map(::compileExpression)
-                val helperName =
-                    standardOutputHelperName(
-                        intrinsic,
-                        argumentExpressions.singleOrNull()?.type,
-                        kotlinStringType,
-                        intType,
-                        booleanType,
-                        charType,
-                        call,
-                    )
-                emit(
-                    Instruction.Call(
-                        Destination.Unit,
-                        FunctionRef.Local(requireNotNull(functionIdsByName[helperName])),
-                        arguments,
-                    ),
-                )
-                return null
-            }
-            require(intrinsic is TrustedIntrinsic.CapabilityOperation)
             val arguments =
                 target.parameters
                     .zip(call.arguments)
@@ -2282,7 +2078,7 @@ private class FunctionCompiler(
                     .map { (_, argument) -> compileExpression(requireNotNull(argument)) }
             val capability = requireNotNull(capabilityIds[intrinsic.capability])
             val destination = if (intrinsic.terminal) Destination.Unit else destinationFor(call.type, call)
-            if (intrinsic.blocking == BlockingMode.VM_TASK) {
+            if (intrinsic.blocking == IntrinsicBlockingMode.VM_TASK) {
                 val resume = createBlock()
                 emit(
                     Instruction.CapabilityCallAsync(
@@ -2816,17 +2612,7 @@ private class FunctionCompiler(
         return compileExpression(result)
     }
 
-    private fun trustedIntrinsic(function: IrSimpleFunction): TrustedIntrinsic? =
-        resolveTrustedIntrinsic(
-            function,
-            session,
-            unitType,
-            kotlinStringType,
-            intType,
-            booleanType,
-            charType,
-            inlineValueClasses,
-        )
+    private fun trustedIntrinsic(function: IrSimpleFunction): LoweredCapabilityOperation? = resolveTrustedIntrinsic(function, session)
 
     private fun valueType(
         type: IrType,
@@ -2979,23 +2765,7 @@ private fun loweredParameters(
 ) {
     function.parameters.filter { it.kind != IrParameterKind.DispatchReceiver }
 } else {
-    when (session.trustedApiIdentity(function.file.fileEntry.name)) {
-        TrustedIntrinsicRegistry.PROCESS_BUNDLE_ID -> {
-            function.parameters.filter { it.kind == IrParameterKind.Regular }
-        }
-
-        TrustedIntrinsicRegistry.REDSTONE_BUNDLE_ID -> {
-            if ((function.parent as? IrClass)?.name?.asString() == "Redstone") {
-                function.parameters.filter { it.kind == IrParameterKind.Regular }
-            } else {
-                function.parameters
-            }
-        }
-
-        else -> {
-            function.parameters
-        }
-    }
+    function.parameters
 }
 
 private fun IrSimpleFunction.canonicalPlatformSignature(): String {
@@ -3061,16 +2831,16 @@ private class StringArrayUsageCollector(
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private class IntrinsicCollector(
-    private val resolve: (IrSimpleFunction) -> TrustedIntrinsic?,
+    private val resolve: (IrSimpleFunction) -> LoweredCapabilityOperation?,
 ) : IrVisitorVoid() {
-    val capabilities = mutableListOf<TrustedCapabilityIdentity>()
+    val capabilities = mutableListOf<LoweredCapabilityIdentity>()
 
     override fun visitElement(element: IrElement) {
         element.acceptChildren(this, null)
     }
 
     override fun visitCall(expression: IrCall) {
-        (resolve(expression.symbol.owner) as? TrustedIntrinsic.CapabilityOperation)?.capability?.let(capabilities::add)
+        resolve(expression.symbol.owner)?.capability?.let(capabilities::add)
         super.visitCall(expression)
     }
 }
@@ -3079,148 +2849,37 @@ private class IntrinsicCollector(
 private fun resolveTrustedIntrinsic(
     function: IrSimpleFunction,
     session: CompilationSession,
-    unitType: IrType,
-    stringType: IrType,
-    intType: IrType,
-    booleanType: IrType,
-    charType: IrType,
-    inlineValueClasses: InlineValueClassRegistry,
-): TrustedIntrinsic? {
+): LoweredCapabilityOperation? {
     var parent = function.parent
     while (parent !is IrFile) {
         parent = (parent as? IrDeclaration)?.parent ?: break
     }
-    if (parent !is IrFile) {
-        val fqName = function.fqNameWhenAvailable?.asString()
-        val parameterTypes =
-            function.parameters
-                .filter { it.kind == IrParameterKind.ExtensionReceiver || it.kind == IrParameterKind.Regular }
-                .joinToString(",") { it.type.canonicalPlatformType() }
-        val signature = "fun($parameterTypes):${function.returnType.canonicalPlatformType()}"
-        val handler =
-            session.canonicalIntrinsicRegistry
-                ?.handlers
-                ?.entries
-                ?.singleOrNull { (key, _) ->
-                    key.module in session.selectedPlatformModules &&
-                        key.callableId.asSingleFqName().asString() == fqName &&
-                        key.signature.value == signature
-                }?.value
-        if (handler is CapabilityOperationHandler) {
-            val capability = handler.requiredCapability
-            return TrustedIntrinsic.CapabilityOperation(
-                TrustedCapabilityIdentity(
-                    capability.namespace,
-                    capability.name,
-                    capability.abiMajor.toUShort(),
-                    0u.toUShort(),
-                    capabilityOperationCount(capability.namespace, capability.name),
-                ),
-                handler.operation,
-                if (handler.blocking == IntrinsicBlockingMode.VM_TASK) BlockingMode.VM_TASK else BlockingMode.NONE,
-                handler.terminal,
-            )
-        }
-    }
-    val bundleIdentity =
-        if (parent is IrFile) {
-            session.trustedApiIdentity(parent.fileEntry.name)
-        } else {
-            session.trustedStandardLibraryIdentity
-        }
-    val origin =
-        when {
-            parent !is IrFile -> TrustedCallableOrigin.PINNED_KOTLIN_STDLIB
-            bundleIdentity != null -> TrustedCallableOrigin.TRUSTED_SDK_SOURCE
-            else -> TrustedCallableOrigin.PLAYER_SOURCE
-        }
-
-    fun IrType.trustedType(): TrustedValueType =
-        when (this) {
-            unitType -> {
-                TrustedValueType.UNIT
-            }
-
-            stringType -> {
-                TrustedValueType.STRING
-            }
-
-            intType -> {
-                TrustedValueType.INT
-            }
-
-            booleanType -> {
-                TrustedValueType.BOOL
-            }
-
-            charType -> {
-                TrustedValueType.CHAR
-            }
-
-            else -> {
-                val classifier = (this as? IrSimpleType)?.classifier as? IrClassSymbol
-                val inline = classifier?.let(inlineValueClasses::get)
-                if (inline != null && !isNullable()) {
-                    inline.underlyingType.trustedType()
-                } else if (isNothing()) {
-                    TrustedValueType.NOTHING
-                } else {
-                    TrustedValueType.OTHER
-                }
-            }
-        }
     val platformModule = (parent as? IrFile)?.let { session.trustedPlatformModule(it.fileEntry.name) }
-    if (platformModule != null) {
-        val fqName = function.fqNameWhenAvailable?.asString() ?: return null
-        val parameterTypes =
-            function.parameters
-                .filter { it.kind == IrParameterKind.ExtensionReceiver || it.kind == IrParameterKind.Regular }
-                .joinToString(",") { it.type.canonicalPlatformType() }
-        val signature = "fun($parameterTypes):${function.returnType.canonicalPlatformType()}"
-        val handler =
-            session.canonicalIntrinsicRegistry
-                ?.handlers
-                ?.entries
-                ?.singleOrNull { (key, _) ->
-                    key.module == platformModule &&
-                        key.callableId.asSingleFqName().asString() == fqName &&
-                        key.signature.value == signature
-                }?.value
-        return when (handler) {
-            is CapabilityOperationHandler -> {
-                val capability = handler.requiredCapability
-                TrustedIntrinsic.CapabilityOperation(
-                    TrustedCapabilityIdentity(
-                        capability.namespace,
-                        capability.name,
-                        capability.abiMajor.toUShort(),
-                        0u.toUShort(),
-                        capabilityOperationCount(capability.namespace, capability.name),
-                    ),
-                    handler.operation,
-                    if (handler.blocking == IntrinsicBlockingMode.VM_TASK) BlockingMode.VM_TASK else BlockingMode.NONE,
-                    handler.terminal,
-                )
-            }
-
-            else -> {
-                null
-            }
-        }
-    }
-    val identity =
-        TrustedCallableIdentity(
-            bundleIdentity = bundleIdentity,
-            name = function.fqNameWhenAvailable?.asString() ?: return null,
-            suspending = function.isSuspend,
-            parameters =
-                function.parameters
-                    .filter { parameter -> parameter.kind == IrParameterKind.Regular }
-                    .map { parameter -> parameter.type.trustedType() },
-            result = function.returnType.trustedType(),
-            origin = origin,
-        )
-    return TrustedIntrinsicRegistry.resolve(identity)
+    if (parent is IrFile && platformModule == null) return null
+    val fqName = function.fqNameWhenAvailable?.asString() ?: return null
+    val signature = function.canonicalPlatformSignature()
+    val handler =
+        session.canonicalIntrinsicRegistry
+            ?.handlers
+            ?.entries
+            ?.singleOrNull { (key, _) ->
+                (platformModule?.let { key.module == it } ?: (key.module in session.selectedPlatformModules)) &&
+                    key.callableId.asSingleFqName().asString() == fqName &&
+                    key.signature.value == signature
+            }?.value as? CapabilityOperationHandler ?: return null
+    val capability = handler.requiredCapability
+    return LoweredCapabilityOperation(
+        LoweredCapabilityIdentity(
+            capability.namespace,
+            capability.name,
+            capability.abiMajor.toUShort(),
+            0u.toUShort(),
+            capabilityOperationCount(capability.namespace, capability.name),
+        ),
+        handler.operation,
+        handler.blocking,
+        handler.terminal,
+    )
 }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -3255,28 +2914,6 @@ private fun capabilityOperationCount(
         "compukter" to "redstone" -> 8u
         else -> error("unknown Compukters capability $namespace:$name")
     }
-
-private fun standardOutputHelperName(
-    intrinsic: TrustedIntrinsic.StandardOutput,
-    argumentType: IrType?,
-    stringType: IrType,
-    intType: IrType,
-    booleanType: IrType,
-    charType: IrType,
-    element: IrElement,
-): String {
-    val suffix =
-        when (argumentType) {
-            null -> ""
-            stringType -> "String"
-            intType -> "Int"
-            booleanType -> "Boolean"
-            charType -> "Char"
-            else -> throw UnsupportedKotlinIr(element, "standard output value type is outside the project subset")
-        }
-    val verb = if (intrinsic.newline) "stdoutPrintln" else "stdoutPrint"
-    return "compukter.io.$verb$suffix"
-}
 
 private fun Any.toArtifactConstant(literalIds: Map<Utf16Literal, Utf16LiteralId>): Constant =
     when (this) {

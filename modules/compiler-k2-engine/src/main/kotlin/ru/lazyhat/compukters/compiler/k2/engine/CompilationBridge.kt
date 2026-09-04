@@ -42,7 +42,6 @@ class CompilationSession(
     val artifactSink: (BinaryValue) -> Unit = {},
     val diagnosticSink: (WorkerDiagnostic) -> Unit = {},
     sourcePaths: Map<String, VirtualSourcePath> = emptyMap(),
-    trustedApiSourceIdentities: Map<String, String> = emptyMap(),
     trustedPlatformSourceModules: Map<String, PlatformModuleId> = emptyMap(),
     val canonicalIntrinsicRegistry: CanonicalIntrinsicRegistry? = null,
     val selectedPlatformModules: Set<PlatformModuleId> = emptySet(),
@@ -51,16 +50,12 @@ class CompilationSession(
     val platformFields: List<PlatformFieldLink> = emptyList(),
     val platformScalarTypes: List<PlatformScalarType> = emptyList(),
     val platformScalarConstants: List<PlatformScalarConstant> = emptyList(),
-    val trustedStandardLibraryIdentity: String? = null,
     val limits: WorkerLimits = WorkerLimits(),
 ) {
     private val sourcePaths = sourcePaths.mapKeys { (path, _) -> normalize(path) }
-    private val trustedApiSourceIdentities = trustedApiSourceIdentities.mapKeys { (path, _) -> normalize(path) }
     private val trustedPlatformSourceModules = trustedPlatformSourceModules.mapKeys { (path, _) -> normalize(path) }
 
     fun virtualSourcePath(physicalPath: String?): VirtualSourcePath? = physicalPath?.let { sourcePaths[normalize(it)] }
-
-    fun trustedApiIdentity(physicalPath: String?): String? = physicalPath?.let { trustedApiSourceIdentities[normalize(it)] }
 
     fun trustedPlatformModule(physicalPath: String?): PlatformModuleId? = physicalPath?.let { trustedPlatformSourceModules[normalize(it)] }
 
