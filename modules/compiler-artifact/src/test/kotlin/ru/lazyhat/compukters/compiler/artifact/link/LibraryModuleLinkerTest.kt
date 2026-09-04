@@ -147,6 +147,47 @@ class LibraryModuleLinkerTest {
     }
 
     @Test
+    fun `reachable exports are canonical after library relocation`() {
+        val library =
+            libraryModule().let { it.copy(exports = it.exports.reversed()) }
+        val source = application(library)
+        val app = source.modules.single()
+        val input =
+            source.copy(
+                modules =
+                    listOf(
+                        app.copy(
+                            types = app.types + signature(StringId.of(2u)).copy(result = ValueType.I32),
+                            imports =
+                                app.imports +
+                                    app.imports.single().copy(expectedSignature = TypeRef.Local(TypeId.of(2u))),
+                            blocks =
+                                listOf(
+                                    app.blocks.single().copy(
+                                        instructions =
+                                            listOf(
+                                                Instruction.Call(Destination.Unit, FunctionRef.Imported(ImportId.of(0u)), emptyList()),
+                                                Instruction.Call(
+                                                    Destination.Register(RegisterId.of(0u)),
+                                                    FunctionRef.Imported(ImportId.of(1u)),
+                                                    emptyList(),
+                                                ),
+                                                Instruction.Return(Destination.Unit),
+                                            ),
+                                    ),
+                                ),
+                            functions = app.functions.map { it.copy(registers = listOf(ValueType.I32)) },
+                        ),
+                    ),
+            )
+
+        val linked = LibraryModuleLinker.link(input, mapOf("sample" to library))
+        val exports = linked.modules.single { it.kind == ModuleKind.LIBRARY }.exports
+
+        assertEquals(listOf(TypeId.of(0u), TypeId.of(1u)), exports.map { (it.signature as TypeRef.Local).id })
+    }
+
+    @Test
     fun `only capabilities reached through retained functions survive`() {
         val library =
             libraryModule().let { source ->
