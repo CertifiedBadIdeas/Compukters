@@ -38,6 +38,39 @@ import kotlin.test.assertFailsWith
 
 class IncrementalK2WorkspaceTest {
     @Test
+    fun `source declaration index follows incremental object additions and renames`() {
+        val revisions =
+            listOf(
+                "object lд\nfun main() = Unit",
+                "object A\nfun main() = Unit",
+                "object B\nfun main() = Unit",
+                "object A\nfun main() = Unit",
+            )
+
+        K2QueryFixture.source("main.kt" to "object l\nfun main() = Unit").use { incremental ->
+            incremental.execute(incremental.presentation()).presentation()
+            revisions.forEach { source ->
+                incremental.update("main.kt" to source)
+                incremental.execute(
+                    AnalysisQuery.Completion(
+                        incremental.identity,
+                        VirtualSourcePath.kotlin("main.kt"),
+                        source.indexOf('\n'),
+                        CompletionTrigger.Automatic,
+                    ),
+                )
+                K2QueryFixture.source("main.kt" to source).use { fresh ->
+                    assertEquals(
+                        fresh.execute(fresh.presentation()).presentation(),
+                        incremental.execute(incremental.presentation()).presentation(),
+                        source,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
     fun `body signature import and invalid syntax updates match fresh K2 snapshots`() {
         val main =
             """

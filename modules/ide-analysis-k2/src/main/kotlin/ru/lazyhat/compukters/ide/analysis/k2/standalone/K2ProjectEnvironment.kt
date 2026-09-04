@@ -32,6 +32,7 @@ import org.jetbrains.kotlin.analysis.project.structure.builder.buildKtLibraryMod
 import org.jetbrains.kotlin.analysis.project.structure.builder.buildKtSourceModule
 import org.jetbrains.kotlin.cli.common.CliModuleVisibilityManagerImpl
 import org.jetbrains.kotlin.load.kotlin.ModuleVisibilityManager
+import org.jetbrains.kotlin.psi.KtFile
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.k2.CompuktersLLFirSessionConfigurator
@@ -41,7 +42,12 @@ import java.nio.file.Path
 internal class K2ProjectEnvironment private constructor(
     private val disposable: Disposable,
     val session: StandaloneAnalysisAPISession,
+    private val sourceIndex: MutableProjectSourceIndex,
 ) : AutoCloseable {
+    fun reindex(file: KtFile) {
+        sourceIndex.replace(file)
+    }
+
     override fun close() {
         session.application.runWriteAction { Disposer.dispose(disposable) }
     }
@@ -102,7 +108,10 @@ internal class K2ProjectEnvironment private constructor(
                             )
                         }
                     }
-                K2ProjectEnvironment(disposable, session)
+                val sourceFiles = session.modulesWithFiles.values.flatten().filterIsInstance<KtFile>()
+                val sourceIndex = MutableProjectSourceIndex(sourceFiles)
+                installMutableProjectSourceProviders(session, sourceIndex)
+                K2ProjectEnvironment(disposable, session, sourceIndex)
             } catch (exception: Exception) {
                 Disposer.dispose(disposable)
                 throw exception
