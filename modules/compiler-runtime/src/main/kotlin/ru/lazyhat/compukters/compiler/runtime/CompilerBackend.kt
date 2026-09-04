@@ -20,10 +20,16 @@ package ru.lazyhat.compukters.compiler.runtime
 
 import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
+import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
 import java.util.concurrent.CompletableFuture
 
 interface CompilerBackend : AutoCloseable {
-    fun compile(snapshot: ProjectSnapshot): CompletableFuture<CompileResult>
+    fun compile(
+        snapshot: ProjectSnapshot,
+        target: TargetSettings,
+        platformModules: List<TrustedBundleIdentity>,
+    ): CompletableFuture<CompileResult>
 
     fun cancel(future: CompletableFuture<CompileResult>) {
         future.cancel(false)

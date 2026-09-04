@@ -27,13 +27,12 @@ import java.util.concurrent.CompletableFuture
 
 class WorkerCompilerBackend(
     private val controller: CompilerWorkerController,
-    private val target: TargetSettings = TargetSettings.KOTLIN_2_4_JVM_17,
-    platformModules: List<TrustedBundleIdentity> = emptyList(),
 ) : CompilerBackend {
-    private val platformModules = platformModules.toList()
-
-    override fun compile(snapshot: ProjectSnapshot): CompletableFuture<CompileResult> =
-        controller.compile(snapshot, target, platformModules)
+    override fun compile(
+        snapshot: ProjectSnapshot,
+        target: TargetSettings,
+        platformModules: List<TrustedBundleIdentity>,
+    ): CompletableFuture<CompileResult> = controller.compile(snapshot, target, platformModules)
 
     override fun cancel(future: CompletableFuture<CompileResult>) {
         controller.cancel(future)
