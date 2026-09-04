@@ -108,7 +108,10 @@ internal class K2ProjectEnvironment private constructor(
                             )
                         }
                     }
-                val sourceFiles = session.modulesWithFiles.values.flatten().filterIsInstance<KtFile>()
+                val sourceFiles =
+                    session.modulesWithFiles.values
+                        .flatten()
+                        .filterIsInstance<KtFile>()
                 val sourceIndex = MutableProjectSourceIndex(sourceFiles)
                 installMutableProjectSourceProviders(session, sourceIndex)
                 K2ProjectEnvironment(disposable, session, sourceIndex)

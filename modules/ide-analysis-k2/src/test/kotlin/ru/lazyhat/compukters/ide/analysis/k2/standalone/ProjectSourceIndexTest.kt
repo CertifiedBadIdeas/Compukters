@@ -51,7 +51,13 @@ class ProjectSourceIndexTest {
             val index = MutableProjectSourceIndex(listOf(first, second))
             val initial = index.snapshot()
 
-            assertSame(first, initial.classesById.getValue(ClassId.topLevel(FqName("sample.Outer"))).single().containingKtFile)
+            assertSame(
+                first,
+                initial.classesById
+                    .getValue(ClassId.topLevel(FqName("sample.Outer")))
+                    .single()
+                    .containingKtFile,
+            )
             assertEquals(
                 "Nested",
                 initial.classesById
@@ -59,7 +65,13 @@ class ProjectSourceIndexTest {
                     .single()
                     .name,
             )
-            assertEquals("Alias", initial.typeAliasesById.getValue(ClassId.topLevel(FqName("sample.Alias"))).single().name)
+            assertEquals(
+                "Alias",
+                initial.typeAliasesById
+                    .getValue(ClassId.topLevel(FqName("sample.Alias")))
+                    .single()
+                    .name,
+            )
             assertEquals(
                 "function",
                 initial.functionsById
@@ -89,8 +101,20 @@ class ProjectSourceIndexTest {
             assertTrue(ClassId.topLevel(FqName("sample.Outer")) !in updated.classesById)
             assertTrue(ClassId.topLevel(FqName("sample.Alias")) !in updated.typeAliasesById)
             assertTrue(CallableId(FqName("sample"), Name.identifier("function")) !in updated.functionsById)
-            assertEquals("Replacement", updated.classesById.getValue(ClassId.topLevel(FqName("changed.Replacement"))).single().name)
-            assertSame(second, updated.classesById.getValue(ClassId.topLevel(FqName("other.Stable"))).single().containingKtFile)
+            assertEquals(
+                "Replacement",
+                updated.classesById
+                    .getValue(ClassId.topLevel(FqName("changed.Replacement")))
+                    .single()
+                    .name,
+            )
+            assertSame(
+                second,
+                updated.classesById
+                    .getValue(ClassId.topLevel(FqName("other.Stable")))
+                    .single()
+                    .containingKtFile,
+            )
             assertTrue(FqName("sample") !in updated.packages)
             assertTrue(FqName("changed") in updated.packages)
         }
