@@ -364,7 +364,7 @@ class AnalysisWorkerMeasurementTest {
                 .content
                 .toByteArray()
                 .decodeToString()
-        val marker = if (fixture.sources.size == 1) "can" else "file0S"
+        val marker = fixture.completionPrefix
         return MeasurementRevision(snapshot, path, text.lastIndexOf(marker) + marker.length)
     }
 

@@ -44,4 +44,26 @@ class AnalysisMeasurementFixturesTest {
             assertTrue("file${index}Seed()" in source.text)
         }
     }
+
+    @Test
+    fun `maximum file fixture reaches file limit within line budget`() {
+        val fixture = AnalysisMeasurementFixtures.maximumFiles()
+
+        assertEquals(512, fixture.sources.size)
+        assertTrue(fixture.totalLines in 4_900..5_000)
+        assertEquals(
+            512,
+            fixture.sources
+                .map { it.path }
+                .toSet()
+                .size,
+        )
+        assertTrue(
+            fixture.sources
+                .last()
+                .text
+                .contains("object ActiveObject"),
+        )
+        assertEquals("file0S", fixture.completionPrefix)
+    }
 }
