@@ -77,12 +77,14 @@ import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetClientNetwork
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalClient
 import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
+import ru.lazyhat.compukters.platform.bundle.PackagedPlatformBundleLoader
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.worker.payload.PackagedToolingBundle
 import ru.lazyhat.compukters.worker.process.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.worker.process.WorkerLaunch
 import ru.lazyhat.compukters.worker.process.WorkerProcessFactory
+import ru.lazyhat.compukters.worker.value.Sha256
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
@@ -592,36 +594,22 @@ internal object ProductionIdeApplicationFactory {
     internal fun loadPackagedPlatform(
         classpath: List<Path>,
         compilerIdentity: WorkerIdentity,
-    ): PlatformBundle {
-        val candidates =
-            classpath.mapNotNull { path ->
-                if (!path.fileName.toString().endsWith(".jar")) return@mapNotNull null
-                ZipFile(path.toFile()).use { archive ->
-                    val entry = archive.getEntry(PLATFORM_ENTRY) ?: return@use null
-                    check(entry.size in 0..MAX_PLATFORM_BYTES) { "packaged Compukters platform exceeds its byte limit" }
-                    archive.getInputStream(entry).use { input ->
-                        val bytes = input.readNBytes((MAX_PLATFORM_BYTES + 1).toInt())
-                        check(bytes.size.toLong() <= MAX_PLATFORM_BYTES) { "packaged Compukters platform exceeds its byte limit" }
-                        PlatformBundleCodec.decode(bytes)
-                    }
-                }
-            }
-        check(candidates.size == 1) { "compiler payload must contain exactly one Compukters platform bundle" }
-        return admitPlatform(candidates.single(), compilerIdentity)
-    }
+    ): PlatformBundle =
+        PackagedPlatformBundleLoader.load(
+            classpath,
+            compilerIdentity.languageVersion,
+            Sha256.of(compilerIdentity.platformAbi.toByteArray()),
+        )
 
     internal fun admitPlatform(
         platform: PlatformBundle,
         compilerIdentity: WorkerIdentity,
-    ): PlatformBundle {
-        check(platform.identity.languageVersion == compilerIdentity.languageVersion) {
-            "Compukters platform language identity does not match compiler worker"
-        }
-        check(Hash256.of(platform.identity.contentHash.toByteArray()) == compilerIdentity.platformAbi) {
-            "Compukters platform content identity does not match compiler worker"
-        }
-        return platform
-    }
+    ): PlatformBundle =
+        PackagedPlatformBundleLoader.admit(
+            platform,
+            compilerIdentity.languageVersion,
+            Sha256.of(compilerIdentity.platformAbi.toByteArray()),
+        )
 
     private fun resource(path: String) =
         checkNotNull(ProductionIdeApplicationFactory::class.java.getResourceAsStream(path)) {
@@ -634,8 +622,6 @@ internal object ProductionIdeApplicationFactory {
     }
 
     private const val TOOLING_WORKER_RESOURCE = "/tooling/workers/k2-tooling-workers.zip"
-    private const val PLATFORM_ENTRY = "compukters-platform/compukters-platform.cpb"
-    private const val MAX_PLATFORM_BYTES = 128L * 1024 * 1024
     private const val COMPILER_HEAP_MIB = 256
     private const val COMPILER_METASPACE_MIB = 256
     private const val ANALYSIS_HEAP_MIB = 384

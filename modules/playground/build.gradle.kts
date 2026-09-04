@@ -23,7 +23,9 @@ plugins {
 
 dependencies {
     implementation(projects.compilerClient)
+    implementation(projects.ideCore)
     implementation(projects.nativeRuntime)
+    implementation(projects.platformBundle)
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.core)
     testImplementation(kotlin("test"))

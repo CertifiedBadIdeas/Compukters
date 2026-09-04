@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.playground
 
+import ru.lazyhat.compukters.compiler.project.ProjectSnapshotException
 import ru.lazyhat.compukters.compiler.project.ProjectSnapshotLoader
 import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
 import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerPolicy
@@ -25,8 +26,15 @@ import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerLaunch
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadLoader
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
+import ru.lazyhat.compukters.ide.project.ProjectLimits
+import ru.lazyhat.compukters.ide.project.ProjectManifestCodec
+import ru.lazyhat.compukters.platform.bundle.PackagedPlatformBundleLoader
+import ru.lazyhat.compukters.worker.value.Sha256
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 
@@ -46,17 +54,26 @@ class ForkedPlaygroundCompiler(
 ) : PlaygroundCompiler {
     private val temporaryRoot = Files.createTempDirectory("compukters-playground-worker-")
     private val controller: CompilerWorkerController
+    private val platformCatalog: PlatformCatalog
 
     init {
         try {
             val payload = WorkerPayloadLoader.loadToolingProfile(payloadRoot)
+            val compilerIdentity = payload.manifest.identity
+            val platform =
+                PackagedPlatformBundleLoader.load(
+                    payload.classpath,
+                    compilerIdentity.languageVersion,
+                    Sha256.of(compilerIdentity.platformAbi.toByteArray()),
+                )
+            platformCatalog = PlatformCatalog.of(platform)
             val launch =
                 WorkerLaunch(
                     javaExecutable = javaExecutable,
                     maximumHeapMiB = 512,
                     maximumMetaspaceMiB = 256,
                     temporaryDirectory = temporaryRoot.resolve("child"),
-                    expectedIdentity = payload.manifest.identity,
+                    expectedIdentity = compilerIdentity,
                     maximumFrameBytes = limits.frameBytes,
                     maximumStderrBytes = limits.stderrBytes,
                 )
@@ -68,7 +85,9 @@ class ForkedPlaygroundCompiler(
     }
 
     override fun compile(project: Path): CompileResult =
-        controller.compile(ProjectSnapshotLoader.load(project, limits)).get(CONTROLLER_WAIT_SECONDS, TimeUnit.SECONDS)
+        controller
+            .compile(ProjectSnapshotLoader.load(project, limits), platformModules = resolveModules(project))
+            .get(CONTROLLER_WAIT_SECONDS, TimeUnit.SECONDS)
 
     override fun close() {
         try {
@@ -78,7 +97,29 @@ class ForkedPlaygroundCompiler(
         }
     }
 
+    private fun resolveModules(project: Path): List<TrustedBundleIdentity> {
+        val limits = ProjectLimits()
+        val manifestPath = project.resolve(MANIFEST_NAME)
+        try {
+            if (!Files.isRegularFile(manifestPath, LinkOption.NOFOLLOW_LINKS)) {
+                throw ProjectSnapshotException("project manifest is missing")
+            }
+            if (Files.size(manifestPath) > limits.manifestBytes) {
+                throw ProjectSnapshotException("manifest byte count exceeds limit")
+            }
+            val manifest = ProjectManifestCodec.decode(Files.readString(manifestPath), limits)
+            return platformCatalog.resolve(manifest.modules).modules.map { module ->
+                TrustedBundleIdentity.of(module.identity.id.value, module.identity.contentHash)
+            }
+        } catch (exception: ProjectSnapshotException) {
+            throw exception
+        } catch (exception: Exception) {
+            throw ProjectSnapshotException(exception.message ?: "failed to resolve project manifest", exception)
+        }
+    }
+
     private companion object {
         const val CONTROLLER_WAIT_SECONDS = 45L
+        const val MANIFEST_NAME = "compukter.toml"
     }
 }
