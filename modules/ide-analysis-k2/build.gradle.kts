@@ -293,8 +293,10 @@ val incrementalAnalysisPerformanceTest = tasks.register<Test>("incrementalAnalys
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     maxHeapSize = "512m"
+    testLogging.showStandardStreams = true
     filter {
         includeTestsMatching("ru.lazyhat.compukters.ide.analysis.k2.integration.AnalysisWorkerMeasurementTest")
+        includeTestsMatching("ru.lazyhat.compukters.ide.analysis.k2.integration.SourceIndexMeasurementTest")
         isFailOnNoMatchingTests = true
     }
     doFirst {

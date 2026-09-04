@@ -41,6 +41,7 @@ internal class PhaseSamples(
 }
 
 internal data class AnalysisPerformanceReport(
+    val initialAdmission: PhaseSamples,
     val snapshotApply: PhaseSamples,
     val presentation: PhaseSamples,
     val completion: PhaseSamples,
@@ -67,6 +68,7 @@ internal data class AnalysisPerformanceReport(
         buildString {
             appendLine("compukters.analysis.performance.v$SCHEMA_VERSION")
             appendLine("schemaVersion=$SCHEMA_VERSION")
+            appendPhase("initialAdmission", initialAdmission)
             appendPhase("snapshotApply", snapshotApply)
             appendPhase("presentation", presentation)
             appendPhase("completion", completion)
@@ -90,6 +92,6 @@ internal data class AnalysisPerformanceReport(
     }
 
     private companion object {
-        const val SCHEMA_VERSION = 2
+        const val SCHEMA_VERSION = 3
     }
 }

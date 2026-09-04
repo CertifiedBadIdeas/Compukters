@@ -27,6 +27,7 @@ import ru.lazyhat.compukters.ide.analysis.k2.standalone.DocumentK2SourceUpdater
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.K2SourceUpdatePhase
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.K2SourceUpdatePhaseSample
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.MutableProjectSourceIndex
+import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -39,7 +40,7 @@ class SourceIndexMeasurementTest {
         val updater = DocumentK2SourceUpdater.measured(System::nanoTime, phaseSamples::add)
         val sources = measurementFixture.sources.map { it.path.value to it.text }.toTypedArray()
 
-        K2QueryFixture.sourceWithUpdater(updater, *sources).use { fixture ->
+        K2QueryFixture.sourceWithUpdater(updater, AnalysisLimits(sourceFiles = 512), *sources).use { fixture ->
             val files = fixture.snapshot.files.values
             val activePath =
                 measurementFixture.sources

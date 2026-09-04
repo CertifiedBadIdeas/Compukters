@@ -48,6 +48,7 @@ import kotlin.io.path.createTempDirectory
 internal class K2QueryFixture private constructor(
     initialSources: Map<VirtualSourcePath, String>,
     val workspace: IncrementalK2Workspace,
+    private val limits: AnalysisLimits,
     private val root: Path,
 ) : AutoCloseable {
     private var requestId = 2uL
@@ -70,14 +71,14 @@ internal class K2QueryFixture private constructor(
 
     fun update(vararg changedSources: Pair<String, String>) {
         val request = updateRequest(*changedSources)
-        workspace.update(request, AnalysisLimits())
+        workspace.update(request, limits)
         sources = sources + changedSources.associate { (path, text) -> VirtualSourcePath.kotlin(path) to text }
     }
 
     fun updateRequest(vararg changedSources: Pair<String, String>): UpdateSnapshotRequest {
         val changed = changedSources.associate { (path, text) -> VirtualSourcePath.kotlin(path) to text }
         val targetSources = sources + changed
-        val project = projectSnapshot(targetSources)
+        val project = projectSnapshot(targetSources, limits)
         val targetIdentity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(project), identity.profile)
         return UpdateSnapshotRequest(
             RequestId.of(requestId++),
@@ -95,12 +96,18 @@ internal class K2QueryFixture private constructor(
     }
 
     companion object {
-        fun source(vararg sources: Pair<String, String>): K2QueryFixture = create(testAdmittedPlatform(), *sources)
+        fun source(vararg sources: Pair<String, String>): K2QueryFixture = create(testAdmittedPlatform(), AnalysisLimits(), null, *sources)
 
         fun sourceWithUpdater(
             sourceUpdater: K2SourceUpdater,
             vararg sources: Pair<String, String>,
-        ): K2QueryFixture = create(testAdmittedPlatform(), sourceUpdater, *sources)
+        ): K2QueryFixture = create(testAdmittedPlatform(), AnalysisLimits(), sourceUpdater, *sources)
+
+        fun sourceWithUpdater(
+            sourceUpdater: K2SourceUpdater,
+            limits: AnalysisLimits,
+            vararg sources: Pair<String, String>,
+        ): K2QueryFixture = create(testAdmittedPlatform(), limits, sourceUpdater, *sources)
 
         fun sourceWithGuestApi(
             attachedSources: Boolean,
@@ -108,23 +115,20 @@ internal class K2QueryFixture private constructor(
         ): K2QueryFixture =
             create(
                 testAdmittedPlatform(selectAllModules = true, attachedSources = attachedSources),
+                AnalysisLimits(),
                 sourceUpdater = null,
                 sources = sources,
             )
 
         private fun create(
             platform: AdmittedAnalysisPlatform,
-            vararg sources: Pair<String, String>,
-        ): K2QueryFixture = create(platform, null, *sources)
-
-        private fun create(
-            platform: AdmittedAnalysisPlatform,
+            limits: AnalysisLimits,
             sourceUpdater: K2SourceUpdater?,
             vararg sources: Pair<String, String>,
         ): K2QueryFixture {
             val root = createTempDirectory("compukters-k2-query-")
             val mapped = sources.associate { (path, text) -> VirtualSourcePath.kotlin(path) to text }
-            val project = projectSnapshot(mapped)
+            val project = projectSnapshot(mapped, limits)
             val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 1 }))
             val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(project), profile)
             val request =
@@ -133,7 +137,7 @@ internal class K2QueryFixture private constructor(
                     identity,
                     project,
                     AdmittedAnalysisProfile(profile, platform),
-                    AnalysisLimits(),
+                    limits,
                 )
             val platform =
                 PlatformBundleCodec.decode(
@@ -149,17 +153,24 @@ internal class K2QueryFixture private constructor(
                         sourceUpdater,
                     )
                 }
-            return K2QueryFixture(mapped, admission.admit(request), root)
+            return K2QueryFixture(mapped, admission.admit(request), limits, root)
         }
     }
 }
 
-private fun projectSnapshot(sources: Map<VirtualSourcePath, String>): ProjectSnapshot =
+private fun projectSnapshot(
+    sources: Map<VirtualSourcePath, String>,
+    limits: AnalysisLimits,
+): ProjectSnapshot =
     ProjectSnapshot.of(
         sources.entries
             .sortedWith { left, right -> compareUtf8(left.key.value, right.key.value) }
             .map { (path, text) -> ProjectSource(path, BinaryValue.of(text.encodeToByteArray())) },
-        WorkerLimits(),
+        WorkerLimits(
+            sourceFiles = limits.sourceFiles,
+            sourceFileBytes = limits.sourceFileBytes,
+            sourceBytes = limits.sourceBytes,
+        ),
     )
 
 private fun compareUtf8(
