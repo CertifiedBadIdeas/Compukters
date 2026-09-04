@@ -114,8 +114,7 @@ private class ProjectSourceDeclarationProvider(
     override fun getClassLikeDeclarationByClassId(classId: ClassId): KtClassLikeDeclaration? =
         getAllClassesByClassId(classId).firstOrNull() ?: getAllTypeAliasesByClassId(classId).firstOrNull()
 
-    override fun getAllClassesByClassId(classId: ClassId): Collection<KtClassOrObject> =
-        snapshot.classesById[classId].orEmpty().inScope()
+    override fun getAllClassesByClassId(classId: ClassId): Collection<KtClassOrObject> = snapshot.classesById[classId].orEmpty().inScope()
 
     override fun getAllTypeAliasesByClassId(classId: ClassId): Collection<KtTypeAlias> =
         snapshot.typeAliasesById[classId].orEmpty().inScope()
@@ -130,8 +129,10 @@ private class ProjectSourceDeclarationProvider(
         snapshot.functionsById[callableId].orEmpty().inScope()
 
     override fun getTopLevelCallableFiles(callableId: CallableId): Collection<KtFile> =
-        (getTopLevelFunctions(callableId).map { it.containingKtFile } +
-            getTopLevelProperties(callableId).map { it.containingKtFile }).distinct()
+        (
+            getTopLevelFunctions(callableId).map { it.containingKtFile } +
+                getTopLevelProperties(callableId).map { it.containingKtFile }
+        ).distinct()
 
     override fun getTopLevelCallableNamesInPackage(packageFqName: FqName): Set<Name> =
         snapshot.callableNamesByPackage[packageFqName].orEmpty()
@@ -142,11 +143,9 @@ private class ProjectSourceDeclarationProvider(
     override fun findFilesForFacade(facadeFqName: FqName): Collection<KtFile> =
         snapshot.filesByFacade[facadeFqName].orEmpty().inScopeFiles()
 
-    override fun findInternalFilesForFacade(facadeFqName: FqName): Collection<KtFile> =
-        findFilesForFacade(facadeFqName)
+    override fun findInternalFilesForFacade(facadeFqName: FqName): Collection<KtFile> = findFilesForFacade(facadeFqName)
 
-    override fun findFilesForScript(scriptFqName: FqName): Collection<KtScript> =
-        snapshot.scriptsByFqName[scriptFqName].orEmpty().inScope()
+    override fun findFilesForScript(scriptFqName: FqName): Collection<KtScript> = snapshot.scriptsByFqName[scriptFqName].orEmpty().inScope()
 
     override fun computePackageNames(): Set<String> = snapshot.packages.mapTo(linkedSetOf(), FqName::asString)
 
@@ -163,8 +162,7 @@ private class ProjectSourceDeclarationProvider(
     private fun <T : org.jetbrains.kotlin.psi.KtElement> Collection<T>.inScope(): List<T> =
         filter { declaration -> declaration.containingKtFile.virtualFile?.let(searchScope::contains) == true }
 
-    private fun Collection<KtFile>.inScopeFiles(): List<KtFile> =
-        filter { file -> file.virtualFile?.let(searchScope::contains) == true }
+    private fun Collection<KtFile>.inScopeFiles(): List<KtFile> = filter { file -> file.virtualFile?.let(searchScope::contains) == true }
 }
 
 private class ProjectSourcePackageProviderFactory(

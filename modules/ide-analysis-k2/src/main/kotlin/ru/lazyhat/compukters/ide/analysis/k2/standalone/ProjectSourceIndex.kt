@@ -33,7 +33,9 @@ import org.jetbrains.kotlin.psi.KtScript
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import org.jetbrains.kotlin.psi.KtTypeAlias
 
-internal class MutableProjectSourceIndex(files: Collection<KtFile>) {
+internal class MutableProjectSourceIndex(
+    files: Collection<KtFile>,
+) {
     private val entries = LinkedHashMap<VirtualFile, ProjectSourceFileIndex>()
 
     @Volatile
