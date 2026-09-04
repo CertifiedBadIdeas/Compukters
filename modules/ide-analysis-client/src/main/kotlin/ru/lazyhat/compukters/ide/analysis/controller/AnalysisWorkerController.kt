@@ -480,7 +480,7 @@ class AnalysisWorkerController(
         if (handshake.protocol != ANALYSIS_PROTOCOL_VERSION || handshake.workerIdentity != expectedWorkerIdentity) {
             throw ControllerFault(AnalysisFailureKind.Protocol, "analysis worker identity mismatch")
         }
-        if (!handshake.features.containsAll(REQUIRED_FEATURES) || handshake.limits != limits) {
+        if (!handshake.features.containsAll(REQUIRED_FEATURES) || !handshake.limits.supports(limits)) {
             throw ControllerFault(AnalysisFailureKind.Protocol, "analysis worker capabilities mismatch")
         }
         return child

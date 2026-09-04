@@ -58,6 +58,20 @@ import kotlin.test.assertTrue
 
 class AnalysisWorkerControllerTest {
     @Test
+    fun `worker capability may exceed requested controller limits`() =
+        withController(1) { controller, _, processes, workerIdentity, limits ->
+            val worker = processes.single()
+            worker.enqueue(handshake(workerIdentity, limits.copy(sourceFiles = 512)))
+            val snapshot = admitted("val answer = 42", limits)
+
+            val opened = controller.open(snapshot)
+            val openRequest = assertIs<OpenSnapshotRequest>(worker.awaitWrite())
+            worker.enqueue(SnapshotReady(openRequest.requestId, snapshot.identity))
+
+            assertEquals(SnapshotOpenResult.Opened(snapshot.identity), opened.get(5, TimeUnit.SECONDS))
+        }
+
+    @Test
     fun `query synchronizes directly from confirmed revision to the latest compatible snapshot`() =
         withController(1) { controller, factory, processes, workerIdentity, limits ->
             val worker = processes.single()
