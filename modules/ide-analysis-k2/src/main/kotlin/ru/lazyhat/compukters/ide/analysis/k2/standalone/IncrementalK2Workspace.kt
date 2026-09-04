@@ -208,6 +208,7 @@ internal object DocumentK2SourceUpdater : K2SourceUpdater {
                         baseline,
                     )
                 }
+                environment.reindex(file)
                 modifications.handleInvalidation(file, locality)
             }
         }
