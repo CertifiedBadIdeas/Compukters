@@ -1067,6 +1067,30 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `platform callable lookalike remains an ordinary project call`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        package kotlin.io
+
+                        fun readln(): String = "guest"
+
+                        fun main() {
+                            readln().length
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+
+            assertTrue(0xe9 !in allOpcodes(artifact), "player lookalike must not become an async capability call")
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+        }
+
+    @Test
     fun `unsupported source produces a stable native platform diagnostic and no artifact`() =
         withAdapter { adapter ->
             listOf(

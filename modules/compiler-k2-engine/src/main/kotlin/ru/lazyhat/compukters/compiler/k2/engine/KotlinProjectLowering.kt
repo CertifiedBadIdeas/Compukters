@@ -3086,39 +3086,41 @@ private fun resolveTrustedIntrinsic(
     charType: IrType,
     inlineValueClasses: InlineValueClassRegistry,
 ): TrustedIntrinsic? {
-    val fqName = function.fqNameWhenAvailable?.asString()
-    val parameterTypes =
-        function.parameters
-            .filter { it.kind == IrParameterKind.ExtensionReceiver || it.kind == IrParameterKind.Regular }
-            .joinToString(",") { it.type.canonicalPlatformType() }
-    val signature = "fun($parameterTypes):${function.returnType.canonicalPlatformType()}"
-    val canonicalHandler =
-        session.canonicalIntrinsicRegistry
-            ?.handlers
-            ?.entries
-            ?.singleOrNull { (key, _) ->
-                key.module in session.selectedPlatformModules &&
-                    key.callableId.asSingleFqName().asString() == fqName &&
-                    key.signature.value == signature
-            }?.value
-    if (canonicalHandler is CapabilityOperationHandler) {
-        val capability = canonicalHandler.requiredCapability
-        return TrustedIntrinsic.CapabilityOperation(
-            TrustedCapabilityIdentity(
-                capability.namespace,
-                capability.name,
-                capability.abiMajor.toUShort(),
-                0u.toUShort(),
-                capabilityOperationCount(capability.namespace, capability.name),
-            ),
-            canonicalHandler.operation,
-            if (canonicalHandler.blocking == IntrinsicBlockingMode.VM_TASK) BlockingMode.VM_TASK else BlockingMode.NONE,
-            canonicalHandler.terminal,
-        )
-    }
     var parent = function.parent
     while (parent !is IrFile) {
         parent = (parent as? IrDeclaration)?.parent ?: break
+    }
+    if (parent !is IrFile) {
+        val fqName = function.fqNameWhenAvailable?.asString()
+        val parameterTypes =
+            function.parameters
+                .filter { it.kind == IrParameterKind.ExtensionReceiver || it.kind == IrParameterKind.Regular }
+                .joinToString(",") { it.type.canonicalPlatformType() }
+        val signature = "fun($parameterTypes):${function.returnType.canonicalPlatformType()}"
+        val handler =
+            session.canonicalIntrinsicRegistry
+                ?.handlers
+                ?.entries
+                ?.singleOrNull { (key, _) ->
+                    key.module in session.selectedPlatformModules &&
+                        key.callableId.asSingleFqName().asString() == fqName &&
+                        key.signature.value == signature
+                }?.value
+        if (handler is CapabilityOperationHandler) {
+            val capability = handler.requiredCapability
+            return TrustedIntrinsic.CapabilityOperation(
+                TrustedCapabilityIdentity(
+                    capability.namespace,
+                    capability.name,
+                    capability.abiMajor.toUShort(),
+                    0u.toUShort(),
+                    capabilityOperationCount(capability.namespace, capability.name),
+                ),
+                handler.operation,
+                if (handler.blocking == IntrinsicBlockingMode.VM_TASK) BlockingMode.VM_TASK else BlockingMode.NONE,
+                handler.terminal,
+            )
+        }
     }
     val bundleIdentity =
         if (parent is IrFile) {
