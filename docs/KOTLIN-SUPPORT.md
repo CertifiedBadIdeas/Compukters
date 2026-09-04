@@ -5,6 +5,12 @@ to Compukter bytecode for the managed Rust VM. This is **Guest Kotlin**, not
 Kotlin/JVM: K2 accepting source does not imply Java interoperability, JVM
 library compatibility, or executable support in Compukters.
 
+The compiler process uses Kotlin compiler libraries internally, but those host
+dependencies are not visible to Guest source. Guest name resolution contains
+only the native declarations published by the selected Compukters platform
+modules. Their metadata, ordinary precompiled Kotlin bodies, and trusted
+external bindings form one versioned platform contract.
+
 This matrix describes the repository revision that contains it.
 
 ## Status legend
@@ -59,10 +65,11 @@ supported.
   `kotlinc command line rejects ambiguous or unsupported arguments`.
   Tracking: not scheduled
 
-- [ ] **Project manifests and modules — Partial** — the IDE resolves canonical
-  project snapshots and Guest API bundles, but the current compiler output is
-  still one application artifact rather than an independently distributable
-  Kotlin module ecosystem. Tracking: not scheduled
+- [ ] **Project manifests and modules — Partial** — `compukter.toml` selects a
+  portable native platform module graph; the IDE, analyzer, and compiler use
+  the same declarations and versions. Compiler output is still one application
+  artifact rather than an independently distributable Kotlin module ecosystem.
+  Tracking: not scheduled
 
 ## Types and numeric semantics
 
@@ -103,7 +110,7 @@ supported.
   wrapping and masked-shift semantics. The remaining integer widths are not
   lowered from source.
   Evidence:
-  [`KotlinProjectLowering`](../modules/compiler-k2/src/main/kotlin/ru/lazyhat/compukters/compiler/worker/k2/KotlinProjectLowering.kt)
+  [`KotlinProjectLowering`](../modules/compiler-k2-engine/src/main/kotlin/ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLowering.kt)
   and [`numeric.rs`](../host/compukter-vm/src/execution/numeric.rs), test
   `integers_wrap_mask_shifts_and_handle_min_division`.
   Tracking: not scheduled
@@ -250,14 +257,17 @@ supported.
   test `heap_instructions_checked_cast_handles_nullability_and_incompatibility`.
   Tracking: not scheduled
 
-- [ ] **Primitive `@JvmInline` value classes — Partial** — a value class with
+- [ ] **Primitive `value class` declarations — Partial** — a value class with
   exactly one `Int`, `Boolean`, or `Char` property erases to that scalar for
   constructors, properties, methods, operators, constants, and trusted ABI
-  calls. Nullable, generic, reference-backed, boxed, and multi-property forms
-  are rejected. Evidence:
+  calls. `@JvmInline` is deliberately rejected because it belongs to the JVM
+  platform, not Guest Kotlin. Nullable, generic, reference-backed, boxed, and
+  multi-property forms are rejected. Evidence:
   [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  tests `JvmInline value class admits one bounded Int constructor precondition`
-  and `redstone program lowers deterministically for vm conformance`.
+  test `typed redstone facade lowers deterministically to scalar capability operations`,
+  and
+  [`CanonicalPlatformSourceTest`](../modules/guest-platform/src/test/kotlin/ru/lazyhat/compukters/platform/source/CanonicalPlatformSourceTest.kt),
+  which rejects JVM-only value-class syntax from native platform sources.
   Tracking: not scheduled
 
 ## Nullability and exceptions
@@ -361,6 +371,28 @@ supported.
   suspension point; concurrent scheduling within one program is future work.
   Tracking: not scheduled
 
+## Native platform modules
+
+The platform catalog currently publishes these module identities. A project
+sees the modules selected by `compukter.toml`, their transitive dependencies,
+and the mandatory built-ins module; there is no ambient Kotlin/JVM classpath.
+
+| Module | Guest surface |
+| --- | --- |
+| `kotlin:builtins` | Core language types, arrays, function types, and structural declarations required by K2 |
+| `stdlib:core` | Small native core helpers such as `require` and supported array construction |
+| `stdlib:ranges` | The admitted `IntRange` surface used by native APIs and bounded checks |
+| `std:terminal` | `print`, `println`, `readln`, stderr, and raw terminal operations |
+| `std:filesystem` | The bounded filesystem facade |
+| `compukter:compiler` | Guest compilation operations |
+| `compukter:process` | Child process execution and explicit exit |
+| `compukter:redstone` | Local-side redstone input, waiting, and packed output operations |
+
+Ordinary functions in these modules are compiled ahead of Guest projects into
+relocatable platform fragments. Only declarations explicitly marked as native
+external bindings lower to host capability operations; a Guest declaration
+cannot become one merely by copying its package, name, and signature.
+
 ## Kotlin standard library
 
 - [ ] **Console functions — Partial** — `print` accepts `String`, `Int`,
@@ -375,14 +407,14 @@ supported.
   Tracking: not scheduled
 
 - [ ] **Core scalar operations — Partial** — the admitted `Int`, `Boolean`,
-  and `Char` operations listed above are provided through pinned Kotlin
-  symbols. The wider primitive API, parsing, formatting, bit operations, and
-  math packages are absent. Tracking: not scheduled
+  and `Char` operations listed above are provided by `kotlin:builtins` and
+  canonical compiler primitives. The wider primitive API, parsing, formatting,
+  bit operations, and math packages are absent. Tracking: not scheduled
 
 - [ ] **Text and array helpers — Partial** — only the `String`, `CharArray`,
-  and `Array<String>` operations listed above are pinned. Regex, Unicode
-  categories, encodings, generic array helpers, and collection conversions are
-  absent. Tracking: not scheduled
+  and `Array<String>` operations listed above are published by the native
+  built-ins and core modules. Regex, Unicode categories, encodings, generic
+  array helpers, and collection conversions are absent. Tracking: not scheduled
 
 - [ ] **Standard collections and functional helpers — Unsupported** — the
   collection hierarchy and higher-order functions such as `map`, `filter`,
@@ -439,8 +471,8 @@ supported.
   `writeText` have exact trusted signatures and bounded VM operations.
   Lowering coverage currently executes only at the compiler/VM sides
   separately. Evidence:
-  [`TrustedIntrinsicRegistryTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/TrustedIntrinsicRegistryTest.kt),
-  test `filesystem provider requires trusted facade and exact synchronous signatures`,
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `filesystem text facade lowers through exact trusted signatures`,
   and [`computer.rs`](../host/compukter-vm/src/computer.rs), tests
   `filesystem_text_response_is_bounded_before_guest_materialization` and
   `filesystem_text_write_replaces_existing_bytes_through_the_machine`.
@@ -458,10 +490,10 @@ supported.
   Tracking: not scheduled
 
 - [ ] **Compiler facade — Partial** — `Compiler.compile(source, output)` and
-  `Compiler.diagnostics()` are pinned, and the checked-in `/rom/kotlinc`
-  program compiles deterministically. Full Guest-to-host compilation behavior
-  is tested at the VM transaction layer rather than as one generated Kotlin
-  execution test. Evidence:
+  `Compiler.diagnostics()` are published by `compukter:compiler`, and the
+  checked-in `/rom/kotlinc` program compiles deterministically. Full
+  Guest-to-host compilation behavior is tested at the VM transaction layer
+  rather than as one generated Kotlin execution test. Evidence:
   [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `checked in kotlinc compiles deterministically`, paired with
   [`computer.rs`](../host/compukter-vm/src/computer.rs), test
@@ -469,12 +501,15 @@ supported.
   Tracking: not scheduled
 
 - [x] **Trusted API identity** — a user declaration cannot impersonate a Guest
-  intrinsic merely by copying its name and signature; providers require the
-  exact trusted bundle origin. Evidence:
-  [`TrustedIntrinsicRegistryTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/TrustedIntrinsicRegistryTest.kt),
-  tests `guest declaration cannot spoof a terminal intrinsic by name and signature`,
-  `terminal provider requires its trusted bundle and exact signatures`, and
-  `compiler provider requires trusted bundle and exact vm-blocking and sync signatures`.
+  intrinsic merely by copying its name and signature. The canonical registry
+  keys every external binding by selected platform module, Kotlin callable ID,
+  and exact canonical signature; lowering also verifies that the declaration
+  came from native platform metadata or the exact platform source module.
+  Evidence:
+  [`TrustedIntrinsicContractTest`](../modules/compiler-k2-engine/src/test/kotlin/ru/lazyhat/compukters/compiler/k2/engine/intrinsic/TrustedIntrinsicContractTest.kt)
+  and
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `platform callable lookalike remains an ordinary project call`.
 
 ## IDE and tooling
 
@@ -556,7 +591,8 @@ supported.
 - **Not planned: reflection and dynamic class loading.** Runtime types and code
   are admitted from verified artifacts before execution.
 - **Not planned: arbitrary compiler plugins and annotation processors.** The
-  trusted compiler pipeline and Guest API bundles define the source surface.
+  trusted compiler pipeline and selected native platform modules define the
+  source surface.
 - **Not planned: ambient access to host JVM or operating-system resources.**
   Guest programs cross only explicit, bounded capability interfaces.
 
