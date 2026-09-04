@@ -44,6 +44,9 @@ internal class K2ProjectEnvironment private constructor(
     val session: StandaloneAnalysisAPISession,
     private val sourceIndex: MutableProjectSourceIndex,
 ) : AutoCloseable {
+    val sourceIndexRebuildCount: Int
+        get() = sourceIndex.rebuildCount
+
     fun reindex(file: KtFile) {
         sourceIndex.replace(file)
     }

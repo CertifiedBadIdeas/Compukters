@@ -173,12 +173,43 @@ internal fun interface K2SourceUpdater {
     )
 }
 
+internal enum class K2SourceUpdatePhase {
+    PsiSynchronization,
+    SourceReindex,
+    K2Invalidation,
+}
+
+internal data class K2SourceUpdatePhaseSample(
+    val phase: K2SourceUpdatePhase,
+    val durationNanos: Long,
+)
+
+internal fun interface K2SourceUpdateObserver {
+    fun recorded(sample: K2SourceUpdatePhaseSample)
+}
+
 @OptIn(KaPlatformInterface::class)
 internal object DocumentK2SourceUpdater : K2SourceUpdater {
     override fun update(
         environment: K2ProjectEnvironment,
         files: Map<VirtualSourcePath, KtFile>,
         changedTexts: Map<VirtualSourcePath, String>,
+    ) = update(environment, files, changedTexts, clock = null, observer = null)
+
+    fun measured(
+        clock: () -> Long,
+        observer: K2SourceUpdateObserver,
+    ): K2SourceUpdater =
+        K2SourceUpdater { environment, files, changedTexts ->
+            update(environment, files, changedTexts, clock, observer)
+        }
+
+    private fun update(
+        environment: K2ProjectEnvironment,
+        files: Map<VirtualSourcePath, KtFile>,
+        changedTexts: Map<VirtualSourcePath, String>,
+        clock: (() -> Long)?,
+        observer: K2SourceUpdateObserver?,
     ) {
         environment.session.application.runWriteAction {
             val documents =
@@ -192,26 +223,49 @@ internal object DocumentK2SourceUpdater : K2SourceUpdater {
                 }
                 val document = requireNotNull(documents.getDocument(file)) { "Kotlin PSI has no document: ${path.value}" }
                 val baseline = StandaloneDocumentSynchronizer.capture(file)
-                CommandProcessor
-                    .getInstance()
-                    .executeCommand(
-                        environment.session.project,
-                        { document.replaceString(0, document.textLength, text) },
-                        "Compukters incremental analysis update",
-                        null,
-                    )
-                documents.runStandaloneCommit {
-                    StandaloneDocumentSynchronizer.synchronize(
-                        document,
-                        environment.session.project,
-                        file,
-                        baseline,
-                    )
+                measure(K2SourceUpdatePhase.PsiSynchronization, clock, observer) {
+                    CommandProcessor
+                        .getInstance()
+                        .executeCommand(
+                            environment.session.project,
+                            { document.replaceString(0, document.textLength, text) },
+                            "Compukters incremental analysis update",
+                            null,
+                        )
+                    documents.runStandaloneCommit {
+                        StandaloneDocumentSynchronizer.synchronize(
+                            document,
+                            environment.session.project,
+                            file,
+                            baseline,
+                        )
+                    }
                 }
-                environment.reindex(file)
-                modifications.handleInvalidation(file, locality)
+                measure(K2SourceUpdatePhase.SourceReindex, clock, observer) {
+                    environment.reindex(file)
+                }
+                measure(K2SourceUpdatePhase.K2Invalidation, clock, observer) {
+                    modifications.handleInvalidation(file, locality)
+                }
             }
         }
+    }
+
+    private inline fun measure(
+        phase: K2SourceUpdatePhase,
+        noinline clock: (() -> Long)?,
+        observer: K2SourceUpdateObserver?,
+        operation: () -> Unit,
+    ) {
+        if (observer == null || clock == null) {
+            operation()
+            return
+        }
+        val startedNanos = clock()
+        operation()
+        val durationNanos = clock() - startedNanos
+        check(durationNanos >= 0) { "K2 source update phase duration must not be negative" }
+        observer.recorded(K2SourceUpdatePhaseSample(phase, durationNanos))
     }
 }
 
