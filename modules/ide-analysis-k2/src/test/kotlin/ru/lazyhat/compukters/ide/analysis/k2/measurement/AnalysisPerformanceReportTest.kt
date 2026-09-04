@@ -41,6 +41,7 @@ class AnalysisPerformanceReportTest {
     fun `report renders a deterministic versioned field set`() {
         val report =
             AnalysisPerformanceReport(
+                initialAdmission = PhaseSamples(listOf(10)),
                 snapshotApply = PhaseSamples(listOf(11)),
                 presentation = PhaseSamples(listOf(21, 20)),
                 completion = PhaseSamples(listOf(31)),
@@ -57,8 +58,10 @@ class AnalysisPerformanceReportTest {
 
         assertEquals(
             """
-            compukters.analysis.performance.v2
-            schemaVersion=2
+            compukters.analysis.performance.v3
+            schemaVersion=3
+            initialAdmission.medianNanos=10
+            initialAdmission.p95Nanos=10
             snapshotApply.medianNanos=11
             snapshotApply.p95Nanos=11
             presentation.medianNanos=20

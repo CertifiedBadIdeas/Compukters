@@ -77,6 +77,7 @@ class AnalysisWorkerMeasurementTest {
             listOf(
                 "single-file" to AnalysisMeasurementFixtures.singleFile(),
                 "five-file" to AnalysisMeasurementFixtures.fiveFiles(),
+                "maximum-files" to AnalysisMeasurementFixtures.maximumFiles(),
             ).map { (name, fixture) -> name to measureFixture(fixture, sampleCount) }
 
         reports.forEach { (name, report) ->
@@ -86,7 +87,7 @@ class AnalysisWorkerMeasurementTest {
             assertEquals(1, report.fullRebuilds, name)
             assertTrue(report.incrementalUpdates > 0, name)
             assertTrue(report.heapBytes <= MAXIMUM_HEAP_MIB * MIB, name)
-            if (performanceGate) enforceLatencyTargets(name, report)
+            if (performanceGate && name != "maximum-files") enforceLatencyTargets(name, report)
         }
     }
 
@@ -97,7 +98,8 @@ class AnalysisWorkerMeasurementTest {
         val payload = ToolingBundleLoader.load(Path.of(checkNotNull(System.getProperty("compukters.analysis.payload")))).profile("analysis")
         val java = Path.of(checkNotNull(System.getProperty("compukters.analysis.java"))).toAbsolutePath().normalize()
         val root = createTempDirectory("compukters-analysis-measurement-").toAbsolutePath().normalize()
-        val limits = AnalysisLimits()
+        val defaults = AnalysisLimits()
+        val limits = defaults.copy(sourceFiles = maxOf(defaults.sourceFiles, fixture.sources.size))
         val launch =
             WorkerLaunch(
                 java,
@@ -132,7 +134,10 @@ class AnalysisWorkerMeasurementTest {
             val session = service.openSession()
             val client = session.client
             val base = snapshot(fixture, 0, limits, includeProbe = false)
-            assertIs<SnapshotOpenResult.Opened>(client.open(base).get(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            val admissionStartedNanos = System.nanoTime()
+            val openResult = client.open(base).get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            assertIs<SnapshotOpenResult.Opened>(openResult, openResult.toString())
+            val initialAdmissionNanos = System.nanoTime() - admissionStartedNanos
             factory.probe.takeSnapshotApply()
 
             var revision = 0
@@ -211,6 +216,7 @@ class AnalysisWorkerMeasurementTest {
             session.close()
             awaitExit(pid)
             return AnalysisPerformanceReport(
+                initialAdmission = PhaseSamples(listOf(initialAdmissionNanos)),
                 snapshotApply = PhaseSamples(snapshotApply),
                 presentation = PhaseSamples(presentation),
                 completion = PhaseSamples(completion),
@@ -382,7 +388,9 @@ class AnalysisWorkerMeasurementTest {
                         if (includeProbe && source.path == lastPath) {
                             buildString {
                                 append(source.text)
-                                if (fixture.sources.size > 1) append("\nfun completionProbe() { file0S }")
+                                if (fixture.sources.size > 1) {
+                                    append("\nfun completionProbe() { ${fixture.completionPrefix} }")
+                                }
                                 append("\nval measurementRevision = $revision")
                             }
                         } else {
@@ -390,7 +398,11 @@ class AnalysisWorkerMeasurementTest {
                         }
                     ProjectSource(source.path, BinaryValue.of(text.encodeToByteArray()))
                 },
-                WorkerLimits(),
+                WorkerLimits(
+                    sourceFiles = limits.sourceFiles,
+                    sourceFileBytes = limits.sourceFileBytes,
+                    sourceBytes = limits.sourceBytes,
+                ),
             )
         val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 31 }))
         val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
