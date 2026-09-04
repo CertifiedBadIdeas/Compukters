@@ -16,19 +16,17 @@
  * limitations under the License.
  */
 
-package ru.lazyhat.compukters.impl.compiler
+package ru.lazyhat.compukters.platform.bundle
 
-import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
-import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
-import ru.lazyhat.compukters.platform.bundle.PlatformBundle
-import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
+import ru.lazyhat.compukters.worker.value.Sha256
 import java.nio.file.Path
 import java.util.zip.ZipFile
 
-internal object PackagedPlatformLoader {
+object PackagedPlatformBundleLoader {
     fun load(
         classpath: List<Path>,
-        compilerIdentity: WorkerIdentity,
+        languageVersion: String,
+        contentHash: Sha256,
     ): PlatformBundle {
         val candidates =
             classpath.mapNotNull { path ->
@@ -44,17 +42,18 @@ internal object PackagedPlatformLoader {
                 }
             }
         check(candidates.size == 1) { "compiler payload must contain exactly one Compukters platform bundle" }
-        return admit(candidates.single(), compilerIdentity)
+        return admit(candidates.single(), languageVersion, contentHash)
     }
 
     fun admit(
         platform: PlatformBundle,
-        compilerIdentity: WorkerIdentity,
+        languageVersion: String,
+        contentHash: Sha256,
     ): PlatformBundle {
-        check(platform.identity.languageVersion == compilerIdentity.languageVersion) {
+        check(platform.identity.languageVersion == languageVersion) {
             "Compukters platform language identity does not match compiler worker"
         }
-        check(Hash256.of(platform.identity.contentHash.toByteArray()) == compilerIdentity.platformAbi) {
+        check(platform.identity.contentHash == contentHash) {
             "Compukters platform content identity does not match compiler worker"
         }
         return platform

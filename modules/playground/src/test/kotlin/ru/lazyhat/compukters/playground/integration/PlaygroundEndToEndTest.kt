@@ -79,7 +79,8 @@ class PlaygroundEndToEndTest {
             val stderr = ByteArrayOutputStream()
             var executed = false
             try {
-                project.resolve("main.kt").writeText("fun main( {")
+                project.resolve("compukter.toml").writeText("format = 1\nname = \"invalid\"\n")
+                project.resolve("main.kt").writeText("fun main() { if ( }")
                 val application =
                     PlaygroundApplication(
                         compilerFactory = ::compiler,

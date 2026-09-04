@@ -39,7 +39,9 @@ import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
+import ru.lazyhat.compukters.platform.bundle.PackagedPlatformBundleLoader
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
+import ru.lazyhat.compukters.worker.value.Sha256
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ExecutorService
@@ -106,7 +108,13 @@ internal class NeoForgeCompilerService private constructor(
                 checkNotNull(NeoForgeCompilerService::class.java.getResourceAsStream(WORKER_RESOURCE)) {
                     "packaged compiler worker is missing: $WORKER_RESOURCE"
                 }.use { archive -> PackagedWorkerPayload.publish(archive, paths.payloadRoot) }
-            val platform = PackagedPlatformLoader.load(packaged.classpath, packaged.manifest.identity)
+            val compilerIdentity = packaged.manifest.identity
+            val platform =
+                PackagedPlatformBundleLoader.load(
+                    packaged.classpath,
+                    compilerIdentity.languageVersion,
+                    Sha256.of(compilerIdentity.platformAbi.toByteArray()),
+                )
             val limits = WorkerLimits()
             val launch =
                 WorkerLaunch(
