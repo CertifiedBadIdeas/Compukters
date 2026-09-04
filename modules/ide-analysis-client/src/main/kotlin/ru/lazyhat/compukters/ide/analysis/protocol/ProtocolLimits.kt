@@ -61,6 +61,20 @@ data class AnalysisLimits(
         requireBounded("reference count", references, ProtocolLimits.MAX_REFERENCES)
         requireBounded("detail text bytes", detailTextBytes, ProtocolLimits.MAX_TEXT_BYTES)
     }
+
+    fun supports(requested: AnalysisLimits): Boolean =
+        sourceFiles >= requested.sourceFiles &&
+            sourceFileBytes >= requested.sourceFileBytes &&
+            sourceBytes >= requested.sourceBytes &&
+            frameBytes >= requested.frameBytes &&
+            modules >= requested.modules &&
+            diagnostics >= requested.diagnostics &&
+            diagnosticTextBytes >= requested.diagnosticTextBytes &&
+            semanticTokens >= requested.semanticTokens &&
+            completionItems >= requested.completionItems &&
+            declarationLocations >= requested.declarationLocations &&
+            references >= requested.references &&
+            detailTextBytes >= requested.detailTextBytes
 }
 
 private fun requireBounded(

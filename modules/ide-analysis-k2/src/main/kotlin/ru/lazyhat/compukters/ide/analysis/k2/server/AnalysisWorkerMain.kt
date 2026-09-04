@@ -32,7 +32,7 @@ fun main() {
     TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
     try {
         val bootstrap = AnalysisWorkerBootstrap.load()
-        val limits = AnalysisLimits()
+        val limits = AnalysisLimits(sourceFiles = 512)
         val admission = SnapshotAdmission(bootstrap.temporaryRoot, bootstrap.platform)
         AnalysisWorkerServer(
             bootstrap.identity,
