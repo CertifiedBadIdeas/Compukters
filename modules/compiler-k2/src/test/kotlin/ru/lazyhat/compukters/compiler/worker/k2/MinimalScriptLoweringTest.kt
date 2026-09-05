@@ -862,6 +862,56 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `while loop jumps lower locally and reject outer targets`() =
+        withAdapter { adapter ->
+            val local =
+                adapter.compile(
+                    request(
+                        """
+                        fun main() {
+                            var outer = 0
+                            var sum = 0
+                            while (outer < 4) {
+                                outer = outer + 1
+                                var inner = 0
+                                while (inner < 5) {
+                                    inner = inner + 1
+                                    if (inner == 2) continue
+                                    if (inner == 4) break
+                                    sum = sum + inner
+                                }
+                            }
+                            require(sum == 16)
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+
+            assertNotNull(local.artifact, local.diagnostics.joinToString())
+            assertTrue(local.diagnostics.none { it.severity.name == "ERROR" }, local.diagnostics.toString())
+
+            val outerTarget =
+                adapter.compile(
+                    request(
+                        """
+                        fun main() {
+                            outer@ while (true) {
+                                while (true) break@outer
+                            }
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+
+            assertNull(outerTarget.artifact)
+            assertTrue(outerTarget.hasErrors)
+            assertTrue(
+                outerTarget.diagnostics.any { "outer loop jump" in it.message },
+                outerTarget.diagnostics.toString(),
+            )
+        }
+
+    @Test
     fun `filesystem text facade lowers through exact trusted signatures`() =
         withAdapter { adapter ->
             val result =
