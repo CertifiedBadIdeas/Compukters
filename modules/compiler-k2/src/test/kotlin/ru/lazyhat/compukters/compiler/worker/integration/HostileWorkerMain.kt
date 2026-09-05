@@ -53,7 +53,15 @@ fun main() {
         }
 
         "OVERSIZED" -> {
-            System.out.write(byteArrayOf(0x43, 0x50, 0x4b, 0x57, 2, 0, 3, 0, -1, -1, -1, 127))
+            val header =
+                WorkerCodec
+                    .encodeFrame(WorkerMessageCodec.encode(success(request.requestId.value)))
+                    .copyOf(12)
+            header[8] = -1
+            header[9] = -1
+            header[10] = -1
+            header[11] = 127
+            System.out.write(header)
         }
 
         "STDERR" -> {

@@ -44,7 +44,7 @@ import kotlin.test.assertTrue
 
 class ForkedWorkerRecoveryTest {
     @Test
-    fun `oversized hostile frame exercises protocol v2 size rejection`() {
+    fun `oversized hostile frame exercises size rejection`() {
         withController { controller ->
             val failure = assertIs<PlatformFailure>(compile(controller, "OVERSIZED"))
 

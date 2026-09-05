@@ -102,8 +102,11 @@ class ForkedCompilerWorkerTest {
                     first.artifact.toByteArray().copyOf(4),
                 )
 
-                val syntax = assertIs<CompilerFailure>(compile(controller, "val answer = )"))
-                assertTrue(syntax.diagnostics.any { it.category == DiagnosticCategory.SYNTAX })
+                val syntax = assertIs<CompilerFailure>(compile(controller, "fun main() { if ( }"))
+                assertTrue(
+                    syntax.diagnostics.any { it.category == DiagnosticCategory.SYNTAX },
+                    syntax.diagnostics.toString(),
+                )
                 val type = assertIs<CompilerFailure>(compile(controller, "val answer: Missing = 42"))
                 assertTrue(type.diagnostics.any { it.category == DiagnosticCategory.TYPE })
                 assertIs<CompileSuccess>(compile(controller, program))
