@@ -29,11 +29,11 @@ class LanguageRuntimeGoldenTest {
         val result = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(languageRuntimeArtifact()))
 
         assertContentEquals(fixture("language-runtime.cpkt"), result.bytes)
-        assertEquals(1552, result.bytes.size)
-        assertEquals("968d9b8fbc48fd7f5227837369910f945dba441f08868ae6c0be002a5b452492", result.sha256.toHex())
+        assertEquals(1952, result.bytes.size)
+        assertEquals("0ce5c469e3b918c2dea398a4280b0c698fe32f1806fa89070ad6509c1c856fab", result.sha256.toHex())
         assertEquals(
-            "ab4e670a18323eab2cc1a734e54f1d78df4f89fb24eb68141f2bc747d2480fd6",
-            encodeModuleSections(languageRuntimeArtifact().modules.single(), ArtifactWriteLimits()).semanticHash.toHex(),
+            "a428be16c623a8cd637de3d4daa39fb2d93772e684ff264b01dcc1d3c81a7845",
+            ArtifactWriter.moduleSemanticHash(languageRuntimeArtifact().modules.single()).toHex(),
         )
     }
 }
