@@ -102,6 +102,24 @@ class LibraryModuleLinkerTest {
     }
 
     @Test
+    fun `linker recomputes stack storage after adding a larger library frame`() {
+        val base = libraryModule()
+        val library =
+            base.copy(
+                functions =
+                    base.functions.map { function ->
+                        function.copy(
+                            values = function.values + List(4) { FunctionValue.scalar(ValueType.I64) },
+                        )
+                    },
+            )
+
+        val linked = LibraryModuleLinker.link(application(library), mapOf("sample:library" to library))
+
+        assertEquals(40u, linked.manifest.requiredStackBytes)
+    }
+
+    @Test
     fun `two level libraries link identically for every input map order`() {
         val dependency = libraryModule()
         val facade = facadeModule(ArtifactWriter.moduleSemanticHash(dependency))
