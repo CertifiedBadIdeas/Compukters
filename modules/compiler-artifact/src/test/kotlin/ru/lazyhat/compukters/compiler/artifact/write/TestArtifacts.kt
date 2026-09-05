@@ -29,6 +29,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.ExceptionEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Function
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionValue
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.Manifest
 import ru.lazyhat.compukters.compiler.artifact.model.MetadataText
@@ -69,7 +70,7 @@ internal fun minimalArtifact(instructions: List<Instruction> = listOf(Instructio
                                 name = StringId.of(1u),
                                 signature = TypeRef.Local(TypeId.of(0u)),
                                 flags = setOf(FunctionFlag.STATIC),
-                                registers = emptyList(),
+                                values = emptyList(),
                                 parameterCount = 0u,
                                 firstBlock = BlockId.of(0u),
                                 blockCount = 1u,
@@ -125,7 +126,7 @@ internal fun languageRuntimeArtifact(): Artifact =
                                 name = StringId.of(3u),
                                 signature = TypeRef.Local(TypeId.of(2u)),
                                 flags = setOf(FunctionFlag.STATIC),
-                                registers =
+                                values =
                                     listOf(
                                         ValueType.Ref(false, TypeRef.Local(TypeId.of(0u))),
                                         ValueType.Ref(true, TypeRef.Local(TypeId.of(0u))),
@@ -135,7 +136,7 @@ internal fun languageRuntimeArtifact(): Artifact =
                                         ValueType.I32,
                                         ValueType.Ref(false, TypeRef.Local(TypeId.of(0u))),
                                         ValueType.I32,
-                                    ),
+                                    ).map(FunctionValue::scalar),
                                 parameterCount = 0u,
                                 firstBlock = BlockId.of(0u),
                                 blockCount = 5u,

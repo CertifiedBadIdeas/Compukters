@@ -39,6 +39,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Function
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionValue
 import ru.lazyhat.compukters.compiler.artifact.model.Import
 import ru.lazyhat.compukters.compiler.artifact.model.ImportId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
@@ -1127,7 +1128,7 @@ class ArtifactValidatorTest {
                             functions =
                                 listOf(
                                     caller.copy(
-                                        registers = listOf(ValueType.Bool, ValueType.I32),
+                                        values = listOf(ValueType.Bool, ValueType.I32).map(FunctionValue::scalar),
                                         parameterCount = 1u,
                                         blockCount = 4u,
                                     ),
@@ -1250,10 +1251,10 @@ class ArtifactValidatorTest {
                             functions =
                                 listOf(
                                     function.copy(
-                                        registers =
-                                            function.registers.toMutableList().also {
+                                        values =
+                                            function.values.toMutableList().also {
                                                 it[exception.exceptionRegister.value.toInt()] =
-                                                    ValueType.Ref(true, TypeRef.Local(TypeId.of(0u)))
+                                                    FunctionValue.scalar(ValueType.Ref(true, TypeRef.Local(TypeId.of(0u))))
                                             },
                                     ),
                                 ),
@@ -1347,7 +1348,7 @@ private fun classInitializerArtifact(): Artifact {
                                 name = StringId.of(1u),
                                 signature = TypeRef.Local(TypeId.of(0u)),
                                 flags = setOf(FunctionFlag.STATIC),
-                                registers = emptyList(),
+                                values = emptyList(),
                                 parameterCount = 0u,
                                 firstBlock = BlockId.of(1u),
                                 blockCount = 1u,
@@ -1400,7 +1401,7 @@ private fun stringArrayEntryArtifact(): Artifact {
                                 name = StringId.of(1u),
                                 signature = TypeRef.Local(TypeId.of(2u)),
                                 flags = setOf(FunctionFlag.STATIC),
-                                registers = listOf(arrayValue),
+                                values = listOf(FunctionValue.scalar(arrayValue)),
                                 parameterCount = 1u,
                                 firstBlock = BlockId.of(0u),
                                 blockCount = 1u,
@@ -1463,7 +1464,9 @@ private fun fieldInstructionArtifact(): Artifact {
                                 name = StringId.of(2u),
                                 signature = TypeRef.Local(TypeId.of(1u)),
                                 flags = setOf(FunctionFlag.STATIC),
-                                registers = listOf(boxValue, ValueType.I32, ValueType.I32, ValueType.I32),
+                                values =
+                                    listOf(boxValue, ValueType.I32, ValueType.I32, ValueType.I32)
+                                        .map(FunctionValue::scalar),
                                 parameterCount = 0u,
                                 firstBlock = BlockId.of(0u),
                                 blockCount = 1u,
@@ -1532,7 +1535,12 @@ private fun Artifact.withFieldRegisterType(
                         functions =
                             listOf(
                                 module.functions.single().let { function ->
-                                    function.copy(registers = function.registers.toMutableList().also { it[index] = type })
+                                    function.copy(
+                                        values =
+                                            function.values.toMutableList().also {
+                                                it[index] = FunctionValue.scalar(type)
+                                            },
+                                    )
                                 },
                             ),
                     )
@@ -1600,7 +1608,7 @@ private fun executableArtifact(
                                     StringId.of(2u),
                                     TypeRef.Local(TypeId.of(0u)),
                                     setOf(FunctionFlag.STATIC, FunctionFlag.SUSPENDING),
-                                    listOf(ValueType.I32, stringType, stringType, stringType),
+                                    listOf(ValueType.I32, stringType, stringType, stringType).map(FunctionValue::scalar),
                                     4u,
                                     BlockId.of(0u),
                                     2u,
@@ -1612,7 +1620,7 @@ private fun executableArtifact(
                                     StringId.of(1u),
                                     TypeRef.Local(TypeId.of(1u)),
                                     setOfNotNull(FunctionFlag.STATIC, FunctionFlag.SUSPENDING.takeIf { calleeSuspending }),
-                                    listOf(ValueType.I32, stringType),
+                                    listOf(ValueType.I32, stringType).map(FunctionValue::scalar),
                                     2u,
                                     BlockId.of(2u),
                                     1u,
@@ -1678,7 +1686,8 @@ private fun executableArtifact(
                                     StringId.of(0u),
                                     TypeRef.Local(TypeId.of(1u)),
                                     setOf(FunctionFlag.STATIC),
-                                    listOf(ValueType.I32, ValueType.Ref(false, TypeRef.Local(TypeId.of(0u)))),
+                                    listOf(ValueType.I32, ValueType.Ref(false, TypeRef.Local(TypeId.of(0u))))
+                                        .map(FunctionValue::scalar),
                                     2u,
                                     BlockId.of(0u),
                                     1u,
@@ -1717,8 +1726,16 @@ private fun importedFieldArtifact(): Artifact {
     val base = executableArtifact(Instruction.Const(RegisterId.of(0u), ConstantId.of(0u)))
     val application = base.modules[0]
     val library = base.modules[1]
-    val applicationStrings = application.strings + listOf(MetadataText.of("zz.Left"), MetadataText.of("zz.Right"), MetadataText.of("zz.Right.code"))
-    val libraryStrings = library.strings + listOf(MetadataText.of("zz.Left"), MetadataText.of("zz.Left.code"), MetadataText.of("zz.Right"), MetadataText.of("zz.Right.code"))
+    val applicationStrings =
+        application.strings + listOf(MetadataText.of("zz.Left"), MetadataText.of("zz.Right"), MetadataText.of("zz.Right.code"))
+    val libraryStrings =
+        library.strings +
+            listOf(
+                MetadataText.of("zz.Left"),
+                MetadataText.of("zz.Left.code"),
+                MetadataText.of("zz.Right"),
+                MetadataText.of("zz.Right.code"),
+            )
     val leftType = TypeRef.Local(TypeId.of(2u))
     val rightType = TypeRef.Local(TypeId.of(3u))
     val expandedLibrary =
@@ -1757,7 +1774,14 @@ private fun importedFieldArtifact(): Artifact {
                     ),
             blocks =
                 application.blocks.toMutableList().also {
-                    it[0] = it[0].copy(instructions = listOf(Instruction.StaticGet(RegisterId.of(0u), FieldRef.Imported(ImportId.of(4u))), Instruction.Jump(BlockId.of(1u))))
+                    it[0] =
+                        it[0].copy(
+                            instructions =
+                                listOf(
+                                    Instruction.StaticGet(RegisterId.of(0u), FieldRef.Imported(ImportId.of(4u))),
+                                    Instruction.Jump(BlockId.of(1u)),
+                                ),
+                        )
                 },
         )
     return base.copy(modules = listOf(expandedApplication, expandedLibrary))
@@ -1785,7 +1809,11 @@ private fun charArrayArtifact(
                         },
                     functions =
                         module.functions.toMutableList().also {
-                            it[0] = entry.copy(registers = entry.registers + arrayType, parameterCount = parameterCount)
+                            it[0] =
+                                entry.copy(
+                                    values = entry.values + FunctionValue.scalar(arrayType),
+                                    parameterCount = parameterCount,
+                                )
                         },
                 ),
                 artifact.modules[1],

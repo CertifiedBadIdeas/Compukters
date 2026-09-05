@@ -257,7 +257,7 @@ internal class ReachabilityGraph(
         function.owner?.let { markType(module, it) }
         markString(module, function.name.value.toInt())
         markType(module, function.signature)
-        function.registers.forEach { markValueType(module, it) }
+        function.values.forEach { markValueType(module, it.semanticType) }
         markRange(function.firstBlock.value, function.blockCount) { markBlock(module, it) }
         markRange(function.firstException, function.exceptionCount) { markException(module, it) }
         artifact.modules[module].debug.withIndex().forEach { (debugIndex, debug) ->

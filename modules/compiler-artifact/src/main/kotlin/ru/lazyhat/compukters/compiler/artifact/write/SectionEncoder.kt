@@ -296,13 +296,13 @@ private fun encodeFunction(
                     (if (FunctionFlag.VIRTUAL in value.flags) 4u else 0u) or
                     (if (FunctionFlag.ABSTRACT in value.flags) 8u else 0u),
             )
-            writeU16(value.registers.size.toUInt())
+            writeU16(value.values.size.toUInt())
             writeU16(value.parameterCount)
             writeU32(value.firstBlock.value)
             writeU32(value.blockCount)
             writeU32(value.firstException)
             writeU32(value.exceptionCount)
-            value.registers.forEach(::writeValueType)
+            value.values.forEach { writeValueType(it.semanticType) }
         }.toByteArray()
 
 private fun encodeDebug(

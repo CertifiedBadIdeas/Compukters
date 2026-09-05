@@ -21,9 +21,40 @@ package ru.lazyhat.compukters.compiler.artifact.model
 import ru.lazyhat.compukters.compiler.artifact.pool.ConstantPoolBuilder
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 
 class ArtifactModelTest {
+    @Test
+    fun `physical shape aligns mixed components without widening references`() {
+        val shape = PhysicalShape(listOf(PhysicalAtom.I32, PhysicalAtom.REF32, PhysicalAtom.I64))
+
+        assertEquals(16u, shape.byteSize)
+        assertEquals(8u, shape.alignment)
+        assertEquals(listOf(0u, 4u, 8u), shape.componentOffsets)
+        assertEquals(4u, PhysicalAtom.REF32.byteSize)
+    }
+
+    @Test
+    fun `physical shape rejects an empty value`() {
+        assertFailsWith<IllegalArgumentException> {
+            PhysicalShape(emptyList())
+        }
+    }
+
+    @Test
+    fun `safepoint root identifies one reference component`() {
+        val expected = ValueComponent(RegisterId.of(3u), 1u)
+        val roots =
+            SafepointRoots(
+                block = BlockId.of(0u),
+                instructionBoundary = 2u,
+                references = listOf(expected),
+            )
+
+        assertEquals(expected, roots.references.single())
+    }
+
     @Test
     fun `logical block owns typed instructions but no physical encoding`() {
         val block =
@@ -81,12 +112,26 @@ class ArtifactModelTest {
                                         name = StringId.of(1u),
                                         signature = TypeRef.Local(TypeId.of(0u)),
                                         flags = setOf(FunctionFlag.STATIC),
-                                        registers = emptyList(),
+                                        values =
+                                            listOf(
+                                                FunctionValue(
+                                                    semanticType = ValueType.I32,
+                                                    physicalShape = PhysicalShape(listOf(PhysicalAtom.I32)),
+                                                ),
+                                            ),
                                         parameterCount = 0u,
                                         firstBlock = BlockId.of(0u),
                                         blockCount = 1u,
                                         firstException = 0u,
                                         exceptionCount = 0u,
+                                        safepointRoots =
+                                            listOf(
+                                                SafepointRoots(
+                                                    block = BlockId.of(0u),
+                                                    instructionBoundary = 0u,
+                                                    references = emptyList(),
+                                                ),
+                                            ),
                                     ),
                                 ),
                             blocks =
@@ -102,6 +147,17 @@ class ArtifactModelTest {
             )
 
         assertEquals(ModuleKind.APPLICATION, artifact.modules.single().kind)
+        assertEquals(
+            PhysicalAtom.I32,
+            artifact.modules
+                .single()
+                .functions
+                .single()
+                .values
+                .single()
+                .physicalShape.components
+                .single(),
+        )
         assertEquals(
             Instruction.Return(Destination.Unit),
             artifact.modules

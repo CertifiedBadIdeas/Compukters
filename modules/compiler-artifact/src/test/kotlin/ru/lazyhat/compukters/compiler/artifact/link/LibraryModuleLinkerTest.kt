@@ -37,6 +37,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Function
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionValue
 import ru.lazyhat.compukters.compiler.artifact.model.Import
 import ru.lazyhat.compukters.compiler.artifact.model.ImportId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
@@ -74,7 +75,12 @@ class LibraryModuleLinkerTest {
         assertEquals(1, linkedLibrary.functions.size)
         assertEquals(FunctionId.of(0u), linkedClass.initializer)
         assertEquals(TypeRef.Local(TypeId.of(0u)), linkedLibrary.functions.single().owner)
-        assertTrue(linkedLibrary.blocks.single().instructions.any { it is Instruction.StaticSet })
+        assertTrue(
+            linkedLibrary.blocks
+                .single()
+                .instructions
+                .any { it is Instruction.StaticSet },
+        )
     }
 
     @Test
@@ -143,7 +149,13 @@ class LibraryModuleLinkerTest {
 
         val linked = LibraryModuleLinker.link(input, mapOf("sample" to sample, "zeta" to zeta))
 
-        assertEquals(listOf(1u, 2u), linked.modules.first().imports.map { it.targetModule.value })
+        assertEquals(
+            listOf(1u, 2u),
+            linked.modules
+                .first()
+                .imports
+                .map { it.targetModule.value },
+        )
     }
 
     @Test
@@ -176,7 +188,7 @@ class LibraryModuleLinkerTest {
                                             ),
                                     ),
                                 ),
-                            functions = app.functions.map { it.copy(registers = listOf(ValueType.I32)) },
+                            functions = app.functions.map { it.copy(values = listOf(FunctionValue.scalar(ValueType.I32))) },
                         ),
                     ),
             )
@@ -385,7 +397,7 @@ class LibraryModuleLinkerTest {
             name = name,
             signature = TypeRef.Local(signature),
             flags = setOf(FunctionFlag.STATIC),
-            registers = if (constant == null) emptyList() else listOf(ValueType.I32),
+            values = if (constant == null) emptyList() else listOf(FunctionValue.scalar(ValueType.I32)),
             parameterCount = 0u,
             firstBlock = block,
             blockCount = 1u,
@@ -446,7 +458,7 @@ private fun applicationWithInitializedLibraryClass(): Pair<Artifact, Module> {
                         name = StringId.of(2u),
                         signature = TypeRef.Local(TypeId.of(1u)),
                         flags = setOf(FunctionFlag.STATIC),
-                        registers = listOf(ValueType.Ref(nullable = false, TypeRef.Local(TypeId.of(0u)))),
+                        values = listOf(FunctionValue.scalar(ValueType.Ref(nullable = false, TypeRef.Local(TypeId.of(0u))))),
                         parameterCount = 0u,
                         firstBlock = BlockId.of(0u),
                         blockCount = 1u,
@@ -494,7 +506,7 @@ private fun applicationWithInitializedLibraryClass(): Pair<Artifact, Module> {
                         name = StringId.of(3u),
                         signature = TypeRef.Local(TypeId.of(0u)),
                         flags = setOf(FunctionFlag.STATIC),
-                        registers = listOf(ValueType.Ref(nullable = false, TypeRef.Imported(ImportId.of(0u)))),
+                        values = listOf(FunctionValue.scalar(ValueType.Ref(nullable = false, TypeRef.Imported(ImportId.of(0u))))),
                         parameterCount = 0u,
                         firstBlock = BlockId.of(0u),
                         blockCount = 1u,

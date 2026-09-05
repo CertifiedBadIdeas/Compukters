@@ -87,6 +87,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Function
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionValue
 import ru.lazyhat.compukters.compiler.artifact.model.Import
 import ru.lazyhat.compukters.compiler.artifact.model.ImportId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
@@ -798,7 +799,7 @@ internal object KotlinProjectLowering {
                     name = requireNotNull(metadataIds[functionArtifactNames[function.symbol]]),
                     signature = TypeRef.Local(requireNotNull(functionTypeIds[function.symbol])),
                     flags = flags,
-                    registers = parameterTypes + compiled.localTypes,
+                    values = (parameterTypes + compiled.localTypes).map(FunctionValue::scalar),
                     parameterCount = parameterTypes.size.toUInt(),
                     firstBlock = BlockId.of(firstBlock.toUInt()),
                     blockCount = compiled.blocks.size.toUInt(),
@@ -836,7 +837,7 @@ internal object KotlinProjectLowering {
                     name = requireNotNull(metadataIds[constructorName(declaration)]),
                     signature = TypeRef.Local(requireNotNull(constructorTypeIds[declaration.symbol])),
                     flags = setOf(FunctionFlag.STATIC),
-                    registers = parameterTypes + resultType,
+                    values = (parameterTypes + resultType).map(FunctionValue::scalar),
                     parameterCount = parameterTypes.size.toUInt(),
                     firstBlock = BlockId.of(firstBlock.toUInt()),
                     blockCount = 1u,
@@ -870,7 +871,10 @@ internal object KotlinProjectLowering {
                     name = requireNotNull(metadataIds["<clinit>"]),
                     signature = TypeRef.Local(requireNotNull(initializerTypeIds[declaration.symbol])),
                     flags = setOf(FunctionFlag.STATIC),
-                    registers = List(layout.enumEntries.size) { ValueType.Ref(nullable = false, type = TypeRef.Local(layout.typeId)) },
+                    values =
+                        List(layout.enumEntries.size) {
+                            FunctionValue.scalar(ValueType.Ref(nullable = false, type = TypeRef.Local(layout.typeId)))
+                        },
                     parameterCount = 0u,
                     firstBlock = BlockId.of(firstBlock.toUInt()),
                     blockCount = (layout.enumEntries.size + 1).toUInt(),
@@ -1090,7 +1094,7 @@ internal object KotlinProjectLowering {
             )
         val maximumCallDepth = 16u
         val maximumFrameBytes =
-            loweredFunctions.maxOfOrNull { function -> function.registers.size.toULong() * 16uL + 32uL } ?: 32uL
+            loweredFunctions.maxOfOrNull { function -> function.values.size.toULong() * 16uL + 32uL } ?: 32uL
         val requiredStackBytes = maximumFrameBytes * maximumCallDepth.toULong()
         require(requiredStackBytes <= UInt.MAX_VALUE.toULong()) { "required frame storage exceeds u32" }
         return Artifact(
