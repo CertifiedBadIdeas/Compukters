@@ -42,10 +42,9 @@ class SectionEncoderTest {
 
     @Test
     fun `vector A module semantic digest matches Rust authority`() {
-        val encoded = encodeModuleSections(minimalArtifact().modules.single(), ArtifactWriteLimits())
         assertEquals(
-            "f1379df5fe4e751a1df57cf6be2d1575956f8c3e3ebaabe795820b44de2185ee",
-            encoded.semanticHash.joinToString("") { "%02x".format(it) },
+            "a94ff3e025b761c62110a3adbbb5818e788e9d8021fe96f99f0f4e2c0b99325d",
+            ArtifactWriter.moduleSemanticHash(minimalArtifact().modules.single()).toHex(),
         )
         assertEquals(32, MessageDigest.getInstance("SHA-256").digest().size)
     }

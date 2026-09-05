@@ -27,10 +27,10 @@ import kotlin.test.assertIs
 
 class MinimalArtifactGoldenTest {
     @Test
-    fun `writer publishes format v2 and a canonical no-argument entry tag`() {
+    fun `writer publishes format v3 and a canonical no-argument entry tag`() {
         val result = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(minimalArtifact()))
 
-        assertEquals(2, result.bytes[4].toInt() and 0xff)
+        assertEquals(3, result.bytes[4].toInt() and 0xff)
         assertEquals(0, result.bytes[48].toInt() and 0xff)
         assertContentEquals(ByteArray(15), result.bytes.copyOfRange(49, 64))
     }
@@ -40,10 +40,10 @@ class MinimalArtifactGoldenTest {
         val expected = fixture("vector-a.cpkt")
         val result = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(minimalArtifact()))
 
-        assertEquals(1144, result.bytes.size)
+        assertEquals(1216, result.bytes.size)
         assertContentEquals(expected, result.bytes)
         assertEquals(
-            "ffdf3638f06189ffee32fe1c0df945a4f47e4a4efe7064fd37099139e3b809ac",
+            "787877cb802761cefafef5343769857b5e26bb9105bbd34a9df98d37de464f77",
             result.sha256.toHex(),
         )
     }
