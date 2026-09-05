@@ -564,7 +564,10 @@ val assertCompilerWorkerIsolation = tasks.register("assertCompilerWorkerIsolatio
 
         val payloadLibraries = workerPayloadDirectory.get().asFile.toPath().resolve("lib")
         val actualNames = Files.list(payloadLibraries).use { paths -> paths.map { it.fileName.toString() }.toList().toSet() }
-        val expectedNames = (workerRuntimeClasspath.files + workerJar.get().asFile).map { it.name }.toSet()
+        val expectedNames =
+            (workerRuntimeClasspath.files + guestPlatformSources.files + workerJar.get().asFile)
+                .map { it.name }
+                .toSet()
         check(actualNames == expectedNames) { "worker payload differs from its fixed resolved runtime classpath" }
         val forbiddenGroups = listOf("minecraft", "neoforge", "fabric", "architectury")
         val forbidden = workerArtifacts.filter { artifact -> forbiddenGroups.any { it in artifact.moduleVersion.id.group.lowercase() } }
