@@ -25,13 +25,13 @@ import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
-/** Strict inverse of the canonical CPKT v2 writer. */
+/** Strict inverse of the canonical CPKT v3 writer. */
 object ArtifactReader {
     fun read(bytes: ByteArray): Artifact {
         require(bytes.size >= 96) { "artifact is truncated" }
         val header = Cursor(bytes, 0, 64)
         require(header.bytes(4).contentEquals(MAGIC)) { "invalid artifact magic" }
-        require(header.u16() == 2u && header.u16() == 0u) { "unsupported artifact format" }
+        require(header.u16() == 3u && header.u16() == 0u) { "unsupported artifact format" }
         val runtimeAbi = AbiVersion(header.u16().toUShort(), header.u16().toUShort())
         require(header.u16() == 64u && header.u16() == 32u) { "unsupported artifact layout" }
         val sectionCount = header.u32().checkedInt("section count")
@@ -92,6 +92,11 @@ private data class Section(
 private data class ModuleRecord(
     val name: StringId,
     val kind: ModuleKind,
+)
+
+private data class FunctionRoots(
+    val function: FunctionId,
+    val roots: SafepointRoots,
 )
 
 private fun decodeManifest(bytes: ByteArray): Manifest {
@@ -155,6 +160,9 @@ private fun decodeModule(
     val code = records(CODE).map(::decodeCode)
     val blockRecords = records(BLOCKS)
     require(blockRecords.size == code.size) { "BLOCKS and CODE counts differ" }
+    val decodedFunctions = records(FUNCTIONS).map(::decodeFunction)
+    val rootsByFunction = records(SAFEPOINT_ROOTS).map(::decodeSafepointRoots).groupBy { it.function }
+    require(rootsByFunction.keys.all { it.value.toInt() in decodedFunctions.indices }) { "root map owner is outside function table" }
     return Module(
         name = record.name,
         kind = record.kind,
@@ -165,7 +173,15 @@ private fun decodeModule(
         imports = records(IMPORTS).map(::decodeImport),
         exports = records(EXPORTS).map(::decodeExport),
         fields = records(FIELDS).map(::decodeField),
-        functions = records(FUNCTIONS).map(::decodeFunction),
+        functions =
+            decodedFunctions.mapIndexed { index, function ->
+                function.copy(
+                    safepointRoots =
+                        rootsByFunction[FunctionId.of(index.toUInt())]
+                            .orEmpty()
+                            .map(FunctionRoots::roots),
+                )
+            },
         blocks = blockRecords.indices.map { decodeBlock(blockRecords[it], code[it]) },
         exceptions = records(EXCEPTIONS).map(::decodeException),
         debug =
@@ -306,7 +322,7 @@ private fun decodeFunction(bytes: ByteArray): ru.lazyhat.compukters.compiler.art
             },
             FunctionFlag.ABSTRACT.takeIf { mask and 8u != 0u },
         )
-    val registers = c.u16().toInt()
+    val values = c.u16().toInt()
     val parameters = c.u16()
     val firstBlock = BlockId.of(c.u32())
     val blockCount = c.u32()
@@ -318,8 +334,25 @@ private fun decodeFunction(bytes: ByteArray): ru.lazyhat.compukters.compiler.art
             name,
             signature,
             flags,
-            List(registers) {
-                FunctionValue.scalar(c.valueType())
+            List(values) {
+                val semanticType = c.valueType()
+                val componentCount = c.u16().toInt()
+                require(c.u16() == 0u)
+                FunctionValue(
+                    semanticType,
+                    PhysicalShape(
+                        List(componentCount) {
+                            when (c.u8()) {
+                                0u -> PhysicalAtom.I32
+                                1u -> PhysicalAtom.I64
+                                2u -> PhysicalAtom.F32
+                                3u -> PhysicalAtom.F64
+                                4u -> PhysicalAtom.REF32
+                                else -> error("invalid physical atom tag")
+                            }
+                        },
+                    ),
+                )
             },
             parameters,
             firstBlock,
@@ -329,6 +362,21 @@ private fun decodeFunction(bytes: ByteArray): ru.lazyhat.compukters.compiler.art
         )
     require(c.done())
     return result
+}
+
+private fun decodeSafepointRoots(bytes: ByteArray): FunctionRoots {
+    val c = Cursor(bytes)
+    val function = FunctionId.of(c.u32())
+    val block = BlockId.of(c.u32())
+    val boundary = c.u32()
+    val count = c.u16().toInt()
+    require(c.u16() == 0u)
+    val roots =
+        List(count) {
+            ValueComponent(RegisterId.of(c.u16()), c.u16().toUShort())
+        }
+    require(c.done()) { "trailing safepoint root bytes" }
+    return FunctionRoots(function, SafepointRoots(block, boundary, roots))
 }
 
 private fun decodeBlock(
@@ -927,4 +975,5 @@ private const val BLOCKS = 0x0107
 private const val CODE = 0x0108
 private const val EXCEPTIONS = 0x0109
 private const val UTF16_LITERALS = 0x010a
+private const val SAFEPOINT_ROOTS = 0x010b
 private const val DEBUG = 0x0110

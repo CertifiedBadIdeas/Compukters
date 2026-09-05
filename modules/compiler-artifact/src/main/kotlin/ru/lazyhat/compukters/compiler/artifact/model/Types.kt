@@ -42,12 +42,13 @@ sealed interface ValueType {
 enum class PhysicalAtom(
     val byteSize: UInt,
     val alignment: UInt,
+    internal val artifactTag: UInt,
 ) {
-    I32(4u, 4u),
-    I64(8u, 8u),
-    F32(4u, 4u),
-    F64(8u, 8u),
-    REF32(4u, 4u),
+    I32(4u, 4u, 0u),
+    I64(8u, 8u, 1u),
+    F32(4u, 4u, 2u),
+    F64(8u, 8u, 3u),
+    REF32(4u, 4u, 4u),
 }
 
 data class PhysicalShape(

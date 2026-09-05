@@ -23,6 +23,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.DebugEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
@@ -42,6 +43,7 @@ internal const val BLOCKS = 0x0107
 internal const val CODE = 0x0108
 internal const val EXCEPTIONS = 0x0109
 internal const val UTF16_LITERALS = 0x010a
+internal const val SAFEPOINT_ROOTS = 0x010b
 internal const val DEBUG = 0x0110
 
 internal data class EncodedSection(
@@ -130,6 +132,18 @@ internal fun encodeModuleSections(
                 UTF16_LITERALS,
                 encodeIndexed(module.utf16Literals.map { it.toLittleEndianByteArray() }, maximum),
                 module.utf16Literals.size.toUInt(),
+            ),
+            EncodedSection(
+                SAFEPOINT_ROOTS,
+                encodeIndexed(
+                    module.functions.flatMapIndexed { functionIndex, function ->
+                        function.safepointRoots.map { roots ->
+                            encodeSafepointRoots(FunctionId.of(functionIndex.toUInt()), roots, maximum)
+                        }
+                    },
+                    maximum,
+                ),
+                module.functions.sumOf { it.safepointRoots.size }.toUInt(),
             ),
         )
     val debug =
@@ -302,7 +316,33 @@ private fun encodeFunction(
             writeU32(value.blockCount)
             writeU32(value.firstException)
             writeU32(value.exceptionCount)
-            value.values.forEach { writeValueType(it.semanticType) }
+            value.values.forEach { functionValue ->
+                writeValueType(functionValue.semanticType)
+                writeU16(
+                    functionValue.physicalShape.components.size
+                        .toUInt(),
+                )
+                writeU16(0u)
+                functionValue.physicalShape.components.forEach { writeU8(it.artifactTag) }
+            }
+        }.toByteArray()
+
+private fun encodeSafepointRoots(
+    function: FunctionId,
+    roots: ru.lazyhat.compukters.compiler.artifact.model.SafepointRoots,
+    maximum: Int,
+): ByteArray =
+    BinarySink(maximum)
+        .apply {
+            writeU32(function.value)
+            writeU32(roots.block.value)
+            writeU32(roots.instructionBoundary)
+            writeU16(roots.references.size.toUInt())
+            writeU16(0u)
+            roots.references.forEach { reference ->
+                writeU16(reference.value.value.toUInt())
+                writeU16(reference.component.toUInt())
+            }
         }.toByteArray()
 
 private fun encodeDebug(
@@ -324,7 +364,7 @@ private fun encodeDebug(
 
 private fun semanticHash(sections: List<EncodedSection>): ByteArray {
     val digest = MessageDigest.getInstance("SHA-256")
-    digest.update("Compukter module v1\u0000".toByteArray(StandardCharsets.US_ASCII))
+    digest.update("Compukter module v2\u0000".toByteArray(StandardCharsets.US_ASCII))
     sections.sortedBy(EncodedSection::kind).forEach { section ->
         digest.update(BinarySink(2).apply { writeU16(section.kind.toUInt()) }.toByteArray())
         digest.update(BinarySink(8).apply { writeU64(section.payload.size.toULong()) }.toByteArray())

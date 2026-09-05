@@ -89,7 +89,7 @@ private fun executableInstructionsArtifact(): Artifact {
                     ),
                 ),
         )
-    val libraryHash = encodeModuleSections(library, limits).semanticHash
+    val libraryHash = ArtifactWriter.moduleSemanticHash(library, limits)
     val stringType = ValueType.Ref(false, TypeRef.Imported(ImportId.of(0u)))
     val charArrayType = ValueType.Ref(false, TypeRef.Local(TypeId.of(3u)))
     val app =
