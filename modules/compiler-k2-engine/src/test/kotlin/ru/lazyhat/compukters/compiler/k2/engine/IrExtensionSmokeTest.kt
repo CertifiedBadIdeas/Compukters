@@ -69,17 +69,21 @@ class IrExtensionSmokeTest {
                 fun exclusive(start: Int, end: Int) {
                     for (index in start until end) println(index)
                 }
+
+                fun rangeUntil(start: Int, end: Int) {
+                    for (index in start..<end) println(index)
+                }
                 """.trimIndent(),
             )
         val facts = IrFacts().also { module.accept(it, null) }
 
-        assertEquals(2, facts.blockOrigins.count { it == "FOR_LOOP" }, facts.blockOrigins.toString())
+        assertEquals(3, facts.blockOrigins.count { it == "FOR_LOOP" }, facts.blockOrigins.toString())
         assertEquals(0, facts.variableOrigins.count { it == "FOR_LOOP_ITERATOR" }, facts.variableOrigins.toString())
-        assertEquals(2, facts.variableOrigins.count { it == "FOR_LOOP_VARIABLE" }, facts.variableOrigins.toString())
+        assertEquals(3, facts.variableOrigins.count { it == "FOR_LOOP_VARIABLE" }, facts.variableOrigins.toString())
         assertEquals(0, facts.whileOrigins.size, facts.whileOrigins.toString())
-        assertEquals(2, facts.doWhileOrigins.count { it == "DO_WHILE_COUNTER_LOOP" }, facts.doWhileOrigins.toString())
-        assertEquals(2, facts.breakCount)
-        assertEquals(2, facts.callNames.count { it == "kotlin.jvm.internal.<int-prefix-incr-decr>" }, facts.callNames.toString())
+        assertEquals(3, facts.doWhileOrigins.count { it == "DO_WHILE_COUNTER_LOOP" }, facts.doWhileOrigins.toString())
+        assertEquals(3, facts.breakCount)
+        assertEquals(3, facts.callNames.count { it == "kotlin.jvm.internal.<int-prefix-incr-decr>" }, facts.callNames.toString())
         assertTrue("kotlin.internal.ir.lessOrEqual" in facts.callNames, facts.callNames.toString())
         assertTrue("kotlin.internal.ir.EQEQ" in facts.callNames, facts.callNames.toString())
         assertTrue("kotlin.internal.ir.less" in facts.callNames, facts.callNames.toString())

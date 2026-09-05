@@ -24,3 +24,7 @@ public class IntRange(
 }
 
 public operator fun Int.rangeTo(other: Int): IntRange = IntRange(this, other)
+
+public external infix fun Int.until(other: Int): IntRange
+
+public external operator fun Int.rangeUntil(other: Int): IntRange

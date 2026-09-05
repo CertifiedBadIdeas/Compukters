@@ -965,6 +965,67 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `exclusive Int for loops lower without range or iterator allocation`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        fun main() {
+                            var untilSum = 0
+                            for (value in 0 until 5) {
+                                untilSum = untilSum + value
+                            }
+                            require(untilSum == 10)
+
+                            var rangeUntilSum = 0
+                            for (value in 0..<5) {
+                                rangeUntilSum = rangeUntilSum + value
+                            }
+                            require(rangeUntilSum == 10)
+
+                            var empty = 0
+                            for (value in Int.MIN_VALUE until Int.MIN_VALUE) {
+                                empty = empty + 1
+                            }
+                            require(empty == 0)
+
+                            var nearMaximum = 0
+                            for (value in (Int.MAX_VALUE - 2) until Int.MAX_VALUE) {
+                                nearMaximum = nearMaximum + 1
+                            }
+                            require(nearMaximum == 2)
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val application = ArtifactReader.read(artifact).modules.single { it.kind == ModuleKind.APPLICATION }
+            val instructions = application.blocks.flatMap(Block::instructions)
+
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+            assertTrue(instructions.none { it is Instruction.NewObject || it is Instruction.NewArray })
+            assertTrue(instructions.any { it is Instruction.AddI32 })
+            assertTrue(application.blocks.any(Block::loopHeaderSafepoint))
+        }
+
+    @Test
+    fun `unsupported loop forms publish no artifact`() =
+        withAdapter { adapter ->
+            listOf(
+                "fun main() { for (value in 3 downTo 1) { value + 1 } }",
+                "fun main() { for (value in (1..5).step(2)) { value + 1 } }",
+                "fun main() { for (value in arrayOf(1)) { value + 1 } }",
+                "fun main() { var value = 0; do { value = value + 1 } while (value < 2) }",
+            ).forEach { source ->
+                val result = adapter.compile(request(source))
+
+                assertNull(result.artifact, source)
+                assertTrue(result.hasErrors, source)
+            }
+        }
+
+    @Test
     fun `filesystem text facade lowers through exact trusted signatures`() =
         withAdapter { adapter ->
             val result =
