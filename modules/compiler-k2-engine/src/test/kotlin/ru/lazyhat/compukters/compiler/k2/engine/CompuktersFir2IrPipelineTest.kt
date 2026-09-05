@@ -254,8 +254,9 @@ class CompuktersFir2IrPipelineTest {
             val artifact = PlatformLibraryFragmentCodec.decode(fragment).artifact.toByteArray()
             assertEquals("CPKT", artifact.copyOfRange(0, 4).decodeToString())
             kotlin.test.assertFalse(artifact.decodeToString().contains("fun answer"))
+            val decoded = ArtifactReader.read(artifact)
             val libraryModule =
-                ArtifactReader.read(artifact).modules.single { module ->
+                decoded.modules.single { module ->
                     module.kind == ModuleKind.LIBRARY &&
                         module.exports.any { export ->
                             export.kind == SymbolKind.FUNCTION &&
@@ -279,7 +280,27 @@ class CompuktersFir2IrPipelineTest {
             assertEquals(SymbolKind.FIELD, exports.getValue("sample.Reason.MISSING").kind)
             assertEquals(1, initializerInstructions.count { it is Instruction.StaticSet })
             assertFalse(exports.containsKey("code"))
+            val largestFrameBytes =
+                decoded.modules
+                    .flatMap { it.functions }
+                    .maxOfOrNull(::compactFrameBytes) ?: 0uL
+            assertEquals(
+                largestFrameBytes * decoded.manifest.maximumCallDepth.toULong(),
+                decoded.manifest.requiredStackBytes.toULong(),
+            )
         }
+    }
+
+    private fun compactFrameBytes(function: ru.lazyhat.compukters.compiler.artifact.model.Function): ULong {
+        var offset = 0uL
+        function.values.forEach { value ->
+            value.physicalShape.components.forEach { component ->
+                val alignment = component.alignment.toULong()
+                offset = (offset + alignment - 1uL) and (alignment - 1uL).inv()
+                offset += component.byteSize
+            }
+        }
+        return (offset + 7uL) and 7uL.inv()
     }
 
     private fun source(
