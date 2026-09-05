@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.compiler.artifact.write
 
+import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
@@ -56,17 +57,73 @@ import ru.lazyhat.compukters.compiler.artifact.model.StringValueType
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
+import ru.lazyhat.compukters.compiler.artifact.model.ValueComponent
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
+private fun exactRoots(artifact: Artifact): Artifact = ReferenceLiveness.derive(artifact)
+
 class ArtifactValidatorTest {
+    @Test
+    fun `functions require exact safepoint roots`() {
+        val source = languageRuntimeArtifact()
+        val module = source.modules.single()
+        val missing = source.copy(modules = listOf(module.copy(functions = module.functions.map { it.copy(safepointRoots = emptyList()) })))
+        val errors = validateArtifact(missing, ArtifactWriteLimits())
+
+        assertTrue(errors.any { it.detail.contains("safepoint roots") }, errors.toString())
+    }
+
+    @Test
+    fun `safepoint roots reject duplicate boundaries invalid components and non canonical maps`() {
+        val source = exactRoots(languageRuntimeArtifact())
+        val module = source.modules.single()
+        val function = module.functions.single()
+        val root = function.safepointRoots.first { it.references.isNotEmpty() }
+        val invalidRoot =
+            root.copy(
+                references =
+                    listOf(
+                        ValueComponent(RegisterId.of(2u), 0u),
+                        ValueComponent(RegisterId.of(2u), 0u),
+                    ),
+            )
+        val invalid =
+            source.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            functions =
+                                listOf(
+                                    function.copy(
+                                        safepointRoots =
+                                            function.safepointRoots
+                                                .filterNot {
+                                                    it.block == root.block && it.instructionBoundary == root.instructionBoundary
+                                                } +
+                                                invalidRoot +
+                                                root,
+                                    ),
+                                ),
+                        ),
+                    ),
+            )
+
+        val errors = validateArtifact(invalid, ArtifactWriteLimits())
+
+        assertTrue(errors.any { it.detail.contains("duplicate instruction boundary") }, errors.toString())
+        assertTrue(errors.any { it.detail.contains("does not identify a Ref32") }, errors.toString())
+        assertTrue(errors.any { it.detail.contains("duplicate reference") }, errors.toString())
+        assertTrue(errors.any { it.detail.contains("exact canonical") }, errors.toString())
+    }
+
     @Test
     fun `class initializer must resolve to a static owned non suspending unit function`() {
         val artifact = classInitializerArtifact()
-        assertEquals(emptyList(), validateArtifact(artifact, ArtifactWriteLimits()))
+        assertEquals(emptyList(), validateArtifact(exactRoots(artifact), ArtifactWriteLimits()))
 
         fun errors(transform: (Module) -> Module): List<ArtifactWriteError> =
             validateArtifact(
@@ -164,7 +221,7 @@ class ArtifactValidatorTest {
     fun `field instructions require resolving references with matching storage kind and mutability`() {
         val artifact = fieldInstructionArtifact()
 
-        assertEquals(emptyList(), validateArtifact(artifact, ArtifactWriteLimits()))
+        assertEquals(emptyList(), validateArtifact(exactRoots(artifact), ArtifactWriteLimits()))
 
         fun errors(replacement: Instruction): List<ArtifactWriteError> =
             validateArtifact(artifact.withFieldInstruction(2, replacement), ArtifactWriteLimits())
@@ -271,7 +328,7 @@ class ArtifactValidatorTest {
                     Instruction.RefEqual(RegisterId.of(2u), RegisterId.of(0u), RegisterId.of(0u)),
                 )
 
-        assertEquals(emptyList(), validateArtifact(artifact, ArtifactWriteLimits()))
+        assertEquals(emptyList(), validateArtifact(exactRoots(artifact), ArtifactWriteLimits()))
         assertTrue(
             validateArtifact(
                 artifact.withFieldInstruction(
@@ -310,8 +367,8 @@ class ArtifactValidatorTest {
                     Instruction.IsType(RegisterId.of(2u), RegisterId.of(0u), TypeRef.Local(TypeId.of(0u))),
                 )
 
-        assertEquals(emptyList(), validateArtifact(cast, ArtifactWriteLimits()))
-        assertEquals(emptyList(), validateArtifact(typeTest, ArtifactWriteLimits()))
+        assertEquals(emptyList(), validateArtifact(exactRoots(cast), ArtifactWriteLimits()))
+        assertEquals(emptyList(), validateArtifact(exactRoots(typeTest), ArtifactWriteLimits()))
         assertTrue(
             validateArtifact(
                 cast.withFieldInstruction(
@@ -337,8 +394,8 @@ class ArtifactValidatorTest {
         val noArguments = minimalArtifact()
         val stringArguments = stringArrayEntryArtifact()
 
-        assertEquals(emptyList(), validateArtifact(noArguments, ArtifactWriteLimits()))
-        assertEquals(emptyList(), validateArtifact(stringArguments, ArtifactWriteLimits()))
+        assertEquals(emptyList(), validateArtifact(exactRoots(noArguments), ArtifactWriteLimits()))
+        assertEquals(emptyList(), validateArtifact(exactRoots(stringArguments), ArtifactWriteLimits()))
 
         val missingArgumentContract =
             validateArtifact(
@@ -396,7 +453,7 @@ class ArtifactValidatorTest {
             )
         val expected = setOf(SemanticFeature.COROUTINES, SemanticFeature.CAPABILITIES, SemanticFeature.MODULE_IMPORTS)
 
-        assertEquals(emptyList(), validateArtifact(artifact.copy(semanticFeatures = expected), ArtifactWriteLimits()))
+        assertEquals(emptyList(), validateArtifact(exactRoots(artifact.copy(semanticFeatures = expected)), ArtifactWriteLimits()))
         assertTrue(
             validateArtifact(
                 artifact.copy(semanticFeatures = expected - SemanticFeature.CAPABILITIES),
@@ -433,8 +490,8 @@ class ArtifactValidatorTest {
                     ),
             )
 
-        assertTrue(validateArtifact(artifact, ArtifactWriteLimits()).none { it.detail.contains("semantic hash") })
-        assertTrue(validateArtifact(stale, ArtifactWriteLimits()).any { it.detail.contains("semantic hash") })
+        assertTrue(validateArtifact(exactRoots(artifact), ArtifactWriteLimits()).none { it.detail.contains("semantic hash") })
+        assertTrue(validateArtifact(exactRoots(stale), ArtifactWriteLimits()).any { it.detail.contains("semantic hash") })
     }
 
     @Test
@@ -556,7 +613,11 @@ class ArtifactValidatorTest {
             )
 
         cases.forEach { instruction ->
-            assertEquals(emptyList(), validateArtifact(executableArtifact(instruction), ArtifactWriteLimits()), instruction.toString())
+            assertEquals(
+                emptyList(),
+                validateArtifact(exactRoots(executableArtifact(instruction)), ArtifactWriteLimits()),
+                instruction.toString(),
+            )
         }
     }
 
@@ -655,7 +716,7 @@ class ArtifactValidatorTest {
     fun `imported fields require the expected owner signature`() {
         val artifact = importedFieldArtifact()
 
-        assertEquals(emptyList(), validateArtifact(artifact, ArtifactWriteLimits()))
+        assertEquals(emptyList(), validateArtifact(exactRoots(artifact), ArtifactWriteLimits()))
 
         val application = artifact.modules[0]
         val invalid =
@@ -764,7 +825,7 @@ class ArtifactValidatorTest {
                     RegisterId.of(0u),
                 ),
             )
-        assertEquals(emptyList(), validateArtifact(valid, ArtifactWriteLimits()))
+        assertEquals(emptyList(), validateArtifact(exactRoots(valid), ArtifactWriteLimits()))
 
         val wrongSource =
             executableArtifact(
@@ -848,7 +909,7 @@ class ArtifactValidatorTest {
                 ),
             )
         valid.forEach { artifact ->
-            assertEquals(emptyList(), validateArtifact(artifact, ArtifactWriteLimits()))
+            assertEquals(emptyList(), validateArtifact(exactRoots(artifact), ArtifactWriteLimits()))
         }
 
         val wrongArray =
@@ -1032,7 +1093,7 @@ class ArtifactValidatorTest {
             executableArtifact(
                 Instruction.CapabilityCallAsync(Destination.Unit, CapabilityId.of(0u), 0u, emptyList(), BlockId.of(1u)),
             )
-        assertEquals(emptyList(), validateArtifact(ordinaryCaller(vmBlocking), ArtifactWriteLimits()))
+        assertEquals(emptyList(), validateArtifact(exactRoots(ordinaryCaller(vmBlocking)), ArtifactWriteLimits()))
 
         val kotlinSuspend =
             executableArtifact(
@@ -1710,7 +1771,7 @@ private fun executableArtifact(
                     Capability(StringId.of(0u), StringId.of(1u), AbiVersion(1u, 0u), required = true, operationCount = 2u),
                 ),
         )
-    val targetHash = encodeModuleSections(artifact.modules[1], ArtifactWriteLimits()).semanticHash
+    val targetHash = ArtifactWriter.moduleSemanticHash(artifact.modules[1])
     return artifact.copy(
         modules =
             listOf(
@@ -1761,7 +1822,7 @@ private fun importedFieldArtifact(): Artifact {
                         Export(SymbolKind.FIELD, ExportVisibility.PUBLIC_LIBRARY, StringId.of(5u), 1u, rightType),
                     ),
         )
-    val targetHash = encodeModuleSections(expandedLibrary, ArtifactWriteLimits()).semanticHash
+    val targetHash = ArtifactWriter.moduleSemanticHash(expandedLibrary)
     val expandedApplication =
         application.copy(
             strings = applicationStrings,

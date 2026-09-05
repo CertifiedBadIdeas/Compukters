@@ -18,12 +18,15 @@
 
 package ru.lazyhat.compukters.compiler.artifact.read
 
+import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
+import ru.lazyhat.compukters.compiler.artifact.model.PhysicalAtom
+import ru.lazyhat.compukters.compiler.artifact.model.PhysicalShape
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
@@ -36,6 +39,43 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class ArtifactReaderTest {
+    @Test
+    fun `round trip preserves physical shapes and exact roots`() {
+        val source = languageRuntimeArtifact()
+        val module = source.modules.single()
+        val function = module.functions.single()
+        val shaped =
+            function.copy(
+                values =
+                    function.values.toMutableList().also {
+                        it[0] = it[0].copy(physicalShape = PhysicalShape(listOf(PhysicalAtom.I32, PhysicalAtom.REF32)))
+                    },
+            )
+        val shapedModule = module.copy(functions = listOf(shaped))
+        val rooted = shaped.copy(safepointRoots = ReferenceLiveness.derive(shapedModule, shaped))
+        val artifact = source.copy(modules = listOf(shapedModule.copy(functions = listOf(rooted))))
+
+        val encoded = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(artifact)).bytes
+        val decoded = ArtifactReader.read(encoded)
+
+        assertEquals(
+            rooted.values,
+            decoded.modules
+                .single()
+                .functions
+                .single()
+                .values,
+        )
+        assertEquals(
+            rooted.safepointRoots,
+            decoded.modules
+                .single()
+                .functions
+                .single()
+                .safepointRoots,
+        )
+    }
+
     @Test
     fun `writer reader writer round trip preserves canonical bytes`() {
         val encoded = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(languageRuntimeArtifact())).bytes

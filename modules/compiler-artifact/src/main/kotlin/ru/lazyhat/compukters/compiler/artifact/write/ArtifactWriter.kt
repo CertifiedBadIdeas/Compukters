@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.compiler.artifact.write
 
+import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Capability
 import ru.lazyhat.compukters.compiler.artifact.model.Module
@@ -29,17 +30,17 @@ object ArtifactWriter {
     fun moduleSemanticHash(
         module: Module,
         limits: ArtifactWriteLimits = ArtifactWriteLimits(),
-    ): ByteArray = encodeModuleSections(module, limits).semanticHash.copyOf()
+    ): ByteArray = encodeModuleSections(ReferenceLiveness.derive(module), limits).semanticHash.copyOf()
 
     fun write(
         artifact: Artifact,
         limits: ArtifactWriteLimits = ArtifactWriteLimits(),
     ): ArtifactWriteResult {
-        val errors = validateArtifact(artifact, limits)
-        if (errors.isNotEmpty()) return ArtifactWriteResult.Failure(errors)
-
         return try {
-            encodeArtifact(artifact, limits)
+            val prepared = ReferenceLiveness.derive(artifact)
+            val errors = validateArtifact(prepared, limits)
+            if (errors.isNotEmpty()) return ArtifactWriteResult.Failure(errors)
+            encodeArtifact(prepared, limits)
         } catch (failure: ArtifactEncodingException) {
             ArtifactWriteResult.Failure(listOf(ArtifactWriteError(failure.code, detail = requireNotNull(failure.message))))
         } catch (failure: IllegalArgumentException) {
@@ -119,7 +120,7 @@ private fun encodeArtifact(
 
     val sink = BinarySink(limits.artifactBytes)
     sink.writeBytes(byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'K'.code.toByte(), 'T'.code.toByte()))
-    sink.writeU16(2u)
+    sink.writeU16(3u)
     sink.writeU16(0u)
     sink.writeU16(artifact.minimumRuntimeAbi.major.toUInt())
     sink.writeU16(artifact.minimumRuntimeAbi.minor.toUInt())

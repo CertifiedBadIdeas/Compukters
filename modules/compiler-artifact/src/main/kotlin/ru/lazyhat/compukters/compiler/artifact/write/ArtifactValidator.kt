@@ -18,6 +18,11 @@
 
 package ru.lazyhat.compukters.compiler.artifact.write
 
+import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
+import ru.lazyhat.compukters.compiler.artifact.analysis.mayThrow
+import ru.lazyhat.compukters.compiler.artifact.analysis.readRegisters
+import ru.lazyhat.compukters.compiler.artifact.analysis.successors
+import ru.lazyhat.compukters.compiler.artifact.analysis.writtenRegisters
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
@@ -336,226 +341,6 @@ internal fun validateArtifact(
         return matches.singleOrNull()
     }
 
-    fun Instruction.readRegisters(): List<RegisterId> =
-        when (this) {
-            is Instruction.Const,
-            is Instruction.Null,
-            is Instruction.NewObject,
-            is Instruction.Jump,
-            Instruction.Unreachable,
-            -> emptyList()
-
-            is Instruction.Move -> listOf(source)
-
-            is Instruction.Convert -> listOf(source)
-
-            is Instruction.AddI32 -> listOf(left, right)
-
-            is Instruction.SubtractI32 -> listOf(left, right)
-
-            is Instruction.MultiplyI32 -> listOf(left, right)
-
-            is Instruction.DivideI32 -> listOf(left, right)
-
-            is Instruction.RemainderI32 -> listOf(left, right)
-
-            is Instruction.BitAndI32 -> listOf(left, right)
-
-            is Instruction.BitOrI32 -> listOf(left, right)
-
-            is Instruction.BitXorI32 -> listOf(left, right)
-
-            is Instruction.ShiftLeftI32 -> listOf(left, right)
-
-            is Instruction.ShiftUnsignedI32 -> listOf(left, right)
-
-            is Instruction.Equal -> listOf(left, right)
-
-            is Instruction.RefEqual -> listOf(left, right)
-
-            is Instruction.RefNotEqual -> listOf(left, right)
-
-            is Instruction.Less -> listOf(left, right)
-
-            is Instruction.LessOrEqual -> listOf(left, right)
-
-            is Instruction.Greater -> listOf(left, right)
-
-            is Instruction.GreaterOrEqual -> listOf(left, right)
-
-            is Instruction.NewArray -> listOf(length)
-
-            is Instruction.ArrayLength -> listOf(array)
-
-            is Instruction.ArrayLoad -> listOf(array, index)
-
-            is Instruction.ArrayStore -> listOf(array, index, value)
-
-            is Instruction.FieldGet -> listOf(receiver)
-
-            is Instruction.FieldSet -> listOf(receiver, value)
-
-            is Instruction.StaticGet -> emptyList()
-
-            is Instruction.StaticSet -> listOf(value)
-
-            is Instruction.IsType -> listOf(value)
-
-            is Instruction.CheckedCast -> listOf(value)
-
-            is Instruction.Call -> arguments
-
-            is Instruction.CallSuspend -> arguments
-
-            is Instruction.StringConcat -> listOf(left, right)
-
-            is Instruction.StringValueOf -> listOf(source)
-
-            is Instruction.StringLength -> listOf(string)
-
-            is Instruction.StringGet -> listOf(string, index)
-
-            is Instruction.StringEquals -> listOf(left, right)
-
-            is Instruction.StringSubstring -> listOf(string, start, end)
-
-            is Instruction.StringFromCharArray -> listOf(array, start, end)
-
-            is Instruction.CapabilityCallSync -> arguments
-
-            is Instruction.CapabilityCallAsync -> arguments
-
-            is Instruction.Branch -> listOf(condition)
-
-            is Instruction.Return -> (value as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
-
-            is Instruction.Throw -> listOf(exception)
-        }
-
-    fun Instruction.writtenRegisters(): List<RegisterId> =
-        when (this) {
-            is Instruction.Move -> listOf(destination)
-
-            is Instruction.Const -> listOf(destination)
-
-            is Instruction.Null -> listOf(destination)
-
-            is Instruction.Convert -> listOf(destination)
-
-            is Instruction.AddI32 -> listOf(destination)
-
-            is Instruction.SubtractI32 -> listOf(destination)
-
-            is Instruction.MultiplyI32 -> listOf(destination)
-
-            is Instruction.DivideI32 -> listOf(destination)
-
-            is Instruction.RemainderI32 -> listOf(destination)
-
-            is Instruction.BitAndI32 -> listOf(destination)
-
-            is Instruction.BitOrI32 -> listOf(destination)
-
-            is Instruction.BitXorI32 -> listOf(destination)
-
-            is Instruction.ShiftLeftI32 -> listOf(destination)
-
-            is Instruction.ShiftUnsignedI32 -> listOf(destination)
-
-            is Instruction.Equal -> listOf(destination)
-
-            is Instruction.RefEqual -> listOf(destination)
-
-            is Instruction.RefNotEqual -> listOf(destination)
-
-            is Instruction.Less -> listOf(destination)
-
-            is Instruction.LessOrEqual -> listOf(destination)
-
-            is Instruction.Greater -> listOf(destination)
-
-            is Instruction.GreaterOrEqual -> listOf(destination)
-
-            is Instruction.NewObject -> listOf(destination)
-
-            is Instruction.NewArray -> listOf(destination)
-
-            is Instruction.ArrayLength -> listOf(destination)
-
-            is Instruction.ArrayLoad -> listOf(destination)
-
-            is Instruction.FieldGet -> listOf(destination)
-
-            is Instruction.StaticGet -> listOf(destination)
-
-            is Instruction.IsType -> listOf(destination)
-
-            is Instruction.CheckedCast -> listOf(destination)
-
-            is Instruction.Call -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
-
-            is Instruction.CallSuspend -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
-
-            is Instruction.StringConcat -> listOf(destination)
-
-            is Instruction.StringValueOf -> listOf(destination)
-
-            is Instruction.StringLength -> listOf(destination)
-
-            is Instruction.StringGet -> listOf(destination)
-
-            is Instruction.StringEquals -> listOf(destination)
-
-            is Instruction.StringSubstring -> listOf(destination)
-
-            is Instruction.StringFromCharArray -> listOf(destination)
-
-            is Instruction.CapabilityCallSync -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
-
-            is Instruction.CapabilityCallAsync -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
-
-            is Instruction.ArrayStore,
-            is Instruction.FieldSet,
-            is Instruction.StaticSet,
-            is Instruction.Jump,
-            is Instruction.Branch,
-            is Instruction.Return,
-            is Instruction.Throw,
-            Instruction.Unreachable,
-            -> emptyList()
-        }
-
-    fun Instruction.successors(): List<BlockId> =
-        when (this) {
-            is Instruction.Jump -> listOf(target)
-            is Instruction.Branch -> listOf(trueTarget, falseTarget)
-            is Instruction.CallSuspend -> listOf(resumeBlock)
-            is Instruction.CapabilityCallAsync -> listOf(resumeBlock)
-            else -> emptyList()
-        }
-
-    fun Instruction.mayThrow(): Boolean =
-        this is Instruction.NewObject ||
-            this is Instruction.NewArray ||
-            this is Instruction.ArrayLength ||
-            this is Instruction.ArrayLoad ||
-            this is Instruction.ArrayStore ||
-            this is Instruction.FieldGet ||
-            this is Instruction.FieldSet ||
-            this is Instruction.StaticGet ||
-            this is Instruction.StaticSet ||
-            this is Instruction.CheckedCast ||
-            this is Instruction.Call ||
-            this is Instruction.CallSuspend ||
-            this is Instruction.CapabilityCallSync ||
-            this is Instruction.CapabilityCallAsync ||
-            this is Instruction.StringGet ||
-            this is Instruction.StringConcat ||
-            this is Instruction.StringValueOf ||
-            this is Instruction.StringSubstring ||
-            this is Instruction.StringFromCharArray ||
-            this is Instruction.Throw
-
     if (artifact.entry.module.value
             .toLong() >= artifact.modules.size
     ) {
@@ -734,6 +519,27 @@ internal fun validateArtifact(
                     ArtifactWriteErrorCode.INVALID_RANGE,
                     "function register or parameter count is invalid",
                     ArtifactWriteLocation(moduleLocation, "FUNCTIONS", functionIndex.toUInt()),
+                )
+            }
+            if (function.values.any { it.physicalShape.components.size > limits.physicalComponentsPerValue }) {
+                add(
+                    ArtifactWriteErrorCode.LIMIT_EXCEEDED,
+                    "function value physical component count exceeds ${limits.physicalComponentsPerValue}",
+                    ArtifactWriteLocation(moduleLocation, "FUNCTIONS", functionIndex.toUInt()),
+                )
+            }
+            if (function.safepointRoots.size > limits.safepointsPerFunction) {
+                add(
+                    ArtifactWriteErrorCode.LIMIT_EXCEEDED,
+                    "function safepoint count exceeds ${limits.safepointsPerFunction}",
+                    ArtifactWriteLocation(moduleLocation, "SAFEPOINT_ROOTS", functionIndex.toUInt()),
+                )
+            }
+            if (function.safepointRoots.any { it.references.size > limits.rootsPerSafepoint }) {
+                add(
+                    ArtifactWriteErrorCode.LIMIT_EXCEEDED,
+                    "safepoint root count exceeds ${limits.rootsPerSafepoint}",
+                    ArtifactWriteLocation(moduleLocation, "SAFEPOINT_ROOTS", functionIndex.toUInt()),
                 )
             }
             val blockEnd = function.firstBlock.value.toLong() + function.blockCount.toLong()
@@ -1619,6 +1425,42 @@ internal fun validateArtifact(
                     )
                 }
                 containingRanges.addLast(end)
+            }
+
+            val rootLocation = ArtifactWriteLocation(moduleLocation, "SAFEPOINT_ROOTS", functionIndex.toUInt())
+            val seenBoundaries = mutableSetOf<Pair<BlockId, UInt>>()
+            function.safepointRoots.forEach { roots ->
+                val blockIndex = roots.block.value.toLong()
+                val block = module.blocks.getOrNull(roots.block.value.toInt())
+                if (blockIndex !in blockStart.toLong() until blockEnd || block == null ||
+                    roots.instructionBoundary.toLong() >= block.instructions.size.toLong()
+                ) {
+                    add(ArtifactWriteErrorCode.INVALID_RANGE, "safepoint roots identify an invalid instruction boundary", rootLocation)
+                }
+                if (!seenBoundaries.add(roots.block to roots.instructionBoundary)) {
+                    add(ArtifactWriteErrorCode.INVALID_RANGE, "safepoint roots contain a duplicate instruction boundary", rootLocation)
+                }
+                val seenReferences = mutableSetOf<ru.lazyhat.compukters.compiler.artifact.model.ValueComponent>()
+                roots.references.forEach { reference ->
+                    val value = function.values.getOrNull(reference.value.value.toInt())
+                    val atom = value?.physicalShape?.components?.getOrNull(reference.component.toInt())
+                    if (atom != ru.lazyhat.compukters.compiler.artifact.model.PhysicalAtom.REF32) {
+                        add(ArtifactWriteErrorCode.INVALID_RANGE, "safepoint root does not identify a Ref32 component", rootLocation)
+                    }
+                    if (!seenReferences.add(reference)) {
+                        add(ArtifactWriteErrorCode.INVALID_RANGE, "safepoint roots contain a duplicate reference", rootLocation)
+                    }
+                }
+            }
+            if (blockRangeValid && exceptionStart <= module.exceptions.size && exceptionEnd <= module.exceptions.size) {
+                val expected = ReferenceLiveness.derive(module, function)
+                if (function.safepointRoots != expected) {
+                    add(
+                        ArtifactWriteErrorCode.INVALID_RANGE,
+                        "function safepoint roots are not the exact canonical liveness map",
+                        rootLocation,
+                    )
+                }
             }
 
             if (FunctionFlag.ABSTRACT in function.flags || function.blockCount == 0u || !blockRangeValid) {

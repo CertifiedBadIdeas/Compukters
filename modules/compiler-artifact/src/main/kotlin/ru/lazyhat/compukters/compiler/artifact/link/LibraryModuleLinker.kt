@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.compiler.artifact.link
 
+import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
@@ -162,7 +163,10 @@ object LibraryModuleLinker {
                 function = applicationRelocation.function(application.entry.function),
             )
         val features = semanticFeatures(modules, capabilities)
-        val linked = application.copy(semanticFeatures = features, entry = entry, modules = modules, capabilities = capabilities)
+        val linked =
+            ReferenceLiveness.derive(
+                application.copy(semanticFeatures = features, entry = entry, modules = modules, capabilities = capabilities),
+            )
         when (val write = ArtifactWriter.write(linked)) {
             is ArtifactWriteResult.Success -> {}
 
@@ -430,6 +434,7 @@ private fun relocateFunction(
         values = function.values.map { it.copy(semanticType = ids.value(it.semanticType)) },
         firstBlock = ids.block(function.firstBlock),
         firstException = relocateStart(function.firstException, function.exceptionCount, ids.exceptions, "exception"),
+        safepointRoots = function.safepointRoots.map { it.copy(block = ids.block(it.block)) },
     )
 
 private fun relocateBlock(
