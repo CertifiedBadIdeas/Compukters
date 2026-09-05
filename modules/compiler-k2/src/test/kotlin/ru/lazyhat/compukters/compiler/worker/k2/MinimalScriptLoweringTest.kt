@@ -912,6 +912,59 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `inclusive Int for loops lower without range or iterator allocation`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        fun main() {
+                            var sum = 0
+                            for (value in 1..4) {
+                                sum = sum + value
+                            }
+                            require(sum == 10)
+
+                            var empty = 0
+                            for (value in 4..1) {
+                                empty = empty + value
+                            }
+                            require(empty == 0)
+
+                            var singleton = 0
+                            for (value in 7..7) {
+                                singleton = singleton + value
+                            }
+                            require(singleton == 7)
+
+                            var maximum = 0
+                            for (value in Int.MAX_VALUE..Int.MAX_VALUE) {
+                                maximum = maximum + 1
+                            }
+                            require(maximum == 1)
+
+                            var filtered = 0
+                            for (value in 0..10) {
+                                if (value == 2) continue
+                                if (value == 5) break
+                                filtered = filtered + value
+                            }
+                            require(filtered == 8)
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val application = ArtifactReader.read(artifact).modules.single { it.kind == ModuleKind.APPLICATION }
+            val instructions = application.blocks.flatMap(Block::instructions)
+
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+            assertTrue(instructions.none { it is Instruction.NewObject || it is Instruction.NewArray })
+            assertTrue(instructions.any { it is Instruction.AddI32 })
+            assertTrue(application.blocks.any(Block::loopHeaderSafepoint))
+        }
+
+    @Test
     fun `filesystem text facade lowers through exact trusted signatures`() =
         withAdapter { adapter ->
             val result =

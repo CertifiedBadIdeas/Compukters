@@ -1765,7 +1765,11 @@ private class FunctionCompiler(
             }
 
             is IrBlock -> {
-                statement.statements.forEach(::compileStatement)
+                if (statement.origin?.toString() == "FOR_LOOP") {
+                    compileIntForLoop(statement)
+                } else {
+                    statement.statements.forEach(::compileStatement)
+                }
             }
 
             is IrComposite -> {
@@ -2538,6 +2542,88 @@ private class FunctionCompiler(
         currentBlock = exit
     }
 
+    private fun compileIntForLoop(block: IrBlock) {
+        val plan = intForLoopPlan(block) ?: throw UnsupportedKotlinIr(block, "unsupported canonical for-loop shape")
+        val startValue = compileExpression(plan.start)
+        val index = allocate(ValueType.I32)
+        emit(Instruction.Move(index, startValue))
+        val endValue = compileExpression(plan.endInclusive)
+        val endInclusive = allocate(ValueType.I32)
+        emit(Instruction.Move(endInclusive, endValue))
+
+        val initialCondition = allocate(ValueType.Bool)
+        emit(Instruction.LessOrEqual(OrderedScalarValueType.I32, initialCondition, index, endInclusive))
+        val initialBranchBlock = currentBlock
+        val initialBranchIndex = blocks[initialBranchBlock].instructions.size
+        val body = createBlock(loopHeader = true)
+        emit(Instruction.Branch(initialCondition, blockId(body), blockId(body)))
+
+        currentBlock = body
+        val loopValue = allocate(ValueType.I32)
+        values[plan.loopVariable.symbol] = loopValue
+        emit(Instruction.Move(loopValue, index))
+        val context = LoopContext(plan.loop, continueTarget = null, placeholderTarget = body)
+        withLoopContext(context) {
+            compileStatement(plan.body)
+        }
+
+        val condition = createBlock()
+        if (!isTerminated()) jumpTo(condition)
+        context.continueBlocks.forEach { patchJumpTarget(it, condition) }
+        currentBlock = condition
+        val atEnd = allocate(ValueType.Bool)
+        emit(Instruction.Equal(ScalarValueType.I32, atEnd, index, endInclusive))
+        val conditionBranchBlock = currentBlock
+        val conditionBranchIndex = blocks[conditionBranchBlock].instructions.size
+        val increment = createBlock()
+        emit(Instruction.Branch(atEnd, blockId(increment), blockId(increment)))
+
+        currentBlock = increment
+        val next = allocate(ValueType.I32)
+        emit(Instruction.AddI32(next, index, emitI32Constant(1, block)))
+        emit(Instruction.Move(index, next))
+        jumpTo(body)
+
+        val exit = createBlock()
+        blocks[initialBranchBlock].instructions[initialBranchIndex] =
+            Instruction.Branch(initialCondition, blockId(body), blockId(exit))
+        blocks[conditionBranchBlock].instructions[conditionBranchIndex] =
+            Instruction.Branch(atEnd, blockId(exit), blockId(increment))
+        context.breakBlocks.forEach { patchJumpTarget(it, exit) }
+        currentBlock = exit
+    }
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    private fun intForLoopPlan(block: IrBlock): IntForLoopPlan? {
+        if (block.statements.size != 2) return null
+        val iterator = block.statements[0] as? IrVariable ?: return null
+        if (iterator.origin.toString() != "FOR_LOOP_ITERATOR") return null
+        val iteratorCall = iterator.initializer as? IrCall ?: return null
+        if (iteratorCall.symbol.owner.fqNameWhenAvailable?.asString() != "kotlin.ranges.IntRange.iterator") return null
+        val rangeCall = iteratorCall.arguments.filterNotNull().singleOrNull() as? IrCall ?: return null
+        if (rangeCall.symbol.owner.fqNameWhenAvailable?.asString() != "kotlin.ranges.rangeTo") return null
+        val bounds = rangeCall.arguments.filterNotNull()
+        if (bounds.size != 2 || bounds.any { it.type != intType }) return null
+
+        val loop = block.statements[1] as? IrWhileLoop ?: return null
+        if (loop.origin?.toString() != "FOR_LOOP_INNER_WHILE") return null
+        val hasNext = loop.condition as? IrCall ?: return null
+        if (hasNext.symbol.owner.fqNameWhenAvailable?.asString() != "kotlin.collections.IntIterator.hasNext") return null
+        val iteratorRead = hasNext.arguments.filterNotNull().singleOrNull() as? IrGetValue ?: return null
+        if (iteratorRead.symbol !== iterator.symbol) return null
+
+        val loopBody = loop.body as? IrBlock ?: return null
+        if (loopBody.statements.size != 2) return null
+        val loopVariable = loopBody.statements[0] as? IrVariable ?: return null
+        if (loopVariable.origin.toString() != "FOR_LOOP_VARIABLE" || loopVariable.type != intType) return null
+        val nextCall = loopVariable.initializer as? IrCall ?: return null
+        if (nextCall.symbol.owner.fqNameWhenAvailable?.asString() != "kotlin.collections.IntIterator.next") return null
+        val nextReceiver = nextCall.arguments.filterNotNull().singleOrNull() as? IrGetValue ?: return null
+        if (nextReceiver.symbol !== iterator.symbol) return null
+        val body = loopBody.statements[1] as? IrExpression ?: return null
+        return IntForLoopPlan(loop, loopVariable, bounds[0], bounds[1], body)
+    }
+
     private fun compileLoopJump(
         jump: IrBreakContinue,
         breakJump: Boolean,
@@ -2548,10 +2634,24 @@ private class FunctionCompiler(
         }
         if (breakJump) {
             context.breakBlocks += currentBlock
-            jumpTo(context.continueTarget)
+            jumpTo(context.placeholderTarget)
         } else {
-            jumpTo(context.continueTarget)
+            val target = context.continueTarget
+            if (target == null) {
+                context.continueBlocks += currentBlock
+                jumpTo(context.placeholderTarget)
+            } else {
+                jumpTo(target)
+            }
         }
+    }
+
+    private fun patchJumpTarget(
+        block: Int,
+        target: Int,
+    ) {
+        check(blocks[block].instructions.lastOrNull() is Instruction.Jump)
+        blocks[block].instructions[blocks[block].instructions.lastIndex] = Instruction.Jump(blockId(target))
     }
 
     private inline fun withLoopContext(
@@ -2799,8 +2899,18 @@ private class FunctionCompiler(
 
     private data class LoopContext(
         val loop: IrLoop,
-        val continueTarget: Int,
+        val continueTarget: Int?,
+        val placeholderTarget: Int = requireNotNull(continueTarget),
         val breakBlocks: MutableList<Int> = mutableListOf(),
+        val continueBlocks: MutableList<Int> = mutableListOf(),
+    )
+
+    private data class IntForLoopPlan(
+        val loop: IrWhileLoop,
+        val loopVariable: IrVariable,
+        val start: IrExpression,
+        val endInclusive: IrExpression,
+        val body: IrExpression,
     )
 }
 
