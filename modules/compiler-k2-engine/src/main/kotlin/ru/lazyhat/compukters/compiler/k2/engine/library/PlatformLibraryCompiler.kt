@@ -163,8 +163,7 @@ class PlatformLibraryCompiler {
 
 private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFragmentEntry(
     declarations: List<PlatformLibraryDeclaration>,
-):
-    ru.lazyhat.compukters.compiler.artifact.model.Artifact {
+): ru.lazyhat.compukters.compiler.artifact.model.Artifact {
     val lowered = modules.first()
     val typeDeclarations =
         declarations
@@ -175,12 +174,18 @@ private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFr
             .filter { it.exported && it.kind == PlatformLibraryDeclarationKind.FIELD }
             .associateBy(PlatformLibraryDeclaration::symbol)
     val fieldSymbols =
-        lowered.fields.mapIndexedNotNull { index, field ->
-            val owner = field.owner as? TypeRef.Local ?: return@mapIndexedNotNull null
-            val ownerName = lowered.strings[lowered.types[owner.id.value.toInt()].name.value.toInt()].toString()
-            val fieldName = lowered.strings[field.name.value.toInt()].toString()
-            "$ownerName.$fieldName" to index
-        }.toMap()
+        lowered.fields
+            .mapIndexedNotNull { index, field ->
+                val owner = field.owner as? TypeRef.Local ?: return@mapIndexedNotNull null
+                val ownerName =
+                    lowered.strings[
+                        lowered.types[owner.id.value.toInt()]
+                            .name.value
+                            .toInt(),
+                    ].toString()
+                val fieldName = lowered.strings[field.name.value.toInt()].toString()
+                "$ownerName.$fieldName" to index
+            }.toMap()
     val libraryStrings = lowered.strings
     val stringIds = libraryStrings.withIndex().associate { (index, value) -> value.toString() to StringId.of(index.toUInt()) }
     val missingFieldNames = fieldDeclarations.keys.filterNot(stringIds::containsKey)
