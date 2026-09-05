@@ -141,16 +141,39 @@ supported.
 
 - [ ] **`if`, blocks, mutable locals, and `while` — Partial** — these forms
   compile and are used by the checked-in shell, including nested loops and
-  reassignment. There is no source-level conformance suite covering every
-  expression/result shape, `do-while`, or loop jump. Evidence:
+  reassignment. `break` and `continue` targeting the current innermost `while`
+  lower directly; jumps to an outer loop are rejected. There is no
+  source-level conformance suite covering every expression/result shape or
+  ordinary `do-while`. Evidence:
   [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  tests `shell language subset lowers control flow scalars strings and raw terminal calls`
-  and `checked in shell compiles deterministically`.
+  tests `shell language subset lowers control flow scalars strings and raw terminal calls`,
+  `checked in shell compiles deterministically`, and
+  `while loop jumps lower locally and reject outer targets`.
   Tracking: not scheduled
 
-- [ ] **`for`, ranges, `break`, and `continue` — Unsupported** — these lower
-  into IR forms or library calls outside the current statement and call
-  subset. Tracking: not scheduled
+- [x] **Allocation-free unit-step `Int` `for` loops** — `start..endInclusive`,
+  `start until endExclusive`, and `start..<endExclusive` evaluate and snapshot
+  both bounds once, then execute as scalar frame slots with no `IntRange` or
+  iterator allocation. Empty, reversed, singleton, negative, and
+  `Int.MAX_VALUE` boundaries preserve Kotlin behavior. `break` and `continue`
+  targeting the current innermost `for` are supported, including nested loops.
+  Every repeated path crosses an existing loop-header quota safepoint.
+  Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  tests `inclusive Int for loops lower without range or iterator allocation`,
+  `exclusive Int for loops lower without range or iterator allocation`, and
+  `allocation free Int loops lower deterministically for vm execution`, plus
+  [`kotlin_writer.rs`](../modules/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
+  test `k2_int_loops_execute_across_quota_slices_without_host_io`.
+
+- [ ] **Other ranges, progressions, and iterable `for` loops — Unsupported** —
+  `downTo`, `step`, arrays, strings, collections, custom iterators, ordinary
+  source `do-while`, and labeled jumps to an outer loop publish no artifact.
+  Non-loop `IntRange`, `until`, and `rangeUntil` calls are declaration-only and
+  are not a general executable range API. Evidence:
+  [`MinimalScriptLoweringTest`](../modules/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `unsupported loop forms publish no artifact`.
+  Tracking: not scheduled
 
 - [ ] **Destructuring and delegated expressions — Unsupported** — component
   calls, delegated storage, and their generated source shapes are not admitted
@@ -381,7 +404,7 @@ and the mandatory built-ins module; there is no ambient Kotlin/JVM classpath.
 | --- | --- |
 | `kotlin:builtins` | Core language types, arrays, function types, and structural declarations required by K2 |
 | `stdlib:core` | Small native core helpers such as `require` and supported array construction |
-| `stdlib:ranges` | The admitted `IntRange` surface used by native APIs and bounded checks |
+| `stdlib:ranges` | Declaration surface for `IntRange`, `until`, and `rangeUntil`; canonical unit-step `Int` loops lower without runtime range objects |
 | `std:terminal` | `print`, `println`, `readln`, stderr, and raw terminal operations |
 | `std:filesystem` | The bounded filesystem facade |
 | `compukter:compiler` | Guest compilation operations |
