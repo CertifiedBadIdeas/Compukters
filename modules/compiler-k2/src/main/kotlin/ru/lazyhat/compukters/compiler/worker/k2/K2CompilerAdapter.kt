@@ -30,8 +30,8 @@ import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.CompilationSession
 import ru.lazyhat.compukters.compiler.k2.engine.CompuktersFir2IrPipeline
-import ru.lazyhat.compukters.compiler.k2.engine.PlatformFunctionLink
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformFieldLink
+import ru.lazyhat.compukters.compiler.k2.engine.PlatformFunctionLink
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformTypeLink
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalTrustedIntrinsics
 import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryFragmentCodec
@@ -275,13 +275,13 @@ class K2CompilerAdapter(
         val types = mutableListOf<PlatformTypeLink>()
         val fields = mutableListOf<PlatformFieldLink>()
         artifacts.forEach { (platformModule, artifact) ->
-                val library =
-                    artifact.modules.single { module ->
-                        module.kind == ModuleKind.LIBRARY && module.exports.any { it.kind == SymbolKind.FUNCTION }
-                    }
-                val moduleHash = ArtifactWriter.moduleSemanticHash(library)
-                functions +=
-                    platformModule.declarations
+            val library =
+                artifact.modules.single { module ->
+                    module.kind == ModuleKind.LIBRARY && module.exports.any { it.kind == SymbolKind.FUNCTION }
+                }
+            val moduleHash = ArtifactWriter.moduleSemanticHash(library)
+            functions +=
+                platformModule.declarations
                     .filter { declaration -> !declaration.trustedExternal && declaration.signature.startsWith("fun(") }
                     .map { declaration ->
                         val simpleName = declaration.symbol.substringAfterLast('.')
@@ -323,26 +323,32 @@ class K2CompilerAdapter(
                             moduleHash.copyOf(),
                         )
                     }
-                library.exports.filter { it.kind == SymbolKind.TYPE }.forEach { export ->
-                    val exportName = library.strings[export.name.value.toInt()].toString()
-                    types += PlatformTypeLink(exportName, exportName, moduleHash.copyOf())
-                }
-                library.exports.filter { it.kind == SymbolKind.FIELD }.forEach { export ->
-                    val exportName = library.strings[export.name.value.toInt()].toString()
-                    val field = library.fields[export.localSymbol.toInt()]
-                    val owner = field.owner as? TypeRef.Local ?: error("platform field $exportName has an imported owner")
-                    val ownerSymbol = library.strings[library.types[owner.id.value.toInt()].name.value.toInt()].toString()
-                    fields +=
-                        PlatformFieldLink(
-                            exportName,
-                            ownerSymbol,
-                            exportName,
-                            field.static,
-                            moduleHash.copyOf(),
-                        )
-                }
+            library.exports.filter { it.kind == SymbolKind.TYPE }.forEach { export ->
+                val exportName = library.strings[export.name.value.toInt()].toString()
+                types += PlatformTypeLink(exportName, exportName, moduleHash.copyOf())
             }
-        val linkOrder = compareBy<PlatformFunctionLink>({ it.moduleHash.toHex() }, PlatformFunctionLink::exportName, PlatformFunctionLink::symbol)
+            library.exports.filter { it.kind == SymbolKind.FIELD }.forEach { export ->
+                val exportName = library.strings[export.name.value.toInt()].toString()
+                val field = library.fields[export.localSymbol.toInt()]
+                val owner = field.owner as? TypeRef.Local ?: error("platform field $exportName has an imported owner")
+                val ownerSymbol =
+                    library.strings[
+                        library.types[owner.id.value.toInt()]
+                            .name.value
+                            .toInt(),
+                    ].toString()
+                fields +=
+                    PlatformFieldLink(
+                        exportName,
+                        ownerSymbol,
+                        exportName,
+                        field.static,
+                        moduleHash.copyOf(),
+                    )
+            }
+        }
+        val linkOrder =
+            compareBy<PlatformFunctionLink>({ it.moduleHash.toHex() }, PlatformFunctionLink::exportName, PlatformFunctionLink::symbol)
         val typeOrder = compareBy<PlatformTypeLink>({ it.moduleHash.toHex() }, PlatformTypeLink::exportName, PlatformTypeLink::symbol)
         val fieldOrder = compareBy<PlatformFieldLink>({ it.moduleHash.toHex() }, PlatformFieldLink::exportName, PlatformFieldLink::symbol)
         return LoadedLibraries(
@@ -450,7 +456,10 @@ private fun Module.canonicalType(type: ValueType): String =
                         val base = strings[nominal.name.value.toInt()].toString()
                         if (nominal is NominalType.Array) "$base<${canonicalType(nominal.element)}>" else base
                     }
-                    is TypeRef.Imported -> strings[imports[reference.id.value.toInt()].targetName.value.toInt()].toString()
+
+                    is TypeRef.Imported -> {
+                        strings[imports[reference.id.value.toInt()].targetName.value.toInt()].toString()
+                    }
                 }
             name + if (type.nullable) "?" else ""
         }
