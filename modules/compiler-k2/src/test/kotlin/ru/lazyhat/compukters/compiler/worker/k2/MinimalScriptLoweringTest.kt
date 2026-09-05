@@ -221,9 +221,10 @@ class MinimalScriptLoweringTest {
             val typeTags = indexedSectionRecords(artifact, 0x0101).map { it.first().toInt() and 0xff }
             val opcodes = applicationCodeOpcodes(artifact)
 
-            val reasonTypeIndex = application.types.indexOfFirst { type ->
-                type is NominalType.Class && application.strings[type.name.value.toInt()].toString() == "Reason"
-            }
+            val reasonTypeIndex =
+                application.types.indexOfFirst { type ->
+                    type is NominalType.Class && application.strings[type.name.value.toInt()].toString() == "Reason"
+                }
             val reasonType = assertNotNull(application.types[reasonTypeIndex] as? NominalType.Class)
             val initializerId = assertNotNull(reasonType.initializer)
             val initializer = application.functions[initializerId.value.toInt()]
@@ -239,12 +240,15 @@ class MinimalScriptLoweringTest {
             assertTrue(initializerBlocks.flatMap(Block::instructions).any { it is Instruction.NewObject })
             assertEquals(2, initializerBlocks.flatMap(Block::instructions).count { it is Instruction.StaticSet })
             assertTrue(
-                application.functions.filterIndexed { index, _ -> index != initializerId.value.toInt() }.flatMap { function ->
-                    application.blocks.subList(
-                        function.firstBlock.value.toInt(),
-                        (function.firstBlock.value + function.blockCount).toInt(),
-                    )
-                }.flatMap(Block::instructions).none { it is Instruction.StaticSet },
+                application.functions
+                    .filterIndexed { index, _ -> index != initializerId.value.toInt() }
+                    .flatMap { function ->
+                        application.blocks.subList(
+                            function.firstBlock.value.toInt(),
+                            (function.firstBlock.value + function.blockCount).toInt(),
+                        )
+                    }.flatMap(Block::instructions)
+                    .none { it is Instruction.StaticSet },
             )
             assertEquals(4, typeTags.count { it == 3 }, "two source functions, the reachable Exited constructor and enum initializer")
             assertEquals(3, typeTags.count { it == 0 }, "Exited, Failed and Reason classes")
@@ -1157,9 +1161,10 @@ class MinimalScriptLoweringTest {
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             val application = ArtifactReader.read(artifact).modules.single { it.kind == ModuleKind.APPLICATION }
-            val imports = application.imports.groupBy { it.kind }.mapValues { (_, values) ->
-                values.map { application.strings[it.targetName.value.toInt()].toString() }.toSet()
-            }
+            val imports =
+                application.imports.groupBy { it.kind }.mapValues { (_, values) ->
+                    values.map { application.strings[it.targetName.value.toInt()].toString() }.toSet()
+                }
             assertTrue("compukter.process.ProcessResult" in imports.getValue(SymbolKind.TYPE))
             assertTrue("compukter.process.ProcessResult.Exited" in imports.getValue(SymbolKind.TYPE))
             assertTrue("compukter.process.ProcessResult.Exited.code" in imports.getValue(SymbolKind.FIELD))

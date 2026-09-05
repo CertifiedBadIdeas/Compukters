@@ -72,7 +72,7 @@ class K2CompilerAdapterTest {
             val syntaxError =
                 assertNotNull(
                     syntax.diagnostics.firstOrNull {
-                    it.severity == DiagnosticSeverity.ERROR && it.category == DiagnosticCategory.SYNTAX
+                        it.severity == DiagnosticSeverity.ERROR && it.category == DiagnosticCategory.SYNTAX
                     },
                     syntax.diagnostics.toString(),
                 )
