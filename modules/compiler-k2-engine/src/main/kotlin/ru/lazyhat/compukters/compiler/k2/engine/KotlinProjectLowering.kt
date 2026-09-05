@@ -1094,9 +1094,11 @@ internal object KotlinProjectLowering {
             )
         val maximumCallDepth = 16u
         val maximumFrameBytes =
-            loweredFunctions.maxOfOrNull { function -> function.values.size.toULong() * 16uL + 32uL } ?: 32uL
+            loweredFunctions.maxOfOrNull { function -> compactFrameBytes(function.values) } ?: 0uL
+        require(
+            maximumFrameBytes <= UInt.MAX_VALUE.toULong() / maximumCallDepth.toULong(),
+        ) { "required frame storage exceeds u32" }
         val requiredStackBytes = maximumFrameBytes * maximumCallDepth.toULong()
-        require(requiredStackBytes <= UInt.MAX_VALUE.toULong()) { "required frame storage exceeds u32" }
         return Artifact(
             semanticFeatures =
                 setOfNotNull(
@@ -1107,7 +1109,7 @@ internal object KotlinProjectLowering {
             manifest =
                 Manifest(
                     requiredHeapBytes = 64u * 1024u,
-                    requiredStackBytes = maxOf(64u * 1024u, requiredStackBytes.toUInt()),
+                    requiredStackBytes = requiredStackBytes.toUInt(),
                     maximumCoroutines = 1u,
                     maximumCallDepth = maximumCallDepth,
                     maximumHostRequests = 64u,
@@ -2936,5 +2938,20 @@ private fun IrConst.toArtifactConstant(literalIds: Map<Utf16Literal, Utf16Litera
         is Char -> Constant.Char(literal.code.toUShort())
         else -> throw UnsupportedKotlinIr(this, "unsupported constant")
     }
+
+private fun compactFrameBytes(values: List<FunctionValue>): ULong {
+    var offset = 0uL
+    values.forEach { value ->
+        value.physicalShape.components.forEach { component ->
+            val alignment = component.alignment.toULong()
+            require(offset <= ULong.MAX_VALUE - (alignment - 1uL)) { "physical frame alignment overflow" }
+            offset = (offset + alignment - 1uL) and (alignment - 1uL).inv()
+            require(offset <= ULong.MAX_VALUE - component.byteSize.toULong()) { "physical frame size overflow" }
+            offset += component.byteSize
+        }
+    }
+    require(offset <= ULong.MAX_VALUE - 7uL) { "physical frame alignment overflow" }
+    return (offset + 7uL) and 7uL.inv()
+}
 
 private fun IrExpression.isTrueConstant(): Boolean = this is IrConst && value == true
