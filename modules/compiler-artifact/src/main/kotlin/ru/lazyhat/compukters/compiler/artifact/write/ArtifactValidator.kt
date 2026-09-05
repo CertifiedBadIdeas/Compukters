@@ -27,6 +27,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility
 import ru.lazyhat.compukters.compiler.artifact.model.FieldRef
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionValue
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
@@ -728,7 +729,7 @@ internal fun validateArtifact(
             }
         }
         module.functions.forEachIndexed { functionIndex, function ->
-            if (function.registers.size > limits.registersPerFunction || function.parameterCount.toLong() > function.registers.size) {
+            if (function.values.size > limits.registersPerFunction || function.parameterCount.toLong() > function.values.size) {
                 add(
                     ArtifactWriteErrorCode.INVALID_RANGE,
                     "function register or parameter count is invalid",
@@ -858,17 +859,20 @@ internal fun validateArtifact(
                         id: RegisterId,
                         role: String,
                     ): ValueType? =
-                        owner.registers.getOrNull(id.value.toInt()).also {
-                            if (it ==
-                                null
-                            ) {
-                                add(
-                                    ArtifactWriteErrorCode.BAD_REFERENCE,
-                                    "$role register is outside the owning function table",
-                                    location,
-                                )
+                        owner.values
+                            .getOrNull(id.value.toInt())
+                            ?.semanticType
+                            .also {
+                                if (it ==
+                                    null
+                                ) {
+                                    add(
+                                        ArtifactWriteErrorCode.BAD_REFERENCE,
+                                        "$role register is outside the owning function table",
+                                        location,
+                                    )
+                                }
                             }
-                        }
 
                     fun destination(destination: Destination): ValueType? =
                         when (destination) {
@@ -928,10 +932,11 @@ internal fun validateArtifact(
                         }
                         val metadataIsConsistent =
                             target.parameterCount.toLong() == signature.parameters.size.toLong() &&
-                                target.registers.size >= signature.parameters.size &&
+                                target.values.size >= signature.parameters.size &&
                                 (FunctionFlag.SUSPENDING in target.flags) == signature.suspending &&
-                                target.registers
+                                target.values
                                     .take(signature.parameters.size)
+                                    .map(FunctionValue::semanticType)
                                     .zip(signature.parameters)
                                     .all { (register, parameter) ->
                                         valueTypesMatch(identity.module, register, requireNotNull(signatureIdentity).module, parameter)
@@ -1553,7 +1558,7 @@ internal fun validateArtifact(
                             protectedStart >= blockStart.toLong() &&
                             protectedEnd <= blockEnd &&
                             exception.handlerBlock.value.toLong() in blockStart.toLong() until blockEnd &&
-                            exception.exceptionRegister.value.toLong() < function.registers.size.toLong()
+                            exception.exceptionRegister.value.toLong() < function.values.size.toLong()
                     if (!structurallyValid) {
                         add(
                             ArtifactWriteErrorCode.INCONSISTENT_RANGE,
@@ -1561,7 +1566,7 @@ internal fun validateArtifact(
                             ArtifactWriteLocation(moduleLocation, "EXCEPTIONS"),
                         )
                     }
-                    val registerType = function.registers.getOrNull(exception.exceptionRegister.value.toInt())
+                    val registerType = function.values.getOrNull(exception.exceptionRegister.value.toInt())?.semanticType
                     if (registerType != null && (registerType !is ValueType.Ref || registerType.nullable)) {
                         add(
                             ArtifactWriteErrorCode.INVALID_RANGE,
@@ -1626,7 +1631,7 @@ internal fun validateArtifact(
             val parameterCount =
                 function.parameterCount
                     .toLong()
-                    .takeIf { it <= function.registers.size.toLong() }
+                    .takeIf { it <= function.values.size.toLong() }
                     ?.toInt() ?: 0
             states[0] = (0 until parameterCount).toMutableSet()
             val queue = ArrayDeque<Int>()
@@ -1671,7 +1676,7 @@ internal fun validateArtifact(
                     }
                     instruction.readRegisters().forEach { register ->
                         val registerIndex = register.value.toInt()
-                        if (registerIndex in function.registers.indices && registerIndex !in state) {
+                        if (registerIndex in function.values.indices && registerIndex !in state) {
                             add(
                                 ArtifactWriteErrorCode.INVALID_RANGE,
                                 "instruction reads an uninitialized register",
@@ -1685,7 +1690,7 @@ internal fun validateArtifact(
                         }
                     }
                     instruction.writtenRegisters().forEach { register ->
-                        if (register.value.toInt() in function.registers.indices) state += register.value.toInt()
+                        if (register.value.toInt() in function.values.indices) state += register.value.toInt()
                     }
                 }
                 block.instructions.lastOrNull()?.successors()?.forEach { successor ->

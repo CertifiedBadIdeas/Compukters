@@ -1165,7 +1165,7 @@ class MinimalScriptLoweringTest {
                                             FunctionFlag.STATIC,
                                             FunctionFlag.SUSPENDING.takeIf { suspending },
                                         ),
-                                    registers = emptyList(),
+                                    values = emptyList(),
                                     parameterCount = 0u,
                                     firstBlock = BlockId.of(0u),
                                     blockCount = 1u,

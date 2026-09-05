@@ -143,7 +143,7 @@ class PlatformLibraryCompiler {
                                     ?.getOrNull(
                                         it,
                                     )
-                            }}; registers=${function?.registers}"
+                            }}; values=${function?.values}"
                         }}",
                     )
                 }
@@ -242,7 +242,7 @@ private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFr
             name = library.name,
             signature = TypeRef.Local(typeId),
             flags = setOf(FunctionFlag.STATIC),
-            registers = emptyList(),
+            values = emptyList(),
             parameterCount = 0u,
             firstBlock = blockId,
             blockCount = 1u,

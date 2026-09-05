@@ -427,7 +427,7 @@ private fun relocateFunction(
         owner = function.owner?.let(ids::type),
         name = ids.string(function.name),
         signature = ids.type(function.signature),
-        registers = function.registers.map(ids::value),
+        values = function.values.map { it.copy(semanticType = ids.value(it.semanticType)) },
         firstBlock = ids.block(function.firstBlock),
         firstException = relocateStart(function.firstException, function.exceptionCount, ids.exceptions, "exception"),
     )

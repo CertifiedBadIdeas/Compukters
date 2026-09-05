@@ -319,7 +319,7 @@ private fun decodeFunction(bytes: ByteArray): ru.lazyhat.compukters.compiler.art
             signature,
             flags,
             List(registers) {
-                c.valueType()
+                FunctionValue.scalar(c.valueType())
             },
             parameters,
             firstBlock,

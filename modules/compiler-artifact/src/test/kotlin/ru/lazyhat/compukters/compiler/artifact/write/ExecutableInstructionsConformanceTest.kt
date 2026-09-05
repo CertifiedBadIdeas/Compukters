@@ -34,6 +34,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Function
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionValue
 import ru.lazyhat.compukters.compiler.artifact.model.Import
 import ru.lazyhat.compukters.compiler.artifact.model.ImportId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
@@ -140,7 +141,7 @@ private fun executableInstructionsArtifact(): Artifact {
                             ValueType.Bool,
                             ValueType.Char,
                             charArrayType,
-                        ),
+                        ).map(FunctionValue::scalar),
                         0u,
                         BlockId.of(0u),
                         8u,
@@ -152,7 +153,7 @@ private fun executableInstructionsArtifact(): Artifact {
                         StringId.of(1u),
                         TypeRef.Local(TypeId.of(1u)),
                         setOf(FunctionFlag.STATIC),
-                        listOf(ValueType.I32, stringType),
+                        listOf(ValueType.I32, stringType).map(FunctionValue::scalar),
                         2u,
                         BlockId.of(8u),
                         1u,

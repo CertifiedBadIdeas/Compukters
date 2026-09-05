@@ -163,12 +163,13 @@ data class Function(
     val name: StringId,
     val signature: TypeRef,
     val flags: Set<FunctionFlag>,
-    val registers: List<ValueType>,
+    val values: List<FunctionValue>,
     val parameterCount: UInt,
     val firstBlock: BlockId,
     val blockCount: UInt,
     val firstException: UInt,
     val exceptionCount: UInt,
+    val safepointRoots: List<SafepointRoots> = emptyList(),
 )
 
 data class Block(
