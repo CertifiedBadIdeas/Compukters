@@ -18,7 +18,6 @@
 
 package ru.lazyhat.compukters.compiler.k2.engine
 
-import ru.lazyhat.compukters.compiler.artifact.analysis.ExecutionStorage
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.Modality
@@ -39,12 +38,13 @@ import org.jetbrains.kotlin.ir.expressions.IrBreak
 import org.jetbrains.kotlin.ir.expressions.IrBreakContinue
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrComposite
-import org.jetbrains.kotlin.ir.expressions.IrContinue
 import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
+import org.jetbrains.kotlin.ir.expressions.IrContinue
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrGetEnumValue
 import org.jetbrains.kotlin.ir.expressions.IrGetValue
+import org.jetbrains.kotlin.ir.expressions.IrLoop
 import org.jetbrains.kotlin.ir.expressions.IrReturn
 import org.jetbrains.kotlin.ir.expressions.IrSetValue
 import org.jetbrains.kotlin.ir.expressions.IrStringConcatenation
@@ -53,7 +53,6 @@ import org.jetbrains.kotlin.ir.expressions.IrTypeOperator
 import org.jetbrains.kotlin.ir.expressions.IrTypeOperatorCall
 import org.jetbrains.kotlin.ir.expressions.IrVararg
 import org.jetbrains.kotlin.ir.expressions.IrWhen
-import org.jetbrains.kotlin.ir.expressions.IrLoop
 import org.jetbrains.kotlin.ir.expressions.IrWhileLoop
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
@@ -72,6 +71,7 @@ import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.util.isNullable
 import org.jetbrains.kotlin.ir.util.parentAsClass
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
+import ru.lazyhat.compukters.compiler.artifact.analysis.ExecutionStorage
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
@@ -2628,9 +2628,9 @@ private class FunctionCompiler(
         val iterator = block.statements[0] as? IrVariable ?: return null
         if (iterator.origin.toString() != "FOR_LOOP_ITERATOR") return null
         val iteratorCall = iterator.initializer as? IrCall ?: return null
-        if (iteratorCall.symbol.owner.fqNameWhenAvailable?.asString() != "kotlin.ranges.IntRange.iterator") return null
+        if (iteratorCall.targetFqName() != "kotlin.ranges.IntRange.iterator") return null
         val rangeCall = iteratorCall.arguments.filterNotNull().singleOrNull() as? IrCall ?: return null
-        val rangeFunction = rangeCall.symbol.owner.fqNameWhenAvailable?.asString()
+        val rangeFunction = rangeCall.targetFqName()
         val inclusive =
             when (rangeFunction) {
                 "kotlin.ranges.rangeTo" -> true
@@ -2643,7 +2643,7 @@ private class FunctionCompiler(
         val loop = block.statements[1] as? IrWhileLoop ?: return null
         if (loop.origin?.toString() != "FOR_LOOP_INNER_WHILE") return null
         val hasNext = loop.condition as? IrCall ?: return null
-        if (hasNext.symbol.owner.fqNameWhenAvailable?.asString() != "kotlin.collections.IntIterator.hasNext") return null
+        if (hasNext.targetFqName() != "kotlin.collections.IntIterator.hasNext") return null
         val iteratorRead = hasNext.arguments.filterNotNull().singleOrNull() as? IrGetValue ?: return null
         if (iteratorRead.symbol !== iterator.symbol) return null
 
@@ -2652,7 +2652,7 @@ private class FunctionCompiler(
         val loopVariable = loopBody.statements[0] as? IrVariable ?: return null
         if (loopVariable.origin.toString() != "FOR_LOOP_VARIABLE" || loopVariable.type != intType) return null
         val nextCall = loopVariable.initializer as? IrCall ?: return null
-        if (nextCall.symbol.owner.fqNameWhenAvailable?.asString() != "kotlin.collections.IntIterator.next") return null
+        if (nextCall.targetFqName() != "kotlin.collections.IntIterator.next") return null
         val nextReceiver = nextCall.arguments.filterNotNull().singleOrNull() as? IrGetValue ?: return null
         if (nextReceiver.symbol !== iterator.symbol) return null
         val body = loopBody.statements[1] as? IrExpression ?: return null
@@ -2688,6 +2688,12 @@ private class FunctionCompiler(
         check(blocks[block].instructions.lastOrNull() is Instruction.Jump)
         blocks[block].instructions[blocks[block].instructions.lastIndex] = Instruction.Jump(blockId(target))
     }
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    private fun IrCall.targetFqName(): String? =
+        symbol.owner
+            .fqNameWhenAvailable
+            ?.asString()
 
     private inline fun withLoopContext(
         context: LoopContext,

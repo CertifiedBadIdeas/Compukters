@@ -1010,6 +1010,89 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `allocation free Int loops lower deterministically for vm execution`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                fun verify(actual: Int, expected: Int) {
+                    if (actual == expected) {
+                        actual + expected
+                    } else {
+                        val zero = actual - actual
+                        1 / zero
+                    }
+                }
+
+                fun main() {
+                    var inclusive = 0
+                    for (value in -2..2) {
+                        inclusive = inclusive + value
+                    }
+                    verify(inclusive, 0)
+
+                    var reversed = 0
+                    for (value in 2..-2) {
+                        reversed = reversed + 1
+                    }
+                    verify(reversed, 0)
+
+                    var maximum = 0
+                    for (value in Int.MAX_VALUE..Int.MAX_VALUE) {
+                        maximum = maximum + 1
+                    }
+                    verify(maximum, 1)
+
+                    var start = 1
+                    var end = 3
+                    var snapshot = 0
+                    for (value in start..end) {
+                        start = 100
+                        end = 0
+                        snapshot = snapshot + value
+                    }
+                    verify(snapshot, 6)
+
+                    var exclusive = 0
+                    for (value in 0 until 5) {
+                        exclusive = exclusive + value
+                    }
+                    verify(exclusive, 10)
+
+                    var rangeUntil = 0
+                    for (value in 0..<5) {
+                        rangeUntil = rangeUntil + value
+                    }
+                    verify(rangeUntil, 10)
+
+                    var nested = 0
+                    for (outer in 0 until 4) {
+                        for (inner in 0..5) {
+                            if (inner == 2) continue
+                            if (inner == 4) break
+                            nested = nested + outer + inner
+                        }
+                    }
+                    verify(nested, 34)
+
+                    var quota = 0
+                    for (value in 0 until 1024) {
+                        quota = quota + 1
+                    }
+                    verify(quota, 1024)
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukter.vm.intLoopsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `unsupported loop forms publish no artifact`() =
         withAdapter { adapter ->
             listOf(
