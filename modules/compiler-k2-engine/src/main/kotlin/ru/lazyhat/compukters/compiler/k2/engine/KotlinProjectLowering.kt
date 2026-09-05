@@ -35,8 +35,11 @@ import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.IrVariable
 import org.jetbrains.kotlin.ir.expressions.IrBlock
 import org.jetbrains.kotlin.ir.expressions.IrBlockBody
+import org.jetbrains.kotlin.ir.expressions.IrBreak
+import org.jetbrains.kotlin.ir.expressions.IrBreakContinue
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrComposite
+import org.jetbrains.kotlin.ir.expressions.IrContinue
 import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
@@ -50,6 +53,7 @@ import org.jetbrains.kotlin.ir.expressions.IrTypeOperator
 import org.jetbrains.kotlin.ir.expressions.IrTypeOperatorCall
 import org.jetbrains.kotlin.ir.expressions.IrVararg
 import org.jetbrains.kotlin.ir.expressions.IrWhen
+import org.jetbrains.kotlin.ir.expressions.IrLoop
 import org.jetbrains.kotlin.ir.expressions.IrWhileLoop
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
@@ -1700,6 +1704,7 @@ private class FunctionCompiler(
     private val localTypes = mutableListOf<ValueType>()
     private val values = mutableMapOf<IrValueSymbol, RegisterId>()
     private val blocks = mutableListOf(MutableBlock())
+    private val loopContexts = ArrayDeque<LoopContext>()
     private var currentBlock = 0
 
     fun compile(): CompiledFunction {
@@ -1777,6 +1782,14 @@ private class FunctionCompiler(
 
             is IrThrow -> {
                 emit(Instruction.Throw(compileExpression(statement.value)))
+            }
+
+            is IrBreak -> {
+                compileLoopJump(statement, breakJump = true)
+            }
+
+            is IrContinue -> {
+                compileLoopJump(statement, breakJump = false)
             }
 
             is IrExpression -> {
@@ -2507,12 +2520,50 @@ private class FunctionCompiler(
         currentBlock = header
         val condition = compileExpression(loop.condition)
         val body = createBlock()
-        val exit = createBlock()
-        emit(Instruction.Branch(condition, blockId(body), blockId(exit)))
+        val branchBlock = currentBlock
+        val branchIndex = blocks[branchBlock].instructions.size
+        emit(Instruction.Branch(condition, blockId(body), blockId(header)))
         currentBlock = body
-        loop.body?.let(::compileStatement)
+        val context = LoopContext(loop, continueTarget = header)
+        withLoopContext(context) {
+            loop.body?.let(::compileStatement)
+        }
         if (!isTerminated()) jumpTo(header)
+        val exit = createBlock()
+        blocks[branchBlock].instructions[branchIndex] = Instruction.Branch(condition, blockId(body), blockId(exit))
+        context.breakBlocks.forEach { block ->
+            check(blocks[block].instructions.lastOrNull() is Instruction.Jump)
+            blocks[block].instructions[blocks[block].instructions.lastIndex] = Instruction.Jump(blockId(exit))
+        }
         currentBlock = exit
+    }
+
+    private fun compileLoopJump(
+        jump: IrBreakContinue,
+        breakJump: Boolean,
+    ) {
+        val context = loopContexts.lastOrNull()
+        if (context == null || jump.loop !== context.loop) {
+            throw UnsupportedKotlinIr(jump, "outer loop jump is not supported")
+        }
+        if (breakJump) {
+            context.breakBlocks += currentBlock
+            jumpTo(context.continueTarget)
+        } else {
+            jumpTo(context.continueTarget)
+        }
+    }
+
+    private inline fun withLoopContext(
+        context: LoopContext,
+        action: () -> Unit,
+    ) {
+        loopContexts.addLast(context)
+        try {
+            action()
+        } finally {
+            check(loopContexts.removeLast() === context)
+        }
     }
 
     private fun compileWhenStatement(expression: IrWhen) {
@@ -2744,6 +2795,12 @@ private class FunctionCompiler(
     private data class MutableBlock(
         var loopHeaderSafepoint: Boolean = false,
         val instructions: MutableList<Instruction> = mutableListOf(),
+    )
+
+    private data class LoopContext(
+        val loop: IrLoop,
+        val continueTarget: Int,
+        val breakBlocks: MutableList<Int> = mutableListOf(),
     )
 }
 
