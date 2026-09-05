@@ -112,7 +112,12 @@ class IrExtensionSmokeTest {
                     apiVersion = "2.4"
                     jvmTarget = "17"
                     noReflect = true
-                    classpath = Path.of(Unit::class.java.protectionDomain.codeSource.location.toURI()).toString()
+                    classpath =
+                        Path
+                            .of(
+                                Unit::class.java.protectionDomain.codeSource.location
+                                    .toURI(),
+                            ).toString()
                     pluginClasspaths = arrayOf(checkNotNull(System.getProperty("compukters.engine.jar")))
                 }
 
@@ -176,7 +181,9 @@ private class IrFacts : IrVisitorVoid() {
     }
 
     override fun visitCall(expression: IrCall) {
-        expression.symbol.owner.fqNameWhenAvailable?.asString()?.let(callNames::add)
+        expression.symbol.owner.fqNameWhenAvailable
+            ?.asString()
+            ?.let(callNames::add)
         super.visitCall(expression)
     }
 
