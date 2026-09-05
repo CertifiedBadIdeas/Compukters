@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.compiler.artifact.link
 
 import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
+import ru.lazyhat.compukters.compiler.artifact.analysis.ExecutionStorage
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
@@ -40,6 +41,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Import
 import ru.lazyhat.compukters.compiler.artifact.model.ImportId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.MetadataText
+import ru.lazyhat.compukters.compiler.artifact.model.Manifest
 import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
@@ -163,9 +165,19 @@ object LibraryModuleLinker {
                 function = applicationRelocation.function(application.entry.function),
             )
         val features = semanticFeatures(modules, capabilities)
+        val manifest =
+            application.manifest.withRequiredStackBytes(
+                ExecutionStorage.requiredStackBytes(modules, application.manifest.maximumCallDepth),
+            )
         val linked =
             ReferenceLiveness.derive(
-                application.copy(semanticFeatures = features, entry = entry, modules = modules, capabilities = capabilities),
+                application.copy(
+                    semanticFeatures = features,
+                    manifest = manifest,
+                    entry = entry,
+                    modules = modules,
+                    capabilities = capabilities,
+                ),
             )
         when (val write = ArtifactWriter.write(linked)) {
             is ArtifactWriteResult.Success -> {}
@@ -179,6 +191,20 @@ object LibraryModuleLinker {
         return linked
     }
 }
+
+private fun Manifest.withRequiredStackBytes(requiredStackBytes: UInt): Manifest =
+    Manifest(
+        requiredHeapBytes = requiredHeapBytes,
+        requiredStackBytes = requiredStackBytes,
+        maximumCoroutines = maximumCoroutines,
+        maximumCallDepth = maximumCallDepth,
+        maximumHostRequests = maximumHostRequests,
+        maximumEvents = maximumEvents,
+        maximumBlockCost = maximumBlockCost,
+        minimumSliceCost = minimumSliceCost,
+        compilerAbi = compilerAbi,
+        platformAbi = platformAbi,
+    )
 
 private data class DenseIds(
     val oldIndices: List<Int>,
