@@ -268,6 +268,23 @@ val testKotlinPlatformScalarVmConformance =
         environment("COMPUKTER_KOTLIN_PLATFORM_SCALAR_ARTIFACT", artifact.get().asFile.absolutePath)
     }
 
+val testKotlinIntLoopsVmConformance =
+    tasks.register<Exec>("testKotlinIntLoopsVmConformance") {
+        description = "Executes allocation-free K2 Int loops with the pinned Compukter VM."
+        group = "verification"
+        dependsOn(":compiler-k2:generateIntLoopsConformanceArtifact")
+        val harness = rootProject.file("modules/compiler-artifact/src/test/rust/executable-conformance/Cargo.toml")
+        val artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-int-loops.cpkt")
+        val target = rootProject.file(".toolchain/build/cargo/compiler-k2-int-loops-conformance")
+        inputs.file(harness)
+        inputs.file(rootProject.file("modules/compiler-artifact/src/test/rust/executable-conformance/Cargo.lock"))
+        inputs.file(rootProject.file("modules/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs"))
+        inputs.file(artifact)
+        commandLine("cargo", "test", "--locked", "--offline", "--manifest-path", harness.absolutePath)
+        environment("CARGO_TARGET_DIR", target.absolutePath)
+        environment("COMPUKTER_KOTLIN_INT_LOOPS_ARTIFACT", artifact.get().asFile.absolutePath)
+    }
+
 val buildScriptsTest = gradle.includedBuild("build-scripts").task(":test")
 
 val verifyActiveMinecraftBaseline =
@@ -485,6 +502,7 @@ tasks.register("verifyLocalFull") {
     dependsOn(":playground:endToEndTest")
     dependsOn(testCompilerArtifactVmConformance)
     dependsOn(testKotlinSubsetVmConformance)
+    dependsOn(testKotlinIntLoopsVmConformance)
     dependsOn(":v26_1-neoforge:runGameTestServer")
     dependsOn(":v26_1-neoforge:verifyPackagedCompukterFfi")
 }

@@ -28,6 +28,48 @@ fn entry_argument_limits() -> EntryArgumentLimits {
 }
 
 #[test]
+fn k2_int_loops_execute_across_quota_slices_without_host_io() {
+    let Ok(path) = std::env::var("COMPUKTER_KOTLIN_INT_LOOPS_ARTIFACT") else {
+        return;
+    };
+    let bytes = fs::read(path).expect("K2 Int loops output must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("pinned VM must verify K2 Int loops output");
+    let profile = ExecutionProfile {
+        heap_bytes: 1024 * 1024,
+        frame_storage_bytes: 1024 * 1024,
+        maximum_call_depth: 64,
+        maximum_coroutines: 1,
+        maximum_host_requests: 64,
+        maximum_events: 0,
+        maximum_slice_budget: 64,
+        compiler_abi: [0; 32],
+        platform_abi: [0; 32],
+        maximum_host_arguments: 16,
+        maximum_outbound_utf16_code_units: 4096,
+        maximum_inbound_utf16_code_units: 4096,
+        maximum_accepted_responses: 64,
+        entry_argument_limits: entry_argument_limits(),
+    };
+    let mut session = Session::admit(verified, profile, &[]).expect("K2 Int loops must admit");
+    session.start(&[]).expect("K2 Int loops must start");
+    let mut exhausted_slices = 0;
+
+    loop {
+        match session.advance(64, 16).expect("K2 Int loops must advance") {
+            AdvanceOutcome::SliceExhausted => exhausted_slices += 1,
+            AdvanceOutcome::Halted(None) => break,
+            outcome => panic!("unexpected K2 Int loops outcome: {outcome:?}"),
+        }
+    }
+
+    assert!(
+        exhausted_slices > 0,
+        "long Int loop must cross a quota boundary"
+    );
+}
+
+#[test]
 fn k2_platform_scalar_precondition_traps_before_publishing_a_value() {
     let Ok(path) = std::env::var("COMPUKTER_KOTLIN_PLATFORM_SCALAR_ARTIFACT") else {
         return;

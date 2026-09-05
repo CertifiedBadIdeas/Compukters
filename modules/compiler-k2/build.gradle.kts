@@ -278,6 +278,7 @@ val whenConformanceArtifact = layout.buildDirectory.file("generated/conformance/
 val argvConformanceArtifact = layout.buildDirectory.file("generated/conformance/argv.cpkt")
 val platformScalarConformanceArtifact = layout.buildDirectory.file("generated/conformance/platform-scalar.cpkt")
 val redstoneConformanceArtifact = layout.buildDirectory.file("generated/conformance/redstone.cpkt")
+val intLoopsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-loops.cpkt")
 val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = layout.buildDirectory.file("generated/system/shell.cpkt")
 val kotlincArtifact = layout.buildDirectory.file("generated/system/kotlinc.cpkt")
@@ -390,6 +391,22 @@ val generateRedstoneConformanceArtifact = tasks.register<Test>("generateRedstone
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.redstoneArtifact", redstoneConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateIntLoopsConformanceArtifact = tasks.register<Test>("generateIntLoopsConformanceArtifact") {
+    description = "Compiles allocation-free Kotlin Int loops for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*allocation free Int loops lower deterministically for vm execution*")
+    inputs.file(workerJar)
+    outputs.file(intLoopsConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.intLoopsArtifact", intLoopsConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

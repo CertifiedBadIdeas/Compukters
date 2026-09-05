@@ -108,7 +108,7 @@ object CanonicalTrustedIntrinsics {
                 "fun(CharArray.Int,Int):String",
             )
             primitive("stdlib", "core", "kotlin", "emptyArray", "fun():Array<T>")
-            primitive("stdlib", "ranges", "kotlin.ranges", "IntProgression.iterator", "fun():IntIterator")
+            primitive("stdlib", "ranges", "kotlin.ranges", "IntRange.iterator", "fun():IntIterator")
             primitive("stdlib", "ranges", "kotlin.ranges", "rangeUntil", "fun(Int.Int):IntRange")
             primitive("stdlib", "ranges", "kotlin.ranges", "until", "fun(Int.Int):IntRange")
 
