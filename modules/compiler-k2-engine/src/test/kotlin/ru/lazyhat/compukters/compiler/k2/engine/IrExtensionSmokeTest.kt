@@ -26,9 +26,18 @@ import org.jetbrains.kotlin.config.Services
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import org.jetbrains.kotlin.ir.declarations.IrVariable
+import org.jetbrains.kotlin.ir.expressions.IrBlock
+import org.jetbrains.kotlin.ir.expressions.IrBreak
+import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConst
+import org.jetbrains.kotlin.ir.expressions.IrDoWhileLoop
+import org.jetbrains.kotlin.ir.expressions.IrWhileLoop
+import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
+import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeText
@@ -40,11 +49,53 @@ import kotlin.test.assertTrue
 class IrExtensionSmokeTest {
     @Test
     fun `pinned K2 loads only the worker plugin and reaches typed script IR`() {
+        val module = compileIr("val answer: Int = 42")
+        val facts = IrFacts().also { module.accept(it, null) }
+
+        assertTrue(facts.sourceFiles.any { it.replace('\\', '/').endsWith("/project/main.kt") })
+        assertTrue(42 in facts.intConstants, "typed IR must contain the Int constant 42")
+        assertFailsWith<IllegalStateException> { CompilationBridge.requireSession() }
+    }
+
+    @Test
+    fun `pinned K2 exposes canonical Int range for loop IR`() {
+        val module =
+            compileIr(
+                """
+                fun inclusive(start: Int, end: Int) {
+                    for (index in start..end) println(index)
+                }
+
+                fun exclusive(start: Int, end: Int) {
+                    for (index in start until end) println(index)
+                }
+                """.trimIndent(),
+            )
+        val facts = IrFacts().also { module.accept(it, null) }
+
+        assertEquals(2, facts.blockOrigins.count { it == "FOR_LOOP" }, facts.blockOrigins.toString())
+        assertEquals(0, facts.variableOrigins.count { it == "FOR_LOOP_ITERATOR" }, facts.variableOrigins.toString())
+        assertEquals(2, facts.variableOrigins.count { it == "FOR_LOOP_VARIABLE" }, facts.variableOrigins.toString())
+        assertEquals(0, facts.whileOrigins.size, facts.whileOrigins.toString())
+        assertEquals(2, facts.doWhileOrigins.count { it == "DO_WHILE_COUNTER_LOOP" }, facts.doWhileOrigins.toString())
+        assertEquals(2, facts.breakCount)
+        assertEquals(2, facts.callNames.count { it == "kotlin.jvm.internal.<int-prefix-incr-decr>" }, facts.callNames.toString())
+        assertTrue("kotlin.internal.ir.lessOrEqual" in facts.callNames, facts.callNames.toString())
+        assertTrue("kotlin.internal.ir.EQEQ" in facts.callNames, facts.callNames.toString())
+        assertTrue("kotlin.internal.ir.less" in facts.callNames, facts.callNames.toString())
+        assertTrue(facts.callNames.none { it.endsWith(".rangeTo") || it.endsWith(".until") }, facts.callNames.toString())
+        assertTrue(
+            facts.callNames.none { it.endsWith(".iterator") || it.endsWith(".hasNext") || it.endsWith(".next") },
+            facts.callNames.toString(),
+        )
+    }
+
+    private fun compileIr(sourceText: String): IrModuleFragment {
         val root = createTempDirectory("compukters-k2-ir-test-")
         try {
             val source = root.resolve("project/main.kt")
             source.parent.createDirectories()
-            source.writeText("val answer: Int = 42")
+            source.writeText(sourceText)
             val output = root.resolve("classes")
             output.createDirectories()
             val modules = mutableListOf<IrModuleFragment>()
@@ -57,6 +108,7 @@ class IrExtensionSmokeTest {
                     apiVersion = "2.4"
                     jvmTarget = "17"
                     noReflect = true
+                    classpath = Path.of(Unit::class.java.protectionDomain.codeSource.location.toURI()).toString()
                     pluginClasspaths = arrayOf(checkNotNull(System.getProperty("compukters.engine.jar")))
                 }
 
@@ -67,19 +119,23 @@ class IrExtensionSmokeTest {
 
             assertEquals(ExitCode.OK, exitCode)
             assertEquals(1, modules.size)
-            val facts = IrFacts().also { modules.single().accept(it, null) }
-            assertTrue(facts.sourceFiles.any { it.replace('\\', '/').endsWith("/project/main.kt") })
-            assertTrue(42 in facts.intConstants, "typed IR must contain the Int constant 42")
-            assertFailsWith<IllegalStateException> { CompilationBridge.requireSession() }
+            return modules.single()
         } finally {
             root.toFile().deleteRecursively()
         }
     }
 }
 
+@OptIn(UnsafeDuringIrConstructionAPI::class)
 private class IrFacts : IrVisitorVoid() {
     val sourceFiles = mutableListOf<String>()
     val intConstants = mutableListOf<Int>()
+    val blockOrigins = mutableListOf<String>()
+    val variableOrigins = mutableListOf<String>()
+    val whileOrigins = mutableListOf<String>()
+    val doWhileOrigins = mutableListOf<String>()
+    val callNames = mutableListOf<String>()
+    var breakCount = 0
 
     override fun visitElement(element: IrElement) {
         element.acceptChildren(this, null)
@@ -93,5 +149,35 @@ private class IrFacts : IrVisitorVoid() {
     override fun visitConst(expression: IrConst) {
         (expression.value as? Int)?.let(intConstants::add)
         super.visitConst(expression)
+    }
+
+    override fun visitBlock(expression: IrBlock) {
+        expression.origin?.toString()?.let(blockOrigins::add)
+        super.visitBlock(expression)
+    }
+
+    override fun visitVariable(declaration: IrVariable) {
+        declaration.origin.toString().let(variableOrigins::add)
+        super.visitVariable(declaration)
+    }
+
+    override fun visitWhileLoop(loop: IrWhileLoop) {
+        loop.origin?.toString()?.let(whileOrigins::add)
+        super.visitWhileLoop(loop)
+    }
+
+    override fun visitDoWhileLoop(loop: IrDoWhileLoop) {
+        loop.origin?.toString()?.let(doWhileOrigins::add)
+        super.visitDoWhileLoop(loop)
+    }
+
+    override fun visitCall(expression: IrCall) {
+        expression.symbol.owner.fqNameWhenAvailable?.asString()?.let(callNames::add)
+        super.visitCall(expression)
+    }
+
+    override fun visitBreak(jump: IrBreak) {
+        breakCount += 1
+        super.visitBreak(jump)
     }
 }
