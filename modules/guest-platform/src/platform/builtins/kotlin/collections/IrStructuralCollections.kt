@@ -8,9 +8,15 @@ package kotlin.collections
 
 import kotlin.*
 
-internal interface Iterable<out T>
+public interface Iterable<out T> {
+    public operator fun iterator(): Iterator<T>
+}
 
-internal interface Iterator<out T>
+public interface Iterator<out T> {
+    public operator fun hasNext(): Boolean
+
+    public operator fun next(): T
+}
 
 internal interface Collection<out T> : Iterable<T>
 
@@ -48,7 +54,11 @@ internal abstract class CharIterator : Iterator<Char>
 
 internal abstract class ShortIterator : Iterator<Short>
 
-internal abstract class IntIterator : Iterator<Int>
+public abstract class IntIterator : Iterator<Int> {
+    public abstract override operator fun next(): Int
+
+    public abstract fun nextInt(): Int
+}
 
 internal abstract class LongIterator : Iterator<Long>
 
