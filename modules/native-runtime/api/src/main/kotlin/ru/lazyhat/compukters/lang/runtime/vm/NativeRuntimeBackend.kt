@@ -24,5 +24,8 @@ import java.nio.file.Path
 interface NativeRuntimeBackend {
     val id: String
 
+    /** Platform-independent native library basename used for packaged resources. */
+    val libraryBaseName: String
+
     fun open(library: Path): LowLevelVmBridge
 }
