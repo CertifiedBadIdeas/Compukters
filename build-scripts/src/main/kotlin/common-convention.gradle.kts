@@ -24,6 +24,7 @@ val libs = libsCatalog()
 
 dependencies {
     implementation(project(":core"))
+    implementation(project(":ide-client"))
     implementation(project(":native-runtime-api"))
 
     implementation(libs.findLibrary("kotlin-stdlib").get())
