@@ -20,6 +20,14 @@ package ru.lazyhat.compukters.compiler.worker.k2
 
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
+import ru.lazyhat.compukters.addon.api.AddonCapabilityIdentity
+import ru.lazyhat.compukters.addon.api.AddonCapabilityOperation
+import ru.lazyhat.compukters.addon.api.AddonCapabilitySchema
+import ru.lazyhat.compukters.addon.api.AddonCapabilityValueType
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBinding
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
+import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
 import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryBudgetException
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
@@ -29,9 +37,13 @@ import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticSeverity
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.platform.bundle.PlatformBundle
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardWatchEventKinds
@@ -128,6 +140,55 @@ class K2CompilerAdapterTest {
         }
 
     @Test
+    fun `admitted addon metadata type checks and lowers while guest spoof is rejected`() {
+        val packaged = K2CompilerAdapter.loadPackagedPlatform()
+        val createModule = packaged.modules.single { it.id.toString() == "create:kinetics" }
+        val addon = createBundle(createModule)
+        val base = packaged.copy(modules = packaged.modules.filterNot { it.id == createModule.id })
+
+        withAdapter(base) { adapter, _ ->
+            val selected =
+                createModule.dependencies.map { dependency ->
+                    val module = base.modules.single { it.id == dependency }
+                    TrustedBundleIdentity.of(
+                        module.id.toString(),
+                        Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()),
+                    )
+                } + TrustedBundleIdentity.of(addon.identity.module, Hash256.of(addon.identity.contentHash.toByteArray()))
+            val payload =
+                TrustedBundlePayload(
+                    selected.last(),
+                    BinaryValue.of(AddonGuestApiBundleCodec.encode(addon)),
+                )
+            val admitted =
+                adapter.compile(
+                    request(
+                        "import create.kinetics.Kinetics\nfun main() { val speed = Kinetics.front.speedometer().speed() }",
+                        platformModules = selected,
+                        addonBundles = listOf(payload),
+                    ),
+                )
+            val artifact = ArtifactReader.read(assertNotNull(admitted.artifact, admitted.diagnostics.joinToString()).toByteArray())
+            assertTrue(
+                artifact.capabilities.any { capability ->
+                    val strings = artifact.modules.first().strings
+                    strings[capability.namespace.value.toInt()].toString() == "create" &&
+                        strings[capability.name.value.toInt()].toString() == "kinetics"
+                },
+            )
+
+            val spoof =
+                adapter.compile(
+                    request(
+                        "package create.kinetics\nprivate object KineticsBindings { fun speed(handle: Int): Float = handle.toFloat() }\nfun main() { val speed = KineticsBindings.speed(1) }",
+                    ),
+                )
+            assertNull(spoof.artifact)
+            assertTrue(spoof.diagnostics.any { it.category == DiagnosticCategory.TARGET })
+        }
+    }
+
+    @Test
     fun `diagnostic count text and physical paths are bounded`() {
         val physical = Path.of("private/request/source/main.kt")
         val collector =
@@ -212,7 +273,10 @@ class K2CompilerAdapterTest {
             Files.list(root).use { assertEquals(0, it.count()) }
         }
 
-    private fun withAdapter(block: (K2CompilerAdapter, Path) -> Unit) {
+    private fun withAdapter(
+        platform: PlatformBundle = K2CompilerAdapter.loadPackagedPlatform(),
+        block: (K2CompilerAdapter, Path) -> Unit,
+    ) {
         val root = createTempDirectory("compukters-k2-adapter-test-")
         try {
             val adapter =
@@ -222,6 +286,7 @@ class K2CompilerAdapterTest {
                         workerJar = Path.of(checkNotNull(System.getProperty("compukters.worker.jar"))),
                         expectedIdentity = identity(),
                     ),
+                    platform,
                 )
             block(adapter, root)
         } finally {
@@ -232,11 +297,15 @@ class K2CompilerAdapterTest {
     private fun request(
         source: String,
         limits: WorkerLimits = WorkerLimits(),
-    ): CompileRequest = request(listOf(source("project/virtual.kt", source)), limits)
+        platformModules: List<TrustedBundleIdentity> = emptyList(),
+        addonBundles: List<TrustedBundlePayload> = emptyList(),
+    ): CompileRequest = request(listOf(source("project/virtual.kt", source)), limits, platformModules, addonBundles)
 
     private fun request(
         sources: List<ProjectSource>,
         limits: WorkerLimits = WorkerLimits(),
+        platformModules: List<TrustedBundleIdentity> = emptyList(),
+        addonBundles: List<TrustedBundlePayload> = emptyList(),
     ): CompileRequest =
         CompileRequest(
             RequestId.of(1u),
@@ -244,7 +313,60 @@ class K2CompilerAdapterTest {
             TargetSettings.KOTLIN_2_4_JVM_17,
             identity(),
             limits,
+            platformModules,
+            addonBundles,
         )
+
+    private fun createBundle(module: ru.lazyhat.compukters.platform.bundle.PlatformModule): AddonGuestApiBundle {
+        val capability = AddonCapabilityIdentity("create", "kinetics", 1, 0)
+        val operations =
+            listOf(
+                "fun(Int):Int" to AddonCapabilityValueType.I32,
+                "fun(Int):Float" to AddonCapabilityValueType.F32,
+                "fun(Int):Float" to AddonCapabilityValueType.F32,
+                "fun(Int):Int" to AddonCapabilityValueType.I32,
+                "fun(Int):Float" to AddonCapabilityValueType.F32,
+                "fun(Int):Float" to AddonCapabilityValueType.F32,
+                "fun(Int):Unit" to AddonCapabilityValueType.UNIT,
+                "fun(Int):Int" to AddonCapabilityValueType.I32,
+                "fun(Int):Int" to AddonCapabilityValueType.I32,
+                "fun(Int,Int):Int" to AddonCapabilityValueType.I32,
+            )
+        val names =
+            listOf(
+                "acquireSpeedometer",
+                "speed",
+                "awaitSpeedChange",
+                "acquireStressometer",
+                "stress",
+                "capacity",
+                "awaitStressChange",
+                "acquireRotationController",
+                "targetSpeed",
+                "setTargetSpeed",
+            )
+        val schema =
+            AddonCapabilitySchema(
+                capability,
+                operations.map { (signature, result) ->
+                    val arguments =
+                        signature.substringAfter('(').substringBefore(')').split(',').filter(String::isNotEmpty).map {
+                            AddonCapabilityValueType.I32
+                        }
+                    AddonCapabilityOperation(arguments, result, asynchronous = true)
+                },
+            )
+        return AddonGuestApiBundleCodec.assemble(
+            "create",
+            PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
+            module,
+            listOf(schema),
+            names.mapIndexed { index, name ->
+                AddonGuestApiBinding("create.kinetics", "KineticsBindings", name, operations[index].first, capability, index)
+            },
+            includeSources = false,
+        )
+    }
 
     private fun source(
         path: String,

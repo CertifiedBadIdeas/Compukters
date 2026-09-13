@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.ide.analysis.protocol
 
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
 import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
@@ -138,31 +139,49 @@ private fun loadPlatformSourceLengths(
     profile: AdmittedAnalysisProfile,
     limits: AnalysisLimits,
 ): Map<AnalysisModuleIdentity, Map<VirtualSourcePath, Int>> {
-    val sourceRoot = profile.platform.sourceRoot ?: return emptyMap()
-    var sourceCount = 0
-    var totalBytes = 0L
-    val path = Path.of(sourceRoot)
-    require(path.isAbsolute && path.normalize() == path) { "platform source root must be absolute and normalized" }
-    require(!Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
-        "platform source root is missing or is not a regular file"
-    }
-    val lengths = linkedMapOf<VirtualSourcePath, Int>()
-    ZipFile(path.toFile()).use { archive ->
-        archive.entries().asSequence().filterNot { it.isDirectory }.filter { it.name.endsWith(".kt") }.forEach { entry ->
-            require(sourceCount < limits.sourceFiles) { "platform source count exceeds analysis limit" }
-            val bytes = archive.getInputStream(entry).use { it.readNBytes(limits.sourceFileBytes + 1) }
-            require(bytes.size <= limits.sourceFileBytes) { "platform source file exceeds analysis limit" }
-            sourceCount += 1
-            totalBytes += bytes.size
-            require(totalBytes <= limits.sourceBytes) { "platform source bytes exceed analysis limit" }
-            val sourcePath = VirtualSourcePath.kotlin(entry.name)
-            require(lengths.put(sourcePath, decodeStrictUtf8(BinaryValue.of(bytes)).length) == null) {
-                "duplicate platform source path: ${entry.name}"
+    val result = linkedMapOf<AnalysisModuleIdentity, Map<VirtualSourcePath, Int>>()
+    profile.platform.sourceRoot?.let { sourceRoot ->
+        var sourceCount = 0
+        var totalBytes = 0L
+        val path = Path.of(sourceRoot)
+        require(path.isAbsolute && path.normalize() == path) { "platform source root must be absolute and normalized" }
+        require(!Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+            "platform source root is missing or is not a regular file"
+        }
+        val lengths = linkedMapOf<VirtualSourcePath, Int>()
+        ZipFile(path.toFile()).use { archive ->
+            archive.entries().asSequence().filterNot { it.isDirectory }.filter { it.name.endsWith(".kt") }.forEach { entry ->
+                require(sourceCount < limits.sourceFiles) { "platform source count exceeds analysis limit" }
+                val bytes = archive.getInputStream(entry).use { it.readNBytes(limits.sourceFileBytes + 1) }
+                require(bytes.size <= limits.sourceFileBytes) { "platform source file exceeds analysis limit" }
+                sourceCount += 1
+                totalBytes += bytes.size
+                require(totalBytes <= limits.sourceBytes) { "platform source bytes exceed analysis limit" }
+                val sourcePath = VirtualSourcePath.kotlin(entry.name)
+                require(lengths.put(sourcePath, decodeStrictUtf8(BinaryValue.of(bytes)).length) == null) {
+                    "duplicate platform source path: ${entry.name}"
+                }
             }
         }
+        val immutableLengths = lengths.toMap()
+        profile.platform.modules.forEach { module -> result[module.identity] = immutableLengths }
     }
-    val immutableLengths = lengths.toMap()
-    return profile.platform.modules.associate { module -> module.identity to immutableLengths }
+    profile.platform.addonBundles.forEach { payload ->
+        val bundle = AddonGuestApiBundleCodec.decode(payload.content.toByteArray())
+        require(bundle.identity.module == payload.identity.name) { "analysis addon bundle module identity mismatch" }
+        require(
+            bundle.identity.contentHash
+                .toByteArray()
+                .contentEquals(payload.identity.hash.toByteArray()),
+        ) {
+            "analysis addon bundle content hash mismatch"
+        }
+        result[payload.identity] =
+            bundle.moduleDescriptor.sources.associate { source ->
+                VirtualSourcePath.kotlin(source.path) to decodeStrictUtf8(BinaryValue.of(source.content.toByteArray())).length
+            }
+    }
+    return result
 }
 
 object AnalysisMessageCodec {
@@ -582,6 +601,11 @@ private class MessageSink {
         value.platform.modules.forEach { module ->
             moduleIdentity(module.identity)
         }
+        u32(value.platform.addonBundles.size)
+        value.platform.addonBundles.forEach { bundle ->
+            moduleIdentity(bundle.identity)
+            bytes(bundle.content)
+        }
         nullableString(value.platform.sourceRoot)
     }
 
@@ -993,8 +1017,12 @@ private class MessageSource(
             List(count) {
                 AdmittedAnalysisModule(moduleIdentity())
             }
+        val addonBundles =
+            List(boundedCount(limits.modules, "addon bundle")) {
+                AdmittedAnalysisBundle(moduleIdentity(), bytes())
+            }
         val sourceRoot = nullableString(ProtocolLimits.MAX_PATH_BYTES)
-        return AdmittedAnalysisProfile(wireIdentity, AdmittedAnalysisPlatform(platformAbi, modules, sourceRoot))
+        return AdmittedAnalysisProfile(wireIdentity, AdmittedAnalysisPlatform(platformAbi, modules, sourceRoot, addonBundles))
     }
 
     fun query(): AnalysisQuery {

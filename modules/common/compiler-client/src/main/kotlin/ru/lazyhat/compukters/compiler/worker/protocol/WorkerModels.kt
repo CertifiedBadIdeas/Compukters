@@ -198,6 +198,15 @@ class TrustedBundleIdentity private constructor(
     }
 }
 
+class TrustedBundlePayload(
+    val identity: TrustedBundleIdentity,
+    val content: BinaryValue,
+) {
+    override fun equals(other: Any?): Boolean = other is TrustedBundlePayload && identity == other.identity && content == other.content
+
+    override fun hashCode(): Int = 31 * identity.hashCode() + content.hashCode()
+}
+
 class CompileRequest(
     val requestId: RequestId,
     sources: List<ProjectSource>,
@@ -205,13 +214,19 @@ class CompileRequest(
     val expectedIdentity: WorkerIdentity,
     val limits: WorkerLimits,
     platformModules: List<TrustedBundleIdentity> = emptyList(),
+    addonBundles: List<TrustedBundlePayload> = emptyList(),
 ) : WorkerMessage {
     override val type = WorkerMessageType.COMPILE_REQUEST
     val sources: List<ProjectSource> = ProjectSnapshot.of(sources, limits).sources
     val platformModules: List<TrustedBundleIdentity> = platformModules.toList()
+    val addonBundles: List<TrustedBundlePayload> = addonBundles.toList()
 
     init {
         requireUniqueBundles(this.platformModules, "platform modules")
+        requireUniqueBundles(this.addonBundles.map(TrustedBundlePayload::identity), "addon bundles")
+        require(this.addonBundles.all { it.identity in this.platformModules }) {
+            "addon bundle payloads must belong to selected platform modules"
+        }
     }
 
     fun copy(
@@ -221,7 +236,8 @@ class CompileRequest(
         expectedIdentity: WorkerIdentity = this.expectedIdentity,
         limits: WorkerLimits = this.limits,
         platformModules: List<TrustedBundleIdentity> = this.platformModules,
-    ): CompileRequest = CompileRequest(requestId, sources, target, expectedIdentity, limits, platformModules)
+        addonBundles: List<TrustedBundlePayload> = this.addonBundles,
+    ): CompileRequest = CompileRequest(requestId, sources, target, expectedIdentity, limits, platformModules, addonBundles)
 
     override fun equals(other: Any?): Boolean =
         other is CompileRequest &&
@@ -230,9 +246,10 @@ class CompileRequest(
             target == other.target &&
             expectedIdentity == other.expectedIdentity &&
             limits == other.limits &&
-            platformModules == other.platformModules
+            platformModules == other.platformModules &&
+            addonBundles == other.addonBundles
 
-    override fun hashCode(): Int = listOf(requestId, sources, target, expectedIdentity, limits, platformModules).hashCode()
+    override fun hashCode(): Int = listOf(requestId, sources, target, expectedIdentity, limits, platformModules, addonBundles).hashCode()
 
     private fun requireUniqueBundles(
         bundles: List<TrustedBundleIdentity>,

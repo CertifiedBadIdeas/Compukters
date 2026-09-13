@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.compiler.k2.engine
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
@@ -45,6 +46,7 @@ class CompilationSession(
     sourcePaths: Map<String, VirtualSourcePath> = emptyMap(),
     trustedPlatformSourceModules: Map<String, PlatformModuleId> = emptyMap(),
     val canonicalIntrinsicRegistry: CanonicalIntrinsicRegistry? = null,
+    val capabilityShapes: Map<PlatformCapabilityId, PlatformCapabilityShape> = emptyMap(),
     val selectedPlatformModules: Set<PlatformModuleId> = emptySet(),
     val platformFunctions: List<PlatformFunctionLink> = emptyList(),
     val platformTypes: List<PlatformTypeLink> = emptyList(),
@@ -68,6 +70,16 @@ class CompilationSession(
                 .normalize()
                 .toString()
         }.getOrDefault(path)
+}
+
+data class PlatformCapabilityShape(
+    val abiMinor: Int,
+    val operationCount: UInt,
+) {
+    init {
+        require(abiMinor in 0..UShort.MAX_VALUE.toInt()) { "capability ABI minor is out of range" }
+        require(operationCount > 0u) { "capability operation count must be positive" }
+    }
 }
 
 data class PlatformFunctionLink(

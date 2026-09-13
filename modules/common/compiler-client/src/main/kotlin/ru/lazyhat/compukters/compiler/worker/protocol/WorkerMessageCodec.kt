@@ -46,6 +46,7 @@ object WorkerMessageCodec {
                 sink.identity(message.expectedIdentity)
                 sink.limits(message.limits)
                 sink.bundles(message.platformModules)
+                sink.bundlePayloads(message.addonBundles)
             }
 
             is CompileSuccess -> {
@@ -171,6 +172,16 @@ private class MessageSink {
         values.forEach { bundle ->
             string(bundle.name)
             hash(bundle.hash)
+        }
+    }
+
+    fun bundlePayloads(values: List<TrustedBundlePayload>) {
+        require(values.size <= MAX_WIRE_BUNDLES) { "trusted bundle payload count exceeds wire limit" }
+        u32(values.size)
+        values.forEach { bundle ->
+            string(bundle.identity.name)
+            hash(bundle.identity.hash)
+            bytes(bundle.content)
         }
     }
 
@@ -309,8 +320,9 @@ private class MessageSource(
         val identity = identity()
         val limits = limits()
         val platformModules = bundles()
+        val addonBundles = bundlePayloads()
         return try {
-            CompileRequest(requestId, sources, target, identity, limits, platformModules)
+            CompileRequest(requestId, sources, target, identity, limits, platformModules, addonBundles)
         } catch (exception: IllegalArgumentException) {
             fail(WorkerProtocolError.INVALID_MESSAGE_VALUE, exception.message ?: "invalid compile request")
         }
@@ -342,6 +354,17 @@ private class MessageSource(
                 TrustedBundleIdentity.of(string(), hash())
             } catch (exception: IllegalArgumentException) {
                 fail(WorkerProtocolError.INVALID_MESSAGE_VALUE, exception.message ?: "invalid trusted bundle identity")
+            }
+        }
+    }
+
+    fun bundlePayloads(): List<TrustedBundlePayload> {
+        val count = boundedCount(MAX_WIRE_BUNDLES, "trusted bundle payload")
+        return List(count) {
+            try {
+                TrustedBundlePayload(TrustedBundleIdentity.of(string(), hash()), bytes())
+            } catch (exception: IllegalArgumentException) {
+                fail(WorkerProtocolError.INVALID_MESSAGE_VALUE, exception.message ?: "invalid trusted bundle payload")
             }
         }
     }

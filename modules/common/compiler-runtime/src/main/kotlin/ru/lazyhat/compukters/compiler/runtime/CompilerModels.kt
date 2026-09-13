@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
 import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 
@@ -42,6 +43,7 @@ data class CompilerServiceConfiguration(
     val limits: WorkerLimits,
     val target: TargetSettings = TargetSettings.KOTLIN_2_4_JVM_17,
     val platformModules: List<TrustedBundleIdentity> = emptyList(),
+    val addonBundles: List<TrustedBundlePayload> = emptyList(),
 )
 
 data class CompilerServicePolicy(

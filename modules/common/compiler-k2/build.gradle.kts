@@ -29,6 +29,7 @@ plugins {
 }
 
 dependencies {
+    implementation(projects.addonGuestApi)
     implementation(projects.compilerK2Engine)
     implementation(projects.compilerClient)
     implementation(projects.compilerArtifact)
@@ -243,6 +244,7 @@ val verifyCompilerWorkerLicenses =
                     .sorted()
             val projectPrefixes =
                 listOf(
+                    "addon-guest-api-",
                     "compiler-artifact-",
                     "compiler-client-",
                     "compiler-k2-",

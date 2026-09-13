@@ -49,6 +49,7 @@ plugins {
 }
 
 dependencies {
+    api(projects.addonGuestApi)
     api(projects.ideCore)
     api(projects.compilerClient)
     implementation(projects.workerClient)
@@ -58,6 +59,7 @@ dependencies {
 
 val allowedAnalysisClientRuntimeModules =
     setOf(
+        ":addon-guest-api",
         ":compiler-client",
         ":ide-core",
         ":platform-bundle",

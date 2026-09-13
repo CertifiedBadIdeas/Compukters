@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
 import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
 import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import java.util.concurrent.CompletableFuture
 
 interface CompilerBackend : AutoCloseable {
@@ -29,6 +30,7 @@ interface CompilerBackend : AutoCloseable {
         snapshot: ProjectSnapshot,
         target: TargetSettings,
         platformModules: List<TrustedBundleIdentity>,
+        addonBundles: List<TrustedBundlePayload> = emptyList(),
     ): CompletableFuture<CompileResult>
 
     fun cancel(future: CompletableFuture<CompileResult>) {

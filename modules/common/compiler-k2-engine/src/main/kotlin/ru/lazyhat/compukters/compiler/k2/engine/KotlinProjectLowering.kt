@@ -122,6 +122,7 @@ import ru.lazyhat.compukters.compiler.artifact.pool.ConstantPoolBuilder
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CapabilityOperationHandler
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.IntrinsicBlockingMode
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
 import ru.lazyhat.compukters.platform.bundle.PlatformDefaultArgument
 import ru.lazyhat.compukters.platform.bundle.PlatformScalarConstant
 import ru.lazyhat.compukters.platform.bundle.PlatformScalarRepresentation
@@ -588,8 +589,8 @@ internal object KotlinProjectLowering {
                                 capability.namespace,
                                 capability.name,
                                 capability.abiMajor.toUShort(),
-                                0u.toUShort(),
-                                capabilityOperationCount(capability.namespace, capability.name),
+                                capabilityShape(capability, session).abiMinor.toUShort(),
+                                capabilityShape(capability, session).operationCount,
                             )
                         }.orEmpty()
             ).distinct().sorted()
@@ -3962,8 +3963,8 @@ private fun resolveTrustedIntrinsic(
             capability.namespace,
             capability.name,
             capability.abiMajor.toUShort(),
-            0u.toUShort(),
-            capabilityOperationCount(capability.namespace, capability.name),
+            capabilityShape(capability, session).abiMinor.toUShort(),
+            capabilityShape(capability, session).operationCount,
         ),
         handler.operation,
         handler.blocking,
@@ -3997,21 +3998,25 @@ private fun IrClass.relativeClassName(): String =
         .asReversed()
         .joinToString(".")
 
-private fun capabilityOperationCount(
-    namespace: String,
-    name: String,
-): UInt =
-    when (namespace to name) {
-        "compukter" to "terminal" -> 14u
-        "compukter" to "stdio" -> 3u
-        "compukter" to "process" -> 3u
-        "compukter" to "filesystem" -> 7u
-        "compukter" to "compiler" -> 2u
-        "compukter" to "redstone" -> 8u
-        "compukter" to "sound" -> 1u
-        "create" to "kinetics" -> 10u
-        else -> error("unknown Compukters capability $namespace:$name")
-    }
+private fun capabilityShape(
+    capability: PlatformCapabilityId,
+    session: CompilationSession,
+): PlatformCapabilityShape =
+    session.capabilityShapes[capability]
+        ?: PlatformCapabilityShape(
+            0,
+            when (capability.namespace to capability.name) {
+                "compukter" to "terminal" -> 14u
+                "compukter" to "stdio" -> 3u
+                "compukter" to "process" -> 3u
+                "compukter" to "filesystem" -> 7u
+                "compukter" to "compiler" -> 2u
+                "compukter" to "redstone" -> 8u
+                "compukter" to "sound" -> 1u
+                "create" to "kinetics" -> 10u
+                else -> error("unknown Compukters capability ${capability.namespace}:${capability.name}")
+            },
+        )
 
 private fun Any.toArtifactConstant(literalIds: Map<Utf16Literal, Utf16LiteralId>): Constant =
     when (this) {

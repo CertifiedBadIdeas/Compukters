@@ -69,13 +69,18 @@ class AnalysisProtocolRoundTripTest {
         val updatedSnapshot = snapshot("src/main.kt" to "val answer = 43")
         val updatedIdentity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(updatedSnapshot), identity.profile)
         val changedSources = updatedSnapshot.sources
+        val addonModule = AnalysisModuleIdentity("addon:meters", hash(6))
         val profile =
             AdmittedAnalysisProfile(
                 identity.profile,
                 AdmittedAnalysisPlatform(
                     hash(5),
-                    listOf(AdmittedAnalysisModule(AnalysisModuleIdentity("std", hash(3)))),
+                    listOf(
+                        AdmittedAnalysisModule(addonModule),
+                        AdmittedAnalysisModule(AnalysisModuleIdentity("std", hash(3))),
+                    ),
                     "/safe/std-sources.jar",
+                    listOf(AdmittedAnalysisBundle(addonModule, BinaryValue.of(byteArrayOf(1, 2, 3)))),
                 ),
             )
         val messages =

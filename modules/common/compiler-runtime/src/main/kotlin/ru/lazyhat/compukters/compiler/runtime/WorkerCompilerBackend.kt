@@ -23,6 +23,7 @@ import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
 import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
 import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import java.util.concurrent.CompletableFuture
 
 class WorkerCompilerBackend(
@@ -32,7 +33,8 @@ class WorkerCompilerBackend(
         snapshot: ProjectSnapshot,
         target: TargetSettings,
         platformModules: List<TrustedBundleIdentity>,
-    ): CompletableFuture<CompileResult> = controller.compile(snapshot, target, platformModules)
+        addonBundles: List<TrustedBundlePayload>,
+    ): CompletableFuture<CompileResult> = controller.compile(snapshot, target, platformModules, addonBundles)
 
     override fun cancel(future: CompletableFuture<CompileResult>) {
         controller.cancel(future)
