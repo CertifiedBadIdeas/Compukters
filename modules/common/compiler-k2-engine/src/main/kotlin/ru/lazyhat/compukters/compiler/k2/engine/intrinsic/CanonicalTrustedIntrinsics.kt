@@ -31,9 +31,10 @@ object CanonicalTrustedIntrinsics {
     val compiler = PlatformCapabilityId("compukter", "compiler", 1)
     val redstone = PlatformCapabilityId("compukter", "redstone", 1)
     val sound = PlatformCapabilityId("compukter", "sound", 1)
+    val createKinetics = PlatformCapabilityId("create", "kinetics", 1)
 
     val executableCapabilities: Set<PlatformCapabilityId> =
-        setOf(terminal, stdio, process, filesystem, compiler, redstone, sound)
+        setOf(terminal, stdio, process, filesystem, compiler, redstone, sound, createKinetics)
 
     val registry: TrustedIntrinsicRegistry = TrustedIntrinsicRegistry.create(registrations())
 
@@ -251,6 +252,30 @@ object CanonicalTrustedIntrinsics {
                 0u,
                 true,
             )
+
+            listOf(
+                Triple("acquireSpeedometer", "fun(Int):Int", 0u),
+                Triple("speed", "fun(Int):Float", 1u),
+                Triple("awaitSpeedChange", "fun(Int):Float", 2u),
+                Triple("acquireStressometer", "fun(Int):Int", 3u),
+                Triple("stress", "fun(Int):Float", 4u),
+                Triple("capacity", "fun(Int):Float", 5u),
+                Triple("awaitStressChange", "fun(Int):Unit", 6u),
+                Triple("acquireRotationController", "fun(Int):Int", 7u),
+                Triple("targetSpeed", "fun(Int):Int", 8u),
+                Triple("setTargetSpeed", "fun(Int,Int):Int", 9u),
+            ).forEach { (name, signature, operation) ->
+                capability(
+                    "create",
+                    "kinetics",
+                    "create.kinetics",
+                    "KineticsBindings.$name",
+                    signature,
+                    createKinetics,
+                    operation,
+                    blocking = true,
+                )
+            }
 
             listOf(
                 Triple("stat", "fun(String):Int", 0u),
