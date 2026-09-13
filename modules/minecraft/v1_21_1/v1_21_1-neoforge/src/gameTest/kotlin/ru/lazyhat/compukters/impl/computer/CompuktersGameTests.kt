@@ -58,6 +58,15 @@ object CompuktersGameTests {
 
     @JvmStatic
     @GameTest(
+        batch = "create_kinetics",
+        template = EMPTY_TEMPLATE,
+        templateNamespace = "minecraft",
+        timeoutTicks = TIMEOUT_TICKS,
+    )
+    fun createKinetics(helper: GameTestHelper) = CreateKineticsGameTestScenario.run(helper)
+
+    @JvmStatic
+    @GameTest(
         batch = "actor_service",
         template = EMPTY_TEMPLATE,
         templateNamespace = "minecraft",

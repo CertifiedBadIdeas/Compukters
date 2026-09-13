@@ -30,6 +30,20 @@ val modProperties =
         .toMutableMap()
         .apply {
             this["mod_version"] = modVersion
+            this["optional_dependencies"] =
+                if (buildContext().versionKey == "v1211") {
+                    """
+
+                    [[dependencies.${getValue("mod_id")}]]
+                    modId="create"
+                    type="optional"
+                    versionRange="[6.0.11,6.1)"
+                    ordering="AFTER"
+                    side="BOTH"
+                    """.trimIndent()
+                } else {
+                    ""
+                }
         }.toMap()
 
 base.archivesName = modProperties.getValue("mod_id").replace(" ", "")

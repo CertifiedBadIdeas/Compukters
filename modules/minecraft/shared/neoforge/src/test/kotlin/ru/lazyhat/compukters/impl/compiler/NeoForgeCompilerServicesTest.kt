@@ -40,6 +40,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 
@@ -78,6 +79,31 @@ class NeoForgeCompilerServicesTest {
         val selection = catalog.resolve(mapOf(ModuleId.parse("compukter:redstone") to ApiMajor(2)))
         val lock = ProjectLock.of(profile.toolchain, selection.modules.map { LockedModule(it.identity, it.direct) })
         assertIs<ProfileResolution.Resolved>(CompileProfileResolver(profile.toolchain, catalog, limits).resolveTarget(lock, profile))
+    }
+
+    @Test
+    fun `server only advertises Create kinetics when its integration is available`() {
+        val base = platform()
+        val builtins = base.builtins
+        val core = base.modules.single { it.id.toString() == "stdlib:core" }
+        val create = module("create", "kinetics", listOf(core.id))
+        val platform = PlatformBundleCodec.assemble("2.4", PlatformBundleCodec.SUPPORTED_PLATFORM_ABI, builtins, base.modules + create)
+        val identity =
+            WorkerIdentity(
+                "2.4.0",
+                "2.4",
+                3u,
+                4u,
+                hash(5),
+                Hash256.of(platform.identity.contentHash.toByteArray()),
+            )
+
+        val unavailable = serverTargetProfile(identity, platform, WorkerLimits())
+        val available = serverTargetProfile(identity, platform, WorkerLimits(), setOf("create:kinetics"))
+
+        assertEquals(false, unavailable.modules.any { it.id.value == "create:kinetics" })
+        assertEquals(true, available.modules.any { it.id.value == "create:kinetics" })
+        assertNotEquals(TargetCompileProfileIdentity.of(unavailable), TargetCompileProfileIdentity.of(available))
     }
 
     @Test

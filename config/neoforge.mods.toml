@@ -16,6 +16,7 @@ type="required"
 versionRange="${neoforge_mod_version_range}"
 ordering="NONE"
 side="BOTH"
+${optional_dependencies}
 
 [[dependencies.${mod_id}]]
 modId="minecraft"

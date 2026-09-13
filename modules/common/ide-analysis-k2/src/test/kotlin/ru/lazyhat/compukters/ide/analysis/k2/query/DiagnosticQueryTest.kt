@@ -99,6 +99,29 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `selected Create kinetics API resolves typed Float sensors and controller writes`() {
+        val source =
+            """
+            import create.kinetics.Kinetics
+
+            fun main() {
+                val speed: Float = Kinetics.left.speedometer().speed()
+                val stress: Float = Kinetics.right.stressometer().stress()
+                val capacity: Float = Kinetics.right.stressometer().capacity()
+                val target: Int = Kinetics.top.rotationController().setTargetSpeed(32)
+                println(speed + stress + capacity)
+                println(target)
+            }
+            """.trimIndent()
+        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+            val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+
+            assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+        }
+    }
+
+    @Test
     fun `redstone output mode does not accept a Boolean`() {
         val source =
             """
