@@ -204,11 +204,11 @@ class MinimalScriptLoweringTest {
                 val changes = IntChannel(1)
                 val level = 13
 
-                suspend fun producer() {
+                fun producer() {
                     changes.send(level)
                 }
 
-                suspend fun main() {
+                fun main() {
                     val task = Tasks.launch(::producer)
                     println(changes.receive())
                     task.join()
@@ -242,17 +242,17 @@ class MinimalScriptLoweringTest {
                 listOf(
                     """
                     import compukter.concurrent.IntChannel
-                    suspend fun main() { val channel = IntChannel(1); channel.receive() }
+                    fun main() { val channel = IntChannel(1); channel.receive() }
                     """.trimIndent() to "IntChannel must be initialized directly in a top-level val",
                     """
                     import compukter.concurrent.IntChannel
                     var channel = IntChannel(1)
-                    suspend fun main() { channel.receive() }
+                    fun main() { channel.receive() }
                     """.trimIndent() to "top-level state must be an immutable property with a default getter",
                     """
                     import compukter.concurrent.IntChannel
                     val channel = IntChannel(0)
-                    suspend fun main() { channel.receive() }
+                    fun main() { channel.receive() }
                     """.trimIndent() to "IntChannel capacity must be a positive Int constant",
                 )
             sources.forEach { (source, message) ->
@@ -267,7 +267,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `direct top level suspend task lowers to spawn and join`() =
+    fun `direct top level ordinary task lowers to spawn and join`() =
         withAdapter { adapter ->
             val result =
                 adapter.compile(
@@ -276,15 +276,15 @@ class MinimalScriptLoweringTest {
                         import compukter.concurrent.Tasks
                         import compukter.redstone.Redstone
 
-                        suspend fun reader() {
+                        fun reader() {
                             readln()
                         }
 
-                        suspend fun writer() {
+                        fun writer() {
                             Redstone.right.set(13)
                         }
 
-                        suspend fun main() {
+                        fun main() {
                             val readerTask = Tasks.launch(::reader)
                             val writerTask = Tasks.launch(::writer)
                             readerTask.join()
@@ -314,8 +314,7 @@ class MinimalScriptLoweringTest {
             val unsupported =
                 listOf(
                     "Tasks.launch { reader() }",
-                    "suspend fun local() {}\n    Tasks.launch(::local)",
-                    "Tasks.launch(::ordinary)",
+                    "fun local() {}\n    Tasks.launch(::local)",
                     "Tasks.launch(Reader()::read)",
                 )
             unsupported.forEach { launch ->
@@ -325,11 +324,11 @@ class MinimalScriptLoweringTest {
                             """
                             import compukter.concurrent.Tasks
 
-                            suspend fun reader() {}
+                            fun reader() {}
                             fun ordinary() {}
-                            class Reader { suspend fun read() {} }
+                            class Reader { fun read() {} }
 
-                            suspend fun main() {
+                            fun main() {
                                 $launch
                             }
                             """.trimIndent(),
@@ -341,7 +340,7 @@ class MinimalScriptLoweringTest {
                     result.diagnostics.any {
                         it.severity.name == "ERROR" &&
                             it.message.contains(
-                                "Tasks.launch requires a direct reference to a top-level, zero-argument suspend function",
+                                "Tasks.launch requires a direct reference to a top-level, zero-argument function",
                             )
                     },
                     "$launch: ${result.diagnostics}",
@@ -492,20 +491,15 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `ordinary and suspend zero argument Unit main lower deterministically`() =
+    fun `ordinary zero argument Unit main lowers deterministically`() =
         withAdapter { adapter ->
-            listOf(false, true).forEach { suspending ->
-                val source = if (suspending) "suspend fun main() {}" else "fun main() {}"
-                val first = adapter.compile(request(source))
-                val second = adapter.compile(request(source))
-                val expected =
-                    (ArtifactWriter.write(expectedMainArtifact(suspending)) as ArtifactWriteResult.Success)
-                        .bytes
+            val first = adapter.compile(request("fun main() {}"))
+            val second = adapter.compile(request("fun main() {}"))
+            val expected = (ArtifactWriter.write(expectedMainArtifact(false)) as ArtifactWriteResult.Success).bytes
 
-                assertContentEquals(expected, assertNotNull(first.artifact).toByteArray())
-                assertContentEquals(expected, assertNotNull(second.artifact).toByteArray())
-                assertTrue(first.diagnostics.none { it.severity.name == "ERROR" })
-            }
+            assertContentEquals(expected, assertNotNull(first.artifact).toByteArray())
+            assertContentEquals(expected, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" })
         }
 
     @Test
@@ -674,14 +668,12 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `all four legal main forms lower deterministically with an explicit entry contract`() =
+    fun `both legal main forms lower deterministically with an explicit entry contract`() =
         withAdapter { adapter ->
             val sources =
                 listOf(
                     "fun main() {}" to 0,
-                    "suspend fun main() {}" to 0,
                     "fun main(args: Array<String>) {}" to 1,
-                    "suspend fun main(args: Array<String>) {}" to 1,
                 )
 
             sources.forEach { (source, expectedTag) ->
@@ -694,6 +686,21 @@ class MinimalScriptLoweringTest {
                 assertEquals(expectedTag, firstBytes[48].toInt() and 0xff)
                 assertTrue(first.diagnostics.none { it.severity.name == "ERROR" })
             }
+        }
+
+    @Test
+    fun `suspend declarations are rejected because Guest tasks suspend transparently`() =
+        withAdapter { adapter ->
+            val result = adapter.compile(request("suspend fun main() {}"))
+
+            assertNull(result.artifact)
+            assertTrue(
+                result.diagnostics.any {
+                    it.code == "UNSUPPORTED_IR" &&
+                        "suspend functions are unsupported; Guest tasks suspend transparently" in it.message
+                },
+                result.diagnostics.toString(),
+            )
         }
 
     @Test
@@ -726,7 +733,7 @@ class MinimalScriptLoweringTest {
                 adapter.compile(
                     request(
                         "a/Main.kt" to "package a\nfun main() {}",
-                        "b/Main.kt" to "package b\nsuspend fun main() {}",
+                        "b/Main.kt" to "package b\nfun main() {}",
                     ),
                 )
             val invalid =
@@ -859,7 +866,7 @@ class MinimalScriptLoweringTest {
                         """
                         import compukter.terminal.Terminal
 
-                        suspend fun main() {
+                        fun main() {
                             Terminal.write(greeting("Ada"))
                             Terminal.awaitEvent()
                         }
@@ -1052,7 +1059,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `suspend project call lowers deterministically for vm execution`() =
+    fun `ordinary project call resumes transparently across host blocking`() =
         withAdapter { adapter ->
             val request =
                 request(
@@ -1060,12 +1067,12 @@ class MinimalScriptLoweringTest {
                         """
                         import compukter.terminal.Terminal
 
-                        suspend fun readKey(): Int {
+                        fun readKey(): Int {
                             Terminal.awaitEvent()
                             return Terminal.eventKey()
                         }
 
-                        suspend fun main() {
+                        fun main() {
                             Terminal.write(if (readKey() == 13) "enter" else "other")
                         }
                         """.trimIndent(),
@@ -1076,7 +1083,7 @@ class MinimalScriptLoweringTest {
             val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
-            System.getProperty("compukter.vm.suspendCallArtifact")?.let { output ->
+            System.getProperty("compukter.vm.transparentCallArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
             }
         }
@@ -1090,12 +1097,12 @@ class MinimalScriptLoweringTest {
                         """
                         import compukter.terminal.Terminal
 
-                        suspend fun key(): Int {
+                        fun key(): Int {
                             Terminal.awaitEvent()
                             return Terminal.eventKey()
                         }
 
-                        suspend fun main() {
+                        fun main() {
                             val text = when (key()) {
                                 13 -> "enter"
                                 27 -> "escape"
@@ -1698,7 +1705,7 @@ class MinimalScriptLoweringTest {
                         """
                         import compukter.terminal.Terminal
 
-                        suspend fun main() {
+                        fun main() {
                             var line = ""
                             var running = true
                             var index = 0
@@ -1855,7 +1862,7 @@ class MinimalScriptLoweringTest {
                 adapter.compile(
                     request(
                         "project/main.kt" to
-                            "import compukter.terminal.Terminal\nsuspend fun main() { Terminal.write(readln(\"guest\")); Terminal.awaitEvent() }",
+                            "import compukter.terminal.Terminal\nfun main() { Terminal.write(readln(\"guest\")); Terminal.awaitEvent() }",
                         "project/read.kt" to "fun readln(value: String): String = value",
                     ),
                 )

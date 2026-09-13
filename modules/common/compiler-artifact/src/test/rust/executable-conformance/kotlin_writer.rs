@@ -25,7 +25,7 @@ fn main() {
         "platform-scalar" => k2_platform_scalar_precondition_traps_before_publishing_a_value(),
         "argv" => k2_string_array_entry_executes_exact_utf16_arguments(),
         "subset" => k2_string_materialization_executes_char_arrays_and_scalar_templates(),
-        "suspend-call" => k2_suspend_project_call_resumes_across_async_capability(),
+        "transparent-call" => k2_ordinary_project_call_resumes_across_async_capability(),
         "tasks" => k2_tasks_keep_independent_host_requests_in_flight(),
         "channel" => k2_channel_handoff_stays_inside_the_vm(),
         "when" => k2_bounded_when_selects_matched_and_fallback_branches(),
@@ -777,12 +777,12 @@ fn k2_string_materialization_executes_char_arrays_and_scalar_templates() {
     }
 }
 
-fn k2_suspend_project_call_resumes_across_async_capability() {
-    let path = std::env::var("COMPUKTER_KOTLIN_SUSPEND_CALL_ARTIFACT")
-        .expect("COMPUKTER_KOTLIN_SUSPEND_CALL_ARTIFACT must be set for this conformance test");
-    let bytes = fs::read(path).expect("K2 suspend-call output must exist");
+fn k2_ordinary_project_call_resumes_across_async_capability() {
+    let path = std::env::var("COMPUKTER_KOTLIN_TRANSPARENT_CALL_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_TRANSPARENT_CALL_ARTIFACT must be set for this conformance test");
+    let bytes = fs::read(path).expect("K2 transparent-call output must exist");
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
-        .expect("pinned VM must verify K2 suspend-call output");
+        .expect("pinned VM must verify K2 transparent-call output");
     let string_argument = [HostValueType::String];
     let no_arguments = [];
     let operations = [
@@ -843,10 +843,10 @@ fn k2_suspend_project_call_resumes_across_async_capability() {
         entry_argument_limits: entry_argument_limits(),
     };
     let mut session =
-        Session::admit(verified, profile, &[binding]).expect("K2 suspend-call program must admit");
+        Session::admit(verified, profile, &[binding]).expect("K2 transparent-call program must admit");
     session
         .start(&[])
-        .expect("K2 suspend-call program must start");
+        .expect("K2 transparent-call program must start");
 
     let await_request = next_host_request(&mut session, "awaitEvent", 3, None);
     session
@@ -871,11 +871,11 @@ fn k2_suspend_project_call_resumes_across_async_capability() {
     loop {
         match session
             .advance(64, 64)
-            .expect("K2 suspend-call program must finish")
+            .expect("K2 transparent-call program must finish")
         {
             AdvanceOutcome::SliceExhausted => {}
             AdvanceOutcome::Halted(None) => break,
-            outcome => panic!("unexpected K2 suspend-call outcome after write: {outcome:?}"),
+            outcome => panic!("unexpected K2 transparent-call outcome after write: {outcome:?}"),
         }
     }
 }

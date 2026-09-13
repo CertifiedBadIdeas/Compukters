@@ -62,6 +62,16 @@ internal object MinimalScriptLowering {
         val declarations = SourceDeclarationCollector().also { module.accept(it, null) }
         val functions = declarations.functions
         val guestTypes = GuestTypeRegistry(pluginContext)
+        functions.firstOrNull(IrSimpleFunction::isSuspend)?.let { function ->
+            session.diagnosticSink(
+                unsupported(
+                    session,
+                    function,
+                    "suspend functions are unsupported; Guest tasks suspend transparently",
+                ),
+            )
+            return null
+        }
         val namedMain = functions.filter { it.name.asString() == "main" && it.parent is IrFile }
         if (namedMain.isNotEmpty()) {
             val validMain =
@@ -111,7 +121,7 @@ internal object MinimalScriptLowering {
         DiagnosticSeverity.ERROR,
         DiagnosticCategory.TARGET,
         "INVALID_ENTRY_POINT",
-        "project must declare exactly one fun main() or suspend fun main() returning Unit, with no parameters or one Array<String>",
+        "project must declare exactly one fun main() returning Unit, with no parameters or one Array<String>",
         session.virtualSourcePath(function?.file?.fileEntry?.name),
         function?.startOffset?.takeIf { it >= 0 }?.toUInt(),
         function?.endOffset?.takeIf { it >= 0 }?.toUInt(),

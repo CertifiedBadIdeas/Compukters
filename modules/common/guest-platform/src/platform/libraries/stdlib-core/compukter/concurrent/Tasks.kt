@@ -8,8 +8,8 @@ package compukter.concurrent
 
 /** A bounded cooperative Guest task. */
 public value class Task internal constructor(internal val id: Int) {
-    /** Suspends the current task until this task completes. */
-    public external suspend fun join()
+    /** Blocks the current task until this task completes. */
+    public external fun join()
 }
 
 /** Starts bounded cooperative work within the current VM. */
@@ -17,9 +17,9 @@ public object Tasks {
     /**
      * Starts [block] and returns its task handle.
      *
-     * Compukters currently accepts only a direct reference to a top-level, zero-argument suspend function.
+     * Compukters currently accepts only a direct reference to a top-level, zero-argument function.
      */
-    public external fun launch(block: suspend () -> Unit): Task
+    public external fun launch(block: () -> Unit): Task
 }
 
 /**
@@ -29,9 +29,9 @@ public object Tasks {
  * and [receive] suspends while it is empty. A positive [capacity] is reserved when the program is admitted.
  */
 public value class IntChannel public constructor(internal val capacity: Int) {
-    /** Sends [value], suspending until bounded channel storage is available. */
-    public external suspend fun send(value: Int)
+    /** Sends [value], blocking the current task until bounded channel storage is available. */
+    public external fun send(value: Int)
 
-    /** Receives the oldest queued value, suspending until one is available. */
-    public external suspend fun receive(): Int
+    /** Receives the oldest queued value, blocking the current task until one is available. */
+    public external fun receive(): Int
 }
