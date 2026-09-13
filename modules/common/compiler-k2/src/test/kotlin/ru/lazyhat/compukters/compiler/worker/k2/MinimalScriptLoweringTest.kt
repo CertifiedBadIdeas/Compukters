@@ -404,6 +404,47 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `Create kinetics typed API lowers deterministically to blocking scalar operations`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import create.kinetics.Kinetics
+
+                fun main() {
+                    val speedometer = Kinetics.front.speedometer()
+                    println(speedometer.speed())
+                    println(speedometer.awaitSpeedChange())
+                    val stressometer = Kinetics.left.stressometer()
+                    println(stressometer.stress())
+                    println(stressometer.capacity())
+                    stressometer.awaitChange()
+                    val controller = Kinetics.back.rotationController()
+                    println(controller.targetSpeed())
+                    println(controller.setTargetSpeed(32))
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val bytes = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            val artifact = ArtifactReader.read(bytes)
+            val opcodes = allOpcodes(bytes)
+
+            assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            assertEquals(
+                10u,
+                artifact.capabilities
+                    .single { capability ->
+                        val module = artifact.modules.first()
+                        module.strings[capability.namespace.value.toInt()].toString() == "create" &&
+                            module.strings[capability.name.value.toInt()].toString() == "kinetics"
+                    }.operationCount,
+            )
+            assertEquals(10, opcodes.count { it == 0xe9 }, "every Create access must yield its VM task: $opcodes")
+            assertTrue(0x35 !in opcodes, "kinetics value classes must not load fields: $opcodes")
+        }
+
+    @Test
     fun `Int for loop supplies its generated increment constant`() =
         withAdapter { adapter ->
             val result =
