@@ -480,7 +480,7 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                         b,
                         c,
                         ->
-                        Instruction.AddI32(a, b, c)
+                        Instruction.Add(scalar(form), a, b, c)
                     }
                 }
 
@@ -490,7 +490,7 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                         b,
                         c,
                         ->
-                        Instruction.SubtractI32(a, b, c)
+                        Instruction.Subtract(scalar(form), a, b, c)
                     }
                 }
 
@@ -500,7 +500,7 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                         b,
                         c,
                         ->
-                        Instruction.MultiplyI32(a, b, c)
+                        Instruction.Multiply(scalar(form), a, b, c)
                     }
                 }
 
@@ -510,7 +510,7 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                         b,
                         c,
                         ->
-                        Instruction.DivideI32(a, b, c)
+                        Instruction.Divide(scalar(form), a, b, c)
                     }
                 }
 
@@ -520,7 +520,7 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                         b,
                         c,
                         ->
-                        Instruction.RemainderI32(a, b, c)
+                        Instruction.Remainder(scalar(form), a, b, c)
                     }
                 }
 
@@ -530,7 +530,7 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                         b,
                         c,
                         ->
-                        Instruction.BitAndI32(a, b, c)
+                        Instruction.BitAnd(scalar(form), a, b, c)
                     }
                 }
 
@@ -540,7 +540,7 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                         b,
                         c,
                         ->
-                        Instruction.BitOrI32(a, b, c)
+                        Instruction.BitOr(scalar(form), a, b, c)
                     }
                 }
 
@@ -550,7 +550,7 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                         b,
                         c,
                         ->
-                        Instruction.BitXorI32(a, b, c)
+                        Instruction.BitXor(scalar(form), a, b, c)
                     }
                 }
 
@@ -560,7 +560,17 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                         b,
                         c,
                         ->
-                        Instruction.ShiftLeftI32(a, b, c)
+                        Instruction.ShiftLeft(scalar(form), a, b, c)
+                    }
+                }
+
+                0x1au -> {
+                    tri {
+                        a,
+                        b,
+                        c,
+                        ->
+                        Instruction.ShiftRight(scalar(form), a, b, c)
                     }
                 }
 
@@ -570,7 +580,7 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                         b,
                         c,
                         ->
-                        Instruction.ShiftUnsignedI32(a, b, c)
+                        Instruction.ShiftUnsigned(scalar(form), a, b, c)
                     }
                 }
 
@@ -680,6 +690,7 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                     val type =
                         when (form) {
                             1u -> StringValueType.I32
+                            2u -> StringValueType.I64
                             5u -> StringValueType.BOOL
                             6u -> StringValueType.CHAR
                             else -> error("unsupported string conversion form $form")

@@ -38,7 +38,9 @@ import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
+import ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
+import ru.lazyhat.compukters.compiler.artifact.model.StringValueType
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
@@ -71,6 +73,13 @@ internal fun validateArtifact(
     data class FieldIdentity(
         val module: Int,
         val field: Int,
+    )
+
+    data class ShiftValidation(
+        val name: String,
+        val type: ScalarValueType,
+        val valueRegisters: List<RegisterId>,
+        val count: RegisterId,
     )
 
     fun resolveType(
@@ -451,6 +460,12 @@ internal fun validateArtifact(
                     .any { it is Instruction.TaskSpawn || it is Instruction.TaskJoin }
             }
         }
+    val usesI64StringConversion =
+        artifact.modules.any { module ->
+            module.blocks.any { block ->
+                block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.I64 }
+            }
+        }
     if (usesTasks && artifact.minimumRuntimeAbi < AbiVersion(1u, 1u)) {
         add(
             ArtifactWriteErrorCode.INVALID_RANGE,
@@ -461,6 +476,12 @@ internal fun validateArtifact(
         add(
             ArtifactWriteErrorCode.INVALID_RANGE,
             "channel instructions require minimum runtime ABI 1.2",
+        )
+    }
+    if (usesI64StringConversion && artifact.minimumRuntimeAbi < AbiVersion(1u, 3u)) {
+        add(
+            ArtifactWriteErrorCode.INVALID_RANGE,
+            "I64 string conversion requires minimum runtime ABI 1.3",
         )
     }
     if (usesChannels && (artifact.manifest.maximumChannels == 0u || artifact.manifest.maximumChannelValues == 0u)) {
@@ -917,93 +938,174 @@ internal fun validateArtifact(
                             register(instruction.source, "source")
                         }
 
-                        is Instruction.AddI32 -> {
-                            listOf(
-                                register(instruction.destination, "destination"),
-                                register(instruction.left, "source"),
-                                register(instruction.right, "source"),
-                            ).filterNotNull().forEach { actual ->
-                                if (actual != ValueType.I32) {
-                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "I32 add register is not I32", location)
-                                }
-                            }
-                        }
-
-                        is Instruction.SubtractI32 -> {
-                            listOf(
-                                register(instruction.destination, "destination"),
-                                register(instruction.left, "source"),
-                                register(instruction.right, "source"),
-                            ).filterNotNull().forEach { actual ->
-                                if (actual != ValueType.I32) {
-                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "I32 subtract register is not I32", location)
-                                }
-                            }
-                        }
-
-                        is Instruction.MultiplyI32,
-                        is Instruction.DivideI32,
-                        is Instruction.RemainderI32,
-                        is Instruction.BitAndI32,
-                        is Instruction.BitOrI32,
-                        is Instruction.BitXorI32,
-                        is Instruction.ShiftLeftI32,
-                        is Instruction.ShiftUnsignedI32,
+                        is Instruction.Add,
+                        is Instruction.Subtract,
+                        is Instruction.Multiply,
+                        is Instruction.Divide,
+                        is Instruction.Remainder,
                         -> {
-                            val name =
+                            val (name, type, registers) =
                                 when (instruction) {
-                                    is Instruction.MultiplyI32 -> "multiply"
-                                    is Instruction.DivideI32 -> "divide"
-                                    is Instruction.RemainderI32 -> "remainder"
-                                    is Instruction.BitAndI32 -> "bit-and"
-                                    is Instruction.BitOrI32 -> "bit-or"
-                                    is Instruction.BitXorI32 -> "bit-xor"
-                                    is Instruction.ShiftLeftI32 -> "shift-left"
-                                    is Instruction.ShiftUnsignedI32 -> "shift-unsigned"
-                                }
-                            val registers =
-                                when (instruction) {
-                                    is Instruction.MultiplyI32 -> {
-                                        listOf(instruction.destination, instruction.left, instruction.right)
+                                    is Instruction.Add -> {
+                                        Triple(
+                                            "add",
+                                            instruction.type,
+                                            listOf(instruction.destination, instruction.left, instruction.right),
+                                        )
                                     }
 
-                                    is Instruction.DivideI32 -> {
-                                        listOf(instruction.destination, instruction.left, instruction.right)
+                                    is Instruction.Subtract -> {
+                                        Triple(
+                                            "subtract",
+                                            instruction.type,
+                                            listOf(instruction.destination, instruction.left, instruction.right),
+                                        )
                                     }
 
-                                    is Instruction.RemainderI32 -> {
-                                        listOf(instruction.destination, instruction.left, instruction.right)
+                                    is Instruction.Multiply -> {
+                                        Triple(
+                                            "multiply",
+                                            instruction.type,
+                                            listOf(instruction.destination, instruction.left, instruction.right),
+                                        )
                                     }
 
-                                    is Instruction.BitAndI32 -> {
-                                        listOf(instruction.destination, instruction.left, instruction.right)
+                                    is Instruction.Divide -> {
+                                        Triple(
+                                            "divide",
+                                            instruction.type,
+                                            listOf(instruction.destination, instruction.left, instruction.right),
+                                        )
                                     }
 
-                                    is Instruction.BitOrI32 -> {
-                                        listOf(instruction.destination, instruction.left, instruction.right)
-                                    }
-
-                                    is Instruction.BitXorI32 -> {
-                                        listOf(instruction.destination, instruction.left, instruction.right)
-                                    }
-
-                                    is Instruction.ShiftLeftI32 -> {
-                                        listOf(instruction.destination, instruction.left, instruction.right)
-                                    }
-
-                                    is Instruction.ShiftUnsignedI32 -> {
-                                        listOf(instruction.destination, instruction.left, instruction.right)
+                                    is Instruction.Remainder -> {
+                                        Triple(
+                                            "remainder",
+                                            instruction.type,
+                                            listOf(instruction.destination, instruction.left, instruction.right),
+                                        )
                                     }
                                 }
+                            if (type !in setOf(ScalarValueType.I32, ScalarValueType.I64, ScalarValueType.F32, ScalarValueType.F64)) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "$name requires a numeric scalar form", location)
+                            }
                             registers
                                 .mapIndexed { index, id ->
                                     register(id, if (index == 0) "destination" else "source")
                                 }.filterNotNull()
                                 .forEach { actual ->
-                                    if (actual != ValueType.I32) {
-                                        add(ArtifactWriteErrorCode.INVALID_RANGE, "I32 $name register is not I32", location)
+                                    if (actual != type.valueType) {
+                                        add(
+                                            ArtifactWriteErrorCode.INVALID_RANGE,
+                                            "${type.name} $name register has the wrong type",
+                                            location,
+                                        )
                                     }
                                 }
+                        }
+
+                        is Instruction.BitAnd,
+                        is Instruction.BitOr,
+                        is Instruction.BitXor,
+                        -> {
+                            val (name, type, registers) =
+                                when (instruction) {
+                                    is Instruction.BitAnd -> {
+                                        Triple(
+                                            "bit-and",
+                                            instruction.type,
+                                            listOf(instruction.destination, instruction.left, instruction.right),
+                                        )
+                                    }
+
+                                    is Instruction.BitOr -> {
+                                        Triple(
+                                            "bit-or",
+                                            instruction.type,
+                                            listOf(instruction.destination, instruction.left, instruction.right),
+                                        )
+                                    }
+
+                                    is Instruction.BitXor -> {
+                                        Triple(
+                                            "bit-xor",
+                                            instruction.type,
+                                            listOf(instruction.destination, instruction.left, instruction.right),
+                                        )
+                                    }
+                                }
+                            if (type !in setOf(ScalarValueType.I32, ScalarValueType.I64)) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "$name requires an integer scalar form", location)
+                            }
+                            registers
+                                .mapIndexed { index, id ->
+                                    register(id, if (index == 0) "destination" else "source")
+                                }.filterNotNull()
+                                .forEach { actual ->
+                                    if (actual != type.valueType) {
+                                        add(
+                                            ArtifactWriteErrorCode.INVALID_RANGE,
+                                            "${type.name} $name register has the wrong type",
+                                            location,
+                                        )
+                                    }
+                                }
+                        }
+
+                        is Instruction.ShiftLeft,
+                        is Instruction.ShiftRight,
+                        is Instruction.ShiftUnsigned,
+                        -> {
+                            val (name, type, valueRegisters, count) =
+                                when (instruction) {
+                                    is Instruction.ShiftLeft -> {
+                                        ShiftValidation(
+                                            "shift-left",
+                                            instruction.type,
+                                            listOf(instruction.destination, instruction.left),
+                                            instruction.right,
+                                        )
+                                    }
+
+                                    is Instruction.ShiftRight -> {
+                                        ShiftValidation(
+                                            "shift-right",
+                                            instruction.type,
+                                            listOf(instruction.destination, instruction.left),
+                                            instruction.right,
+                                        )
+                                    }
+
+                                    is Instruction.ShiftUnsigned -> {
+                                        ShiftValidation(
+                                            "shift-unsigned",
+                                            instruction.type,
+                                            listOf(instruction.destination, instruction.left),
+                                            instruction.right,
+                                        )
+                                    }
+                                }
+                            if (type !in setOf(ScalarValueType.I32, ScalarValueType.I64)) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "$name requires an integer scalar form", location)
+                            }
+                            valueRegisters
+                                .mapIndexed { index, id ->
+                                    register(id, if (index == 0) "destination" else "source")
+                                }.filterNotNull()
+                                .forEach { actual ->
+                                    if (actual != type.valueType) {
+                                        add(
+                                            ArtifactWriteErrorCode.INVALID_RANGE,
+                                            "${type.name} $name register has the wrong type",
+                                            location,
+                                        )
+                                    }
+                                }
+                            register(count, "source")?.let { actual ->
+                                if (actual != ValueType.I32) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "$name count is not I32", location)
+                                }
+                            }
                         }
 
                         is Instruction.Equal,

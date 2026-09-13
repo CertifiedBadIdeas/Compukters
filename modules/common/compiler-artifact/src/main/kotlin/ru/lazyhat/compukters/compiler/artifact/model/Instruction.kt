@@ -40,65 +40,115 @@ sealed interface Instruction {
         val source: RegisterId,
     ) : Instruction
 
-    data class AddI32(
+    data class Add(
+        val type: ScalarValueType,
         val destination: RegisterId,
         val left: RegisterId,
         val right: RegisterId,
-    ) : Instruction
+    ) : Instruction {
+        constructor(destination: RegisterId, left: RegisterId, right: RegisterId) :
+            this(ScalarValueType.I32, destination, left, right)
+    }
 
-    data class SubtractI32(
+    data class Subtract(
+        val type: ScalarValueType,
         val destination: RegisterId,
         val left: RegisterId,
         val right: RegisterId,
-    ) : Instruction
+    ) : Instruction {
+        constructor(destination: RegisterId, left: RegisterId, right: RegisterId) :
+            this(ScalarValueType.I32, destination, left, right)
+    }
 
-    data class MultiplyI32(
+    data class Multiply(
+        val type: ScalarValueType,
         val destination: RegisterId,
         val left: RegisterId,
         val right: RegisterId,
-    ) : Instruction
+    ) : Instruction {
+        constructor(destination: RegisterId, left: RegisterId, right: RegisterId) :
+            this(ScalarValueType.I32, destination, left, right)
+    }
 
-    data class DivideI32(
+    data class Divide(
+        val type: ScalarValueType,
         val destination: RegisterId,
         val left: RegisterId,
         val right: RegisterId,
-    ) : Instruction
+    ) : Instruction {
+        constructor(destination: RegisterId, left: RegisterId, right: RegisterId) :
+            this(ScalarValueType.I32, destination, left, right)
+    }
 
-    data class RemainderI32(
+    data class Remainder(
+        val type: ScalarValueType,
         val destination: RegisterId,
         val left: RegisterId,
         val right: RegisterId,
-    ) : Instruction
+    ) : Instruction {
+        constructor(destination: RegisterId, left: RegisterId, right: RegisterId) :
+            this(ScalarValueType.I32, destination, left, right)
+    }
 
-    data class BitAndI32(
+    data class BitAnd(
+        val type: ScalarValueType,
         val destination: RegisterId,
         val left: RegisterId,
         val right: RegisterId,
-    ) : Instruction
+    ) : Instruction {
+        constructor(destination: RegisterId, left: RegisterId, right: RegisterId) :
+            this(ScalarValueType.I32, destination, left, right)
+    }
 
-    data class BitOrI32(
+    data class BitOr(
+        val type: ScalarValueType,
         val destination: RegisterId,
         val left: RegisterId,
         val right: RegisterId,
-    ) : Instruction
+    ) : Instruction {
+        constructor(destination: RegisterId, left: RegisterId, right: RegisterId) :
+            this(ScalarValueType.I32, destination, left, right)
+    }
 
-    data class BitXorI32(
+    data class BitXor(
+        val type: ScalarValueType,
         val destination: RegisterId,
         val left: RegisterId,
         val right: RegisterId,
-    ) : Instruction
+    ) : Instruction {
+        constructor(destination: RegisterId, left: RegisterId, right: RegisterId) :
+            this(ScalarValueType.I32, destination, left, right)
+    }
 
-    data class ShiftLeftI32(
+    data class ShiftLeft(
+        val type: ScalarValueType,
         val destination: RegisterId,
         val left: RegisterId,
         val right: RegisterId,
-    ) : Instruction
+    ) : Instruction {
+        constructor(destination: RegisterId, left: RegisterId, right: RegisterId) :
+            this(ScalarValueType.I32, destination, left, right)
+    }
 
-    data class ShiftUnsignedI32(
+    data class ShiftRight(
+        val type: ScalarValueType,
         val destination: RegisterId,
         val left: RegisterId,
         val right: RegisterId,
-    ) : Instruction
+    ) : Instruction {
+        constructor(destination: RegisterId, left: RegisterId, right: RegisterId) :
+            this(ScalarValueType.I32, destination, left, right)
+    }
+
+    data class ShiftUnsigned(
+        val type: ScalarValueType,
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction {
+        constructor(destination: RegisterId, left: RegisterId, right: RegisterId) :
+            this(ScalarValueType.I32, destination, left, right)
+    }
 
     data class Equal(
         val type: ScalarValueType,

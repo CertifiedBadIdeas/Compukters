@@ -185,8 +185,8 @@ private fun executableInstructionsArtifact(): Artifact {
                             Instruction.Const(RegisterId.of(5u), ConstantId.of(1u)),
                             Instruction.Const(RegisterId.of(6u), ConstantId.of(2u)),
                             Instruction.Move(RegisterId.of(3u), RegisterId.of(1u)),
-                            Instruction.AddI32(RegisterId.of(4u), RegisterId.of(0u), RegisterId.of(0u)),
-                            Instruction.SubtractI32(RegisterId.of(4u), RegisterId.of(4u), RegisterId.of(0u)),
+                            Instruction.Add(RegisterId.of(4u), RegisterId.of(0u), RegisterId.of(0u)),
+                            Instruction.Subtract(RegisterId.of(4u), RegisterId.of(4u), RegisterId.of(0u)),
                             Instruction.Equal(
                                 ScalarValueType.I32,
                                 RegisterId.of(5u),

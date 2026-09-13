@@ -2309,7 +2309,7 @@ private class FunctionCompiler(
         ) {
             val compiled = arguments.map(::compileExpression)
             val end = allocate(ValueType.I32)
-            emit(Instruction.AddI32(end, compiled[1], compiled[2]))
+            emit(Instruction.Add(end, compiled[1], compiled[2]))
             prepareAllocationBlock()
             return allocate(stringType).also { destination ->
                 emit(Instruction.StringFromCharArray(destination, compiled[0], compiled[1], end))
@@ -2913,16 +2913,16 @@ private class FunctionCompiler(
         }
         if (arguments.size == 2 && argumentExpressions.all { it.type == intType }) {
             when (name) {
-                "plus" -> return result(ValueType.I32) { Instruction.AddI32(it, arguments[0], arguments[1]) }
-                "minus" -> return result(ValueType.I32) { Instruction.SubtractI32(it, arguments[0], arguments[1]) }
-                "times" -> return result(ValueType.I32) { Instruction.MultiplyI32(it, arguments[0], arguments[1]) }
-                "div" -> return result(ValueType.I32) { Instruction.DivideI32(it, arguments[0], arguments[1]) }
-                "rem" -> return result(ValueType.I32) { Instruction.RemainderI32(it, arguments[0], arguments[1]) }
-                "and" -> return result(ValueType.I32) { Instruction.BitAndI32(it, arguments[0], arguments[1]) }
-                "or" -> return result(ValueType.I32) { Instruction.BitOrI32(it, arguments[0], arguments[1]) }
-                "xor" -> return result(ValueType.I32) { Instruction.BitXorI32(it, arguments[0], arguments[1]) }
-                "shl" -> return result(ValueType.I32) { Instruction.ShiftLeftI32(it, arguments[0], arguments[1]) }
-                "ushr" -> return result(ValueType.I32) { Instruction.ShiftUnsignedI32(it, arguments[0], arguments[1]) }
+                "plus" -> return result(ValueType.I32) { Instruction.Add(it, arguments[0], arguments[1]) }
+                "minus" -> return result(ValueType.I32) { Instruction.Subtract(it, arguments[0], arguments[1]) }
+                "times" -> return result(ValueType.I32) { Instruction.Multiply(it, arguments[0], arguments[1]) }
+                "div" -> return result(ValueType.I32) { Instruction.Divide(it, arguments[0], arguments[1]) }
+                "rem" -> return result(ValueType.I32) { Instruction.Remainder(it, arguments[0], arguments[1]) }
+                "and" -> return result(ValueType.I32) { Instruction.BitAnd(it, arguments[0], arguments[1]) }
+                "or" -> return result(ValueType.I32) { Instruction.BitOr(it, arguments[0], arguments[1]) }
+                "xor" -> return result(ValueType.I32) { Instruction.BitXor(it, arguments[0], arguments[1]) }
+                "shl" -> return result(ValueType.I32) { Instruction.ShiftLeft(it, arguments[0], arguments[1]) }
+                "ushr" -> return result(ValueType.I32) { Instruction.ShiftUnsigned(it, arguments[0], arguments[1]) }
             }
         }
         if (arguments.size == 1 && argumentExpressions[0].type == booleanType && name == "not") {
@@ -2932,11 +2932,11 @@ private class FunctionCompiler(
         }
         if (arguments.size == 1 && argumentExpressions[0].type == intType && name == "unaryMinus") {
             val zero = emitI32Constant(0, call)
-            return result(ValueType.I32) { Instruction.SubtractI32(it, zero, arguments[0]) }
+            return result(ValueType.I32) { Instruction.Subtract(it, zero, arguments[0]) }
         }
         if (arguments.size == 1 && argumentExpressions[0].type == intType && name == "inv") {
             val allBits = emitI32Constant(-1, call)
-            return result(ValueType.I32) { Instruction.BitXorI32(it, arguments[0], allBits) }
+            return result(ValueType.I32) { Instruction.BitXor(it, arguments[0], allBits) }
         }
         if (arguments.size == 1 && argumentExpressions[0].type == intType && call.type == charType && name == "toChar") {
             return result(ValueType.Char) { Instruction.Convert(it, arguments[0]) }
@@ -3031,7 +3031,7 @@ private class FunctionCompiler(
             fqName == "kotlin.text.String"
         ) {
             val end = allocate(ValueType.I32)
-            emit(Instruction.AddI32(end, arguments[1], arguments[2]))
+            emit(Instruction.Add(end, arguments[1], arguments[2]))
             prepareAllocationBlock()
             return result(stringType) { Instruction.StringFromCharArray(it, arguments[0], arguments[1], end) }
         }
@@ -3046,7 +3046,7 @@ private class FunctionCompiler(
         val start = arguments[1]
         val end = arguments[2]
         val length = allocate(ValueType.I32)
-        emit(Instruction.SubtractI32(length, end, start))
+        emit(Instruction.Subtract(length, end, start))
         prepareAllocationBlock()
         val destination = allocate(stringArrayType)
         emit(Instruction.NewArray(destination, (stringArrayType as ValueType.Ref).type, length))
@@ -3071,10 +3071,10 @@ private class FunctionCompiler(
         emit(Instruction.ArrayLoad(value, source, sourceIndex))
         emit(Instruction.ArrayStore(destination, destinationIndex, value))
         val nextSource = allocate(ValueType.I32)
-        emit(Instruction.AddI32(nextSource, sourceIndex, one))
+        emit(Instruction.Add(nextSource, sourceIndex, one))
         emit(Instruction.Move(sourceIndex, nextSource))
         val nextDestination = allocate(ValueType.I32)
-        emit(Instruction.AddI32(nextDestination, destinationIndex, one))
+        emit(Instruction.Add(nextDestination, destinationIndex, one))
         emit(Instruction.Move(destinationIndex, nextDestination))
         jumpTo(header)
 
@@ -3188,7 +3188,7 @@ private class FunctionCompiler(
             emit(Instruction.Branch(atEnd, blockId(increment), blockId(increment)))
             currentBlock = increment
             val next = allocate(ValueType.I32)
-            emit(Instruction.AddI32(next, index, emitI32Constant(1, block)))
+            emit(Instruction.Add(next, index, emitI32Constant(1, block)))
             emit(Instruction.Move(index, next))
             jumpTo(body)
             exitBranchCondition = atEnd
@@ -3196,7 +3196,7 @@ private class FunctionCompiler(
             exitOnTrue = true
         } else {
             val next = allocate(ValueType.I32)
-            emit(Instruction.AddI32(next, index, emitI32Constant(1, block)))
+            emit(Instruction.Add(next, index, emitI32Constant(1, block)))
             emit(Instruction.Move(index, next))
             val hasNext = allocate(ValueType.Bool)
             emit(Instruction.Less(OrderedScalarValueType.I32, hasNext, index, endInclusive))

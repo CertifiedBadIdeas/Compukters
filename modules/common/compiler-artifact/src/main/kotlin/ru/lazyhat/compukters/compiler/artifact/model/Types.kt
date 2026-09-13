@@ -154,6 +154,7 @@ enum class StringValueType(
     internal val valueType: ValueType,
 ) {
     I32(1u, ValueType.I32),
+    I64(2u, ValueType.I64),
     BOOL(5u, ValueType.Bool),
     CHAR(6u, ValueType.Char),
 }

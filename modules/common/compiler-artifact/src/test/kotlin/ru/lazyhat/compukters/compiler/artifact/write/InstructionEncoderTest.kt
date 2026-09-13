@@ -342,6 +342,7 @@ class InstructionEncoderTest {
     fun `scalar string conversion encodes canonical typed forms`() {
         listOf(
             StringValueType.I32 to 1,
+            StringValueType.I64 to 2,
             StringValueType.BOOL to 5,
             StringValueType.CHAR to 6,
         ).forEach { (type, form) ->
@@ -362,19 +363,31 @@ class InstructionEncoderTest {
             listOf(
                 Instruction.Move(RegisterId.of(1u), RegisterId.of(2u)) to
                     byteArrayOf(0x01, 0, 8, 0, 1, 0, 2, 0),
-                Instruction.AddI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                Instruction.Add(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
                     byteArrayOf(0x10, 1, 10, 0, 1, 0, 2, 0, 3, 0),
-                Instruction.SubtractI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                Instruction.Add(
+                    ScalarValueType.I64,
+                    RegisterId.of(1u),
+                    RegisterId.of(2u),
+                    RegisterId.of(3u),
+                ) to byteArrayOf(0x10, 2, 10, 0, 1, 0, 2, 0, 3, 0),
+                Instruction.Subtract(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
                     byteArrayOf(0x11, 1, 10, 0, 1, 0, 2, 0, 3, 0),
-                Instruction.BitAndI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                Instruction.BitAnd(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
                     byteArrayOf(0x16, 1, 10, 0, 1, 0, 2, 0, 3, 0),
-                Instruction.BitOrI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                Instruction.BitOr(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
                     byteArrayOf(0x17, 1, 10, 0, 1, 0, 2, 0, 3, 0),
-                Instruction.BitXorI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                Instruction.BitXor(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
                     byteArrayOf(0x18, 1, 10, 0, 1, 0, 2, 0, 3, 0),
-                Instruction.ShiftLeftI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                Instruction.ShiftLeft(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
                     byteArrayOf(0x19, 1, 10, 0, 1, 0, 2, 0, 3, 0),
-                Instruction.ShiftUnsignedI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                Instruction.ShiftRight(
+                    ScalarValueType.I64,
+                    RegisterId.of(1u),
+                    RegisterId.of(2u),
+                    RegisterId.of(3u),
+                ) to byteArrayOf(0x1a, 2, 10, 0, 1, 0, 2, 0, 3, 0),
+                Instruction.ShiftUnsigned(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
                     byteArrayOf(0x1b, 1, 10, 0, 1, 0, 2, 0, 3, 0),
                 Instruction.Equal(
                     ScalarValueType.CHAR,
@@ -404,17 +417,17 @@ class InstructionEncoderTest {
         val cases =
             listOf(
                 Triple(
-                    Instruction.MultiplyI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)),
+                    Instruction.Multiply(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)),
                     byteArrayOf(0x12, 1, 10, 0, 1, 0, 2, 0, 3, 0),
                     2u,
                 ),
                 Triple(
-                    Instruction.DivideI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)),
+                    Instruction.Divide(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)),
                     byteArrayOf(0x13, 1, 10, 0, 1, 0, 2, 0, 3, 0),
                     4u,
                 ),
                 Triple(
-                    Instruction.RemainderI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)),
+                    Instruction.Remainder(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)),
                     byteArrayOf(0x14, 1, 10, 0, 1, 0, 2, 0, 3, 0),
                     4u,
                 ),

@@ -198,25 +198,27 @@ internal fun Instruction.readRegisters(): List<RegisterId> =
 
         is Instruction.Convert -> listOf(source)
 
-        is Instruction.AddI32 -> listOf(left, right)
+        is Instruction.Add -> listOf(left, right)
 
-        is Instruction.SubtractI32 -> listOf(left, right)
+        is Instruction.Subtract -> listOf(left, right)
 
-        is Instruction.MultiplyI32 -> listOf(left, right)
+        is Instruction.Multiply -> listOf(left, right)
 
-        is Instruction.DivideI32 -> listOf(left, right)
+        is Instruction.Divide -> listOf(left, right)
 
-        is Instruction.RemainderI32 -> listOf(left, right)
+        is Instruction.Remainder -> listOf(left, right)
 
-        is Instruction.BitAndI32 -> listOf(left, right)
+        is Instruction.BitAnd -> listOf(left, right)
 
-        is Instruction.BitOrI32 -> listOf(left, right)
+        is Instruction.BitOr -> listOf(left, right)
 
-        is Instruction.BitXorI32 -> listOf(left, right)
+        is Instruction.BitXor -> listOf(left, right)
 
-        is Instruction.ShiftLeftI32 -> listOf(left, right)
+        is Instruction.ShiftLeft -> listOf(left, right)
 
-        is Instruction.ShiftUnsignedI32 -> listOf(left, right)
+        is Instruction.ShiftRight -> listOf(left, right)
+
+        is Instruction.ShiftUnsigned -> listOf(left, right)
 
         is Instruction.Equal -> listOf(left, right)
 
@@ -301,25 +303,27 @@ internal fun Instruction.writtenRegisters(): List<RegisterId> =
 
         is Instruction.Convert -> listOf(destination)
 
-        is Instruction.AddI32 -> listOf(destination)
+        is Instruction.Add -> listOf(destination)
 
-        is Instruction.SubtractI32 -> listOf(destination)
+        is Instruction.Subtract -> listOf(destination)
 
-        is Instruction.MultiplyI32 -> listOf(destination)
+        is Instruction.Multiply -> listOf(destination)
 
-        is Instruction.DivideI32 -> listOf(destination)
+        is Instruction.Divide -> listOf(destination)
 
-        is Instruction.RemainderI32 -> listOf(destination)
+        is Instruction.Remainder -> listOf(destination)
 
-        is Instruction.BitAndI32 -> listOf(destination)
+        is Instruction.BitAnd -> listOf(destination)
 
-        is Instruction.BitOrI32 -> listOf(destination)
+        is Instruction.BitOr -> listOf(destination)
 
-        is Instruction.BitXorI32 -> listOf(destination)
+        is Instruction.BitXor -> listOf(destination)
 
-        is Instruction.ShiftLeftI32 -> listOf(destination)
+        is Instruction.ShiftLeft -> listOf(destination)
 
-        is Instruction.ShiftUnsignedI32 -> listOf(destination)
+        is Instruction.ShiftRight -> listOf(destination)
+
+        is Instruction.ShiftUnsigned -> listOf(destination)
 
         is Instruction.Equal -> listOf(destination)
 

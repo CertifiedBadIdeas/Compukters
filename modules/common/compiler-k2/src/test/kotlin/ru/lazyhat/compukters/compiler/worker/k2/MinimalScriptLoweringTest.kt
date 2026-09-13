@@ -1286,7 +1286,7 @@ class MinimalScriptLoweringTest {
 
             assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
             assertTrue(instructions.none { it is Instruction.NewObject || it is Instruction.NewArray })
-            assertTrue(instructions.any { it is Instruction.AddI32 })
+            assertTrue(instructions.any { it is Instruction.Add })
             assertTrue(application.blocks.any(Block::loopHeaderSafepoint))
         }
 
@@ -1331,7 +1331,7 @@ class MinimalScriptLoweringTest {
 
             assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
             assertTrue(instructions.none { it is Instruction.NewObject || it is Instruction.NewArray })
-            assertTrue(instructions.any { it is Instruction.AddI32 })
+            assertTrue(instructions.any { it is Instruction.Add })
             assertTrue(application.blocks.any(Block::loopHeaderSafepoint))
         }
 

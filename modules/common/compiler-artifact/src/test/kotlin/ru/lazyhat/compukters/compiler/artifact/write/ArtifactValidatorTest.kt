@@ -669,7 +669,7 @@ class ArtifactValidatorTest {
                 ),
                 Instruction.StringConcat(RegisterId.of(3u), RegisterId.of(1u), RegisterId.of(2u)),
                 Instruction.Move(RegisterId.of(2u), RegisterId.of(1u)),
-                Instruction.AddI32(RegisterId.of(0u), RegisterId.of(0u), RegisterId.of(0u)),
+                Instruction.Add(RegisterId.of(0u), RegisterId.of(0u), RegisterId.of(0u)),
                 Instruction.StringLength(RegisterId.of(0u), RegisterId.of(1u)),
                 Instruction.StringSubstring(
                     RegisterId.of(3u),
@@ -706,12 +706,12 @@ class ArtifactValidatorTest {
         val cases =
             listOf(
                 Instruction.Move(RegisterId.of(0u), RegisterId.of(1u)) to "move source and destination types differ",
-                Instruction.AddI32(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 add register",
-                Instruction.MultiplyI32(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 multiply register",
-                Instruction.DivideI32(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 divide register",
-                Instruction.RemainderI32(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 remainder register",
-                Instruction.BitAndI32(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 bit-and register",
-                Instruction.ShiftUnsignedI32(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to
+                Instruction.Add(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 add register",
+                Instruction.Multiply(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 multiply register",
+                Instruction.Divide(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 divide register",
+                Instruction.Remainder(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 remainder register",
+                Instruction.BitAnd(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 bit-and register",
+                Instruction.ShiftUnsigned(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to
                     "I32 shift-unsigned register",
                 Instruction.StringLength(RegisterId.of(1u), RegisterId.of(1u)) to "string length destination",
                 Instruction.CapabilityCallSync(Destination.Unit, CapabilityId.of(0u), 2u, emptyList()) to
@@ -930,6 +930,59 @@ class ArtifactValidatorTest {
         assertTrue(
             validateArtifact(wrongDestination, ArtifactWriteLimits()).any { it.detail.contains("kotlin.String") },
         )
+    }
+
+    @Test
+    fun `i64 string conversion requires runtime ABI 1 3`() {
+        val source =
+            executableArtifact(
+                Instruction.StringValueOf(
+                    StringValueType.I64,
+                    RegisterId.of(3u),
+                    RegisterId.of(0u),
+                ),
+            )
+        val module = source.modules.first()
+        val functionType = module.types.first() as NominalType.Function
+        val function = module.functions.first()
+        val artifact =
+            exactRoots(
+                source.copy(
+                    minimumRuntimeAbi = AbiVersion(1u, 3u),
+                    modules =
+                        listOf(
+                            module.copy(
+                                types =
+                                    module.types.toMutableList().also {
+                                        it[0] =
+                                            functionType.copy(
+                                                parameters =
+                                                    functionType.parameters.toMutableList().also { parameters ->
+                                                        parameters[0] =
+                                                            ValueType.I64
+                                                    },
+                                            )
+                                    },
+                                functions =
+                                    module.functions.toMutableList().also {
+                                        it[0] =
+                                            function.copy(
+                                                values =
+                                                    function.values.toMutableList().also { values ->
+                                                        values[0] =
+                                                            FunctionValue.scalar(ValueType.I64)
+                                                    },
+                                            )
+                                    },
+                            ),
+                            source.modules[1],
+                        ),
+                ),
+            )
+
+        assertEquals(emptyList(), validateArtifact(artifact, ArtifactWriteLimits()))
+        val oldAbiErrors = validateArtifact(artifact.copy(minimumRuntimeAbi = AbiVersion(1u, 2u)), ArtifactWriteLimits())
+        assertTrue(oldAbiErrors.any { it.detail.contains("runtime ABI 1.3") }, oldAbiErrors.toString())
     }
 
     @Test

@@ -63,63 +63,69 @@ internal fun encodeInstruction(
             operands.writeRegister(instruction.source)
         }
 
-        is Instruction.AddI32 -> {
+        is Instruction.Add -> {
             opcode = 0x10u
-            form = 1u
+            form = instruction.type.artifactForm
             operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
         }
 
-        is Instruction.SubtractI32 -> {
+        is Instruction.Subtract -> {
             opcode = 0x11u
-            form = 1u
+            form = instruction.type.artifactForm
             operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
         }
 
-        is Instruction.MultiplyI32 -> {
+        is Instruction.Multiply -> {
             opcode = 0x12u
-            form = 1u
+            form = instruction.type.artifactForm
             operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
         }
 
-        is Instruction.DivideI32 -> {
+        is Instruction.Divide -> {
             opcode = 0x13u
-            form = 1u
+            form = instruction.type.artifactForm
             operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
         }
 
-        is Instruction.RemainderI32 -> {
+        is Instruction.Remainder -> {
             opcode = 0x14u
-            form = 1u
+            form = instruction.type.artifactForm
             operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
         }
 
-        is Instruction.BitAndI32 -> {
+        is Instruction.BitAnd -> {
             opcode = 0x16u
-            form = 1u
+            form = instruction.type.artifactForm
             operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
         }
 
-        is Instruction.BitOrI32 -> {
+        is Instruction.BitOr -> {
             opcode = 0x17u
-            form = 1u
+            form = instruction.type.artifactForm
             operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
         }
 
-        is Instruction.BitXorI32 -> {
+        is Instruction.BitXor -> {
             opcode = 0x18u
-            form = 1u
+            form = instruction.type.artifactForm
             operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
         }
 
-        is Instruction.ShiftLeftI32 -> {
+        is Instruction.ShiftLeft -> {
             opcode = 0x19u
-            form = 1u
+            form = instruction.type.artifactForm
             operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
         }
 
-        is Instruction.ShiftUnsignedI32 -> {
+        is Instruction.ShiftRight -> {
+            opcode = 0x1au
+            form = instruction.type.artifactForm
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
+        }
+
+        is Instruction.ShiftUnsigned -> {
             opcode = 0x1bu
-            form = 1u
+            form = instruction.type.artifactForm
             operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
         }
 
@@ -432,13 +438,14 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
         is Instruction.Move,
         is Instruction.Const,
         is Instruction.Null,
-        is Instruction.AddI32,
-        is Instruction.SubtractI32,
-        is Instruction.BitAndI32,
-        is Instruction.BitOrI32,
-        is Instruction.BitXorI32,
-        is Instruction.ShiftLeftI32,
-        is Instruction.ShiftUnsignedI32,
+        is Instruction.Add,
+        is Instruction.Subtract,
+        is Instruction.BitAnd,
+        is Instruction.BitOr,
+        is Instruction.BitXor,
+        is Instruction.ShiftLeft,
+        is Instruction.ShiftRight,
+        is Instruction.ShiftUnsigned,
         is Instruction.Equal,
         is Instruction.RefEqual,
         is Instruction.RefNotEqual,
@@ -459,10 +466,10 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
         Instruction.Unreachable,
         -> 1u
 
-        is Instruction.MultiplyI32 -> 2u
+        is Instruction.Multiply -> 2u
 
-        is Instruction.DivideI32,
-        is Instruction.RemainderI32,
+        is Instruction.Divide,
+        is Instruction.Remainder,
         -> 4u
 
         is Instruction.ArrayLoad,
