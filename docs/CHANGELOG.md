@@ -10,6 +10,8 @@ permalink: /CHANGELOG/
 This page records user-visible Compukters changes. The newest version is first; releases remain as permanent section
 headings so this page has one stable URL that can be shared outside the repository.
 
+## 0.5.0 — In development
+
 ## 0.4.0 — 2026-09-12
 
 This release makes the integrated multi-file Kotlin IDE available on both supported Minecraft versions, adds a Java
