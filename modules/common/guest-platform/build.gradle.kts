@@ -34,48 +34,22 @@ dependencies {
 
 val platformSourceRoot = layout.projectDirectory.dir("src/platform")
 val platformDescriptor = platformSourceRoot.file("modules.toml")
-val addonDescriptor = layout.projectDirectory.file("src/addons/create-kinetics.api")
-val fullPlatformBundle = layout.buildDirectory.file("platform/compukters-platform-full.cpb")
 val platformBundle = layout.buildDirectory.file("platform/compukters-platform.cpb")
-val createKineticsAddonBundle = layout.buildDirectory.file("platform/create-kinetics.cagb")
-val assembleFullPlatformBundle = tasks.register<JavaExec>("assembleFullPlatformBundle") {
+val assemblePlatformBundle = tasks.register<JavaExec>("assemblePlatformBundle") {
     group = "build"
-    description = "Builds the complete intermediate Compukters platform bundle."
+    description = "Builds the canonical base Compukters platform bundle."
     classpath = platformBuilder
     mainClass = "ru.lazyhat.compukters.compiler.k2.engine.build.PlatformBundleBuilderMainKt"
     inputs.dir(platformSourceRoot)
     inputs.file(platformDescriptor)
-    inputs.file(addonDescriptor)
-    outputs.file(fullPlatformBundle)
+    outputs.file(platformBundle)
     args(
         "--sources",
         platformSourceRoot.asFile.absolutePath,
         "--descriptor",
         platformDescriptor.asFile.absolutePath,
         "--output",
-        fullPlatformBundle.get().asFile.absolutePath,
-        "--addon-descriptor",
-        addonDescriptor.asFile.absolutePath,
-    )
-}
-val assemblePlatformBundle = tasks.register<JavaExec>("assemblePlatformBundle") {
-    group = "build"
-    description = "Builds the base platform and extracts deterministic addon Guest API bundles."
-    dependsOn(assembleFullPlatformBundle)
-    classpath = platformBuilder
-    mainClass = "ru.lazyhat.compukters.compiler.k2.engine.build.AddonGuestApiSplitterMainKt"
-    inputs.file(fullPlatformBundle)
-    inputs.file(addonDescriptor)
-    outputs.files(platformBundle, createKineticsAddonBundle)
-    args(
-        "--input",
-        fullPlatformBundle.get().asFile.absolutePath,
-        "--descriptor",
-        addonDescriptor.asFile.absolutePath,
-        "--platform-output",
         platformBundle.get().asFile.absolutePath,
-        "--addon-output",
-        createKineticsAddonBundle.get().asFile.absolutePath,
     )
 }
 
@@ -83,26 +57,16 @@ val compuktersPlatformBundle = configurations.create("compuktersPlatformBundle")
     isCanBeConsumed = true
     isCanBeResolved = false
 }
-val createKineticsGuestApiBundle = configurations.create("createKineticsGuestApiBundle") {
-    isCanBeConsumed = true
-    isCanBeResolved = false
-}
-
 artifacts {
     add(compuktersPlatformBundle.name, platformBundle) {
         builtBy(assemblePlatformBundle)
         type = "cpb"
-    }
-    add(createKineticsGuestApiBundle.name, createKineticsAddonBundle) {
-        builtBy(assemblePlatformBundle)
-        type = "cagb"
     }
 }
 
 tasks.processResources {
     from("src/platform") {
         into("compukters-platform/sources")
-        exclude("libraries/create-kinetics/**")
     }
 }
 

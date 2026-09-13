@@ -19,10 +19,11 @@ contracts without the Minecraft carrier.
 
 ## Platform and K2 tooling
 
-Guest Kotlin declarations are authored in `guest-platform` as separately versioned modules. Its build produces the
-canonical platform bundle consumed by both compilation and IDE analysis. `platform-bundle` owns the bundle model,
-codec, module graph, and default imports; `platform-k2` exposes that metadata to K2 without making the K2
-implementation part of the platform format.
+Built-in Guest Kotlin declarations are authored in `guest-platform` as separately versioned modules. Its build
+produces only the canonical base platform bundle consumed by both compilation and IDE analysis. Optional integrations
+own and build their Guest declarations as addon bundles against that base; `v1_21_1-create` owns the first such bundle.
+`platform-bundle` owns the base bundle model, codec, module graph, and default imports; `platform-k2` exposes that
+metadata to K2 without making the K2 implementation part of the platform format.
 Constant `Int` and qualified enum-entry defaults cross this bundle explicitly; compiler lowering materializes an
 omitted platform argument without a JVM-style mask dispatcher. Other platform default expressions remain unsupported.
 
@@ -142,9 +143,10 @@ versioned Kotlin platform module, its exact external-call bindings, the matching
 sources; it contains no executable addon JVM classes. Registration rejects duplicate addon/module identities, and a
 created host must expose the exact registered capability schema. The actor transfers immutable typed requests to
 the server thread, where the host may complete immediately or retain a bounded wait; completions resume the exact VM
-task on a later turn. The Minecraft 1.21.1 Create adapter lives in the separate `v1_21_1-create` leaf so shared and
-26.1 code have no direct Create dependency. It resolves only the six adjacent loaded positions and binds handles to
-exact block-entity identities, preventing replacement from silently rebinding a running Guest program.
+task on a later turn. The Minecraft 1.21.1 Create adapter and its Guest Kotlin declarations live in the separate
+`v1_21_1-create` leaf, so the base platform, shared Minecraft code, and 26.1 code have no direct Create ownership. It
+resolves only the six adjacent loaded positions and binds handles to exact block-entity identities, preventing
+replacement from silently rebinding a running Guest program.
 
 `ProgramRuntimeHost` owns one current Rust `ComputerMachine`, advances it with bounded guest and maintenance budgets,
 commits terminal changes once per active server tick, and exposes typed full/delta states and failures through JDK 25
@@ -338,7 +340,7 @@ existing Gradle project paths and artifact names remain flat and stable.
 | `compiler-runtime` | Server-global scheduling, single-flight compilation, persistent cache, and compiler backend lifecycle |
 | `compiler-k2-engine` | Shared K2 FIR-to-IR pipeline, platform linking, trusted intrinsics, and Compukter lowering |
 | `compiler-k2` | Isolated compiler worker entry point and packaged compiler payload |
-| `guest-platform` | Trusted Guest Kotlin declarations and canonical platform-bundle inputs |
+| `guest-platform` | Built-in Guest Kotlin declarations and canonical base platform-bundle inputs |
 | `ide-core` | Minecraft-independent project, editor, profile resolution, client compilation, and analysis models |
 | `ide-analysis-client` | K2-free analysis protocol, controller, scheduling, cancellation, and worker lifetime |
 | `ide-analysis-k2` | Isolated K2 Analysis API worker and incremental project workspace |
@@ -348,7 +350,7 @@ existing Gradle project paths and artifact names remain flat and stable.
 | `minecraft/shared/common` | Canonical loader-independent Minecraft sources, resources, and tests compiled against every supported game target |
 | `minecraft/shared/neoforge` | Canonical NeoForge integration sources, resources, and tests compiled against every supported loader target |
 | `v1_21_1-common` | Minecraft 1.21.1 compatibility adapters over the shared computer carrier |
-| `v1_21_1-create` | Optional Create 6.0.x kinetic-device adapter, bounded host state, and focused integration tests |
+| `v1_21_1-create` | Optional Create 6.0.x Guest API bundle, kinetic-device adapter, bounded host state, and focused integration tests |
 | `v1_21_1-neoforge` | NeoForge 1.21.1 compatibility adapters, Java 21 JNI packaging, and production archive |
 | `v26_1-common` | Minecraft 26.1 compatibility adapters over the shared computer carrier |
 | `v26_1-neoforge` | NeoForge 26.1 compatibility adapters, client UI, GameTests, resources, and production archive |

@@ -62,7 +62,7 @@ dependencies {
     }
     add(
         createKineticsGuestApiBundle.name,
-        project(path = ":guest-platform", configuration = "createKineticsGuestApiBundle"),
+        project(path = ":v1_21_1-create", configuration = "createKineticsGuestApiBundle"),
     )
 }
 

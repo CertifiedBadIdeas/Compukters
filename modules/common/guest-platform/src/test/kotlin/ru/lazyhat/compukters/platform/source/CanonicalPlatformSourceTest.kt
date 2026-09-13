@@ -48,25 +48,6 @@ class CanonicalPlatformSourceTest {
     }
 
     @Test
-    fun `Create kinetics publishes the typed adjacent peripheral API`() {
-        val source =
-            root
-                .resolve("libraries/create-kinetics/create/kinetics/Kinetics.kt")
-                .readText()
-
-        listOf("front", "back", "left", "right", "top", "bottom").forEach { side ->
-            assertTrue("public val $side: KineticSide" in source)
-        }
-        assertTrue("public fun speed(): Float" in source)
-        assertTrue("public fun awaitSpeedChange(): Float" in source)
-        assertTrue("public fun stress(): Float" in source)
-        assertTrue("public fun capacity(): Float" in source)
-        assertTrue("public fun awaitChange()" in source)
-        assertTrue("public fun targetSpeed(): Int" in source)
-        assertTrue("public fun setTargetSpeed(speed: Int): Int" in source)
-    }
-
-    @Test
     fun `every canonical source has exactly one owner`() {
         val sources =
             Files.walk(root).use { paths ->
@@ -104,14 +85,12 @@ class CanonicalPlatformSourceTest {
                 "compukter:process",
                 "compukter:redstone",
                 "compukter:sound",
-                "create:kinetics",
             ),
             modulesById.keys,
         )
         assertTrue(modulesById.getValue("kotlin:builtins").dependencies.isEmpty())
         assertEquals("2.0.0", modulesById.getValue("compukter:redstone").version)
         assertEquals("1.0.0", modulesById.getValue("compukter:sound").version)
-        assertEquals("1.0.0", modulesById.getValue("create:kinetics").version)
         catalog.modules.forEach { module ->
             assertTrue(MODULE_ID.matches(module.id), "invalid module id ${module.id}")
             assertTrue(VERSION.matches(module.version), "invalid module version ${module.version}")
@@ -177,7 +156,6 @@ class CanonicalPlatformSourceTest {
                 paths
                     .filter(Files::isRegularFile)
                     .map { root.relativize(it).invariantSeparatorsPathString }
-                    .filter { !it.startsWith("libraries/create-kinetics/") }
                     .map { "compukters-platform/sources/$it" }
                     .toList()
                     .toSet()
