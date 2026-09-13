@@ -41,7 +41,15 @@ repositories {
     }
 }
 
+val createDevRuntime by sourceSets.creating {
+    compileClasspath += sourceSets.main.get().output + sourceSets.main.get().compileClasspath
+    runtimeClasspath += sourceSets.main.get().output + sourceSets.main.get().runtimeClasspath
+}
+val gameTest = sourceSets.named("gameTest").get()
+
 loom {
+    createRemapConfigurations(createDevRuntime)
+    createRemapConfigurations(gameTest)
     mods {
         maybeCreate("main").apply {
             sourceSet("main", project(projects.v1211Common.path))
@@ -51,6 +59,15 @@ loom {
     runs.named("gameTestServer") {
         mods.maybeCreate("main").sourceSet("main", project(projects.v1211Create.path))
     }
+    listOf("client", "client2", "client3", "server").forEach { runName ->
+        runs.named(runName) {
+            source(createDevRuntime)
+        }
+    }
+}
+
+configurations.named("modGameTestImplementation") {
+    extendsFrom(configurations.named("modCreateDevRuntimeImplementation").get())
 }
 
 dependencies {
@@ -59,7 +76,7 @@ dependencies {
     common(project(path = projects.v1211Create.path)) { isTransitive = false }
     shadowBundle(project(path = projects.v1211Create.path, configuration = "transformProductionNeoForge"))
     testImplementation(project(path = projects.v1211Common.path))
-    modImplementation(libs.create.v1211)
+    add("modCreateDevRuntimeImplementation", libs.create.v1211)
     implementation(projects.nativeRuntimeJni)
     shadowBundle(project(path = projects.nativeRuntimeJni.path)) { isTransitive = false }
     implementation(projects.platformBundle)

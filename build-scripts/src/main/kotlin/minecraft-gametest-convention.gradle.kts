@@ -73,6 +73,7 @@ val loom = extensions.getByType<LoomGradleExtensionAPI>()
 val buildContext = buildContext()
 loom.runs.register("gameTestServer") {
     server()
+    source(gameTest)
     environment("gametestserver")
     forgeTemplate("gameTestServer")
     runDir("run/gameTestServer")

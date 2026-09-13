@@ -18,6 +18,7 @@
 
 import net.fabricmc.loom.api.LoomGradleExtensionAPI
 import net.fabricmc.loom.configuration.ide.RunConfigSettings
+import org.gradle.api.tasks.SourceSetContainer
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.util.UUID
@@ -49,6 +50,20 @@ runs.named("client") {
     runDir("run/client")
     applyShared()
     programArgs("--username", DEV_CLIENT_USERNAMES[0])
+}
+
+// The 1.21.1 target has Create on its normal development classpath. Keep a
+// separate client on the main source set so the mod can also be smoke-tested
+// when Create is not installed.
+if (buildContext().versionKey == "v1211") {
+    runs.register("clientWithoutCreate") {
+        client()
+        configName = "Minecraft Client without Create"
+        runDir("run/clientWithoutCreate")
+        source(extensions.getByType<SourceSetContainer>().named("main").get())
+        applyShared()
+        programArgs("--username", DEV_CLIENT_USERNAMES[0])
+    }
 }
 
 // Second client instance for local multiplayer testing. Reuses the main mod classpath, so any
@@ -191,11 +206,12 @@ private val DEV_CLIENT_SERVERS =
     )
 
 private val CLIENT_RUN_DIRS =
-    listOf(
-        "run/client",
-        "run/client2",
-        "run/client3",
-    )
+    buildList {
+        add("run/client")
+        add("run/client2")
+        add("run/client3")
+        if (buildContext().versionKey == "v1211") add("run/clientWithoutCreate")
+    }
 
 val prepareClientDev =
     tasks.register("prepareClientDev") {
@@ -217,11 +233,12 @@ val prepareClientDev =
     }
 
 private val CLIENT_RUN_TASKS =
-    setOf(
-        "runClient",
-        "runClient2",
-        "runClient3",
-    )
+    buildSet {
+        add("runClient")
+        add("runClient2")
+        add("runClient3")
+        if (buildContext().versionKey == "v1211") add("runClientWithoutCreate")
+    }
 
 tasks.matching { it.name in CLIENT_RUN_TASKS }.configureEach {
     dependsOn(prepareClientDev)
