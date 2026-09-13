@@ -3312,7 +3312,9 @@ private class FunctionCompiler(
             } else {
                 arguments
             }
-        if (name in setOf("EQEQ", "equals", "eqeq")) {
+        val floatIeeeEquality =
+            name.equals("ieee754Equals", ignoreCase = true) && leftType == floatType && rightType == floatType
+        if (name in setOf("EQEQ", "equals", "eqeq") || floatIeeeEquality) {
             return allocate(ValueType.Bool).also { destination ->
                 if (leftType == kotlinStringType && rightType == kotlinStringType) {
                     emit(Instruction.StringEquals(destination, operands[0], operands[1]))

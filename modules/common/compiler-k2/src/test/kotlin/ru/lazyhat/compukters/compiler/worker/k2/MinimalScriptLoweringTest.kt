@@ -404,6 +404,27 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `Float variable equality lowers from the K2 IEEE intrinsic`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        fun main() {
+                            val previous = 0.0F
+                            val current = 1.0F
+                            println(previous != current)
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+
+            val artifact = ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray())
+            val instructions = artifact.modules.flatMap { module -> module.blocks.flatMap(Block::instructions) }
+            assertTrue(instructions.any { it is Instruction.Equal && it.type == ScalarValueType.F32 })
+        }
+
+    @Test
     fun `Create kinetics typed API lowers deterministically to blocking scalar operations`() =
         withAdapter { adapter ->
             val source =

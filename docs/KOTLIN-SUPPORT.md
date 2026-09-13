@@ -128,7 +128,8 @@ supported.
   with `Int` or `Long`; integral operands widen to F32. `MIN_VALUE`, `MAX_VALUE`,
   `POSITIVE_INFINITY`, `NEGATIVE_INFINITY`, and `NaN` are available, and text
   conversion preserves JVM spellings including signed zero. Evidence:
-  `Float arithmetic conversions comparisons and text lower for vm conformance`.
+  `Float arithmetic conversions comparisons and text lower for vm conformance` and
+  `Float variable equality lowers from the K2 IEEE intrinsic`.
   Tracking: [#620](https://github.com/CertifiedBadIdeas/Compukters/issues/620)
 
 - [ ] **Conversions — Partial** — `Int.toChar()`, `Int.toLong()`, `Long.toInt()`,

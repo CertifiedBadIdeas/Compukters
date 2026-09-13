@@ -18,6 +18,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   explicit `Int`/`Long` conversions, constants, string interpolation, and console output.
 - Added unboxed `Float` values with mixed `Int`/`Long` arithmetic and comparisons, explicit numeric conversions,
   standard constants, Kotlin-compatible string interpolation, console output, and typed host responses.
+- Fixed `==` and `!=` between `Float` variables lowered by K2 through its internal IEEE equality intrinsic.
 
 ### Create integration
 
