@@ -540,8 +540,8 @@ classpath.
 - [x] **Addon Guest API bundles** — a loader integration can register a bounded, versioned Kotlin metadata/source bundle
   with exact capability schemas and intrinsic bindings. The server is the authority for availability; compiler and IDE
   workers accept only the exact advertised bytes and content hash, reject malformed or shadowing modules, and never
-  execute addon JVM code. The first producer is the `create:kinetics` integration, which is extracted from the base
-  platform into its own deterministic bundle during the build.
+  execute addon JVM code. The first producer is the `create:kinetics` integration, whose declarations and contract are
+  owned by the Create module and built into a deterministic bundle against the canonical base platform.
 
 - [x] **One-shot sound** — `Sound.beep(note, volume = 100)` emits the vanilla note-block pling from the
   computer and return whether the server admitted it. Notes are bounded to

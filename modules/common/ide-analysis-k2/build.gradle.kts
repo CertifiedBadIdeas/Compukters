@@ -92,11 +92,19 @@ val guestPlatformSources = configurations.create("guestPlatformSources") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
+val createKineticsGuestApiBundle = configurations.create("createKineticsGuestApiBundle") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
 
 dependencies {
     add(guestPlatformSources.name, project(path = ":guest-platform")) {
         isTransitive = false
     }
+    add(
+        createKineticsGuestApiBundle.name,
+        project(path = ":v1_21_1-create", configuration = "createKineticsGuestApiBundle"),
+    )
 }
 
 tasks.withType<Jar>().configureEach {
@@ -313,7 +321,8 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
 tasks.test {
     val guestApiJar = project(":guest-platform").tasks.named<Jar>("jar")
     val platformBundle = project(":guest-platform").tasks.named("assemblePlatformBundle")
-    dependsOn(guestApiJar, platformBundle)
+    dependsOn(guestApiJar, platformBundle, createKineticsGuestApiBundle)
+    inputs.files(createKineticsGuestApiBundle)
     doFirst {
         val formatterClasspath = kotlinFormatterRuntime.files + configurations.runtimeClasspath.get().files
         systemProperty("compukters.test.kotlinFormatterClasspath", formatterClasspath.joinToString(File.pathSeparator))
@@ -324,7 +333,7 @@ tasks.test {
         )
         systemProperty(
             "compukters.test.createKineticsGuestApi",
-            project(":guest-platform").layout.buildDirectory.file("platform/create-kinetics.cagb").get().asFile.absolutePath,
+            createKineticsGuestApiBundle.singleFile.absolutePath,
         )
     }
     filter.excludeTestsMatching("ru.lazyhat.compukters.ide.analysis.k2.integration.*")
@@ -333,10 +342,11 @@ tasks.test {
 val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
     description = "Runs forked K2 analysis worker integration tests."
     group = "verification"
-    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle", ":guest-platform:jar", ":guest-platform:assemblePlatformBundle")
+    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle", ":guest-platform:jar", createKineticsGuestApiBundle)
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
+    inputs.files(createKineticsGuestApiBundle)
     filter {
         includeTestsMatching("ru.lazyhat.compukters.ide.analysis.k2.integration.*")
         isFailOnNoMatchingTests = false
@@ -360,7 +370,7 @@ val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
         )
         systemProperty(
             "compukters.test.createKineticsGuestApi",
-            project(":guest-platform").layout.buildDirectory.file("platform/create-kinetics.cagb").get().asFile.absolutePath,
+            createKineticsGuestApiBundle.singleFile.absolutePath,
         )
     }
 }
@@ -368,10 +378,11 @@ val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
 val incrementalAnalysisPerformanceTest = tasks.register<Test>("incrementalAnalysisPerformanceTest") {
     description = "Runs machine-sensitive incremental IDE analysis SLO checks."
     group = "verification"
-    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle", ":guest-platform:jar", ":guest-platform:assemblePlatformBundle")
+    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle", ":guest-platform:jar", createKineticsGuestApiBundle)
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
+    inputs.files(createKineticsGuestApiBundle)
     maxHeapSize = "512m"
     testLogging.showStandardStreams = true
     filter {
@@ -399,7 +410,7 @@ val incrementalAnalysisPerformanceTest = tasks.register<Test>("incrementalAnalys
         )
         systemProperty(
             "compukters.test.createKineticsGuestApi",
-            project(":guest-platform").layout.buildDirectory.file("platform/create-kinetics.cagb").get().asFile.absolutePath,
+            createKineticsGuestApiBundle.singleFile.absolutePath,
         )
     }
 }
