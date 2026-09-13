@@ -25,7 +25,10 @@ import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationOut
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationRequest
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompiler
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilerCompletion
+import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
+import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryListing
 import ru.lazyhat.compukters.lang.runtime.fs.VmFileChunk
@@ -66,6 +69,46 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class ProgramRuntimeHostTest {
+    @Test
+    fun `addon requests suspend independently and reject completions after lifecycle reset`() {
+        val first = VmHostRequest(11, CREATE_KINETICS, 1, listOf(VmValue.I32(3)), taskId = 2)
+        val second = VmHostRequest(12, CREATE_KINETICS, 2, listOf(VmValue.I32(4)), taskId = 3)
+        val session =
+            ScriptedSession(
+                outcomes =
+                    listOf(
+                        VmOutcome.HostRequestBatch(listOf(first)),
+                        VmOutcome.HostRequestBatch(listOf(first)),
+                        VmOutcome.HostRequestBatch(listOf(second)),
+                        VmOutcome.SliceExhausted,
+                    ),
+            )
+        val submitted = mutableListOf<ProgramAddonRequest>()
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { session },
+                tickBudget = ProgramTickBudget(maximumAdvancesPerTick = 4),
+                addonCapabilitySchemas = listOf(CREATE_KINETICS_SCHEMA),
+                addonRequestPort =
+                    ProgramAddonRequestPort { request ->
+                        submitted += request
+                        true
+                    },
+            )
+        host.start(byteArrayOf(1))
+
+        assertEquals(ProgramRuntimeState.Running, host.serverTick())
+        assertEquals(listOf(first.identity, second.identity), submitted.map(ProgramAddonRequest::identity))
+        assertEquals(4, session.advances.size)
+        assertEquals(emptyList(), session.responses)
+
+        assertTrue(host.completeAddon(ProgramAddonCompletion(second.identity, HostResponse.FloatSuccess(2.5f))))
+        assertEquals(listOf(response(3, 12, HostResponse.FloatSuccess(2.5f))), session.responses)
+        host.shutdown()
+        assertFalse(host.completeAddon(ProgramAddonCompletion(first.identity, HostResponse.IntSuccess(7))))
+        assertEquals(1, session.responses.size)
+    }
+
     @Test
     fun `resource snapshots are pull based and include only budgets granted to native advances`() {
         val session =
@@ -1138,6 +1181,16 @@ class ProgramRuntimeHostTest {
     )
 
     private companion object {
+        val CREATE_KINETICS = CapabilityIdentity("create", "kinetics", 1, 0)
+        val CREATE_KINETICS_SCHEMA =
+            HostCapabilitySchema(
+                CREATE_KINETICS,
+                listOf(
+                    HostOperationSchema(listOf(HostValueType.I32), HostValueType.F32, asynchronous = true),
+                    HostOperationSchema(listOf(HostValueType.I32), HostValueType.I32, asynchronous = true),
+                    HostOperationSchema(listOf(HostValueType.I32), HostValueType.I32, asynchronous = true),
+                ),
+            )
         val REDSTONE = CapabilityIdentity("compukter", "redstone", 1, 0)
         val SOUND = CapabilityIdentity("compukter", "sound", 1, 0)
 

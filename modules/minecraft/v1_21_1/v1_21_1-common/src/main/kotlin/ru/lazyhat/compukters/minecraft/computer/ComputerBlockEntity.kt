@@ -250,6 +250,7 @@ open class ComputerBlockEntity internal constructor(
                 filesystem = filesystem,
                 redstoneHostPort = redstoneHostPort,
                 soundHostPort = soundHostPort,
+                addonHost = (level as? ServerLevel)?.let { ComputerAddonHosts.create(it, blockPos, blockState) },
                 initialRedstoneOutput = committedRedstoneOutput,
             ) ?: return null
         terminalMachineId = machineId

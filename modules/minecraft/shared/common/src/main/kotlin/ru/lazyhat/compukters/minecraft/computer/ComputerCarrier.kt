@@ -29,11 +29,13 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorComman
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorFailure
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneHostPort
 import ru.lazyhat.compukters.core.device.runtime.program.SoundHostPort
+import ru.lazyhat.compukters.core.device.runtime.program.programAddonHostOf
 import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryListing
 import ru.lazyhat.compukters.lang.runtime.fs.VmFileChunk
 import ru.lazyhat.compukters.lang.runtime.fs.VmFileStat
@@ -126,6 +128,7 @@ internal fun interface ComputerCarrierFactory {
         filesystem: ComputerFileSystemContext?,
         redstoneHostPort: RedstoneHostPort,
         soundHostPort: SoundHostPort,
+        addonHost: ProgramAddonHost?,
         initialRedstoneOutput: Int,
     ): ComputerCarrier?
 }
@@ -138,9 +141,11 @@ internal object RuntimeComputerCarrierFactory : ComputerCarrierFactory {
         filesystem: ComputerFileSystemContext?,
         redstoneHostPort: RedstoneHostPort,
         soundHostPort: SoundHostPort,
+        addonHost: ProgramAddonHost?,
         initialRedstoneOutput: Int,
     ): ComputerCarrier? {
         val context = requireNotNull(filesystem) { "production computer boot requires a filesystem context" }
+        val effectiveAddonHost = addonHost ?: programAddonHostOf(emptyList())
         val endpoint = VmActorEndpoint(context.computerId, machineEpoch)
         val lease =
             context.actorService.attachBootable(
@@ -149,11 +154,15 @@ internal object RuntimeComputerCarrierFactory : ComputerCarrierFactory {
                 context.romImage(),
                 compilerRouter = context.compilerRouter,
                 initialRedstoneOutput = initialRedstoneOutput,
-            ) ?: return null
+                addonHost = effectiveAddonHost,
+            ) ?: run {
+                effectiveAddonHost.close()
+                return null
+            }
         return ActorComputerCarrier(
             deviceId,
             stateSink,
-            ActorProgramComputer(context.actorService, lease, redstoneHostPort, soundHostPort),
+            ActorProgramComputer(context.actorService, lease, redstoneHostPort, soundHostPort, effectiveAddonHost),
         )
     }
 }

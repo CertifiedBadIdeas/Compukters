@@ -27,12 +27,17 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorServic
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeRequestId
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
+import ru.lazyhat.compukters.core.device.runtime.program.EmptyProgramAddonHost
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonCompletion
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonDispatch
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFailure
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneHostPort
 import ru.lazyhat.compukters.core.device.runtime.program.SoundCommitResult
 import ru.lazyhat.compukters.core.device.runtime.program.SoundHostPort
+import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
 import java.util.concurrent.CompletableFuture
@@ -47,6 +52,7 @@ class ActorProgramComputer(
     private val lease: ProgramRuntimeActorLease,
     private val redstone: RedstoneHostPort,
     private val sound: SoundHostPort = SoundHostPort { SoundCommitResult.Failed(HostFailureKind.UNAVAILABLE, 0) },
+    private val addon: ProgramAddonHost = EmptyProgramAddonHost,
     private val stateSink: (ProgramRuntimeState) -> Unit = {},
 ) {
     private val owner = Thread.currentThread()
@@ -54,6 +60,8 @@ class ActorProgramComputer(
     private var pendingOutput: PendingOutput? = null
     private var pendingSound: PendingSound? = null
     private val pendingRedstoneInputs = ArrayDeque<Int>()
+    private val pendingAddonCompletions = ArrayDeque<ProgramAddonCompletion>()
+    private val outstandingAddonRequests = mutableSetOf<ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity>()
     private var closeResult: CompletableFuture<Long?>? = null
     private var bootRequest: CompletableFuture<ProgramRuntimeActorReply>? = null
     private var lastAdvanceTick = -1L
@@ -110,6 +118,7 @@ class ActorProgramComputer(
         checkOwner()
         require(worldTick >= 0)
         redstoneInput?.let(::enqueueRedstoneInput)
+        collectAddonCompletions()
         lastObservedServerTick = maxOf(lastObservedServerTick, worldTick)
         if (closeResult != null) return
         if (worldTick <= lastAdvanceTick ||
@@ -118,6 +127,7 @@ class ActorProgramComputer(
                     state != ProgramRuntimeState.WaitingForCompiler &&
                     pendingOutput == null &&
                     pendingSound == null &&
+                    pendingAddonCompletions.isEmpty() &&
                     pendingRedstoneInputs.isEmpty()
             )
         ) {
@@ -125,6 +135,7 @@ class ActorProgramComputer(
         }
         val output = pendingOutput
         val requestedSound = pendingSound
+        val addonCompletions = pendingAddonCompletions.toList()
         check(output == null || requestedSound == null) { "computer cannot own two pending world requests" }
         val input = pendingRedstoneInputs.firstOrNull()
         val effects =
@@ -141,6 +152,7 @@ class ActorProgramComputer(
                 requestedSound?.let {
                     add(ProgramRuntimeActorEffect.CompleteSound(it.requestId, it.result))
                 }
+                if (addonCompletions.isNotEmpty()) add(ProgramRuntimeActorEffect.CompleteAddons(addonCompletions))
                 input?.let { add(ProgramRuntimeActorEffect.RedstoneInput(it)) }
             }
         lastAdvanceTick = worldTick
@@ -149,6 +161,9 @@ class ActorProgramComputer(
         if (!future.isCompletedExceptionally) {
             pendingOutput = null
             pendingSound = null
+            repeat(addonCompletions.size) {
+                outstandingAddonRequests.remove(pendingAddonCompletions.removeFirst().identity)
+            }
             if (input != null) pendingRedstoneInputs.removeFirst()
             hostCompletionTick?.let { completedAt ->
                 service.recordHostContinuationDelay((worldTick - completedAt).coerceAtLeast(0))
@@ -173,6 +188,9 @@ class ActorProgramComputer(
         pendingOutput = null
         pendingSound = null
         pendingRedstoneInputs.clear()
+        pendingAddonCompletions.clear()
+        outstandingAddonRequests.clear()
+        addon.close()
         hostCompletionTick = null
         val result = lease.closeAsync()
         closeResult = result
@@ -184,6 +202,13 @@ class ActorProgramComputer(
         reply: ProgramRuntimeActorReply,
         currentLifecycle: Long,
     ) {
+        if (
+            reply.state != ProgramRuntimeState.Running &&
+            reply.state != ProgramRuntimeState.WaitingForInput &&
+            reply.state != ProgramRuntimeState.WaitingForCompiler
+        ) {
+            discardAddonRequests()
+        }
         when (val request = reply.value) {
             is ProgramRuntimeActorValue.RedstoneOutputRequested -> {
                 val result =
@@ -213,6 +238,24 @@ class ActorProgramComputer(
                 hostCompletionTick = lastObservedServerTick
             }
 
+            is ProgramRuntimeActorValue.AddonsRequested -> {
+                request.requests.forEach { addonRequest ->
+                    check(outstandingAddonRequests.add(addonRequest.identity)) {
+                        "addon host received a duplicate pending request"
+                    }
+                    val result =
+                        try {
+                            addon.dispatch(addonRequest)
+                        } catch (_: Exception) {
+                            ProgramAddonDispatch.Completed(HostResponse.Failure(HostFailureKind.INPUT_OUTPUT, 0))
+                        }
+                    if (result is ProgramAddonDispatch.Completed) {
+                        pendingAddonCompletions += ProgramAddonCompletion(addonRequest.identity, result.response)
+                    }
+                }
+                hostCompletionTick = lastObservedServerTick
+            }
+
             else -> {
                 Unit
             }
@@ -230,6 +273,7 @@ class ActorProgramComputer(
         pendingOutput = null
         pendingSound = null
         pendingRedstoneInputs.clear()
+        discardAddonRequests()
         hostCompletionTick = null
         return observe(submitted, lifecycle)
     }
@@ -276,6 +320,25 @@ class ActorProgramComputer(
         service.recordCoalescedRedstoneInput()
     }
 
+    private fun collectAddonCompletions() {
+        val available = MAXIMUM_ADDON_COMPLETIONS_PER_TICK - pendingAddonCompletions.size
+        if (available <= 0 || outstandingAddonRequests.isEmpty()) return
+        val polled = addon.poll(available)
+        require(polled.size <= available) { "addon host exceeded its completion budget" }
+        val queued = pendingAddonCompletions.mapTo(mutableSetOf(), ProgramAddonCompletion::identity)
+        polled.forEach { completion ->
+            require(completion.identity in outstandingAddonRequests) { "addon host completed an unknown or stale request" }
+            require(queued.add(completion.identity)) { "addon host completed one request more than once" }
+            pendingAddonCompletions += completion
+        }
+    }
+
+    private fun discardAddonRequests() {
+        pendingAddonCompletions.clear()
+        outstandingAddonRequests.clear()
+        addon.reset()
+    }
+
     private fun publish(next: ProgramRuntimeState) {
         if (state == next) return
         state = next
@@ -294,4 +357,8 @@ class ActorProgramComputer(
         val requestId: ProgramRuntimeRequestId,
         val result: SoundCommitResult,
     )
+
+    private companion object {
+        const val MAXIMUM_ADDON_COMPLETIONS_PER_TICK = 256
+    }
 }

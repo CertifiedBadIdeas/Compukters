@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonCompletion
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonRequest
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
@@ -206,6 +208,25 @@ sealed interface ProgramRuntimeActorEffect : ProgramRuntimeActorMessage {
             require(result != SoundCommitResult.Deferred) { "sound completion cannot be deferred" }
         }
     }
+
+    class CompleteAddons(
+        completions: List<ProgramAddonCompletion>,
+    ) : ProgramRuntimeActorEffect {
+        val completions: List<ProgramAddonCompletion> = completions.toList()
+
+        init {
+            require(this.completions.isNotEmpty()) { "addon completion batch must not be empty" }
+            require(this.completions.size <= MAXIMUM_ADDON_BATCH) { "addon completion batch exceeds its bound" }
+            require(
+                this.completions
+                    .map(ProgramAddonCompletion::identity)
+                    .toSet()
+                    .size == this.completions.size,
+            ) {
+                "addon completion batch contains duplicate identities"
+            }
+        }
+    }
 }
 
 data class ProgramRuntimeTickPermit(
@@ -287,10 +308,31 @@ sealed interface ProgramRuntimeActorValue {
         val requests: List<SoundRequest> = requests.toList()
     }
 
+    class AddonsRequested(
+        requests: List<ProgramAddonRequest>,
+    ) : ProgramRuntimeActorValue {
+        val requests: List<ProgramAddonRequest> = requests.toList()
+
+        init {
+            require(this.requests.isNotEmpty()) { "addon request batch must not be empty" }
+            require(this.requests.size <= MAXIMUM_ADDON_BATCH) { "addon request batch exceeds its bound" }
+            require(
+                this.requests
+                    .map(ProgramAddonRequest::identity)
+                    .toSet()
+                    .size == this.requests.size,
+            ) {
+                "addon request batch contains duplicate identities"
+            }
+        }
+    }
+
     data class Rejected(
         val failure: ProgramRuntimeActorFailure,
     ) : ProgramRuntimeActorValue
 }
+
+private const val MAXIMUM_ADDON_BATCH = 256
 
 sealed interface ProgramRuntimeActorFailure {
     data class FileSystem(

@@ -156,7 +156,7 @@ class ComputerBlockEntityTest {
         lateinit var accepted: FakeCarrier
         val entity =
             TestComputerBlockEntity(
-                ComputerCarrierFactory { deviceId, _, stateSink, _, redstoneHostPort, _, initialRedstoneOutput ->
+                ComputerCarrierFactory { deviceId, _, stateSink, _, redstoneHostPort, _, _, initialRedstoneOutput ->
                     attempts++
                     if (attempts == 1) {
                         null
@@ -184,7 +184,7 @@ class ComputerBlockEntityTest {
         var attempts = 0
         val entity =
             TestComputerBlockEntity(
-                ComputerCarrierFactory { deviceId, _, stateSink, _, redstoneHostPort, _, initialRedstoneOutput ->
+                ComputerCarrierFactory { deviceId, _, stateSink, _, redstoneHostPort, _, _, initialRedstoneOutput ->
                     attempts++
                     if (attempts == 1) {
                         null
@@ -294,7 +294,7 @@ class ComputerBlockEntityTest {
         val carriers = mutableListOf<FakeCarrier>()
         val entity =
             TestComputerBlockEntity(
-                ComputerCarrierFactory { deviceId, _, stateSink, _, redstoneHostPort, _, initialRedstoneOutput ->
+                ComputerCarrierFactory { deviceId, _, stateSink, _, redstoneHostPort, _, _, initialRedstoneOutput ->
                     FakeCarrier(deviceId, stateSink, redstoneHostPort, initialRedstoneOutput).also(carriers::add)
                 },
             )
