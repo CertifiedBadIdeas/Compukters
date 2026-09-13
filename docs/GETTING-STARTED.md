@@ -19,6 +19,9 @@ terminal workflow. Both produce the same verified Compukter executable format.
 | Java | **JDK 25** for 26.1.2; **Java 21** for 1.21.1 |
 | Packaged native runtime | **Linux x86_64** or **Windows x86_64** |
 
+Create 6.0.11 through 6.0.x is an optional dependency on Minecraft 1.21.1. Install it on both client and server only
+when using the [Create kinetics Guest API](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/).
+
 The mod is required on both the client and server. macOS and ARM builds are not part of the current published
 artifacts.
 
@@ -111,7 +114,7 @@ block as a portable disk.
 ## Current boundaries
 
 Compukters intentionally supports a focused Kotlin subset. Do not assume that arbitrary Kotlin/JVM libraries, Java
-interop, reflection, threads, ordinary coroutines, collections, floating-point types, or exceptions are available. The
+interop, reflection, threads, ordinary coroutines, collections, or exceptions are available. The
 [Guest Kotlin support matrix](https://certifiedbadideas.github.io/Compukters/KOTLIN-SUPPORT/) is the compatibility contract for language features, standard-library
 operations, Guest APIs, and IDE behavior.
 
@@ -121,6 +124,7 @@ I/O, processes, and redstone are admitted through bounded runtime contracts.
 ## Next steps
 
 - Connect a program to the world with [Redstone GPIO](https://certifiedbadideas.github.io/Compukters/REDSTONE/).
+- Read and control adjacent Create devices with [Create kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/).
 - Check exact language support in the [Guest Kotlin support matrix](https://certifiedbadideas.github.io/Compukters/KOTLIN-SUPPORT/).
 - Contributors can continue with [Architecture](https://certifiedbadideas.github.io/Compukters/ARCHITECTURE/) and [Verification](https://certifiedbadideas.github.io/Compukters/VERIFICATION/).
 - Report a reproducible problem through [GitHub Issues](https://github.com/CertifiedBadIdeas/Compukters/issues).

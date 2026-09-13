@@ -482,6 +482,7 @@ and the mandatory built-ins module; there is no ambient Kotlin/JVM classpath.
 | `compukter:process` | Child process execution and explicit exit |
 | `compukter:redstone` | Side-oriented redstone reads, waits, and weak/direct output writes |
 | `compukter:sound` | Bounded one-shot computer beeps with admission feedback |
+| `create:kinetics` | Optional Minecraft 1.21.1/Create 6.0.x access to adjacent speedometers, stressometers, and rotation speed controllers |
 
 Ordinary functions in these modules are compiled ahead of Guest projects into
 relocatable platform fragments. Only declarations explicitly marked as native
@@ -519,6 +520,15 @@ cannot become one merely by copying its package, name, and signature.
   these packages have no Guest implementation. Tracking: not scheduled
 
 ## Compukters Guest APIs
+
+- [x] **Create kinetics on Minecraft 1.21.1** — when Create 6.0.11 through 6.0.x is loaded, the optional
+  `create:kinetics` module exposes computer-local sides through `Kinetics`. Programs can read exact `Float` speed,
+  stress, and capacity values; wait for speed or load changes; and read or set a rotation controller's target speed.
+  Handles remain bound to the exact adjacent block entity and fail rather than rebinding after replacement. Evidence:
+  `KineticsHostStateTest`, the lowering test `Create kinetics program lowers deterministically for GameTest
+  conformance`, IDE diagnostic/completion/parameter-information tests, and the real NeoForge `createkinetics`
+  GameTest. See [Create kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/) for the API and
+  manifest entry.
 
 - [x] **One-shot sound** — `Sound.beep(note, volume = 100)` emits the vanilla note-block pling from the
   computer and return whether the server admitted it. Notes are bounded to

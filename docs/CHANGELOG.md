@@ -19,6 +19,15 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Added unboxed `Float` values with mixed `Int`/`Long` arithmetic and comparisons, explicit numeric conversions,
   standard constants, Kotlin-compatible string interpolation, console output, and typed host responses.
 
+### Create integration
+
+- Added optional Create 6.0.x integration on Minecraft 1.21.1 for adjacent speedometers, stressometers, and rotation
+  speed controllers through the `create:kinetics` Guest Kotlin module.
+- Added exact `Float` readings, suspending change waits, bounded stable device handles, and deterministic failure when
+  an attached Create block is missing, unloaded, removed, or replaced.
+- Made the IDE and compiler advertise `create:kinetics` only when the attached server has the compatible integration
+  loaded; Compukters remains usable without Create installed.
+
 ## 0.4.0 — 2026-09-12
 
 This release makes the integrated multi-file Kotlin IDE available on both supported Minecraft versions, adds a Java
