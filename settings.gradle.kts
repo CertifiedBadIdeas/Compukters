@@ -65,6 +65,7 @@ project(":native-runtime-ffm").projectDir = commonModulesDir.resolve("native-run
 include("native-runtime-jni")
 project(":native-runtime-jni").projectDir = commonModulesDir.resolve("native-runtime/jni")
 include("platform-bundle", commonModulesDir)
+include("addon-guest-api", commonModulesDir)
 include("platform-k2", commonModulesDir)
 include("compiler-artifact", commonModulesDir)
 include("worker-client", commonModulesDir)
