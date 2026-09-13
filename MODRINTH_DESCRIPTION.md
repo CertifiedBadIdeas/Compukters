@@ -47,6 +47,13 @@ Programs can read and control all six sides of a computer relative to its facing
 - output levels from `0` to `15`;
 - persistent weak and direct power modes.
 
+## Integrate with Create on Minecraft 1.21.1
+
+With Create 6.0.x installed, Guest Kotlin projects can select the optional `create:kinetics` module. Programs can read
+adjacent speedometers and stressometers, suspend until their values change, and control an adjacent Rotation Speed
+Controller. The IDE exposes this API only when the attached server supports it, and Compukters remains usable without
+Create.
+
 ## Kotlin, without unrestricted JVM access
 
 Compukters uses the Kotlin K2 frontend, but Guest programs do not run as Kotlin/JVM and cannot access arbitrary Java
@@ -78,6 +85,7 @@ Each Minecraft version has its own download. No Architectury runtime dependency 
 - [Documentation and getting started](https://certifiedbadideas.github.io/Compukters/)
 - [Guest Kotlin support matrix](https://certifiedbadideas.github.io/Compukters/KOTLIN-SUPPORT/)
 - [Redstone API and behavior](https://certifiedbadideas.github.io/Compukters/REDSTONE/)
+- [Create kinetics API](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/)
 - [Changelog](https://certifiedbadideas.github.io/Compukters/CHANGELOG/)
 - [Source code](https://github.com/CertifiedBadIdeas/Compukters)
 - [Development blog](https://t.me/lazyhatdev) — in Russian

@@ -136,6 +136,13 @@ publish the next one. A full actor mailbox retains the exact continuation for re
 Its close future reports the final filesystem generation after accepted work drains and native resources close; this
 barrier does not depend on server result pumping and may complete on a worker thread.
 
+Third-party world capabilities use the same continuation boundary. Loader integrations register bounded
+`ProgramAddonHost` factories and matching platform-module identities. The actor transfers immutable typed requests to
+the server thread, where the host may complete immediately or retain a bounded wait; completions resume the exact VM
+task on a later turn. The Minecraft 1.21.1 Create adapter lives in the separate `v1_21_1-create` leaf so shared and
+26.1 code have no direct Create dependency. It resolves only the six adjacent loaded positions and binds handles to
+exact block-entity identities, preventing replacement from silently rebinding a running Guest program.
+
 `ProgramRuntimeHost` owns one current Rust `ComputerMachine`, advances it with bounded guest and maintenance budgets,
 commits terminal changes once per active server tick, and exposes typed full/delta states and failures through JDK 25
 FFM on the 26.1 product line. The Java 21 runtime API owns the same typed session boundary independently of its native
@@ -300,10 +307,11 @@ their existing resource counters once, and wakes them with an ordinary Text even
 `/rom/vmbench` workload to at most 1000 loaded physical computers in a bounded area. The harness owns no persistent
 computer identity, never loads chunks, and does not provide a guest-visible fleet protocol.
 
-Terminal, standard output and error, redstone, sound, process, filesystem, and compiler declarations live in the
+Terminal, standard output and error, redstone, sound, process, filesystem, compiler, and optional integration
+declarations live in the
 `guest-platform` bundle as separately identifiable modules. Compilation and IDE analysis resolve the same module graph
-and consume the same Kotlin API surface. General stream handles, pipes, process redirection, and third-party addon
-bundles remain later layers.
+and consume the same target-filtered Kotlin API surface. General stream handles, pipes, process redirection, and
+externally supplied addon bundles remain later layers.
 
 ## Module ownership
 
@@ -335,6 +343,7 @@ existing Gradle project paths and artifact names remain flat and stable.
 | `minecraft/shared/common` | Canonical loader-independent Minecraft sources, resources, and tests compiled against every supported game target |
 | `minecraft/shared/neoforge` | Canonical NeoForge integration sources, resources, and tests compiled against every supported loader target |
 | `v1_21_1-common` | Minecraft 1.21.1 compatibility adapters over the shared computer carrier |
+| `v1_21_1-create` | Optional Create 6.0.x kinetic-device adapter, bounded host state, and focused integration tests |
 | `v1_21_1-neoforge` | NeoForge 1.21.1 compatibility adapters, Java 21 JNI packaging, and production archive |
 | `v26_1-common` | Minecraft 26.1 compatibility adapters over the shared computer carrier |
 | `v26_1-neoforge` | NeoForge 26.1 compatibility adapters, client UI, GameTests, resources, and production archive |
