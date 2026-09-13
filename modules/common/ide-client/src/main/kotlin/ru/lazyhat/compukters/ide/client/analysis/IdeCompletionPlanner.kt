@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.ide.client.analysis
 
+import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
@@ -25,6 +27,7 @@ import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ProjectManifest
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 
 data class IdeCompletionEntry(
     val proposal: CompletionItem,
@@ -40,6 +43,15 @@ data class IdeCompletionModuleRequirement(
 class IdeCompletionPlanner(
     private val catalog: PlatformCatalog,
 ) {
+    private val builtinsIdentity =
+        AnalysisModuleIdentity(
+            catalog.bundle.builtins.id
+                .toString(),
+            Hash256.of(
+                PlatformBundleCodec.moduleContentHash(catalog.bundle.builtins).toByteArray(),
+            ),
+        )
+
     fun plan(
         proposals: List<CompletionItem>,
         manifest: ProjectManifest,
@@ -48,7 +60,7 @@ class IdeCompletionPlanner(
         proposals.mapNotNull { proposal ->
             val origin = proposal.origin
             val requirement =
-                if (origin is DeclarationOrigin.Platform) {
+                if (origin is DeclarationOrigin.Platform && origin.identity != builtinsIdentity) {
                     val identity =
                         if (target == null) {
                             catalog.entries
