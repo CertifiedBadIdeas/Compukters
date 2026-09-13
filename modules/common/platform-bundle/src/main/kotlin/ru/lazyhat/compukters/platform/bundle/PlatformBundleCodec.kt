@@ -44,6 +44,8 @@ object PlatformBundleCodec {
     private const val MAX_SCALAR_TYPES = 65_536
     private const val MAX_SCALAR_CONSTANTS = 262_144
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'B'.code.toByte(), 'F'.code.toByte())
+    private val MODULE_MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'M'.code.toByte(), 'D'.code.toByte())
+    private const val MODULE_FORMAT_VERSION = 1
 
     fun assemble(
         languageVersion: String,
@@ -109,6 +111,34 @@ object PlatformBundleCodec {
         digest.update("Compukters platform module v1\u0000".encodeToByteArray())
         digest.update(Sink().apply { module(canonical) }.result())
         return Sha256.of(digest.digest())
+    }
+
+    fun encodeModule(module: PlatformModule): ByteArray {
+        val canonical = canonicalize(module)
+        val semantic = Sink().apply { module(canonical) }.result()
+        val hash = moduleContentHash(canonical)
+        return Sink()
+            .apply {
+                raw(MODULE_MAGIC)
+                u32(MODULE_FORMAT_VERSION)
+                raw(hash.toByteArray())
+                raw(semantic)
+            }.result()
+            .also { require(it.size <= MAX_BUNDLE_BYTES) { "platform module exceeds byte limit" } }
+    }
+
+    fun decodeModule(bytes: ByteArray): PlatformModule {
+        require(bytes.size <= MAX_BUNDLE_BYTES) { "platform module exceeds byte limit" }
+        val source = Source(bytes)
+        require(source.raw(MODULE_MAGIC.size).contentEquals(MODULE_MAGIC)) { "invalid platform module magic" }
+        require(source.u32() == MODULE_FORMAT_VERSION) { "unsupported platform module format" }
+        val storedHash = Sha256.of(source.raw(32))
+        val module = source.module()
+        source.requireEnd()
+        val canonical = canonicalize(module)
+        require(canonical == module) { "platform module is not canonical" }
+        require(moduleContentHash(canonical) == storedHash) { "platform module content hash mismatch" }
+        return canonical
     }
 
     private fun canonicalize(module: PlatformModule): PlatformModule =
