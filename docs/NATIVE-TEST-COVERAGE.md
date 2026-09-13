@@ -50,16 +50,16 @@ compatibility, corruption, and resume matrix.
 | --- | --- | --- | --- |
 | Wire versions, tags, scalar encodings, and bounded buffers | `ffi/src/wire.rs` unit tests and `ffi/tests/ffi_api.rs` | Decoder and malformed-wire tests in `VmSessionTest`, `WorldFileSystemStoreTest`, and terminal transport tests | Strong for currently exercised values and failure tags |
 | Opaque sessions, stores, and deployment candidates | `ffi/src/handle_table.rs`, bridge unit tests, and `ffi/tests/ffi_api.rs` | `VmSessionTest`, store tests, and real FFM integration tests | Covers invalid/stale/busy handles, conditional consumption, close order, and retry behavior |
-| Exported artifact, execution, terminal, filesystem, deployment, compilation, redstone, and resource calls | `ffi/tests/ffi_api.rs` directly exercises 37 of 40 current exports; the Unit, string, and failure `resume_*` exports are covered below the export boundary by bridge/session tests | `FfmAbiParityIntegrationTest` resolves and safely invokes the authoritative descriptors for all 40 symbols; native integration, runtime-host integration, and GameTest additionally exercise shipped workflows | Complete built-library symbol/descriptor parity, with deeper behavior assigned to the owning Rust and vertical tests |
+| Exported artifact, execution, terminal, filesystem, deployment, compilation, redstone, and resource calls | `ffi/tests/ffi_api.rs` directly exercises 39 of 42 current exports; the Unit, string, and failure `resume_*` exports are covered below the export boundary by bridge/session tests | `FfmAbiParityIntegrationTest` resolves and safely invokes the authoritative descriptors for all 42 symbols; native integration, runtime-host integration, and GameTest additionally exercise shipped workflows | Complete built-library symbol/descriptor parity, with deeper behavior assigned to the owning Rust and vertical tests |
 | Panic containment and public error classification | `ffi_api::tests::panic_is_contained_as_an_internal_status`, wire-code tests, and API invalid-input cases | Typed Kotlin mapping and malformed-result tests | Stable mappings are covered; artificial invalid addresses are outside the safe test contract, while null/length validation is covered |
-| Built dynamic library and packaged loading | Runtime-bundler smoke helper plus archive tests | The shared `FfmAbiFunction` inventory, `FfmAbiParityIntegrationTest`, `nativeIntegrationTest`, `packagedNativeIntegrationTest`, loader tests, and production archive verification | Actual loading, ABI version, all 40 descriptors, packaged extraction, and archive composition are covered |
+| Built dynamic library and packaged loading | Runtime-bundler smoke helper plus archive tests | The shared `FfmAbiFunction` inventory, `FfmAbiParityIntegrationTest`, `nativeIntegrationTest`, `packagedNativeIntegrationTest`, loader tests, and production archive verification | Actual loading, ABI version, all 42 descriptors, packaged extraction, and archive composition are covered |
 
 ## Cross-layer map
 
-The eleven registered Kotlin-to-VM conformance scenarios cover the executable artifact writer, the supported Kotlin
+The twelve registered Kotlin-to-VM conformance scenarios cover the executable artifact writer, the supported Kotlin
 subset, suspend-call lowering, cooperative tasks, VM-owned bounded channel handoff, `when`, `Array<String>` entry
-arguments, platform scalar calls, bounded `Int` loops, specialized `IntArray` operations, and `Long` arithmetic and
-text conversion. These prove compiler/runtime agreement; they do not add independent decoder,
+arguments, platform scalar calls, bounded `Int` loops, specialized `IntArray` operations, and `Long`/`Float` arithmetic
+and text conversion. These prove compiler/runtime agreement; they do not add independent decoder,
 verifier, allocator, or failure-path coverage.
 
 The two `ProgramRuntimeHostIntegrationTest` scenarios cover ROM boot, foreground child execution, reboot, terminal

@@ -25,25 +25,37 @@ public class Int private constructor() : Number(), Comparable<Int> {
 
     public external operator fun compareTo(other: Long): Int
 
+    public external operator fun compareTo(other: Float): Int
+
     public external operator fun plus(other: Int): Int
 
     public external operator fun plus(other: Long): Long
+
+    public external operator fun plus(other: Float): Float
 
     public external operator fun minus(other: Int): Int
 
     public external operator fun minus(other: Long): Long
 
+    public external operator fun minus(other: Float): Float
+
     public external operator fun times(other: Int): Int
 
     public external operator fun times(other: Long): Long
+
+    public external operator fun times(other: Float): Float
 
     public external operator fun div(other: Int): Int
 
     public external operator fun div(other: Long): Long
 
+    public external operator fun div(other: Float): Float
+
     public external operator fun rem(other: Int): Int
 
     public external operator fun rem(other: Long): Long
+
+    public external operator fun rem(other: Float): Float
 
     public external operator fun unaryMinus(): Int
 
@@ -65,6 +77,8 @@ public class Int private constructor() : Number(), Comparable<Int> {
 
     public external fun toLong(): Long
 
+    public external fun toFloat(): Float
+
     public companion object {
         public const val MIN_VALUE: Int = -2147483647 - 1
         public const val MAX_VALUE: Int = 2147483647
@@ -80,25 +94,37 @@ public class Long private constructor() : Number(), Comparable<Long> {
 
     public external operator fun compareTo(other: Int): Int
 
+    public external operator fun compareTo(other: Float): Int
+
     public external operator fun plus(other: Long): Long
 
     public external operator fun plus(other: Int): Long
+
+    public external operator fun plus(other: Float): Float
 
     public external operator fun minus(other: Long): Long
 
     public external operator fun minus(other: Int): Long
 
+    public external operator fun minus(other: Float): Float
+
     public external operator fun times(other: Long): Long
 
     public external operator fun times(other: Int): Long
+
+    public external operator fun times(other: Float): Float
 
     public external operator fun div(other: Long): Long
 
     public external operator fun div(other: Int): Long
 
+    public external operator fun div(other: Float): Float
+
     public external operator fun rem(other: Long): Long
 
     public external operator fun rem(other: Int): Long
+
+    public external operator fun rem(other: Float): Float
 
     public external operator fun unaryMinus(): Long
 
@@ -118,13 +144,65 @@ public class Long private constructor() : Number(), Comparable<Long> {
 
     public external fun toInt(): Int
 
+    public external fun toFloat(): Float
+
     public companion object {
         public const val MIN_VALUE: Long = -9223372036854775807L - 1L
         public const val MAX_VALUE: Long = 9223372036854775807L
     }
 }
 
-internal class Float private constructor() : Number()
+public class Float private constructor() : Number(), Comparable<Float> {
+    public external override operator fun compareTo(other: Float): Int
+
+    public external operator fun compareTo(other: Int): Int
+
+    public external operator fun compareTo(other: Long): Int
+
+    public external operator fun plus(other: Float): Float
+
+    public external operator fun plus(other: Int): Float
+
+    public external operator fun plus(other: Long): Float
+
+    public external operator fun minus(other: Float): Float
+
+    public external operator fun minus(other: Int): Float
+
+    public external operator fun minus(other: Long): Float
+
+    public external operator fun times(other: Float): Float
+
+    public external operator fun times(other: Int): Float
+
+    public external operator fun times(other: Long): Float
+
+    public external operator fun div(other: Float): Float
+
+    public external operator fun div(other: Int): Float
+
+    public external operator fun div(other: Long): Float
+
+    public external operator fun rem(other: Float): Float
+
+    public external operator fun rem(other: Int): Float
+
+    public external operator fun rem(other: Long): Float
+
+    public external operator fun unaryMinus(): Float
+
+    public external fun toInt(): Int
+
+    public external fun toLong(): Long
+
+    public companion object {
+        public const val MIN_VALUE: Float = 1.4E-45F
+        public const val MAX_VALUE: Float = 3.4028235E38F
+        public external val POSITIVE_INFINITY: Float
+        public external val NEGATIVE_INFINITY: Float
+        public external val NaN: Float
+    }
+}
 
 internal class Double private constructor() : Number()
 

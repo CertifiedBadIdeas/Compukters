@@ -31,6 +31,27 @@ import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
     @Test
+    fun `Guest Float arithmetic conversions and console API resolve without errors`() {
+        val source =
+            """
+            fun main() {
+                val speed: Float = 16.5F
+                val scaled = speed * 2 + 1L
+                println("speed=${'$'}scaled int=${'$'}{scaled.toInt()}")
+            }
+            """.trimIndent()
+        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+            val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+
+            assertTrue(
+                active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error },
+                active.diagnostics.toString(),
+            )
+        }
+    }
+
+    @Test
     fun `foreign JVM declarations are outside the native analysis platform`() {
         K2QueryFixture.source("main.kt" to "val forbidden: java.lang.String? = null").use { fixture ->
             val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation

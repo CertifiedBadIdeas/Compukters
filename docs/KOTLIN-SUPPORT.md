@@ -78,13 +78,14 @@ supported.
 
 ## Types and numeric semantics
 
-- [x] **`Int`, `Long`, `Boolean`, and `Char` scalar values** — these source types lower
+- [x] **`Int`, `Long`, `Float`, `Boolean`, and `Char` scalar values** — these source types lower
   to distinct verified VM scalar types with Kotlin-compatible control and
   comparison behavior. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `bounded when forms compile for admitted scalar types` and
   `primitive char array lowers deterministically for exact utf16 materialization`, plus
-  `Long arithmetic conversions comparisons and text lower for vm conformance`,
+  `Long arithmetic conversions comparisons and text lower for vm conformance` and
+  `Float arithmetic conversions comparisons and text lower for vm conformance`,
   paired with [`tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/tests.rs), test
   `scalar_vectors_match_kotlin_jvm_semantics`.
 
@@ -96,11 +97,11 @@ supported.
   and `typed process v2 facade lowers without public capability masks or suspend calls`.
   Tracking: not scheduled
 
-- [ ] **`Byte`, `Short`, `Float`, and `Double` — Unsupported** — the VM defines
-  additional scalar operations, but the Guest source signature and value-type
-  registry do not admit these Kotlin types. Evidence:
+- [ ] **`Byte`, `Short`, and `Double` — Unsupported** — these numeric types have no
+  Guest source representation. `Float` is supported separately as an unboxed F32
+  scalar. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `unsupported collection and unsigned source produces a stable diagnostic and no artifact`.
+  test `unsupported collection unsigned and Double source produces a stable diagnostic and no artifact`.
   Tracking: not scheduled
 
 - [ ] **Unsigned types — Unsupported** — `UByte`, `UShort`, `UInt`, and
@@ -122,9 +123,19 @@ supported.
   `Long arithmetic conversions comparisons and text lower for vm conformance`.
   Tracking: [#619](https://github.com/CertifiedBadIdeas/Compukters/issues/619)
 
-- [ ] **Conversions — Partial** — `Int.toChar()`, `Int.toLong()`, and
-  `Long.toInt()` are lowered. Other numeric conversions remain outside the
-  source subset. Tracking: [#619](https://github.com/CertifiedBadIdeas/Compukters/issues/619)
+- [x] **Floating-point arithmetic** — unboxed `Float` supports `+`, `-`, `*`, `/`,
+  `%`, unary minus, equality, and ordered comparisons. Operations can mix `Float`
+  with `Int` or `Long`; integral operands widen to F32. `MIN_VALUE`, `MAX_VALUE`,
+  `POSITIVE_INFINITY`, `NEGATIVE_INFINITY`, and `NaN` are available, and text
+  conversion preserves JVM spellings including signed zero. Evidence:
+  `Float arithmetic conversions comparisons and text lower for vm conformance`.
+  Tracking: [#620](https://github.com/CertifiedBadIdeas/Compukters/issues/620)
+
+- [ ] **Conversions — Partial** — `Int.toChar()`, `Int.toLong()`, `Long.toInt()`,
+  `Int.toFloat()`, `Long.toFloat()`, `Float.toInt()`, and `Float.toLong()` are
+  lowered. Other numeric conversions remain outside the
+  source subset. Tracking: [#619](https://github.com/CertifiedBadIdeas/Compukters/issues/619),
+  [#620](https://github.com/CertifiedBadIdeas/Compukters/issues/620)
 
 ## Expressions and control flow
 
@@ -256,7 +267,7 @@ supported.
   defines it as a supported language contract. Tracking: not scheduled
 
 - [ ] **Top-level state — Partial** — immutable top-level properties support
-  direct `Int`, `Long`, `Boolean`, `Char`, and `String` literals plus direct
+  direct `Int`, `Long`, `Float`, `Boolean`, `Char`, and `String` literals plus direct
   `IntChannel(capacity)` construction. They lower to lazily initialized static
   VM storage. Top-level `var`, custom or delegated accessors, initializer
   dependencies, and arbitrary object construction remain unsupported. Evidence:
@@ -480,7 +491,7 @@ cannot become one merely by copying its package, name, and signature.
 ## Kotlin standard library
 
 - [ ] **Console functions — Partial** — `print` accepts `String`, `Int`, `Long`,
-  `Boolean`, and `Char`; `println` supports those types plus the no-argument
+  `Float`, `Boolean`, and `Char`; `println` supports those types plus the no-argument
   form; `readln()` reads one canonical line. Other overloads and formatting
   are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
@@ -490,7 +501,7 @@ cannot become one merely by copying its package, name, and signature.
   `stdio_read_conflict_becomes_bounded_host_failure_without_consuming_input`.
   Tracking: not scheduled
 
-- [ ] **Core scalar operations — Partial** — the admitted `Int`, `Long`,
+- [ ] **Core scalar operations — Partial** — the admitted `Int`, `Long`, `Float`,
   `Boolean`, and `Char` operations listed above are provided by `kotlin:builtins` and
   canonical compiler primitives. The wider primitive API, parsing, general
   formatting, and math packages are absent. Tracking: not scheduled

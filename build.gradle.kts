@@ -398,6 +398,15 @@ registerKotlinVmConformance(
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_LONG_ARTIFACT",
     conformanceScenario = "long",
 )
+registerKotlinVmConformance(
+    taskName = "testKotlinFloatVmConformance",
+    taskDescription = "Executes Guest Kotlin Float arithmetic, conversions, comparisons, and text with the pinned VM.",
+    artifactTask = ":compiler-k2:generateFloatConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-float.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-float-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_FLOAT_ARTIFACT",
+    conformanceScenario = "float",
+)
 
 val buildScriptsTest = gradle.includedBuild("build-scripts").task(":test")
 

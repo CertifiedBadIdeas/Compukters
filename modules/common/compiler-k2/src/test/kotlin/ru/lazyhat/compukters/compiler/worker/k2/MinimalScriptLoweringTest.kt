@@ -135,6 +135,63 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `Float arithmetic conversions comparisons and text lower for vm conformance`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                val base = 1.5F
+
+                fun calculate(value: Int): Float {
+                    val arithmetic = ((((value + base) - 0.5F) * 2L) / 3) % 7.0F
+                    return -arithmetic
+                }
+
+                fun main() {
+                    val result = calculate(5)
+                    val ordered = 1 < base && base < 2L && result <= -4.0F
+                    println(result)
+                    println("value=" + result)
+                    println("${'$'}ordered:${'$'}{3.toFloat()}:${'$'}{4L.toFloat()}:${'$'}{3.9F.toInt()}:${'$'}{(-3.9F).toLong()}")
+                    println("${'$'}{Float.MIN_VALUE}:${'$'}{Float.MAX_VALUE}:${'$'}{Float.POSITIVE_INFINITY}:${'$'}{Float.NEGATIVE_INFINITY}:${'$'}{Float.NaN}:${'$'}{-0.0F}")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val bytes = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            val artifact = ArtifactReader.read(bytes)
+            val instructions = artifact.modules.flatMap { module -> module.blocks.flatMap(Block::instructions) }
+
+            assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
+            assertEquals(AbiVersion(1u, 4u), artifact.minimumRuntimeAbi)
+            assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.F32 })
+            assertTrue(instructions.any { it is Instruction.Subtract && it.type == ScalarValueType.F32 })
+            assertTrue(instructions.any { it is Instruction.Multiply && it.type == ScalarValueType.F32 })
+            assertTrue(instructions.any { it is Instruction.Divide && it.type == ScalarValueType.F32 })
+            assertTrue(instructions.any { it is Instruction.Remainder && it.type == ScalarValueType.F32 })
+            assertTrue(instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F32 })
+            assertTrue(instructions.any { it is Instruction.Convert })
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+
+            val numericOnly = adapter.compile(request("fun main() { val value = 1.toFloat() + 2L; value > 0.0F }"))
+            val numericArtifact =
+                ArtifactReader.read(
+                    assertNotNull(numericOnly.artifact, numericOnly.diagnostics.joinToString()).toByteArray(),
+                )
+            assertEquals(AbiVersion(1u, 0u), numericArtifact.minimumRuntimeAbi)
+
+            val consoleOnly = adapter.compile(request("fun main() { println(1.5F) }"))
+            val consoleArtifact =
+                ArtifactReader.read(
+                    assertNotNull(consoleOnly.artifact, consoleOnly.diagnostics.joinToString()).toByteArray(),
+                )
+            assertEquals(AbiVersion(1u, 4u), consoleArtifact.minimumRuntimeAbi)
+
+            System.getProperty("compukter.vm.floatArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `top level IntChannel lowers to VM owned bounded handoff`() =
         withAdapter { adapter ->
             val source =
@@ -1768,11 +1825,12 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `unsupported collection and unsigned source produces a stable diagnostic and no artifact`() =
+    fun `unsupported collection unsigned and Double source produces a stable diagnostic and no artifact`() =
         withAdapter { adapter ->
             listOf(
                 "fun main() { listOf(1) }",
                 "fun main() { val answer: UInt = 42u }",
+                "fun main() { val answer: Double = 42.0 }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))
                 val errors = result.diagnostics.filter { it.severity.name == "ERROR" }

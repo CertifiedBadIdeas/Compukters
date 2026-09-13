@@ -160,6 +160,8 @@ JNI. The two Minecraft release artifacts therefore share one pinned native relea
 transport.
 Runtime ABI 1.3 adds exact decimal materialization for the existing `I64` scalar form; artifacts require it only when
 an `I64` value is converted to `String`, while purely numeric `Long` programs remain compatible with Runtime ABI 1.0.
+Runtime ABI 1.4 does the same for F32 using Kotlin/JVM-compatible spellings, including signed zero, infinities, NaN,
+and the smallest subnormal values; purely numeric `Float` programs likewise remain compatible with Runtime ABI 1.0.
 
 The Minecraft carrier owns exactly one actor endpoint and submits at most one ordinary advance or host continuation
 for each server tick. Rust starts
@@ -239,8 +241,8 @@ native world-store handle are serialized by a fair lock across VM actors and per
 execution stays on actor workers.
 
 The versioned C ABI v13 exposes opaque world-store lifecycle operations, machine creation inside a store, stateless
-artifact verification, dedicated bounded compilation request and completion calls, and typed `Unit`, `Boolean`,
-`String`, or failure host-request completion. Kotlin can select a world
+artifact verification, dedicated bounded compilation request and completion calls, and typed `Unit`, `Int`, raw-bit
+`Float`, `Boolean`, `String`, or failure host-request completion. Kotlin can select a world
 store, identify a computer, request flush, tombstone, or recovery, and route compiler results, but it cannot perform
 arbitrary guest file operations. Guest code reaches Rust-owned state only through declared capabilities. The guest
 filesystem facade exposes bounded `stat`, `list`, `readText`, and `writeText`; Rust validates paths, UTF-8, permissions,

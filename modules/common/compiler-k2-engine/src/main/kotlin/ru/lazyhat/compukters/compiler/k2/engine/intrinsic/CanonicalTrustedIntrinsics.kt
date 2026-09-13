@@ -96,6 +96,15 @@ object CanonicalTrustedIntrinsics {
                 "toLong" to "fun():Long",
             ).forEach { (name, signature) -> primitive("kotlin", "builtins", "kotlin", "Int.$name", signature) }
             listOf(
+                "compareTo" to "fun(Float):Int",
+                "div" to "fun(Float):Float",
+                "minus" to "fun(Float):Float",
+                "plus" to "fun(Float):Float",
+                "rem" to "fun(Float):Float",
+                "times" to "fun(Float):Float",
+                "toFloat" to "fun():Float",
+            ).forEach { (name, signature) -> primitive("kotlin", "builtins", "kotlin", "Int.$name", signature) }
+            listOf(
                 "and" to "fun(Long):Long",
                 "compareTo" to "fun(Int):Int",
                 "compareTo" to "fun(Long):Int",
@@ -118,6 +127,41 @@ object CanonicalTrustedIntrinsics {
                 "ushr" to "fun(Int):Long",
                 "xor" to "fun(Long):Long",
             ).forEach { (name, signature) -> primitive("kotlin", "builtins", "kotlin", "Long.$name", signature) }
+            listOf(
+                "compareTo" to "fun(Float):Int",
+                "div" to "fun(Float):Float",
+                "minus" to "fun(Float):Float",
+                "plus" to "fun(Float):Float",
+                "rem" to "fun(Float):Float",
+                "times" to "fun(Float):Float",
+                "toFloat" to "fun():Float",
+            ).forEach { (name, signature) -> primitive("kotlin", "builtins", "kotlin", "Long.$name", signature) }
+            listOf(
+                "compareTo" to "fun(Float):Int",
+                "compareTo" to "fun(Int):Int",
+                "compareTo" to "fun(Long):Int",
+                "div" to "fun(Float):Float",
+                "div" to "fun(Int):Float",
+                "div" to "fun(Long):Float",
+                "minus" to "fun(Float):Float",
+                "minus" to "fun(Int):Float",
+                "minus" to "fun(Long):Float",
+                "plus" to "fun(Float):Float",
+                "plus" to "fun(Int):Float",
+                "plus" to "fun(Long):Float",
+                "rem" to "fun(Float):Float",
+                "rem" to "fun(Int):Float",
+                "rem" to "fun(Long):Float",
+                "times" to "fun(Float):Float",
+                "times" to "fun(Int):Float",
+                "times" to "fun(Long):Float",
+                "toInt" to "fun():Int",
+                "toLong" to "fun():Long",
+                "unaryMinus" to "fun():Float",
+            ).forEach { (name, signature) -> primitive("kotlin", "builtins", "kotlin", "Float.$name", signature) }
+            primitive("kotlin", "builtins", "kotlin", "Float.Companion.POSITIVE_INFINITY", "val():Float")
+            primitive("kotlin", "builtins", "kotlin", "Float.Companion.NEGATIVE_INFINITY", "val():Float")
+            primitive("kotlin", "builtins", "kotlin", "Float.Companion.NaN", "val():Float")
             primitive("kotlin", "builtins", "kotlin", "String.<init>", "constructor()")
             primitive("kotlin", "builtins", "kotlin", "String.<init>", "constructor(CharArray)")
             primitive("kotlin", "builtins", "kotlin", "String.<init>", "constructor(CharArray,Int,Int)")

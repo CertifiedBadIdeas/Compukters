@@ -26,8 +26,9 @@ dependencies = [
 
 [[package]]
 name = "compukter-vm"
-version = "0.12.1"
+version = "0.13.0"
 dependencies = [
+ "ryu",
  "sha2",
 ]
 
@@ -75,6 +76,12 @@ name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
+
+[[package]]
+name = "ryu"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "sha2"

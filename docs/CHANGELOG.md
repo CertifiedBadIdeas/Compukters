@@ -16,6 +16,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Added unboxed `Long` values, mixed `Int`/`Long` arithmetic and comparisons, bitwise and shift operations,
   explicit `Int`/`Long` conversions, constants, string interpolation, and console output.
+- Added unboxed `Float` values with mixed `Int`/`Long` arithmetic and comparisons, explicit numeric conversions,
+  standard constants, Kotlin-compatible string interpolation, console output, and typed host responses.
 
 ## 0.4.0 — 2026-09-12
 

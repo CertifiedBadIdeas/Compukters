@@ -296,6 +296,7 @@ val soundConformanceArtifact = layout.buildDirectory.file("generated/conformance
 val intLoopsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-loops.cpkt")
 val intArrayConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-array.cpkt")
 val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-long.cpkt")
+val floatConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-float.cpkt")
 val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = layout.buildDirectory.file("generated/system/shell.cpkt")
 val kotlincArtifact = layout.buildDirectory.file("generated/system/kotlinc.cpkt")
@@ -506,6 +507,22 @@ val generateLongConformanceArtifact = tasks.register<Test>("generateLongConforma
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.longArtifact", longConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateFloatConformanceArtifact = tasks.register<Test>("generateFloatConformanceArtifact") {
+    description = "Compiles Guest Kotlin Float operations and text output for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*Float arithmetic conversions comparisons and text lower for vm conformance*")
+    inputs.file(workerJar)
+    outputs.file(floatConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.floatArtifact", floatConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

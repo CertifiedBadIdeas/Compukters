@@ -34,7 +34,7 @@ class CanonicalPlatformSourceTest {
     private val catalog by lazy { SourceCatalog.parse(root.resolve("modules.toml").readText()) }
 
     @Test
-    fun `builtins publish specialized IntArray and Long contracts`() {
+    fun `builtins publish specialized IntArray Long and Float contracts`() {
         val arrays = root.resolve("builtins/kotlin/Arrays.kt").readText()
         val primitives = root.resolve("builtins/kotlin/PrimitiveTypes.kt").readText()
 
@@ -42,7 +42,9 @@ class CanonicalPlatformSourceTest {
         assertTrue("public external fun intArrayOf(vararg elements: Int): IntArray" in arrays)
         assertTrue("public class Long private constructor()" in primitives)
         assertTrue("public const val MIN_VALUE: Long" in primitives)
-        assertEquals("1.2.0", catalog.modules.single { it.id == "kotlin:builtins" }.version)
+        assertTrue("public class Float private constructor()" in primitives)
+        assertTrue("public external val NaN: Float" in primitives)
+        assertEquals("1.3.0", catalog.modules.single { it.id == "kotlin:builtins" }.version)
     }
 
     @Test
