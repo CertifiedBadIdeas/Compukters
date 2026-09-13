@@ -28,6 +28,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
 import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerCodec
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerFeature
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerHandshake
@@ -87,6 +88,7 @@ class CompilerWorkerController(
         snapshot: ProjectSnapshot,
         target: TargetSettings = TargetSettings.KOTLIN_2_4_JVM_17,
         platformModules: List<TrustedBundleIdentity> = emptyList(),
+        addonBundles: List<TrustedBundlePayload> = emptyList(),
     ): CompletableFuture<CompileResult> {
         val future = CompletableFuture<CompileResult>()
         var startDrain = false
@@ -111,6 +113,7 @@ class CompilerWorkerController(
                         launch.expectedIdentity,
                         limits,
                         platformModules,
+                        addonBundles,
                     ),
                     future,
                 )

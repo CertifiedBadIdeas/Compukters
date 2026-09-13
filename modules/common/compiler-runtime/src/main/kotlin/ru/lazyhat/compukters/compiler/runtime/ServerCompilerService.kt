@@ -179,7 +179,13 @@ class ServerCompilerService(
                     return
                 }
                 try {
-                    val future = backend.compile(snapshot, configuration.target, configuration.platformModules)
+                    val future =
+                        backend.compile(
+                            snapshot,
+                            configuration.target,
+                            configuration.platformModules,
+                            configuration.addonBundles,
+                        )
                     Flight(identity, mutableListOf(target), future).also { flights[identity] = it }
                 } catch (error: Exception) {
                     complete(target, CompilerOutcome.PlatformFailure(error.message ?: "compiler backend failed"))
@@ -231,6 +237,7 @@ class ServerCompilerService(
             configuration.workerIdentity,
             configuration.limits,
             configuration.platformModules,
+            configuration.addonBundles,
         )
 
     private fun complete(

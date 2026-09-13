@@ -45,6 +45,7 @@ repositories {
 }
 
 dependencies {
+    implementation(projects.addonGuestApi) { isTransitive = false }
     implementation(projects.ideAnalysisClient) { isTransitive = false }
     implementation(projects.ideCore) { isTransitive = false }
     implementation(projects.platformBundle) { isTransitive = false }
@@ -262,6 +263,7 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
                 .map { it.removePrefix("lib/") }
                 .filterNot { name ->
                     listOf(
+                        "addon-guest-api-",
                         "guest-platform-",
                         "ide-analysis-k2-",
                         "ide-analysis-client-",

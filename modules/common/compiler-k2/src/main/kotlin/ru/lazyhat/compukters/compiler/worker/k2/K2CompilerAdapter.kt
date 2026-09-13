@@ -22,6 +22,11 @@ package ru.lazyhat.compukters.compiler.worker.k2
 
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.diagnostics.Severity
+import org.jetbrains.kotlin.name.CallableId
+import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.artifact.link.LibraryModuleLinker
 import ru.lazyhat.compukters.compiler.artifact.model.*
 import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
@@ -30,10 +35,11 @@ import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.CompilationSession
 import ru.lazyhat.compukters.compiler.k2.engine.CompuktersFir2IrPipeline
+import ru.lazyhat.compukters.compiler.k2.engine.PlatformCapabilityShape
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformFieldLink
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformFunctionLink
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformTypeLink
-import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalTrustedIntrinsics
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.*
 import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryFragmentCodec
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryBudget
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryUsage
@@ -113,7 +119,8 @@ class K2CompilerAdapter(
             }
         }
         if (diagnostics.isNotEmpty()) return failure(diagnostics, reachedIr = false, request.limits)
-        val selected = selectModules(request)
+        val selection = selectModules(request)
+        val selected = selection.modules
         val libraries = loadLibraries(selected)
         val budget = TemporaryBudget(inputs.temporaryRoot, request.limits)
         budget.requireCapacity(sourceFootprint(request))
@@ -191,7 +198,8 @@ class K2CompilerAdapter(
                                     }
                             },
                             sourcePaths = sourcePaths,
-                            canonicalIntrinsicRegistry = CanonicalTrustedIntrinsics.registry,
+                            canonicalIntrinsicRegistry = intrinsicRegistry(selection.addonBundles),
+                            capabilityShapes = capabilityShapes(selection.addonBundles),
                             selectedPlatformModules = selected.mapTo(mutableSetOf(), PlatformModule::id),
                             platformFunctions = libraries.functions,
                             platformTypes = libraries.types,
@@ -245,22 +253,98 @@ class K2CompilerAdapter(
         }
     }
 
-    private fun selectModules(request: CompileRequest): List<PlatformModule> {
-        val byName = platform.modules.associateBy { it.id.toString() }
+    private fun selectModules(request: CompileRequest): SelectedPlatform {
+        val addonBundles =
+            request.addonBundles.map { payload ->
+                AddonGuestApiBundleCodec.decode(payload.content.toByteArray()).also { bundle ->
+                    require(bundle.identity.module == payload.identity.name) { "addon bundle module identity mismatch" }
+                    require(
+                        bundle.identity.contentHash
+                            .toByteArray()
+                            .contentEquals(payload.identity.hash.toByteArray()),
+                    ) {
+                        "addon bundle content hash mismatch"
+                    }
+                    require(bundle.identity.platformAbi == platform.identity.platformAbi) { "addon bundle platform ABI mismatch" }
+                }
+            }
+        val addonByName = addonBundles.associateBy { it.identity.module }
+        require(addonByName.size == addonBundles.size) { "duplicate addon bundle module identity" }
+        val packagedByName = platform.modules.associateBy { it.id.toString() }
+        require(addonByName.keys.intersect(packagedByName.keys).isEmpty()) { "addon bundle shadows a packaged platform module" }
+        val byName = packagedByName + addonBundles.associate { it.identity.module to it.moduleDescriptor }
         val requested =
             request.platformModules.map { identity ->
                 val module = requireNotNull(byName[identity.name]) { "unknown platform module ${identity.name}" }
-                require(PlatformBundleCodec.moduleContentHash(module).toByteArray().contentEquals(identity.hash.toByteArray())) {
+                val expectedHash = addonByName[identity.name]?.identity?.contentHash ?: PlatformBundleCodec.moduleContentHash(module)
+                require(expectedHash.toByteArray().contentEquals(identity.hash.toByteArray())) {
                     "platform module ${identity.name} content hash mismatch"
                 }
                 module
             }
-        val resolved = PlatformModuleGraph(platform).resolve(requested.mapTo(mutableSetOf(), PlatformModule::id)).modules
+        val externalRequested = requested.map(PlatformModule::id).mapTo(mutableSetOf(), PlatformModuleId::toString) - packagedByName.keys
+        require(externalRequested == addonByName.keys) { "compile request addon payloads do not match selected external modules" }
+        val merged =
+            PlatformBundle(
+                platform.identity,
+                platform.builtins,
+                platform.modules + addonBundles.map(AddonGuestApiBundle::moduleDescriptor),
+            )
+        val resolved = PlatformModuleGraph(merged).resolve(requested.mapTo(mutableSetOf(), PlatformModule::id)).modules
         require(resolved.map(PlatformModule::id).toSet() == requested.map(PlatformModule::id).toSet()) {
             "compile request platform module closure is incomplete"
         }
-        return listOf(platform.builtins) + resolved
+        return SelectedPlatform(listOf(platform.builtins) + resolved, addonBundles)
     }
+
+    private fun intrinsicRegistry(bundles: List<AddonGuestApiBundle>): TrustedIntrinsicRegistry {
+        val addonModules = bundles.mapTo(mutableSetOf()) { it.moduleDescriptor.id }
+        val registrations =
+            CanonicalTrustedIntrinsics.registry.handlers
+                .filterKeys { key -> key.module !in addonModules }
+                .map { (key, handler) -> TrustedIntrinsicRegistration(key, handler) }
+                .toMutableList()
+        bundles.forEach { bundle ->
+            val schemas = bundle.capabilitySchemas.associateBy { it.identity }
+            bundle.bindings.forEach { binding ->
+                val operation = schemas.getValue(binding.capability).operations[binding.operation]
+                val callableId =
+                    if (binding.owner == null) {
+                        CallableId(FqName(binding.packageName), Name.identifier(binding.callableName))
+                    } else {
+                        CallableId(
+                            FqName(binding.packageName),
+                            FqName(requireNotNull(binding.owner)),
+                            Name.identifier(binding.callableName),
+                        )
+                    }
+                registrations +=
+                    TrustedIntrinsicRegistration(
+                        TrustedIntrinsicKey(
+                            bundle.moduleDescriptor.id,
+                            callableId,
+                            CanonicalCallableSignature(binding.signature),
+                        ),
+                        CapabilityOperationHandler(
+                            PlatformCapabilityId(
+                                binding.capability.namespace,
+                                binding.capability.name,
+                                binding.capability.abiMajor,
+                            ),
+                            binding.operation.toUInt(),
+                            if (operation.asynchronous) IntrinsicBlockingMode.VM_TASK else IntrinsicBlockingMode.NONE,
+                        ),
+                    )
+            }
+        }
+        return TrustedIntrinsicRegistry.create(registrations)
+    }
+
+    private fun capabilityShapes(bundles: List<AddonGuestApiBundle>): Map<PlatformCapabilityId, PlatformCapabilityShape> =
+        bundles.flatMap(AddonGuestApiBundle::capabilitySchemas).associate { schema ->
+            PlatformCapabilityId(schema.identity.namespace, schema.identity.name, schema.identity.abiMajor) to
+                PlatformCapabilityShape(schema.identity.abiMinor, schema.operations.size.toUInt())
+        }
 
     private fun loadLibraries(modules: List<PlatformModule>): LoadedLibraries {
         val artifacts =
@@ -413,6 +497,11 @@ private data class LoadedLibraries(
     val types: List<PlatformTypeLink>,
     val fields: List<PlatformFieldLink>,
     val artifacts: List<Artifact>,
+)
+
+private data class SelectedPlatform(
+    val modules: List<PlatformModule>,
+    val addonBundles: List<AddonGuestApiBundle>,
 )
 
 private fun Module.functionSignature(reference: TypeRef): String {

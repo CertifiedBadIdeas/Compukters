@@ -31,6 +31,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
 import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
@@ -196,6 +197,7 @@ class ServerCompilerServiceTest {
             snapshot: ProjectSnapshot,
             target: TargetSettings,
             platformModules: List<TrustedBundleIdentity>,
+            addonBundles: List<TrustedBundlePayload>,
         ): CompletableFuture<CompileResult> {
             calls++
             this.target = target

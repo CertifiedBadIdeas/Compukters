@@ -38,6 +38,13 @@ class ProjectWorkerProtocolTest {
                         TrustedBundleIdentity.of("core-api", Hash256.of(ByteArray(32) { 1 })),
                         TrustedBundleIdentity.of("redstone", Hash256.of(ByteArray(32) { 2 })),
                     ),
+                addonBundles =
+                    listOf(
+                        TrustedBundlePayload(
+                            TrustedBundleIdentity.of("redstone", Hash256.of(ByteArray(32) { 2 })),
+                            BinaryValue.of(byteArrayOf(3, 4, 5)),
+                        ),
+                    ),
             )
 
         assertEquals(request, WorkerMessageCodec.decode(WorkerMessageCodec.encode(request)))
@@ -64,11 +71,22 @@ class ProjectWorkerProtocolTest {
         val a = TrustedBundleIdentity.of("a", Hash256.zero())
         assertEquals(listOf(z, a), request(listOf(source("main.kt", "x")), WorkerLimits(), listOf(z, a)).platformModules)
         assertFailsWith<IllegalArgumentException> { request(listOf(source("main.kt", "x")), WorkerLimits(), listOf(a, a)) }
+        assertFailsWith<IllegalArgumentException> {
+            CompileRequest(
+                RequestId.of(1uL),
+                listOf(source("main.kt", "x")),
+                TargetSettings.KOTLIN_2_4_JVM_17,
+                identity(),
+                WorkerLimits(),
+                listOf(a),
+                listOf(TrustedBundlePayload(z, BinaryValue.of(byteArrayOf(1)))),
+            )
+        }
         assertFailsWith<IllegalArgumentException> { TrustedBundleIdentity.of("", Hash256.zero()) }
     }
 
     @Test
-    fun `protocol v3 explicitly rejects a v1 frame`() {
+    fun `protocol v4 explicitly rejects a v1 frame`() {
         val encoded = WorkerCodec.encodeFrame(WorkerMessageCodec.encode(request(listOf(source("main.kt", "x")), WorkerLimits())))
         val v1 =
             encoded.copyOf().also { bytes ->

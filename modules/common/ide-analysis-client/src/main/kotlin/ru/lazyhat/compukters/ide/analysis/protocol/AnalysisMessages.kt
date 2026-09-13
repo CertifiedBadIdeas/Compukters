@@ -36,7 +36,7 @@ import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Collections
 
-const val ANALYSIS_PROTOCOL_VERSION: UInt = 8u
+const val ANALYSIS_PROTOCOL_VERSION: UInt = 9u
 
 data class AnalysisWorkerIdentity(
     val compilerVersion: String,
@@ -64,23 +64,45 @@ data class AdmittedAnalysisModule(
     val identity: AnalysisModuleIdentity,
 )
 
+class AdmittedAnalysisBundle(
+    val identity: AnalysisModuleIdentity,
+    val content: BinaryValue,
+) {
+    override fun equals(other: Any?): Boolean = other is AdmittedAnalysisBundle && identity == other.identity && content == other.content
+
+    override fun hashCode(): Int = 31 * identity.hashCode() + content.hashCode()
+}
+
 class AdmittedAnalysisPlatform(
     val abi: Hash256,
     modules: List<AdmittedAnalysisModule>,
     val sourceRoot: String? = null,
+    addonBundles: List<AdmittedAnalysisBundle> = emptyList(),
 ) {
     val modules: List<AdmittedAnalysisModule> = immutableCopy(modules)
+    val addonBundles: List<AdmittedAnalysisBundle> = immutableCopy(addonBundles)
 
     init {
         require(modules.size <= ProtocolLimits.MAX_MODULES) { "analysis module count exceeds protocol limit" }
         requireCanonicalModules(this.modules)
+        require(this.addonBundles.size <= ProtocolLimits.MAX_MODULES) { "analysis addon bundle count exceeds protocol limit" }
+        require(this.addonBundles.distinctBy(AdmittedAnalysisBundle::identity).size == this.addonBundles.size) {
+            "analysis addon bundle identities must be unique"
+        }
+        require(this.addonBundles.all { bundle -> this.modules.any { it.identity == bundle.identity } }) {
+            "analysis addon bundles must belong to admitted modules"
+        }
         sourceRoot?.let { validateRoot("platform source root", it) }
     }
 
     override fun equals(other: Any?): Boolean =
-        other is AdmittedAnalysisPlatform && abi == other.abi && modules == other.modules && sourceRoot == other.sourceRoot
+        other is AdmittedAnalysisPlatform &&
+            abi == other.abi &&
+            modules == other.modules &&
+            addonBundles == other.addonBundles &&
+            sourceRoot == other.sourceRoot
 
-    override fun hashCode(): Int = listOf(abi, modules, sourceRoot).hashCode()
+    override fun hashCode(): Int = listOf(abi, modules, addonBundles, sourceRoot).hashCode()
 }
 
 class AdmittedAnalysisProfile(
@@ -131,6 +153,9 @@ data class OpenSnapshotRequest(
         require(sources.sources.all { it.content.size <= limits.sourceFileBytes }) { "source file exceeds analysis limit" }
         sources.sources.forEach { source -> validateProtocolSourcePath(source.path.value) }
         require(profile.platform.modules.size <= limits.modules) { "module count exceeds analysis limit" }
+        require(profile.platform.addonBundles.sumOf { it.content.size.toLong() } <= limits.frameBytes.toLong()) {
+            "addon bundle bytes exceed analysis frame limit"
+        }
     }
 }
 

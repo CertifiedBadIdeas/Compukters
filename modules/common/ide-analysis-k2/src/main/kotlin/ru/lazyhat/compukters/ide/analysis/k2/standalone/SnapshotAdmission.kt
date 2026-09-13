@@ -22,6 +22,9 @@ import com.intellij.openapi.vfs.StandardFileSystems
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtPsiFactory
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
@@ -58,8 +61,6 @@ internal class SnapshotAdmission(
     private val platformBundle: PlatformBundle,
     private val sourceUpdater: K2SourceUpdater = DocumentK2SourceUpdater,
 ) {
-    private val platformCompletionIndex = GlobalCompletionIndex.platform(platformBundle)
-
     fun admit(request: OpenSnapshotRequest): IncrementalK2Workspace {
         require(
             request.profile.platform.abi
@@ -68,6 +69,32 @@ internal class SnapshotAdmission(
         ) {
             "analysis platform ABI does not match worker platform"
         }
+        val addonBundles =
+            request.profile.platform.addonBundles.map { payload ->
+                AddonGuestApiBundleCodec.decode(payload.content.toByteArray()).also { bundle ->
+                    require(bundle.identity.module == payload.identity.name) { "analysis addon bundle module identity mismatch" }
+                    require(
+                        bundle.identity.contentHash
+                            .toByteArray()
+                            .contentEquals(payload.identity.hash.toByteArray()),
+                    ) {
+                        "analysis addon bundle content hash mismatch"
+                    }
+                    require(bundle.identity.platformAbi == platformBundle.identity.platformAbi) {
+                        "analysis addon bundle platform ABI mismatch"
+                    }
+                }
+            }
+        val addonByName = addonBundles.associateBy { it.identity.module }
+        require(addonByName.size == addonBundles.size) { "duplicate analysis addon bundle module identity" }
+        val packagedByName = platformBundle.modules.associateBy { it.id.toString() }
+        require(addonByName.keys.intersect(packagedByName.keys).isEmpty()) { "analysis addon bundle shadows packaged module" }
+        val mergedBundle =
+            PlatformBundle(
+                platformBundle.identity,
+                platformBundle.builtins,
+                platformBundle.modules + addonBundles.map(AddonGuestApiBundle::moduleDescriptor),
+            )
         val requestedModules =
             request.profile.platform.modules.associate { admitted ->
                 val id = platformModuleId(admitted.identity.name)
@@ -75,20 +102,24 @@ internal class SnapshotAdmission(
                     if (id == platformBundle.builtins.id) {
                         platformBundle.builtins
                     } else {
-                        platformBundle.modules.singleOrNull { it.id == id }
+                        mergedBundle.modules.singleOrNull { it.id == id }
                     }
                         ?: error("analysis platform module is unavailable: $id")
+                val expectedHash =
+                    addonByName[admitted.identity.name]?.identity?.contentHash ?: PlatformBundleCodec.moduleContentHash(module)
                 require(
                     admitted.identity.hash
                         .toByteArray()
-                        .contentEquals(PlatformBundleCodec.moduleContentHash(module).toByteArray()),
+                        .contentEquals(expectedHash.toByteArray()),
                 ) {
                     "analysis platform module hash mismatch: $id"
                 }
                 id to admitted.identity
             }
         val selectedModules = requestedModules.keys - platformBundle.builtins.id
-        val resolvedModules = PlatformModuleGraph(platformBundle).resolve(selectedModules).modules
+        val selectedExternal = selectedModules.mapTo(mutableSetOf(), PlatformModuleId::toString) - packagedByName.keys
+        require(selectedExternal == addonByName.keys) { "analysis addon payloads do not match selected external modules" }
+        val resolvedModules = PlatformModuleGraph(mergedBundle).resolve(selectedModules).modules
         require(resolvedModules.mapTo(mutableSetOf()) { it.id } == selectedModules) {
             "analysis platform module selection is not dependency-closed"
         }
@@ -109,7 +140,7 @@ internal class SnapshotAdmission(
                 target.parent.createDirectories()
                 Files.writeString(target, text, StandardCharsets.UTF_8)
             }
-            environment = K2ProjectEnvironment.create(sourceRoot, platformBundle, selectedModules)
+            environment = K2ProjectEnvironment.create(sourceRoot, mergedBundle, selectedModules)
             val platform =
                 CompuktersAnalysisPlatformContext(
                     listOf(platformBundle.builtins) + resolvedModules,
@@ -126,7 +157,8 @@ internal class SnapshotAdmission(
             require(files.keys == sourceLengths.keys) { "standalone K2 source mapping differs from admitted snapshot" }
             val projectCompletionIndex = GlobalCompletionIndex.project(files)
             val platformSourceFiles =
-                attachedSourceRoot?.let { loadPlatformSourceFiles(environment, it, request) }.orEmpty()
+                attachedSourceRoot?.let { loadPlatformSourceFiles(environment, it, request) }.orEmpty() +
+                    loadAddonSourceFiles(environment, addonBundles, request)
             return IncrementalK2Workspace(
                 request.identity,
                 root,
@@ -139,13 +171,34 @@ internal class SnapshotAdmission(
                 platform,
                 sourceUpdater,
                 projectCompletionIndex,
-                platformCompletionIndex,
+                GlobalCompletionIndex.platform(mergedBundle),
             )
         } catch (exception: Exception) {
             environment?.close()
             root.toFile().deleteRecursively()
             throw exception
         }
+    }
+
+    private fun loadAddonSourceFiles(
+        environment: K2ProjectEnvironment,
+        bundles: List<AddonGuestApiBundle>,
+        request: OpenSnapshotRequest,
+    ): Map<VirtualSourcePath, KtFile> {
+        val factory = KtPsiFactory(environment.session.project, markGenerated = false)
+        val sources = bundles.flatMap { bundle -> bundle.moduleDescriptor.sources }
+        require(sources.size <= request.limits.sourceFiles) { "addon platform source count exceeds analysis limit" }
+        require(sources.all { source -> source.content.size <= request.limits.sourceFileBytes }) {
+            "addon platform source file exceeds analysis limit"
+        }
+        require(sources.sumOf { source -> source.content.size.toLong() } <= request.limits.sourceBytes.toLong()) {
+            "addon platform source bytes exceed analysis limit"
+        }
+        return sources
+            .associate { source ->
+                val path = VirtualSourcePath.kotlin(source.path)
+                path to factory.createFile(path.value.substringAfterLast('/'), decodeStrict(source.content.toByteArray()))
+            }
     }
 
     private fun decodeStrict(bytes: ByteArray): String =
