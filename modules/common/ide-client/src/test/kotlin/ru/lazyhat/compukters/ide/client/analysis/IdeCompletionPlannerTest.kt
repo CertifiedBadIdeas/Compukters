@@ -104,6 +104,30 @@ class IdeCompletionPlannerTest {
         assertEquals(module.id, planned.moduleRequirement?.id)
     }
 
+    @Test
+    fun `planner retains builtin member completion for an attached target`() {
+        val catalog = catalog()
+        val builtins = catalog.bundle.builtins
+        val identity =
+            AnalysisModuleIdentity(
+                builtins.id.toString(),
+                Hash256.of(PlatformBundleCodec.moduleContentHash(builtins).toByteArray()),
+            )
+        val proposal =
+            CompletionItem(
+                "toInt()",
+                "toInt",
+                CompletionKind.Function,
+                origin = DeclarationOrigin.Platform(identity),
+            )
+        val target = TargetCompileProfile(toolchain(catalog), catalog.entries.map { it.identity }, WorkerLimits())
+
+        val planned = IdeCompletionPlanner(catalog).plan(listOf(proposal), ProjectManifest.of("sample", emptyMap()), target).single()
+
+        assertEquals("toInt", planned.proposal.insertText)
+        assertEquals(null, planned.moduleRequirement)
+    }
+
     private fun catalog(): PlatformCatalog {
         val builtins = module(PlatformModuleId("kotlin", "builtins"), "1.0.0")
         val redstone = module(PlatformModuleId("compukter", "redstone"), "2.0.0")

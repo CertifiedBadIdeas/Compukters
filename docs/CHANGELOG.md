@@ -35,6 +35,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Made IDE completion discover APIs from compatible attached addons and offer to import `Kinetics` while enabling its
   project module in the same completion action.
 
+### In-game IDE
+
+- Fixed member completion for built-in Guest Kotlin types, including `Float.toInt()`, while an IDE is attached to a
+  computer.
+
 ## 0.4.0 — 2026-09-12
 
 This release makes the integrated multi-file Kotlin IDE available on both supported Minecraft versions, adds a Java

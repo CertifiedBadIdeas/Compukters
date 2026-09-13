@@ -232,6 +232,16 @@ class CompletionQueryTest {
     }
 
     @Test
+    fun `qualified completion exposes Float conversion members on a parameter`() {
+        val source = "fun convert(speed: Float): Int = speed.to"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val items = fixture.complete("main.kt", source.length).items
+
+            assertTrue(items.any { it.label == "toInt()" && it.insertText == "toInt" }, items.toString())
+        }
+    }
+
+    @Test
     fun `unqualified completion includes imported and implicit receiver scopes`() {
         val library = "package library\nfun importedFunction() = Unit"
         val source =
