@@ -780,7 +780,7 @@ internal fun validateArtifact(
                         targetReference: FunctionRef,
                         callDestination: Destination,
                         arguments: List<RegisterId>,
-                        suspending: Boolean,
+                        suspending: Boolean?,
                     ) {
                         val argumentTypes = arguments.map { register(it, "argument") }
                         val identity = resolveFunction(moduleIndex, targetReference)
@@ -792,10 +792,10 @@ internal fun validateArtifact(
                         }
                         val targetModule = artifact.modules[identity.module]
                         val target = targetModule.functions[identity.function]
-                        if (!suspending && FunctionFlag.ABSTRACT in target.flags) {
+                        if (suspending == false && FunctionFlag.ABSTRACT in target.flags) {
                             add(ArtifactWriteErrorCode.INVALID_RANGE, "direct call targets an abstract function", location)
                         }
-                        if (suspending != (FunctionFlag.SUSPENDING in target.flags)) {
+                        if (suspending != null && suspending != (FunctionFlag.SUSPENDING in target.flags)) {
                             val detail =
                                 if (suspending) {
                                     "suspending call targets a non-suspending function"
@@ -1262,7 +1262,7 @@ internal fun validateArtifact(
                         }
 
                         is Instruction.TaskSpawn -> {
-                            call(instruction.function, Destination.Unit, instruction.arguments, suspending = true)
+                            call(instruction.function, Destination.Unit, instruction.arguments, suspending = null)
                             val task = register(instruction.destination, "destination")
                             if (task != null && task != ValueType.I32) {
                                 add(ArtifactWriteErrorCode.INVALID_RANGE, "task handle destination is not I32", location)
@@ -1795,8 +1795,4 @@ private fun Instruction.isTerminator(): Boolean =
         this is Instruction.ChannelReceive ||
         this is Instruction.CapabilityCallAsync
 
-private fun Instruction.isKotlinSuspendingTerminator(): Boolean =
-    this is Instruction.CallSuspend ||
-        this is Instruction.TaskJoin ||
-        this is Instruction.ChannelSend ||
-        this is Instruction.ChannelReceive
+private fun Instruction.isKotlinSuspendingTerminator(): Boolean = this is Instruction.CallSuspend

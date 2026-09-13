@@ -198,7 +198,7 @@ object CanonicalTrustedIntrinsics {
                 "core",
                 "compukter.concurrent",
                 "Tasks.launch",
-                "fun(suspend()->Unit):Task",
+                "fun(()->Unit):Task",
             )
             primitive("stdlib", "ranges", "kotlin.ranges", "IntRange.iterator", "fun():IntIterator")
             primitive("stdlib", "ranges", "kotlin.ranges", "rangeUntil", "fun(Int.Int):IntRange")

@@ -2197,7 +2197,7 @@ private class FunctionCompiler(
                 throw UnsupportedKotlinIr(
                     statement,
                     "local functions are unsupported; Tasks.launch requires a direct reference to a top-level, " +
-                        "zero-argument suspend function",
+                        "zero-argument function",
                 )
             }
 
@@ -2615,7 +2615,7 @@ private class FunctionCompiler(
                 }.singleOrNull()
                 ?: throw UnsupportedKotlinIr(
                     call,
-                    "Tasks.launch requires a direct reference to a top-level, zero-argument suspend function",
+                    "Tasks.launch requires a direct reference to a top-level, zero-argument function",
                 )
         val referenced =
             when (block) {
@@ -2633,17 +2633,17 @@ private class FunctionCompiler(
             }
                 ?: throw UnsupportedKotlinIr(
                     block,
-                    "Tasks.launch requires a direct reference to a top-level, zero-argument suspend function",
+                    "Tasks.launch requires a direct reference to a top-level, zero-argument function",
                 )
         if (
             referenced.parent !is IrFile ||
-            !referenced.isSuspend ||
+            referenced.isSuspend ||
             referenced.returnType != unitType ||
             loweredParameters(referenced, session).isNotEmpty()
         ) {
             throw UnsupportedKotlinIr(
                 block,
-                "Tasks.launch requires a direct reference to a top-level, zero-argument suspend function",
+                "Tasks.launch requires a direct reference to a top-level, zero-argument function",
             )
         }
         val functionRef =

@@ -297,7 +297,7 @@ tasks.test {
 
 val kotlinSubsetConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")
 val blockingCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/blocking-call.cpkt")
-val suspendCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/suspend-call.cpkt")
+val transparentCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/transparent-call.cpkt")
 val tasksConformanceArtifact = layout.buildDirectory.file("generated/conformance/tasks.cpkt")
 val channelConformanceArtifact = layout.buildDirectory.file("generated/conformance/channel.cpkt")
 val whenConformanceArtifact = layout.buildDirectory.file("generated/conformance/when.cpkt")
@@ -330,19 +330,19 @@ val generateKotlinSubsetConformanceArtifact = tasks.register<Test>("generateKotl
     }
 }
 
-val generateSuspendCallConformanceArtifact = tasks.register<Test>("generateSuspendCallConformanceArtifact") {
-    description = "Compiles a real K2 suspend-call program for pinned VM conformance."
+val generateTransparentCallConformanceArtifact = tasks.register<Test>("generateTransparentCallConformanceArtifact") {
+    description = "Compiles an ordinary project call across VM-task blocking for pinned VM conformance."
     group = "verification"
     dependsOn(tasks.jar)
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
-    filter.includeTestsMatching("*suspend project call lowers deterministically for vm execution*")
+    filter.includeTestsMatching("*ordinary project call resumes transparently across host blocking*")
     inputs.file(workerJar)
-    outputs.file(suspendCallConformanceArtifact)
+    outputs.file(transparentCallConformanceArtifact)
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.suspendCallArtifact", suspendCallConformanceArtifact.get().asFile.absolutePath)
+        systemProperty("compukter.vm.transparentCallArtifact", transparentCallConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
@@ -353,7 +353,7 @@ val generateTasksConformanceArtifact = tasks.register<Test>("generateTasksConfor
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
-    filter.includeTestsMatching("*direct top level suspend task lowers to spawn and join*")
+    filter.includeTestsMatching("*direct top level ordinary task lowers to spawn and join*")
     inputs.file(workerJar)
     outputs.file(tasksConformanceArtifact)
     doFirst {

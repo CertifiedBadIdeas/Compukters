@@ -318,13 +318,13 @@ registerKotlinVmConformance(
     conformanceScenario = "subset",
 )
 registerKotlinVmConformance(
-    taskName = "testKotlinSuspendCallVmConformance",
-    taskDescription = "Executes a K2-produced suspend project call with the pinned Compukter VM.",
-    artifactTask = ":compiler-k2:generateSuspendCallConformanceArtifact",
-    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/suspend-call.cpkt"),
-    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-suspend-call-conformance",
-    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_SUSPEND_CALL_ARTIFACT",
-    conformanceScenario = "suspend-call",
+    taskName = "testKotlinTransparentCallVmConformance",
+    taskDescription = "Executes an ordinary K2 project call across VM-task blocking with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateTransparentCallConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/transparent-call.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-transparent-call-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_TRANSPARENT_CALL_ARTIFACT",
+    conformanceScenario = "transparent-call",
 )
 registerKotlinVmConformance(
     taskName = "testKotlinTasksVmConformance",
