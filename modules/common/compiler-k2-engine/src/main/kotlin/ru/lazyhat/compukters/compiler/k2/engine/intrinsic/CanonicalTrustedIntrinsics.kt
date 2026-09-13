@@ -86,6 +86,38 @@ object CanonicalTrustedIntrinsics {
                 "ushr" to "fun(Int):Int",
                 "xor" to "fun(Int):Int",
             ).forEach { (name, signature) -> primitive("kotlin", "builtins", "kotlin", "Int.$name", signature) }
+            listOf(
+                "compareTo" to "fun(Long):Int",
+                "div" to "fun(Long):Long",
+                "minus" to "fun(Long):Long",
+                "plus" to "fun(Long):Long",
+                "rem" to "fun(Long):Long",
+                "times" to "fun(Long):Long",
+                "toLong" to "fun():Long",
+            ).forEach { (name, signature) -> primitive("kotlin", "builtins", "kotlin", "Int.$name", signature) }
+            listOf(
+                "and" to "fun(Long):Long",
+                "compareTo" to "fun(Int):Int",
+                "compareTo" to "fun(Long):Int",
+                "div" to "fun(Int):Long",
+                "div" to "fun(Long):Long",
+                "inv" to "fun():Long",
+                "minus" to "fun(Int):Long",
+                "minus" to "fun(Long):Long",
+                "or" to "fun(Long):Long",
+                "plus" to "fun(Int):Long",
+                "plus" to "fun(Long):Long",
+                "rem" to "fun(Int):Long",
+                "rem" to "fun(Long):Long",
+                "shl" to "fun(Int):Long",
+                "shr" to "fun(Int):Long",
+                "times" to "fun(Int):Long",
+                "times" to "fun(Long):Long",
+                "toInt" to "fun():Int",
+                "unaryMinus" to "fun():Long",
+                "ushr" to "fun(Int):Long",
+                "xor" to "fun(Long):Long",
+            ).forEach { (name, signature) -> primitive("kotlin", "builtins", "kotlin", "Long.$name", signature) }
             primitive("kotlin", "builtins", "kotlin", "String.<init>", "constructor()")
             primitive("kotlin", "builtins", "kotlin", "String.<init>", "constructor(CharArray)")
             primitive("kotlin", "builtins", "kotlin", "String.<init>", "constructor(CharArray,Int,Int)")

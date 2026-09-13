@@ -389,6 +389,15 @@ registerKotlinVmConformance(
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_INT_ARRAY_ARTIFACT",
     conformanceScenario = "int-array",
 )
+registerKotlinVmConformance(
+    taskName = "testKotlinLongVmConformance",
+    taskDescription = "Executes Guest Kotlin Long arithmetic, conversions, comparisons, and text with the pinned VM.",
+    artifactTask = ":compiler-k2:generateLongConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-long.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-long-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_LONG_ARTIFACT",
+    conformanceScenario = "long",
+)
 
 val buildScriptsTest = gradle.includedBuild("build-scripts").task(":test")
 

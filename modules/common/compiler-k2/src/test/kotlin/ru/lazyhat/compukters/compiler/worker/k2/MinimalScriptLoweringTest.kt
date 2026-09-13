@@ -35,6 +35,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
+import ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.StringValueType
@@ -71,6 +72,68 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
+    @Test
+    fun `Long arithmetic conversions comparisons and text lower for vm conformance`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                val base = 3_000_000_000L
+
+                fun calculate(value: Int): Long {
+                    val arithmetic = ((((value + base) + 0L) - 1L) * 2L / 3) % 7L
+                    val bits = (((arithmetic or 8L) xor 1L) and 15L) shl 2
+                    return ((bits shr 1) ushr 1).inv().inv()
+                }
+
+                fun main() {
+                    val result = calculate(5)
+                    val ordered = 5 < base && base > 5 && result >= 8L
+                    println(result)
+                    println("value=" + result)
+                    println("${'$'}{-result}:${'$'}ordered:${'$'}{Long.MIN_VALUE}:${'$'}{Long.MAX_VALUE}:${'$'}{result.toInt()}:${'$'}{7.toLong()}")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val bytes = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            val artifact = ArtifactReader.read(bytes)
+            val instructions = artifact.modules.flatMap { module -> module.blocks.flatMap(Block::instructions) }
+
+            assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
+            assertEquals(AbiVersion(1u, 3u), artifact.minimumRuntimeAbi)
+            assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.I64 })
+            assertTrue(instructions.any { it is Instruction.Subtract && it.type == ScalarValueType.I64 })
+            assertTrue(instructions.any { it is Instruction.Multiply && it.type == ScalarValueType.I64 })
+            assertTrue(instructions.any { it is Instruction.Divide && it.type == ScalarValueType.I64 })
+            assertTrue(instructions.any { it is Instruction.Remainder && it.type == ScalarValueType.I64 })
+            assertTrue(instructions.any { it is Instruction.BitAnd && it.type == ScalarValueType.I64 })
+            assertTrue(instructions.any { it is Instruction.ShiftRight && it.type == ScalarValueType.I64 })
+            assertTrue(instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.I64 })
+            assertTrue(instructions.any { it is Instruction.Convert })
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+
+            val numericOnly =
+                adapter.compile(
+                    request("fun main() { val value = 7.toLong() + 3_000_000_000L; value > 0L }"),
+                )
+            val numericArtifact =
+                ArtifactReader.read(
+                    assertNotNull(numericOnly.artifact, numericOnly.diagnostics.joinToString()).toByteArray(),
+                )
+            assertEquals(AbiVersion(1u, 0u), numericArtifact.minimumRuntimeAbi)
+
+            val consoleOnly = adapter.compile(request("fun main() { println(7L) }"))
+            val consoleArtifact =
+                ArtifactReader.read(
+                    assertNotNull(consoleOnly.artifact, consoleOnly.diagnostics.joinToString()).toByteArray(),
+                )
+            assertEquals(AbiVersion(1u, 3u), consoleArtifact.minimumRuntimeAbi)
+
+            System.getProperty("compukter.vm.longArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
     @Test
     fun `top level IntChannel lowers to VM owned bounded handoff`() =
         withAdapter { adapter ->
@@ -1705,10 +1768,9 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `unsupported source produces a stable native platform diagnostic and no artifact`() =
+    fun `unsupported collection and unsigned source produces a stable diagnostic and no artifact`() =
         withAdapter { adapter ->
             listOf(
-                "fun main() { val answer: Long = 42L }",
                 "fun main() { listOf(1) }",
                 "fun main() { val answer: UInt = 42u }",
             ).forEach { source ->

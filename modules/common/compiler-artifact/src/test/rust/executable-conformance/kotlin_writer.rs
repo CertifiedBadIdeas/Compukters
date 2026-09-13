@@ -20,6 +20,7 @@ fn main() {
         "executable" => pinned_vm_verifies_kotlin_executable_instruction_artifact(),
         "int-array" => k2_int_array_executes_specialized_storage_and_traps(),
         "int-loops" => k2_int_loops_execute_across_quota_slices_without_host_io(),
+        "long" => k2_long_executes_arithmetic_conversions_comparisons_and_text(),
         "platform-scalar" => k2_platform_scalar_precondition_traps_before_publishing_a_value(),
         "argv" => k2_string_array_entry_executes_exact_utf16_arguments(),
         "subset" => k2_string_materialization_executes_char_arrays_and_scalar_templates(),
@@ -168,6 +169,69 @@ fn k2_channel_handoff_stays_inside_the_vm() {
             AdvanceOutcome::SliceExhausted => {}
             AdvanceOutcome::Halted(None) => break,
             outcome => panic!("unexpected K2 channel outcome: {outcome:?}"),
+        }
+    }
+}
+
+fn k2_long_executes_arithmetic_conversions_comparisons_and_text() {
+    let path = std::env::var("COMPUKTER_KOTLIN_LONG_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_LONG_ARTIFACT must be set for this conformance test");
+    let bytes = fs::read(path).expect("K2 Long output must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("pinned VM must verify K2 Long output");
+    let string_argument = [HostValueType::String];
+    let operations = [
+        OperationSchema::asynchronous(&[], HostValueType::String),
+        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
+        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
+    ];
+    let stdio = CapabilityBinding::new("compukter", "stdio", 1, 0, &operations);
+    let profile = ExecutionProfile {
+        heap_bytes: 1024 * 1024,
+        frame_storage_bytes: 1024 * 1024,
+        maximum_call_depth: 64,
+        maximum_coroutines: 1,
+        maximum_channels: 0,
+        maximum_channel_values: 0,
+        maximum_host_requests: 64,
+        maximum_events: 0,
+        maximum_slice_budget: u32::MAX,
+        compiler_abi: [0; 32],
+        platform_abi: [0; 32],
+        maximum_host_arguments: 16,
+        maximum_outbound_utf16_code_units: 4096,
+        maximum_inbound_utf16_code_units: 4096,
+        maximum_accepted_responses: 64,
+        entry_argument_limits: entry_argument_limits(),
+    };
+    let mut session = Session::admit(verified, profile, &[stdio]).expect("K2 Long must admit");
+    session.start(&[]).expect("K2 Long must start");
+
+    let value = utf16("9\n");
+    let write = next_host_request(&mut session, "println Long", 1, Some(&value));
+    session
+        .resume(write, HostResponse::Success(HostValueInput::Unit))
+        .expect("println must resume the Long program");
+    let concatenated = utf16("value=9\n");
+    let write = next_host_request(
+        &mut session,
+        "println concatenated Long",
+        1,
+        Some(&concatenated),
+    );
+    session
+        .resume(write, HostResponse::Success(HostValueInput::Unit))
+        .expect("concatenated println must resume the Long program");
+    let summary = utf16("-9:true:-9223372036854775808:9223372036854775807:9:7\n");
+    let write = next_host_request(&mut session, "println summary", 1, Some(&summary));
+    session
+        .resume(write, HostResponse::Success(HostValueInput::Unit))
+        .expect("summary println must resume the Long program");
+    loop {
+        match session.advance(64, 64).expect("K2 Long must finish") {
+            AdvanceOutcome::SliceExhausted => {}
+            AdvanceOutcome::Halted(None) => break,
+            outcome => panic!("unexpected K2 Long outcome: {outcome:?}"),
         }
     }
 }

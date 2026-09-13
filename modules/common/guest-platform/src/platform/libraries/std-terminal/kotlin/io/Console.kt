@@ -13,6 +13,8 @@ public fun print(value: String): Unit = stdoutPrint(value)
 
 public fun print(value: Int): Unit = stdoutPrint(value)
 
+public fun print(value: Long): Unit = stdoutPrint(value)
+
 public fun print(value: Boolean): Unit = stdoutPrint(value)
 
 public fun print(value: Char): Unit = stdoutPrint(value)
@@ -22,6 +24,8 @@ public fun println(): Unit = stdoutPrintln()
 public fun println(value: String): Unit = stdoutPrintln(value)
 
 public fun println(value: Int): Unit = stdoutPrintln(value)
+
+public fun println(value: Long): Unit = stdoutPrintln(value)
 
 public fun println(value: Boolean): Unit = stdoutPrintln(value)
 

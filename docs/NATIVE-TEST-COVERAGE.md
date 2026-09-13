@@ -56,9 +56,10 @@ compatibility, corruption, and resume matrix.
 
 ## Cross-layer map
 
-The nine registered Kotlin-to-VM conformance scenarios cover the executable artifact writer, the supported Kotlin
-subset, suspend-call lowering, VM-owned bounded channel handoff, `when`, `Array<String>` entry arguments, platform
-scalar calls, bounded `Int` loops, and specialized `IntArray` operations. These prove compiler/runtime agreement; they do not add independent decoder,
+The eleven registered Kotlin-to-VM conformance scenarios cover the executable artifact writer, the supported Kotlin
+subset, suspend-call lowering, cooperative tasks, VM-owned bounded channel handoff, `when`, `Array<String>` entry
+arguments, platform scalar calls, bounded `Int` loops, specialized `IntArray` operations, and `Long` arithmetic and
+text conversion. These prove compiler/runtime agreement; they do not add independent decoder,
 verifier, allocator, or failure-path coverage.
 
 The two `ProgramRuntimeHostIntegrationTest` scenarios cover ROM boot, foreground child execution, reboot, terminal

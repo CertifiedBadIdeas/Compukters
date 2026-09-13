@@ -12,6 +12,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.5.0 — In development
 
+### Guest Kotlin
+
+- Added unboxed `Long` values, mixed `Int`/`Long` arithmetic and comparisons, bitwise and shift operations,
+  explicit `Int`/`Long` conversions, constants, string interpolation, and console output.
+
 ## 0.4.0 — 2026-09-12
 
 This release makes the integrated multi-file Kotlin IDE available on both supported Minecraft versions, adds a Java

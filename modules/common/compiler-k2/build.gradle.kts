@@ -295,6 +295,7 @@ val redstoneConformanceArtifact = layout.buildDirectory.file("generated/conforma
 val soundConformanceArtifact = layout.buildDirectory.file("generated/conformance/sound.cpkt")
 val intLoopsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-loops.cpkt")
 val intArrayConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-array.cpkt")
+val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-long.cpkt")
 val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = layout.buildDirectory.file("generated/system/shell.cpkt")
 val kotlincArtifact = layout.buildDirectory.file("generated/system/kotlinc.cpkt")
@@ -489,6 +490,22 @@ val generateIntArrayConformanceArtifact = tasks.register<Test>("generateIntArray
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.intArrayArtifact", intArrayConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateLongConformanceArtifact = tasks.register<Test>("generateLongConformanceArtifact") {
+    description = "Compiles Guest Kotlin Long operations and text output for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*Long arithmetic conversions comparisons and text lower for vm conformance*")
+    inputs.file(workerJar)
+    outputs.file(longConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.longArtifact", longConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

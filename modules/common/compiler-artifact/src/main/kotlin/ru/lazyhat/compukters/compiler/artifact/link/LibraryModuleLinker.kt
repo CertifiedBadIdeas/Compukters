@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.compiler.artifact.link
 
 import ru.lazyhat.compukters.compiler.artifact.analysis.ExecutionStorage
 import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
+import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
@@ -48,6 +49,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
+import ru.lazyhat.compukters.compiler.artifact.model.StringValueType
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.Utf16LiteralId
@@ -166,6 +168,7 @@ object LibraryModuleLinker {
                 function = applicationRelocation.function(application.entry.function),
             )
         val features = semanticFeatures(modules, capabilities)
+        val minimumRuntimeAbi = minimumRuntimeAbi(application.minimumRuntimeAbi, modules)
         val maximumBlockCost =
             modules
                 .asSequence()
@@ -181,6 +184,7 @@ object LibraryModuleLinker {
         val linked =
             ReferenceLiveness.derive(
                 application.copy(
+                    minimumRuntimeAbi = minimumRuntimeAbi,
                     semanticFeatures = features,
                     manifest = manifest,
                     entry = entry,
@@ -199,6 +203,36 @@ object LibraryModuleLinker {
         }
         return linked
     }
+}
+
+private fun minimumRuntimeAbi(
+    declared: AbiVersion,
+    modules: List<Module>,
+): AbiVersion {
+    var required = declared
+    modules.asSequence().flatMap { module -> module.blocks.asSequence() }.flatMap { block -> block.instructions.asSequence() }.forEach {
+        when (it) {
+            is Instruction.StringValueOf -> {
+                if (it.type == StringValueType.I64) required = maxOf(required, AbiVersion(1u, 3u))
+            }
+
+            is Instruction.ChannelCreate,
+            is Instruction.ChannelSend,
+            is Instruction.ChannelReceive,
+            -> {
+                required = maxOf(required, AbiVersion(1u, 2u))
+            }
+
+            is Instruction.TaskSpawn,
+            is Instruction.TaskJoin,
+            -> {
+                required = maxOf(required, AbiVersion(1u, 1u))
+            }
+
+            else -> {}
+        }
+    }
+    return required
 }
 
 private fun Manifest.withLinkedRequirements(

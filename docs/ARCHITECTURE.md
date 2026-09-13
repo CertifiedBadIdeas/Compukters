@@ -158,6 +158,8 @@ operating-system target under a single Runtime, VM commit, and C ABI identity. B
 entries before staging; the Java 25 runtime module packages only FFI, while the Java 21 runtime module packages only
 JNI. The two Minecraft release artifacts therefore share one pinned native release without carrying an unusable
 transport.
+Runtime ABI 1.3 adds exact decimal materialization for the existing `I64` scalar form; artifacts require it only when
+an `I64` value is converted to `String`, while purely numeric `Long` programs remain compatible with Runtime ABI 1.0.
 
 The Minecraft carrier owns exactly one actor endpoint and submits at most one ordinary advance or host continuation
 for each server tick. Rust starts

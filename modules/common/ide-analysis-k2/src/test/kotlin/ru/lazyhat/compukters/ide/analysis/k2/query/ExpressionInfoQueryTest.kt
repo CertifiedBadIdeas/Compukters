@@ -51,6 +51,24 @@ class ExpressionInfoQueryTest {
     }
 
     @Test
+    fun `expression query renders inferred Long arithmetic`() {
+        val source = "fun main() { val total = 3_000_000_000L + 7 }"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val start = source.indexOf("total")
+            val result =
+                fixture.execute(
+                    AnalysisQuery.ExpressionInfo(
+                        fixture.identity,
+                        VirtualSourcePath.kotlin("main.kt"),
+                        start,
+                    ),
+                ) as AnalysisResult.ExpressionInfo
+
+            assertEquals("kotlin.Long", assertNotNull(result.value).renderedType)
+        }
+    }
+
+    @Test
     fun `expression query renders the explicit type on a local declaration name`() {
         val source = "fun main() { val message: String = \"ok\" }"
         K2QueryFixture.source("main.kt" to source).use { fixture ->
