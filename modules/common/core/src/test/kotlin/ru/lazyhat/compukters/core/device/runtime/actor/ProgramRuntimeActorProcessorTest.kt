@@ -19,6 +19,10 @@
 package ru.lazyhat.compukters.core.device.runtime.actor
 
 import ru.lazyhat.compukters.core.device.computer.ActorProgramComputer
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonCompletion
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonDispatch
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonHost
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonRequest
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
@@ -30,7 +34,10 @@ import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
 import ru.lazyhat.compukters.core.device.runtime.program.SoundCommitResult
 import ru.lazyhat.compukters.core.device.runtime.program.SoundHostPort
 import ru.lazyhat.compukters.core.device.runtime.program.SoundRequest
+import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
+import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryEntry
 import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryListing
@@ -67,6 +74,79 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ProgramRuntimeActorProcessorTest {
+    @Test
+    fun `addon actor batches are owned unique and bounded`() {
+        val mutable =
+            mutableListOf(
+                ProgramAddonCompletion(VmHostRequestIdentity(1, 1), HostResponse.UnitSuccess),
+            )
+        val effect = ProgramRuntimeActorEffect.CompleteAddons(mutable)
+        mutable.clear()
+
+        assertEquals(1, effect.completions.size)
+        assertFailsWith<IllegalArgumentException> {
+            ProgramRuntimeActorEffect.CompleteAddons(
+                List(257) { index ->
+                    ProgramAddonCompletion(VmHostRequestIdentity(1, index + 1L), HostResponse.UnitSuccess)
+                },
+            )
+        }
+    }
+
+    @Test
+    fun `addon wait is dispatched and polled on owner while actor continues advancing`() {
+        val owner = Thread.currentThread()
+        val session = RecordingSession()
+        val port = ActorAddonRequestPort()
+        val addon = RecordingAddonHost(owner)
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory =
+                    object : ProgramVmSessionFactory {
+                        override fun open(artifact: ByteArray): ProgramVmSession = session
+
+                        override fun boot(): ProgramVmSession = session
+                    },
+                addonCapabilitySchemas = addon.capabilitySchemas,
+                addonRequestPort = port,
+            )
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(21, 22), 1)
+        ProgramRuntimeActorService(schedulerConfig()).use { service ->
+            val carrier =
+                ActorProgramComputer(
+                    service,
+                    requireNotNull(service.attach(endpoint, host, addonPort = port)),
+                    { RedstoneCommitResult.Committed },
+                    addon = addon,
+                )
+            carrier.turnOn()
+            awaitQueuedResult(service)
+            service.pump(1)
+            val request = VmHostRequest(31, CREATE_KINETICS, 0, listOf(VmValue.I32(7)), taskId = 2)
+            session.nextOutcome = VmOutcome.HostRequestBatch(listOf(request))
+
+            carrier.serverTick(1)
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertEquals(listOf(request.identity), addon.dispatched.map(ProgramAddonRequest::identity))
+            assertEquals(emptyList(), session.responses)
+
+            carrier.serverTick(2)
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertTrue(session.calls.count { it.startsWith("advance:") } >= 2)
+
+            addon.completions += ProgramAddonCompletion(request.identity, HostResponse.FloatSuccess(17.5f))
+            carrier.serverTick(3)
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertEquals(listOf<HostResponse>(HostResponse.FloatSuccess(17.5f)), session.responses)
+            assertEquals(0, service.runtimeMetrics().deferredWorldRequests)
+            carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            assertEquals(1, addon.closeCalls)
+        }
+    }
+
     @Test
     fun `carrier requests resource snapshots only on the actor worker and rejects them after close`() {
         val owner = Thread.currentThread()
@@ -903,7 +983,43 @@ class ProgramRuntimeActorProcessorTest {
         }
     }
 
+    private class RecordingAddonHost(
+        private val owner: Thread,
+    ) : ProgramAddonHost {
+        override val capabilitySchemas: List<HostCapabilitySchema> = listOf(CREATE_KINETICS_SCHEMA)
+        val dispatched = mutableListOf<ProgramAddonRequest>()
+        val completions = ArrayDeque<ProgramAddonCompletion>()
+        var closeCalls = 0
+
+        override fun dispatch(request: ProgramAddonRequest): ProgramAddonDispatch {
+            assertEquals(owner, Thread.currentThread())
+            dispatched += request
+            return ProgramAddonDispatch.Pending
+        }
+
+        override fun poll(maximumCompletions: Int): List<ProgramAddonCompletion> {
+            assertEquals(owner, Thread.currentThread())
+            return List(minOf(maximumCompletions, completions.size)) { completions.removeFirst() }
+        }
+
+        override fun reset() {
+            assertEquals(owner, Thread.currentThread())
+            completions.clear()
+        }
+
+        override fun close() {
+            reset()
+            closeCalls++
+        }
+    }
+
     private companion object {
+        val CREATE_KINETICS = CapabilityIdentity("create", "kinetics", 1, 0)
+        val CREATE_KINETICS_SCHEMA =
+            HostCapabilitySchema(
+                CREATE_KINETICS,
+                listOf(HostOperationSchema(listOf(HostValueType.I32), HostValueType.F32, asynchronous = true)),
+            )
         val SOUND = CapabilityIdentity("compukter", "sound", 1, 0)
         val REDSTONE = CapabilityIdentity("compukter", "redstone", 1, 0)
         const val TIMEOUT_SECONDS = 5L

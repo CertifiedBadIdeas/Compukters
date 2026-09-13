@@ -19,6 +19,10 @@
 package ru.lazyhat.compukters.core.device.runtime.actor
 
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
+import ru.lazyhat.compukters.core.device.runtime.program.EmptyProgramAddonHost
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonHost
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonRequest
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonRequestPort
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
@@ -68,7 +72,8 @@ class ProgramRuntimeActorService(
         tickBudget: ProgramTickBudget = ProgramTickBudget(),
         compilerRouter: CompilerCompletionRouter? = null,
         initialRedstoneOutput: Int = 0,
-    ): Boolean = attachBootable(endpoint, store, romImage, tickBudget, compilerRouter, initialRedstoneOutput) != null
+        addonHost: ProgramAddonHost? = null,
+    ): Boolean = attachBootable(endpoint, store, romImage, tickBudget, compilerRouter, initialRedstoneOutput, addonHost) != null
 
     fun attachBootable(
         endpoint: VmActorEndpoint,
@@ -77,9 +82,12 @@ class ProgramRuntimeActorService(
         tickBudget: ProgramTickBudget = ProgramTickBudget(),
         compilerRouter: CompilerCompletionRouter? = null,
         initialRedstoneOutput: Int = 0,
+        addonHost: ProgramAddonHost? = null,
     ): ProgramRuntimeActorLease? {
         val port = ActorRedstoneHostPort()
         val soundPort = ActorSoundHostPort()
+        val effectiveAddonHost = addonHost ?: EmptyProgramAddonHost
+        val addonPort = ActorAddonRequestPort()
         val host =
             ProgramRuntimeHost(
                 store = store,
@@ -89,9 +97,11 @@ class ProgramRuntimeActorService(
                 compilerRouter = compilerRouter,
                 redstoneHostPort = port,
                 soundHostPort = soundPort,
+                addonCapabilitySchemas = effectiveAddonHost.capabilitySchemas,
+                addonRequestPort = addonPort,
                 initialRedstoneOutput = initialRedstoneOutput,
             )
-        return attach(endpoint, host, port, soundPort)
+        return attach(endpoint, host, port, soundPort, addonPort)
     }
 
     internal fun attach(
@@ -99,8 +109,9 @@ class ProgramRuntimeActorService(
         host: ProgramRuntimeHost,
         port: ActorRedstoneHostPort? = null,
         soundPort: ActorSoundHostPort? = null,
+        addonPort: ActorAddonRequestPort? = null,
     ): ProgramRuntimeActorLease? {
-        val processor = ProgramRuntimeActorProcessor(host, port, soundPort)
+        val processor = ProgramRuntimeActorProcessor(host, port, soundPort, addonPort)
         if (!scheduler.register(endpoint, processor)) return null
         return ProgramRuntimeActorLease(endpoint, processor.closed) { scheduler.unregister(endpoint) }
     }
@@ -142,7 +153,9 @@ class ProgramRuntimeActorService(
             PendingRequest(
                 future,
                 effects.any {
-                    it is ProgramRuntimeActorEffect.CompleteRedstoneOutput || it is ProgramRuntimeActorEffect.CompleteSound
+                    it is ProgramRuntimeActorEffect.CompleteRedstoneOutput ||
+                        it is ProgramRuntimeActorEffect.CompleteSound ||
+                        it is ProgramRuntimeActorEffect.CompleteAddons
                 },
             )
         check(pending.putIfAbsent(address, pendingRequest) == null) { "runtime request id collision" }
@@ -174,7 +187,8 @@ class ProgramRuntimeActorService(
                     if (
                         (
                             reply.value is ProgramRuntimeActorValue.RedstoneOutputRequested ||
-                                reply.value is ProgramRuntimeActorValue.SoundRequested
+                                reply.value is ProgramRuntimeActorValue.SoundRequested ||
+                                reply.value is ProgramRuntimeActorValue.AddonsRequested
                         ) &&
                         deferredWorldRequests.add(event.endpoint)
                     ) {
@@ -288,4 +302,22 @@ internal class ActorSoundHostPort : SoundHostPort {
     }
 
     fun takeRequestedSounds(): List<SoundRequest>? = requestedSounds.also { requestedSounds = null }
+}
+
+internal class ActorAddonRequestPort : ProgramAddonRequestPort {
+    private val requests = mutableListOf<ProgramAddonRequest>()
+
+    override fun submit(request: ProgramAddonRequest): Boolean {
+        if (requests.size >= MAXIMUM_ADDON_REQUEST_BATCH) return false
+        requests += request
+        return true
+    }
+
+    fun takeRequests(): List<ProgramAddonRequest> = requests.toList().also { requests.clear() }
+
+    fun clear() = requests.clear()
+
+    private companion object {
+        const val MAXIMUM_ADDON_REQUEST_BATCH = 256
+    }
 }

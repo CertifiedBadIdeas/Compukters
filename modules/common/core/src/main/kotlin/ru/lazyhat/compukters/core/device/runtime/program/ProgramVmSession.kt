@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.core.device.runtime.program
 
+import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryListing
@@ -131,20 +132,27 @@ internal class ProgramFileSystemLaunchContext(
 ) {
     private val romImage = romImage.copyOf()
 
-    fun open(artifact: ByteArray): VmSession = VmSession.openInStore(artifact, store, computerId, romImage.copyOf())
+    fun open(
+        artifact: ByteArray,
+        capabilitySchemas: List<HostCapabilitySchema>,
+    ): VmSession = VmSession.openInStore(artifact, store, computerId, romImage.copyOf(), capabilitySchemas)
 
-    fun boot(): VmSession = VmSession.bootInStore(store, computerId, romImage.copyOf())
+    fun boot(capabilitySchemas: List<HostCapabilitySchema>): VmSession =
+        VmSession.bootInStore(store, computerId, romImage.copyOf(), capabilitySchemas)
 }
 
 internal class NativeProgramVmSessionFactory(
     private val filesystem: ProgramFileSystemLaunchContext? = null,
+    capabilitySchemas: List<HostCapabilitySchema> = emptyList(),
 ) : ProgramVmSessionFactory {
+    private val capabilitySchemas = capabilitySchemas.toList()
+
     override fun open(artifact: ByteArray): ProgramVmSession =
-        NativeProgramVmSession(filesystem?.open(artifact) ?: VmSession.open(artifact))
+        NativeProgramVmSession(filesystem?.open(artifact, capabilitySchemas) ?: VmSession.open(artifact, capabilitySchemas))
 
     override fun boot(): ProgramVmSession {
         val context = filesystem ?: throw VmBridgeException("ROM boot requires a persistent filesystem")
-        return NativeProgramVmSession(context.boot())
+        return NativeProgramVmSession(context.boot(capabilitySchemas))
     }
 }
 

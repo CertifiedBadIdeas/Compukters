@@ -38,6 +38,7 @@ internal class ProgramRuntimeActorProcessor(
     private val host: ProgramRuntimeHost,
     private val redstonePort: ActorRedstoneHostPort? = null,
     private val soundPort: ActorSoundHostPort? = null,
+    private val addonPort: ActorAddonRequestPort? = null,
 ) : VmActorProcessor<ProgramRuntimeActorMessage, ProgramRuntimeTickPermit, ProgramRuntimeActorReply> {
     private val deploymentCandidates = mutableMapOf<ProgramDeploymentToken, ProgramDeploymentCandidate>()
     private var nextDeploymentToken = 0L
@@ -104,6 +105,7 @@ internal class ProgramRuntimeActorProcessor(
                 captureGeneration()
                 pendingRedstoneRequest = null
                 pendingSoundRequest = null
+                addonPort?.clear()
                 discardAllCandidates()
                 ProgramRuntimeActorValue.Start(host.start(command.artifactBytes()))
             }
@@ -112,6 +114,7 @@ internal class ProgramRuntimeActorProcessor(
                 captureGeneration()
                 pendingRedstoneRequest = null
                 pendingSoundRequest = null
+                addonPort?.clear()
                 discardAllCandidates()
                 ProgramRuntimeActorValue.Start(host.startBoot())
             }
@@ -179,6 +182,7 @@ internal class ProgramRuntimeActorProcessor(
                 captureGeneration()
                 pendingRedstoneRequest = null
                 pendingSoundRequest = null
+                addonPort?.clear()
                 discardAllCandidates()
                 host.shutdown()
                 ProgramRuntimeActorValue.None
@@ -188,6 +192,7 @@ internal class ProgramRuntimeActorProcessor(
                 captureGeneration()
                 pendingRedstoneRequest = null
                 pendingSoundRequest = null
+                addonPort?.clear()
                 discardAllCandidates()
                 host.shutdown()
                 ProgramRuntimeActorValue.Start(host.startBoot())
@@ -211,6 +216,12 @@ internal class ProgramRuntimeActorProcessor(
                 check(host.completeSound(effect.result)) { "sound completion was rejected" }
                 pendingSoundRequest = null
             }
+
+            is ProgramRuntimeActorEffect.CompleteAddons -> {
+                effect.completions.forEach { completion ->
+                    check(host.completeAddon(completion)) { "addon completion was rejected" }
+                }
+            }
         }
     }
 
@@ -231,7 +242,10 @@ internal class ProgramRuntimeActorProcessor(
                     ProgramRuntimeActorValue.SoundRequested(requests)
                 }
         check(redstone == null || sound == null) { "one actor advance cannot defer two world request batches" }
-        return redstone ?: sound ?: ProgramRuntimeActorValue.None
+        if (redstone != null) return redstone
+        if (sound != null) return sound
+        val addons = addonPort?.takeRequests().orEmpty()
+        return if (addons.isEmpty()) ProgramRuntimeActorValue.None else ProgramRuntimeActorValue.AddonsRequested(addons)
     }
 
     private fun prepareDeployment(command: ProgramRuntimeActorCommand.PrepareDeployment): ProgramRuntimeActorValue {

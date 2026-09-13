@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.compiler.runtime.CompilerSubmissionResult
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationAddress
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationOutcome
+import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
@@ -52,6 +53,8 @@ class ProgramRuntimeHost internal constructor(
     private val compilerRouter: CompilerCompletionRouter? = null,
     private val redstoneHostPort: RedstoneHostPort = UNAVAILABLE_REDSTONE_PORT,
     private val soundHostPort: SoundHostPort = UNAVAILABLE_SOUND_PORT,
+    addonCapabilitySchemas: List<HostCapabilitySchema> = emptyList(),
+    private val addonRequestPort: ProgramAddonRequestPort = UNAVAILABLE_ADDON_PORT,
     initialRedstoneOutput: Int = 0,
 ) : AutoCloseable {
     constructor(tickBudget: ProgramTickBudget = ProgramTickBudget()) : this(NativeProgramVmSessionFactory(), tickBudget)
@@ -64,14 +67,21 @@ class ProgramRuntimeHost internal constructor(
         compilerRouter: CompilerCompletionRouter? = null,
         redstoneHostPort: RedstoneHostPort = UNAVAILABLE_REDSTONE_PORT,
         soundHostPort: SoundHostPort = UNAVAILABLE_SOUND_PORT,
+        addonCapabilitySchemas: List<HostCapabilitySchema> = emptyList(),
+        addonRequestPort: ProgramAddonRequestPort = UNAVAILABLE_ADDON_PORT,
         initialRedstoneOutput: Int = 0,
     ) : this(
-        NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, computerId, romImage)),
+        NativeProgramVmSessionFactory(
+            ProgramFileSystemLaunchContext(store, computerId, romImage),
+            addonCapabilitySchemas,
+        ),
         tickBudget,
         computerId,
         compilerRouter,
         redstoneHostPort,
         soundHostPort,
+        addonCapabilitySchemas,
+        addonRequestPort,
         initialRedstoneOutput,
     )
 
@@ -81,6 +91,8 @@ class ProgramRuntimeHost internal constructor(
     private var pendingCompilation: ComputerCompilationAddress? = null
     private var pendingRedstoneCommit: PendingRedstoneCommit? = null
     private var pendingSoundCommit: PendingSoundCommit? = null
+    private val pendingAddonRequests = mutableMapOf<ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity, PendingAddonRequest>()
+    private val addonCapabilitySchemas = addonCapabilitySchemas.toList()
     internal var lastClosedFileSystemGeneration: Long? = null
         private set
     private var confirmedRedstoneOutput = RedstoneWire.requireOutputRegister(initialRedstoneOutput)
@@ -88,6 +100,12 @@ class ProgramRuntimeHost internal constructor(
     private val grantedBudgets = GrantedResourceBudgets()
     var state: ProgramRuntimeState = ProgramRuntimeState.Idle
         private set
+
+    init {
+        require(this.addonCapabilitySchemas.none { it.identity.namespace == "compukter" }) {
+            "addon capabilities cannot use the reserved compukter namespace"
+        }
+    }
 
     fun start(artifact: ByteArray): ProgramStartResult {
         val launchArtifact = artifact.copyOf()
@@ -215,16 +233,33 @@ class ProgramRuntimeHost internal constructor(
                         "native VM exceeded supplied host request budget"
                     }
                     remainingHostRequests -= outcome.requests.size
-                    if (outcome.requests.all(::isRedstoneOutputRequest)) {
-                        commitRedstoneBatch(activeSession, outcome.requests)
+                    val redstone = outcome.requests.filter(::isRedstoneOutputRequest)
+                    val sound = outcome.requests.filter(::isSoundRequest)
+                    val addon = outcome.requests.filter(::isAddonRequest)
+                    outcome.requests
+                        .asSequence()
+                        .filterNot(::isRedstoneOutputRequest)
+                        .filterNot(::isSoundRequest)
+                        .filterNot(::isAddonRequest)
+                        .forEach { request ->
+                            if (!resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))) return
+                        }
+                    addon.forEach { request ->
+                        if (!deferAddonRequest(activeSession, request)) return
+                    }
+                    if (redstone.isNotEmpty() && sound.isNotEmpty()) {
+                        (redstone + sound).forEach { request ->
+                            if (!resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))) return
+                        }
+                        return@repeat
+                    }
+                    if (redstone.isNotEmpty()) {
+                        commitRedstoneBatch(activeSession, redstone)
                         return
                     }
-                    if (outcome.requests.all(::isSoundRequest)) {
-                        commitSoundBatch(activeSession, outcome.requests)
+                    if (sound.isNotEmpty()) {
+                        commitSoundBatch(activeSession, sound)
                         return
-                    }
-                    for (request in outcome.requests) {
-                        if (!resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))) return
                     }
                 }
 
@@ -427,6 +462,12 @@ class ProgramRuntimeHost internal constructor(
         return true
     }
 
+    fun completeAddon(completion: ProgramAddonCompletion): Boolean {
+        val pending = pendingAddonRequests.remove(completion.identity) ?: return false
+        if (session !== pending.session) return false
+        return resume(pending.request, completion.response)
+    }
+
     fun shutdown() {
         if (state == ProgramRuntimeState.Closed) return
         releaseSession()
@@ -612,6 +653,7 @@ class ProgramRuntimeHost internal constructor(
         pendingCompilation = null
         pendingRedstoneCommit = null
         pendingSoundCommit = null
+        pendingAddonRequests.clear()
         activeVmEpoch = 0
         try {
             try {
@@ -633,11 +675,44 @@ class ProgramRuntimeHost internal constructor(
             RedstoneHostPort { RedstoneCommitResult.Failed(HostFailureKind.UNAVAILABLE, 0) }
         val UNAVAILABLE_SOUND_PORT =
             SoundHostPort { SoundCommitResult.Failed(HostFailureKind.UNAVAILABLE, 0) }
+        val UNAVAILABLE_ADDON_PORT = ProgramAddonRequestPort { false }
+        const val MAXIMUM_PENDING_ADDON_REQUESTS = 256
 
         fun isRedstoneOutputRequest(request: VmHostRequest): Boolean =
             request.capability == REDSTONE_CAPABILITY && request.operation in 6..7
 
         fun isSoundRequest(request: VmHostRequest): Boolean = request.capability == SOUND_CAPABILITY && request.operation == 0
+    }
+
+    private fun isAddonRequest(request: VmHostRequest): Boolean =
+        addonCapabilitySchemas.any { schema ->
+            schema.identity.namespace == request.capability.namespace &&
+                schema.identity.name == request.capability.name &&
+                schema.identity.abiMajor == request.capability.abiMajor &&
+                schema.identity.abiMinor >= request.capability.abiMinor
+        }
+
+    private fun deferAddonRequest(
+        activeSession: ProgramVmSession,
+        request: VmHostRequest,
+    ): Boolean {
+        val existing = pendingAddonRequests[request.identity]
+        if (existing != null) {
+            check(existing.session === activeSession && existing.request == request) {
+                "pending addon request identity changed before completion"
+            }
+            return true
+        }
+        if (pendingAddonRequests.size >= MAXIMUM_PENDING_ADDON_REQUESTS) {
+            return resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))
+        }
+        val submitted =
+            addonRequestPort.submit(
+                ProgramAddonRequest(request.identity, request.capability, request.operation, request.arguments),
+            )
+        if (!submitted) return resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))
+        pendingAddonRequests[request.identity] = PendingAddonRequest(activeSession, request)
+        return true
     }
 
     private data class PendingRedstoneCommit(
@@ -649,6 +724,11 @@ class ProgramRuntimeHost internal constructor(
     private data class PendingSoundCommit(
         val session: ProgramVmSession,
         val requests: List<VmHostRequest>,
+    )
+
+    private data class PendingAddonRequest(
+        val session: ProgramVmSession,
+        val request: VmHostRequest,
     )
 }
 
