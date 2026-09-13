@@ -25,7 +25,9 @@ import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.components.KaDiagnosticCheckerFilter
 import org.jetbrains.kotlin.analysis.api.components.collectDiagnostics
 import org.jetbrains.kotlin.analysis.api.diagnostics.KaSeverity
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtNamedFunction
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnostic
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
@@ -40,10 +42,12 @@ internal object DiagnosticQuery {
         limits: AnalysisLimits,
     ): List<EditorDiagnostic> {
         val result = mutableListOf<EditorDiagnostic>()
+        var containsSyntaxError = false
         file.accept(
             object : PsiRecursiveElementWalkingVisitor() {
                 override fun visitElement(element: PsiElement) {
                     if (element is PsiErrorElement) {
+                        containsSyntaxError = true
                         if (result.size >= limits.diagnostics) {
                             throw AnalysisOutputLimitException("diagnostic count exceeds analysis limit")
                         }
@@ -61,11 +65,25 @@ internal object DiagnosticQuery {
                                 range = textRange?.let { EditorRange(it.startOffset, it.endOffset) },
                             )
                     }
+                    if (element is KtNamedFunction) {
+                        element.modifierList?.getModifier(KtTokens.SUSPEND_KEYWORD)?.let { modifier ->
+                            if (result.size >= limits.diagnostics) {
+                                throw AnalysisOutputLimitException("diagnostic count exceeds analysis limit")
+                            }
+                            result +=
+                                EditorDiagnostic(
+                                    severity = EditorDiagnosticSeverity.Error,
+                                    message = "suspend functions are unsupported; Guest tasks suspend transparently",
+                                    path = path,
+                                    range = modifier.textRange.let { EditorRange(it.startOffset, it.endOffset) },
+                                )
+                        }
+                    }
                     super.visitElement(element)
                 }
             },
         )
-        if (result.isNotEmpty()) return result.sorted()
+        if (containsSyntaxError) return result.sorted()
         val diagnostics = with(session) { file.collectDiagnostics(KaDiagnosticCheckerFilter.ONLY_COMMON_CHECKERS) }
         diagnostics.forEach { diagnostic ->
             if (result.size >= limits.diagnostics) {

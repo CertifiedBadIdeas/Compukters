@@ -35,8 +35,8 @@ supported.
 
 ## Entry points and projects
 
-- [x] **`main(args: Array<String>)` argument contract** — ordinary and
-  `suspend` entry points receive one owned array whose strings preserve their
+- [x] **`main(args: Array<String>)` argument contract** — the argument-bearing
+  entry point receives one owned array whose strings preserve their
   exact UTF-16 code units. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `string array entry lowers deterministically for vm argv conformance`,
@@ -44,13 +44,10 @@ supported.
   [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
   test `k2_string_array_entry_executes_exact_utf16_arguments`.
 
-- [ ] **Four legal `main` forms — Partial** — `fun main()`,
-  `suspend fun main()`, and their single-`Array<String>` variants lower with
-  explicit entry tags, but only the argument-bearing runtime contract has a
-  dedicated K2-to-VM execution test. Evidence:
+- [x] **Two legal `main` forms** — `fun main()` and
+  `fun main(args: Array<String>)` lower with explicit entry tags. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `all four legal main forms lower deterministically with an explicit entry contract`.
-  Tracking: not scheduled
+  test `both legal main forms lower deterministically with an explicit entry contract`.
 
 - [x] **Invalid entry points are rejected** — duplicate entries, missing
   entries, unsupported parameters, nullable argument arrays, and non-`Unit`
@@ -93,7 +90,7 @@ supported.
   non-returning trusted intrinsics are admitted, but general `Nothing`
   expressions such as arbitrary throws are not lowered. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  tests `ordinary and suspend zero argument Unit main lower deterministically`
+  tests `ordinary zero argument Unit main lowers deterministically`
   and `typed process v2 facade lowers without public capability masks or suspend calls`.
   Tracking: not scheduled
 
@@ -210,13 +207,13 @@ supported.
   `same-named guest function remains an ordinary project call`.
   Tracking: not scheduled
 
-- [x] **Direct `suspend` project calls** — a suspending Guest function may call
-  another suspending project function and resume across an asynchronous host
-  capability. Evidence:
+- [x] **Transparent blocking across project calls** — an ordinary Guest
+  function may call another ordinary function and resume across an
+  asynchronous host capability without a coroutine calling convention. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `suspend project call lowers deterministically for vm execution`, and
+  test `ordinary project call resumes transparently across host blocking`, and
   [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
-  test `k2_suspend_project_call_resumes_across_async_capability`.
+  test `k2_ordinary_project_call_resumes_across_async_capability`.
 
 - [ ] **Default arguments — Partial** — platform APIs may publish constant
   `Int` or qualified enum-entry defaults, which direct platform calls lower
@@ -255,11 +252,11 @@ supported.
 
 - [ ] **Lambdas, local functions, and function references — Partial** —
   `Tasks.launch(::worker)` accepts the one allocation-free form: a direct
-  reference to a top-level, zero-argument `suspend` function returning `Unit`.
+  reference to a top-level, zero-argument ordinary function returning `Unit`.
   Lambdas, captures, local or bound references, argument-taking references,
   and general function values remain unsupported. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  tests `direct top level suspend task lowers to spawn and join` and
+  tests `direct top level ordinary task lowers to spawn and join` and
   `task launch rejects callable shapes that require runtime function objects`.
   Tracking: [#567](https://github.com/CertifiedBadIdeas/Compukters/issues/567)
 
@@ -422,28 +419,39 @@ supported.
   test `unsupported source IR produces one stable target diagnostic and no artifact`.
   Tracking: not scheduled
 
-## Coroutines and concurrency
+## Tasks and concurrency
 
-- [x] **Direct suspension across a host request** — a `suspend` Guest call
-  resumes at its verified continuation block after an asynchronous capability
-  response. Evidence:
+- [x] **Transparent suspension across a host request** — an ordinary Guest call
+  preserves its complete stack and resumes at its verified continuation after
+  an asynchronous capability response. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `suspend project call lowers deterministically for vm execution`, and
+  test `ordinary project call resumes transparently across host blocking`, and
   [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
-  test `k2_suspend_project_call_resumes_across_async_capability`.
+  test `k2_ordinary_project_call_resumes_across_async_capability`.
 
-- [ ] **VM-blocking calls from ordinary functions — Partial** — designated
-  Guest API calls such as terminal event waiting lower from an ordinary caller
-  and the VM verifies the blocking-capability contract, but the generated
-  ordinary-main fixture is not executed end to end. Evidence:
+- [x] **VM-blocking calls from ordinary functions** — designated Guest API
+  calls, task joins, and channel handoffs block only the current stackful VM
+  task. Ordinary callers need no source modifier, including across nested
+  project calls. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `ordinary main lowers trusted terminal wait as vm blocking`, paired
+  tests `ordinary main lowers trusted terminal wait as vm blocking` and
+  `ordinary project call resumes transparently across host blocking`, paired
   with [`verify/tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/verify/tests.rs), tests
-  `vm_blocking_capability_is_valid_in_a_non_suspending_function` and
-  `vm_blocking_capability_does_not_claim_coroutine_semantics`.
-  Tracking: not scheduled
+  `vm_blocking_capability_is_valid_in_a_non_suspending_function`,
+  `task_yield_is_valid_in_a_non_suspending_function`, and
+  `task_spawn_accepts_a_non_suspending_target`.
 
-- [ ] **Cooperative Guest tasks — Partial** — `Tasks.launch(::worker)` starts a
+- [ ] **Kotlin `suspend` declarations — Unsupported** — Guest tasks use
+  transparent stackful suspension instead of Kotlin's coroutine effect and
+  calling convention. The compiler and IDE reject `suspend` source while the
+  artifact reader, verifier, and VM retain legacy suspend-call support.
+  Evidence: `MinimalScriptLoweringTest`, test
+  `suspend declarations are rejected because Guest tasks suspend transparently`,
+  and `DiagnosticQueryTest`, test
+  `suspend declaration is outside the transparent Guest task model`.
+
+- [ ] **Cooperative Guest tasks — Partial** — `Tasks.launch(::worker)` starts an
+  ordinary top-level function as a
   bounded task and `Task.join()` waits for it. Tasks share one VM and execute
   one at a time, but a task suspended on host I/O does not stop another runnable
   task. Scheduling and host-request ownership are deterministic. Public
@@ -452,7 +460,7 @@ supported.
 
 - [ ] **Bounded integer channels — Partial** — a top-level
   `IntChannel(capacity)` provides deterministic FIFO `send(Int)` and
-  `receive(): Int` suspension between cooperative tasks. Capacity must be a
+  `receive(): Int` blocking handoff between cooperative tasks. Capacity must be a
   positive compile-time constant; channel storage and waiter state are admitted
   up front and communication stays inside the VM without a host request.
   Generic payloads, close, cancellation, selection, timeouts, and cross-process
@@ -574,9 +582,9 @@ classpath.
   `Terminal.awaitEvent`, and `Terminal.eventKey` lower to exact terminal
   capability calls and execute across a host request. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `suspend project call lowers deterministically for vm execution`, and
+  test `ordinary project call resumes transparently across host blocking`, and
   [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
-  test `k2_suspend_project_call_resumes_across_async_capability`.
+  test `k2_ordinary_project_call_resumes_across_async_capability`.
 
 - [ ] **Remaining raw terminal operations — Partial** — clear, erase, text and
   action/modifier event fields, and event completion lower through trusted

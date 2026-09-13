@@ -13,7 +13,7 @@ owns bounded multi-file projects with `compukter.toml`, an optional `compukter.l
 it can analyze and compile a project locally, attach to a computer, and deploy the resulting executable.
 
 Both paths produce the same canonical Compukter artifact and execute through the same VM session boundary. A project
-must declare exactly one supported top-level entry point: `fun main()`, `suspend fun main()`, or either form with one
+must declare exactly one supported top-level entry point: `fun main()` with either no parameters or one
 `Array<String>` parameter, returning `Unit`. The standalone playground uses the same compiler artifact and VM session
 contracts without the Minecraft carrier.
 
@@ -157,6 +157,8 @@ instructions at once; suspension on a host request or `Task.join()` transfers ex
 FIFO order. Pending requests retain their `(TaskId, RequestId)` owner, so independent reads and writes may remain in
 flight and complete out of order without running Guest code re-entrantly. Returning from the root task ends the process
 and cancels its remaining task work.
+Guest Kotlin exposes this as transparent stackful blocking through ordinary functions: `suspend` declarations are
+outside the supported source subset, while legacy suspend-call artifact instructions remain decodable and executable.
 The production execution profile reserves a 256 KiB managed heap for each active foreground process; child-process
 capacity is charged independently while its parent is suspended. Heap arenas are released with their owning machine.
 An explicit actor request can also compose one immutable resource snapshot from host lifecycle/configuration and the

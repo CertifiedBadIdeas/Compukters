@@ -1,6 +1,6 @@
 import compukter.terminal.Terminal
 
-suspend fun main() {
+fun main() {
     Terminal.write("Your name: ")
     var name = ""
     var reading = true

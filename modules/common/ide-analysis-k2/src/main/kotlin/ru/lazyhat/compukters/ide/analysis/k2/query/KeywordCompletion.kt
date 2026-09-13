@@ -33,7 +33,7 @@ internal object KeywordCompletion {
 
     private val VISIBILITY_MODIFIERS = setOf("internal", "private", "protected", "public")
     private val INHERITANCE_MODIFIERS = setOf("abstract", "final", "open", "override", "sealed")
-    private val CALLABLE_MODIFIERS = setOf("external", "infix", "inline", "operator", "suspend", "tailrec")
+    private val CALLABLE_MODIFIERS = setOf("external", "infix", "inline", "operator", "tailrec")
 
     private val FILE_KEYWORDS =
         sortedSetOf(
