@@ -332,6 +332,8 @@ existing Gradle project paths and artifact names remain flat and stable.
 | `native-runtime-ffm` | Explicit JDK 25 FFM transport, native resource loading, and FFM integration evidence |
 | `native-runtime-jni` | Explicit Java 21 JNI transport, native resource loading, and JNI-to-C-ABI integration evidence |
 | `platform-bundle` | Canonical platform bundle model, codec, module graph, identities, and default imports |
+| `addon-guest-api` | Loader-independent addon bundle model, codec, capability schemas, bindings, and admission limits |
+| `addon-guest-api-fixture` | Test-only neutral addon bundle used by common compiler and IDE verification |
 | `platform-k2` | Shared K2 metadata and FIR integration for the Compukters platform |
 | `compiler-artifact` | Canonical executable artifact model, validation, and encoding |
 | `worker-client` | Generic bounded JVM worker processes, payload publication, framing, deadlines, and immutable values |
@@ -359,6 +361,7 @@ existing Gradle project paths and artifact names remain flat and stable.
 Ownership rules:
 
 - Every module under `modules/common` must remain independent of `net.minecraft.*`.
+- Common compiler and IDE modules must use the neutral addon fixture and must not depend on optional loader integrations.
 - Version modules must consume neutral `modules/minecraft/shared` roots rather than another version module's source tree.
 - Compatibility declarations must remain in the Compukters namespace and must not emit classes beneath `net.minecraft.*`.
 - Kotlin modules must not implement another interpreter or mutable guest machine model.

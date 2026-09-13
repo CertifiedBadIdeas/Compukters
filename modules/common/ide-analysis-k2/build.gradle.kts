@@ -92,7 +92,7 @@ val guestPlatformSources = configurations.create("guestPlatformSources") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
-val createKineticsGuestApiBundle = configurations.create("createKineticsGuestApiBundle") {
+val addonGuestApiFixtureBundle = configurations.create("addonGuestApiFixtureBundle") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
@@ -102,8 +102,8 @@ dependencies {
         isTransitive = false
     }
     add(
-        createKineticsGuestApiBundle.name,
-        project(path = ":v1_21_1-create", configuration = "createKineticsGuestApiBundle"),
+        addonGuestApiFixtureBundle.name,
+        project(path = ":addon-guest-api-fixture", configuration = "addonGuestApiBundle"),
     )
 }
 
@@ -321,8 +321,8 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
 tasks.test {
     val guestApiJar = project(":guest-platform").tasks.named<Jar>("jar")
     val platformBundle = project(":guest-platform").tasks.named("assemblePlatformBundle")
-    dependsOn(guestApiJar, platformBundle, createKineticsGuestApiBundle)
-    inputs.files(createKineticsGuestApiBundle)
+    dependsOn(guestApiJar, platformBundle, addonGuestApiFixtureBundle)
+    inputs.files(addonGuestApiFixtureBundle)
     doFirst {
         val formatterClasspath = kotlinFormatterRuntime.files + configurations.runtimeClasspath.get().files
         systemProperty("compukters.test.kotlinFormatterClasspath", formatterClasspath.joinToString(File.pathSeparator))
@@ -332,8 +332,8 @@ tasks.test {
             project(":guest-platform").layout.buildDirectory.file("platform/compukters-platform.cpb").get().asFile.absolutePath,
         )
         systemProperty(
-            "compukters.test.createKineticsGuestApi",
-            createKineticsGuestApiBundle.singleFile.absolutePath,
+            "compukters.test.addonGuestApiFixture",
+            addonGuestApiFixtureBundle.singleFile.absolutePath,
         )
     }
     filter.excludeTestsMatching("ru.lazyhat.compukters.ide.analysis.k2.integration.*")
@@ -342,11 +342,11 @@ tasks.test {
 val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
     description = "Runs forked K2 analysis worker integration tests."
     group = "verification"
-    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle", ":guest-platform:jar", createKineticsGuestApiBundle)
+    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle", ":guest-platform:jar", addonGuestApiFixtureBundle)
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
-    inputs.files(createKineticsGuestApiBundle)
+    inputs.files(addonGuestApiFixtureBundle)
     filter {
         includeTestsMatching("ru.lazyhat.compukters.ide.analysis.k2.integration.*")
         isFailOnNoMatchingTests = false
@@ -369,8 +369,8 @@ val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
             project(":guest-platform").tasks.named<Jar>("jar").get().archiveFile.get().asFile.absolutePath,
         )
         systemProperty(
-            "compukters.test.createKineticsGuestApi",
-            createKineticsGuestApiBundle.singleFile.absolutePath,
+            "compukters.test.addonGuestApiFixture",
+            addonGuestApiFixtureBundle.singleFile.absolutePath,
         )
     }
 }
@@ -378,11 +378,11 @@ val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
 val incrementalAnalysisPerformanceTest = tasks.register<Test>("incrementalAnalysisPerformanceTest") {
     description = "Runs machine-sensitive incremental IDE analysis SLO checks."
     group = "verification"
-    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle", ":guest-platform:jar", createKineticsGuestApiBundle)
+    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle", ":guest-platform:jar", addonGuestApiFixtureBundle)
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
-    inputs.files(createKineticsGuestApiBundle)
+    inputs.files(addonGuestApiFixtureBundle)
     maxHeapSize = "512m"
     testLogging.showStandardStreams = true
     filter {
@@ -409,8 +409,8 @@ val incrementalAnalysisPerformanceTest = tasks.register<Test>("incrementalAnalys
             project(":guest-platform").tasks.named<Jar>("jar").get().archiveFile.get().asFile.absolutePath,
         )
         systemProperty(
-            "compukters.test.createKineticsGuestApi",
-            createKineticsGuestApiBundle.singleFile.absolutePath,
+            "compukters.test.addonGuestApiFixture",
+            addonGuestApiFixtureBundle.singleFile.absolutePath,
         )
     }
 }

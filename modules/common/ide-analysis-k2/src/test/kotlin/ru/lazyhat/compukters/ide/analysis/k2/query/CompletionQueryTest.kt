@@ -332,8 +332,8 @@ class CompletionQueryTest {
     }
 
     @Test
-    fun `completion exposes typed Create kinetics sides and devices`() {
-        val kineticsSource = "import create.kinetics.Kinetics\nfun main() { Kinetics. }"
+    fun `completion exposes typed addon sides and devices`() {
+        val kineticsSource = "import fixture.kinetics.Kinetics\nfun main() { Kinetics. }"
         K2QueryFixture.sourceWithGuestApi(false, "main.kt" to kineticsSource).use { fixture ->
             val items = fixture.complete("main.kt", kineticsSource.indexOf("Kinetics.") + "Kinetics.".length).items
 
@@ -343,7 +343,7 @@ class CompletionQueryTest {
             )
         }
 
-        val sideSource = "import create.kinetics.Kinetics\nfun main() { Kinetics.left. }"
+        val sideSource = "import fixture.kinetics.Kinetics\nfun main() { Kinetics.left. }"
         K2QueryFixture.sourceWithGuestApi(false, "main.kt" to sideSource).use { fixture ->
             val items = fixture.complete("main.kt", sideSource.indexOf("Kinetics.left.") + "Kinetics.left.".length).items
 

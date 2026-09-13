@@ -532,8 +532,8 @@ classpath.
   `create:kinetics` module exposes computer-local sides through `Kinetics`. Programs can read exact `Float` speed,
   stress, and capacity values; wait for speed or load changes; and read or set a rotation controller's target speed.
   Handles remain bound to the exact adjacent block entity and fail rather than rebinding after replacement. Evidence:
-  `KineticsHostStateTest`, the lowering test `Create kinetics program lowers deterministically for GameTest
-  conformance`, IDE diagnostic/completion/parameter-information tests, and the real NeoForge `createkinetics`
+  `KineticsHostStateTest`, `CreateKineticsArtifactTest`, neutral addon IDE
+  diagnostic/completion/parameter-information tests, and the real NeoForge `createkinetics`
   GameTest. See [Create kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/) for the API and
   manifest entry.
 

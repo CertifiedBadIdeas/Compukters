@@ -427,11 +427,11 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `Create kinetics typed API lowers deterministically to blocking scalar operations`() =
+    fun `addon fixture typed API lowers deterministically to blocking scalar operations`() =
         withAdapter { adapter ->
             val source =
                 """
-                import create.kinetics.Kinetics
+                import fixture.kinetics.Kinetics
 
                 fun main() {
                     val speedometer = Kinetics.front.speedometer()
@@ -446,8 +446,8 @@ class MinimalScriptLoweringTest {
                     println(controller.setTargetSpeed(32))
                 }
                 """.trimIndent()
-            val first = adapter.compile(request(source, includeCreateAddon = true))
-            val second = adapter.compile(request(source, includeCreateAddon = true))
+            val first = adapter.compile(request(source, includeAddonFixture = true))
+            val second = adapter.compile(request(source, includeAddonFixture = true))
             val bytes = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
             val artifact = ArtifactReader.read(bytes)
             val opcodes = allOpcodes(bytes)
@@ -459,49 +459,12 @@ class MinimalScriptLoweringTest {
                 artifact.capabilities
                     .single { capability ->
                         val module = artifact.modules.first()
-                        module.strings[capability.namespace.value.toInt()].toString() == "create" &&
+                        module.strings[capability.namespace.value.toInt()].toString() == "fixture" &&
                             module.strings[capability.name.value.toInt()].toString() == "kinetics"
                     }.operationCount,
             )
-            assertEquals(10, opcodes.count { it == 0xe9 }, "every Create access must yield its VM task: $opcodes")
+            assertEquals(10, opcodes.count { it == 0xe9 }, "every addon access must yield its VM task: $opcodes")
             assertTrue(0x35 !in opcodes, "kinetics value classes must not load fields: $opcodes")
-        }
-
-    @Test
-    fun `Create kinetics program lowers deterministically for GameTest conformance`() =
-        withAdapter { adapter ->
-            val source =
-                """
-                import create.kinetics.Kinetics
-
-                fun main() {
-                    val left = Kinetics.left.speedometer()
-                    val right = Kinetics.right.speedometer()
-                    val back = Kinetics.back.speedometer()
-                    val stressometer = Kinetics.bottom.stressometer()
-                    val controller = Kinetics.top.rotationController()
-                    println(controller.setTargetSpeed(32_000))
-                    println(left.awaitSpeedChange())
-                    println(right.awaitSpeedChange())
-                    println(back.awaitSpeedChange())
-                    stressometer.awaitChange()
-                    println(stressometer.stress())
-                    println(stressometer.capacity())
-                    val stale = Kinetics.front.speedometer()
-                    println("waiting-disconnect")
-                    stale.awaitSpeedChange()
-                    println("unexpected-rebind")
-                }
-                """.trimIndent()
-            val first = adapter.compile(request(source, includeCreateAddon = true))
-            val second = adapter.compile(request(source, includeCreateAddon = true))
-            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
-
-            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
-            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
-            System.getProperty("compukter.vm.createKineticsArtifact")?.let { output ->
-                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
-            }
         }
 
     @Test
@@ -2036,21 +1999,21 @@ class MinimalScriptLoweringTest {
     private fun request(
         source: String,
         limits: WorkerLimits = WorkerLimits(),
-        includeCreateAddon: Boolean = false,
-    ): CompileRequest = request(listOf("project/main.kt" to source), limits, includeCreateAddon)
+        includeAddonFixture: Boolean = false,
+    ): CompileRequest = request(listOf("project/main.kt" to source), limits, includeAddonFixture)
 
     private fun request(vararg sources: Pair<String, String>): CompileRequest = request(sources.toList(), WorkerLimits(), false)
 
     private fun request(
         sources: List<Pair<String, String>>,
         limits: WorkerLimits,
-        includeCreateAddon: Boolean = false,
+        includeAddonFixture: Boolean = false,
     ): CompileRequest {
         val addon =
-            if (includeCreateAddon) {
+            if (includeAddonFixture) {
                 AddonGuestApiBundleCodec.decode(
                     java.nio.file.Files
-                        .readAllBytes(Path.of(checkNotNull(System.getProperty("compukters.createKineticsGuestApi")))),
+                        .readAllBytes(Path.of(checkNotNull(System.getProperty("compukters.addonGuestApiFixture")))),
                 )
             } else {
                 null

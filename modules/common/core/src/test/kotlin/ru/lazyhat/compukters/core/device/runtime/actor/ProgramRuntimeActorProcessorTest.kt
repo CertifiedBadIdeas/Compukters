@@ -122,7 +122,7 @@ class ProgramRuntimeActorProcessorTest {
             carrier.turnOn()
             awaitQueuedResult(service)
             service.pump(1)
-            val request = VmHostRequest(31, CREATE_KINETICS, 0, listOf(VmValue.I32(7)), taskId = 2)
+            val request = VmHostRequest(31, TEST_ADDON_CAPABILITY, 0, listOf(VmValue.I32(7)), taskId = 2)
             session.nextOutcome = VmOutcome.HostRequestBatch(listOf(request))
 
             carrier.serverTick(1)
@@ -986,7 +986,7 @@ class ProgramRuntimeActorProcessorTest {
     private class RecordingAddonHost(
         private val owner: Thread,
     ) : ProgramAddonHost {
-        override val capabilitySchemas: List<HostCapabilitySchema> = listOf(CREATE_KINETICS_SCHEMA)
+        override val capabilitySchemas: List<HostCapabilitySchema> = listOf(TEST_ADDON_SCHEMA)
         val dispatched = mutableListOf<ProgramAddonRequest>()
         val completions = ArrayDeque<ProgramAddonCompletion>()
         var closeCalls = 0
@@ -1014,10 +1014,10 @@ class ProgramRuntimeActorProcessorTest {
     }
 
     private companion object {
-        val CREATE_KINETICS = CapabilityIdentity("create", "kinetics", 1, 0)
-        val CREATE_KINETICS_SCHEMA =
+        val TEST_ADDON_CAPABILITY = CapabilityIdentity("fixture", "device", 1, 0)
+        val TEST_ADDON_SCHEMA =
             HostCapabilitySchema(
-                CREATE_KINETICS,
+                TEST_ADDON_CAPABILITY,
                 listOf(HostOperationSchema(listOf(HostValueType.I32), HostValueType.F32, asynchronous = true)),
             )
         val SOUND = CapabilityIdentity("compukter", "sound", 1, 0)

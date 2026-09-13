@@ -42,7 +42,7 @@ internal fun testAdmittedPlatform(
     attachedSources: Boolean = false,
 ): AdmittedAnalysisPlatform {
     val platform = testPlatform()
-    val addonBytes = Files.readAllBytes(Path.of(requireNotNull(System.getProperty("compukters.test.createKineticsGuestApi"))))
+    val addonBytes = Files.readAllBytes(Path.of(requireNotNull(System.getProperty("compukters.test.addonGuestApiFixture"))))
     val addon = AddonGuestApiBundleCodec.decode(addonBytes)
     val modules =
         if (selectAllModules) {

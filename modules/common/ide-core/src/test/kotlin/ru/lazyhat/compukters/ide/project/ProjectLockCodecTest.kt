@@ -30,7 +30,7 @@ class ProjectLockCodecTest {
             ProjectLock.of(
                 toolchain(),
                 listOf(
-                    module("create:kinetics", 1, "1.4.0", 1),
+                    module("fixture:device", 1, "1.4.0", 1),
                     module("std:terminal", 2, "2.3.1", 2),
                 ),
             )
@@ -51,7 +51,7 @@ class ProjectLockCodecTest {
             platform_abi_sha256 = "0202020202020202020202020202020202020202020202020202020202020202"
 
             [[modules]]
-            id = "create:kinetics"
+            id = "fixture:device"
             major = 1
             version = "1.4.0"
             content_sha256 = "0101010101010101010101010101010101010101010101010101010101010101"
