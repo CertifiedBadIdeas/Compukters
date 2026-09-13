@@ -18,7 +18,10 @@
 
 package ru.lazyhat.compukters.ide.client.analysis
 
+import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
@@ -29,7 +32,10 @@ import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.editor.EditorRange
+import ru.lazyhat.compukters.ide.project.ApiMajor
+import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ProjectManifest
+import ru.lazyhat.compukters.ide.project.ResolvedModule
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
@@ -71,6 +77,33 @@ class IdeCompletionPlannerTest {
         )
     }
 
+    @Test
+    fun `planner enables an addon module advertised only by the attached target`() {
+        val catalog = catalog()
+        val identity = AnalysisModuleIdentity("fixture:telemetry", hash(9))
+        val proposal =
+            CompletionItem(
+                "Telemetry",
+                "Telemetry",
+                CompletionKind.Object,
+                origin = DeclarationOrigin.Platform(identity),
+                symbol = CompletionSymbol("fixture.telemetry.Telemetry", "fixture.telemetry.Telemetry"),
+                additionalEdits = listOf(CompletionTextEdit(EditorRange(0, 0), "import fixture.telemetry.Telemetry\n\n")),
+            )
+        val module = ResolvedModule(ModuleId("fixture", "telemetry"), ApiMajor(1), "1.0.0", identity.hash)
+        val payload =
+            TrustedBundlePayload(
+                TrustedBundleIdentity.of(identity.name, identity.hash),
+                BinaryValue.of(byteArrayOf(1)),
+            )
+        val target = TargetCompileProfile(toolchain(catalog), listOf(module), WorkerLimits(), listOf(payload))
+
+        val planned = IdeCompletionPlanner(catalog).plan(listOf(proposal), ProjectManifest.of("sample", emptyMap()), target).single()
+
+        assertEquals("import fixture.telemetry.Telemetry · enable fixture:telemetry", planned.actionText)
+        assertEquals(module.id, planned.moduleRequirement?.id)
+    }
+
     private fun catalog(): PlatformCatalog {
         val builtins = module(PlatformModuleId("kotlin", "builtins"), "1.0.0")
         val redstone = module(PlatformModuleId("compukter", "redstone"), "2.0.0")
@@ -106,4 +139,6 @@ class IdeCompletionPlannerTest {
                     .toByteArray(),
             ),
         )
+
+    private fun hash(value: Int) = Hash256.of(ByteArray(32) { value.toByte() })
 }

@@ -66,7 +66,7 @@ internal class IdeTargetReplyPayloadTest {
             IdeTargetProfileId(hash(1)),
             TargetCompileProfile(
                 ToolchainLockIdentity("2.4.10", "2.4", 1u, 2u, 3u, hash(2), hash(3)),
-                listOf(ResolvedModule(ModuleId("create", "kinetics"), ApiMajor(2), "2.7.1", hash(4))),
+                listOf(ResolvedModule(ModuleId("fixture", "telemetry"), ApiMajor(2), "2.7.1", hash(4))),
                 WorkerLimits(
                     sourceFiles = 2,
                     sourceFileBytes = 3,
@@ -81,7 +81,7 @@ internal class IdeTargetReplyPayloadTest {
                 ),
                 listOf(
                     TrustedBundlePayload(
-                        TrustedBundleIdentity.of("create:kinetics", hash(4)),
+                        TrustedBundleIdentity.of("fixture:telemetry", hash(4)),
                         BinaryValue.of(byteArrayOf(9, 8, 7)),
                     ),
                 ),

@@ -21,7 +21,7 @@ contracts without the Minecraft carrier.
 
 Built-in Guest Kotlin declarations are authored in `guest-platform` as separately versioned modules. Its build
 produces only the canonical base platform bundle consumed by both compilation and IDE analysis. Optional integrations
-own and build their Guest declarations as addon bundles against that base; `v1_21_1-create` owns the first such bundle.
+own and build their Guest declarations as addon bundles against that base; `addons/create` owns the first such bundle.
 `platform-bundle` owns the base bundle model, codec, module graph, and default imports; `platform-k2` exposes that
 metadata to K2 without making the K2 implementation part of the platform format.
 Constant `Int` and qualified enum-entry defaults cross this bundle explicitly; compiler lowering materializes an
@@ -317,8 +317,10 @@ computer identity, never loads chunks, and does not provide a guest-visible flee
 Terminal, standard output and error, redstone, sound, process, filesystem, and compiler declarations live in the base
 `guest-platform` bundle as separately identifiable modules. Optional integrations publish bounded addon Guest API
 bundles instead. The server admits those bundles, includes their content hashes in the target and compilation-cache
-identity, and sends their metadata and optional sources to the attached IDE. Compiler and analysis workers decode only
-this data format: they never load or execute addon code. Exact admitted bindings extend intrinsic lowering, while a
+identity, and sends their metadata and optional sources to the attached IDE. Analysis indexes the bounded catalog of
+available addons for completion, while K2 semantics and compilation activate only the modules selected in the project
+lock. Compiler and analysis workers decode only this data format: they never load or execute addon code. Exact admitted
+bindings extend intrinsic lowering, while a
 same-named Guest declaration remains ordinary Guest code. General stream handles, pipes, and process redirection remain
 later layers.
 

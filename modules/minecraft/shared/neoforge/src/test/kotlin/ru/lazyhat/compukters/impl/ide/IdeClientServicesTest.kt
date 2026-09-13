@@ -18,20 +18,32 @@
 
 package ru.lazyhat.compukters.impl.ide
 
+import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisPlatform
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyKind
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
 import ru.lazyhat.compukters.ide.client.controller.IdeClientTooling
+import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
+import ru.lazyhat.compukters.ide.compiler.profile.ResolvedPlatformModule
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
+import ru.lazyhat.compukters.ide.project.ApiMajor
+import ru.lazyhat.compukters.ide.project.ModuleId
+import ru.lazyhat.compukters.ide.project.ResolvedModule
+import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetReply
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetRequest
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetRequestChannel
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalClient
 import ru.lazyhat.compukters.impl.ide.target.NetworkIdeTargetPort
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.zip.ZipEntry
@@ -46,6 +58,18 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 internal class IdeClientServicesTest {
+    @Test
+    fun `analysis receives every addon advertised by the attached target`() {
+        val selected = bundle("selected:module", 1)
+        val available = bundle("fixture:telemetry", 2)
+        val module = ResolvedModule(ModuleId("fixture", "telemetry"), ApiMajor(1), "1.0.0", available.identity.hash)
+        val toolchain = ToolchainLockIdentity("2.4.0", "2.4", 1u, 2u, 1u, hash(3), hash(4))
+        val target = TargetCompileProfile(toolchain, listOf(module), WorkerLimits(), listOf(available))
+
+        assertEquals(listOf(available), ProductionIdeApplicationFactory.analysisAddonBundles(listOf(selected), target))
+        assertEquals(listOf(selected), ProductionIdeApplicationFactory.analysisAddonBundles(listOf(selected), null))
+    }
+
     @Test
     fun `attached source loader admits exact Unicode Kotlin text`() {
         val archive = createTempDirectory("compukters-attached-source-").resolve("sources.jar")
@@ -153,13 +177,29 @@ internal class IdeClientServicesTest {
                         modulesById.getValue("stdlib:ranges"),
                         modulesById.getValue("compukter:redstone"),
                         modulesById.getValue("std:terminal"),
-                    ),
+                    ).map { descriptor ->
+                        val entry = PlatformCatalog.of(platform).require(ModuleId.parse(descriptor.id.toString()))
+                        ResolvedPlatformModule(entry.identity, descriptor, direct = true)
+                    },
                 )
             assertEquals(
                 listOf("compukter:redstone", "kotlin:builtins", "std:terminal", "stdlib:core", "stdlib:ranges"),
                 admittedModules.map { it.identity.name },
             )
             AdmittedAnalysisPlatform(compiler.manifest.identity.platformAbi, admittedModules, guestApi.toString())
+
+            val addonHash = hash(9)
+            val addonDescriptor =
+                modulesById
+                    .getValue("std:terminal")
+                    .copy(id = PlatformModuleId("fixture", "telemetry"), version = "1.0.0")
+            val addonIdentity = ResolvedModule(ModuleId("fixture", "telemetry"), ApiMajor(1), "1.0.0", addonHash)
+            val admittedAddon =
+                ProductionIdeApplicationFactory.admittedAnalysisModules(
+                    platform,
+                    listOf(ResolvedPlatformModule(addonIdentity, addonDescriptor, direct = true)),
+                )
+            assertEquals(addonHash, admittedAddon.single { it.identity.name == "fixture:telemetry" }.identity.hash)
 
             val mismatch = compiler.manifest.identity.copy(platformAbi = Hash256.zero())
             assertFailsWith<IllegalStateException> {
@@ -213,6 +253,13 @@ internal class IdeClientServicesTest {
         }
     }
 }
+
+private fun bundle(
+    name: String,
+    value: Int,
+) = TrustedBundlePayload(TrustedBundleIdentity.of(name, hash(value)), BinaryValue.of(byteArrayOf(value.toByte())))
+
+private fun hash(value: Int) = Hash256.of(ByteArray(32) { value.toByte() })
 
 private class RecordingVisibleLatencyTrace : IdeVisibleLatencyTrace {
     override fun editApplied(documentRevision: Long) = Unit

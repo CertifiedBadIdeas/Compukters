@@ -89,9 +89,6 @@ class AdmittedAnalysisPlatform(
         require(this.addonBundles.distinctBy(AdmittedAnalysisBundle::identity).size == this.addonBundles.size) {
             "analysis addon bundle identities must be unique"
         }
-        require(this.addonBundles.all { bundle -> this.modules.any { it.identity == bundle.identity } }) {
-            "analysis addon bundles must belong to admitted modules"
-        }
         sourceRoot?.let { validateRoot("platform source root", it) }
     }
 

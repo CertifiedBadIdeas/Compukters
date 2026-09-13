@@ -120,6 +120,14 @@ internal class K2QueryFixture private constructor(
                 sources = sources,
             )
 
+        fun sourceWithInactiveGuestApi(vararg sources: Pair<String, String>): K2QueryFixture =
+            create(
+                testAdmittedPlatform(includeAddonBundle = true),
+                AnalysisLimits(),
+                sourceUpdater = null,
+                sources = sources,
+            )
+
         private fun create(
             platform: AdmittedAnalysisPlatform,
             limits: AnalysisLimits,

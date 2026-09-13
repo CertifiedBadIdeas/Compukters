@@ -35,6 +35,7 @@ import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformCompletionKind
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 
 internal data class GlobalCompletionDeclaration(
     val fqName: String,
@@ -90,14 +91,18 @@ internal class GlobalCompletionIndex private constructor(
             return GlobalCompletionIndex(byPath, byPath.values.flatten())
         }
 
-        fun platform(bundle: PlatformBundle): GlobalCompletionIndex {
+        fun platform(
+            bundle: PlatformBundle,
+            externalIdentities: Map<PlatformModuleId, AnalysisModuleIdentity> = emptyMap(),
+        ): GlobalCompletionIndex {
             val declarations =
                 (listOf(bundle.builtins) + bundle.modules).flatMap { module ->
                     val identity =
-                        AnalysisModuleIdentity(
-                            module.id.toString(),
-                            Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()),
-                        )
+                        externalIdentities[module.id]
+                            ?: AnalysisModuleIdentity(
+                                module.id.toString(),
+                                Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()),
+                            )
                     module.completionDeclarations.map { declaration ->
                         GlobalCompletionDeclaration(
                             fqName = declaration.symbol,

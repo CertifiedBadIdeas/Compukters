@@ -8,12 +8,13 @@ permalink: /CREATE-KINETICS/
 # Create kinetics
 
 Compukters can expose adjacent Create kinetic devices directly to Guest Kotlin. This optional integration is available
-on **Minecraft 1.21.1** with **Create 6.0.11 through 6.0.x**. Compukters still starts normally when Create is absent;
+on **Minecraft 1.21.1** with **Create 6.0.10 through 6.0.x**. Compukters still starts normally when Create is absent;
 the `create:kinetics` platform module is then unavailable to projects.
 
 ## Enable the project module
 
-Add the Create module to the project's `compukter.toml`:
+Choose a `Kinetics` completion in the attached IDE to add its import and enable the module automatically, or add the
+Create module to the project's `compukter.toml` manually:
 
 ```toml
 format = 1

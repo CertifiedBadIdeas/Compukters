@@ -1,0 +1,7 @@
+# Build-time data only. The compiler and analysis workers never load addon JVM classes.
+addon create
+module create:kinetics
+version 1.0.0
+dependencies stdlib:core stdlib:ranges
+
+capability create kinetics 1 0 create.kinetics.KineticsBindings

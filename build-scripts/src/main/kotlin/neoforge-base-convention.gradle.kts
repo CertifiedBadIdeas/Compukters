@@ -107,6 +107,7 @@ val devRuntimeLibrariesJar =
     }
 
 dependencies.add("forgeRuntimeLibrary", files(devRuntimeLibrariesJar))
+addCompuktersNeoForgeDevelopmentRuntime()
 
 extensions.getByType<LoomGradleExtensionAPI>().nestJars(productionJar, configurations.named("include"))
 
@@ -135,23 +136,17 @@ tasks.register("buildProductionUniversalJar") {
 fun <T : ModuleDependency> DependencyHandler.neoForgeImplementation(dependency: Provider<T>) {
     val resolvedDependency = dependency.get()
     val implementationDependency = create(resolvedDependency) as ModuleDependency
-    val runtimeDependency = create(resolvedDependency) as ModuleDependency
     val includedDependency = create(resolvedDependency)
     implementation(implementationDependency) { isTransitive = false }
-    runtimeDependency.isTransitive = false
-    add("forgeRuntimeLibrary", runtimeDependency)
     add("include", includedDependency)
 }
 
 fun <T : ModuleDependency> DependencyHandler.neoForgeRelocatedImplementation(dependency: Provider<T>) {
     val resolvedDependency = dependency.get()
     val implementationDependency = create(resolvedDependency) as ModuleDependency
-    val runtimeDependency = create(resolvedDependency) as ModuleDependency
     val shadowDependency = create(resolvedDependency) as ModuleDependency
     implementationDependency.isTransitive = false
-    runtimeDependency.isTransitive = false
     shadowDependency.isTransitive = false
     implementation(implementationDependency)
-    add("forgeRuntimeLibrary", runtimeDependency)
     add("shadowBundle", shadowDependency)
 }

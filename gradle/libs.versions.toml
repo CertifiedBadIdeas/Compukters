@@ -6,9 +6,11 @@
 kotlinConvention = { id = "kotlin-convention" }
 commonConvention = { id = "common-convention" }
 commonRuntimeResourcesConvention = { id = "common-runtime-resources" }
+addonGuestApiConvention = { id = "addon-guest-api-convention" }
 minecraftSharedSourcesConvention = { id = "minecraft-shared-sources" }
 neoforgeConvention = { id = "neoforge-convention" }
 neoforge1211Convention = { id = "neoforge-1.21.1-convention" }
+neoforgeAddon1211Convention = { id = "neoforge-addon-1.21.1-convention" }
 metadataConvention = { id = "metadata" }
 releaseConvention = { id = "release-convention" }
 
@@ -48,7 +50,10 @@ minecraft-v261 = "26.1.2"
 
 # 1.21.1
 minecraft-v1211 = "1.21.1"
-create-v1211 = "6.0.11-300"
+create-v1211 = "6.0.10-280"
+ponder-v1211 = "1.0.82+mc1.21.1"
+flywheel-v1211 = "1.0.6"
+registrate-v1211 = "MC1.21-1.3.0+67"
 
 [libraries]
 
@@ -88,3 +93,7 @@ minecraft-v1211 = { module = "net.minecraft:minecraft", version.ref = "minecraft
 parchment-v1211 = "org.parchmentmc.data:parchment-1.21.1:2024.11.17"
 neoforge-v1211 = "net.neoforged:neoforge:21.1.250"
 create-v1211 = { module = "com.simibubi.create:create-1.21.1", version.ref = "create-v1211" }
+ponder-v1211 = { module = "net.createmod.ponder:ponder-neoforge", version.ref = "ponder-v1211" }
+flywheel-api-v1211 = { module = "dev.engine-room.flywheel:flywheel-neoforge-api-1.21.1", version.ref = "flywheel-v1211" }
+flywheel-v1211 = { module = "dev.engine-room.flywheel:flywheel-neoforge-1.21.1", version.ref = "flywheel-v1211" }
+registrate-v1211 = { module = "com.tterrag.registrate:Registrate", version.ref = "registrate-v1211" }
