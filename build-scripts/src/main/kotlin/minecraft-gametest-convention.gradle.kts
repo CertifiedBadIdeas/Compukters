@@ -26,6 +26,7 @@ val gameTest by sourceSets.creating
 val commonProject = project(":${name.removeSuffix("-neoforge")}-common")
 val redstoneConformanceArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/redstone.cpkt")
 val soundConformanceArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/sound.cpkt")
+val createKineticsConformanceArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/create-kinetics.cpkt")
 
 kotlin.target.compilations.named(gameTest.name) {
     associateWith(kotlin.target.compilations.getByName("main"))
@@ -36,6 +37,10 @@ tasks.named<ProcessResources>(gameTest.processResourcesTaskName) {
     dependsOn(":compiler-k2:generateSoundConformanceArtifact")
     from(redstoneConformanceArtifact) { into("fixtures") }
     from(soundConformanceArtifact) { into("fixtures") }
+    if (buildContext().versionKey == "v1211") {
+        dependsOn(":compiler-k2:generateCreateKineticsConformanceArtifact")
+        from(createKineticsConformanceArtifact) { into("fixtures") }
+    }
     listOf(
         "filesystem-write.cpkt",
         "filesystem-write-alternate.cpkt",

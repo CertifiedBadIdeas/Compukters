@@ -332,6 +332,29 @@ class CompletionQueryTest {
     }
 
     @Test
+    fun `completion exposes typed Create kinetics sides and devices`() {
+        val kineticsSource = "import create.kinetics.Kinetics\nfun main() { Kinetics. }"
+        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to kineticsSource).use { fixture ->
+            val items = fixture.complete("main.kt", kineticsSource.indexOf("Kinetics.") + "Kinetics.".length).items
+
+            assertTrue(
+                items.map { it.insertText }.containsAll(setOf("front", "back", "left", "right", "top", "bottom")),
+                items.toString(),
+            )
+        }
+
+        val sideSource = "import create.kinetics.Kinetics\nfun main() { Kinetics.left. }"
+        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to sideSource).use { fixture ->
+            val items = fixture.complete("main.kt", sideSource.indexOf("Kinetics.left.") + "Kinetics.left.".length).items
+
+            assertTrue(
+                items.map { it.insertText }.containsAll(setOf("speedometer", "stressometer", "rotationController")),
+                items.toString(),
+            )
+        }
+    }
+
+    @Test
     fun `completion tolerates synthetic function interfaces from platform libraries`() {
         val source = "fun main() { Fun }"
         K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->

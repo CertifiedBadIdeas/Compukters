@@ -445,6 +445,43 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `Create kinetics program lowers deterministically for GameTest conformance`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import create.kinetics.Kinetics
+
+                fun main() {
+                    val left = Kinetics.left.speedometer()
+                    val right = Kinetics.right.speedometer()
+                    val back = Kinetics.back.speedometer()
+                    val stressometer = Kinetics.bottom.stressometer()
+                    val controller = Kinetics.top.rotationController()
+                    println(controller.setTargetSpeed(32_000))
+                    println(left.awaitSpeedChange())
+                    println(right.awaitSpeedChange())
+                    println(back.awaitSpeedChange())
+                    stressometer.awaitChange()
+                    println(stressometer.stress())
+                    println(stressometer.capacity())
+                    val stale = Kinetics.front.speedometer()
+                    println("waiting-disconnect")
+                    stale.awaitSpeedChange()
+                    println("unexpected-rebind")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukter.vm.createKineticsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `Int for loop supplies its generated increment constant`() =
         withAdapter { adapter ->
             val result =

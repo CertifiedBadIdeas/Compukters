@@ -100,6 +100,22 @@ class ParameterInfoQueryTest {
         }
     }
 
+    @Test
+    fun `parameter info exposes Create controller target speed`() {
+        val source =
+            """
+            import create.kinetics.Kinetics
+
+            fun main() { Kinetics.top.rotationController().setTargetSpeed(32) }
+            """.trimIndent()
+        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+            val info = assertNotNull(fixture.parameterInfo(source.indexOf("32") + 1))
+
+            assertEquals(listOf("setTargetSpeed(speed: Int): Int"), info.items.map { it.signature })
+            assertEquals("speed: Int", info.items.single().activeText())
+        }
+    }
+
     private fun K2QueryFixture.parameterInfo(offset: Int) =
         (execute(AnalysisQuery.ParameterInfo(identity, VirtualSourcePath.kotlin("main.kt"), offset)) as AnalysisResult.ParameterInfo).value
 

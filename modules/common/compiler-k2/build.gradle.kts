@@ -293,6 +293,7 @@ val argvConformanceArtifact = layout.buildDirectory.file("generated/conformance/
 val platformScalarConformanceArtifact = layout.buildDirectory.file("generated/conformance/platform-scalar.cpkt")
 val redstoneConformanceArtifact = layout.buildDirectory.file("generated/conformance/redstone.cpkt")
 val soundConformanceArtifact = layout.buildDirectory.file("generated/conformance/sound.cpkt")
+val createKineticsConformanceArtifact = layout.buildDirectory.file("generated/conformance/create-kinetics.cpkt")
 val intLoopsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-loops.cpkt")
 val intArrayConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-array.cpkt")
 val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-long.cpkt")
@@ -459,6 +460,22 @@ val generateSoundConformanceArtifact = tasks.register<Test>("generateSoundConfor
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.soundArtifact", soundConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateCreateKineticsConformanceArtifact = tasks.register<Test>("generateCreateKineticsConformanceArtifact") {
+    description = "Compiles the deterministic Create kinetics program for GameTest conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*Create kinetics program lowers deterministically for GameTest conformance*")
+    inputs.file(workerJar)
+    outputs.file(createKineticsConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.createKineticsArtifact", createKineticsConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

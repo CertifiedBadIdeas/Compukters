@@ -29,18 +29,37 @@ plugins {
     id("minecraft-gametest-convention")
 }
 
+repositories {
+    maven("https://maven.createmod.net") {
+        name = "Create"
+    }
+    maven("https://maven.ithundxr.dev/snapshots") {
+        name = "Registrate"
+    }
+    maven("https://raw.githubusercontent.com/Fuzss/modresources/main/maven") {
+        name = "NeoForgeConfigApiPort"
+    }
+}
+
 loom {
     mods {
         maybeCreate("main").apply {
             sourceSet("main", project(projects.v1211Common.path))
+            sourceSet("main", project(projects.v1211Create.path))
         }
+    }
+    runs.named("gameTestServer") {
+        mods.maybeCreate("main").sourceSet("main", project(projects.v1211Create.path))
     }
 }
 
 dependencies {
     common(project(path = projects.v1211Common.path)) { isTransitive = false }
     shadowBundle(project(path = projects.v1211Common.path, configuration = "transformProductionNeoForge"))
+    common(project(path = projects.v1211Create.path)) { isTransitive = false }
+    shadowBundle(project(path = projects.v1211Create.path, configuration = "transformProductionNeoForge"))
     testImplementation(project(path = projects.v1211Common.path))
+    modImplementation(libs.create.v1211)
     implementation(projects.nativeRuntimeJni)
     shadowBundle(project(path = projects.nativeRuntimeJni.path)) { isTransitive = false }
     implementation(projects.platformBundle)
@@ -89,6 +108,7 @@ val verifyProductionJar =
             listOf(
                 "META-INF/neoforge.mods.toml",
                 "ru/lazyhat/compukters/impl/CompuktersMod.class",
+                "ru/lazyhat/compukters/integration/create/CreateKineticsIntegration.class",
                 "ru/lazyhat/compukters/impl/ide/IdeClientBootstrap.class",
                 "ru/lazyhat/compukters/impl/ide/IdeRenderer.class",
                 "ru/lazyhat/compukters/impl/ide/IdeScreen.class",
@@ -118,6 +138,9 @@ val verifyProductionJar =
             validateNativeResources(nativeEntries, expectedPackagedNativeResources)
             check(entries.none { "compukter_ffi" in it || it.endsWith("/FfmRuntimeBackend.class") }) {
                 "Java 25 FFM runtime content leaked into ${archive.name}"
+            }
+            check(entries.none { it.startsWith("com/simibubi/create/") }) {
+                "Create implementation classes leaked into ${archive.name}"
             }
             check(
                 entries.none { entry ->
@@ -164,6 +187,9 @@ val verifyProductionJar =
                 check("versionRange=\"${expectedMetadata.getValue(property)}\"" in metadata) {
                     "wrong $property in ${archive.name}"
                 }
+            }
+            check("modId=\"create\"" in metadata && "versionRange=\"[6.0.11,6.1)\"" in metadata) {
+                "optional Create compatibility metadata is missing from ${archive.name}"
             }
         }
     }

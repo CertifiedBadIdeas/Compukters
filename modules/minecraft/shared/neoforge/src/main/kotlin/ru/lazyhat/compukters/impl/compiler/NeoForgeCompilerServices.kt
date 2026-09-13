@@ -40,6 +40,7 @@ import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
+import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
 import ru.lazyhat.compukters.platform.bundle.PackagedPlatformBundleLoader
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import ru.lazyhat.compukters.worker.value.Sha256
@@ -129,7 +130,8 @@ internal class NeoForgeCompilerService private constructor(
                     maximumStderrBytes = limits.stderrBytes,
                 )
             val controller = CompilerWorkerController(packaged, launch, limits, JdkWorkerProcessFactory())
-            val platformModules = platformModules(platform)
+            val availablePlatformModules = ComputerAddonHosts.availablePlatformModules()
+            val platformModules = platformModules(platform, availablePlatformModules)
             val backend = WorkerCompilerBackend(controller)
             val cache =
                 PersistentCompilationCache.open(
@@ -151,7 +153,7 @@ internal class NeoForgeCompilerService private constructor(
                 val compiler = ServerComputerCompiler(service, limits)
                 return NeoForgeCompilerService(
                     CompilerCompletionRouter(compiler),
-                    serverTargetProfile(packaged.manifest.identity, platform, limits),
+                    serverTargetProfile(packaged.manifest.identity, platform, limits, availablePlatformModules),
                     service,
                     executor,
                 )
@@ -196,6 +198,7 @@ internal fun serverTargetProfile(
     identity: WorkerIdentity,
     platform: PlatformBundle,
     limits: WorkerLimits,
+    availableOptionalModules: Set<String> = emptySet(),
 ): TargetCompileProfile =
     TargetCompileProfile(
         ToolchainLockIdentity(
@@ -207,11 +210,23 @@ internal fun serverTargetProfile(
             payloadHash = identity.payloadHash,
             platformAbi = identity.platformAbi,
         ),
-        modules = PlatformCatalog.of(platform).entries.map { it.identity },
+        modules = availablePlatformEntries(platform, availableOptionalModules).map { it.identity },
         limits = limits,
     )
 
-private fun platformModules(platform: PlatformBundle): List<TrustedBundleIdentity> =
-    PlatformCatalog.of(platform).entries.map { entry ->
+private fun platformModules(
+    platform: PlatformBundle,
+    availableOptionalModules: Set<String>,
+): List<TrustedBundleIdentity> =
+    availablePlatformEntries(platform, availableOptionalModules).map { entry ->
         TrustedBundleIdentity.of(entry.identity.id.value, entry.identity.contentHash)
     }
+
+private fun availablePlatformEntries(
+    platform: PlatformBundle,
+    availableOptionalModules: Set<String>,
+) = PlatformCatalog.of(platform).entries.filter { entry ->
+    entry.identity.id.value !in OPTIONAL_PLATFORM_MODULES || entry.identity.id.value in availableOptionalModules
+}
+
+private val OPTIONAL_PLATFORM_MODULES = setOf("create:kinetics")

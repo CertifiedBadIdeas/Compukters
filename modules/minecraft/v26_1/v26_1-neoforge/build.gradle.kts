@@ -454,6 +454,9 @@ val verifyPackagedCompukterFfi =
             check(entries.none { it.contains("ComputerBlockGameTest") }) {
                 "GameTest classes leaked into ${archive.name}"
             }
+            check(entries.none { it.startsWith("ru/lazyhat/compukters/integration/create/") }) {
+                "Create 1.21.1 integration leaked into ${archive.name}"
+            }
             check(entries.none { it.startsWith("fixtures/") }) {
                 "GameTest artifacts leaked into ${archive.name}"
             }

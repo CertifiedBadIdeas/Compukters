@@ -35,10 +35,22 @@ fun interface ComputerAddonHostFactory {
 
 object ComputerAddonHosts {
     private val factories = CopyOnWriteArrayList<ComputerAddonHostFactory>()
+    private val platformModules = mutableSetOf<String>()
 
-    fun register(factory: ComputerAddonHostFactory) {
+    @Synchronized
+    fun register(
+        factory: ComputerAddonHostFactory,
+        platformModules: Set<String> = emptySet(),
+    ) {
+        platformModules.forEach { module ->
+            require(PLATFORM_MODULE.matches(module)) { "invalid addon platform module: $module" }
+        }
         require(factories.addIfAbsent(factory)) { "computer addon host factory is already registered" }
+        this.platformModules += platformModules
     }
+
+    @Synchronized
+    fun availablePlatformModules(): Set<String> = platformModules.toSet()
 
     internal fun create(
         level: ServerLevel,
@@ -53,4 +65,6 @@ object ComputerAddonHosts {
             throw failure
         }
     }
+
+    private val PLATFORM_MODULE = Regex("[a-z][a-z0-9-]{0,63}:[a-z][a-z0-9-]{0,63}")
 }
