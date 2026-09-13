@@ -53,19 +53,24 @@ interface LowLevelVmBridge {
 
     fun verifyArtifact(artifact: ByteArray): Boolean = error("artifact verification is unavailable")
 
-    fun create(artifact: ByteArray): ByteArray
+    fun create(
+        artifact: ByteArray,
+        capabilitySchemas: ByteArray,
+    ): ByteArray
 
     fun createInStore(
         storeHandle: Long,
         id: ByteArray,
         rom: ByteArray,
         artifact: ByteArray,
+        capabilitySchemas: ByteArray,
     ): ByteArray = error("persistent VM creation is unavailable")
 
     fun createBootInStore(
         storeHandle: Long,
         id: ByteArray,
         rom: ByteArray,
+        capabilitySchemas: ByteArray,
     ): ByteArray = error("persistent VM boot is unavailable")
 
     fun filesystemGeneration(handle: Long): ByteArray = error("filesystem generation is unavailable")

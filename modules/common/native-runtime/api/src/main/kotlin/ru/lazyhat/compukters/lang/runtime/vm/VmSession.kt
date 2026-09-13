@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.lang.runtime.vm
 
+import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
+import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchemaWire
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryEntry
@@ -285,15 +287,20 @@ class VmSession private constructor(
     companion object {
         private const val CLOSED = 0L
 
-        fun open(artifact: ByteArray): VmSession = open(artifact, VmRuntime.bridge())
+        fun open(
+            artifact: ByteArray,
+            capabilities: List<HostCapabilitySchema> = emptyList(),
+        ): VmSession = open(artifact, capabilities, VmRuntime.bridge())
 
         fun openInStore(
             artifact: ByteArray,
             store: WorldFileSystemStore,
             id: ComputerId,
             romImage: ByteArray,
+            capabilities: List<HostCapabilitySchema> = emptyList(),
         ): VmSession {
-            val (bridge, result) = store.createMachine(id, romImage.copyOf(), artifact.copyOf())
+            val schemas = HostCapabilitySchemaWire.encode(capabilities)
+            val (bridge, result) = store.createMachine(id, romImage.copyOf(), artifact.copyOf(), schemas)
             val handle = decodeNative { WireDecoder(result).createdHandle() }
             return admitted(handle, bridge)
         }
@@ -302,8 +309,10 @@ class VmSession private constructor(
             store: WorldFileSystemStore,
             id: ComputerId,
             romImage: ByteArray,
+            capabilities: List<HostCapabilitySchema> = emptyList(),
         ): VmSession {
-            val (bridge, result) = store.createBootMachine(id, romImage.copyOf())
+            val schemas = HostCapabilitySchemaWire.encode(capabilities)
+            val (bridge, result) = store.createBootMachine(id, romImage.copyOf(), schemas)
             val handle = decodeNative { WireDecoder(result).createdHandle() }
             return admitted(handle, bridge)
         }
@@ -311,8 +320,15 @@ class VmSession private constructor(
         fun open(
             artifact: ByteArray,
             bridge: LowLevelVmBridge,
+        ): VmSession = open(artifact, emptyList(), bridge)
+
+        fun open(
+            artifact: ByteArray,
+            capabilities: List<HostCapabilitySchema>,
+            bridge: LowLevelVmBridge,
         ): VmSession {
-            val handle = decodeNative { WireDecoder(bridge.create(artifact.copyOf())).createdHandle() }
+            val schemas = HostCapabilitySchemaWire.encode(capabilities)
+            val handle = decodeNative { WireDecoder(bridge.create(artifact.copyOf(), schemas)).createdHandle() }
             return admitted(handle, bridge)
         }
 

@@ -42,7 +42,10 @@ class VmArtifactVerifierTest {
             return true
         }
 
-        override fun create(artifact: ByteArray): ByteArray {
+        override fun create(
+            artifact: ByteArray,
+            capabilitySchemas: ByteArray,
+        ): ByteArray {
             created = true
             error("verification must not create a VM session")
         }

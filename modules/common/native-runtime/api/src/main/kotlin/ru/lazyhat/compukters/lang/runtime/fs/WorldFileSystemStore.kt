@@ -69,17 +69,19 @@ class WorldFileSystemStore private constructor(
         id: ComputerId,
         romImage: ByteArray,
         artifact: ByteArray,
+        capabilitySchemas: ByteArray,
     ): Pair<LowLevelVmBridge, ByteArray> =
         operationLock.withLock {
-            bridge to bridge.createInStore(requireHandle(), id.toByteArray(), romImage, artifact)
+            bridge to bridge.createInStore(requireHandle(), id.toByteArray(), romImage, artifact, capabilitySchemas)
         }
 
     internal fun createBootMachine(
         id: ComputerId,
         romImage: ByteArray,
+        capabilitySchemas: ByteArray,
     ): Pair<LowLevelVmBridge, ByteArray> =
         operationLock.withLock {
-            bridge to bridge.createBootInStore(requireHandle(), id.toByteArray(), romImage)
+            bridge to bridge.createBootInStore(requireHandle(), id.toByteArray(), romImage, capabilitySchemas)
         }
 
     override fun close() =

@@ -43,18 +43,25 @@ final class JniNative {
 
     static native int storeClose(long handle);
 
-    static native int create(byte[] artifact, byte[] output, long[] written);
+    static native int create(
+            byte[] artifact, byte[] capabilitySchemas, byte[] output, long[] written);
 
     static native int createInStore(
             long storeHandle,
             byte[] id,
             byte[] rom,
             byte[] artifact,
+            byte[] capabilitySchemas,
             byte[] output,
             long[] written);
 
     static native int createBootInStore(
-            long storeHandle, byte[] id, byte[] rom, byte[] output, long[] written);
+            long storeHandle,
+            byte[] id,
+            byte[] rom,
+            byte[] capabilitySchemas,
+            byte[] output,
+            long[] written);
 
     static native int close(long handle);
 

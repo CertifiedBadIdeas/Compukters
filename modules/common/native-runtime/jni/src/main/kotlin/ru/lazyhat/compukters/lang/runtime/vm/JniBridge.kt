@@ -81,10 +81,13 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
             else -> throw failure("artifact verification", status)
         }
 
-    override fun create(artifact: ByteArray): ByteArray {
+    override fun create(
+        artifact: ByteArray,
+        capabilitySchemas: ByteArray,
+    ): ByteArray {
         val maximum = maximumCreateBytes()
         return fixedOutput("create", maximum) { output, written ->
-            JniNative.create(artifact, output, written)
+            JniNative.create(artifact, capabilitySchemas, output, written)
         }
     }
 
@@ -93,11 +96,12 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
         id: ByteArray,
         rom: ByteArray,
         artifact: ByteArray,
+        capabilitySchemas: ByteArray,
     ): ByteArray {
         requireComputerId(id)
         val maximum = maximumCreateBytes()
         return fixedOutput("create in filesystem store", maximum) { output, written ->
-            JniNative.createInStore(storeHandle, id, rom, artifact, output, written)
+            JniNative.createInStore(storeHandle, id, rom, artifact, capabilitySchemas, output, written)
         }
     }
 
@@ -105,11 +109,12 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
         storeHandle: Long,
         id: ByteArray,
         rom: ByteArray,
+        capabilitySchemas: ByteArray,
     ): ByteArray {
         requireComputerId(id)
         val maximum = maximumCreateBytes()
         return fixedOutput("boot in filesystem store", maximum) { output, written ->
-            JniNative.createBootInStore(storeHandle, id, rom, output, written)
+            JniNative.createBootInStore(storeHandle, id, rom, capabilitySchemas, output, written)
         }
     }
 
@@ -516,7 +521,7 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
 
         fun open(library: Path): JniBridge {
             System.load(library.toAbsolutePath().normalize().toString())
-            if (JniNative.abiVersion() != 13) throw VmBridgeException("unsupported Compukter JNI ABI")
+            if (JniNative.abiVersion() != 14) throw VmBridgeException("unsupported Compukter JNI ABI")
             return JniBridge()
         }
     }

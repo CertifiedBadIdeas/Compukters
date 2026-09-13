@@ -207,7 +207,10 @@ class WorldFileSystemStoreTest {
             closedStores += handle
         }
 
-        override fun create(artifact: ByteArray): ByteArray = error("unused")
+        override fun create(
+            artifact: ByteArray,
+            capabilitySchemas: ByteArray,
+        ): ByteArray = error("unused")
 
         override fun advance(
             handle: Long,

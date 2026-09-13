@@ -19,6 +19,10 @@
 package ru.lazyhat.compukters.lang.runtime.integration
 
 import kotlinx.coroutines.runBlocking
+import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
+import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
+import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
+import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.FfmBridge
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
@@ -37,9 +41,21 @@ import kotlin.test.assertTrue
 
 class FfmBridgeIntegrationTest {
     @Test
+    fun `FFM admits a machine with a typed addon capability schema`() {
+        FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
+            val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
+            val schema = testAddonSchema()
+
+            VmSession.open(artifact, listOf(schema), bridge).use { session ->
+                assertTrue(session.resourceSnapshot().heapCapacityBytes > 0)
+            }
+        }
+    }
+
+    @Test
     fun `JDK 25 FFM reads the native ABI version`() {
         FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
-            assertEquals(13, bridge.abiVersion())
+            assertEquals(14, bridge.abiVersion())
         }
     }
 
@@ -183,3 +199,12 @@ class FfmBridgeIntegrationTest {
         return output.toString().trimEnd('\n') + '\n'
     }
 }
+
+private fun testAddonSchema(): HostCapabilitySchema =
+    HostCapabilitySchema(
+        CapabilityIdentity("create", "kinetics", 1, 0),
+        listOf(
+            HostOperationSchema(listOf(HostValueType.I32), HostValueType.F32, asynchronous = true),
+            HostOperationSchema(listOf(HostValueType.I32, HostValueType.I32), HostValueType.I32, asynchronous = true),
+        ),
+    )

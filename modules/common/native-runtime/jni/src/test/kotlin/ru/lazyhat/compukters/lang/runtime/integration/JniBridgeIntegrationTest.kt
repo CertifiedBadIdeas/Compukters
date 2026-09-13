@@ -18,6 +18,10 @@
 
 package ru.lazyhat.compukters.lang.runtime.integration
 
+import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
+import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
+import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
+import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.JniBridge
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
@@ -29,6 +33,21 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class JniBridgeIntegrationTest {
+    @Test
+    fun `JNI admits a machine with a typed addon capability schema`() {
+        val bridge = JniBridge.open(Path.of(requiredProperty("compukter.jni.library")))
+        val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
+        val schema =
+            HostCapabilitySchema(
+                CapabilityIdentity("create", "kinetics", 1, 0),
+                listOf(HostOperationSchema(listOf(HostValueType.I32), HostValueType.F32, asynchronous = true)),
+            )
+
+        VmSession.open(artifact, listOf(schema), bridge).use { session ->
+            assertTrue(session.resourceSnapshot().heapCapacityBytes > 0)
+        }
+    }
+
     @Test
     fun `Java 21 JNI preserves typed create failures`() {
         val bridge = JniBridge.open(Path.of(requiredProperty("compukter.jni.library")))
