@@ -40,6 +40,7 @@ internal fun testPlatformAbi(): Hash256 = Hash256.of(testPlatform().identity.con
 internal fun testAdmittedPlatform(
     selectAllModules: Boolean = false,
     attachedSources: Boolean = false,
+    includeAddonBundle: Boolean = selectAllModules,
 ): AdmittedAnalysisPlatform {
     val platform = testPlatform()
     val addonBytes = Files.readAllBytes(Path.of(requireNotNull(System.getProperty("compukters.test.addonGuestApiFixture"))))
@@ -72,7 +73,7 @@ internal fun testAdmittedPlatform(
             null
         }
     val addonBundles =
-        if (selectAllModules) {
+        if (includeAddonBundle) {
             listOf(
                 AdmittedAnalysisBundle(
                     AnalysisModuleIdentity(addon.identity.module, Hash256.of(addon.identity.contentHash.toByteArray())),

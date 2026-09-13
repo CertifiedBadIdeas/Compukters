@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
+import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
@@ -118,8 +119,10 @@ internal class SnapshotAdmission(
             }
         val selectedModules = requestedModules.keys - platformBundle.builtins.id
         val selectedExternal = selectedModules.mapTo(mutableSetOf(), PlatformModuleId::toString) - packagedByName.keys
-        require(selectedExternal == addonByName.keys) { "analysis addon payloads do not match selected external modules" }
-        val resolvedModules = PlatformModuleGraph(mergedBundle).resolve(selectedModules).modules
+        require(selectedExternal.all(addonByName::containsKey)) { "selected external analysis modules are missing addon payloads" }
+        val graph = PlatformModuleGraph(mergedBundle)
+        addonBundles.forEach { bundle -> graph.resolve(setOf(bundle.moduleDescriptor.id)) }
+        val resolvedModules = graph.resolve(selectedModules).modules
         require(resolvedModules.mapTo(mutableSetOf()) { it.id } == selectedModules) {
             "analysis platform module selection is not dependency-closed"
         }
@@ -156,6 +159,14 @@ internal class SnapshotAdmission(
                     }
             require(files.keys == sourceLengths.keys) { "standalone K2 source mapping differs from admitted snapshot" }
             val projectCompletionIndex = GlobalCompletionIndex.project(files)
+            val addonIdentities =
+                addonBundles.associate { bundle ->
+                    bundle.moduleDescriptor.id to
+                        AnalysisModuleIdentity(
+                            bundle.identity.module,
+                            Hash256.of(bundle.identity.contentHash.toByteArray()),
+                        )
+                }
             val platformSourceFiles =
                 attachedSourceRoot?.let { loadPlatformSourceFiles(environment, it, request) }.orEmpty() +
                     loadAddonSourceFiles(environment, addonBundles, request)
@@ -171,7 +182,7 @@ internal class SnapshotAdmission(
                 platform,
                 sourceUpdater,
                 projectCompletionIndex,
-                GlobalCompletionIndex.platform(mergedBundle),
+                GlobalCompletionIndex.platform(mergedBundle, addonIdentities),
             )
         } catch (exception: Exception) {
             environment?.close()

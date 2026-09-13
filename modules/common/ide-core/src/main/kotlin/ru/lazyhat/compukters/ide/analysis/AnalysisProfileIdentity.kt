@@ -53,9 +53,13 @@ data class AnalysisProfileIdentity(
             canonicalLock: BinaryValue,
             modules: List<AnalysisModuleIdentity>,
             settings: AnalysisSemanticSettings,
+            availableAddonModules: List<AnalysisModuleIdentity> = emptyList(),
         ): AnalysisProfileIdentity {
             require(modules.zipWithNext().all { (left, right) -> compareModuleIdentities(left, right) < 0 }) {
                 "analysis module identities must be strictly sorted and unique"
+            }
+            require(availableAddonModules.zipWithNext().all { (left, right) -> compareModuleIdentities(left, right) < 0 }) {
+                "available addon module identities must be strictly sorted and unique"
             }
             val digest = MessageDigest.getInstance("SHA-256")
             digest.update(DOMAIN)
@@ -72,13 +76,18 @@ data class AnalysisProfileIdentity(
                 digest.field(module.name)
                 digest.field(module.hash.toByteArray())
             }
+            digest.int(availableAddonModules.size)
+            availableAddonModules.forEach { module ->
+                digest.field(module.name)
+                digest.field(module.hash.toByteArray())
+            }
             digest.field(settings.languageVersion)
             digest.field(settings.apiVersion)
             digest.update(if (settings.progressiveMode) 1 else 0)
             return AnalysisProfileIdentity(Hash256.of(digest.digest()))
         }
 
-        private val DOMAIN = "Compukters analysis profile v3\u0000".encodeToByteArray()
+        private val DOMAIN = "Compukters analysis profile v4\u0000".encodeToByteArray()
     }
 }
 

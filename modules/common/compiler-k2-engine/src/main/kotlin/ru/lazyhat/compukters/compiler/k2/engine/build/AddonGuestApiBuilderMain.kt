@@ -115,10 +115,24 @@ fun main(args: Array<String>) {
     val platformInput = arguments.path("--platform-input")
     val sourceRoot = arguments.path("--sources")
     val descriptor = arguments.path("--descriptor")
+    val abiLock = arguments.path("--abi-lock")
     val output = arguments.path("--output")
+    val hostOutput = arguments["--host-output"]?.let { Path.of(it).toAbsolutePath().normalize() }
     val base = PlatformBundleCodec.decode(Files.readAllBytes(platformInput))
-    val contract = AddonContract.parse(descriptor.readLines())
-    writeAtomically(output, buildAddonGuestApiBundle(base, sourceRoot, contract))
+    val authoring = AddonAuthoringContract.parse(descriptor.readLines())
+    val currentLock = if (Files.exists(abiLock)) AddonAbiLock.parse(abiLock.readLines()) else AddonAbiLock.empty()
+    val resolved = resolveAddonContract(sourceRoot, authoring, currentLock)
+    val updateLock = arguments["--update-abi-lock"]?.toBooleanStrict() ?: false
+    if (updateLock) {
+        writeAtomically(abiLock, resolved.expectedLock.render().encodeToByteArray())
+    } else {
+        require(Files.exists(abiLock)) { "addon ABI lock is missing; run updateAddonGuestApiAbiLock" }
+        require(currentLock == resolved.expectedLock && Files.readString(abiLock) == currentLock.render()) {
+            "addon ABI lock is stale; run updateAddonGuestApiAbiLock and review the ABI change"
+        }
+    }
+    writeAtomically(output, buildAddonGuestApiBundle(base, sourceRoot, resolved.contract))
+    hostOutput?.let { path -> writeAtomically(path, renderAddonHostContract(authoring, resolved.contract).encodeToByteArray()) }
 }
 
 private fun writeSource(

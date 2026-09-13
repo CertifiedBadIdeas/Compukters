@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.ide.analysis.k2.query
 
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
@@ -28,7 +29,10 @@ import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorEditResult
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.editor.EditorTextEdit
+import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -360,6 +364,29 @@ class CompletionQueryTest {
             assertTrue(
                 items.map { it.insertText }.containsAll(setOf("speedometer", "stressometer", "rotationController")),
                 items.toString(),
+            )
+        }
+    }
+
+    @Test
+    fun `completion proposes an available addon API before its module is selected`() {
+        val source = "fun main() { Kin }"
+        K2QueryFixture.sourceWithInactiveGuestApi("main.kt" to source).use { fixture ->
+            val kinetics = fixture.complete("main.kt", source.indexOf("Kin") + 3).items.single { it.insertText == "Kinetics" }
+
+            assertEquals("fixture.kinetics.Kinetics", kinetics.symbol?.fqName)
+            assertEquals("fixture.kinetics.Kinetics", kinetics.symbol?.importFqName)
+            assertEquals(
+                "fixture:kinetics",
+                assertIs<DeclarationOrigin.Platform>(kinetics.origin).identity.name,
+            )
+            val addon =
+                AddonGuestApiBundleCodec.decode(
+                    Files.readAllBytes(Path.of(requireNotNull(System.getProperty("compukters.test.addonGuestApiFixture")))),
+                )
+            assertContentEquals(
+                addon.identity.contentHash.toByteArray(),
+                assertIs<DeclarationOrigin.Platform>(kinetics.origin).identity.hash.toByteArray(),
             )
         }
     }

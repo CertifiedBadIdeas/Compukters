@@ -4,25 +4,4 @@ module fixture:kinetics
 version 1.0.0
 dependencies stdlib:core stdlib:ranges
 
-capability fixture kinetics 1 0
-operation async I32 I32
-operation async F32 I32
-operation async F32 I32
-operation async I32 I32
-operation async F32 I32
-operation async F32 I32
-operation async UNIT I32
-operation async I32 I32
-operation async I32 I32
-operation async I32 I32 I32
-
-binding fixture.kinetics KineticsBindings acquireSpeedometer fun(Int):Int fixture:kinetics:1 0
-binding fixture.kinetics KineticsBindings speed fun(Int):Float fixture:kinetics:1 1
-binding fixture.kinetics KineticsBindings awaitSpeedChange fun(Int):Float fixture:kinetics:1 2
-binding fixture.kinetics KineticsBindings acquireStressometer fun(Int):Int fixture:kinetics:1 3
-binding fixture.kinetics KineticsBindings stress fun(Int):Float fixture:kinetics:1 4
-binding fixture.kinetics KineticsBindings capacity fun(Int):Float fixture:kinetics:1 5
-binding fixture.kinetics KineticsBindings awaitStressChange fun(Int):Unit fixture:kinetics:1 6
-binding fixture.kinetics KineticsBindings acquireRotationController fun(Int):Int fixture:kinetics:1 7
-binding fixture.kinetics KineticsBindings targetSpeed fun(Int):Int fixture:kinetics:1 8
-binding fixture.kinetics KineticsBindings setTargetSpeed fun(Int,Int):Int fixture:kinetics:1 9
+capability fixture kinetics 1 0 fixture.kinetics.KineticsBindings

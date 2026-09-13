@@ -275,7 +275,8 @@ object AddonGuestApiBundleCodec {
             val operation =
                 schema.operations.getOrNull(binding.operation)
                     ?: throw IllegalArgumentException("addon binding operation is outside capability schema")
-            require(signatureTypes(binding.signature) == operation.arguments to operation.result) {
+            val signature = AddonCapabilitySignature.parse(binding.signature)
+            require(signature.arguments == operation.arguments && signature.result == operation.result) {
                 "addon binding signature does not match capability operation: ${binding.symbol} ${binding.signature}"
             }
         }
@@ -305,32 +306,6 @@ object AddonGuestApiBundleCodec {
 
     private fun validKotlinIdentifier(value: String): Boolean =
         value.isNotEmpty() && (value.first() == '_' || value.first().isLetter()) && value.drop(1).all { it == '_' || it.isLetterOrDigit() }
-
-    private fun signatureTypes(signature: String): Pair<List<AddonCapabilityValueType>, AddonCapabilityValueType> {
-        val match =
-            Regex("fun\\(([^)]*)\\):([A-Za-z0-9_.]+)").matchEntire(signature)
-                ?: throw IllegalArgumentException("addon external binding must use a canonical function signature")
-        val arguments =
-            match.groupValues[1]
-                .takeIf(String::isNotEmpty)
-                ?.split(',')
-                ?.map(::hostType)
-                .orEmpty()
-        return arguments to hostType(match.groupValues[2])
-    }
-
-    private fun hostType(value: String): AddonCapabilityValueType =
-        when (value.substringAfterLast('.')) {
-            "Unit" -> AddonCapabilityValueType.UNIT
-            "Int" -> AddonCapabilityValueType.I32
-            "Long" -> AddonCapabilityValueType.I64
-            "Float" -> AddonCapabilityValueType.F32
-            "Double" -> AddonCapabilityValueType.F64
-            "Boolean" -> AddonCapabilityValueType.BOOL
-            "Char" -> AddonCapabilityValueType.CHAR
-            "String" -> AddonCapabilityValueType.STRING
-            else -> throw IllegalArgumentException("unsupported addon capability ABI type: $value")
-        }
 
     private fun semanticBytes(bundle: AddonGuestApiBundle): ByteArray =
         ByteArrayOutputStream()

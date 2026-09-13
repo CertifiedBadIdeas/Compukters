@@ -32,6 +32,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   loaded; Compukters remains usable without Create installed.
 - Moved `create:kinetics` into a server-admitted addon Guest API bundle, including its Kotlin metadata and sources, so
   compiler and IDE workers no longer need the integration in the base platform or execute addon code.
+- Made IDE completion discover APIs from compatible attached addons and offer to import `Kinetics` while enabling its
+  project module in the same completion action.
 
 ## 0.4.0 — 2026-09-12
 

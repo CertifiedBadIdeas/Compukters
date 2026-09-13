@@ -24,7 +24,6 @@ import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.EventPriority
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.fml.ModContainer
-import net.neoforged.fml.ModList
 import net.neoforged.fml.common.Mod
 import net.neoforged.fml.config.ModConfig
 import net.neoforged.fml.loading.FMLEnvironment
@@ -42,7 +41,6 @@ import ru.lazyhat.compukters.impl.ide.IdeClientBootstrap
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetNetwork
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.impl.terminal.TerminalNetwork
-import ru.lazyhat.compukters.integration.create.CreateKineticsIntegration
 import ru.lazyhat.compukters.lang.runtime.vm.JniRuntimeBackend
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 
@@ -54,7 +52,6 @@ class CompuktersMod(
     init {
         val native = requireNativeRuntime()
         CompuktersRegistry.register(eventBus)
-        if (ModList.get().isLoaded("create")) CreateKineticsIntegration.register()
         eventBus.addListener(TerminalNetwork::register)
         eventBus.addListener(IdeTargetNetwork::register)
         if (FMLEnvironment.dist == Dist.CLIENT) IdeClientBootstrap.register(eventBus)

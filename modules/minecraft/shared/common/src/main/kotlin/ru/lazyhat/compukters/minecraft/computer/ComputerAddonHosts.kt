@@ -25,19 +25,12 @@ import ru.lazyhat.compukters.addon.api.AddonCapabilitySchema
 import ru.lazyhat.compukters.addon.api.AddonCapabilityValueType
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.addon.api.AddonGuestApiCatalog
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersAddonHostFactory
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.programAddonHostOf
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import java.util.concurrent.CopyOnWriteArrayList
-
-fun interface ComputerAddonHostFactory {
-    fun create(
-        level: ServerLevel,
-        position: BlockPos,
-        state: BlockState,
-    ): ProgramAddonHost?
-}
 
 object ComputerAddonHosts {
     private val registrations = CopyOnWriteArrayList<Registration>()
@@ -45,7 +38,7 @@ object ComputerAddonHosts {
 
     @Synchronized
     fun register(
-        factory: ComputerAddonHostFactory,
+        factory: CompuktersAddonHostFactory,
         guestApiBundles: List<AddonGuestApiBundle> = emptyList(),
     ) {
         require(registrations.none { it.factory == factory }) { "computer addon host factory is already registered" }
@@ -77,7 +70,7 @@ object ComputerAddonHosts {
     }
 
     private data class Registration(
-        val factory: ComputerAddonHostFactory,
+        val factory: CompuktersAddonHostFactory,
         val guestApiBundles: List<AddonGuestApiBundle>,
     )
 }

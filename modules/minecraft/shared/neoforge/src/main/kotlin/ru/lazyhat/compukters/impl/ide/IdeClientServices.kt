@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
@@ -70,6 +71,7 @@ import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
 import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
+import ru.lazyhat.compukters.ide.compiler.profile.ResolvedPlatformModule
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectLockService
@@ -596,14 +598,21 @@ internal object ProductionIdeApplicationFactory {
                     frameBytes = limits.frameBytes,
                 ),
             )
-        val admittedModules = admittedAnalysisModules(platform, profile.modules.map { module -> module.descriptor })
-        val profileIdentity = analysisProfile(profile, ProjectLockCodec.encode(lock).encodeToByteArray(), admittedModules)
+        val admittedModules = admittedAnalysisModules(platform, profile.modules)
+        val availableAddonBundles = analysisAddonBundles(profile.addonBundles, target)
+        val profileIdentity =
+            analysisProfile(
+                profile,
+                ProjectLockCodec.encode(lock).encodeToByteArray(),
+                admittedModules,
+                availableAddonBundles,
+            )
         val admittedPlatform =
             AdmittedAnalysisPlatform(
                 profile.toolchain.platformAbi,
                 admittedModules,
                 platformSourceRoot.toString(),
-                profile.addonBundles.map { bundle ->
+                availableAddonBundles.map { bundle ->
                     AdmittedAnalysisBundle(AnalysisModuleIdentity(bundle.identity.name, bundle.identity.hash), bundle.content)
                 },
             )
@@ -619,13 +628,21 @@ internal object ProductionIdeApplicationFactory {
         profile: CompileProfile,
         lockBytes: ByteArray,
         modules: List<AdmittedAnalysisModule>,
+        availableAddonBundles: List<TrustedBundlePayload>,
     ): AnalysisProfileIdentity =
         AnalysisProfileIdentity.of(
-            profile.toolchain,
-            BinaryValue.of(lockBytes),
-            modules.map(AdmittedAnalysisModule::identity),
-            AnalysisSemanticSettings(profile.toolchain.languageVersion, profile.toolchain.languageVersion, false),
+            toolchain = profile.toolchain,
+            canonicalLock = BinaryValue.of(lockBytes),
+            modules = modules.map(AdmittedAnalysisModule::identity),
+            settings = AnalysisSemanticSettings(profile.toolchain.languageVersion, profile.toolchain.languageVersion, false),
+            availableAddonModules =
+                availableAddonBundles.map { bundle -> AnalysisModuleIdentity(bundle.identity.name, bundle.identity.hash) },
         )
+
+    internal fun analysisAddonBundles(
+        selected: List<TrustedBundlePayload>,
+        target: TargetCompileProfile?,
+    ): List<TrustedBundlePayload> = target?.addonBundles ?: selected
 
     private fun analysisModule(module: PlatformModule): AdmittedAnalysisModule =
         AdmittedAnalysisModule(
@@ -637,8 +654,16 @@ internal object ProductionIdeApplicationFactory {
 
     internal fun admittedAnalysisModules(
         platform: PlatformBundle,
-        modules: List<PlatformModule>,
-    ): List<AdmittedAnalysisModule> = (listOf(platform.builtins) + modules).sortedBy { it.id }.map(::analysisModule)
+        modules: List<ResolvedPlatformModule>,
+    ): List<AdmittedAnalysisModule> =
+        (
+            listOf(analysisModule(platform.builtins)) +
+                modules.map { module ->
+                    AdmittedAnalysisModule(
+                        AnalysisModuleIdentity(module.identity.id.value, module.identity.contentHash),
+                    )
+                }
+        ).sortedBy { it.identity.name }
 
     internal fun loadPackagedPlatform(
         classpath: List<Path>,

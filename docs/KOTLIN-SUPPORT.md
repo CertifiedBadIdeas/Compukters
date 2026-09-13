@@ -500,9 +500,11 @@ cannot become one merely by copying its package, name, and signature.
 
 The built-in modules are packaged with the tooling workers. Addons instead register an `AddonGuestApiBundle` on the
 server. Its deterministic identity covers metadata, sources, capability schemas, and exact callable bindings. An
-attached IDE receives the admitted data from the server, so completion, diagnostics, parameter information, navigation,
-compilation, and cache invalidation all use the same API identity without adding the addon JAR to either worker's JVM
-classpath.
+attached IDE receives the admitted data from the server. Completion can propose APIs from available inactive addons
+and enable their project modules; diagnostics, parameter information, navigation, compilation, and cache invalidation
+then use the same selected API identity without adding the addon JAR to either worker's JVM classpath. Evidence:
+[`CompletionQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/CompletionQueryTest.kt)
+and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-client/src/test/kotlin/ru/lazyhat/compukters/ide/client/analysis/IdeCompletionPlannerTest.kt).
 
 ## Kotlin standard library
 
@@ -536,7 +538,7 @@ classpath.
 
 ## Compukters Guest APIs
 
-- [x] **Create kinetics on Minecraft 1.21.1** — when Create 6.0.11 through 6.0.x is loaded, the optional
+- [x] **Create kinetics on Minecraft 1.21.1** — when Create 6.0.10 through 6.0.x is loaded, the optional
   `create:kinetics` module exposes computer-local sides through `Kinetics`. Programs can read exact `Float` speed,
   stress, and capacity values; wait for speed or load changes; and read or set a rotation controller's target speed.
   Handles remain bound to the exact adjacent block entity and fail rather than rebinding after replacement. Evidence:
