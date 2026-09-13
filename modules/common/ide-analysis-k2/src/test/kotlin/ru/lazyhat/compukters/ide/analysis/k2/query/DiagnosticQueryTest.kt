@@ -31,6 +31,24 @@ import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
     @Test
+    fun `suspend declaration is outside the transparent Guest task model`() {
+        val source = "suspend fun main() {}"
+        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+            val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+
+            assertTrue(
+                active.diagnostics.any {
+                    it.severity == EditorDiagnosticSeverity.Error &&
+                        it.message == "suspend functions are unsupported; Guest tasks suspend transparently" &&
+                        it.range == EditorRange(0, "suspend".length)
+                },
+                active.diagnostics.toString(),
+            )
+        }
+    }
+
+    @Test
     fun `Guest Float arithmetic conversions and console API resolve without errors`() {
         val source =
             """

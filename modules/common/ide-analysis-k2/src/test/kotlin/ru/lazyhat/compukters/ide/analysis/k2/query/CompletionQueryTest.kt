@@ -62,6 +62,16 @@ class CompletionQueryTest {
     }
 
     @Test
+    fun `completion does not propose suspend outside the Guest subset`() {
+        val source = "sus"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val result = fixture.complete("main.kt", source.length)
+
+            assertTrue(result.items.none { it.insertText == "suspend" }, result.items.toString())
+        }
+    }
+
+    @Test
     fun `completion suppresses keywords outside unqualified Kotlin code`() {
         val source =
             """
