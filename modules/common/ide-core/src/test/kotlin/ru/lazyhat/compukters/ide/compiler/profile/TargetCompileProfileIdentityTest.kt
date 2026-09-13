@@ -6,7 +6,10 @@
 
 package ru.lazyhat.compukters.ide.compiler.profile
 
+import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
@@ -24,6 +27,7 @@ class TargetCompileProfileIdentityTest {
         assertEquals(TargetCompileProfileIdentity.of(base), TargetCompileProfileIdentity.of(profile()))
         assertNotEquals(TargetCompileProfileIdentity.of(base), TargetCompileProfileIdentity.of(profile(payload = 2)))
         assertNotEquals(TargetCompileProfileIdentity.of(base), TargetCompileProfileIdentity.of(profile(moduleHash = 3)))
+        assertNotEquals(TargetCompileProfileIdentity.of(profile(addonByte = 4)), TargetCompileProfileIdentity.of(profile(addonByte = 5)))
         assertNotEquals(
             TargetCompileProfileIdentity.of(base),
             TargetCompileProfileIdentity.of(profile(limits = WorkerLimits(artifactBytes = 1024))),
@@ -34,10 +38,19 @@ class TargetCompileProfileIdentityTest {
         payload: Int = 1,
         moduleHash: Int = 2,
         limits: WorkerLimits = WorkerLimits(),
+        addonByte: Int? = null,
     ) = TargetCompileProfile(
         ToolchainLockIdentity("2.4.0", "2.4", 1u, 2u, 1u, hash(payload), hash(7)),
         listOf(ResolvedModule(ModuleId("std", "terminal"), ApiMajor(2), "2.0.0", hash(moduleHash))),
         limits,
+        addonByte?.let { byte ->
+            listOf(
+                TrustedBundlePayload(
+                    TrustedBundleIdentity.of("std:terminal", hash(moduleHash)),
+                    BinaryValue.of(byteArrayOf(byte.toByte())),
+                ),
+            )
+        } ?: emptyList(),
     )
 
     private fun hash(value: Int) = Hash256.of(ByteArray(32) { value.toByte() })

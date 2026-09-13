@@ -21,6 +21,9 @@ package ru.lazyhat.compukters.impl.compiler
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.storage.LevelResource
 import net.neoforged.neoforge.event.server.ServerStoppingEvent
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
+import ru.lazyhat.compukters.addon.api.AddonGuestApiCatalog
 import ru.lazyhat.compukters.compiler.cache.ArtifactVerifier
 import ru.lazyhat.compukters.compiler.cache.PersistentCompilationCache
 import ru.lazyhat.compukters.compiler.runtime.CompilerServiceConfiguration
@@ -31,6 +34,7 @@ import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
 import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerLaunch
 import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
@@ -38,6 +42,9 @@ import ru.lazyhat.compukters.core.device.runtime.compiler.ServerComputerCompiler
 import ru.lazyhat.compukters.ide.compiler.profile.COMPUKTER_ARTIFACT_ABI
 import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
+import ru.lazyhat.compukters.ide.project.ApiMajor
+import ru.lazyhat.compukters.ide.project.ModuleId
+import ru.lazyhat.compukters.ide.project.ResolvedModule
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
 import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
@@ -130,8 +137,9 @@ internal class NeoForgeCompilerService private constructor(
                     maximumStderrBytes = limits.stderrBytes,
                 )
             val controller = CompilerWorkerController(packaged, launch, limits, JdkWorkerProcessFactory())
-            val availablePlatformModules = ComputerAddonHosts.availablePlatformModules()
-            val platformModules = platformModules(platform, availablePlatformModules)
+            val addonCatalog = ComputerAddonHosts.availableGuestApiCatalog()
+            val addonBundles = addonPayloads(addonCatalog)
+            val platformModules = platformModules(platform) + addonBundles.map(TrustedBundlePayload::identity)
             val backend = WorkerCompilerBackend(controller)
             val cache =
                 PersistentCompilationCache.open(
@@ -147,13 +155,18 @@ internal class NeoForgeCompilerService private constructor(
                     ServerCompilerService(
                         cache,
                         backend,
-                        CompilerServiceConfiguration(packaged.manifest.identity, limits, platformModules = platformModules),
+                        CompilerServiceConfiguration(
+                            packaged.manifest.identity,
+                            limits,
+                            platformModules = platformModules,
+                            addonBundles = addonBundles,
+                        ),
                         executor = executor,
                     )
                 val compiler = ServerComputerCompiler(service, limits)
                 return NeoForgeCompilerService(
                     CompilerCompletionRouter(compiler),
-                    serverTargetProfile(packaged.manifest.identity, platform, limits, availablePlatformModules),
+                    serverTargetProfile(packaged.manifest.identity, platform, limits, addonCatalog),
                     service,
                     executor,
                 )
@@ -198,7 +211,7 @@ internal fun serverTargetProfile(
     identity: WorkerIdentity,
     platform: PlatformBundle,
     limits: WorkerLimits,
-    availableOptionalModules: Set<String> = emptySet(),
+    addonCatalog: AddonGuestApiCatalog = AddonGuestApiCatalog.empty(),
 ): TargetCompileProfile =
     TargetCompileProfile(
         ToolchainLockIdentity(
@@ -210,23 +223,44 @@ internal fun serverTargetProfile(
             payloadHash = identity.payloadHash,
             platformAbi = identity.platformAbi,
         ),
-        modules = availablePlatformEntries(platform, availableOptionalModules).map { it.identity },
+        modules =
+            PlatformCatalog.of(platform).entries.map { it.identity } +
+                addonCatalog.bundles.map(::resolvedModule),
         limits = limits,
+        addonBundles = addonPayloads(addonCatalog),
     )
 
-private fun platformModules(
-    platform: PlatformBundle,
-    availableOptionalModules: Set<String>,
-): List<TrustedBundleIdentity> =
-    availablePlatformEntries(platform, availableOptionalModules).map { entry ->
-        TrustedBundleIdentity.of(entry.identity.id.value, entry.identity.contentHash)
+private fun addonPayloads(catalog: AddonGuestApiCatalog): List<TrustedBundlePayload> =
+    catalog.bundles.map { bundle ->
+        TrustedBundlePayload(
+            TrustedBundleIdentity.of(
+                bundle.identity.module,
+                ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+                    .of(bundle.identity.contentHash.toByteArray()),
+            ),
+            ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
+                .of(AddonGuestApiBundleCodec.encode(bundle)),
+        )
     }
 
-private fun availablePlatformEntries(
-    platform: PlatformBundle,
-    availableOptionalModules: Set<String>,
-) = PlatformCatalog.of(platform).entries.filter { entry ->
-    entry.identity.id.value !in OPTIONAL_PLATFORM_MODULES || entry.identity.id.value in availableOptionalModules
+private fun resolvedModule(bundle: AddonGuestApiBundle): ResolvedModule {
+    val major =
+        bundle.identity.version
+            .substringBefore('.')
+            .toIntOrNull()
+    require(major != null && major in 1..ApiMajor.MAXIMUM) {
+        "addon guest API module ${bundle.identity.module} version must begin with a supported API major"
+    }
+    return ResolvedModule(
+        ModuleId.parse(bundle.identity.module),
+        ApiMajor(major),
+        bundle.identity.version,
+        ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+            .of(bundle.identity.contentHash.toByteArray()),
+    )
 }
 
-private val OPTIONAL_PLATFORM_MODULES = setOf("create:kinetics")
+private fun platformModules(platform: PlatformBundle): List<TrustedBundleIdentity> =
+    PlatformCatalog.of(platform).entries.map { entry ->
+        TrustedBundleIdentity.of(entry.identity.id.value, entry.identity.contentHash)
+    }

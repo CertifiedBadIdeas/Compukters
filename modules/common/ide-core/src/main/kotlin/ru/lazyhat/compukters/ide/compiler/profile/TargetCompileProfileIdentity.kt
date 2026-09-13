@@ -36,6 +36,12 @@ data class TargetCompileProfileIdentity(
                 digest.field(module.version)
                 digest.field(module.contentHash.toByteArray())
             }
+            digest.int(profile.addonBundles.size)
+            profile.addonBundles.forEach { bundle ->
+                digest.field(bundle.identity.name)
+                digest.field(bundle.identity.hash.toByteArray())
+                digest.field(bundle.content.toByteArray())
+            }
             val limits = profile.limits
             digest.int(limits.sourceFiles)
             digest.int(limits.sourceFileBytes)
@@ -50,7 +56,7 @@ data class TargetCompileProfileIdentity(
             return TargetCompileProfileIdentity(Hash256.of(digest.digest()))
         }
 
-        private val DOMAIN = "Compukters target compile profile v2\u0000".encodeToByteArray()
+        private val DOMAIN = "Compukters target compile profile v3\u0000".encodeToByteArray()
     }
 }
 

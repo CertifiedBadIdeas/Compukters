@@ -49,14 +49,21 @@ class IdeCompletionPlanner(
             val origin = proposal.origin
             val requirement =
                 if (origin is DeclarationOrigin.Platform) {
-                    val entry =
-                        catalog.entries.singleOrNull { candidate ->
-                            candidate.identity.id.value == origin.identity.name && candidate.identity.contentHash == origin.identity.hash
+                    val identity =
+                        if (target == null) {
+                            catalog.entries
+                                .singleOrNull { candidate ->
+                                    candidate.identity.id.value == origin.identity.name &&
+                                        candidate.identity.contentHash == origin.identity.hash
+                                }?.identity
+                        } else {
+                            target.modules.singleOrNull { candidate ->
+                                candidate.id.value == origin.identity.name && candidate.contentHash == origin.identity.hash
+                            }
                         } ?: return@mapNotNull null
-                    if (target != null && entry.identity !in target.modules) return@mapNotNull null
-                    when (manifest.modules[entry.identity.id]) {
-                        null -> IdeCompletionModuleRequirement(entry.identity.id, entry.identity.major)
-                        entry.identity.major -> null
+                    when (manifest.modules[identity.id]) {
+                        null -> IdeCompletionModuleRequirement(identity.id, identity.major)
+                        identity.major -> null
                         else -> return@mapNotNull null
                     }
                 } else {

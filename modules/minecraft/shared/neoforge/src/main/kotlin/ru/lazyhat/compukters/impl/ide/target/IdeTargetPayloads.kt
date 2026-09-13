@@ -17,8 +17,11 @@ import net.minecraft.network.codec.StreamCodec
 import net.minecraft.network.codec.StreamDecoder
 import net.minecraft.network.codec.StreamEncoder
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload
+import ru.lazyhat.compukters.addon.api.AddonGuestApiLimits
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
@@ -613,6 +616,13 @@ private fun RegistryFriendlyByteBuf.writeProfile(profile: TargetCompileProfile) 
         writeUtf(module.version, 128)
         writeHash(module.contentHash)
     }
+    require(profile.addonBundles.size <= AddonGuestApiLimits.MAXIMUM_BUNDLES) { "target profile has too many addon bundles" }
+    writeVarInt(profile.addonBundles.size)
+    profile.addonBundles.forEach { bundle ->
+        writeUtf(bundle.identity.name, 129)
+        writeHash(bundle.identity.hash)
+        writeBounded(bundle.content, AddonGuestApiLimits.MAXIMUM_BUNDLE_BYTES, "addon guest API bundle")
+    }
     writeLimits(profile.limits)
 }
 
@@ -629,7 +639,19 @@ private fun RegistryFriendlyByteBuf.readProfile(): TargetCompileProfile {
                 readHash(),
             )
         }
-    return TargetCompileProfile(toolchain, modules, readLimits())
+    val addonCount = readVarInt()
+    require(addonCount in 0..AddonGuestApiLimits.MAXIMUM_BUNDLES) { "target profile has too many addon bundles" }
+    var addonBytes = 0L
+    val addonBundles =
+        List(addonCount) {
+            val name = readUtf(129)
+            val hash = readHash()
+            val content = readBounded(AddonGuestApiLimits.MAXIMUM_BUNDLE_BYTES, "addon guest API bundle")
+            addonBytes = Math.addExact(addonBytes, content.size.toLong())
+            require(addonBytes <= AddonGuestApiLimits.MAXIMUM_CATALOG_BYTES) { "target addon bundle catalog exceeds byte limit" }
+            TrustedBundlePayload(TrustedBundleIdentity.of(name, hash), content)
+        }
+    return TargetCompileProfile(toolchain, modules, readLimits(), addonBundles)
 }
 
 private fun RegistryFriendlyByteBuf.writeToolchain(toolchain: ToolchainLockIdentity) {

@@ -26,3 +26,7 @@ plugins {
 architectury {
     common("neoforge")
 }
+
+dependencies {
+    implementation(projects.addonGuestApi)
+}

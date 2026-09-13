@@ -142,14 +142,16 @@ class K2CompilerAdapterTest {
     @Test
     fun `admitted addon metadata type checks and lowers while guest spoof is rejected`() {
         val packaged = K2CompilerAdapter.loadPackagedPlatform()
-        val createModule = packaged.modules.single { it.id.toString() == "create:kinetics" }
-        val addon = createBundle(createModule)
-        val base = packaged.copy(modules = packaged.modules.filterNot { it.id == createModule.id })
+        val addon =
+            AddonGuestApiBundleCodec.decode(
+                Files.readAllBytes(Path.of(checkNotNull(System.getProperty("compukters.createKineticsGuestApi")))),
+            )
+        val createModule = addon.moduleDescriptor
 
-        withAdapter(base) { adapter, _ ->
+        withAdapter(packaged) { adapter, _ ->
             val selected =
                 createModule.dependencies.map { dependency ->
-                    val module = base.modules.single { it.id == dependency }
+                    val module = packaged.modules.single { it.id == dependency }
                     TrustedBundleIdentity.of(
                         module.id.toString(),
                         Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()),
@@ -316,57 +318,6 @@ class K2CompilerAdapterTest {
             platformModules,
             addonBundles,
         )
-
-    private fun createBundle(module: ru.lazyhat.compukters.platform.bundle.PlatformModule): AddonGuestApiBundle {
-        val capability = AddonCapabilityIdentity("create", "kinetics", 1, 0)
-        val operations =
-            listOf(
-                "fun(Int):Int" to AddonCapabilityValueType.I32,
-                "fun(Int):Float" to AddonCapabilityValueType.F32,
-                "fun(Int):Float" to AddonCapabilityValueType.F32,
-                "fun(Int):Int" to AddonCapabilityValueType.I32,
-                "fun(Int):Float" to AddonCapabilityValueType.F32,
-                "fun(Int):Float" to AddonCapabilityValueType.F32,
-                "fun(Int):Unit" to AddonCapabilityValueType.UNIT,
-                "fun(Int):Int" to AddonCapabilityValueType.I32,
-                "fun(Int):Int" to AddonCapabilityValueType.I32,
-                "fun(Int,Int):Int" to AddonCapabilityValueType.I32,
-            )
-        val names =
-            listOf(
-                "acquireSpeedometer",
-                "speed",
-                "awaitSpeedChange",
-                "acquireStressometer",
-                "stress",
-                "capacity",
-                "awaitStressChange",
-                "acquireRotationController",
-                "targetSpeed",
-                "setTargetSpeed",
-            )
-        val schema =
-            AddonCapabilitySchema(
-                capability,
-                operations.map { (signature, result) ->
-                    val arguments =
-                        signature.substringAfter('(').substringBefore(')').split(',').filter(String::isNotEmpty).map {
-                            AddonCapabilityValueType.I32
-                        }
-                    AddonCapabilityOperation(arguments, result, asynchronous = true)
-                },
-            )
-        return AddonGuestApiBundleCodec.assemble(
-            "create",
-            PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
-            module,
-            listOf(schema),
-            names.mapIndexed { index, name ->
-                AddonGuestApiBinding("create.kinetics", "KineticsBindings", name, operations[index].first, capability, index)
-            },
-            includeSources = false,
-        )
-    }
 
     private fun source(
         path: String,

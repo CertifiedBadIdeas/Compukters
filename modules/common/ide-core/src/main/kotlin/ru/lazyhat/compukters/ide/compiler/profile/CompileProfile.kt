@@ -18,7 +18,9 @@
 
 package ru.lazyhat.compukters.ide.compiler.profile
 
+import ru.lazyhat.compukters.addon.api.AddonGuestApiLimits
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
@@ -33,9 +35,11 @@ class CompileProfile(
     directModules: Set<ModuleId>,
     modules: List<ResolvedPlatformModule>,
     val limits: WorkerLimits,
+    addonBundles: List<TrustedBundlePayload> = emptyList(),
 ) {
     val directModules: Set<ModuleId> = Collections.unmodifiableSet(directModules.toSet())
     val modules: List<ResolvedPlatformModule> = Collections.unmodifiableList(modules.toList())
+    val addonBundles: List<TrustedBundlePayload> = Collections.unmodifiableList(addonBundles.toList())
 
     init {
         require(toolchain.languageVersion == platform.languageVersion) { "compile profile language version does not match platform" }
@@ -47,6 +51,18 @@ class CompileProfile(
         require(this.directModules == this.modules.filter(ResolvedPlatformModule::direct).mapTo(mutableSetOf()) { it.identity.id }) {
             "compile profile direct module set does not match resolved modules"
         }
+        require(
+            this.addonBundles
+                .map { it.identity.name }
+                .toSet()
+                .size == this.addonBundles.size,
+        ) {
+            "compile profile addon bundle names must be unique"
+        }
+        val selected = this.modules.associateBy { it.identity.id.value }
+        require(this.addonBundles.all { bundle -> selected[bundle.identity.name]?.identity?.contentHash == bundle.identity.hash }) {
+            "compile profile addon bundles must exactly match selected modules"
+        }
     }
 }
 
@@ -54,6 +70,7 @@ class TargetCompileProfile(
     val toolchain: ToolchainLockIdentity,
     modules: List<ResolvedModule>,
     val limits: WorkerLimits,
+    addonBundles: List<TrustedBundlePayload> = emptyList(),
 ) {
     val modules: List<ResolvedModule> =
         Collections.unmodifiableList(
@@ -64,15 +81,35 @@ class TargetCompileProfile(
                 compareValuesBy(left.id, right.id, ModuleId::provider, ModuleId::module)
             },
         )
+    val addonBundles: List<TrustedBundlePayload> =
+        Collections.unmodifiableList(addonBundles.sortedBy { it.identity.name })
 
     init {
         require(this.modules.zipWithNext().none { (left, right) -> left.id == right.id }) { "target module IDs must be unique" }
+        require(this.addonBundles.zipWithNext().none { (left, right) -> left.identity.name == right.identity.name }) {
+            "target addon bundle names must be unique"
+        }
+        require(this.addonBundles.size <= AddonGuestApiLimits.MAXIMUM_BUNDLES) { "target has too many addon bundles" }
+        require(this.addonBundles.all { it.content.size <= AddonGuestApiLimits.MAXIMUM_BUNDLE_BYTES }) {
+            "target addon bundle exceeds byte limit"
+        }
+        require(this.addonBundles.sumOf { it.content.size.toLong() } <= AddonGuestApiLimits.MAXIMUM_CATALOG_BYTES) {
+            "target addon bundle catalog exceeds byte limit"
+        }
+        val advertised = this.modules.associateBy { it.id.value }
+        require(this.addonBundles.all { bundle -> advertised[bundle.identity.name]?.contentHash == bundle.identity.hash }) {
+            "target addon bundles must exactly match advertised modules"
+        }
     }
 
     override fun equals(other: Any?): Boolean =
-        other is TargetCompileProfile && toolchain == other.toolchain && modules == other.modules && limits == other.limits
+        other is TargetCompileProfile &&
+            toolchain == other.toolchain &&
+            modules == other.modules &&
+            limits == other.limits &&
+            addonBundles == other.addonBundles
 
-    override fun hashCode(): Int = 31 * (31 * toolchain.hashCode() + modules.hashCode()) + limits.hashCode()
+    override fun hashCode(): Int = listOf(toolchain, modules, limits, addonBundles).hashCode()
 }
 
 sealed interface ProfileResolution {

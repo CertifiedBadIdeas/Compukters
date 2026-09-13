@@ -31,7 +31,7 @@ class CompileProfileResolver(
 ) {
     fun resolveLocal(lock: ProjectLock): ProfileResolution {
         if (lock.toolchain != localToolchain) return ProfileResolution.Failure.ToolchainMismatch(lock.toolchain, localToolchain)
-        return resolveBundles(lock, requiredLimits)
+        return resolveBundles(lock, requiredLimits, catalog)
     }
 
     fun resolveTarget(
@@ -42,27 +42,30 @@ class CompileProfileResolver(
         compareModules(lock.modules.map { it.identity }, target.modules)?.let { return it }
         compareLimits(requiredLimits, target.limits)?.let { return it }
         if (lock.toolchain != localToolchain) return ProfileResolution.Failure.ToolchainMismatch(lock.toolchain, localToolchain)
-        return resolveBundles(lock, target.limits)
+        val targetCatalog = PlatformCatalog.forTarget(catalog.bundle, target.modules, target.addonBundles)
+        return resolveBundles(lock, target.limits, targetCatalog)
     }
 
     private fun resolveBundles(
         lock: ProjectLock,
         limits: WorkerLimits,
+        availableCatalog: PlatformCatalog,
     ): ProfileResolution {
         val resolved =
             lock.modules.map { locked ->
                 val expected = locked.identity
-                val available = catalog.find(expected.id) ?: return ProfileResolution.Failure.MissingModule(expected.id)
+                val available = availableCatalog.find(expected.id) ?: return ProfileResolution.Failure.MissingModule(expected.id)
                 compareModule(expected, available.identity)?.let { return it }
                 ResolvedPlatformModule(expected, available.descriptor, locked.direct)
             }
         return ProfileResolution.Resolved(
             CompileProfile(
                 lock.toolchain,
-                catalog.bundle.identity,
+                availableCatalog.bundle.identity,
                 lock.modules.filter(LockedModule::direct).mapTo(mutableSetOf()) { it.identity.id },
                 resolved,
                 limits,
+                availableCatalog.addonBundlesFor(resolved.mapTo(mutableSetOf()) { it.identity.id }),
             ),
         )
     }

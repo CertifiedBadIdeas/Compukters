@@ -47,6 +47,10 @@ val guestPlatformSources = configurations.create("guestPlatformSources") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
+val createKineticsGuestApiBundle = configurations.create("createKineticsGuestApiBundle") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
 
 dependencies {
     add(
@@ -56,6 +60,10 @@ dependencies {
     add(guestPlatformSources.name, project(path = ":guest-platform")) {
         isTransitive = false
     }
+    add(
+        createKineticsGuestApiBundle.name,
+        project(path = ":guest-platform", configuration = "createKineticsGuestApiBundle"),
+    )
 }
 
 tasks.processResources {
@@ -280,8 +288,10 @@ tasks.test {
     dependsOn(tasks.jar)
     filter.excludeTestsMatching("ru.lazyhat.compukters.compiler.worker.integration.*")
     inputs.file(workerJar)
+    inputs.files(createKineticsGuestApiBundle)
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukters.createKineticsGuestApi", createKineticsGuestApiBundle.singleFile.absolutePath)
     }
 }
 
@@ -474,9 +484,11 @@ val generateCreateKineticsConformanceArtifact = tasks.register<Test>("generateCr
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("*Create kinetics program lowers deterministically for GameTest conformance*")
     inputs.file(workerJar)
+    inputs.files(createKineticsGuestApiBundle)
     outputs.file(createKineticsConformanceArtifact)
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukters.createKineticsGuestApi", createKineticsGuestApiBundle.singleFile.absolutePath)
         systemProperty("compukter.vm.createKineticsArtifact", createKineticsConformanceArtifact.get().asFile.absolutePath)
     }
 }

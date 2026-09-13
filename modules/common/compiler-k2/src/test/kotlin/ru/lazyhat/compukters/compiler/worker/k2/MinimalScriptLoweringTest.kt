@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.compiler.worker.k2
 
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
@@ -55,6 +56,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
 import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
@@ -444,8 +446,8 @@ class MinimalScriptLoweringTest {
                     println(controller.setTargetSpeed(32))
                 }
                 """.trimIndent()
-            val first = adapter.compile(request(source))
-            val second = adapter.compile(request(source))
+            val first = adapter.compile(request(source, includeCreateAddon = true))
+            val second = adapter.compile(request(source, includeCreateAddon = true))
             val bytes = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
             val artifact = ArtifactReader.read(bytes)
             val opcodes = allOpcodes(bytes)
@@ -491,8 +493,8 @@ class MinimalScriptLoweringTest {
                     println("unexpected-rebind")
                 }
                 """.trimIndent()
-            val first = adapter.compile(request(source))
-            val second = adapter.compile(request(source))
+            val first = adapter.compile(request(source, includeCreateAddon = true))
+            val second = adapter.compile(request(source, includeCreateAddon = true))
             val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
 
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
@@ -2034,15 +2036,27 @@ class MinimalScriptLoweringTest {
     private fun request(
         source: String,
         limits: WorkerLimits = WorkerLimits(),
-    ): CompileRequest = request(listOf("project/main.kt" to source), limits)
+        includeCreateAddon: Boolean = false,
+    ): CompileRequest = request(listOf("project/main.kt" to source), limits, includeCreateAddon)
 
-    private fun request(vararg sources: Pair<String, String>): CompileRequest = request(sources.toList(), WorkerLimits())
+    private fun request(vararg sources: Pair<String, String>): CompileRequest = request(sources.toList(), WorkerLimits(), false)
 
     private fun request(
         sources: List<Pair<String, String>>,
         limits: WorkerLimits,
-    ): CompileRequest =
-        CompileRequest(
+        includeCreateAddon: Boolean = false,
+    ): CompileRequest {
+        val addon =
+            if (includeCreateAddon) {
+                AddonGuestApiBundleCodec.decode(
+                    java.nio.file.Files
+                        .readAllBytes(Path.of(checkNotNull(System.getProperty("compukters.createKineticsGuestApi")))),
+                )
+            } else {
+                null
+            }
+        val addonIdentity = addon?.let { TrustedBundleIdentity.of(it.identity.module, Hash256.of(it.identity.contentHash.toByteArray())) }
+        return CompileRequest(
             RequestId.of(1u),
             sources.map { (path, source) ->
                 ProjectSource(VirtualSourcePath.kotlin(path), BinaryValue.of(source.encodeToByteArray()))
@@ -2059,8 +2073,17 @@ class MinimalScriptLoweringTest {
                             .toByteArray(),
                     ),
                 )
-            },
+            } + listOfNotNull(addonIdentity),
+            addon?.let { bundle ->
+                listOf(
+                    TrustedBundlePayload(
+                        requireNotNull(addonIdentity),
+                        BinaryValue.of(AddonGuestApiBundleCodec.encode(bundle)),
+                    ),
+                )
+            } ?: emptyList(),
         )
+    }
 
     private fun identity() =
         WorkerIdentity(

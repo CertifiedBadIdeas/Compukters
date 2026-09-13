@@ -185,6 +185,7 @@ val verifyToolingRuntimeLicenses =
                     .sorted()
             val projectPrefixes =
                 listOf(
+                    "addon-guest-api-",
                     "compiler-artifact-",
                     "compiler-client-",
                     "compiler-k2-",

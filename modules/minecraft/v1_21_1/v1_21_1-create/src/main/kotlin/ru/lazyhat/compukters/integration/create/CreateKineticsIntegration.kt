@@ -25,6 +25,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.block.entity.BlockEntity
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonCompletion
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonDispatch
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonHost
@@ -44,7 +45,7 @@ object CreateKineticsIntegration {
     fun register() {
         ComputerAddonHosts.register(
             factory = { level, position, _ -> CreateKineticsHost.create(level, position) },
-            platformModules = setOf(CREATE_KINETICS_MODULE),
+            guestApiBundles = listOf(CREATE_KINETICS_GUEST_API),
         )
     }
 }
@@ -397,6 +398,13 @@ private fun operation(
 ) = HostOperationSchema(arguments, result, asynchronous = true)
 
 private const val CREATE_KINETICS_MODULE = "create:kinetics"
+private val CREATE_KINETICS_GUEST_API =
+    AddonGuestApiBundleCodec
+        .decode(
+            checkNotNull(CreateKineticsIntegration::class.java.getResourceAsStream("/META-INF/compukters/addons/create-kinetics.cagb")) {
+                "packaged Create kinetics Guest API bundle is missing"
+            }.use { it.readBytes() },
+        ).also { bundle -> require(bundle.identity.module == CREATE_KINETICS_MODULE) }
 private const val MAXIMUM_HANDLES = 64
 private const val MAXIMUM_PENDING_WAITS = 64
 private const val FAILURE_WRONG_CAPABILITY = 1L

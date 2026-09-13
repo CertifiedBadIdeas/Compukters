@@ -170,13 +170,15 @@ class CanonicalPlatformSourceTest {
     }
 
     @Test
-    fun `source archive contains the exact canonical tree without classes`() {
+    fun `base source archive excludes addon sources and contains no classes`() {
         val archive = Path.of(checkNotNull(System.getProperty("compukters.platform.source-archive")))
         val expected =
             Files.walk(root).use { paths ->
                 paths
                     .filter(Files::isRegularFile)
-                    .map { "compukters-platform/sources/${root.relativize(it).invariantSeparatorsPathString}" }
+                    .map { root.relativize(it).invariantSeparatorsPathString }
+                    .filter { !it.startsWith("libraries/create-kinetics/") }
+                    .map { "compukters-platform/sources/$it" }
                     .toList()
                     .toSet()
             }

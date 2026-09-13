@@ -69,6 +69,7 @@ class IdeBuildServices(
     val profileResolver: CompileProfileResolver,
     val lockServices: ProjectLockServiceFactory,
     val compilation: ClientCompilationService,
+    val targetResolution: (TargetCompileProfile) -> ProjectResolution = { localResolution },
 )
 
 class IdeBuildJob internal constructor(
@@ -145,7 +146,8 @@ class IdeBuildCoordinator(
     ): CompletableFuture<ProjectDependencyUpdate> =
         submit(
             action = {
-                ProjectDependencyService(project, services.localResolution).enableModule(id, major) { proposed ->
+                val resolution = target?.let(services.targetResolution) ?: services.localResolution
+                ProjectDependencyService(project, resolution).enableModule(id, major) { proposed ->
                     val admitted = target?.let { services.profileResolver.resolveTarget(proposed, it) }
                     if (admitted == null || admitted is ProfileResolution.Resolved) {
                         null
@@ -192,7 +194,7 @@ class IdeBuildCoordinator(
     ): IdeResolveResult =
         try {
             val manifest = ProjectManifestCodec.decode(decodeStrict(input.manifestBytes))
-            val resolution = services.localResolution
+            val resolution = target?.let(services.targetResolution) ?: services.localResolution
             val lockService = services.lockServices.create(input.project)
             val proposed = lockService.resolve(manifest, resolution)
             if (target != null) {
@@ -289,7 +291,7 @@ class IdeBuildCoordinator(
             }
         val resolution =
             try {
-                services.localResolution
+                target?.let(services.targetResolution) ?: services.localResolution
             } catch (failure: Throwable) {
                 throw BuildPreparationFailure(IdeBuildFailureKind.UnsatisfiedProfile, "local Guest API profile is unsatisfied", failure)
             }

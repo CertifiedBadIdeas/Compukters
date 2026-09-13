@@ -71,6 +71,8 @@ configurations.named("modGameTestImplementation") {
 }
 
 dependencies {
+    implementation(projects.addonGuestApi)
+    shadowBundle(project(path = projects.addonGuestApi.path)) { isTransitive = false }
     common(project(path = projects.v1211Common.path)) { isTransitive = false }
     shadowBundle(project(path = projects.v1211Common.path, configuration = "transformProductionNeoForge"))
     common(project(path = projects.v1211Create.path)) { isTransitive = false }
@@ -138,6 +140,7 @@ val verifyProductionJar =
                 "system/programs/vmbench",
                 "tooling/workers/k2-tooling-workers.bundle",
                 "tooling/workers/k2-tooling-workers.zip.xz",
+                "META-INF/compukters/addons/create-kinetics.cagb",
                 "assets/compukters/blockstates/compukter.json",
                 "assets/compukters/models/block/compukter.json",
                 "assets/compukters/models/item/compukter.json",
@@ -158,6 +161,9 @@ val verifyProductionJar =
             }
             check(entries.none { it.startsWith("com/simibubi/create/") }) {
                 "Create implementation classes leaked into ${archive.name}"
+            }
+            check(entries.none { it.startsWith("ru/lazyhat/compukters/addon/api/build/") }) {
+                "addon Guest API build tooling leaked into ${archive.name}"
             }
             check(
                 entries.none { entry ->

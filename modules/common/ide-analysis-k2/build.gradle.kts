@@ -322,6 +322,10 @@ tasks.test {
             "compukters.test.platformBundle",
             project(":guest-platform").layout.buildDirectory.file("platform/compukters-platform.cpb").get().asFile.absolutePath,
         )
+        systemProperty(
+            "compukters.test.createKineticsGuestApi",
+            project(":guest-platform").layout.buildDirectory.file("platform/create-kinetics.cagb").get().asFile.absolutePath,
+        )
     }
     filter.excludeTestsMatching("ru.lazyhat.compukters.ide.analysis.k2.integration.*")
 }
@@ -353,6 +357,10 @@ val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
         systemProperty(
             "compukters.test.guestApi",
             project(":guest-platform").tasks.named<Jar>("jar").get().archiveFile.get().asFile.absolutePath,
+        )
+        systemProperty(
+            "compukters.test.createKineticsGuestApi",
+            project(":guest-platform").layout.buildDirectory.file("platform/create-kinetics.cagb").get().asFile.absolutePath,
         )
     }
 }
@@ -388,6 +396,10 @@ val incrementalAnalysisPerformanceTest = tasks.register<Test>("incrementalAnalys
         systemProperty(
             "compukters.test.guestApi",
             project(":guest-platform").tasks.named<Jar>("jar").get().archiveFile.get().asFile.absolutePath,
+        )
+        systemProperty(
+            "compukters.test.createKineticsGuestApi",
+            project(":guest-platform").layout.buildDirectory.file("platform/create-kinetics.cagb").get().asFile.absolutePath,
         )
     }
 }

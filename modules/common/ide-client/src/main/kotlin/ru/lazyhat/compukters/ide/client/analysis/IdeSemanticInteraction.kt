@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.ide.client.analysis
 
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
@@ -137,14 +139,40 @@ sealed interface IdeSemanticInteraction {
 
 class IdeAttachedSourceCatalog private constructor(
     private val sources: Map<AnalysisModuleIdentity, Map<VirtualSourcePath, String>>,
+    private val maximumModules: Int,
+    private val maximumFiles: Int,
+    private val maximumFileBytes: Int,
+    private val maximumTotalBytes: Int,
 ) {
     fun text(
         module: AnalysisModuleIdentity,
         path: VirtualSourcePath,
     ): String? = sources[module]?.get(path)
 
+    fun withAddonBundles(bundles: List<TrustedBundlePayload>): IdeAttachedSourceCatalog {
+        val additions =
+            bundles.associate { payload ->
+                val bundle = AddonGuestApiBundleCodec.decode(payload.content.toByteArray())
+                require(bundle.identity.module == payload.identity.name) { "addon attached source module identity mismatch" }
+                require(
+                    bundle.identity.contentHash
+                        .toByteArray()
+                        .contentEquals(payload.identity.hash.toByteArray()),
+                ) {
+                    "addon attached source content hash mismatch"
+                }
+                AnalysisModuleIdentity(payload.identity.name, payload.identity.hash) to
+                    bundle.moduleDescriptor.sources.associate { source ->
+                        VirtualSourcePath.kotlin(source.path) to
+                            source.content.toByteArray().decodeToString(throwOnInvalidSequence = true)
+                    }
+            }
+        require(additions.keys.none(sources::containsKey)) { "addon attached sources shadow a packaged module" }
+        return of(sources + additions, maximumModules, maximumFiles, maximumFileBytes, maximumTotalBytes)
+    }
+
     companion object {
-        fun empty(): IdeAttachedSourceCatalog = IdeAttachedSourceCatalog(emptyMap())
+        fun empty(): IdeAttachedSourceCatalog = IdeAttachedSourceCatalog(emptyMap(), 0, 0, 0, 0)
 
         fun of(
             sources: Map<AnalysisModuleIdentity, Map<VirtualSourcePath, String>>,
@@ -175,7 +203,13 @@ class IdeAttachedSourceCatalog private constructor(
                 }
                 admitted[module] = Collections.unmodifiableMap(copied)
             }
-            return IdeAttachedSourceCatalog(Collections.unmodifiableMap(admitted))
+            return IdeAttachedSourceCatalog(
+                Collections.unmodifiableMap(admitted),
+                maximumModules,
+                maximumFiles,
+                maximumFileBytes,
+                maximumTotalBytes,
+            )
         }
     }
 }

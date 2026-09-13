@@ -137,7 +137,10 @@ Its close future reports the final filesystem generation after accepted work dra
 barrier does not depend on server result pumping and may complete on a worker thread.
 
 Third-party world capabilities use the same continuation boundary. Loader integrations register bounded
-`ProgramAddonHost` factories and matching platform-module identities. The actor transfers immutable typed requests to
+`ProgramAddonHost` factories together with deterministic `AddonGuestApiBundle` values. Each bundle contains one
+versioned Kotlin platform module, its exact external-call bindings, the matching typed capability schema, and optional
+sources; it contains no executable addon JVM classes. Registration rejects duplicate addon/module identities, and a
+created host must expose the exact registered capability schema. The actor transfers immutable typed requests to
 the server thread, where the host may complete immediately or retain a bounded wait; completions resume the exact VM
 task on a later turn. The Minecraft 1.21.1 Create adapter lives in the separate `v1_21_1-create` leaf so shared and
 26.1 code have no direct Create dependency. It resolves only the six adjacent loaded positions and binds handles to
@@ -307,11 +310,13 @@ their existing resource counters once, and wakes them with an ordinary Text even
 `/rom/vmbench` workload to at most 1000 loaded physical computers in a bounded area. The harness owns no persistent
 computer identity, never loads chunks, and does not provide a guest-visible fleet protocol.
 
-Terminal, standard output and error, redstone, sound, process, filesystem, compiler, and optional integration
-declarations live in the
-`guest-platform` bundle as separately identifiable modules. Compilation and IDE analysis resolve the same module graph
-and consume the same target-filtered Kotlin API surface. General stream handles, pipes, process redirection, and
-externally supplied addon bundles remain later layers.
+Terminal, standard output and error, redstone, sound, process, filesystem, and compiler declarations live in the base
+`guest-platform` bundle as separately identifiable modules. Optional integrations publish bounded addon Guest API
+bundles instead. The server admits those bundles, includes their content hashes in the target and compilation-cache
+identity, and sends their metadata and optional sources to the attached IDE. Compiler and analysis workers decode only
+this data format: they never load or execute addon code. Exact admitted bindings extend intrinsic lowering, while a
+same-named Guest declaration remains ordinary Guest code. General stream handles, pipes, and process redirection remain
+later layers.
 
 ## Module ownership
 

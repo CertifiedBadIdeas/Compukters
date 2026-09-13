@@ -28,6 +28,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   an attached Create block is missing, unloaded, removed, or replaced.
 - Made the IDE and compiler advertise `create:kinetics` only when the attached server has the compatible integration
   loaded; Compukters remains usable without Create installed.
+- Moved `create:kinetics` into a server-admitted addon Guest API bundle, including its Kotlin metadata and sources, so
+  compiler and IDE workers no longer need the integration in the base platform or execute addon code.
 
 ## 0.4.0 — 2026-09-12
 
