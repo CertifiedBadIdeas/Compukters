@@ -986,6 +986,57 @@ class ArtifactValidatorTest {
     }
 
     @Test
+    fun `f32 string conversion requires runtime ABI 1 4`() {
+        val source =
+            executableArtifact(
+                Instruction.StringValueOf(
+                    StringValueType.F32,
+                    RegisterId.of(3u),
+                    RegisterId.of(0u),
+                ),
+            )
+        val module = source.modules.first()
+        val functionType = module.types.first() as NominalType.Function
+        val function = module.functions.first()
+        val artifact =
+            exactRoots(
+                source.copy(
+                    minimumRuntimeAbi = AbiVersion(1u, 4u),
+                    modules =
+                        listOf(
+                            module.copy(
+                                types =
+                                    module.types.toMutableList().also {
+                                        it[0] =
+                                            functionType.copy(
+                                                parameters =
+                                                    functionType.parameters.toMutableList().also { parameters ->
+                                                        parameters[0] = ValueType.F32
+                                                    },
+                                            )
+                                    },
+                                functions =
+                                    module.functions.toMutableList().also {
+                                        it[0] =
+                                            function.copy(
+                                                values =
+                                                    function.values.toMutableList().also { values ->
+                                                        values[0] = FunctionValue.scalar(ValueType.F32)
+                                                    },
+                                            )
+                                    },
+                            ),
+                            source.modules[1],
+                        ),
+                ),
+            )
+
+        assertEquals(emptyList(), validateArtifact(artifact, ArtifactWriteLimits()))
+        val oldAbiErrors = validateArtifact(artifact.copy(minimumRuntimeAbi = AbiVersion(1u, 3u)), ArtifactWriteLimits())
+        assertTrue(oldAbiErrors.any { it.detail.contains("runtime ABI 1.4") }, oldAbiErrors.toString())
+    }
+
+    @Test
     fun `string concat requires the unique canonical standard library string export`() {
         val artifact = executableArtifact(Instruction.StringConcat(RegisterId.of(3u), RegisterId.of(1u), RegisterId.of(2u)))
         val invalid =

@@ -691,6 +691,7 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                         when (form) {
                             1u -> StringValueType.I32
                             2u -> StringValueType.I64
+                            3u -> StringValueType.F32
                             5u -> StringValueType.BOOL
                             6u -> StringValueType.CHAR
                             else -> error("unsupported string conversion form $form")

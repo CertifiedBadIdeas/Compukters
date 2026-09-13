@@ -155,6 +155,7 @@ enum class StringValueType(
 ) {
     I32(1u, ValueType.I32),
     I64(2u, ValueType.I64),
+    F32(3u, ValueType.F32),
     BOOL(5u, ValueType.Bool),
     CHAR(6u, ValueType.Char),
 }

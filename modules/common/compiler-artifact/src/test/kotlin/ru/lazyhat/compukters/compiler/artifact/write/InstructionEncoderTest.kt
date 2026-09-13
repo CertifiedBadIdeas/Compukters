@@ -343,6 +343,7 @@ class InstructionEncoderTest {
         listOf(
             StringValueType.I32 to 1,
             StringValueType.I64 to 2,
+            StringValueType.F32 to 3,
             StringValueType.BOOL to 5,
             StringValueType.CHAR to 6,
         ).forEach { (type, form) ->

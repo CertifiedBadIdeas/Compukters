@@ -213,7 +213,17 @@ private fun minimumRuntimeAbi(
     modules.asSequence().flatMap { module -> module.blocks.asSequence() }.flatMap { block -> block.instructions.asSequence() }.forEach {
         when (it) {
             is Instruction.StringValueOf -> {
-                if (it.type == StringValueType.I64) required = maxOf(required, AbiVersion(1u, 3u))
+                when (it.type) {
+                    StringValueType.F32 -> {
+                        required = maxOf(required, AbiVersion(1u, 4u))
+                    }
+
+                    StringValueType.I64 -> {
+                        required = maxOf(required, AbiVersion(1u, 3u))
+                    }
+
+                    else -> {}
+                }
             }
 
             is Instruction.ChannelCreate,

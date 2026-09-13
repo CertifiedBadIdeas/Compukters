@@ -466,6 +466,12 @@ internal fun validateArtifact(
                 block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.I64 }
             }
         }
+    val usesF32StringConversion =
+        artifact.modules.any { module ->
+            module.blocks.any { block ->
+                block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F32 }
+            }
+        }
     if (usesTasks && artifact.minimumRuntimeAbi < AbiVersion(1u, 1u)) {
         add(
             ArtifactWriteErrorCode.INVALID_RANGE,
@@ -482,6 +488,12 @@ internal fun validateArtifact(
         add(
             ArtifactWriteErrorCode.INVALID_RANGE,
             "I64 string conversion requires minimum runtime ABI 1.3",
+        )
+    }
+    if (usesF32StringConversion && artifact.minimumRuntimeAbi < AbiVersion(1u, 4u)) {
+        add(
+            ArtifactWriteErrorCode.INVALID_RANGE,
+            "F32 string conversion requires minimum runtime ABI 1.4",
         )
     }
     if (usesChannels && (artifact.manifest.maximumChannels == 0u || artifact.manifest.maximumChannelValues == 0u)) {
