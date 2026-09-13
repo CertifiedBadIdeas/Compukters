@@ -61,6 +61,8 @@ internal class FfmBridge private constructor(
     private val compilationRequestCopyHandle: MethodHandle,
     private val compilationCompleteHandle: MethodHandle,
     private val resumeUnitHandle: MethodHandle,
+    private val resumeIntHandle: MethodHandle,
+    private val resumeFloatBitsHandle: MethodHandle,
     private val resumeBoolHandle: MethodHandle,
     private val resumeStringHandle: MethodHandle,
     private val resumeFailureHandle: MethodHandle,
@@ -499,6 +501,20 @@ internal class FfmBridge private constructor(
         requestId: Long,
     ) = requireSuccess("resume unit", resumeUnitHandle.invokeExact(handle, taskId, requestId) as Int)
 
+    override fun resumeInt(
+        handle: Long,
+        taskId: Int,
+        requestId: Long,
+        value: Int,
+    ) = requireSuccess("resume int", resumeIntHandle.invokeExact(handle, taskId, requestId, value) as Int)
+
+    override fun resumeFloatBits(
+        handle: Long,
+        taskId: Int,
+        requestId: Long,
+        bits: Int,
+    ) = requireSuccess("resume float", resumeFloatBitsHandle.invokeExact(handle, taskId, requestId, bits) as Int)
+
     override fun resumeBool(
         handle: Long,
         taskId: Int,
@@ -891,6 +907,10 @@ internal class FfmBridge private constructor(
                         downcall(FfmAbiFunction.COMPILATION_COMPLETE),
                     resumeUnitHandle =
                         downcall(FfmAbiFunction.RESUME_UNIT),
+                    resumeIntHandle =
+                        downcall(FfmAbiFunction.RESUME_I32),
+                    resumeFloatBitsHandle =
+                        downcall(FfmAbiFunction.RESUME_F32_BITS),
                     resumeBoolHandle =
                         downcall(FfmAbiFunction.RESUME_BOOL),
                     resumeStringHandle =
@@ -910,7 +930,7 @@ internal class FfmBridge private constructor(
                     terminalTextHandle =
                         downcall(FfmAbiFunction.TERMINAL_TEXT),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 12) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 13) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()

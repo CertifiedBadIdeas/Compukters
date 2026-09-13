@@ -229,6 +229,14 @@ internal enum class FfmAbiFunction(
         "compukter_resume_unit",
         status(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG),
     ),
+    RESUME_I32(
+        "compukter_resume_i32",
+        status(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT),
+    ),
+    RESUME_F32_BITS(
+        "compukter_resume_f32_bits",
+        status(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT),
+    ),
     RESUME_BOOL(
         "compukter_resume_bool",
         status(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT),

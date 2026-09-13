@@ -263,6 +263,20 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
         requestId: Long,
     ) = requireSuccess("resume unit", JniNative.resumeUnit(handle, taskId, requestId))
 
+    override fun resumeInt(
+        handle: Long,
+        taskId: Int,
+        requestId: Long,
+        value: Int,
+    ) = requireSuccess("resume int", JniNative.resumeInt(handle, taskId, requestId, value))
+
+    override fun resumeFloatBits(
+        handle: Long,
+        taskId: Int,
+        requestId: Long,
+        bits: Int,
+    ) = requireSuccess("resume float", JniNative.resumeFloatBits(handle, taskId, requestId, bits))
+
     override fun resumeBool(
         handle: Long,
         taskId: Int,
@@ -502,7 +516,7 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
 
         fun open(library: Path): JniBridge {
             System.load(library.toAbsolutePath().normalize().toString())
-            if (JniNative.abiVersion() != 12) throw VmBridgeException("unsupported Compukter JNI ABI")
+            if (JniNative.abiVersion() != 13) throw VmBridgeException("unsupported Compukter JNI ABI")
             return JniBridge()
         }
     }

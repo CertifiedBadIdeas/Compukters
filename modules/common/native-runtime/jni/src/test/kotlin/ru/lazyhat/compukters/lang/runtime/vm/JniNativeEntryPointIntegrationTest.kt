@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
 
 class JniNativeEntryPointIntegrationTest {
     @Test
-    fun `every Java 21 JNI entry point resolves against ABI v12 adapter`() {
+    fun `every Java 21 JNI entry point resolves against ABI v13 adapter`() {
         JniBridge.open(Path.of(requiredProperty("compukter.jni.library")))
         val bytes = ByteArray(0)
         val output = ByteArray(1)
@@ -34,7 +34,7 @@ class JniNativeEntryPointIntegrationTest {
         val written = LongArray(1)
         val candidate = LongArray(1)
 
-        assertEquals(12, JniNative.abiVersion())
+        assertEquals(13, JniNative.abiVersion())
         assertTrue(JniNative.maximumOutcomeBytes() > 0)
         assertTrue(JniNative.maximumCreateBytes() > 0)
         statuses(
@@ -67,6 +67,8 @@ class JniNativeEntryPointIntegrationTest {
             JniNative.compilationRequestCopy(0, 0, output, written),
             JniNative.compilationComplete(0, 0, 0, bytes),
             JniNative.resumeUnit(0, 1, 0),
+            JniNative.resumeInt(0, 1, 0, Int.MIN_VALUE),
+            JniNative.resumeFloatBits(0, 1, 0, (-0.0f).toBits()),
             JniNative.resumeBool(0, 1, 0, false),
             JniNative.resumeString(0, 1, 0, charArrayOf()),
             JniNative.resumeFailure(0, 1, 0, 0, 0),

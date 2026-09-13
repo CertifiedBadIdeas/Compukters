@@ -85,6 +85,8 @@ class VmSession private constructor(
     ) {
         when (response) {
             HostResponse.UnitSuccess -> resumeUnit(identity)
+            is HostResponse.IntSuccess -> resumeInt(identity, response.value)
+            is HostResponse.FloatSuccess -> resumeFloat(identity, response.value)
             is HostResponse.BoolSuccess -> resumeBool(identity, response.value)
             is HostResponse.StringSuccess -> resumeString(identity, response.value)
             is HostResponse.Failure -> resumeFailure(identity, response.kind, response.code)
@@ -99,6 +101,26 @@ class VmSession private constructor(
     fun resumeUnit(identity: VmHostRequestIdentity) = bridge.resumeUnit(requireHandle(), identity.taskId, identity.requestId)
 
     fun resumeUnit(requestId: Long) = resumeUnit(VmHostRequestIdentity(1, requestId))
+
+    fun resumeInt(
+        identity: VmHostRequestIdentity,
+        value: Int,
+    ) = bridge.resumeInt(requireHandle(), identity.taskId, identity.requestId, value)
+
+    fun resumeInt(
+        requestId: Long,
+        value: Int,
+    ) = resumeInt(VmHostRequestIdentity(1, requestId), value)
+
+    fun resumeFloat(
+        identity: VmHostRequestIdentity,
+        value: Float,
+    ) = bridge.resumeFloatBits(requireHandle(), identity.taskId, identity.requestId, value.toBits())
+
+    fun resumeFloat(
+        requestId: Long,
+        value: Float,
+    ) = resumeFloat(VmHostRequestIdentity(1, requestId), value)
 
     fun resumeBool(
         identity: VmHostRequestIdentity,

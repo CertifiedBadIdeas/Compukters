@@ -157,6 +157,20 @@ interface LowLevelVmBridge {
         requestId: Long,
     )
 
+    fun resumeInt(
+        handle: Long,
+        taskId: Int,
+        requestId: Long,
+        value: Int,
+    ): Unit = error("Int host responses are unavailable")
+
+    fun resumeFloatBits(
+        handle: Long,
+        taskId: Int,
+        requestId: Long,
+        bits: Int,
+    ): Unit = error("Float host responses are unavailable")
+
     fun resumeBool(
         handle: Long,
         taskId: Int,

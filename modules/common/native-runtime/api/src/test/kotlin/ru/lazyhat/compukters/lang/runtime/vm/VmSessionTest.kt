@@ -379,14 +379,25 @@ class VmSessionTest {
         val session = VmSession.open(byteArrayOf(1), bridge)
 
         session.resume(VmHostRequestIdentity(2, 7), HostResponse.UnitSuccess)
-        session.resume(VmHostRequestIdentity(3, 8), HostResponse.BoolSuccess(true))
-        session.resume(VmHostRequestIdentity(4, 9), HostResponse.StringSuccess("A\ud800B"))
-        session.resume(VmHostRequestIdentity(5, 10), HostResponse.Failure(HostFailureKind.END_OF_FILE, 17))
+        session.resume(VmHostRequestIdentity(3, 8), HostResponse.IntSuccess(Int.MIN_VALUE))
+        session.resume(VmHostRequestIdentity(4, 9), HostResponse.FloatSuccess(-0.0f))
+        session.resume(VmHostRequestIdentity(5, 10), HostResponse.FloatSuccess(Float.fromBits(0x7fa1_2345)))
+        session.resume(VmHostRequestIdentity(6, 11), HostResponse.BoolSuccess(true))
+        session.resume(VmHostRequestIdentity(7, 12), HostResponse.StringSuccess("A\ud800B"))
+        session.resume(VmHostRequestIdentity(8, 13), HostResponse.Failure(HostFailureKind.END_OF_FILE, 17))
 
         assertEquals(listOf(UnitResponse(11, 2, 7)), bridge.unitResponses)
-        assertEquals(listOf(BoolResponse(11, 3, 8, true)), bridge.boolResponses)
-        assertEquals(listOf(StringResponse(11, 4, 9, "A\ud800B".toCharArray().toList())), bridge.stringResponses)
-        assertEquals(listOf(FailureResponse(11, 5, 10, 0, 17)), bridge.failures)
+        assertEquals(listOf(IntResponse(11, 3, 8, Int.MIN_VALUE)), bridge.intResponses)
+        assertEquals(
+            listOf(
+                FloatBitsResponse(11, 4, 9, (-0.0f).toBits()),
+                FloatBitsResponse(11, 5, 10, Float.NaN.toBits()),
+            ),
+            bridge.floatResponses,
+        )
+        assertEquals(listOf(BoolResponse(11, 6, 11, true)), bridge.boolResponses)
+        assertEquals(listOf(StringResponse(11, 7, 12, "A\ud800B".toCharArray().toList())), bridge.stringResponses)
+        assertEquals(listOf(FailureResponse(11, 8, 13, 0, 17)), bridge.failures)
     }
 
     @Test
@@ -582,6 +593,8 @@ class VmSessionTest {
         val advances = mutableListOf<AdvanceCall>()
         val closed = mutableListOf<Long>()
         val unitResponses = mutableListOf<UnitResponse>()
+        val intResponses = mutableListOf<IntResponse>()
+        val floatResponses = mutableListOf<FloatBitsResponse>()
         val boolResponses = mutableListOf<BoolResponse>()
         val stringResponses = mutableListOf<StringResponse>()
         val failures = mutableListOf<FailureResponse>()
@@ -740,6 +753,24 @@ class VmSessionTest {
             stringResponses += StringResponse(handle, taskId, requestId, value.toList())
         }
 
+        override fun resumeInt(
+            handle: Long,
+            taskId: Int,
+            requestId: Long,
+            value: Int,
+        ) {
+            intResponses += IntResponse(handle, taskId, requestId, value)
+        }
+
+        override fun resumeFloatBits(
+            handle: Long,
+            taskId: Int,
+            requestId: Long,
+            bits: Int,
+        ) {
+            floatResponses += FloatBitsResponse(handle, taskId, requestId, bits)
+        }
+
         override fun resumeBool(
             handle: Long,
             taskId: Int,
@@ -817,6 +848,20 @@ class VmSessionTest {
         val handle: Long,
         val taskId: Int,
         val requestId: Long,
+    )
+
+    private data class IntResponse(
+        val handle: Long,
+        val taskId: Int,
+        val requestId: Long,
+        val value: Int,
+    )
+
+    private data class FloatBitsResponse(
+        val handle: Long,
+        val taskId: Int,
+        val requestId: Long,
+        val bits: Int,
     )
 
     private data class BoolResponse(

@@ -153,7 +153,7 @@ host counts Guest and maintenance budgets only when it actually invokes native a
 counters saturate explicitly instead of overflowing. These values describe VM work and granted capacity, not host CPU
 percentage. No sampling loop, history buffer, heap-content scan, or unsolicited FFM call runs for unobserved computers.
 
-Published Runtime 0.12.1 platform bundles use manifest schema 2 and contain the FFI and JNI native libraries for one
+Published Runtime 0.13.0 platform bundles use manifest schema 2 and contain the FFI and JNI native libraries for one
 operating-system target under a single Runtime, VM commit, and C ABI identity. Bundle validation covers both transport
 entries before staging; the Java 25 runtime module packages only FFI, while the Java 21 runtime module packages only
 JNI. The two Minecraft release artifacts therefore share one pinned native release without carrying an unusable
@@ -238,7 +238,7 @@ close. Initial store opening happens during server startup rather than an ordina
 native world-store handle are serialized by a fair lock across VM actors and persistence work, while ordinary VM
 execution stays on actor workers.
 
-The versioned C ABI v12 exposes opaque world-store lifecycle operations, machine creation inside a store, stateless
+The versioned C ABI v13 exposes opaque world-store lifecycle operations, machine creation inside a store, stateless
 artifact verification, dedicated bounded compilation request and completion calls, and typed `Unit`, `Boolean`,
 `String`, or failure host-request completion. Kotlin can select a world
 store, identify a computer, request flush, tombstone, or recovery, and route compiler results, but it cannot perform

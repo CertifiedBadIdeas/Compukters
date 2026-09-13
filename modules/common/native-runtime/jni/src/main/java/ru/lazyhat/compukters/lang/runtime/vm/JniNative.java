@@ -118,6 +118,10 @@ final class JniNative {
 
     static native int resumeUnit(long handle, int taskId, long requestId);
 
+    static native int resumeInt(long handle, int taskId, long requestId, int value);
+
+    static native int resumeFloatBits(long handle, int taskId, long requestId, int bits);
+
     static native int resumeBool(long handle, int taskId, long requestId, boolean value);
 
     static native int resumeString(long handle, int taskId, long requestId, char[] value);
