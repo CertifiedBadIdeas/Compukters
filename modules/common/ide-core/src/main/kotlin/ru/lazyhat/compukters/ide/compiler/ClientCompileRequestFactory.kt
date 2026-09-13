@@ -64,6 +64,7 @@ object ClientCompileRequestFactory {
                     ),
                 limits = input.profile.limits,
                 platformModules = input.profile.modules.map(::trustedIdentity),
+                addonBundles = input.profile.addonBundles,
             )
         return PreparedClientCompilation(
             request,

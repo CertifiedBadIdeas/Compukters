@@ -450,7 +450,7 @@ class IdeAnalysisFlowTest {
         requests: FlowAnalysisRequests,
     ) = IdeAnalysisCoordinator(
         IdeAnalysisInputLoader(workspace::buildInput),
-        IdeAnalysisSnapshotFactory { input, path, text -> analysisSnapshot(input.sources, path, text) },
+        IdeAnalysisSnapshotFactory { input, path, text, _ -> analysisSnapshot(input.sources, path, text) },
         IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
         platformCatalog = TEST_PLATFORM_CATALOG,
     )

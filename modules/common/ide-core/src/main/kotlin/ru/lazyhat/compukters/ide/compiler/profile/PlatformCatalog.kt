@@ -18,7 +18,9 @@
 
 package ru.lazyhat.compukters.ide.compiler.profile
 
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ResolvedModule
@@ -55,6 +57,7 @@ class ResolvedPlatformSelection internal constructor(
 class PlatformCatalog private constructor(
     val bundle: PlatformBundle,
     entries: List<PlatformCatalogEntry>,
+    addonBundles: List<TrustedBundlePayload>,
 ) {
     val entries: List<PlatformCatalogEntry> =
         Collections.unmodifiableList(
@@ -64,10 +67,14 @@ class PlatformCatalog private constructor(
         )
     private val byId = this.entries.associateBy { it.identity.id }
     private val graph = PlatformModuleGraph(bundle)
+    private val addonBundles = addonBundles.associateBy { ModuleId.parse(it.identity.name) }
 
     fun find(id: ModuleId): PlatformCatalogEntry? = byId[id]
 
     fun require(id: ModuleId): PlatformCatalogEntry = requireNotNull(find(id)) { "platform module ${id.value} is unavailable" }
+
+    fun addonBundlesFor(modules: Set<ModuleId>): List<TrustedBundlePayload> =
+        modules.mapNotNull(addonBundles::get).sortedBy { it.identity.name }
 
     fun resolve(requirements: Map<ModuleId, ApiMajor>): ResolvedPlatformSelection {
         requirements.forEach { (id, major) ->
@@ -88,18 +95,41 @@ class PlatformCatalog private constructor(
     }
 
     companion object {
-        fun of(bundle: PlatformBundle): PlatformCatalog = PlatformCatalog(bundle, bundle.modules.map(::entry))
+        fun of(bundle: PlatformBundle): PlatformCatalog = PlatformCatalog(bundle, bundle.modules.map(::entry), emptyList())
 
         fun forTarget(
             bundle: PlatformBundle,
             advertised: List<ResolvedModule>,
+            addonBundles: List<TrustedBundlePayload> = emptyList(),
         ): PlatformCatalog {
             val local = of(bundle)
+            val externalEntries =
+                addonBundles.associate { payload ->
+                    val decoded = AddonGuestApiBundleCodec.decode(payload.content.toByteArray())
+                    require(
+                        decoded.identity.module == payload.identity.name,
+                    ) { "target addon bundle module identity does not match payload" }
+                    require(
+                        decoded.identity.platformAbi == bundle.identity.platformAbi,
+                    ) { "target addon bundle platform ABI does not match bundle" }
+                    require(
+                        decoded.identity.contentHash
+                            .toByteArray()
+                            .contentEquals(payload.identity.hash.toByteArray()),
+                    ) {
+                        "target addon bundle content hash does not match payload"
+                    }
+                    val id = projectId(decoded.moduleDescriptor.id)
+                    require(id.value == payload.identity.name) { "target addon bundle module descriptor does not match identity" }
+                    id to entry(decoded.moduleDescriptor, payload.identity.hash)
+                }
+            require(externalEntries.size == addonBundles.size) { "target addon bundle module IDs must be unique" }
+            require(externalEntries.keys.none(local.byId::containsKey)) { "target addon bundles cannot shadow packaged platform modules" }
             val advertisedById = advertised.associateBy(ResolvedModule::id)
             require(advertisedById.size == advertised.size) { "target platform module IDs must be unique" }
             val entries =
                 advertised.map { actual ->
-                    val expected = local.require(actual.id)
+                    val expected = externalEntries[actual.id] ?: local.require(actual.id)
                     require(expected.identity == actual) { "target platform module ${actual.id.value} identity does not match bundle" }
                     expected
                 }
@@ -114,10 +144,19 @@ class PlatformCatalog private constructor(
                     }
                 }
             }
-            return PlatformCatalog(bundle, entries)
+            val merged =
+                PlatformBundle(
+                    bundle.identity,
+                    bundle.builtins,
+                    bundle.modules + externalEntries.values.map(PlatformCatalogEntry::descriptor),
+                )
+            return PlatformCatalog(merged, entries, addonBundles)
         }
 
-        private fun entry(module: PlatformModule): PlatformCatalogEntry {
+        private fun entry(
+            module: PlatformModule,
+            contentHash: Hash256 = Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()),
+        ): PlatformCatalogEntry {
             val majorText = module.version.substringBefore('.')
             val major = majorText.toIntOrNull()
             require(major != null && major in 1..ApiMajor.MAXIMUM) {
@@ -129,7 +168,7 @@ class PlatformCatalog private constructor(
                         id = projectId(module.id),
                         major = ApiMajor(major),
                         version = module.version,
-                        contentHash = Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()),
+                        contentHash = contentHash,
                     ),
                 descriptor = module,
             )

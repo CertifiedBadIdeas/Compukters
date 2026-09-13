@@ -701,7 +701,7 @@ class IdeClientControllerTest {
         latency: IdeVisibleLatencyTrace,
     ) = IdeAnalysisCoordinator(
         IdeAnalysisInputLoader(workspace::buildInput),
-        IdeAnalysisSnapshotFactory { input, path, text -> latencyAnalysisSnapshot(input.sources, path, text) },
+        IdeAnalysisSnapshotFactory { input, path, text, _ -> latencyAnalysisSnapshot(input.sources, path, text) },
         IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
         latency,
         platformCatalog = TEST_PLATFORM_CATALOG,
@@ -716,7 +716,7 @@ class IdeClientControllerTest {
             analysisCoordinatorFactory = { workspace ->
                 IdeAnalysisCoordinator(
                     IdeAnalysisInputLoader(workspace::buildInput),
-                    IdeAnalysisSnapshotFactory { input, path, text -> latencyAnalysisSnapshot(input.sources, path, text) },
+                    IdeAnalysisSnapshotFactory { input, path, text, _ -> latencyAnalysisSnapshot(input.sources, path, text) },
                     IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
                     attachedSources = attachedSources,
                     platformCatalog = TEST_PLATFORM_CATALOG,

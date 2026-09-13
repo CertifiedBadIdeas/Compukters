@@ -21,6 +21,7 @@ plugins {
 }
 
 dependencies {
+    api(projects.addonGuestApi)
     api(projects.platformK2)
     implementation(projects.compilerArtifact)
     implementation(projects.compilerClient)
@@ -30,7 +31,8 @@ dependencies {
 
 val assertCompilerEngineBoundary = tasks.register("assertCompilerEngineBoundary") {
     doLast {
-        val allowedProjects = setOf(":compiler-artifact", ":compiler-client", ":platform-bundle", ":platform-k2", ":worker-client")
+        val allowedProjects =
+            setOf(":addon-guest-api", ":compiler-artifact", ":compiler-client", ":platform-bundle", ":platform-k2", ":worker-client")
         val projects =
             configurations.runtimeClasspath
                 .get()

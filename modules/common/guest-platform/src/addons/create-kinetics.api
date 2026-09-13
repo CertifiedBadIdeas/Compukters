@@ -1,0 +1,26 @@
+# Build-time data only. The compiler and analysis workers never load addon JVM classes.
+addon create
+module create:kinetics
+
+capability create kinetics 1 0
+operation async I32 I32
+operation async F32 I32
+operation async F32 I32
+operation async I32 I32
+operation async F32 I32
+operation async F32 I32
+operation async UNIT I32
+operation async I32 I32
+operation async I32 I32
+operation async I32 I32 I32
+
+binding create.kinetics KineticsBindings acquireSpeedometer fun(Int):Int create:kinetics:1 0
+binding create.kinetics KineticsBindings speed fun(Int):Float create:kinetics:1 1
+binding create.kinetics KineticsBindings awaitSpeedChange fun(Int):Float create:kinetics:1 2
+binding create.kinetics KineticsBindings acquireStressometer fun(Int):Int create:kinetics:1 3
+binding create.kinetics KineticsBindings stress fun(Int):Float create:kinetics:1 4
+binding create.kinetics KineticsBindings capacity fun(Int):Float create:kinetics:1 5
+binding create.kinetics KineticsBindings awaitStressChange fun(Int):Unit create:kinetics:1 6
+binding create.kinetics KineticsBindings acquireRotationController fun(Int):Int create:kinetics:1 7
+binding create.kinetics KineticsBindings targetSpeed fun(Int):Int create:kinetics:1 8
+binding create.kinetics KineticsBindings setTargetSpeed fun(Int,Int):Int create:kinetics:1 9

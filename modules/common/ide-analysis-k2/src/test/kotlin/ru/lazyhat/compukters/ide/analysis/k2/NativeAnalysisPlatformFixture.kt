@@ -18,8 +18,11 @@
 
 package ru.lazyhat.compukters.ide.analysis.k2
 
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
+import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
+import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisBundle
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisModule
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisPlatform
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
@@ -39,13 +42,19 @@ internal fun testAdmittedPlatform(
     attachedSources: Boolean = false,
 ): AdmittedAnalysisPlatform {
     val platform = testPlatform()
+    val addonBytes = Files.readAllBytes(Path.of(requireNotNull(System.getProperty("compukters.test.createKineticsGuestApi"))))
+    val addon = AddonGuestApiBundleCodec.decode(addonBytes)
     val modules =
         if (selectAllModules) {
-            (listOf(platform.builtins) + platform.modules).sortedBy { it.id }.map { module ->
+            (listOf(platform.builtins) + platform.modules + addon.moduleDescriptor).sortedBy { it.id }.map { module ->
                 AdmittedAnalysisModule(
                     AnalysisModuleIdentity(
                         module.id.toString(),
-                        Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()),
+                        if (module.id == addon.moduleDescriptor.id) {
+                            Hash256.of(addon.identity.contentHash.toByteArray())
+                        } else {
+                            Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray())
+                        },
                     ),
                 )
             }
@@ -62,5 +71,16 @@ internal fun testAdmittedPlatform(
         } else {
             null
         }
-    return AdmittedAnalysisPlatform(testPlatformAbi(), modules, sourceRoot)
+    val addonBundles =
+        if (selectAllModules) {
+            listOf(
+                AdmittedAnalysisBundle(
+                    AnalysisModuleIdentity(addon.identity.module, Hash256.of(addon.identity.contentHash.toByteArray())),
+                    BinaryValue.of(addonBytes),
+                ),
+            )
+        } else {
+            emptyList()
+        }
+    return AdmittedAnalysisPlatform(testPlatformAbi(), modules, sourceRoot, addonBundles)
 }

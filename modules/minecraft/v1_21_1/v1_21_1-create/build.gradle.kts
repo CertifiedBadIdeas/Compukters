@@ -38,6 +38,25 @@ repositories {
 }
 
 dependencies {
+    implementation(projects.addonGuestApi)
     implementation(projects.v1211Common)
     modImplementation(libs.create.v1211)
+}
+
+val createKineticsGuestApiBundle = configurations.create("createKineticsGuestApiBundle") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+dependencies {
+    add(
+        createKineticsGuestApiBundle.name,
+        project(path = projects.guestPlatform.path, configuration = "createKineticsGuestApiBundle"),
+    )
+}
+
+tasks.processResources {
+    from(createKineticsGuestApiBundle) {
+        into("META-INF/compukters/addons")
+    }
 }

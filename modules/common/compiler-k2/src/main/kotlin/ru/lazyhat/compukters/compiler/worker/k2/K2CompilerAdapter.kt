@@ -22,9 +22,6 @@ package ru.lazyhat.compukters.compiler.worker.k2
 
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.diagnostics.Severity
-import org.jetbrains.kotlin.name.CallableId
-import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.name.Name
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.artifact.link.LibraryModuleLinker
@@ -297,48 +294,13 @@ class K2CompilerAdapter(
         return SelectedPlatform(listOf(platform.builtins) + resolved, addonBundles)
     }
 
-    private fun intrinsicRegistry(bundles: List<AddonGuestApiBundle>): TrustedIntrinsicRegistry {
-        val addonModules = bundles.mapTo(mutableSetOf()) { it.moduleDescriptor.id }
-        val registrations =
-            CanonicalTrustedIntrinsics.registry.handlers
-                .filterKeys { key -> key.module !in addonModules }
-                .map { (key, handler) -> TrustedIntrinsicRegistration(key, handler) }
-                .toMutableList()
-        bundles.forEach { bundle ->
-            val schemas = bundle.capabilitySchemas.associateBy { it.identity }
-            bundle.bindings.forEach { binding ->
-                val operation = schemas.getValue(binding.capability).operations[binding.operation]
-                val callableId =
-                    if (binding.owner == null) {
-                        CallableId(FqName(binding.packageName), Name.identifier(binding.callableName))
-                    } else {
-                        CallableId(
-                            FqName(binding.packageName),
-                            FqName(requireNotNull(binding.owner)),
-                            Name.identifier(binding.callableName),
-                        )
-                    }
-                registrations +=
-                    TrustedIntrinsicRegistration(
-                        TrustedIntrinsicKey(
-                            bundle.moduleDescriptor.id,
-                            callableId,
-                            CanonicalCallableSignature(binding.signature),
-                        ),
-                        CapabilityOperationHandler(
-                            PlatformCapabilityId(
-                                binding.capability.namespace,
-                                binding.capability.name,
-                                binding.capability.abiMajor,
-                            ),
-                            binding.operation.toUInt(),
-                            if (operation.asynchronous) IntrinsicBlockingMode.VM_TASK else IntrinsicBlockingMode.NONE,
-                        ),
-                    )
-            }
-        }
-        return TrustedIntrinsicRegistry.create(registrations)
-    }
+    private fun intrinsicRegistry(bundles: List<AddonGuestApiBundle>): TrustedIntrinsicRegistry =
+        AddonTrustedIntrinsics.extend(
+            CanonicalTrustedIntrinsics.registry,
+            bundles.map { bundle ->
+                AddonIntrinsicContract(bundle.moduleDescriptor.id, bundle.capabilitySchemas, bundle.bindings)
+            },
+        )
 
     private fun capabilityShapes(bundles: List<AddonGuestApiBundle>): Map<PlatformCapabilityId, PlatformCapabilityShape> =
         bundles.flatMap(AddonGuestApiBundle::capabilitySchemas).associate { schema ->

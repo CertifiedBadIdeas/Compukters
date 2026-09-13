@@ -55,6 +55,7 @@ fun interface IdeAnalysisSnapshotFactory {
         input: IdeBuildInput,
         activePath: VirtualSourcePath,
         activeText: String,
+        target: TargetCompileProfile?,
     ): AdmittedAnalysisSnapshot
 }
 
@@ -168,6 +169,7 @@ class IdeAnalysisCoordinator(
     private val publishedState = AtomicReference<IdeAnalysisState>(IdeAnalysisState.Idle)
     private val requests = requestFactory.create(this)
     private val completionPlanner = IdeCompletionPlanner(platformCatalog)
+    private var activeAttachedSources = attachedSources
     private var session: Session? = null
     private var version = 0L
     private var semanticOperation = 0L
@@ -185,7 +187,7 @@ class IdeAnalysisCoordinator(
     fun attachedSource(
         module: ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity,
         path: VirtualSourcePath,
-    ): String? = attachedSources.text(module, path)
+    ): String? = synchronized(lock) { activeAttachedSources.text(module, path) }
 
     fun open(
         project: ProjectHandle,
@@ -542,6 +544,7 @@ class IdeAnalysisCoordinator(
     fun updateTargetProfile(profile: TargetCompileProfile?) {
         synchronized(lock) {
             if (targetProfile == profile) return
+            activeAttachedSources = profile?.let { attachedSources.withAddonBundles(it.addonBundles) } ?: attachedSources
             targetProfile = profile
             targetRevision = Math.incrementExact(targetRevision)
             val active = publishedState.get() as? IdeAnalysisState.Active ?: return
@@ -626,10 +629,14 @@ class IdeAnalysisCoordinator(
         expectedVersion: Long,
         input: IdeBuildInput,
     ) {
-        val current = synchronized(lock) { session?.takeIf { !closed && version == expectedVersion && it.input === input } } ?: return
+        val (current, target) =
+            synchronized(lock) {
+                val active = session?.takeIf { !closed && version == expectedVersion && it.input === input } ?: return
+                active to targetProfile
+            }
         val snapshot =
             try {
-                snapshotFactory.create(input, current.path, current.text).also { validateSnapshot(it, current) }
+                snapshotFactory.create(input, current.path, current.text, target).also { validateSnapshot(it, current) }
             } catch (failure: Throwable) {
                 unavailable(expectedVersion, failure.message ?: "invalid analysis snapshot")
                 return

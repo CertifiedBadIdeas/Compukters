@@ -52,6 +52,7 @@ plugins {
 }
 
 dependencies {
+    implementation(projects.addonGuestApi)
     implementation(projects.compilerClient)
     implementation(projects.platformBundle)
     implementation(libs.tomlj)
@@ -62,6 +63,7 @@ dependencies {
 val allowedIdeCoreRuntimeModules =
     setOf(
         ":compiler-client",
+        ":addon-guest-api",
         ":platform-bundle",
         ":worker-client",
         "org.jetbrains.kotlin:kotlin-stdlib",

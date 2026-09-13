@@ -18,6 +18,8 @@ import net.minecraft.network.RegistryFriendlyByteBuf
 import net.minecraft.network.codec.StreamCodec
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
@@ -76,6 +78,12 @@ internal class IdeTargetReplyPayloadTest {
                     stderrBytes = 9,
                     temporaryBytes = 10,
                     temporaryFiles = 11,
+                ),
+                listOf(
+                    TrustedBundlePayload(
+                        TrustedBundleIdentity.of("create:kinetics", hash(4)),
+                        BinaryValue.of(byteArrayOf(9, 8, 7)),
+                    ),
                 ),
             ),
             IdeTargetCapabilities(writableFileSystem = true, canonicalInput = false, terminal = true),

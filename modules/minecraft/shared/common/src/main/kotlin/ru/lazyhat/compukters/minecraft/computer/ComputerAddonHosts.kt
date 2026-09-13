@@ -21,8 +21,14 @@ package ru.lazyhat.compukters.minecraft.computer
 import net.minecraft.core.BlockPos
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.block.state.BlockState
+import ru.lazyhat.compukters.addon.api.AddonCapabilitySchema
+import ru.lazyhat.compukters.addon.api.AddonCapabilityValueType
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
+import ru.lazyhat.compukters.addon.api.AddonGuestApiCatalog
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.programAddonHostOf
+import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
+import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import java.util.concurrent.CopyOnWriteArrayList
 
 fun interface ComputerAddonHostFactory {
@@ -34,30 +40,34 @@ fun interface ComputerAddonHostFactory {
 }
 
 object ComputerAddonHosts {
-    private val factories = CopyOnWriteArrayList<ComputerAddonHostFactory>()
-    private val platformModules = mutableSetOf<String>()
+    private val registrations = CopyOnWriteArrayList<Registration>()
+    private var guestApiCatalog = AddonGuestApiCatalog.empty()
 
     @Synchronized
     fun register(
         factory: ComputerAddonHostFactory,
-        platformModules: Set<String> = emptySet(),
+        guestApiBundles: List<AddonGuestApiBundle> = emptyList(),
     ) {
-        platformModules.forEach { module ->
-            require(PLATFORM_MODULE.matches(module)) { "invalid addon platform module: $module" }
-        }
-        require(factories.addIfAbsent(factory)) { "computer addon host factory is already registered" }
-        this.platformModules += platformModules
+        require(registrations.none { it.factory == factory }) { "computer addon host factory is already registered" }
+        val updatedCatalog = AddonGuestApiCatalog.of(guestApiCatalog.bundles + guestApiBundles)
+        registrations += Registration(factory, guestApiBundles)
+        guestApiCatalog = updatedCatalog
     }
 
     @Synchronized
-    fun availablePlatformModules(): Set<String> = platformModules.toSet()
+    fun availableGuestApiCatalog(): AddonGuestApiCatalog = guestApiCatalog
 
     internal fun create(
         level: ServerLevel,
         position: BlockPos,
         state: BlockState,
     ): ProgramAddonHost {
-        val hosts = factories.mapNotNull { it.create(level, position, state) }
+        val hosts =
+            registrations.mapNotNull { registration ->
+                registration.factory.create(level, position, state)?.also { host ->
+                    requireAddonCapabilitySchemas(registration.guestApiBundles, host.capabilitySchemas)
+                }
+            }
         return try {
             programAddonHostOf(hosts)
         } catch (failure: Throwable) {
@@ -66,5 +76,43 @@ object ComputerAddonHosts {
         }
     }
 
-    private val PLATFORM_MODULE = Regex("[a-z][a-z0-9-]{0,63}:[a-z][a-z0-9-]{0,63}")
+    private data class Registration(
+        val factory: ComputerAddonHostFactory,
+        val guestApiBundles: List<AddonGuestApiBundle>,
+    )
 }
+
+internal fun requireAddonCapabilitySchemas(
+    bundles: List<AddonGuestApiBundle>,
+    schemas: List<HostCapabilitySchema>,
+) {
+    val actual = schemas.associateBy(::capabilityKey)
+    bundles.flatMap(AddonGuestApiBundle::capabilitySchemas).forEach { expected ->
+        require(actual[capabilityKey(expected)] == expected.toHostSchema()) {
+            "addon host does not provide registered capability ${expected.identity.namespace}:${expected.identity.name}"
+        }
+    }
+}
+
+private fun capabilityKey(schema: HostCapabilitySchema) = Triple(schema.identity.namespace, schema.identity.name, schema.identity.abiMajor)
+
+private fun capabilityKey(schema: AddonCapabilitySchema) = Triple(schema.identity.namespace, schema.identity.name, schema.identity.abiMajor)
+
+private fun AddonCapabilitySchema.toHostSchema(): HostCapabilitySchema =
+    HostCapabilitySchema(
+        ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity(
+            identity.namespace,
+            identity.name,
+            identity.abiMajor,
+            identity.abiMinor,
+        ),
+        operations.map { operation ->
+            ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema(
+                operation.arguments.map { argument -> argument.toHostValueType() },
+                operation.result.toHostValueType(),
+                operation.asynchronous,
+            )
+        },
+    )
+
+private fun AddonCapabilityValueType.toHostValueType(): HostValueType = HostValueType.valueOf(name)

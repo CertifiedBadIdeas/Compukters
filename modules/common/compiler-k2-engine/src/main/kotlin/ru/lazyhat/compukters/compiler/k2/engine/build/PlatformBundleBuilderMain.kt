@@ -19,6 +19,8 @@
 package ru.lazyhat.compukters.compiler.k2.engine.build
 
 import ru.lazyhat.compukters.compiler.k2.engine.CompuktersFir2IrPipeline
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.AddonIntrinsicContract
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.AddonTrustedIntrinsics
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalTrustedIntrinsics
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicContract
@@ -170,8 +172,27 @@ fun main(args: Array<String>) {
     val sourceRoot = Path.of(requireNotNull(arguments["--sources"]) { "missing --sources" }).toAbsolutePath().normalize()
     val descriptor = Path.of(requireNotNull(arguments["--descriptor"]) { "missing --descriptor" }).toAbsolutePath().normalize()
     val output = Path.of(requireNotNull(arguments["--output"]) { "missing --output" }).toAbsolutePath().normalize()
+    val addonContracts =
+        arguments["--addon-descriptor"]?.let { descriptorPath ->
+            val contract =
+                AddonContract.parse(
+                    Path
+                        .of(descriptorPath)
+                        .toAbsolutePath()
+                        .normalize()
+                        .readText()
+                        .lines(),
+                )
+            listOf(AddonIntrinsicContract(contract.module, contract.schemas, contract.bindings))
+        } ?: emptyList()
+    val registry = AddonTrustedIntrinsics.extend(CanonicalTrustedIntrinsics.registry, addonContracts)
+    val capabilities =
+        CanonicalTrustedIntrinsics.executableCapabilities +
+            addonContracts.flatMap(AddonIntrinsicContract::capabilitySchemas).mapTo(mutableSetOf()) { schema ->
+                PlatformCapabilityId(schema.identity.namespace, schema.identity.name, schema.identity.abiMajor)
+            }
     require(descriptor.startsWith(sourceRoot)) { "platform descriptor must be inside the source root" }
-    val bytes = PlatformBundleCodec.encode(PlatformBundleBuilder().build(sourceRoot, descriptor))
+    val bytes = PlatformBundleCodec.encode(PlatformBundleBuilder(registry, capabilities).build(sourceRoot, descriptor))
     output.parent.createDirectories()
     val temporary = Files.createTempFile(output.parent, output.fileName.toString(), ".tmp")
     try {

@@ -152,38 +152,6 @@ class TrustedIntrinsicContractTest {
         }
     }
 
-    @Test
-    fun `Create kinetics externals have exact blocking capability handlers`() {
-        val module = PlatformModuleId("create", "kinetics")
-        val expected =
-            listOf(
-                Triple("acquireSpeedometer", "fun(Int):Int", 0u),
-                Triple("speed", "fun(Int):Float", 1u),
-                Triple("awaitSpeedChange", "fun(Int):Float", 2u),
-                Triple("acquireStressometer", "fun(Int):Int", 3u),
-                Triple("stress", "fun(Int):Float", 4u),
-                Triple("capacity", "fun(Int):Float", 5u),
-                Triple("awaitStressChange", "fun(Int):Unit", 6u),
-                Triple("acquireRotationController", "fun(Int):Int", 7u),
-                Triple("targetSpeed", "fun(Int):Int", 8u),
-                Triple("setTargetSpeed", "fun(Int,Int):Int", 9u),
-            )
-
-        expected.forEach { (name, signature, operation) ->
-            val key =
-                TrustedIntrinsicKey(
-                    module,
-                    callable("create.kinetics", "KineticsBindings", name),
-                    CanonicalCallableSignature(signature),
-                )
-            val handler = assertIs<CapabilityOperationHandler>(CanonicalTrustedIntrinsics.registry.handlers[key], key.toString())
-
-            assertEquals(CanonicalTrustedIntrinsics.createKinetics, handler.requiredCapability)
-            assertEquals(operation, handler.operation)
-            assertEquals(IntrinsicBlockingMode.VM_TASK, handler.blocking)
-        }
-    }
-
     private fun declaration(external: Boolean): PlatformDeclaration =
         PlatformDeclaration(
             symbol = "kotlin.io.println",

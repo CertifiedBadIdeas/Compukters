@@ -40,6 +40,7 @@ import ru.lazyhat.compukters.ide.analysis.controller.AnalysisServiceLifetime
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisTaskScheduler
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisWorkerController
 import ru.lazyhat.compukters.ide.analysis.controller.DefaultAnalysisRequestCoordinator
+import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisBundle
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisModule
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisPlatform
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
@@ -69,6 +70,7 @@ import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
 import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectLockService
 import ru.lazyhat.compukters.ide.project.ProjectResolution
@@ -475,6 +477,12 @@ internal object ProductionIdeApplicationFactory {
                     profileResolver = profileResolver,
                     lockServices = { project -> ProjectLockService(project.lockFileWriter()) },
                     compilation = compilation,
+                    targetResolution = { target ->
+                        ProjectResolution(
+                            target.toolchain,
+                            PlatformCatalog.forTarget(platform, target.modules, target.addonBundles),
+                        )
+                    },
                 ),
                 clock,
                 clientLimits,
@@ -483,7 +491,7 @@ internal object ProductionIdeApplicationFactory {
             IdeAnalysisCoordinator(
                 inputLoader = IdeAnalysisInputLoader(workspace::buildInput),
                 snapshotFactory =
-                    IdeAnalysisSnapshotFactory { input, activePath, activeText ->
+                    IdeAnalysisSnapshotFactory { input, activePath, activeText, target ->
                         analysisSnapshot(
                             input,
                             activePath,
@@ -492,6 +500,7 @@ internal object ProductionIdeApplicationFactory {
                             analysisLimits,
                             platform,
                             platformSourceRoot,
+                            target,
                         )
                     },
                 requestFactory =
@@ -568,10 +577,11 @@ internal object ProductionIdeApplicationFactory {
         limits: AnalysisLimits,
         platform: PlatformBundle,
         platformSourceRoot: Path,
+        target: TargetCompileProfile?,
     ): AdmittedAnalysisSnapshot {
         val lockBytes = checkNotNull(input.lockBytes) { "resolve compukter.lock before analysis" }
         val lock = ProjectLockCodec.decode(lockBytes.decodeToString())
-        val resolved = resolver.resolveLocal(lock)
+        val resolved = target?.let { resolver.resolveTarget(lock, it) } ?: resolver.resolveLocal(lock)
         val profile =
             (resolved as? ProfileResolution.Resolved)?.profile ?: error("analysis profile does not match local toolchain: $resolved")
         val sources =
@@ -589,7 +599,14 @@ internal object ProductionIdeApplicationFactory {
         val admittedModules = admittedAnalysisModules(platform, profile.modules.map { module -> module.descriptor })
         val profileIdentity = analysisProfile(profile, ProjectLockCodec.encode(lock).encodeToByteArray(), admittedModules)
         val admittedPlatform =
-            AdmittedAnalysisPlatform(profile.toolchain.platformAbi, admittedModules, platformSourceRoot.toString())
+            AdmittedAnalysisPlatform(
+                profile.toolchain.platformAbi,
+                admittedModules,
+                platformSourceRoot.toString(),
+                profile.addonBundles.map { bundle ->
+                    AdmittedAnalysisBundle(AnalysisModuleIdentity(bundle.identity.name, bundle.identity.hash), bundle.content)
+                },
+            )
         return AdmittedAnalysisSnapshot(
             AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profileIdentity),
             sources,

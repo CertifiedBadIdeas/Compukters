@@ -771,7 +771,7 @@ private class AnalysisFixture(
                     if (deferredInput) inputFuture else CompletableFuture.completedFuture(input())
                 },
             snapshotFactory =
-                IdeAnalysisSnapshotFactory { input, activePath, activeText ->
+                IdeAnalysisSnapshotFactory { input, activePath, activeText, _ ->
                     require(activeText != rejectedText) { "rejected analysis source" }
                     snapshot(input, activePath, activeText)
                 },

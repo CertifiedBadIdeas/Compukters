@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.impl.compiler
 
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
+import ru.lazyhat.compukters.addon.api.AddonGuestApiCatalog
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
@@ -82,12 +84,18 @@ class NeoForgeCompilerServicesTest {
     }
 
     @Test
-    fun `server only advertises Create kinetics when its integration is available`() {
+    fun `server advertises an admitted addon bundle with its exact content identity`() {
         val base = platform()
-        val builtins = base.builtins
         val core = base.modules.single { it.id.toString() == "stdlib:core" }
         val create = module("create", "kinetics", listOf(core.id))
-        val platform = PlatformBundleCodec.assemble("2.4", PlatformBundleCodec.SUPPORTED_PLATFORM_ABI, builtins, base.modules + create)
+        val addon =
+            AddonGuestApiBundleCodec.assemble(
+                "create",
+                PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
+                create,
+                emptyList(),
+                emptyList(),
+            )
         val identity =
             WorkerIdentity(
                 "2.4.0",
@@ -95,14 +103,21 @@ class NeoForgeCompilerServicesTest {
                 3u,
                 4u,
                 hash(5),
-                Hash256.of(platform.identity.contentHash.toByteArray()),
+                Hash256.of(base.identity.contentHash.toByteArray()),
             )
 
-        val unavailable = serverTargetProfile(identity, platform, WorkerLimits())
-        val available = serverTargetProfile(identity, platform, WorkerLimits(), setOf("create:kinetics"))
+        val unavailable = serverTargetProfile(identity, base, WorkerLimits())
+        val available = serverTargetProfile(identity, base, WorkerLimits(), AddonGuestApiCatalog.of(listOf(addon)))
 
         assertEquals(false, unavailable.modules.any { it.id.value == "create:kinetics" })
         assertEquals(true, available.modules.any { it.id.value == "create:kinetics" })
+        assertEquals(1, available.addonBundles.size)
+        assertEquals(
+            available.modules.single { it.id.value == "create:kinetics" }.contentHash,
+            available.addonBundles
+                .single()
+                .identity.hash,
+        )
         assertNotEquals(TargetCompileProfileIdentity.of(unavailable), TargetCompileProfileIdentity.of(available))
     }
 

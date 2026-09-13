@@ -483,12 +483,18 @@ and the mandatory built-ins module; there is no ambient Kotlin/JVM classpath.
 | `compukter:process` | Child process execution and explicit exit |
 | `compukter:redstone` | Side-oriented redstone reads, waits, and weak/direct output writes |
 | `compukter:sound` | Bounded one-shot computer beeps with admission feedback |
-| `create:kinetics` | Optional Minecraft 1.21.1/Create 6.0.x access to adjacent speedometers, stressometers, and rotation speed controllers |
+| `create:kinetics` | Server-admitted addon bundle for optional Minecraft 1.21.1/Create 6.0.x access to adjacent speedometers, stressometers, and rotation speed controllers |
 
 Ordinary functions in these modules are compiled ahead of Guest projects into
 relocatable platform fragments. Only declarations explicitly marked as native
 external bindings lower to host capability operations; a Guest declaration
 cannot become one merely by copying its package, name, and signature.
+
+The built-in modules are packaged with the tooling workers. Addons instead register an `AddonGuestApiBundle` on the
+server. Its deterministic identity covers metadata, sources, capability schemas, and exact callable bindings. An
+attached IDE receives the admitted data from the server, so completion, diagnostics, parameter information, navigation,
+compilation, and cache invalidation all use the same API identity without adding the addon JAR to either worker's JVM
+classpath.
 
 ## Kotlin standard library
 
@@ -530,6 +536,12 @@ cannot become one merely by copying its package, name, and signature.
   conformance`, IDE diagnostic/completion/parameter-information tests, and the real NeoForge `createkinetics`
   GameTest. See [Create kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/) for the API and
   manifest entry.
+
+- [x] **Addon Guest API bundles** — a loader integration can register a bounded, versioned Kotlin metadata/source bundle
+  with exact capability schemas and intrinsic bindings. The server is the authority for availability; compiler and IDE
+  workers accept only the exact advertised bytes and content hash, reject malformed or shadowing modules, and never
+  execute addon JVM code. The first producer is the `create:kinetics` integration, which is extracted from the base
+  platform into its own deterministic bundle during the build.
 
 - [x] **One-shot sound** — `Sound.beep(note, volume = 100)` emits the vanilla note-block pling from the
   computer and return whether the server admitted it. Notes are bounded to

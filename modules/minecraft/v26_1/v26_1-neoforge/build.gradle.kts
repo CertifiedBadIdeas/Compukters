@@ -48,6 +48,8 @@ loom {
 }
 
 dependencies {
+    implementation(projects.addonGuestApi)
+    shadowBundle(project(path = projects.addonGuestApi.path)) { isTransitive = false }
     common(project(path = projects.v261Common.path)) { isTransitive = false }
     shadowBundle(project(path = projects.v261Common.path, configuration = "transformProductionNeoForge"))
     testImplementation(project(path = projects.v261Common.path))
@@ -363,6 +365,7 @@ val verifyPackagedCompukterFfi =
                     .sorted()
             val toolingProjectPrefixes =
                 listOf(
+                    "addon-guest-api-",
                     "compiler-artifact-",
                     "compiler-client-",
                     "compiler-k2-",

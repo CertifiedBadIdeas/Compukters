@@ -50,6 +50,7 @@ plugins {
 
 dependencies {
     api(projects.ideCore)
+    implementation(projects.addonGuestApi)
     implementation(projects.ideAnalysisClient)
     implementation(projects.compilerRuntime)
     implementation(projects.compilerClient)
@@ -79,6 +80,7 @@ tasks.test {
 val allowedIdeClientRuntimeModules =
     setOf(
         ":ide-core",
+        ":addon-guest-api",
         ":ide-analysis-client",
         ":compiler-runtime",
         ":compiler-client",
