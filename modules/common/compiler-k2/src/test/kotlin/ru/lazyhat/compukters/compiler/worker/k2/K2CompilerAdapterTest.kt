@@ -144,13 +144,13 @@ class K2CompilerAdapterTest {
         val packaged = K2CompilerAdapter.loadPackagedPlatform()
         val addon =
             AddonGuestApiBundleCodec.decode(
-                Files.readAllBytes(Path.of(checkNotNull(System.getProperty("compukters.createKineticsGuestApi")))),
+                Files.readAllBytes(Path.of(checkNotNull(System.getProperty("compukters.addonGuestApiFixture")))),
             )
-        val createModule = addon.moduleDescriptor
+        val fixtureModule = addon.moduleDescriptor
 
         withAdapter(packaged) { adapter, _ ->
             val selected =
-                createModule.dependencies.map { dependency ->
+                fixtureModule.dependencies.map { dependency ->
                     val module = packaged.modules.single { it.id == dependency }
                     TrustedBundleIdentity.of(
                         module.id.toString(),
@@ -165,7 +165,7 @@ class K2CompilerAdapterTest {
             val admitted =
                 adapter.compile(
                     request(
-                        "import create.kinetics.Kinetics\nfun main() { val speed = Kinetics.front.speedometer().speed() }",
+                        "import fixture.kinetics.Kinetics\nfun main() { val speed = Kinetics.front.speedometer().speed() }",
                         platformModules = selected,
                         addonBundles = listOf(payload),
                     ),
@@ -174,7 +174,7 @@ class K2CompilerAdapterTest {
             assertTrue(
                 artifact.capabilities.any { capability ->
                     val strings = artifact.modules.first().strings
-                    strings[capability.namespace.value.toInt()].toString() == "create" &&
+                    strings[capability.namespace.value.toInt()].toString() == "fixture" &&
                         strings[capability.name.value.toInt()].toString() == "kinetics"
                 },
             )
@@ -182,7 +182,7 @@ class K2CompilerAdapterTest {
             val spoof =
                 adapter.compile(
                     request(
-                        "package create.kinetics\nprivate object KineticsBindings { fun speed(handle: Int): Float = handle.toFloat() }\nfun main() { val speed = KineticsBindings.speed(1) }",
+                        "package fixture.kinetics\nprivate object KineticsBindings { fun speed(handle: Int): Float = handle.toFloat() }\nfun main() { val speed = KineticsBindings.speed(1) }",
                     ),
                 )
             assertNull(spoof.artifact)

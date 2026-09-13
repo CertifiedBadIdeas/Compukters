@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.compiler.k2.engine.build
 
 import ru.lazyhat.compukters.compiler.k2.engine.CompuktersFir2IrPipeline
+import ru.lazyhat.compukters.compiler.k2.engine.PlatformCapabilityShape
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.AddonIntrinsicContract
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.AddonTrustedIntrinsics
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalTrustedIntrinsics
@@ -46,6 +47,7 @@ import kotlin.io.path.readText
 class PlatformBundleBuilder(
     private val intrinsicRegistry: TrustedIntrinsicRegistry = CanonicalTrustedIntrinsics.registry,
     private val executableCapabilities: Set<PlatformCapabilityId> = CanonicalTrustedIntrinsics.executableCapabilities,
+    private val capabilityShapes: Map<PlatformCapabilityId, PlatformCapabilityShape> = emptyMap(),
 ) {
     fun build(
         sourceRoot: Path,
@@ -130,6 +132,7 @@ class PlatformBundleBuilder(
                             sources.mapTo(mutableSetOf(), PlatformSource::path),
                             sourceModules,
                             intrinsicRegistry,
+                            capabilityShapes,
                         )
                     }
                 modules[descriptorModule.id] =

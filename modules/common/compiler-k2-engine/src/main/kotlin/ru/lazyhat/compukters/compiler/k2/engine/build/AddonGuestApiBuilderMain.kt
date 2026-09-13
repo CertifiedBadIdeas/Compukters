@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.addon.api.AddonCapabilitySchema
 import ru.lazyhat.compukters.addon.api.AddonCapabilityValueType
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBinding
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
+import ru.lazyhat.compukters.compiler.k2.engine.PlatformCapabilityShape
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.AddonIntrinsicContract
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.AddonTrustedIntrinsics
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalTrustedIntrinsics
@@ -76,7 +77,12 @@ fun buildAddonGuestApiBundle(
                 contract.schemas.mapTo(mutableSetOf()) { schema ->
                     PlatformCapabilityId(schema.identity.namespace, schema.identity.name, schema.identity.abiMajor)
                 }
-        val combined = PlatformBundleBuilder(registry, capabilities).build(workspace, descriptor)
+        val capabilityShapes =
+            contract.schemas.associate { schema ->
+                PlatformCapabilityId(schema.identity.namespace, schema.identity.name, schema.identity.abiMajor) to
+                    PlatformCapabilityShape(schema.identity.abiMinor, schema.operations.size.toUInt())
+            }
+        val combined = PlatformBundleBuilder(registry, capabilities, capabilityShapes).build(workspace, descriptor)
         val module =
             combined.modules.singleOrNull { it.id == contract.module }
                 ?: error("platform contains no unique addon module ${contract.module}")

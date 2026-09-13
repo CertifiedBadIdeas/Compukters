@@ -85,6 +85,13 @@ dependencies {
     shadowBundle(project(path = projects.platformBundle.path)) { isTransitive = false }
 }
 
+val createKineticsConformanceArtifact =
+    project(":v1_21_1-create").layout.buildDirectory.file("generated/conformance/create-kinetics.cpkt")
+tasks.named<ProcessResources>("processGameTestResources") {
+    dependsOn(":v1_21_1-create:generateCreateKineticsConformanceArtifact")
+    from(createKineticsConformanceArtifact) { into("fixtures") }
+}
+
 val productionJar = tasks.named<RemapJarTask>("remapJar")
 val expectedMetadata = readVersionedModProperties()
 val nativeOs =

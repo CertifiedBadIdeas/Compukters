@@ -104,7 +104,7 @@ class ParameterInfoQueryTest {
     fun `parameter info exposes Create controller target speed`() {
         val source =
             """
-            import create.kinetics.Kinetics
+            import fixture.kinetics.Kinetics
 
             fun main() { Kinetics.top.rotationController().setTargetSpeed(32) }
             """.trimIndent()

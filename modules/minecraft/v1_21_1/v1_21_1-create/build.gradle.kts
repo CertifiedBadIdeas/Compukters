@@ -17,6 +17,7 @@
  */
 
 plugins {
+    id("addon-guest-api-convention")
     alias(libs.plugins.v1211)
     alias(libs.plugins.commonConvention)
 }
@@ -41,68 +42,53 @@ dependencies {
     implementation(projects.addonGuestApi)
     implementation(projects.v1211Common)
     modImplementation(libs.create.v1211)
+    testImplementation(projects.compilerArtifact)
+    testImplementation(projects.compilerClient)
+    testImplementation(projects.compilerK2)
+    testImplementation(projects.platformBundle)
+    testImplementation(kotlin("test"))
 }
 
-val platformBuilder = configurations.create("platformBuilder") {
-    isCanBeConsumed = false
-    isCanBeResolved = true
-}
-val compuktersPlatformBundle = configurations.create("compuktersPlatformBundle") {
+val createKineticsAddonBundle = layout.buildDirectory.file("addon-guest-api/${project.name}.cagb")
+val compilerWorkerJar = configurations.create("compilerWorkerJar") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
 
 dependencies {
-    add(platformBuilder.name, projects.compilerK2Engine)
-    add(compuktersPlatformBundle.name, project(path = projects.guestPlatform.path, configuration = "compuktersPlatformBundle"))
-}
-
-val guestApiSourceRoot = layout.projectDirectory.dir("src/guestApi/kotlin")
-val guestApiDescriptor = layout.projectDirectory.file("src/guestApi/create-kinetics.api")
-val createKineticsAddonBundle = layout.buildDirectory.file("addon-guest-api/create-kinetics.cagb")
-val platformBundleFile = compuktersPlatformBundle.elements.map { files -> files.single().asFile }
-val assembleCreateKineticsGuestApiBundle = tasks.register<JavaExec>("assembleCreateKineticsGuestApiBundle") {
-    group = "build"
-    description = "Builds the deterministic Create kinetics Guest API bundle."
-    classpath = platformBuilder
-    mainClass = "ru.lazyhat.compukters.compiler.k2.engine.build.AddonGuestApiBuilderMainKt"
-    inputs.file(platformBundleFile)
-    inputs.dir(guestApiSourceRoot)
-    inputs.file(guestApiDescriptor)
-    outputs.file(createKineticsAddonBundle)
-    doFirst {
-        args(
-            "--platform-input",
-            platformBundleFile.get().absolutePath,
-            "--sources",
-            guestApiSourceRoot.asFile.absolutePath,
-            "--descriptor",
-            guestApiDescriptor.asFile.absolutePath,
-            "--output",
-            createKineticsAddonBundle.get().asFile.absolutePath,
-        )
-    }
-}
-
-val createKineticsGuestApiBundle = configurations.create("createKineticsGuestApiBundle") {
-    isCanBeConsumed = true
-    isCanBeResolved = false
-}
-
-artifacts {
-    add(createKineticsGuestApiBundle.name, createKineticsAddonBundle) {
-        builtBy(assembleCreateKineticsGuestApiBundle)
-        type = "cagb"
+    add(compilerWorkerJar.name, project(path = projects.compilerK2.path)) {
+        isTransitive = false
     }
 }
 
 tasks.processResources {
-    dependsOn(assembleCreateKineticsGuestApiBundle)
+    dependsOn("assembleAddonGuestApiBundle")
     from(createKineticsAddonBundle) {
         into("META-INF/compukters/addons")
+        rename { "create-kinetics.cagb" }
     }
 }
 
-tasks.check {
-    dependsOn(assembleCreateKineticsGuestApiBundle)
+tasks.withType<Test>().configureEach {
+    dependsOn("assembleAddonGuestApiBundle", compilerWorkerJar)
+    inputs.file(createKineticsAddonBundle)
+    inputs.files(compilerWorkerJar)
+    doFirst {
+        systemProperty("compukters.test.createKineticsGuestApi", createKineticsAddonBundle.get().asFile.absolutePath)
+        systemProperty("compukters.test.compilerWorkerJar", compilerWorkerJar.singleFile.absolutePath)
+    }
+}
+
+val createKineticsConformanceArtifact = layout.buildDirectory.file("generated/conformance/create-kinetics.cpkt")
+tasks.register<Test>("generateCreateKineticsConformanceArtifact") {
+    description = "Compiles the deterministic Create kinetics program for GameTest conformance."
+    group = "verification"
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*Create kinetics program lowers deterministically for GameTest conformance*")
+    outputs.file(createKineticsConformanceArtifact)
+    doFirst {
+        systemProperty("compukter.vm.createKineticsArtifact", createKineticsConformanceArtifact.get().asFile.absolutePath)
+    }
 }

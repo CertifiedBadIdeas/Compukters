@@ -99,10 +99,10 @@ class DiagnosticQueryTest {
     }
 
     @Test
-    fun `selected Create kinetics API resolves typed Float sensors and controller writes`() {
+    fun `selected addon API resolves typed Float sensors and controller writes`() {
         val source =
             """
-            import create.kinetics.Kinetics
+            import fixture.kinetics.Kinetics
 
             fun main() {
                 val speed: Float = Kinetics.left.speedometer().speed()

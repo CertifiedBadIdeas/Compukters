@@ -50,7 +50,9 @@ import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.CompilationSession
 import ru.lazyhat.compukters.compiler.k2.engine.KotlinProjectLowering
+import ru.lazyhat.compukters.compiler.k2.engine.PlatformCapabilityShape
 import ru.lazyhat.compukters.compiler.k2.engine.UnsupportedKotlinIr
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicRegistry
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.k2.build.PlatformLibraryDeclaration
@@ -76,6 +78,7 @@ class PlatformLibraryCompiler {
         currentSourcePaths: Set<String>,
         sourceModules: Map<String, PlatformModuleId>,
         intrinsicRegistry: TrustedIntrinsicRegistry,
+        capabilityShapes: Map<PlatformCapabilityId, PlatformCapabilityShape> = emptyMap(),
     ): ImmutableBytes? {
         if (declarations.none { it.kind == PlatformLibraryDeclarationKind.FUNCTION }) return null
         val filesByPath = ir.files.associateBy { file -> matchSourcePath(file.fileEntry.name, sourceModules.keys) }
@@ -98,6 +101,7 @@ class PlatformLibraryCompiler {
                 irSink = { _, _ -> },
                 trustedPlatformSourceModules = physicalModules,
                 canonicalIntrinsicRegistry = intrinsicRegistry,
+                capabilityShapes = capabilityShapes,
             )
         val artifact =
             try {

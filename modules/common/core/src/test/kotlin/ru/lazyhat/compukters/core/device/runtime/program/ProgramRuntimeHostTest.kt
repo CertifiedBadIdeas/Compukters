@@ -71,8 +71,8 @@ import kotlin.test.assertTrue
 class ProgramRuntimeHostTest {
     @Test
     fun `addon requests suspend independently and reject completions after lifecycle reset`() {
-        val first = VmHostRequest(11, CREATE_KINETICS, 1, listOf(VmValue.I32(3)), taskId = 2)
-        val second = VmHostRequest(12, CREATE_KINETICS, 2, listOf(VmValue.I32(4)), taskId = 3)
+        val first = VmHostRequest(11, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(3)), taskId = 2)
+        val second = VmHostRequest(12, TEST_ADDON_CAPABILITY, 2, listOf(VmValue.I32(4)), taskId = 3)
         val session =
             ScriptedSession(
                 outcomes =
@@ -88,7 +88,7 @@ class ProgramRuntimeHostTest {
             ProgramRuntimeHost(
                 sessionFactory = ProgramVmSessionFactory { session },
                 tickBudget = ProgramTickBudget(maximumAdvancesPerTick = 4),
-                addonCapabilitySchemas = listOf(CREATE_KINETICS_SCHEMA),
+                addonCapabilitySchemas = listOf(TEST_ADDON_SCHEMA),
                 addonRequestPort =
                     ProgramAddonRequestPort { request ->
                         submitted += request
@@ -1181,10 +1181,10 @@ class ProgramRuntimeHostTest {
     )
 
     private companion object {
-        val CREATE_KINETICS = CapabilityIdentity("create", "kinetics", 1, 0)
-        val CREATE_KINETICS_SCHEMA =
+        val TEST_ADDON_CAPABILITY = CapabilityIdentity("fixture", "device", 1, 0)
+        val TEST_ADDON_SCHEMA =
             HostCapabilitySchema(
-                CREATE_KINETICS,
+                TEST_ADDON_CAPABILITY,
                 listOf(
                     HostOperationSchema(listOf(HostValueType.I32), HostValueType.F32, asynchronous = true),
                     HostOperationSchema(listOf(HostValueType.I32), HostValueType.I32, asynchronous = true),

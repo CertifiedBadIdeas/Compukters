@@ -47,7 +47,7 @@ val guestPlatformSources = configurations.create("guestPlatformSources") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
-val createKineticsGuestApiBundle = configurations.create("createKineticsGuestApiBundle") {
+val addonGuestApiFixtureBundle = configurations.create("addonGuestApiFixtureBundle") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
@@ -61,8 +61,8 @@ dependencies {
         isTransitive = false
     }
     add(
-        createKineticsGuestApiBundle.name,
-        project(path = ":v1_21_1-create", configuration = "createKineticsGuestApiBundle"),
+        addonGuestApiFixtureBundle.name,
+        project(path = ":addon-guest-api-fixture", configuration = "addonGuestApiBundle"),
     )
 }
 
@@ -288,10 +288,10 @@ tasks.test {
     dependsOn(tasks.jar)
     filter.excludeTestsMatching("ru.lazyhat.compukters.compiler.worker.integration.*")
     inputs.file(workerJar)
-    inputs.files(createKineticsGuestApiBundle)
+    inputs.files(addonGuestApiFixtureBundle)
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukters.createKineticsGuestApi", createKineticsGuestApiBundle.singleFile.absolutePath)
+        systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
     }
 }
 
@@ -305,7 +305,6 @@ val argvConformanceArtifact = layout.buildDirectory.file("generated/conformance/
 val platformScalarConformanceArtifact = layout.buildDirectory.file("generated/conformance/platform-scalar.cpkt")
 val redstoneConformanceArtifact = layout.buildDirectory.file("generated/conformance/redstone.cpkt")
 val soundConformanceArtifact = layout.buildDirectory.file("generated/conformance/sound.cpkt")
-val createKineticsConformanceArtifact = layout.buildDirectory.file("generated/conformance/create-kinetics.cpkt")
 val intLoopsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-loops.cpkt")
 val intArrayConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-array.cpkt")
 val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-long.cpkt")
@@ -472,24 +471,6 @@ val generateSoundConformanceArtifact = tasks.register<Test>("generateSoundConfor
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.soundArtifact", soundConformanceArtifact.get().asFile.absolutePath)
-    }
-}
-
-val generateCreateKineticsConformanceArtifact = tasks.register<Test>("generateCreateKineticsConformanceArtifact") {
-    description = "Compiles the deterministic Create kinetics program for GameTest conformance."
-    group = "verification"
-    dependsOn(tasks.jar)
-    useJUnitPlatform()
-    testClassesDirs = sourceSets.test.get().output.classesDirs
-    classpath = sourceSets.test.get().runtimeClasspath
-    filter.includeTestsMatching("*Create kinetics program lowers deterministically for GameTest conformance*")
-    inputs.file(workerJar)
-    inputs.files(createKineticsGuestApiBundle)
-    outputs.file(createKineticsConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukters.createKineticsGuestApi", createKineticsGuestApiBundle.singleFile.absolutePath)
-        systemProperty("compukter.vm.createKineticsArtifact", createKineticsConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
