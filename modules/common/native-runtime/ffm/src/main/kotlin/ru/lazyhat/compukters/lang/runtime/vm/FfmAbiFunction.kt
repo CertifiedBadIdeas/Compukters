@@ -71,6 +71,8 @@ internal enum class FfmAbiFunction(
             ValueLayout.ADDRESS,
             ValueLayout.JAVA_LONG,
             ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
         ),
     ),
     CREATE_IN_STORE(
@@ -85,6 +87,8 @@ internal enum class FfmAbiFunction(
             ValueLayout.ADDRESS,
             ValueLayout.JAVA_LONG,
             ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
         ),
     ),
     CREATE_BOOT_IN_STORE(
@@ -92,6 +96,8 @@ internal enum class FfmAbiFunction(
         status(
             ValueLayout.JAVA_LONG,
             ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
             ValueLayout.ADDRESS,
             ValueLayout.JAVA_LONG,
             ValueLayout.ADDRESS,

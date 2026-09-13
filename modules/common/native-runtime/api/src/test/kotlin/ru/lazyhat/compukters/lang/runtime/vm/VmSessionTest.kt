@@ -18,7 +18,10 @@
 
 package ru.lazyhat.compukters.lang.runtime.vm
 
+import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
+import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import java.nio.ByteBuffer
@@ -29,6 +32,27 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class VmSessionTest {
+    @Test
+    fun `creation paths forward canonical host capability schemas`() {
+        val schema =
+            HostCapabilitySchema(
+                CapabilityIdentity("create", "kinetics", 1, 0),
+                listOf(HostOperationSchema(listOf(HostValueType.I32), HostValueType.F32, asynchronous = true)),
+            )
+        val bridge = FakeBridge(createResult = bytes(0, long(7)))
+        val store = WorldFileSystemStore.open(Path.of("/tmp/compukters-capability-store"), bridge)
+        val id = ComputerId.fromLongs(1, 2)
+
+        VmSession.open(byteArrayOf(1), listOf(schema), bridge).close()
+        VmSession.openInStore(byteArrayOf(2), store, id, byteArrayOf(3), listOf(schema)).close()
+        VmSession.bootInStore(store, id, byteArrayOf(4), listOf(schema)).close()
+
+        val expected = bridge.standaloneCapabilitySchemas
+        assertEquals(expected, bridge.persistentCreate?.capabilitySchemas?.toList())
+        assertEquals(expected, bridge.bootCreate?.capabilitySchemas?.toList())
+        store.close()
+    }
+
     @Test
     fun `redstone synchronization validates and delegates exact unsigned bits`() {
         val bridge = FakeBridge(createResult = bytes(0, long(7)))
@@ -605,6 +629,7 @@ class VmSessionTest {
         val terminalTexts = mutableListOf<IntArray>()
         var persistentCreate: PersistentCreate? = null
         var bootCreate: BootCreate? = null
+        var standaloneCapabilitySchemas: List<Byte> = emptyList()
         var terminalTransportFactory: (() -> TerminalWireTransport)? = null
         var terminalTransportOpens = 0
         val lifecycleEvents = mutableListOf<String>()
@@ -689,8 +714,9 @@ class VmSessionTest {
             id: ByteArray,
             rom: ByteArray,
             artifact: ByteArray,
+            capabilitySchemas: ByteArray,
         ): ByteArray {
-            persistentCreate = PersistentCreate(storeHandle, id.copyOf(), rom.copyOf(), artifact.copyOf())
+            persistentCreate = PersistentCreate(storeHandle, id.copyOf(), rom.copyOf(), artifact.copyOf(), capabilitySchemas.copyOf())
             return createResult
         }
 
@@ -698,12 +724,19 @@ class VmSessionTest {
             storeHandle: Long,
             id: ByteArray,
             rom: ByteArray,
+            capabilitySchemas: ByteArray,
         ): ByteArray {
-            bootCreate = BootCreate(storeHandle, id.copyOf(), rom.copyOf())
+            bootCreate = BootCreate(storeHandle, id.copyOf(), rom.copyOf(), capabilitySchemas.copyOf())
             return createResult
         }
 
-        override fun create(artifact: ByteArray): ByteArray = createResult
+        override fun create(
+            artifact: ByteArray,
+            capabilitySchemas: ByteArray,
+        ): ByteArray {
+            standaloneCapabilitySchemas = capabilitySchemas.toList()
+            return createResult
+        }
 
         override fun advance(
             handle: Long,
@@ -904,12 +937,14 @@ class VmSessionTest {
         val id: ByteArray,
         val rom: ByteArray,
         val artifact: ByteArray,
+        val capabilitySchemas: ByteArray,
     )
 
     private data class BootCreate(
         val storeHandle: Long,
         val id: ByteArray,
         val rom: ByteArray,
+        val capabilitySchemas: ByteArray,
     )
 
     private data class CompilationArtifact(

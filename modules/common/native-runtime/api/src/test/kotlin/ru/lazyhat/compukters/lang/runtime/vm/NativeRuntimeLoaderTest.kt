@@ -328,7 +328,10 @@ class NativeRuntimeLoaderTest {
         )
 
     private class FakeBridge : LowLevelVmBridge {
-        override fun create(artifact: ByteArray): ByteArray = error("unused")
+        override fun create(
+            artifact: ByteArray,
+            capabilitySchemas: ByteArray,
+        ): ByteArray = error("unused")
 
         override fun advance(
             handle: Long,

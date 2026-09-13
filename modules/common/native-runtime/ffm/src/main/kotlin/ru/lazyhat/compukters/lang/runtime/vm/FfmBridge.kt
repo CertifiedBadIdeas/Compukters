@@ -173,7 +173,10 @@ internal class FfmBridge private constructor(
             }
         }
 
-    override fun create(artifact: ByteArray): ByteArray =
+    override fun create(
+        artifact: ByteArray,
+        capabilitySchemas: ByteArray,
+    ): ByteArray =
         Arena.ofConfined().use { callArena ->
             val maximum = maximumCreateBytes()
             val output = callArena.allocate(maximum.toLong())
@@ -182,6 +185,8 @@ internal class FfmBridge private constructor(
                 createHandle.invokeExact(
                     callArena.nativeBytes(artifact),
                     artifact.size.toLong(),
+                    callArena.nativeBytes(capabilitySchemas),
+                    capabilitySchemas.size.toLong(),
                     output,
                     maximum.toLong(),
                     written,
@@ -195,6 +200,7 @@ internal class FfmBridge private constructor(
         id: ByteArray,
         rom: ByteArray,
         artifact: ByteArray,
+        capabilitySchemas: ByteArray,
     ): ByteArray {
         requireComputerId(id)
         return Arena.ofConfined().use { callArena ->
@@ -209,6 +215,8 @@ internal class FfmBridge private constructor(
                     rom.size.toLong(),
                     callArena.nativeBytes(artifact),
                     artifact.size.toLong(),
+                    callArena.nativeBytes(capabilitySchemas),
+                    capabilitySchemas.size.toLong(),
                     output,
                     maximum.toLong(),
                     written,
@@ -222,6 +230,7 @@ internal class FfmBridge private constructor(
         storeHandle: Long,
         id: ByteArray,
         rom: ByteArray,
+        capabilitySchemas: ByteArray,
     ): ByteArray {
         requireComputerId(id)
         return Arena.ofConfined().use { callArena ->
@@ -234,6 +243,8 @@ internal class FfmBridge private constructor(
                     callArena.nativeBytes(id),
                     callArena.nativeBytes(rom),
                     rom.size.toLong(),
+                    callArena.nativeBytes(capabilitySchemas),
+                    capabilitySchemas.size.toLong(),
                     output,
                     maximum.toLong(),
                     written,
@@ -930,7 +941,7 @@ internal class FfmBridge private constructor(
                     terminalTextHandle =
                         downcall(FfmAbiFunction.TERMINAL_TEXT),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 13) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 14) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()

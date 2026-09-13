@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
 
 class JniNativeEntryPointIntegrationTest {
     @Test
-    fun `every Java 21 JNI entry point resolves against ABI v13 adapter`() {
+    fun `every Java 21 JNI entry point resolves against ABI v14 adapter`() {
         JniBridge.open(Path.of(requiredProperty("compukter.jni.library")))
         val bytes = ByteArray(0)
         val output = ByteArray(1)
@@ -33,8 +33,9 @@ class JniNativeEntryPointIntegrationTest {
         val invalidLimits = byteArrayOf(0xff.toByte())
         val written = LongArray(1)
         val candidate = LongArray(1)
+        val capabilitySchemas = byteArrayOf(1, 0)
 
-        assertEquals(13, JniNative.abiVersion())
+        assertEquals(14, JniNative.abiVersion())
         assertTrue(JniNative.maximumOutcomeBytes() > 0)
         assertTrue(JniNative.maximumCreateBytes() > 0)
         statuses(
@@ -46,9 +47,9 @@ class JniNativeEntryPointIntegrationTest {
             JniNative.storeTombstone(0, id),
             JniNative.storeRecover(0, id),
             JniNative.storeClose(0),
-            JniNative.create(bytes, output, written),
-            JniNative.createInStore(0, id, bytes, bytes, output, written),
-            JniNative.createBootInStore(0, id, bytes, output, written),
+            JniNative.create(bytes, capabilitySchemas, output, written),
+            JniNative.createInStore(0, id, bytes, bytes, capabilitySchemas, output, written),
+            JniNative.createBootInStore(0, id, bytes, capabilitySchemas, output, written),
             JniNative.close(0),
             JniNative.submitRedstoneInput(0, 0),
             JniNative.confirmRedstoneOutput(0, 0),
