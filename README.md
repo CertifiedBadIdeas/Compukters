@@ -35,6 +35,8 @@ New players can follow the [getting-started guide](docs/GETTING-STARTED.md), als
 published as the [Compukters documentation site](https://certifiedbadideas.github.io/Compukters/).
 See [Redstone GPIO](docs/REDSTONE.md) for local-side input waits, persistent
 weak/direct outputs, and tick-boundary behavior.
+See [Addon development](docs/ADDON-DEVELOPMENT.md) for publishing typed Guest
+Kotlin APIs from independent NeoForge mods.
 See [Verification](docs/VERIFICATION.md) for focused checks, complete local
 verification, and the separate tagged dual-artifact release gate.
 See the [in-world VM benchmark guide](docs/VM-BENCHMARK.md) for profiling the
@@ -53,6 +55,7 @@ installation:
 ./gradlew-sandbox-dev-parallel :v26_1-neoforge:buildProductionUniversalJar
 ./gradlew-sandbox-dev-parallel :v1_21_1-neoforge:runClient
 ./gradlew-sandbox-dev-parallel :v1_21_1-neoforge:buildProductionUniversalJar
+./gradlew-sandbox-dev-parallel runCreateAddonClient
 ```
 
 Minecraft-independent Gradle modules are grouped beneath `modules/common`, while
@@ -68,7 +71,7 @@ canonical content.
 For fast feedback, `./gradlew-sandbox-dev-parallel verifyLocalFast` runs policy,
 build-script, and a curated JVM test slice. Before treating the current checkout
 as fully verified, run `./gradlew-sandbox-dev-parallel verifyLocalFull`; it covers
-every Gradle subproject check, all registered Kotlin-to-VM conformance scenarios,
+every Gradle subproject check, the standalone Create addon build, all registered Kotlin-to-VM conformance scenarios,
 Rust and FFM checks, runtime integrations, the real GameTest server, and the
 production artifacts for the locally configured native platform.
 
