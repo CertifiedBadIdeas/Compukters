@@ -17,8 +17,8 @@
  */
 
 import net.fabricmc.loom.task.RemapJarTask
-import org.jmailen.gradle.kotlinter.tasks.ConfigurableKtLintTask
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jmailen.gradle.kotlinter.tasks.ConfigurableKtLintTask
 import java.util.zip.ZipFile
 
 plugins {
@@ -144,18 +144,6 @@ tasks.test {
     useJUnitPlatform()
 }
 
-tasks.matching { it.name in setOf("runClient", "runServer") }.configureEach {
-    group = "compukters development"
-}
-
-tasks.named("assembleCompuktersAddon") {
-    group = "compukters addon sdk"
-}
-
-tasks.named("updateCompuktersAddonAbiLock") {
-    group = "compukters addon sdk"
-}
-
 tasks.withType<ConfigurableKtLintTask>().configureEach {
     exclude { it.file.path.contains("build/generated") }
 }
@@ -164,33 +152,48 @@ tasks.jar {
     archiveClassifier.set("dev")
 }
 
-val productionJar = tasks.named<RemapJarTask>("remapJar") {
-    inputFile.set(tasks.jar.flatMap { it.archiveFile })
-    archiveClassifier.set("")
-}
-
-val verifyProductionJar = tasks.register("verifyProductionJar") {
-    group = "compukters verification"
-    description = "Checks that the standalone Create addon contains only its own implementation and Guest API bundle."
-    dependsOn(productionJar)
-    inputs.file(productionJar.flatMap { it.archiveFile })
-    doLast {
-        val archive = productionJar.get().archiveFile.get().asFile
-        val entries = ZipFile(archive).use { zip -> zip.entries().asSequence().filterNot { it.isDirectory }.map { it.name }.toList() }
-        listOf(
-            "META-INF/neoforge.mods.toml",
-            "ru/lazyhat/compukters/integration/create/CompuktersCreateMod.class",
-            "ru/lazyhat/compukters/integration/create/CreateKineticsIntegration.class",
-            "META-INF/compukters/addons/create-kinetics.cagb",
-        ).forEach { required ->
-            check(entries.count { it == required } == 1) { "$required is missing or duplicated in ${archive.name}" }
-        }
-        check(entries.none { it.startsWith("com/simibubi/create/") }) { "Create implementation classes leaked into ${archive.name}" }
-        check(entries.none { it.startsWith("ru/lazyhat/compukters/api/") }) { "Compukters API classes leaked into ${archive.name}" }
-        check(entries.none { it.startsWith("ru/lazyhat/compukters/core/") }) { "Compukters core classes leaked into ${archive.name}" }
-        check(entries.none { it.startsWith("ru/lazyhat/compukters/impl/") }) { "Compukters implementation leaked into ${archive.name}" }
+val productionJar =
+    tasks.named<RemapJarTask>("remapJar") {
+        inputFile.set(tasks.jar.flatMap { it.archiveFile })
+        archiveClassifier.set("")
     }
-}
+
+val verifyProductionJar =
+    tasks.register("verifyProductionJar") {
+        group = "verification"
+        description = "Checks that the standalone Create addon contains only its own implementation and Guest API bundle."
+        dependsOn(productionJar)
+        inputs.file(productionJar.flatMap { it.archiveFile })
+        doLast {
+            val archive =
+                productionJar
+                    .get()
+                    .archiveFile
+                    .get()
+                    .asFile
+            val entries =
+                ZipFile(archive).use { zip ->
+                    zip
+                        .entries()
+                        .asSequence()
+                        .filterNot { it.isDirectory }
+                        .map { it.name }
+                        .toList()
+                }
+            listOf(
+                "META-INF/neoforge.mods.toml",
+                "ru/lazyhat/compukters/integration/create/CompuktersCreateMod.class",
+                "ru/lazyhat/compukters/integration/create/CreateKineticsIntegration.class",
+                "META-INF/compukters/addons/create-kinetics.cagb",
+            ).forEach { required ->
+                check(entries.count { it == required } == 1) { "$required is missing or duplicated in ${archive.name}" }
+            }
+            check(entries.none { it.startsWith("com/simibubi/create/") }) { "Create implementation classes leaked into ${archive.name}" }
+            check(entries.none { it.startsWith("ru/lazyhat/compukters/api/") }) { "Compukters API classes leaked into ${archive.name}" }
+            check(entries.none { it.startsWith("ru/lazyhat/compukters/core/") }) { "Compukters core classes leaked into ${archive.name}" }
+            check(entries.none { it.startsWith("ru/lazyhat/compukters/impl/") }) { "Compukters implementation leaked into ${archive.name}" }
+        }
+    }
 
 tasks.named("check") {
     dependsOn(verifyProductionJar)
@@ -201,7 +204,7 @@ tasks.named("assemble") {
 }
 
 tasks.register("buildProductionJar") {
-    group = "compukters distribution"
+    group = "build"
     description = "Builds the standalone remapped Create addon mod JAR."
     dependsOn(productionJar, verifyProductionJar)
 }
