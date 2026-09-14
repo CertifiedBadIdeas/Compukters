@@ -11,8 +11,9 @@ A Compukters addon is an ordinary, independently installed NeoForge mod. It owns
 Kotlin declarations and generated `.cagb` bundle. Compukters reads that data bundle when the addon registers it, but
 the base mod never links to or packages the addon implementation.
 
-The public addon SDK first ships with Compukters 0.5.0 for Minecraft 1.21.1. Its Maven artifacts share the Compukters
-release version:
+The public addon SDK first ships as version 0.1.0 with Compukters 0.5.0 for Minecraft 1.21.1. The SDK has its own
+compatibility version: Compukters releases do not require addon authors to update unless the public addon boundary
+changes. All artifacts belonging to one SDK release share that SDK version:
 
 | Coordinate | Build role |
 | --- | --- |
@@ -21,7 +22,7 @@ release version:
 | `ru.lazyhat.compukters:compukters-guest-platform` | Canonical base platform bundle with extension `cpb` |
 | `ru.lazyhat.compukters:compukters-addon-api-neoforge-1.21.1` | Compile-only host and registration API supplied by the installed base mod at runtime |
 
-Released coordinates are intended to resolve from Maven Central. Before version 0.5.0 is published, a Compukters
+Released coordinates are intended to resolve from Maven Central. Before SDK version 0.1.0 is published, a Compukters
 checkout can publish the same SDK coordinates to Maven Local with:
 
 ```shell
@@ -34,8 +35,9 @@ builds and TestKit verification that need an explicit repository under `build/re
 
 The first-party Create addon under `addons/create` is itself a separate Gradle root and serves as the complete example.
 It contains no project dependency, included build, shared source directory, or path back into the Compukters build.
-From the Compukters root, `verifyCreateAddon`, `buildCreateAddon`, and `runCreateAddonClient` first publish the matching
-SDK to Maven Local and then invoke that independent build.
+From the Compukters root, `verifyCreateAddon`, `buildCreateAddon`, and `runCreateAddonClient` first publish the selected
+SDK version to Maven Local and then invoke that independent build. The Create addon also has its own release version,
+independent of both the SDK and the base mod.
 
 ## Apply the plugin
 
@@ -62,7 +64,7 @@ dependencyResolutionManagement {
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.10"
-    id("ru.lazyhat.compukters.addon") version "0.5.0"
+    id("ru.lazyhat.compukters.addon") version "0.1.0"
     // Apply and configure Loom/NeoForge as usual for the target mod.
 }
 
@@ -74,10 +76,10 @@ compuktersAddon {
 }
 ```
 
-The plugin adds the version-matched Compukters API as `compileOnly`. Do not shade or Jar-in-Jar that API into the
-addon: the separately installed Compukters mod supplies those classes. Declare Compukters as a required dependency in
-the addon's `neoforge.mods.toml`, and add the ordinary Compukters development mod to the run configuration used by
-your Loom setup.
+The plugin adds the API belonging to the selected SDK release as `compileOnly`. Do not shade or Jar-in-Jar that API
+into the addon: the separately installed Compukters mod supplies those classes. Declare Compukters as a required
+dependency in the addon's `neoforge.mods.toml`, and add the ordinary Compukters development mod to the run configuration
+used by your Loom setup.
 
 ## Write the Guest API
 

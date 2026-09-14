@@ -22,6 +22,8 @@ plugins {
     `maven-publish`
 }
 
+val addonSdkVersion = libs.versions.addon.sdk.get()
+
 gradlePlugin {
     plugins {
         create("compuktersAddon") {
@@ -34,7 +36,7 @@ gradlePlugin {
 }
 
 tasks.jar {
-    manifest.attributes["Implementation-Version"] = project.version
+    manifest.attributes["Implementation-Version"] = addonSdkVersion
 }
 
 tasks.test {
@@ -48,14 +50,14 @@ tasks.test {
         "compukters.addon.sdk.repository",
         rootProject.layout.buildDirectory.dir("repositories/addon-sdk").get().asFile.absolutePath,
     )
-    systemProperty("compukters.addon.sdk.version", project.version.toString())
+    systemProperty("compukters.addon.sdk.version", addonSdkVersion)
     systemProperty("compukters.addon.kotlin.version", libs.plugins.kotlin.get().version.requiredVersion)
 }
 
 publishing {
     publications.withType<MavenPublication>().configureEach {
         groupId = project.group.toString()
-        version = project.version.toString()
+        version = addonSdkVersion
         if (name == "pluginMaven") artifactId = "compukters-addon-gradle-plugin"
     }
     repositories {

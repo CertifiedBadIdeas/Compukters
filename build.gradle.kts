@@ -731,10 +731,6 @@ fun registerCreateAddonBuild(
         dir = file("addons/create")
         tasks = requestedTasks.toList()
         dependsOn("publishAddonSdkToMavenLocal")
-        startParameter.projectProperties =
-            mapOf(
-                "compuktersAddonSdkVersion" to project.version.toString(),
-            )
     }
 
 val verifyCreateAddon =

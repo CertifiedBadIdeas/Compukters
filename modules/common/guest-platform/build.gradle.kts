@@ -21,6 +21,8 @@ plugins {
     `maven-publish`
 }
 
+val addonSdkVersion = libs.versions.addon.sdk.get()
+
 dependencies {
     testImplementation(kotlin("test"))
 }
@@ -59,7 +61,7 @@ publishing {
         create<MavenPublication>("addonPlatform") {
             groupId = project.group.toString()
             artifactId = "compukters-guest-platform"
-            version = project.version.toString()
+            version = addonSdkVersion
             artifact(platformBundle) {
                 extension = "cpb"
                 builtBy(assemblePlatformBundle)

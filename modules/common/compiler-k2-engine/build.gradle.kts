@@ -22,6 +22,8 @@ plugins {
     `maven-publish`
 }
 
+val addonSdkVersion = libs.versions.addon.sdk.get()
+
 val addonToolingJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
     archiveClassifier.set("addon-tooling")
     isPreserveFileTimestamps = false
@@ -35,7 +37,7 @@ publishing {
         create<MavenPublication>("addonTooling") {
             groupId = project.group.toString()
             artifactId = "compukters-addon-tooling"
-            version = project.version.toString()
+            version = addonSdkVersion
             artifact(addonToolingJar) {
                 classifier = null
             }

@@ -30,8 +30,8 @@ plugins {
 }
 
 group = "ru.lazyhat.compukters"
-val addonSdkVersion = providers.gradleProperty("compuktersAddonSdkVersion").orElse("0.5.0")
-version = "1.21.1-neoforge-${addonSdkVersion.get()}"
+val addonSdkVersion = "0.1.0"
+version = "1.21.1-neoforge-${providers.gradleProperty("addonVersion").get()}"
 
 kotlin {
     jvmToolchain(21)
@@ -73,7 +73,7 @@ repositories {
     maven("https://raw.githubusercontent.com/Fuzss/modresources/main/maven")
 }
 
-val compuktersApi = "ru.lazyhat.compukters:compukters-addon-api-neoforge-1.21.1:${addonSdkVersion.get()}"
+val compuktersApi = "ru.lazyhat.compukters:compukters-addon-api-neoforge-1.21.1:$addonSdkVersion"
 
 dependencies {
     minecraft("net.minecraft:minecraft:1.21.1")
