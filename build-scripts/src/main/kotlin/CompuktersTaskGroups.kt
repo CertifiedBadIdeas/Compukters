@@ -18,16 +18,14 @@
 
 import org.gradle.api.Project
 
-private val developmentTasks =
-    setOf("runClient", "runClient2", "runClient3", "runServer", "runGameTestServer", "runCreateAddonClient")
-private val distributionTasks = setOf("buildCreateAddon", "buildProductionUniversalJar", "buildReleaseUniversalJar")
+private val developmentTasks = setOf("runClient", "runClient2", "runClient3", "runServer", "runGameTestServer")
+private val distributionTasks = setOf("buildProductionUniversalJar", "buildReleaseUniversalJar")
 private val verificationTasks =
     setOf(
         "verifyLocalFast",
         "verifyLocalFull",
         "verifyAllModuleChecks",
         "verifyKotlinVmConformance",
-        "verifyCreateAddon",
         "verifyNativeRuntime",
         "programRuntimeIntegrationTest",
         "endToEndTest",
@@ -36,7 +34,6 @@ private val verificationTasks =
     )
 private val addonSdkTasks =
     setOf(
-        "stageAddonSdkMavenRepository",
         "publishAddonSdkToMavenLocal",
         "assembleAddonGuestApiBundle",
         "assemblePlatformBundle",

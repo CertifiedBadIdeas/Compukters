@@ -68,6 +68,17 @@ publishing {
     }
 }
 
+tasks.register("publishAddonSdkToMavenLocal") {
+    description = "Publishes the public addon SDK to Maven Local for standalone builds and IDE imports."
+    group = "compukters addon sdk"
+    dependsOn(
+        tasks.named("publishToMavenLocal"),
+        ":compiler-k2-engine:publishAddonToolingPublicationToMavenLocal",
+        ":guest-platform:publishAddonPlatformPublicationToMavenLocal",
+        ":v1_21_1-neoforge:publishAddonApiPublicationToMavenLocal",
+    )
+}
+
 dependencies {
     testImplementation(gradleTestKit())
     testImplementation(kotlin("test"))

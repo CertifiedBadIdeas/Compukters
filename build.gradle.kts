@@ -698,60 +698,6 @@ tasks.register("verifyLocalFast") {
     dependsOn(":v26_1-neoforge:test")
 }
 
-tasks.register("stageAddonSdkMavenRepository") {
-    description = "Builds the public addon SDK into the local Maven staging repository."
-    group = "publishing"
-    dependsOn(
-        ":addon-gradle-plugin:publishAllPublicationsToAddonSdkRepository",
-        ":compiler-k2-engine:publishAddonToolingPublicationToAddonSdkRepository",
-        ":guest-platform:publishAddonPlatformPublicationToAddonSdkRepository",
-        ":v1_21_1-neoforge:publishAddonApiPublicationToAddonSdkRepository",
-    )
-}
-
-tasks.register("publishAddonSdkToMavenLocal") {
-    description = "Publishes the public addon SDK to Maven Local for standalone builds and IDE imports."
-    group = "compukters addon sdk"
-    dependsOn(
-        ":addon-gradle-plugin:publishToMavenLocal",
-        ":compiler-k2-engine:publishAddonToolingPublicationToMavenLocal",
-        ":guest-platform:publishAddonPlatformPublicationToMavenLocal",
-        ":v1_21_1-neoforge:publishAddonApiPublicationToMavenLocal",
-    )
-}
-
-fun registerCreateAddonBuild(
-    name: String,
-    description: String,
-    vararg requestedTasks: String,
-) =
-    tasks.register<GradleBuild>(name) {
-        this.description = description
-        group = if (requestedTasks.any { it.startsWith("run") }) "loom" else "verification"
-        dir = file("addons/create")
-        tasks = requestedTasks.toList()
-        dependsOn("publishAddonSdkToMavenLocal")
-    }
-
-val verifyCreateAddon =
-    registerCreateAddonBuild(
-        "verifyCreateAddon",
-        "Verifies the standalone Create addon against the Maven-published local Compukters SDK.",
-        "check",
-    )
-
-registerCreateAddonBuild(
-    "buildCreateAddon",
-    "Builds the standalone Create addon against the Maven-published local Compukters SDK.",
-    "buildProductionJar",
-)
-
-registerCreateAddonBuild(
-    "runCreateAddonClient",
-    "Runs the standalone Create addon client against the Maven-published local Compukters SDK.",
-    "runClient",
-)
-
 tasks.named("check") {
     dependsOn(verifyLicensePolicy)
 }
@@ -768,7 +714,6 @@ tasks.register("verifyLocalFull") {
     group = "verification"
     dependsOn("verifyLocalFast")
     dependsOn(verifyAllModuleChecks)
-    dependsOn(verifyCreateAddon)
     dependsOn(verifyKotlinVmConformance)
     dependsOn(testCompukterVmRust)
     dependsOn(testCompukterFfiRust)

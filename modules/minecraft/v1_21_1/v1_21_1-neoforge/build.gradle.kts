@@ -142,12 +142,6 @@ val verifyProductionJar =
             check(entries.none { "compukter_ffi" in it || it.endsWith("/FfmRuntimeBackend.class") }) {
                 "Java 25 FFM runtime content leaked into ${archive.name}"
             }
-            check(entries.none { it.startsWith("com/simibubi/create/") }) {
-                "Create implementation classes leaked into ${archive.name}"
-            }
-            check(entries.none { it.startsWith("ru/lazyhat/compukters/integration/create/") }) {
-                "standalone Create addon classes leaked into ${archive.name}"
-            }
             check(entries.none { it.startsWith("ru/lazyhat/compukters/addon/api/build/") }) {
                 "addon Guest API build tooling leaked into ${archive.name}"
             }
@@ -196,9 +190,6 @@ val verifyProductionJar =
                 check("versionRange=\"${expectedMetadata.getValue(property)}\"" in metadata) {
                     "wrong $property in ${archive.name}"
                 }
-            }
-            check("modId=\"create\"" !in metadata && "compukters_create" !in metadata) {
-                "standalone Create addon metadata leaked into ${archive.name}"
             }
         }
     }
