@@ -22,7 +22,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonHost
+import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
 
 fun interface CompuktersAddonHostFactory {

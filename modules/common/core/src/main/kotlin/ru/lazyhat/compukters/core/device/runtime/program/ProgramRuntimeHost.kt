@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.core.device.runtime.program
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
+import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.compiler.runtime.CompilerSubmissionResult
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationAddress

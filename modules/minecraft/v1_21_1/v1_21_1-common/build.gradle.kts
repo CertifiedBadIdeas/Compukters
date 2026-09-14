@@ -28,5 +28,6 @@ architectury {
 }
 
 dependencies {
+    implementation(projects.addonApi)
     implementation(projects.addonGuestApi)
 }

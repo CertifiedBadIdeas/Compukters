@@ -19,3 +19,7 @@
 plugins {
     id("addon-guest-api-convention")
 }
+
+dependencies {
+    implementation(projects.addonApi)
+}

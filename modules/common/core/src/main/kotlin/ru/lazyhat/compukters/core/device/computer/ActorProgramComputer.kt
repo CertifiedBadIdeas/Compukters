@@ -18,6 +18,9 @@
 
 package ru.lazyhat.compukters.core.device.computer
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
+import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
+import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorEffect
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorLease
@@ -28,9 +31,6 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeRequestId
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
 import ru.lazyhat.compukters.core.device.runtime.program.EmptyProgramAddonHost
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonCompletion
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonDispatch
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFailure
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult

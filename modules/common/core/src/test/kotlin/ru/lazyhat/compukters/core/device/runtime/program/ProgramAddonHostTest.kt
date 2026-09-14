@@ -18,6 +18,10 @@
 
 package ru.lazyhat.compukters.core.device.runtime.program
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
+import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
+import ru.lazyhat.compukters.api.addon.ProgramAddonHost
+import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse

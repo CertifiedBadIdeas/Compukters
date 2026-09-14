@@ -18,8 +18,8 @@
 
 package ru.lazyhat.compukters.core.device.runtime.actor
 
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonCompletion
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonRequest
+import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
+import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult

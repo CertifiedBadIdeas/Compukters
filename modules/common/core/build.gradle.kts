@@ -35,6 +35,7 @@ nativeIntegrationTest.compileClasspath += sourceSets.main.get().output
 nativeIntegrationTest.runtimeClasspath += sourceSets.main.get().output
 
 dependencies {
+    implementation(projects.addonApi)
     implementation(projects.compilerClient)
     implementation(projects.compilerRuntime)
     implementation(projects.nativeRuntimeApi)
