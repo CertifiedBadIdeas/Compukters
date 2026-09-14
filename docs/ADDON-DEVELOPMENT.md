@@ -80,12 +80,16 @@ plugins {
 }
 
 compuktersAddon {
-    addon.set("example")
-    module.set("sensors")
-    dependencies.set(listOf("stdlib:core"))
-    capability("sensors")
+    module(
+        addon = "example",
+        name = "sensors",
+        dependencies = listOf("stdlib:core"),
+    )
 }
 ```
+
+The Guest module version defaults to the Gradle project's `version`; pass `version = "..."` only when those versions
+intentionally differ. Addon and module names remain separate because one addon may publish several module groups.
 
 The plugin adds the Minecraft-independent API and the NeoForge 1.21.1 adapter belonging to the selected SDK release as
 `compileOnly`. A build targeting another supported version can set `adapterApiCoordinate` to the matching coordinate.
@@ -116,14 +120,14 @@ identify each owner explicitly:
 
 ```kotlin
 compuktersAddon {
-    addon.set("example")
-    module.set("devices")
-    capability("sensors") {
-        bindingOwner.set("example.devices.SensorBindings")
-    }
-    capability("motors") {
-        bindingOwner.set("example.devices.MotorBindings")
-    }
+    module(
+        addon = "example",
+        name = "devices",
+        capabilities = mapOf(
+            "sensors" to "example.devices.SensorBindings",
+            "motors" to "example.devices.MotorBindings",
+        ),
+    )
 }
 ```
 

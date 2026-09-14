@@ -17,15 +17,16 @@ Choose a `Kinetics` completion in the attached IDE to add its import and enable 
 Create module to the project's `compukter.toml` manually:
 
 ```toml
-format = 1
+format = 2
 name = "kinetic-monitor"
 
 [modules]
-create = { kinetics = 1 }
+create = [ "kinetics" ]
 ```
 
 The IDE, analysis worker, and compiler all use the attached server's target profile. A project that requests this module
-therefore resolves only when the target actually has the compatible Create integration loaded.
+therefore resolves only when the target actually has the compatible Create integration loaded. Exact module versions
+and content hashes are recorded by the IDE in `compukter.lock`; they are not written by hand in this manifest.
 
 ## Sides and devices
 
