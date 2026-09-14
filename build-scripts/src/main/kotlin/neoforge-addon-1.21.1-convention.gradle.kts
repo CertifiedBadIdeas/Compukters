@@ -45,7 +45,6 @@ mapOf(
     "runClient" to "run/client",
     "runClient2" to "run/client2",
     "runClient3" to "run/client3",
-    "runClientWithoutCreate" to "run/clientWithoutCreate",
     "runServer" to "run/server",
 ).forEach { (runTask, runDirectory) ->
     val suffix = runTask.removePrefix("run")
