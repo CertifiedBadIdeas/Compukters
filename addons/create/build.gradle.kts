@@ -107,8 +107,6 @@ dependencies {
         "io.github.oshai:kotlin-logging-jvm:8.0.4",
         "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.11.0",
         "org.tukaani:xz:1.10",
-        "org.tomlj:tomlj:1.1.1",
-        "org.antlr:antlr4-runtime:4.11.1",
     ).forEach { dependency ->
         forgeRuntimeLibrary(dependency) { isTransitive = false }
     }
