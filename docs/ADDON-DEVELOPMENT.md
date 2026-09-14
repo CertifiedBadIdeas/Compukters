@@ -20,7 +20,9 @@ changes. All artifacts belonging to one SDK release share that SDK version:
 | `ru.lazyhat.compukters:compukters-addon-gradle-plugin` | Public plugin implementation for `ru.lazyhat.compukters.addon` |
 | `ru.lazyhat.compukters:compukters-addon-tooling` | Isolated Guest API compiler invoked by the plugin |
 | `ru.lazyhat.compukters:compukters-guest-platform` | Canonical base platform bundle with extension `cpb` |
-| `ru.lazyhat.compukters:compukters-addon-api-neoforge-1.21.1` | Compile-only host and registration API supplied by the installed base mod at runtime |
+| `ru.lazyhat.compukters:compukters-addon-api` | Minecraft-independent host contracts, result types, and Guest API models |
+| `ru.lazyhat.compukters:compukters-addon-neoforge-1.21.1` | Thin compile-only registration adapter for NeoForge 1.21.1 |
+| `ru.lazyhat.compukters:compukters-addon-neoforge-26.1.2` | Thin compile-only registration adapter for NeoForge 26.1.2 |
 
 Released coordinates are intended to resolve from Maven Central. Before SDK version 0.1.0 is published, a Compukters
 checkout can publish the same SDK coordinates to Maven Local with:
@@ -29,9 +31,16 @@ checkout can publish the same SDK coordinates to Maven Local with:
 ./gradlew :addon-gradle-plugin:publishAddonSdkToMavenLocal
 ```
 
+The common API and target adapters are compile-only dependencies and carry the SDK version. To run an addon from a
+checkout, publish the matching development mod separately; its coordinate carries the Compukters version instead:
+
+```shell
+./gradlew :v1_21_1-neoforge:publishDevelopmentModPublicationToMavenLocal
+```
+
 The standalone addon checks `mavenLocal()` before public repositories, so direct Gradle runs and IDE imports resolve
-the development SDK after that one bootstrap command. Isolated TestKit verification stages the same artifacts under
-`build/repositories/addon-sdk` without exposing another root task.
+these published coordinates without a source or project dependency on the Compukters build. Isolated TestKit
+verification stages the SDK artifacts under `build/repositories/addon-sdk` without exposing another root task.
 
 The first-party Create addon under `addons/create` is itself a separate Gradle root and serves as the complete example.
 It contains no project dependency, included build, shared source directory, or path back into the Compukters build,
@@ -78,10 +87,11 @@ compuktersAddon {
 }
 ```
 
-The plugin adds the API belonging to the selected SDK release as `compileOnly`. Do not shade or Jar-in-Jar that API
-into the addon: the separately installed Compukters mod supplies those classes. Declare Compukters as a required
-dependency in the addon's `neoforge.mods.toml`, and add the ordinary Compukters development mod to the run configuration
-used by your Loom setup.
+The plugin adds the Minecraft-independent API and the NeoForge 1.21.1 adapter belonging to the selected SDK release as
+`compileOnly`. A build targeting another supported version can set `adapterApiCoordinate` to the matching coordinate.
+Do not shade or Jar-in-Jar either artifact into the addon: the separately installed Compukters mod supplies those
+classes. Declare Compukters as a required dependency in the addon's `neoforge.mods.toml`, and add an ordinary
+Compukters development mod with its own product version to the run configuration used by your Loom setup.
 
 ## Write the Guest API
 
@@ -126,14 +136,18 @@ bindings and request decoding. Addon source never contains those wire details.
 `SensorsCapabilityHandler` and `SensorsAddonContract`:
 
 ```kotlin
-CompuktersAddonRegistry.register(SensorsAddonContract.guestApi(MyAddon::class.java)) { level, position, state ->
+CompuktersAddonRegistry.register(SensorsAddonContract.guestApi(MyAddon::class.java)) { computer ->
     SensorsAddonContract.host(
         object : SensorsCapabilityHandler {
-            override fun temperature(): AddonCallResult<Float> = addonCompleted(readTemperature(level, position))
+            override fun temperature(): AddonCallResult<Float> =
+                addonCompleted(readTemperature(computer.level, computer.position))
         },
     )
 }
 ```
+
+`CompuktersComputerContext` exposes the server level, computer position, and `adjacentDirection(side)` mapping without
+requiring the addon to link against Compukters block implementation classes.
 
 Handlers execute through the bounded server-side addon boundary. Return `addonCompleted(value)` for an immediate
 result, `addonFailed(kind, detail)` for a descriptive Guest failure, or `addonPending { ... }` when the world operation
