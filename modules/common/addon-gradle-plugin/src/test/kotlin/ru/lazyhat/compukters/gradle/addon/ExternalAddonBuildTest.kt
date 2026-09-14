@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.gradle.addon
 import org.gradle.testkit.runner.GradleRunner
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.util.zip.ZipFile
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
@@ -33,14 +34,38 @@ class ExternalAddonBuildTest {
     fun `standalone build resolves SDK coordinates and packages its bundle`() {
         val project = Files.createTempDirectory("compukters-external-addon-")
         try {
-            val repository = Path.of(requireNotNull(System.getProperty("compukters.addon.sdk.repository")))
             val sdkVersion = requireNotNull(System.getProperty("compukters.addon.sdk.version"))
             val kotlinVersion = requireNotNull(System.getProperty("compukters.addon.kotlin.version"))
+            val repository = project.resolve("repository")
+            stageModule(
+                repository,
+                "compukters-addon-api",
+                sdkVersion,
+                Path.of(requireNotNull(System.getProperty("compukters.addon.test.api"))),
+            )
+            stageModule(
+                repository,
+                "compukters-addon-tooling",
+                sdkVersion,
+                Path.of(requireNotNull(System.getProperty("compukters.addon.test.tooling"))),
+            )
+            stageModule(
+                repository,
+                "compukters-guest-platform",
+                sdkVersion,
+                Path.of(requireNotNull(System.getProperty("compukters.addon.test.platform"))),
+                "cpb",
+            )
+            stageModule(
+                repository,
+                "compukters-addon-neoforge-1.21.1",
+                sdkVersion,
+                singleJar(Path.of(requireNotNull(System.getProperty("compukters.addon.test.adapter-dir")))),
+            )
             project.resolve("settings.gradle.kts").writeText(
                 """
                 pluginManagement {
                     repositories {
-                        maven { url = uri(${repository.toUri().toString().quoted()}) }
                         gradlePluginPortal()
                     }
                 }
@@ -58,13 +83,17 @@ class ExternalAddonBuildTest {
                 plugins {
                     java
                     id("org.jetbrains.kotlin.jvm") version "$kotlinVersion"
-                    id("ru.lazyhat.compukters.addon") version "$sdkVersion"
+                    id("ru.lazyhat.compukters.addon")
                 }
 
                 version = "2.3.4"
 
                 compuktersAddon {
                     register("fixture")
+                    toolingCoordinate.set("ru.lazyhat.compukters:compukters-addon-tooling:$sdkVersion")
+                    platformCoordinate.set("ru.lazyhat.compukters:compukters-guest-platform:$sdkVersion@cpb")
+                    commonApiCoordinate.set("ru.lazyhat.compukters:compukters-addon-api:$sdkVersion")
+                    adapterApiCoordinate.set("ru.lazyhat.compukters:compukters-addon-neoforge-1.21.1:$sdkVersion")
                 }
 
                 tasks.register("verifyCompuktersApiClasspath") {
@@ -124,7 +153,40 @@ class ExternalAddonBuildTest {
             .create()
             .withProjectDir(project.toFile())
             .withArguments("--stacktrace", task)
+            .withPluginClasspath()
             .forwardOutput()
+}
+
+private fun singleJar(directory: Path): Path =
+    Files.list(directory).use { files ->
+        files
+            .filter { file -> file.fileName.toString().endsWith(".jar") }
+            .filter { file -> "transformProductionNeoForge" !in file.fileName.toString() }
+            .toList()
+            .single()
+    }
+
+private fun stageModule(
+    repository: Path,
+    artifact: String,
+    version: String,
+    source: Path,
+    extension: String = "jar",
+) {
+    val module = repository.resolve("ru/lazyhat/compukters/$artifact/$version")
+    module.createDirectories()
+    Files.copy(source, module.resolve("$artifact-$version.$extension"), StandardCopyOption.REPLACE_EXISTING)
+    module.resolve("$artifact-$version.pom").writeText(
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>ru.lazyhat.compukters</groupId>
+          <artifactId>$artifact</artifactId>
+          <version>$version</version>
+        </project>
+        """.trimIndent(),
+    )
 }
 
 private fun String.quoted(): String = "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""

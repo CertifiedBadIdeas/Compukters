@@ -11,7 +11,7 @@ A Compukters addon is an ordinary, independently installed NeoForge mod. It owns
 Kotlin declarations and generated `.cagb` bundle. Compukters reads that data bundle when the addon registers it, but
 the base mod never links to or packages the addon implementation.
 
-The public addon SDK first ships as version 0.1.0 with Compukters 0.5.0 for Minecraft 1.21.1. The SDK has its own
+The public addon SDK uses version 0.2.0 independently of Compukters 0.5.0 for Minecraft 1.21.1. The SDK has its own
 compatibility version: Compukters releases do not require addon authors to update unless the public addon boundary
 changes. All artifacts belonging to one SDK release share that SDK version:
 
@@ -24,31 +24,25 @@ changes. All artifacts belonging to one SDK release share that SDK version:
 | `ru.lazyhat.compukters:compukters-addon-neoforge-1.21.1` | Thin compile-only registration adapter for NeoForge 1.21.1 |
 | `ru.lazyhat.compukters:compukters-addon-neoforge-26.1.2` | Thin compile-only registration adapter for NeoForge 26.1.2 |
 
-Released coordinates are intended to resolve from Maven Central. Before SDK version 0.1.0 is published, a Compukters
+Released coordinates are intended to resolve from Maven Central. Before an SDK version is published, a Compukters
 checkout can publish the same SDK coordinates to Maven Local with:
 
 ```shell
 ./gradlew :addon-gradle-plugin:publishAddonSdkToMavenLocal
 ```
 
-The common API and target adapters are compile-only dependencies and carry the SDK version. To run an addon from a
-checkout, publish the matching development mod separately; its coordinate carries the Compukters version instead:
-
-```shell
-./gradlew :v1_21_1-neoforge:publishDevelopmentModPublicationToMavenLocal
-```
-
-The standalone addon checks `mavenLocal()` before public repositories, so direct Gradle runs and IDE imports resolve
-these published coordinates without a source or project dependency on the Compukters build. Isolated TestKit
-verification stages the SDK artifacts under `build/repositories/addon-sdk` without exposing another root task.
+The common API and target adapters are compile-only dependencies and carry the SDK version. Isolated TestKit
+verification creates its own temporary Maven layout directly from the built SDK artifacts.
 
 The first-party Create addon under `addons/create` is itself a separate Gradle root and serves as the complete example.
-It contains no project dependency, included build, shared source directory, or path back into the Compukters build,
-and owns the Gradle wrapper that pins its build toolchain. After publishing a development SDK, run `check`,
-`buildProductionJar`, or `runClient` from `addons/create`; its `gradlew-sandbox*` launchers provide the same isolated,
-parallel, interactive, and summarized modes as the main repository without referring back to it. The Compukters root
-does not own or invoke those tasks. The Create addon also has its own release version, independent of both the SDK and
-the base mod.
+It owns its Gradle wrapper and includes the adjacent Compukters checkout as a composite build for local co-development.
+Public SDK and development-mod coordinates remain in the addon build, but explicit substitutions select the matching
+local projects; the runtime mod selects the self-contained `namedElements` development artifact. A changed Compukters
+source therefore rebuilds the development mod for `runClient` without publishing it to Maven Local or relying on
+Loom's coordinate-keyed remap cache. After publishing the Gradle plugin and tooling SDK, run `check`,
+`buildProductionJar`, or `runClient` from `addons/create`. The Compukters root remains unaware of the addon and does not
+own or invoke its tasks. The Create addon also has its own release version, independent of both the SDK and the base
+mod.
 
 ## Apply the plugin
 

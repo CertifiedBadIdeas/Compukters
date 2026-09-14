@@ -47,12 +47,6 @@ publishing {
             }
         }
     }
-    repositories {
-        maven {
-            name = "addonSdk"
-            url = rootProject.layout.buildDirectory.dir("repositories/addon-sdk").get().asFile.toURI()
-        }
-    }
 }
 
 val verifyAddonNeoForgeApiJar =

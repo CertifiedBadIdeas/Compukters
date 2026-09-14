@@ -60,9 +60,6 @@ compuktersAddon {
 }
 
 repositories {
-    providers.gradleProperty("compuktersAddonSdkRepository").orNull?.let { repository ->
-        maven { url = uri(repository) }
-    }
     mavenLocal()
     mavenCentral()
     maven("https://maven.architectury.dev/")
@@ -90,7 +87,8 @@ dependencies {
     neoForge("net.neoforged:neoforge:21.1.250")
 
     modRuntimeOnly(compuktersDevelopmentMod) {
-        isChanging = true
+        isTransitive = false
+        targetConfiguration = "namedElements"
     }
     testImplementation(compuktersCommonApi)
     testImplementation(compuktersAdapterApi)
@@ -110,10 +108,6 @@ dependencies {
     }
 
     testImplementation(kotlin("test"))
-}
-
-configurations.configureEach {
-    resolutionStrategy.cacheChangingModulesFor(0, "seconds")
 }
 
 loom {
