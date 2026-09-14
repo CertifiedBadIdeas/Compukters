@@ -23,6 +23,7 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
+import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHostFactory
 import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
 
 fun interface CompuktersAddonHostFactory {
@@ -39,6 +40,10 @@ object CompuktersAddonRegistry {
         guestApi: AddonGuestApiBundle,
         factory: CompuktersAddonHostFactory,
     ) {
-        ComputerAddonHosts.register(factory, listOf(guestApi))
+        ComputerAddonHosts.register(
+            ComputerAddonHostFactory { level, position, state -> factory.create(level, position, state) },
+            listOf(guestApi),
+            factory,
+        )
     }
 }

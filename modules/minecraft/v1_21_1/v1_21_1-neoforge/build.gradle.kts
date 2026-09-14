@@ -59,6 +59,10 @@ loom {
 }
 
 dependencies {
+    implementation(projects.addonApi)
+    shadowBundle(project(path = projects.addonApi.path)) { isTransitive = false }
+    implementation(projects.v1211AddonNeoforgeApi)
+    shadowBundle(project(path = projects.v1211AddonNeoforgeApi.path)) { isTransitive = false }
     implementation(projects.addonGuestApi)
     shadowBundle(project(path = projects.addonGuestApi.path)) { isTransitive = false }
     common(project(path = projects.v1211Common.path)) { isTransitive = false }
@@ -111,6 +115,8 @@ val verifyProductionJar =
                 }
             listOf(
                 "META-INF/neoforge.mods.toml",
+                "ru/lazyhat/compukters/api/addon/ProgramAddonHost.class",
+                "ru/lazyhat/compukters/api/addon/minecraft/CompuktersAddonRegistry.class",
                 "ru/lazyhat/compukters/impl/CompuktersMod.class",
                 "ru/lazyhat/compukters/impl/ide/IdeClientBootstrap.class",
                 "ru/lazyhat/compukters/impl/ide/IdeRenderer.class",

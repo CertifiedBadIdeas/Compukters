@@ -22,9 +22,10 @@ plugins {
 
 val sharedLayer =
     when {
+        name.endsWith("-addon-neoforge-api") -> "addon-neoforge-api"
         name.endsWith("-common") -> "common"
         name.endsWith("-neoforge") -> "neoforge"
-        else -> error("minecraft-shared-sources requires a common or NeoForge leaf: $path")
+        else -> error("minecraft-shared-sources requires a supported Minecraft leaf: $path")
     }
 val libs = libsCatalog()
 val supportedMinecraftVersions =

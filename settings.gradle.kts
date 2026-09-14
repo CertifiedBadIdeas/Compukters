@@ -88,10 +88,12 @@ include("core", commonModulesDir)
 
 val v26_1Dir = minecraftModulesDir.resolve("v26_1")
 include("v26_1-common", v26_1Dir)
+include("v26_1-addon-neoforge-api", v26_1Dir)
 include("v26_1-neoforge", v26_1Dir)
 
 val v1_21_1Dir = minecraftModulesDir.resolve("v1_21_1")
 include("v1_21_1-common", v1_21_1Dir)
+include("v1_21_1-addon-neoforge-api", v1_21_1Dir)
 include("v1_21_1-neoforge", v1_21_1Dir)
 
 rootProject.name = "Compukters"
