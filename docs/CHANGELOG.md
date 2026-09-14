@@ -12,36 +12,34 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.5.0 — In development
 
+This release expands the Kotlin available to computer programs and introduces support for independently installed
+addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
+
 ### Guest Kotlin
 
-- Added unboxed `Long` values, mixed `Int`/`Long` arithmetic and comparisons, bitwise and shift operations,
-  explicit `Int`/`Long` conversions, constants, string interpolation, and console output.
-- Added unboxed `Float` values with mixed `Int`/`Long` arithmetic and comparisons, explicit numeric conversions,
-  standard constants, Kotlin-compatible string interpolation, console output, and typed host responses.
-- Fixed `==` and `!=` between `Float` variables lowered by K2 through its internal IEEE equality intrinsic.
-- Replaced source-level `suspend` functions with transparent stackful task blocking: ordinary functions can now wait
-  on host requests, task joins, and channel handoffs without a coroutine modifier.
+- Computer programs can use unboxed `Long` and `Float` values, including mixed numeric arithmetic and comparisons,
+  explicit conversions, `Long` bitwise and shift operations, constants, string interpolation, and console output.
+- `Float` values retain their binary32 representation through arithmetic, equality, host responses, and conversion to
+  text, including signed zero, infinities, NaN, and subnormal values.
+- Operations that wait for the world, another task, or a channel now block transparently inside ordinary functions;
+  source-level `suspend` declarations are not part of the supported Guest Kotlin subset.
 
-### Create integration
+### Addons and Create
 
-- Added optional Create 6.0.x integration on Minecraft 1.21.1 for adjacent speedometers, stressometers, and rotation
-  speed controllers through the `create:kinetics` Guest Kotlin module.
-- Added exact `Float` readings, blocking change waits, bounded stable device handles, and deterministic failure when
-  an attached Create block is missing, unloaded, removed, or replaced.
-- Replaced opaque addon failure numbers with bounded descriptions that identify the unavailable or stale Create device
-  in terminal process diagnostics.
-- Made the IDE and compiler advertise `create:kinetics` only when the attached server has the compatible integration
-  loaded; Compukters remains usable without Create installed.
-- Moved `create:kinetics` into a server-admitted addon Guest API bundle, including its Kotlin metadata and sources, so
-  compiler and IDE workers no longer need the integration in the base platform or execute addon code.
-- Made IDE completion discover APIs from compatible attached addons and offer to import `Kinetics` while enabling its
-  project module in the same completion action.
+- Independently installed addon mods can provide typed Guest Kotlin APIs without becoming dependencies of Compukters.
+  The compiler and IDE expose only the addons available on the attached server.
+- The separately installed Create addon supports Create 6.0.x on Minecraft 1.21.1 while the base Compukters mod remains
+  usable without Create.
+- Its `create:kinetics` module reads exact `Float` speed, stress, and capacity values from adjacent speedometers and
+  stressometers, waits for value changes without Guest-side polling, and controls rotation speed controllers.
+- Device handles remain bound to the exact adjacent block. Missing, unloaded, removed, or replaced devices fail
+  deterministically and produce a descriptive terminal diagnostic.
 
 ### In-game IDE
 
-- Fixed member completion for built-in Guest Kotlin types, including `Float.toInt()`, while an IDE is attached to a
-  computer.
-- Fixed navigation to bundled Kotlin sources supplied by an attached addon, including `create:kinetics`.
+- Member completion includes the supported operations of built-in Guest Kotlin numeric types.
+- Completion, automatic imports, parameter information, and source navigation include compatible APIs supplied by
+  installed addons. Selecting `Kinetics` also enables the required project module.
 
 ## 0.4.0 — 2026-09-12
 

@@ -84,6 +84,12 @@ Internal refactors, tests, build chores, and documentation-only edits need no en
 contributors, packaging, or the release process. When releasing a version, replace its `In development` marker with the
 release date and add the next development-version heading at the top.
 
+Treat an `In development` section as the cumulative user-visible state of the upcoming release, not as a chronological
+log of intermediate implementation work. Consolidate additions, later corrections, and architectural moves into the
+final capability users will receive. Use wording such as `Fixed` or `Restored` only for regressions relative to an
+already published release or previously available user-facing behavior, not for defects introduced and resolved during
+the same unreleased development cycle.
+
 After each verified implementation stage, create a focused commit unless the user explicitly asks not to commit.
 Commit frequently enough that a clean, build, or tooling failure cannot destroy a large body of uncommitted work.
 Stage only files that belong to the current task, and never include unrelated user changes in an agent commit.
