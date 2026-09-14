@@ -26,7 +26,7 @@ import ru.lazyhat.compukters.addon.api.AddonCapabilityValueType
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.addon.api.AddonGuestApiCatalog
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersAddonHostFactory
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonHost
+import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.programAddonHostOf
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostValueType

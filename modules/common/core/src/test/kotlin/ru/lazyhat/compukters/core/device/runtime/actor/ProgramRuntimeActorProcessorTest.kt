@@ -18,11 +18,11 @@
 
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
+import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
+import ru.lazyhat.compukters.api.addon.ProgramAddonHost
+import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.core.device.computer.ActorProgramComputer
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonCompletion
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonDispatch
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonHost
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonRequest
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost

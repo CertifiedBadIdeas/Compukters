@@ -18,10 +18,10 @@
 
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonHost
+import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.program.EmptyProgramAddonHost
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonHost
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonRequest
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonRequestPort
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget

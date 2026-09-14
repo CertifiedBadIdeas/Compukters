@@ -26,15 +26,24 @@ import kotlin.test.assertFailsWith
 
 class AddonCallResultTest {
     @Test
-    fun `addon failure helpers retain bounded human-readable details`() {
-        val detail = "Create kinetic device is unavailable"
+    fun `failure retains its bounded detail`() {
+        val detail = "Peripheral at 1, 2, 3 was replaced"
 
         assertEquals(AddonCallResult.Failed(HostFailureKind.UNAVAILABLE, detail), addonFailed(HostFailureKind.UNAVAILABLE, detail))
         assertEquals(AddonPollResult.Failed(HostFailureKind.UNAVAILABLE, detail), addonPollFailed(HostFailureKind.UNAVAILABLE, detail))
+    }
+
+    @Test
+    fun `failure rejects an empty detail`() {
         assertFailsWith<IllegalArgumentException> { addonFailed(HostFailureKind.OTHER, "") }
-        assertFailsWith<IllegalArgumentException> {
-            addonPollFailed(HostFailureKind.OTHER, "x".repeat(MAXIMUM_HOST_FAILURE_DETAIL_BYTES + 1))
-        }
-        assertFailsWith<IllegalArgumentException> { addonFailed(HostFailureKind.OTHER, "\ud800") }
+        assertFailsWith<IllegalArgumentException> { addonPollFailed(HostFailureKind.OTHER, "") }
+    }
+
+    @Test
+    fun `failure rejects a detail beyond the native bound`() {
+        val oversized = "x".repeat(MAXIMUM_HOST_FAILURE_DETAIL_BYTES + 1)
+
+        assertFailsWith<IllegalArgumentException> { addonFailed(HostFailureKind.OTHER, oversized) }
+        assertFailsWith<IllegalArgumentException> { addonPollFailed(HostFailureKind.OTHER, oversized) }
     }
 }

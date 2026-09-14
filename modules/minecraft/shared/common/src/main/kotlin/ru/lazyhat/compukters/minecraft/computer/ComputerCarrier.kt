@@ -29,7 +29,7 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorComman
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorFailure
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonHost
+import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
