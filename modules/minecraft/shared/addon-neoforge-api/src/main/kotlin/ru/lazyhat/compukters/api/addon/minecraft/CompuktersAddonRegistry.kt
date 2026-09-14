@@ -19,19 +19,33 @@
 package ru.lazyhat.compukters.api.addon.minecraft
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
-import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHostFactory
 import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
+import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
+
+class CompuktersComputerContext internal constructor(
+    val level: ServerLevel,
+    val position: BlockPos,
+    private val facing: Direction,
+) {
+    fun adjacentDirection(side: Int): Direction? =
+        when (side) {
+            0 -> facing
+            1 -> facing.opposite
+            2 -> facing.counterClockWise
+            3 -> facing.clockWise
+            4 -> Direction.UP
+            5 -> Direction.DOWN
+            else -> null
+        }
+}
 
 fun interface CompuktersAddonHostFactory {
-    fun create(
-        level: ServerLevel,
-        position: BlockPos,
-        state: BlockState,
-    ): ProgramAddonHost?
+    fun create(context: CompuktersComputerContext): ProgramAddonHost?
 }
 
 object CompuktersAddonRegistry {
@@ -41,7 +55,9 @@ object CompuktersAddonRegistry {
         factory: CompuktersAddonHostFactory,
     ) {
         ComputerAddonHosts.register(
-            ComputerAddonHostFactory { level, position, state -> factory.create(level, position, state) },
+            ComputerAddonHostFactory { level, position, state ->
+                factory.create(CompuktersComputerContext(level, position, state.getValue(ComputerBlock.FACING)))
+            },
             listOf(guestApi),
             factory,
         )

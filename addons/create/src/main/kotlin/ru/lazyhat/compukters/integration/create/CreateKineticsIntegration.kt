@@ -24,7 +24,6 @@ import com.simibubi.create.content.kinetics.speedController.SpeedControllerBlock
 import create.kinetics.KineticsAddonContract
 import create.kinetics.KineticsCapabilityHandler
 import net.minecraft.core.BlockPos
-import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.block.entity.BlockEntity
 import ru.lazyhat.compukters.api.addon.AddonCallResult
@@ -34,29 +33,29 @@ import ru.lazyhat.compukters.api.addon.addonPending
 import ru.lazyhat.compukters.api.addon.addonPollCompleted
 import ru.lazyhat.compukters.api.addon.addonPollFailed
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersAddonRegistry
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersComputerContext
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
-import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
 
 object CreateKineticsIntegration {
     fun register() {
-        CompuktersAddonRegistry.register(KineticsAddonContract.guestApi(CreateKineticsIntegration::class.java)) { level, position, _ ->
+        CompuktersAddonRegistry.register(KineticsAddonContract.guestApi(CreateKineticsIntegration::class.java)) { computer ->
             KineticsAddonContract.host(
                 KineticsHostState { side, kind ->
-                    resolveEndpoint(level, position, side, kind)
+                    resolveEndpoint(computer, side, kind)
                 },
             )
         }
     }
 
     private fun resolveEndpoint(
-        level: ServerLevel,
-        computerPosition: BlockPos,
+        computer: CompuktersComputerContext,
         side: Int,
         kind: PeripheralKind,
     ): KineticsEndpoint? {
+        val level = computer.level
         check(level.server.isSameThread) { "Create kinetics must be accessed on the server thread" }
-        val direction = adjacentDirection(level, computerPosition, side) ?: return null
-        val position = computerPosition.relative(direction)
+        val direction = computer.adjacentDirection(side) ?: return null
+        val position = computer.position.relative(direction)
         if (!level.hasChunkAt(position)) return null
         return when (val entity = level.getBlockEntity(position)) {
             is SpeedGaugeBlockEntity -> {
@@ -266,25 +265,6 @@ private class RotationControllerEndpoint(
     override fun setTargetSpeed(speed: Int): Int {
         entity.targetSpeed.setValue(speed)
         return entity.targetSpeed.getValue()
-    }
-}
-
-private fun adjacentDirection(
-    level: ServerLevel,
-    computerPosition: BlockPos,
-    side: Int,
-): Direction? {
-    val state = level.getBlockState(computerPosition)
-    if (!state.hasProperty(ComputerBlock.FACING)) return null
-    val facing = state.getValue(ComputerBlock.FACING)
-    return when (side) {
-        0 -> facing
-        1 -> facing.opposite
-        2 -> facing.counterClockWise
-        3 -> facing.clockWise
-        4 -> Direction.UP
-        5 -> Direction.DOWN
-        else -> null
     }
 }
 

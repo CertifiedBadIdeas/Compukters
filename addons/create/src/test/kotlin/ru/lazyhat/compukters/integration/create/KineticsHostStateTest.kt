@@ -19,9 +19,10 @@
 package ru.lazyhat.compukters.integration.create
 
 import create.kinetics.KineticsAddonContract
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonDispatch
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonHost
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonRequest
+import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
+import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
+import ru.lazyhat.compukters.api.addon.ProgramAddonHost
+import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
@@ -50,8 +51,7 @@ class KineticsHostStateTest {
         speedometer.speed = -32.5f
         assertEquals(
             listOf(
-                ru.lazyhat.compukters.core.device.runtime.program
-                    .ProgramAddonCompletion(wait.identity, HostResponse.FloatSuccess(-32.5f)),
+                ProgramAddonCompletion(wait.identity, HostResponse.FloatSuccess(-32.5f)),
             ),
             host.poll(8),
         )
