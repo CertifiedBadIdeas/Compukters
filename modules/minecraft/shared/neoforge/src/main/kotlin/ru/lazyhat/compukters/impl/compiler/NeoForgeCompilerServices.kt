@@ -248,7 +248,7 @@ private fun resolvedModule(bundle: AddonGuestApiBundle): ResolvedModule {
         bundle.identity.version
             .substringBefore('.')
             .toIntOrNull()
-    require(major != null && major in 1..ApiMajor.MAXIMUM) {
+    require(major != null && major in 0..ApiMajor.MAXIMUM) {
         "addon guest API module ${bundle.identity.module} version must begin with a supported API major"
     }
     return ResolvedModule(

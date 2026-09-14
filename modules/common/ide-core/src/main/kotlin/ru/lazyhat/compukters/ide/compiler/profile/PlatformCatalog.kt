@@ -154,7 +154,7 @@ class PlatformCatalog private constructor(
         ): PlatformCatalogEntry {
             val majorText = module.version.substringBefore('.')
             val major = majorText.toIntOrNull()
-            require(major != null && major in 1..ApiMajor.MAXIMUM) {
+            require(major != null && major in 0..ApiMajor.MAXIMUM) {
                 "platform module ${module.id} version must begin with a supported API major"
             }
             return PlatformCatalogEntry(
