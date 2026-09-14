@@ -34,7 +34,7 @@ import kotlin.io.path.invariantSeparatorsPathString
 
 data class AddonCapabilityAuthoring(
     val identity: AddonCapabilityIdentity,
-    val bindingOwner: String,
+    val bindingOwner: String?,
 )
 
 data class AddonAuthoringContract(
@@ -77,11 +77,11 @@ data class AddonAuthoringContract(
                     }
 
                     "capability" -> {
-                        require(fields.size == 6) { "invalid capability directive at line ${index + 1}" }
+                        require(fields.size == 5 || fields.size == 6) { "invalid capability directive at line ${index + 1}" }
                         capabilities +=
                             AddonCapabilityAuthoring(
                                 AddonCapabilityIdentity(fields[1], fields[2], fields[3].toInt(), fields[4].toInt()),
-                                fields[5],
+                                fields.getOrNull(5),
                             )
                     }
 
@@ -99,7 +99,7 @@ data class AddonAuthoringContract(
             }
             capabilities.forEach { capability ->
                 require(capability.identity.namespace == identity) { "addon capability namespace must equal addon identity" }
-                require(capability.bindingOwner.startsWith("$identity.")) {
+                require(capability.bindingOwner == null || capability.bindingOwner.startsWith("$identity.")) {
                     "addon binding owner escapes namespace: ${capability.bindingOwner}"
                 }
             }
@@ -227,11 +227,15 @@ fun resolveAddonContract(
             .compile(authoring.module, sources)
             .declarations
             .filter(PlatformDeclaration::trustedExternal)
-    val byCapability =
+    val resolvedOwners =
         authoring.capabilities.associateWith { capability ->
+            capability.bindingOwner ?: inferBindingOwner(authoring, capability, external)
+        }
+    val byCapability =
+        resolvedOwners.mapValues { (_, bindingOwner) ->
             external.filter { declaration ->
-                declaration.symbol.startsWith("${capability.bindingOwner}.") &&
-                    '.' !in declaration.symbol.removePrefix("${capability.bindingOwner}.")
+                declaration.symbol.startsWith("$bindingOwner.") &&
+                    '.' !in declaration.symbol.removePrefix("$bindingOwner.")
             }
         }
     val assigned = byCapability.values.flatten()
@@ -321,6 +325,21 @@ fun resolveAddonContract(
         AddonContract(authoring.addon, authoring.module, authoring.version, authoring.dependencies, schemas, bindings),
         expectedLock,
     )
+}
+
+private fun inferBindingOwner(
+    authoring: AddonAuthoringContract,
+    capability: AddonCapabilityAuthoring,
+    external: List<PlatformDeclaration>,
+): String {
+    require(authoring.capabilities.size == 1) {
+        "addon capability ${capability.identity.capabilityKey()} must configure a binding owner when the module has multiple capabilities"
+    }
+    val owners = external.map { it.symbol.substringBeforeLast('.') }.distinct()
+    require(owners.size == 1) {
+        "addon capability ${capability.identity.capabilityKey()} cannot infer a unique binding owner: $owners"
+    }
+    return owners.single()
 }
 
 private fun discoverAuthoringSources(root: Path): List<PlatformSource> =

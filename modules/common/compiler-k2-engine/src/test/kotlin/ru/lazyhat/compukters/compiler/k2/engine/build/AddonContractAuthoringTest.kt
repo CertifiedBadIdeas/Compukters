@@ -28,6 +28,37 @@ import kotlin.test.assertFailsWith
 
 class AddonContractAuthoringTest {
     @Test
+    fun `single capability infers its binding owner from external declarations`() =
+        withSources(
+            """
+            package fixture.kinetics
+            private object Bindings {
+                external fun speed(handle: Int): Float
+            }
+            """.trimIndent(),
+        ) { root ->
+            val contract =
+                AddonAuthoringContract.parse(
+                    """
+                    addon fixture
+                    module fixture:kinetics
+                    version 1.0.0
+                    dependencies stdlib:core
+                    capability fixture kinetics 1 0
+                    """.trimIndent().lines(),
+                )
+
+            val resolved = resolveAddonContract(root, contract, AddonAbiLock.empty())
+
+            assertEquals(
+                "fixture.kinetics.Bindings.speed",
+                resolved.contract.bindings
+                    .single()
+                    .symbol,
+            )
+        }
+
+    @Test
     fun `declaration order does not affect locked operation selectors`() =
         withSources(
             """
