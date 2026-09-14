@@ -18,6 +18,12 @@
 
 package ru.lazyhat.compukters.ide.client.analysis
 
+import ru.lazyhat.compukters.addon.api.AddonCapabilityIdentity
+import ru.lazyhat.compukters.addon.api.AddonCapabilityOperation
+import ru.lazyhat.compukters.addon.api.AddonCapabilitySchema
+import ru.lazyhat.compukters.addon.api.AddonCapabilityValueType
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBinding
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
@@ -32,6 +38,7 @@ import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.editor.EditorRange
+import ru.lazyhat.compukters.ide.project.AddonId
 import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ProjectManifest
@@ -47,7 +54,7 @@ import kotlin.test.assertTrue
 
 class IdeCompletionPlannerTest {
     @Test
-    fun `planner describes import and module enablement and filters against attached target`() {
+    fun `built-in completion requires only its import`() {
         val catalog = catalog()
         val entry = catalog.entries.single()
         val proposal =
@@ -62,25 +69,25 @@ class IdeCompletionPlannerTest {
         val manifest = ProjectManifest.of("sample", emptySet())
 
         val detached = IdeCompletionPlanner(catalog).plan(listOf(proposal), manifest, null).single()
-        assertEquals("import compukter.redstone.Redstone · enable compukter:redstone", detached.actionText)
-        assertEquals(entry.identity.id, detached.moduleRequirement?.id)
+        assertEquals("import compukter.redstone.Redstone", detached.actionText)
+        assertEquals(null, detached.addonRequirement)
 
         val unsupportedTarget = TargetCompileProfile(toolchain(catalog), emptyList(), WorkerLimits())
-        assertTrue(IdeCompletionPlanner(catalog).plan(listOf(proposal), manifest, unsupportedTarget).isEmpty())
+        assertEquals(1, IdeCompletionPlanner(catalog).plan(listOf(proposal), manifest, unsupportedTarget).size)
         val supportedTarget = TargetCompileProfile(toolchain(catalog), listOf(entry.identity), WorkerLimits())
         assertEquals(1, IdeCompletionPlanner(catalog).plan(listOf(proposal), manifest, supportedTarget).size)
 
-        val direct = ProjectManifest.of("sample", setOf(entry.identity.id))
         assertEquals(
             "import compukter.redstone.Redstone",
-            IdeCompletionPlanner(catalog).plan(listOf(proposal), direct, supportedTarget).single().actionText,
+            IdeCompletionPlanner(catalog).plan(listOf(proposal), manifest, supportedTarget).single().actionText,
         )
     }
 
     @Test
     fun `planner enables an addon module advertised only by the attached target`() {
         val catalog = catalog()
-        val identity = AnalysisModuleIdentity("fixture:telemetry", hash(9))
+        val addon = addon(catalog)
+        val identity = AnalysisModuleIdentity(addon.first.id.value, addon.first.contentHash)
         val proposal =
             CompletionItem(
                 "Telemetry",
@@ -90,18 +97,14 @@ class IdeCompletionPlannerTest {
                 symbol = CompletionSymbol("fixture.telemetry.Telemetry", "fixture.telemetry.Telemetry"),
                 additionalEdits = listOf(CompletionTextEdit(EditorRange(0, 0), "import fixture.telemetry.Telemetry\n\n")),
             )
-        val module = ResolvedModule(ModuleId("fixture", "telemetry"), ApiMajor(1), "1.0.0", identity.hash)
-        val payload =
-            TrustedBundlePayload(
-                TrustedBundleIdentity.of(identity.name, identity.hash),
-                BinaryValue.of(byteArrayOf(1)),
-            )
+        val module = addon.first
+        val payload = addon.second
         val target = TargetCompileProfile(toolchain(catalog), listOf(module), WorkerLimits(), listOf(payload))
 
         val planned = IdeCompletionPlanner(catalog).plan(listOf(proposal), ProjectManifest.of("sample", emptySet()), target).single()
 
-        assertEquals("import fixture.telemetry.Telemetry · enable fixture:telemetry", planned.actionText)
-        assertEquals(module.id, planned.moduleRequirement?.id)
+        assertEquals("import fixture.telemetry.Telemetry · enable fixture", planned.actionText)
+        assertEquals(AddonId("fixture"), planned.addonRequirement?.id)
     }
 
     @Test
@@ -125,7 +128,7 @@ class IdeCompletionPlannerTest {
         val planned = IdeCompletionPlanner(catalog).plan(listOf(proposal), ProjectManifest.of("sample", emptySet()), target).single()
 
         assertEquals("toInt", planned.proposal.insertText)
-        assertEquals(null, planned.moduleRequirement)
+        assertEquals(null, planned.addonRequirement)
     }
 
     private fun catalog(): PlatformCatalog {
@@ -149,6 +152,53 @@ class IdeCompletionPlannerTest {
         emptyList(),
         emptyList(),
     )
+
+    private fun addon(catalog: PlatformCatalog): Pair<ResolvedModule, TrustedBundlePayload> {
+        val id = PlatformModuleId("fixture", "telemetry")
+        val path = "fixture/telemetry/Telemetry.kt"
+        val source = "package fixture.telemetry\nprivate object Bindings { external fun read(): Int }\n"
+        val capability = AddonCapabilityIdentity("fixture", "telemetry", 1, 0)
+        val module =
+            PlatformModule(
+                id,
+                "1.0.0",
+                emptyList(),
+                ImmutableBytes.of(byteArrayOf(1)),
+                null,
+                listOf(
+                    ru.lazyhat.compukters.platform.bundle
+                        .PlatformSource(path, ImmutableBytes.of(source.encodeToByteArray())),
+                ),
+                listOf(
+                    ru.lazyhat.compukters.platform.bundle.PlatformDeclaration(
+                        "fixture.telemetry.Bindings.read",
+                        "fun():Int",
+                        id,
+                        path,
+                        0,
+                        source.length,
+                        true,
+                    ),
+                ),
+                emptyList(),
+            )
+        val bundle =
+            AddonGuestApiBundleCodec.assemble(
+                "fixture",
+                catalog.bundle.identity.platformAbi,
+                module,
+                listOf(
+                    AddonCapabilitySchema(capability, listOf(AddonCapabilityOperation(emptyList(), AddonCapabilityValueType.I32, false))),
+                ),
+                listOf(AddonGuestApiBinding("fixture.telemetry", "Bindings", "read", "fun():Int", capability, 0)),
+            )
+        val hash = Hash256.of(bundle.identity.contentHash.toByteArray())
+        return ResolvedModule(ModuleId("fixture", "telemetry"), ApiMajor(1), "1.0.0", hash) to
+            TrustedBundlePayload(
+                TrustedBundleIdentity.of("fixture:telemetry", hash),
+                BinaryValue.of(AddonGuestApiBundleCodec.encode(bundle)),
+            )
+    }
 
     private fun toolchain(catalog: PlatformCatalog) =
         ToolchainLockIdentity(

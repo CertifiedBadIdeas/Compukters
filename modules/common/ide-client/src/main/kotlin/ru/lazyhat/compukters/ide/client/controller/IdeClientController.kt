@@ -787,7 +787,7 @@ class IdeClientController(
     }
 
     private fun acceptCompletion(selection: IdeCompletionSelection) {
-        val requirement = selection.entry.moduleRequirement
+        val requirement = selection.entry.addonRequirement
         if (requirement == null) {
             applyCompletionSelection(selection)
             refreshAnalysisState()
@@ -811,7 +811,7 @@ class IdeClientController(
         state = state.copy(busy = state.busy + IdeBusyOperation.Resolve)
         publishWorkspace()
         coordinator
-            .enableModule(selected.handle, requirement.id, target?.compileProfile)
+            .enableAddon(selected.handle, requirement.id, target?.compileProfile)
             .whenComplete { result, failure ->
                 val mapped =
                     if (failure == null) {
@@ -876,7 +876,7 @@ class IdeClientController(
         state = state.copy(busy = state.busy - IdeBusyOperation.Resolve)
         if (update is ProjectDependencyUpdate.Published) {
             val module =
-                event.selection.entry.moduleRequirement
+                event.selection.entry.addonRequirement
                     ?.id
                     ?.value
                     .orEmpty()

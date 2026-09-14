@@ -136,7 +136,7 @@ class ClientCompilationServiceTest {
             ),
             BinaryValue.of("manifest".encodeToByteArray()),
             BinaryValue.of("lock".encodeToByteArray()),
-            CompileProfile(platformToolchain(platform), platform.identity, emptySet(), emptyList(), limits),
+            CompileProfile(platformToolchain(platform), platform.identity, emptyList(), emptyList(), limits),
         )
     }
 

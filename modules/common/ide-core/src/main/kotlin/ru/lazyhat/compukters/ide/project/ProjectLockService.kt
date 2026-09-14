@@ -29,43 +29,26 @@ sealed interface ProjectLockMismatch {
         val available: String,
     ) : ProjectLockMismatch
 
-    data class ManifestModuleMissing(
-        val id: ModuleId,
+    data class ManifestAddonMissing(
+        val id: AddonId,
     ) : ProjectLockMismatch
 
-    data class ModuleDirect(
-        val id: ModuleId,
-        val expected: Boolean,
-        val locked: Boolean,
+    data class UnexpectedLockedAddon(
+        val id: AddonId,
     ) : ProjectLockMismatch
 
-    data class ModuleOrder(
-        val expected: List<ModuleId>,
-        val locked: List<ModuleId>,
+    data class AddonUnavailable(
+        val id: AddonId,
     ) : ProjectLockMismatch
 
-    data class UnexpectedLockedModule(
-        val id: ModuleId,
-    ) : ProjectLockMismatch
-
-    data class ModuleUnavailable(
-        val id: ModuleId,
-    ) : ProjectLockMismatch
-
-    data class ModuleMajor(
-        val id: ModuleId,
-        val expected: ApiMajor,
-        val available: ApiMajor,
-    ) : ProjectLockMismatch
-
-    data class ModuleVersion(
-        val id: ModuleId,
+    data class AddonVersion(
+        val id: AddonId,
         val expected: String,
         val available: String,
     ) : ProjectLockMismatch
 
-    data class ModuleContent(
-        val id: ModuleId,
+    data class AddonContent(
+        val id: AddonId,
         val expected: String,
         val available: String,
     ) : ProjectLockMismatch
@@ -86,13 +69,13 @@ class ProjectLockService(
     ): ProjectLock {
         val selected =
             try {
-                resolution.catalog.resolve(manifest.modules)
+                resolution.catalog.resolve(manifest.addons)
             } catch (failure: IllegalArgumentException) {
-                throw ProjectResolutionException(failure.message ?: "platform module resolution failed")
+                throw ProjectResolutionException(failure.message ?: "addon resolution failed")
             }
         return ProjectLock.of(
             resolution.toolchain,
-            selected.modules.map { module -> LockedModule(module.identity, module.direct) },
+            selected.addons,
         )
     }
 
@@ -103,49 +86,26 @@ class ProjectLockService(
     ): List<ProjectLockMismatch> =
         buildList {
             compareToolchain(lock.toolchain, availableProfile.toolchain)
-            val locked = lock.modules.associateBy { it.identity.id }
-            manifest.modules.forEach { id ->
-                val lockedModule = locked[id]?.identity
-                if (lockedModule == null) {
-                    add(ProjectLockMismatch.ManifestModuleMissing(id))
+            val locked = lock.addons.associateBy(ResolvedAddon::id)
+            manifest.addons.forEach { id ->
+                if (id !in locked) {
+                    add(ProjectLockMismatch.ManifestAddonMissing(id))
                 }
             }
-            lock.modules.filter { it.direct && it.identity.id !in manifest.modules }.forEach {
-                add(ProjectLockMismatch.UnexpectedLockedModule(it.identity.id))
+            lock.addons.filter { it.id !in manifest.addons }.forEach {
+                add(ProjectLockMismatch.UnexpectedLockedAddon(it.id))
             }
-            val available = availableProfile.catalog.entries.associateBy { it.identity.id }
-            lock.modules.forEach { lockedModule ->
-                val expected = lockedModule.identity
+            val available = availableProfile.catalog.addons.associateBy { it.identity.id }
+            lock.addons.forEach { expected ->
                 val actual = available[expected.id]?.identity
                 if (actual == null) {
-                    add(ProjectLockMismatch.ModuleUnavailable(expected.id))
+                    add(ProjectLockMismatch.AddonUnavailable(expected.id))
                 } else {
-                    if (actual.major != expected.major) {
-                        add(ProjectLockMismatch.ModuleMajor(expected.id, expected.major, actual.major))
-                    }
                     if (actual.version != expected.version) {
-                        add(ProjectLockMismatch.ModuleVersion(expected.id, expected.version, actual.version))
+                        add(ProjectLockMismatch.AddonVersion(expected.id, expected.version, actual.version))
                     }
                     if (actual.contentHash != expected.contentHash) {
-                        add(ProjectLockMismatch.ModuleContent(expected.id, expected.contentHash.hex(), actual.contentHash.hex()))
-                    }
-                }
-            }
-            val expectedClosure = runCatching { availableProfile.catalog.resolve(manifest.modules) }.getOrNull()
-            if (expectedClosure != null) {
-                val expectedIds = expectedClosure.modules.map { it.identity.id }
-                val lockedIds = lock.modules.map { it.identity.id }
-                (expectedIds - lockedIds.toSet()).forEach { add(ProjectLockMismatch.ManifestModuleMissing(it)) }
-                (lockedIds - expectedIds.toSet()).forEach { add(ProjectLockMismatch.UnexpectedLockedModule(it)) }
-                if (expectedIds.toSet() == lockedIds.toSet() && expectedIds != lockedIds) {
-                    add(ProjectLockMismatch.ModuleOrder(expectedIds, lockedIds))
-                }
-                val lockedById = lock.modules.associateBy { it.identity.id }
-                expectedClosure.modules.forEach { expected ->
-                    lockedById[expected.identity.id]?.let { actual ->
-                        if (expected.direct != actual.direct) {
-                            add(ProjectLockMismatch.ModuleDirect(expected.identity.id, expected.direct, actual.direct))
-                        }
+                        add(ProjectLockMismatch.AddonContent(expected.id, expected.contentHash.hex(), actual.contentHash.hex()))
                     }
                 }
             }

@@ -18,9 +18,7 @@
 
 package ru.lazyhat.compukters.ide.project
 
-import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
-import ru.lazyhat.compukters.ide.compiler.profile.platformBundle
-import ru.lazyhat.compukters.ide.compiler.profile.platformCatalog
+import ru.lazyhat.compukters.ide.compiler.profile.platformResolutionWithAddon
 import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -30,28 +28,31 @@ import kotlin.test.assertTrue
 
 class ProjectDependencyServiceTest {
     @Test
-    fun `module enablement publishes canonical manifest and lock and can roll back`() {
+    fun `addon enablement publishes canonical manifest and lock and can roll back`() {
         val root = createTempDirectory("compukters-dependency-")
         val project = ProjectCatalog.open(root).create("hello")
         val resolution = resolution()
-        val module = resolution.catalog.entries.first()
+        val addon =
+            resolution.catalog.addons
+                .single()
+                .identity
         val service = ProjectDependencyService(project.handle, resolution)
 
         val published =
             assertIs<ProjectDependencyUpdate.Published>(
-                service.enableModule(module.identity.id),
+                service.enableAddon(addon.id),
             )
         val manifestPath = project.handle.canonicalPath.resolve("compukter.toml")
         val lockPath = project.handle.canonicalPath.resolve("compukter.lock")
         val manifest = ProjectManifestCodec.decode(Files.readString(manifestPath))
 
-        assertTrue(module.identity.id in manifest.modules)
+        assertTrue(addon.id in manifest.addons)
         assertEquals(ProjectManifestCodec.encode(manifest), Files.readString(manifestPath))
         assertTrue(Files.isRegularFile(lockPath))
-        assertEquals(ProjectDependencyUpdate.AlreadyDirect, service.enableModule(module.identity.id))
+        assertEquals(ProjectDependencyUpdate.AlreadyDirect, service.enableAddon(addon.id))
 
         assertEquals(ProjectDependencyRollback.Restored, service.rollback(published.receipt))
-        assertTrue(ProjectManifestCodec.decode(Files.readString(manifestPath)).modules.isEmpty())
+        assertTrue(ProjectManifestCodec.decode(Files.readString(manifestPath)).addons.isEmpty())
         assertTrue(Files.notExists(lockPath))
     }
 
@@ -60,9 +61,12 @@ class ProjectDependencyServiceTest {
         val root = createTempDirectory("compukters-dependency-conflict-")
         val project = ProjectCatalog.open(root).create("hello")
         val resolution = resolution()
-        val module = resolution.catalog.entries.first()
+        val addon =
+            resolution.catalog.addons
+                .single()
+                .identity
         val service = ProjectDependencyService(project.handle, resolution)
-        val receipt = assertIs<ProjectDependencyUpdate.Published>(service.enableModule(module.identity.id)).receipt
+        val receipt = assertIs<ProjectDependencyUpdate.Published>(service.enableAddon(addon.id)).receipt
         val manifestPath = project.handle.canonicalPath.resolve("compukter.toml")
 
         Files.writeString(manifestPath, "newer")
@@ -72,38 +76,27 @@ class ProjectDependencyServiceTest {
     }
 
     @Test
-    fun `module enablement validates proposed lock before publishing`() {
+    fun `addon enablement validates proposed lock before publishing`() {
         val root = createTempDirectory("compukters-dependency-validation-")
         val project = ProjectCatalog.open(root).create("hello")
         val resolution = resolution()
-        val module = resolution.catalog.entries.first()
+        val addon =
+            resolution.catalog.addons
+                .single()
+                .identity
         val service = ProjectDependencyService(project.handle, resolution)
 
         val result =
-            service.enableModule(module.identity.id) { proposed ->
-                val locked = proposed.modules.single { it.identity.id == module.identity.id }
-                assertEquals(module.identity.major, locked.identity.major)
+            service.enableAddon(addon.id) { proposed ->
+                val locked = proposed.addons.single { it.id == addon.id }
+                assertEquals(addon, locked)
                 "target profile changed"
             }
 
         assertEquals(ProjectDependencyUpdate.Conflict("target profile changed"), result)
-        assertTrue(ProjectManifestCodec.decode(Files.readString(project.handle.canonicalPath.resolve("compukter.toml"))).modules.isEmpty())
+        assertTrue(ProjectManifestCodec.decode(Files.readString(project.handle.canonicalPath.resolve("compukter.toml"))).addons.isEmpty())
         assertTrue(Files.notExists(project.handle.canonicalPath.resolve("compukter.lock")))
     }
 
-    private fun resolution(): ProjectResolution {
-        val bundle = platformBundle()
-        return ProjectResolution(
-            ToolchainLockIdentity(
-                compilerVersion = "2.4.10",
-                languageVersion = bundle.identity.languageVersion,
-                codegenAbi = 1u,
-                artifactAbi = 1u,
-                artifactWriterVersion = 1u,
-                payloadHash = Hash256.of(ByteArray(32) { 1 }),
-                platformAbi = Hash256.of(bundle.identity.contentHash.toByteArray()),
-            ),
-            platformCatalog(bundle),
-        )
-    }
+    private fun resolution(): ProjectResolution = platformResolutionWithAddon()
 }

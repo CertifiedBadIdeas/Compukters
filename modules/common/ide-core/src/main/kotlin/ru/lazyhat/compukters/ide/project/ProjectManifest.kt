@@ -24,29 +24,29 @@ import java.util.TreeSet
 class ProjectManifest private constructor(
     val format: Int,
     val name: String,
-    modules: Set<ModuleId>,
+    addons: Set<AddonId>,
 ) {
-    val modules: Set<ModuleId> =
-        Collections.unmodifiableSet(TreeSet<ModuleId>(MODULE_COMPARATOR).apply { addAll(modules) })
+    val addons: Set<AddonId> =
+        Collections.unmodifiableSet(TreeSet<AddonId>().apply { addAll(addons) })
 
     override fun equals(other: Any?): Boolean =
-        other is ProjectManifest && format == other.format && name == other.name && modules == other.modules
+        other is ProjectManifest && format == other.format && name == other.name && addons == other.addons
 
-    override fun hashCode(): Int = 31 * (31 * format + name.hashCode()) + modules.hashCode()
+    override fun hashCode(): Int = 31 * (31 * format + name.hashCode()) + addons.hashCode()
 
-    override fun toString(): String = "ProjectManifest(format=$format, name=$name, modules=$modules)"
+    override fun toString(): String = "ProjectManifest(format=$format, name=$name, addons=$addons)"
 
     companion object {
-        const val FORMAT = 2
+        const val FORMAT = 3
 
         fun of(
             name: String,
-            modules: Set<ModuleId>,
+            addons: Set<AddonId>,
             limits: ProjectLimits = ProjectLimits(),
         ): ProjectManifest {
             validateName(name, limits)
-            require(modules.size <= limits.modules) { "project module count exceeds limit" }
-            return ProjectManifest(FORMAT, name, modules.toSet())
+            require(addons.size <= limits.addons) { "project addon count exceeds limit" }
+            return ProjectManifest(FORMAT, name, addons.toSet())
         }
 
         internal fun validateName(
@@ -67,11 +67,5 @@ class ProjectManifest private constructor(
             require('/' !in name && '\\' !in name) { "project name cannot contain path separators" }
             require(name.codePoints().noneMatch(Character::isISOControl)) { "project name cannot contain control characters" }
         }
-
-        private val MODULE_COMPARATOR =
-            Comparator<ModuleId> { left, right ->
-                val provider = TomlSupport.utf8Comparator.compare(left.provider, right.provider)
-                if (provider != 0) provider else TomlSupport.utf8Comparator.compare(left.module, right.module)
-            }
     }
 }

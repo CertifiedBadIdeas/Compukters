@@ -24,80 +24,48 @@ import kotlin.test.assertFailsWith
 
 class ProjectManifestCodecTest {
     @Test
-    fun `legacy manifest majors migrate to versionless module identities`() {
-        val legacy =
-            ProjectManifestCodec.decode(
-                """
-                format = 1
-                name = "hello"
-
-                [modules]
-                std = { terminal = 2 }
-                """.trimIndent(),
-            )
-        val current =
-            ProjectManifestCodec.decode(
-                """
-                format = 2
-                name = "hello"
-
-                [modules]
-                std = ["terminal"]
-                """.trimIndent(),
-            )
-
-        assertEquals(current, legacy)
-        assertEquals(setOf(ModuleId("std", "terminal")), legacy.modules)
-    }
-
-    @Test
-    fun `quoted keys and input order encode canonically`() {
+    fun `addons encode canonically in UTF-8 order`() {
         val manifest =
             ProjectManifestCodec.decode(
                 """
+                addons = ["mekanism", "create"]
                 name = "hello \"world\""
-                format = 2
-
-                [modules]
-                "std" = ["terminal", "filesystem"]
-                create = ["kinetics"]
+                format = 3
                 """.trimIndent(),
             )
 
         assertEquals(
             """
-            format = 2
+            format = 3
             name = "hello \"world\""
 
-            [modules]
-            create = [ "kinetics" ]
-            std = [ "filesystem", "terminal" ]
-
-            """.trimIndent(),
+            addons = ["create", "mekanism"]
+            """.trimIndent() + "\n",
             ProjectManifestCodec.encode(manifest),
         )
         assertEquals(manifest, ProjectManifestCodec.decode(ProjectManifestCodec.encode(manifest)))
     }
 
     @Test
-    fun `empty module table is valid and deterministic`() {
-        val manifest = ProjectManifestCodec.decode("format = 2\nname = \"empty\"\n")
+    fun `empty addon list is valid and deterministic`() {
+        val manifest = ProjectManifestCodec.decode("format = 3\nname = \"empty\"\n")
 
-        assertEquals(emptySet(), manifest.modules)
-        assertEquals("format = 2\nname = \"empty\"\n\n[modules]\n", ProjectManifestCodec.encode(manifest))
+        assertEquals(emptySet(), manifest.addons)
+        assertEquals("format = 3\nname = \"empty\"\n\naddons = []\n", ProjectManifestCodec.encode(manifest))
     }
 
     @Test
     fun `manifest rejects syntax duplicates unknown fields and unsupported formats`() {
-        invalid("format = 1\nname = \"x\"\nname = \"y\"")
-        invalid("format = 1\nname = \"x\"\nunknown = true")
-        invalid("format = 3\nname = \"x\"")
-        invalid("format = \"1\"\nname = \"x\"")
+        invalid("format = 3\nname = \"x\"\nname = \"y\"")
+        invalid("format = 3\nname = \"x\"\nunknown = true")
+        invalid("format = 2\nname = \"x\"")
+        invalid("format = \"3\"\nname = \"x\"")
         invalid("name = \"x\"")
-        invalid("format = 1")
-        invalid("format = 1\nname = \"x\"\nmodules = 1")
-        invalid("format = 1\nname = \"x\"\n[modules]\nstd = { terminal = { major = 2 } }")
-        invalid("format = 1\nname = \"unterminated")
+        invalid("format = 3")
+        invalid("format = 3\nname = \"x\"\naddons = 1")
+        invalid("format = 3\nname = \"x\"\naddons = [1]")
+        invalid("format = 3\nname = \"x\"\naddons = [\"create\", \"create\"]")
+        invalid("format = 3\nname = \"unterminated")
     }
 
     @Test
@@ -118,39 +86,25 @@ class ProjectManifestCodecTest {
     }
 
     @Test
-    fun `manifest rejects invalid module identities and majors`() {
-        listOf(
-            "Std" to "terminal",
-            "std." to "terminal",
-            "std" to "Terminal",
-            "std" to "a".repeat(65),
-        ).forEach { (provider, module) ->
-            assertFailsWith<IllegalArgumentException>("$provider:$module") { ModuleId(provider, module) }
+    fun `manifest rejects invalid addon identities`() {
+        listOf("Create", "create.api", "create:kinetics", "a".repeat(65)).forEach { id ->
+            assertFailsWith<IllegalArgumentException>(id) { AddonId(id) }
+            invalid("format = 3\nname = \"x\"\naddons = [\"$id\"]")
         }
-        assertEquals(0, ApiMajor(0).value)
-        assertFailsWith<IllegalArgumentException> { ApiMajor(65536) }
-
-        invalid("format = 1\nname = \"x\"\n[modules]\nstd = { terminal = 0 }")
-        invalid("format = 1\nname = \"x\"\n[modules]\nstd = { terminal = -1 }")
-        invalid("format = 1\nname = \"x\"\n[modules]\nstd = { terminal = 1.0 }")
-        invalid("format = 1\nname = \"x\"\n[modules]\nstd = { terminal = \"2\" }")
-        invalid("format = 1\nname = \"x\"\n[modules]\nstd = { terminal = 65536 }")
-        invalid("format = 2\nname = \"x\"\n[modules]\nstd = [1]")
-        invalid("format = 2\nname = \"x\"\n[modules]\nstd = { terminal = 1 }")
     }
 
     @Test
-    fun `manifest enforces byte and module-count limits`() {
+    fun `manifest enforces byte and addon-count limits`() {
         assertFailsWith<ManifestException> {
             ProjectManifestCodec.decode(
-                "format = 1\nname = \"hello\"",
+                "format = 3\nname = \"hello\"",
                 ProjectLimits(manifestBytes = 8),
             )
         }
         assertFailsWith<ManifestException> {
             ProjectManifestCodec.decode(
-                "format = 2\nname = \"hello\"\n[modules]\nstd = [\"one\", \"two\"]",
-                ProjectLimits(modules = 1),
+                "format = 3\nname = \"hello\"\naddons = [\"one\", \"two\"]",
+                ProjectLimits(addons = 1),
             )
         }
     }

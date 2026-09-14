@@ -28,7 +28,6 @@ import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfileIdentity
 import ru.lazyhat.compukters.ide.project.ApiMajor
-import ru.lazyhat.compukters.ide.project.LockedModule
 import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ProjectLock
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
@@ -78,8 +77,7 @@ class NeoForgeCompilerServicesTest {
             TargetCompileProfileIdentity.of(serverTargetProfile(identity, platform, limits)),
         )
 
-        val selection = catalog.resolve(setOf(ModuleId.parse("compukter:redstone")))
-        val lock = ProjectLock.of(profile.toolchain, selection.modules.map { LockedModule(it.identity, it.direct) })
+        val lock = ProjectLock.of(profile.toolchain, emptyList())
         assertIs<ProfileResolution.Resolved>(CompileProfileResolver(profile.toolchain, catalog, limits).resolveTarget(lock, profile))
     }
 

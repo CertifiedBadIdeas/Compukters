@@ -18,10 +18,7 @@
 
 package ru.lazyhat.compukters.ide.project
 
-import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
-import ru.lazyhat.compukters.ide.compiler.profile.platformBundle
-import ru.lazyhat.compukters.ide.compiler.profile.platformCatalog
-import ru.lazyhat.compukters.ide.compiler.profile.platformToolchain
+import ru.lazyhat.compukters.ide.compiler.profile.platformResolutionWithAddon
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -30,41 +27,27 @@ import kotlin.test.assertTrue
 
 class ProjectLockServiceTest {
     @Test
-    fun `resolution writes deterministic complete closure with direct roots`() {
+    fun `resolution locks only explicitly selected addons`() {
         val resolution = resolution()
         val lock = ProjectLockService(RecordingLockFileWriter()).resolve(manifest(), resolution)
 
-        assertEquals(listOf("stdlib:core", "stdlib:ranges", "std:terminal"), lock.modules.map { it.identity.id.value })
-        assertEquals(listOf(false, false, true), lock.modules.map(LockedModule::direct))
+        assertEquals(listOf("fixture"), lock.addons.map { it.id.value })
         assertEquals(lock, ProjectLockCodec.decode(ProjectLockCodec.encode(lock)))
     }
 
     @Test
-    fun `declared unavailable module fails while undeclared available module stays out of lock`() {
+    fun `declared unavailable addon fails while undeclared available addon stays out of lock`() {
         val service = ProjectLockService(RecordingLockFileWriter())
-        val lock = service.resolve(manifest(), resolution())
+        val lock = service.resolve(ProjectManifest.of("hello", emptySet()), resolution())
 
-        assertTrue(lock.modules.none { it.identity.id == ModuleId.parse("std:filesystem") })
+        assertTrue(lock.addons.isEmpty())
         assertFailsWith<ProjectResolutionException> {
-            service.resolve(ProjectManifest.of("hello", setOf(ModuleId.parse("missing:module"))), resolution())
+            service.resolve(ProjectManifest.of("hello", setOf(AddonId("missing"))), resolution())
         }
     }
 
     @Test
-    fun `declaring a transitive dependency promotes only its direct flag`() {
-        val promoted =
-            ProjectManifest.of(
-                "hello",
-                setOf(ModuleId.parse("std:terminal"), ModuleId.parse("stdlib:ranges")),
-            )
-
-        val lock = ProjectLockService(RecordingLockFileWriter()).resolve(promoted, resolution())
-
-        assertTrue(lock.modules.single { it.identity.id == ModuleId.parse("stdlib:ranges") }.direct)
-    }
-
-    @Test
-    fun `validation reports typed toolchain module and closure differences`() {
+    fun `validation reports typed toolchain addon and manifest differences`() {
         val service = ProjectLockService(RecordingLockFileWriter())
         val resolution = resolution()
         val lock = service.resolve(manifest(), resolution)
@@ -73,29 +56,23 @@ class ProjectLockServiceTest {
         val changedToolchain = resolution.copy(toolchain = resolution.toolchain.copy(artifactAbi = 9u))
         assertTrue(service.validate(manifest(), lock, changedToolchain).any { it is ProjectLockMismatch.Toolchain })
 
-        val changedBundle = platformBundle(terminalVersion = "2.2.0")
-        val changedResolution = ProjectResolution(platformToolchain(changedBundle), PlatformCatalog.of(changedBundle))
+        val changedResolution = platformResolutionWithAddon(addonVersion = "2.0.0")
         val mismatches = service.validate(manifest(), lock, changedResolution)
-        assertTrue(mismatches.any { it is ProjectLockMismatch.ModuleVersion })
-        assertTrue(mismatches.any { it is ProjectLockMismatch.ModuleContent })
+        assertTrue(mismatches.any { it is ProjectLockMismatch.AddonVersion })
+        assertTrue(mismatches.any { it is ProjectLockMismatch.AddonContent })
 
-        val withoutDependency = ProjectLock.of(lock.toolchain, lock.modules.filterNot { it.identity.id == ModuleId.parse("stdlib:ranges") })
-        assertIs<ProjectLockMismatch.ManifestModuleMissing>(
-            service.validate(manifest(), withoutDependency, resolution).first { it is ProjectLockMismatch.ManifestModuleMissing },
+        val withoutAddon = ProjectLock.of(lock.toolchain, emptyList())
+        assertIs<ProjectLockMismatch.ManifestAddonMissing>(
+            service.validate(manifest(), withoutAddon, resolution).first { it is ProjectLockMismatch.ManifestAddonMissing },
         )
 
-        val indirectRoot =
+        val unexpected =
             ProjectLock.of(
                 lock.toolchain,
-                lock.modules.map { if (it.identity.id == ModuleId.parse("std:terminal")) it.copy(direct = false) else it },
+                lock.addons + ResolvedAddon(AddonId("other"), "1.0.0", lock.addons.single().contentHash),
             )
-        assertIs<ProjectLockMismatch.ModuleDirect>(
-            service.validate(manifest(), indirectRoot, resolution).first { it is ProjectLockMismatch.ModuleDirect },
-        )
-
-        val reordered = ProjectLock.of(lock.toolchain, lock.modules.reversed())
-        assertIs<ProjectLockMismatch.ModuleOrder>(
-            service.validate(manifest(), reordered, resolution).first { it is ProjectLockMismatch.ModuleOrder },
+        assertIs<ProjectLockMismatch.UnexpectedLockedAddon>(
+            service.validate(manifest(), unexpected, resolution).first { it is ProjectLockMismatch.UnexpectedLockedAddon },
         )
     }
 
@@ -122,19 +99,16 @@ class ProjectLockServiceTest {
         val before = writer.content!!.copyOf()
 
         assertFailsWith<ProjectResolutionException> {
-            service.updateLock(ProjectManifest.of("hello", setOf(ModuleId.parse("missing:module"))), resolution())
+            service.updateLock(ProjectManifest.of("hello", setOf(AddonId("missing"))), resolution())
         }
         assertTrue(before.contentEquals(writer.content))
         assertFailsWith<IllegalStateException> { service.updateLock(manifest(), resolution()) }
         assertTrue(before.contentEquals(writer.content))
     }
 
-    private fun manifest() = ProjectManifest.of("hello", setOf(ModuleId.parse("std:terminal")))
+    private fun manifest() = ProjectManifest.of("hello", setOf(AddonId("fixture")))
 
-    private fun resolution(): ProjectResolution {
-        val bundle = platformBundle()
-        return ProjectResolution(platformToolchain(bundle), platformCatalog(bundle))
-    }
+    private fun resolution(): ProjectResolution = platformResolutionWithAddon()
 
     private class RecordingLockFileWriter(
         var content: ByteArray? = null,

@@ -366,7 +366,7 @@ class IdeAnalysisFlowTest {
     }
 
     @Test
-    fun `undeclared module completion publishes dependencies before applying source`() {
+    fun `built-in completion applies source without publishing dependencies`() {
         val requests = FlowAnalysisRequests()
         val fixture =
             ControllerFixture(
@@ -415,8 +415,6 @@ class IdeAnalysisFlowTest {
         fixture.controller.tick()
 
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Tab))
-        assertTrue(IdeBusyOperation.Resolve in fixture.controller.viewState().busy)
-        fixture.tickUntil { IdeBusyOperation.Resolve !in fixture.controller.viewState().busy }
 
         assertEquals("import compukter.redstone.Redstone\n\nfun main() { Redstone }", fixture.textEditor().visibleLines.joinToString("\n"))
         val manifest =
@@ -426,12 +424,13 @@ class IdeAnalysisFlowTest {
                     .toFile()
                     .readText(),
             )
-        assertTrue(module.identity.id in manifest.modules)
+        assertTrue(manifest.addons.isEmpty())
         assertTrue(
             fixture.workspace.descriptor.handle.canonicalPath
                 .resolve("compukter.lock")
                 .toFile()
-                .isFile,
+                .exists()
+                .not(),
         )
         fixture.controller.close()
     }

@@ -47,46 +47,47 @@ data class ResolvedModule(
     }
 }
 
-data class LockedModule(
-    val identity: ResolvedModule,
-    val direct: Boolean,
-)
+data class ResolvedAddon(
+    val id: AddonId,
+    val version: String,
+    val contentHash: Hash256,
+) {
+    init {
+        validateLockText("module version", version)
+    }
+}
 
 class ProjectLock private constructor(
     val format: Int,
     val toolchain: ToolchainLockIdentity,
-    modules: List<LockedModule>,
+    addons: List<ResolvedAddon>,
 ) {
-    val modules: List<LockedModule> = Collections.unmodifiableList(modules.toList())
+    val addons: List<ResolvedAddon> = Collections.unmodifiableList(addons.toList())
 
     override fun equals(other: Any?): Boolean =
-        other is ProjectLock && format == other.format && toolchain == other.toolchain && modules == other.modules
+        other is ProjectLock && format == other.format && toolchain == other.toolchain && addons == other.addons
 
-    override fun hashCode(): Int = 31 * (31 * format + toolchain.hashCode()) + modules.hashCode()
+    override fun hashCode(): Int = 31 * (31 * format + toolchain.hashCode()) + addons.hashCode()
 
-    override fun toString(): String = "ProjectLock(format=$format, toolchain=$toolchain, modules=$modules)"
+    override fun toString(): String = "ProjectLock(format=$format, toolchain=$toolchain, addons=$addons)"
 
     companion object {
-        const val FORMAT = 2
+        const val FORMAT = 3
 
         fun of(
             toolchain: ToolchainLockIdentity,
-            modules: List<LockedModule>,
+            addons: List<ResolvedAddon>,
             limits: ProjectLimits = ProjectLimits(),
         ): ProjectLock {
-            require(modules.size <= limits.modules) { "project module count exceeds limit" }
-            val copied = modules.toList()
-            require(copied.map { it.identity.id }.toSet().size == copied.size) { "locked module IDs must be unique" }
+            require(addons.size <= limits.addons) { "project addon count exceeds limit" }
+            val copied = addons.sortedWith(RESOLVED_ADDON_COMPARATOR)
+            require(copied.map(ResolvedAddon::id).toSet().size == copied.size) { "locked addon IDs must be unique" }
             return ProjectLock(FORMAT, toolchain, copied)
         }
     }
 }
 
-internal val RESOLVED_MODULE_COMPARATOR =
-    Comparator<ResolvedModule> { left, right ->
-        val provider = TomlSupport.utf8Comparator.compare(left.id.provider, right.id.provider)
-        if (provider != 0) provider else TomlSupport.utf8Comparator.compare(left.id.module, right.id.module)
-    }
+internal val RESOLVED_ADDON_COMPARATOR = Comparator<ResolvedAddon> { left, right -> left.id.compareTo(right.id) }
 
 internal fun validateLockText(
     description: String,

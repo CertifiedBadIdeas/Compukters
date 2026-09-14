@@ -21,8 +21,10 @@ package ru.lazyhat.compukters.ide.compiler.profile
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
+import ru.lazyhat.compukters.ide.project.AddonId
 import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
+import ru.lazyhat.compukters.ide.project.ResolvedAddon
 import ru.lazyhat.compukters.ide.project.ResolvedModule
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
@@ -42,22 +44,25 @@ data class ResolvedPlatformModule(
     val direct: Boolean,
 )
 
+data class PlatformAddonEntry(
+    val identity: ResolvedAddon,
+    val descriptor: PlatformModule,
+    val payload: TrustedBundlePayload,
+)
+
 class ResolvedPlatformSelection internal constructor(
     modules: List<ResolvedPlatformModule>,
+    addons: List<ResolvedAddon>,
 ) {
     val modules: List<ResolvedPlatformModule> = Collections.unmodifiableList(modules.toList())
-    val directModules: Set<ModuleId> =
-        Collections.unmodifiableSet(
-            this.modules
-                .filter(ResolvedPlatformModule::direct)
-                .mapTo(sortedSetOf(MODULE_ID_COMPARATOR)) { it.identity.id },
-        )
+    val addons: List<ResolvedAddon> = Collections.unmodifiableList(addons.sortedBy { it.id })
 }
 
 class PlatformCatalog private constructor(
     val bundle: PlatformBundle,
+    val baseBundle: PlatformBundle,
     entries: List<PlatformCatalogEntry>,
-    addonBundles: List<TrustedBundlePayload>,
+    addonEntries: List<PlatformAddonEntry>,
 ) {
     val entries: List<PlatformCatalogEntry> =
         Collections.unmodifiableList(
@@ -67,30 +72,38 @@ class PlatformCatalog private constructor(
         )
     private val byId = this.entries.associateBy { it.identity.id }
     private val graph = PlatformModuleGraph(bundle)
-    private val addonBundles = addonBundles.associateBy { ModuleId.parse(it.identity.name) }
+    val addons: List<PlatformAddonEntry> = Collections.unmodifiableList(addonEntries.sortedBy { it.identity.id })
+    private val addonsById = this.addons.associateBy { it.identity.id }
 
     fun find(id: ModuleId): PlatformCatalogEntry? = byId[id]
 
     fun require(id: ModuleId): PlatformCatalogEntry = requireNotNull(find(id)) { "platform module ${id.value} is unavailable" }
 
-    fun addonBundlesFor(modules: Set<ModuleId>): List<TrustedBundlePayload> =
-        modules.mapNotNull(addonBundles::get).sortedBy { it.identity.name }
+    fun findAddon(id: AddonId): PlatformAddonEntry? = addonsById[id]
 
-    fun resolve(requirements: Set<ModuleId>): ResolvedPlatformSelection {
-        requirements.forEach(::require)
-        val roots = requirements.mapTo(mutableSetOf(), ::platformId)
+    fun addonBundlesFor(addons: Set<AddonId>): List<TrustedBundlePayload> =
+        addons
+            .map { id -> requireNotNull(addonsById[id]) { "addon ${id.value} is unavailable" }.payload }
+            .sortedBy { it.identity.name }
+
+    fun resolve(requirements: Set<AddonId>): ResolvedPlatformSelection {
+        val selectedAddons = requirements.map { id -> requireNotNull(findAddon(id)) { "addon ${id.value} is unavailable" } }
+        val directModuleIds = selectedAddons.mapTo(mutableSetOf()) { projectId(it.descriptor.id) }
+        val roots = bundle.modules.mapTo(mutableSetOf()) { it.id }
+        roots += selectedAddons.map { it.descriptor.id }
         val resolved = graph.resolve(roots)
         return ResolvedPlatformSelection(
             resolved.modules.map { descriptor ->
                 val id = projectId(descriptor.id)
                 val entry = require(id)
-                ResolvedPlatformModule(entry.identity, entry.descriptor, id in requirements)
+                ResolvedPlatformModule(entry.identity, entry.descriptor, id in directModuleIds)
             },
+            selectedAddons.map(PlatformAddonEntry::identity),
         )
     }
 
     companion object {
-        fun of(bundle: PlatformBundle): PlatformCatalog = PlatformCatalog(bundle, bundle.modules.map(::entry), emptyList())
+        fun of(bundle: PlatformBundle): PlatformCatalog = PlatformCatalog(bundle, bundle, bundle.modules.map(::entry), emptyList())
 
         fun forTarget(
             bundle: PlatformBundle,
@@ -98,8 +111,8 @@ class PlatformCatalog private constructor(
             addonBundles: List<TrustedBundlePayload> = emptyList(),
         ): PlatformCatalog {
             val local = of(bundle)
-            val externalEntries =
-                addonBundles.associate { payload ->
+            val decodedAddons =
+                addonBundles.map { payload ->
                     val decoded = AddonGuestApiBundleCodec.decode(payload.content.toByteArray())
                     require(
                         decoded.identity.module == payload.identity.name,
@@ -116,15 +129,27 @@ class PlatformCatalog private constructor(
                     }
                     val id = projectId(decoded.moduleDescriptor.id)
                     require(id.value == payload.identity.name) { "target addon bundle module descriptor does not match identity" }
-                    id to entry(decoded.moduleDescriptor, payload.identity.hash)
+                    PlatformAddonEntry(
+                        identity =
+                            ResolvedAddon(
+                                AddonId(decoded.identity.addon),
+                                decoded.identity.version,
+                                payload.identity.hash,
+                            ),
+                        descriptor = decoded.moduleDescriptor,
+                        payload = payload,
+                    )
                 }
+            require(decodedAddons.distinctBy { it.identity.id }.size == decodedAddons.size) { "target addon IDs must be unique" }
+            val externalEntries = decodedAddons.associateBy { projectId(it.descriptor.id) }
             require(externalEntries.size == addonBundles.size) { "target addon bundle module IDs must be unique" }
             require(externalEntries.keys.none(local.byId::containsKey)) { "target addon bundles cannot shadow packaged platform modules" }
             val advertisedById = advertised.associateBy(ResolvedModule::id)
             require(advertisedById.size == advertised.size) { "target platform module IDs must be unique" }
             val entries =
                 advertised.map { actual ->
-                    val expected = externalEntries[actual.id] ?: local.require(actual.id)
+                    val expected =
+                        externalEntries[actual.id]?.let { entry(it.descriptor, it.identity.contentHash) } ?: local.require(actual.id)
                     require(expected.identity == actual) { "target platform module ${actual.id.value} identity does not match bundle" }
                     expected
                 }
@@ -143,9 +168,9 @@ class PlatformCatalog private constructor(
                 PlatformBundle(
                     bundle.identity,
                     bundle.builtins,
-                    bundle.modules + externalEntries.values.map(PlatformCatalogEntry::descriptor),
+                    bundle.modules + externalEntries.values.map(PlatformAddonEntry::descriptor),
                 )
-            return PlatformCatalog(merged, entries, addonBundles)
+            return PlatformCatalog(merged, bundle, entries, decodedAddons)
         }
 
         private fun entry(

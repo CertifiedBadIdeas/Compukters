@@ -21,7 +21,7 @@ package ru.lazyhat.compukters.ide.project
 data class ProjectLimits(
     val manifestBytes: Int = 64 * 1024,
     val lockBytes: Int = 256 * 1024,
-    val modules: Int = 128,
+    val addons: Int = 64,
     val projectNameCodePoints: Int = 64,
     val projectNameUtf8Bytes: Int = 128,
     val sourceFiles: Int = 64,
@@ -37,7 +37,7 @@ data class ProjectLimits(
     init {
         require(manifestBytes >= 0) { "manifest byte limit must be non-negative" }
         require(lockBytes >= 0) { "lock byte limit must be non-negative" }
-        require(modules >= 0) { "module count limit must be non-negative" }
+        require(addons >= 0) { "addon count limit must be non-negative" }
         require(projectNameCodePoints >= 0) { "project name code-point limit must be non-negative" }
         require(projectNameUtf8Bytes >= 0) { "project name byte limit must be non-negative" }
         require(sourceFiles >= 0) { "source file count limit must be non-negative" }

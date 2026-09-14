@@ -477,7 +477,7 @@ private fun target() =
     IdeAttachedTarget(
         IdeTargetId("computer-1"),
         IdeTargetProfileId(hash(7)),
-        TargetCompileProfile(toolchain(), emptyList(), TARGET_LIMITS),
+        TargetCompileProfile(toolchain(), TEST_PLATFORM_CATALOG.entries.map { it.identity }, TARGET_LIMITS),
         IdeTargetCapabilities(
             writableFileSystem = true,
             canonicalInput = true,

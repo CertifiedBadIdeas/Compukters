@@ -62,8 +62,8 @@ class ProjectDependencyService(
     private val resolution: ProjectResolution,
     private val limits: ProjectLimits = ProjectLimits(),
 ) {
-    fun enableModule(
-        id: ModuleId,
+    fun enableAddon(
+        id: AddonId,
         validate: (ProjectLock) -> String? = { null },
     ): ProjectDependencyUpdate =
         try {
@@ -71,8 +71,8 @@ class ProjectDependencyService(
             val manifestFile = captured.getValue(MANIFEST)
             val manifestBytes = manifestFile.content ?: return ProjectDependencyUpdate.Conflict("project manifest is missing")
             val manifest = ProjectManifestCodec.decode(TomlSupport.decodeStrictUtf8(manifestBytes), limits)
-            if (id in manifest.modules) return ProjectDependencyUpdate.AlreadyDirect
-            val proposed = ProjectManifest.of(manifest.name, manifest.modules + id, limits)
+            if (id in manifest.addons) return ProjectDependencyUpdate.AlreadyDirect
+            val proposed = ProjectManifest.of(manifest.name, manifest.addons + id, limits)
             val lock = ProjectLockService(NOOP_LOCK_WRITER).resolve(proposed, resolution)
             validate(lock)?.let { return ProjectDependencyUpdate.Conflict(it) }
             val replacements =
