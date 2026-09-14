@@ -856,7 +856,7 @@ class IdeAnalysisCoordinator(
                                 }
 
                                 is DeclarationOrigin.Platform -> {
-                                    if (attachedSources.text(origin.identity, location.path) != null) {
+                                    if (activeAttachedSources.text(origin.identity, location.path) != null) {
                                         IdeDeclarationTarget.AttachedSource(origin.identity, location.path, location.range)
                                     } else {
                                         unavailableModules += origin.identity

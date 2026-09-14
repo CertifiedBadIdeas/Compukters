@@ -39,6 +39,7 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Fixed member completion for built-in Guest Kotlin types, including `Float.toInt()`, while an IDE is attached to a
   computer.
+- Fixed navigation to bundled Kotlin sources supplied by an attached addon, including `create:kinetics`.
 
 ## 0.4.0 — 2026-09-12
 

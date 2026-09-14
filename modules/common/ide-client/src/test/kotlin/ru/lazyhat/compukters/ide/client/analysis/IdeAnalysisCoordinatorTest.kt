@@ -18,10 +18,13 @@
 
 package ru.lazyhat.compukters.ide.client.analysis
 
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
 import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
@@ -46,16 +49,25 @@ import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFailureKind
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.client.controller.TEST_PLATFORM_CATALOG
+import ru.lazyhat.compukters.ide.client.controller.TEST_TOOLCHAIN
 import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.editor.EditorChange
 import ru.lazyhat.compukters.ide.editor.EditorChangeOrigin
 import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
+import ru.lazyhat.compukters.ide.project.ApiMajor
+import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ProjectHandle
 import ru.lazyhat.compukters.ide.project.ProjectManifestCodec
+import ru.lazyhat.compukters.ide.project.ResolvedModule
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
+import ru.lazyhat.compukters.platform.bundle.PlatformModule
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
+import ru.lazyhat.compukters.platform.bundle.PlatformSource
+import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import java.util.concurrent.CompletableFuture
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -231,6 +243,84 @@ class IdeAnalysisCoordinatorTest {
         )
 
         assertEquals(IdeDeclarationOutcome.SourceUnavailable(bundle), pending.join())
+    }
+
+    @Test
+    fun `platform declaration navigates to source supplied by active addon target`() {
+        val sourcePath = VirtualSourcePath.kotlin("fixture/telemetry/Telemetry.kt")
+        val sourceText = "package fixture.telemetry\nobject Telemetry"
+        val moduleId = PlatformModuleId("fixture", "telemetry")
+        val bundle =
+            AddonGuestApiBundleCodec.assemble(
+                addon = "fixture",
+                platformAbi = 1,
+                module =
+                    PlatformModule(
+                        moduleId,
+                        "1.0.0",
+                        emptyList(),
+                        ImmutableBytes.of(byteArrayOf(1)),
+                        null,
+                        listOf(PlatformSource(sourcePath.value, ImmutableBytes.of(sourceText.encodeToByteArray()))),
+                        emptyList(),
+                        emptyList(),
+                    ),
+                capabilitySchemas = emptyList(),
+                bindings = emptyList(),
+            )
+        val payloadBytes = AddonGuestApiBundleCodec.encode(bundle)
+        val identity =
+            ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity(
+                bundle.identity.module,
+                Hash256.of(bundle.identity.contentHash.toByteArray()),
+            )
+        val payload =
+            TrustedBundlePayload(
+                TrustedBundleIdentity.of(identity.name, identity.hash),
+                BinaryValue.of(payloadBytes),
+            )
+        val target =
+            TargetCompileProfile(
+                TEST_TOOLCHAIN,
+                listOf(ResolvedModule(ModuleId.parse(identity.name), ApiMajor(1), "1.0.0", identity.hash)),
+                WorkerLimits(),
+                listOf(payload),
+            )
+        val fixture =
+            fixture(
+                "val answer = 42",
+                attachedSources = IdeAttachedSourceCatalog.of(emptyMap(), 1, 1, 128, 128),
+            )
+        val active = fixture.open()
+        fixture.coordinator.updateTargetProfile(target)
+        val pending = fixture.coordinator.goToDeclaration(EditorRange(4, 10), 6)
+
+        fixture.requests.completeNavigation(
+            AnalysisClientResult.Success(
+                AnalysisResult.Declaration.create(
+                    active.identity,
+                    listOf(
+                        DeclarationLocation.Source(
+                            DeclarationOrigin.Platform(identity),
+                            sourcePath,
+                            EditorRange(sourceText.indexOf("Telemetry"), sourceText.length),
+                        ),
+                    ),
+                    mapOf(path() to fixture.text.length),
+                    platformSourceLengthsUtf16 = mapOf(identity to mapOf(sourcePath to sourceText.length)),
+                ),
+            ),
+        )
+
+        assertEquals(
+            IdeDeclarationTarget.AttachedSource(
+                identity,
+                sourcePath,
+                EditorRange(sourceText.indexOf("Telemetry"), sourceText.length),
+            ),
+            assertIs<IdeDeclarationOutcome.Targets>(pending.join()).values.single(),
+        )
+        assertEquals(sourceText, fixture.coordinator.attachedSource(identity, sourcePath))
     }
 
     @Test
