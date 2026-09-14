@@ -134,6 +134,18 @@ tasks.test {
     useJUnitPlatform()
 }
 
+tasks.matching { it.name in setOf("runClient", "runServer") }.configureEach {
+    group = "compukters development"
+}
+
+tasks.named("assembleCompuktersAddon") {
+    group = "compukters addon sdk"
+}
+
+tasks.named("updateCompuktersAddonAbiLock") {
+    group = "compukters addon sdk"
+}
+
 tasks.withType<ConfigurableKtLintTask>().configureEach {
     exclude { it.file.path.contains("build/generated") }
 }
@@ -148,7 +160,7 @@ val productionJar = tasks.named<RemapJarTask>("remapJar") {
 }
 
 val verifyProductionJar = tasks.register("verifyProductionJar") {
-    group = "verification"
+    group = "compukters verification"
     description = "Checks that the standalone Create addon contains only its own implementation and Guest API bundle."
     dependsOn(productionJar)
     inputs.file(productionJar.flatMap { it.archiveFile })
@@ -179,7 +191,7 @@ tasks.named("assemble") {
 }
 
 tasks.register("buildProductionJar") {
-    group = "build"
+    group = "compukters distribution"
     description = "Builds the standalone remapped Create addon mod JAR."
     dependsOn(productionJar, verifyProductionJar)
 }

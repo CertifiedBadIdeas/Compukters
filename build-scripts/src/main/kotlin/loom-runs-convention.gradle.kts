@@ -105,6 +105,7 @@ private val DEV_SERVER_PROPERTIES =
 
 val prepareServerDev =
     tasks.register("prepareServerDev") {
+        description = "Seeds the development server run directory with its EULA, properties, and operator list."
         val runDirs =
             listOf(layout.projectDirectory.dir("run/server"))
         runDirs.forEach { runDir ->
