@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.ide.project
 
 import org.tomlj.Toml
+import org.tomlj.TomlArray
 import org.tomlj.TomlTable
 
 class ManifestException(
@@ -46,7 +47,7 @@ object ProjectManifestCodec {
         }
         rejectUnknownKeys(parsed, ROOT_KEYS, "manifest")
         val format = parsed["format"] as? Long ?: throw ManifestException("manifest format must be an integer")
-        if (format != ProjectManifest.FORMAT.toLong()) throw ManifestException("unsupported manifest format: $format")
+        if (format !in 1L..ProjectManifest.FORMAT.toLong()) throw ManifestException("unsupported manifest format: $format")
         val name = parsed["name"] as? String ?: throw ManifestException("manifest name must be a string")
         val moduleTable =
             when (val modules = parsed["modules"]) {
@@ -54,17 +55,40 @@ object ProjectManifestCodec {
                 is TomlTable -> modules
                 else -> throw ManifestException("manifest modules must be a table")
             }
-        val requirements = linkedMapOf<ModuleId, ApiMajor>()
+        val requirements = linkedSetOf<ModuleId>()
         moduleTable?.entrySet()?.forEach { (provider, value) ->
-            val providerTable = value as? TomlTable ?: throw ManifestException("module provider $provider must be a table")
-            providerTable.entrySet().forEach { (module, rawMajor) ->
-                val id = validated("invalid module ID $provider:$module") { ModuleId(provider, module) }
-                val majorValue = rawMajor as? Long ?: throw ManifestException("module ${id.value} major must be an integer")
-                if (majorValue !in 1L..ApiMajor.MAXIMUM.toLong()) {
-                    throw ManifestException("module ${id.value} major is outside the supported range")
+            val modules =
+                when (format) {
+                    1L -> {
+                        val providerTable =
+                            value as? TomlTable ?: throw ManifestException("module provider $provider must be a table")
+                        providerTable.entrySet().map { (module, rawMajor) ->
+                            val majorValue =
+                                rawMajor as? Long
+                                    ?: throw ManifestException("module $provider:$module major must be an integer")
+                            if (majorValue !in 1L..ApiMajor.MAXIMUM.toLong()) {
+                                throw ManifestException("module $provider:$module major is outside the supported range")
+                            }
+                            module
+                        }
+                    }
+
+                    2L -> {
+                        val providerArray =
+                            value as? TomlArray ?: throw ManifestException("module provider $provider must be an array")
+                        List(providerArray.size()) { index ->
+                            providerArray[index] as? String
+                                ?: throw ManifestException("module provider $provider entry $index must be a string")
+                        }
+                    }
+
+                    else -> {
+                        error("unreachable manifest format")
+                    }
                 }
-                val previous = requirements.put(id, ApiMajor(majorValue.toInt()))
-                if (previous != null) throw ManifestException("duplicate module requirement: ${id.value}")
+            modules.forEach { module ->
+                val id = validated("invalid module ID $provider:$module") { ModuleId(provider, module) }
+                if (!requirements.add(id)) throw ManifestException("duplicate module requirement: ${id.value}")
                 if (requirements.size > limits.modules) throw ManifestException("project module count exceeds limit")
             }
         }
@@ -73,22 +97,22 @@ object ProjectManifestCodec {
 
     fun encode(manifest: ProjectManifest): String {
         val providers =
-            manifest.modules.entries
-                .groupBy { it.key.provider }
+            manifest.modules
+                .groupBy(ModuleId::provider)
                 .toSortedMap(TomlSupport.utf8Comparator)
         return buildString {
-            append("format = ").append(manifest.format).append('\n')
+            append("format = ").append(ProjectManifest.FORMAT).append('\n')
             append("name = ").append(TomlSupport.quoted(manifest.name)).append("\n\n")
             append("[modules]\n")
             providers.forEach { (provider, entries) ->
-                append(provider).append(" = { ")
+                append(provider).append(" = [ ")
                 entries
-                    .sortedWith { left, right -> TomlSupport.utf8Comparator.compare(left.key.module, right.key.module) }
-                    .forEachIndexed { index, (id, major) ->
+                    .sortedWith { left, right -> TomlSupport.utf8Comparator.compare(left.module, right.module) }
+                    .forEachIndexed { index, id ->
                         if (index > 0) append(", ")
-                        append(id.module).append(" = ").append(major.value)
+                        append(TomlSupport.quoted(id.module))
                     }
-                append(" }\n")
+                append(" ]\n")
             }
         }
     }

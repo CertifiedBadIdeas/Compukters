@@ -183,7 +183,7 @@ class IdeBuildCoordinatorTest {
         val manifestBefore = manifestPath.readBytes()
         val update =
             fixture.coordinator
-                .enableModule(fixture.descriptor.handle, ModuleId.parse("compukter:redstone"), ApiMajor(1))
+                .enableModule(fixture.descriptor.handle, ModuleId.parse("compukter:redstone"))
                 .get(5, TimeUnit.SECONDS)
 
         val published = assertIs<ProjectDependencyUpdate.Published>(update)
@@ -212,7 +212,6 @@ class IdeBuildCoordinatorTest {
                 .enableModule(
                     fixture.descriptor.handle,
                     ModuleId.parse("compukter:redstone"),
-                    ApiMajor(1),
                     targetWithoutModule,
                 ).get(5, TimeUnit.SECONDS)
 

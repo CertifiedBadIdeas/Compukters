@@ -76,14 +76,9 @@ class PlatformCatalog private constructor(
     fun addonBundlesFor(modules: Set<ModuleId>): List<TrustedBundlePayload> =
         modules.mapNotNull(addonBundles::get).sortedBy { it.identity.name }
 
-    fun resolve(requirements: Map<ModuleId, ApiMajor>): ResolvedPlatformSelection {
-        requirements.forEach { (id, major) ->
-            val available = require(id).identity
-            require(available.major == major) {
-                "platform module ${id.value} requires major ${major.value}, available ${available.major.value}"
-            }
-        }
-        val roots = requirements.keys.mapTo(mutableSetOf(), ::platformId)
+    fun resolve(requirements: Set<ModuleId>): ResolvedPlatformSelection {
+        requirements.forEach(::require)
+        val roots = requirements.mapTo(mutableSetOf(), ::platformId)
         val resolved = graph.resolve(roots)
         return ResolvedPlatformSelection(
             resolved.modules.map { descriptor ->

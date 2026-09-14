@@ -78,7 +78,7 @@ class NeoForgeCompilerServicesTest {
             TargetCompileProfileIdentity.of(serverTargetProfile(identity, platform, limits)),
         )
 
-        val selection = catalog.resolve(mapOf(ModuleId.parse("compukter:redstone") to ApiMajor(2)))
+        val selection = catalog.resolve(setOf(ModuleId.parse("compukter:redstone")))
         val lock = ProjectLock.of(profile.toolchain, selection.modules.map { LockedModule(it.identity, it.direct) })
         assertIs<ProfileResolution.Resolved>(CompileProfileResolver(profile.toolchain, catalog, limits).resolveTarget(lock, profile))
     }

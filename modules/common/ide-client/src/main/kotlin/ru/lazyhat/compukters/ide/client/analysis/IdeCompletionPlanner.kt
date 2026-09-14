@@ -24,7 +24,6 @@ import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
-import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ProjectManifest
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
@@ -37,7 +36,6 @@ data class IdeCompletionEntry(
 
 data class IdeCompletionModuleRequirement(
     val id: ModuleId,
-    val major: ApiMajor,
 )
 
 class IdeCompletionPlanner(
@@ -73,11 +71,7 @@ class IdeCompletionPlanner(
                                 candidate.id.value == origin.identity.name && candidate.contentHash == origin.identity.hash
                             }
                         } ?: return@mapNotNull null
-                    when (manifest.modules[identity.id]) {
-                        null -> IdeCompletionModuleRequirement(identity.id, identity.major)
-                        identity.major -> null
-                        else -> return@mapNotNull null
-                    }
+                    if (identity.id in manifest.modules) null else IdeCompletionModuleRequirement(identity.id)
                 } else {
                     null
                 }

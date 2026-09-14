@@ -24,8 +24,8 @@ import kotlin.test.assertFailsWith
 
 class ProjectManifestCodecTest {
     @Test
-    fun `inline and expanded module tables have one semantic form`() {
-        val inline =
+    fun `legacy manifest majors migrate to versionless module identities`() {
+        val legacy =
             ProjectManifestCodec.decode(
                 """
                 format = 1
@@ -35,19 +35,19 @@ class ProjectManifestCodecTest {
                 std = { terminal = 2 }
                 """.trimIndent(),
             )
-        val expanded =
+        val current =
             ProjectManifestCodec.decode(
                 """
-                format = 1
+                format = 2
                 name = "hello"
 
-                [modules.std]
-                terminal = 2
+                [modules]
+                std = ["terminal"]
                 """.trimIndent(),
             )
 
-        assertEquals(inline, expanded)
-        assertEquals(ApiMajor(2), inline.modules.getValue(ModuleId("std", "terminal")))
+        assertEquals(current, legacy)
+        assertEquals(setOf(ModuleId("std", "terminal")), legacy.modules)
     }
 
     @Test
@@ -56,22 +56,22 @@ class ProjectManifestCodecTest {
             ProjectManifestCodec.decode(
                 """
                 name = "hello \"world\""
-                format = 1
+                format = 2
 
                 [modules]
-                "std" = { "terminal" = 2, filesystem = 1 }
-                create = { kinetics = 3 }
+                "std" = ["terminal", "filesystem"]
+                create = ["kinetics"]
                 """.trimIndent(),
             )
 
         assertEquals(
             """
-            format = 1
+            format = 2
             name = "hello \"world\""
 
             [modules]
-            create = { kinetics = 3 }
-            std = { filesystem = 1, terminal = 2 }
+            create = [ "kinetics" ]
+            std = [ "filesystem", "terminal" ]
 
             """.trimIndent(),
             ProjectManifestCodec.encode(manifest),
@@ -81,17 +81,17 @@ class ProjectManifestCodecTest {
 
     @Test
     fun `empty module table is valid and deterministic`() {
-        val manifest = ProjectManifestCodec.decode("format = 1\nname = \"empty\"\n")
+        val manifest = ProjectManifestCodec.decode("format = 2\nname = \"empty\"\n")
 
-        assertEquals(emptyMap(), manifest.modules)
-        assertEquals("format = 1\nname = \"empty\"\n\n[modules]\n", ProjectManifestCodec.encode(manifest))
+        assertEquals(emptySet(), manifest.modules)
+        assertEquals("format = 2\nname = \"empty\"\n\n[modules]\n", ProjectManifestCodec.encode(manifest))
     }
 
     @Test
     fun `manifest rejects syntax duplicates unknown fields and unsupported formats`() {
         invalid("format = 1\nname = \"x\"\nname = \"y\"")
         invalid("format = 1\nname = \"x\"\nunknown = true")
-        invalid("format = 2\nname = \"x\"")
+        invalid("format = 3\nname = \"x\"")
         invalid("format = \"1\"\nname = \"x\"")
         invalid("name = \"x\"")
         invalid("format = 1")
@@ -103,15 +103,15 @@ class ProjectManifestCodecTest {
     @Test
     fun `manifest rejects invalid project names`() {
         listOf("", ".", "..", "a/b", "a\\b", "bad\u0000name", "\ud800").forEach { name ->
-            assertFailsWith<IllegalArgumentException>(name) { ProjectManifest.of(name, emptyMap()) }
+            assertFailsWith<IllegalArgumentException>(name) { ProjectManifest.of(name, emptySet()) }
         }
         assertFailsWith<IllegalArgumentException> {
-            ProjectManifest.of("a".repeat(65), emptyMap(), ProjectLimits(projectNameCodePoints = 64))
+            ProjectManifest.of("a".repeat(65), emptySet(), ProjectLimits(projectNameCodePoints = 64))
         }
         assertFailsWith<IllegalArgumentException> {
             ProjectManifest.of(
                 "é".repeat(65),
-                emptyMap(),
+                emptySet(),
                 ProjectLimits(projectNameCodePoints = 128, projectNameUtf8Bytes = 128),
             )
         }
@@ -135,6 +135,8 @@ class ProjectManifestCodecTest {
         invalid("format = 1\nname = \"x\"\n[modules]\nstd = { terminal = 1.0 }")
         invalid("format = 1\nname = \"x\"\n[modules]\nstd = { terminal = \"2\" }")
         invalid("format = 1\nname = \"x\"\n[modules]\nstd = { terminal = 65536 }")
+        invalid("format = 2\nname = \"x\"\n[modules]\nstd = [1]")
+        invalid("format = 2\nname = \"x\"\n[modules]\nstd = { terminal = 1 }")
     }
 
     @Test
@@ -147,7 +149,7 @@ class ProjectManifestCodecTest {
         }
         assertFailsWith<ManifestException> {
             ProjectManifestCodec.decode(
-                "format = 1\nname = \"hello\"\n[modules]\nstd = { one = 1, two = 2 }",
+                "format = 2\nname = \"hello\"\n[modules]\nstd = [\"one\", \"two\"]",
                 ProjectLimits(modules = 1),
             )
         }

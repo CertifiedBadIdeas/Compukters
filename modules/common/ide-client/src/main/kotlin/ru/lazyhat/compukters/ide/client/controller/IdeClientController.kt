@@ -811,7 +811,7 @@ class IdeClientController(
         state = state.copy(busy = state.busy + IdeBusyOperation.Resolve)
         publishWorkspace()
         coordinator
-            .enableModule(selected.handle, requirement.id, requirement.major, target?.compileProfile)
+            .enableModule(selected.handle, requirement.id, target?.compileProfile)
             .whenComplete { result, failure ->
                 val mapped =
                     if (failure == null) {

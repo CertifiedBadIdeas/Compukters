@@ -39,16 +39,16 @@ class ProjectDependencyServiceTest {
 
         val published =
             assertIs<ProjectDependencyUpdate.Published>(
-                service.enableModule(module.identity.id, module.identity.major),
+                service.enableModule(module.identity.id),
             )
         val manifestPath = project.handle.canonicalPath.resolve("compukter.toml")
         val lockPath = project.handle.canonicalPath.resolve("compukter.lock")
         val manifest = ProjectManifestCodec.decode(Files.readString(manifestPath))
 
-        assertEquals(module.identity.major, manifest.modules[module.identity.id])
+        assertTrue(module.identity.id in manifest.modules)
         assertEquals(ProjectManifestCodec.encode(manifest), Files.readString(manifestPath))
         assertTrue(Files.isRegularFile(lockPath))
-        assertEquals(ProjectDependencyUpdate.AlreadyDirect, service.enableModule(module.identity.id, module.identity.major))
+        assertEquals(ProjectDependencyUpdate.AlreadyDirect, service.enableModule(module.identity.id))
 
         assertEquals(ProjectDependencyRollback.Restored, service.rollback(published.receipt))
         assertTrue(ProjectManifestCodec.decode(Files.readString(manifestPath)).modules.isEmpty())
@@ -62,7 +62,7 @@ class ProjectDependencyServiceTest {
         val resolution = resolution()
         val module = resolution.catalog.entries.first()
         val service = ProjectDependencyService(project.handle, resolution)
-        val receipt = assertIs<ProjectDependencyUpdate.Published>(service.enableModule(module.identity.id, module.identity.major)).receipt
+        val receipt = assertIs<ProjectDependencyUpdate.Published>(service.enableModule(module.identity.id)).receipt
         val manifestPath = project.handle.canonicalPath.resolve("compukter.toml")
 
         Files.writeString(manifestPath, "newer")
@@ -80,7 +80,7 @@ class ProjectDependencyServiceTest {
         val service = ProjectDependencyService(project.handle, resolution)
 
         val result =
-            service.enableModule(module.identity.id, module.identity.major) { proposed ->
+            service.enableModule(module.identity.id) { proposed ->
                 val locked = proposed.modules.single { it.identity.id == module.identity.id }
                 assertEquals(module.identity.major, locked.identity.major)
                 "target profile changed"

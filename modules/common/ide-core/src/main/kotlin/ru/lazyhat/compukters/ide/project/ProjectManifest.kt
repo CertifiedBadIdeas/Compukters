@@ -19,15 +19,15 @@
 package ru.lazyhat.compukters.ide.project
 
 import java.util.Collections
-import java.util.TreeMap
+import java.util.TreeSet
 
 class ProjectManifest private constructor(
     val format: Int,
     val name: String,
-    modules: Map<ModuleId, ApiMajor>,
+    modules: Set<ModuleId>,
 ) {
-    val modules: Map<ModuleId, ApiMajor> =
-        Collections.unmodifiableMap(TreeMap<ModuleId, ApiMajor>(MODULE_COMPARATOR).apply { putAll(modules) })
+    val modules: Set<ModuleId> =
+        Collections.unmodifiableSet(TreeSet<ModuleId>(MODULE_COMPARATOR).apply { addAll(modules) })
 
     override fun equals(other: Any?): Boolean =
         other is ProjectManifest && format == other.format && name == other.name && modules == other.modules
@@ -37,16 +37,16 @@ class ProjectManifest private constructor(
     override fun toString(): String = "ProjectManifest(format=$format, name=$name, modules=$modules)"
 
     companion object {
-        const val FORMAT = 1
+        const val FORMAT = 2
 
         fun of(
             name: String,
-            modules: Map<ModuleId, ApiMajor>,
+            modules: Set<ModuleId>,
             limits: ProjectLimits = ProjectLimits(),
         ): ProjectManifest {
             validateName(name, limits)
             require(modules.size <= limits.modules) { "project module count exceeds limit" }
-            return ProjectManifest(FORMAT, name, modules.toMap())
+            return ProjectManifest(FORMAT, name, modules.toSet())
         }
 
         internal fun validateName(

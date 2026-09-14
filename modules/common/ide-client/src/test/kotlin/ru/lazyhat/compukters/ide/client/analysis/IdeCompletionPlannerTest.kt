@@ -59,7 +59,7 @@ class IdeCompletionPlannerTest {
                 symbol = CompletionSymbol("compukter.redstone.Redstone", "compukter.redstone.Redstone"),
                 additionalEdits = listOf(CompletionTextEdit(EditorRange(0, 0), "import compukter.redstone.Redstone\n\n")),
             )
-        val manifest = ProjectManifest.of("sample", emptyMap())
+        val manifest = ProjectManifest.of("sample", emptySet())
 
         val detached = IdeCompletionPlanner(catalog).plan(listOf(proposal), manifest, null).single()
         assertEquals("import compukter.redstone.Redstone · enable compukter:redstone", detached.actionText)
@@ -70,7 +70,7 @@ class IdeCompletionPlannerTest {
         val supportedTarget = TargetCompileProfile(toolchain(catalog), listOf(entry.identity), WorkerLimits())
         assertEquals(1, IdeCompletionPlanner(catalog).plan(listOf(proposal), manifest, supportedTarget).size)
 
-        val direct = ProjectManifest.of("sample", mapOf(entry.identity.id to entry.identity.major))
+        val direct = ProjectManifest.of("sample", setOf(entry.identity.id))
         assertEquals(
             "import compukter.redstone.Redstone",
             IdeCompletionPlanner(catalog).plan(listOf(proposal), direct, supportedTarget).single().actionText,
@@ -98,7 +98,7 @@ class IdeCompletionPlannerTest {
             )
         val target = TargetCompileProfile(toolchain(catalog), listOf(module), WorkerLimits(), listOf(payload))
 
-        val planned = IdeCompletionPlanner(catalog).plan(listOf(proposal), ProjectManifest.of("sample", emptyMap()), target).single()
+        val planned = IdeCompletionPlanner(catalog).plan(listOf(proposal), ProjectManifest.of("sample", emptySet()), target).single()
 
         assertEquals("import fixture.telemetry.Telemetry · enable fixture:telemetry", planned.actionText)
         assertEquals(module.id, planned.moduleRequirement?.id)
@@ -122,7 +122,7 @@ class IdeCompletionPlannerTest {
             )
         val target = TargetCompileProfile(toolchain(catalog), catalog.entries.map { it.identity }, WorkerLimits())
 
-        val planned = IdeCompletionPlanner(catalog).plan(listOf(proposal), ProjectManifest.of("sample", emptyMap()), target).single()
+        val planned = IdeCompletionPlanner(catalog).plan(listOf(proposal), ProjectManifest.of("sample", emptySet()), target).single()
 
         assertEquals("toInt", planned.proposal.insertText)
         assertEquals(null, planned.moduleRequirement)

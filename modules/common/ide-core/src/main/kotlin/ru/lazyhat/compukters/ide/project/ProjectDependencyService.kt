@@ -64,7 +64,6 @@ class ProjectDependencyService(
 ) {
     fun enableModule(
         id: ModuleId,
-        major: ApiMajor,
         validate: (ProjectLock) -> String? = { null },
     ): ProjectDependencyUpdate =
         try {
@@ -72,14 +71,8 @@ class ProjectDependencyService(
             val manifestFile = captured.getValue(MANIFEST)
             val manifestBytes = manifestFile.content ?: return ProjectDependencyUpdate.Conflict("project manifest is missing")
             val manifest = ProjectManifestCodec.decode(TomlSupport.decodeStrictUtf8(manifestBytes), limits)
-            manifest.modules[id]?.let { existing ->
-                return if (existing == major) {
-                    ProjectDependencyUpdate.AlreadyDirect
-                } else {
-                    ProjectDependencyUpdate.Conflict("module ${id.value} already requires API ${existing.value}")
-                }
-            }
-            val proposed = ProjectManifest.of(manifest.name, manifest.modules + (id to major), limits)
+            if (id in manifest.modules) return ProjectDependencyUpdate.AlreadyDirect
+            val proposed = ProjectManifest.of(manifest.name, manifest.modules + id, limits)
             val lock = ProjectLockService(NOOP_LOCK_WRITER).resolve(proposed, resolution)
             validate(lock)?.let { return ProjectDependencyUpdate.Conflict(it) }
             val replacements =

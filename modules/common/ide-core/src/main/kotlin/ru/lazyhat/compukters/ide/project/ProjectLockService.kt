@@ -33,12 +33,6 @@ sealed interface ProjectLockMismatch {
         val id: ModuleId,
     ) : ProjectLockMismatch
 
-    data class ManifestModuleMajor(
-        val id: ModuleId,
-        val required: ApiMajor,
-        val locked: ApiMajor,
-    ) : ProjectLockMismatch
-
     data class ModuleDirect(
         val id: ModuleId,
         val expected: Boolean,
@@ -110,12 +104,10 @@ class ProjectLockService(
         buildList {
             compareToolchain(lock.toolchain, availableProfile.toolchain)
             val locked = lock.modules.associateBy { it.identity.id }
-            manifest.modules.forEach { (id, requiredMajor) ->
+            manifest.modules.forEach { id ->
                 val lockedModule = locked[id]?.identity
                 if (lockedModule == null) {
                     add(ProjectLockMismatch.ManifestModuleMissing(id))
-                } else if (lockedModule.major != requiredMajor) {
-                    add(ProjectLockMismatch.ManifestModuleMajor(id, requiredMajor, lockedModule.major))
                 }
             }
             lock.modules.filter { it.direct && it.identity.id !in manifest.modules }.forEach {

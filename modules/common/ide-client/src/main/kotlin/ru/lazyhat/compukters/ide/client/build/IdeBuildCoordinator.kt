@@ -36,7 +36,6 @@ import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
 import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.editor.EditorRange
-import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ProjectDependencyReceipt
 import ru.lazyhat.compukters.ide.project.ProjectDependencyRollback
@@ -141,13 +140,12 @@ class IdeBuildCoordinator(
     fun enableModule(
         project: ProjectHandle,
         id: ModuleId,
-        major: ApiMajor,
         target: TargetCompileProfile? = null,
     ): CompletableFuture<ProjectDependencyUpdate> =
         submit(
             action = {
                 val resolution = target?.let(services.targetResolution) ?: services.localResolution
-                ProjectDependencyService(project, resolution).enableModule(id, major) { proposed ->
+                ProjectDependencyService(project, resolution).enableModule(id) { proposed ->
                     val admitted = target?.let { services.profileResolver.resolveTarget(proposed, it) }
                     if (admitted == null || admitted is ProfileResolution.Resolved) {
                         null
