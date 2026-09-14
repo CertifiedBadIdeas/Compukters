@@ -31,13 +31,14 @@ plugins {
 }
 
 val addonApiJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("developmentModJar")
+val addonSdkVersion = libs.versions.addon.sdk.get()
 
 publishing {
     publications {
         create<MavenPublication>("addonApi") {
             groupId = project.group.toString()
             artifactId = "compukters-addon-api-neoforge-1.21.1"
-            version = rootProject.version.toString()
+            version = addonSdkVersion
             artifact(addonApiJar)
         }
     }

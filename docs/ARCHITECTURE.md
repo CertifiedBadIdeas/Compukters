@@ -22,11 +22,11 @@ contracts without the Minecraft carrier.
 Built-in Guest Kotlin declarations are authored in `guest-platform` as separately versioned modules. Its build
 produces only the canonical base platform bundle consumed by both compilation and IDE analysis. Optional integrations
 own and build their Guest declarations as addon bundles against that base; `addons/create` owns the first such bundle.
-The public `ru.lazyhat.compukters.addon` Gradle plugin resolves a version-matched isolated builder and base bundle by
-Maven coordinate, derives the wire schema and bindings from Guest Kotlin declarations, validates a checked-in selector
-lock, generates the typed JVM host contract, and packages the resulting `.cagb` in the independent addon JAR. The same
-plugin source is compiled into the repository build for first-party addons without making their projects or sources
-part of the published plugin.
+The public `ru.lazyhat.compukters.addon` Gradle plugin resolves an isolated builder, base bundle, and loader API from
+one independently versioned SDK release by Maven coordinate. The SDK version changes with its public compatibility
+boundary rather than every Compukters release. The plugin derives the wire schema and bindings from Guest Kotlin
+declarations, validates a checked-in selector lock, generates the typed JVM host contract, and packages the resulting
+`.cagb` in the independent addon JAR.
 `platform-bundle` owns the base bundle model, codec, module graph, and default imports; `platform-k2` exposes that
 metadata to K2 without making the K2 implementation part of the platform format.
 Constant `Int` and qualified enum-entry defaults cross this bundle explicitly; compiler lowering materializes an
@@ -150,8 +150,9 @@ created host must expose the exact registered capability schema. The actor trans
 the server thread, where the host may complete immediately or retain a bounded wait; completions resume the exact VM
 task on a later turn. The Minecraft 1.21.1 Create adapter and its Guest Kotlin declarations live in the standalone
 `addons/create` Gradle root. It consumes the public plugin, tooling, platform bundle, and NeoForge API exclusively as
-Maven coordinates; the Compukters root only stages those artifacts and invokes the independent build. The base platform,
-shared Minecraft code, and 26.1 code therefore have no direct Create ownership. The adapter resolves only the six
+Maven coordinates; the Compukters root only publishes the selected SDK to Maven Local and invokes the independent
+build. The base platform, shared Minecraft code, and 26.1 code therefore have no direct Create ownership. The adapter
+resolves only the six
 adjacent loaded positions and binds handles to exact block-entity identities, preventing replacement from silently
 rebinding a running Guest program.
 
