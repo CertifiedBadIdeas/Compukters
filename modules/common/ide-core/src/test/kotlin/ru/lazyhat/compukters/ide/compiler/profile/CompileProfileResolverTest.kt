@@ -18,12 +18,10 @@
 
 package ru.lazyhat.compukters.ide.compiler.profile
 
-import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
-import ru.lazyhat.compukters.ide.project.ApiMajor
-import ru.lazyhat.compukters.ide.project.LockedModule
-import ru.lazyhat.compukters.ide.project.ModuleId
+import ru.lazyhat.compukters.ide.project.AddonId
 import ru.lazyhat.compukters.ide.project.ProjectLock
+import ru.lazyhat.compukters.ide.project.ProjectLockService
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import kotlin.test.Test
@@ -33,54 +31,62 @@ import kotlin.test.assertTrue
 
 class CompileProfileResolverTest {
     @Test
-    fun `local profile requires every exact locked module`() {
+    fun `local profile requires every exact locked addon`() {
         val fixture = fixture()
-        val sensors = fixture.catalog.require(ModuleId.parse("create:sensors")).identity
-        val missing = ProjectLock.of(fixture.toolchain, fixture.lock.modules + LockedModule(sensors, true))
+        val missing = ProjectLock.of(fixture.toolchain, fixture.lock.addons.map { it.copy(id = AddonId("missing")) })
 
-        val limited = PlatformCatalog.forTarget(fixture.bundle, fixture.lock.modules.map { it.identity })
         assertEquals(
-            ProfileResolution.Failure.MissingModule(ModuleId.parse("create:sensors")),
-            CompileProfileResolver(fixture.toolchain, limited, WorkerLimits()).resolveLocal(missing),
+            ProfileResolution.Failure.MissingAddon(AddonId("missing")),
+            fixture.resolver.resolveLocal(missing),
         )
     }
 
     @Test
-    fun `local profile rejects toolchain version and module content differences`() {
+    fun `local profile rejects toolchain and addon differences`() {
         val fixture = fixture()
-        val terminalIndex = fixture.lock.modules.indexOfFirst { it.identity.id == ModuleId.parse("std:terminal") }
-        val changed = fixture.lock.modules.toMutableList()
-        changed[terminalIndex] = changed[terminalIndex].copy(identity = changed[terminalIndex].identity.copy(version = "2.2.0"))
+        val changed = fixture.lock.addons.map { it.copy(version = "2.2.0") }
 
-        assertIs<ProfileResolution.Failure.VersionMismatch>(fixture.resolver.resolveLocal(ProjectLock.of(fixture.toolchain, changed)))
+        assertIs<ProfileResolution.Failure.AddonVersionMismatch>(fixture.resolver.resolveLocal(ProjectLock.of(fixture.toolchain, changed)))
         assertIs<ProfileResolution.Failure.ToolchainMismatch>(
             CompileProfileResolver(fixture.toolchain.copy(artifactAbi = 9u), fixture.catalog, WorkerLimits()).resolveLocal(fixture.lock),
         )
     }
 
     @Test
-    fun `target permits available extras but rejects missing closure and changed content`() {
+    fun `target resolves exact advertised addon payload`() {
         val fixture = fixture()
-        val extras = fixture.catalog.entries.map { it.identity }
+        val modules = fixture.catalog.entries.map { it.identity }
+        val addonBundles = fixture.catalog.addons.map { it.payload }
         assertIs<ProfileResolution.Resolved>(
-            fixture.resolver.resolveTarget(fixture.lock, TargetCompileProfile(fixture.toolchain, extras, WorkerLimits())),
+            fixture.resolver.resolveTarget(fixture.lock, TargetCompileProfile(fixture.toolchain, modules, WorkerLimits(), addonBundles)),
         )
 
-        val withoutRanges = extras.filterNot { it.id == ModuleId.parse("stdlib:ranges") }
-        assertIs<ProfileResolution.Failure.MissingModule>(
-            fixture.resolver.resolveTarget(fixture.lock, TargetCompileProfile(fixture.toolchain, withoutRanges, WorkerLimits())),
-        )
-
-        val changed = extras.map { if (it.id == ModuleId.parse("std:terminal")) it.copy(contentHash = it.contentHash.reversed()) else it }
-        assertIs<ProfileResolution.Failure.ContentMismatch>(
-            fixture.resolver.resolveTarget(fixture.lock, TargetCompileProfile(fixture.toolchain, changed, WorkerLimits())),
+        assertIs<ProfileResolution.Failure.MissingAddon>(
+            fixture.resolver.resolveTarget(
+                fixture.lock,
+                TargetCompileProfile(
+                    fixture.toolchain,
+                    fixture.catalog.entries
+                        .filter {
+                            it.identity.id.provider !=
+                                "fixture"
+                        }.map { it.identity },
+                    WorkerLimits(),
+                ),
+            ),
         )
     }
 
     @Test
     fun `target rejects limits below compilation policy`() {
         val fixture = fixture(WorkerLimits(sourceFiles = 4))
-        val target = TargetCompileProfile(fixture.toolchain, fixture.catalog.entries.map { it.identity }, WorkerLimits(sourceFiles = 3))
+        val target =
+            TargetCompileProfile(
+                fixture.toolchain,
+                fixture.catalog.entries.map { it.identity },
+                WorkerLimits(sourceFiles = 3),
+                fixture.catalog.addons.map { it.payload },
+            )
 
         assertEquals(
             ProfileResolution.Failure.TargetLimitMismatch("sourceFiles", 4, 3),
@@ -89,25 +95,36 @@ class CompileProfileResolverTest {
     }
 
     @Test
-    fun `resolved profile retains topological modules and direct roots`() {
+    fun `resolved profile retains all built-ins and selected addons`() {
         val fixture = fixture()
         val profile = assertIs<ProfileResolution.Resolved>(fixture.resolver.resolveLocal(fixture.lock)).profile
 
-        assertEquals(listOf("stdlib:core", "stdlib:ranges", "std:terminal"), profile.modules.map { it.identity.id.value })
-        assertEquals(setOf(ModuleId.parse("std:terminal")), profile.directModules)
-        assertTrue(profile.modules.single { it.identity.id == ModuleId.parse("std:terminal") }.direct)
+        assertEquals(
+            fixture.bundle.modules
+                .map {
+                    it.id.toString()
+                }.toSet() + "fixture:meters",
+            profile.modules.map { it.identity.id.value }.toSet(),
+        )
+        assertEquals(listOf("fixture"), profile.addons.map { it.id.value })
+        assertTrue(profile.modules.single { it.identity.id.value == "fixture:meters" }.direct)
     }
 
     private fun fixture(requiredLimits: WorkerLimits = WorkerLimits()): Fixture {
-        val bundle = platformBundle()
-        val catalog = platformCatalog(bundle)
-        val toolchain = platformToolchain(bundle)
-        val selection = catalog.resolve(setOf(ModuleId.parse("std:terminal")))
-        val lock = ProjectLock.of(toolchain, selection.modules.map { LockedModule(it.identity, it.direct) })
+        val resolution = platformResolutionWithAddon()
+        val bundle = resolution.catalog.bundle
+        val catalog = resolution.catalog
+        val toolchain = resolution.toolchain
+        val lock =
+            ProjectLockService(
+                NOOP_LOCK_WRITER,
+            ).resolve(
+                ru.lazyhat.compukters.ide.project.ProjectManifest
+                    .of("fixture", setOf(AddonId("fixture"))),
+                resolution,
+            )
         return Fixture(bundle, catalog, toolchain, lock, CompileProfileResolver(toolchain, catalog, requiredLimits))
     }
-
-    private fun Hash256.reversed() = Hash256.of(toByteArray().reversedArray())
 
     private data class Fixture(
         val bundle: PlatformBundle,
@@ -116,4 +133,13 @@ class CompileProfileResolverTest {
         val lock: ProjectLock,
         val resolver: CompileProfileResolver,
     )
+
+    private companion object {
+        val NOOP_LOCK_WRITER =
+            object : ru.lazyhat.compukters.ide.project.LockFileWriter {
+                override fun create(content: ByteArray) = Unit
+
+                override fun update(content: ByteArray) = Unit
+            }
+    }
 }

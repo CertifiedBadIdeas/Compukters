@@ -22,8 +22,10 @@ import ru.lazyhat.compukters.addon.api.AddonGuestApiLimits
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.ide.project.AddonId
 import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
+import ru.lazyhat.compukters.ide.project.ResolvedAddon
 import ru.lazyhat.compukters.ide.project.ResolvedModule
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.platform.bundle.PlatformIdentity
@@ -32,12 +34,12 @@ import java.util.Collections
 class CompileProfile(
     val toolchain: ToolchainLockIdentity,
     val platform: PlatformIdentity,
-    directModules: Set<ModuleId>,
+    addons: List<ResolvedAddon>,
     modules: List<ResolvedPlatformModule>,
     val limits: WorkerLimits,
     addonBundles: List<TrustedBundlePayload> = emptyList(),
 ) {
-    val directModules: Set<ModuleId> = Collections.unmodifiableSet(directModules.toSet())
+    val addons: List<ResolvedAddon> = Collections.unmodifiableList(addons.toList())
     val modules: List<ResolvedPlatformModule> = Collections.unmodifiableList(modules.toList())
     val addonBundles: List<TrustedBundlePayload> = Collections.unmodifiableList(addonBundles.toList())
 
@@ -48,9 +50,12 @@ class CompileProfile(
         }
         val ids = this.modules.map { it.identity.id }
         require(ids.size == ids.toSet().size) { "compile profile module IDs must be unique" }
-        require(this.directModules == this.modules.filter(ResolvedPlatformModule::direct).mapTo(mutableSetOf()) { it.identity.id }) {
-            "compile profile direct module set does not match resolved modules"
-        }
+        require(
+            this.addons
+                .map(ResolvedAddon::id)
+                .toSet()
+                .size == this.addons.size,
+        ) { "compile profile addon IDs must be unique" }
         require(
             this.addonBundles
                 .map { it.identity.name }
@@ -59,9 +64,9 @@ class CompileProfile(
         ) {
             "compile profile addon bundle names must be unique"
         }
-        val selected = this.modules.associateBy { it.identity.id.value }
-        require(this.addonBundles.all { bundle -> selected[bundle.identity.name]?.identity?.contentHash == bundle.identity.hash }) {
-            "compile profile addon bundles must exactly match selected modules"
+        val selectedHashes = this.addons.mapTo(mutableSetOf()) { it.contentHash }
+        require(this.addonBundles.all { bundle -> bundle.identity.hash in selectedHashes } && this.addonBundles.size == this.addons.size) {
+            "compile profile addon bundles must exactly match selected addons"
         }
     }
 }
@@ -127,6 +132,10 @@ sealed interface ProfileResolution {
             val id: ModuleId,
         ) : Failure
 
+        data class MissingAddon(
+            val id: AddonId,
+        ) : Failure
+
         data class MajorMismatch(
             val id: ModuleId,
             val expected: ApiMajor,
@@ -141,6 +150,18 @@ sealed interface ProfileResolution {
 
         data class ContentMismatch(
             val id: ModuleId,
+            val expected: Hash256,
+            val available: Hash256,
+        ) : Failure
+
+        data class AddonVersionMismatch(
+            val id: AddonId,
+            val expected: String,
+            val available: String,
+        ) : Failure
+
+        data class AddonContentMismatch(
+            val id: AddonId,
             val expected: Hash256,
             val available: Hash256,
         ) : Failure

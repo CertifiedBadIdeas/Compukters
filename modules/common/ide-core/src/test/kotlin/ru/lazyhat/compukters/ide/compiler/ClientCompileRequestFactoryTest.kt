@@ -88,26 +88,23 @@ class ClientCompileRequestFactoryTest {
     private fun baseline(): ClientBuildSnapshot {
         val limits = WorkerLimits(sourceFiles = 4, sourceFileBytes = 1024, sourceBytes = 2048)
         val bundle = platformBundle()
-        val selection =
-            platformCatalog(bundle).resolve(
-                setOf(ModuleId.parse("std:terminal"), ModuleId.parse("create:sensors")),
-            )
+        val selection = platformCatalog(bundle).resolve(emptySet())
         val toolchain = platformToolchain(bundle)
         return ClientBuildSnapshot(
             snapshot("fun main() = 1", limits),
             BinaryValue.of("manifest".encodeToByteArray()),
             BinaryValue.of("lock".encodeToByteArray()),
-            CompileProfile(toolchain, bundle.identity, selection.directModules, selection.modules, limits),
+            CompileProfile(toolchain, bundle.identity, emptyList(), selection.modules, limits),
             TargetSettings.KOTLIN_2_4_JVM_17,
         )
     }
 
     private fun ClientBuildSnapshot.limits() = profile.limits
 
-    private fun CompileProfile.withLimits(limits: WorkerLimits) = CompileProfile(toolchain, platform, directModules, modules, limits)
+    private fun CompileProfile.withLimits(limits: WorkerLimits) = CompileProfile(toolchain, platform, addons, modules, limits)
 
     private fun CompileProfile.withToolchain(toolchain: ToolchainLockIdentity) =
-        CompileProfile(toolchain, platform, directModules, modules, limits)
+        CompileProfile(toolchain, platform, addons, modules, limits)
 
     private fun CompileProfile.withChangedModuleHash(): CompileProfile {
         val changed =
@@ -118,7 +115,7 @@ class ClientCompileRequestFactoryTest {
                     module
                 }
             }
-        return CompileProfile(toolchain, platform, directModules, changed, limits)
+        return CompileProfile(toolchain, platform, addons, changed, limits)
     }
 
     private fun snapshot(

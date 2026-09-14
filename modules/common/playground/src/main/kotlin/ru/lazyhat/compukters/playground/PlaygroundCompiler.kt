@@ -108,7 +108,7 @@ class ForkedPlaygroundCompiler(
                 throw ProjectSnapshotException("manifest byte count exceeds limit")
             }
             val manifest = ProjectManifestCodec.decode(Files.readString(manifestPath), limits)
-            return platformCatalog.resolve(manifest.modules).modules.map { module ->
+            return platformCatalog.resolve(manifest.addons).modules.map { module ->
                 TrustedBundleIdentity.of(module.identity.id.value, module.identity.contentHash)
             }
         } catch (exception: ProjectSnapshotException) {

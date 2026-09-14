@@ -57,8 +57,8 @@ object ProjectLockCodec {
                     platformAbi = requiredHash(toolchain, "platform_abi_sha256", "toolchain"),
                 )
             }
-        val modules = parseModules(parsed["modules"], limits)
-        return validated("invalid project lock") { ProjectLock.of(identity, modules, limits) }
+        val addons = parseAddons(parsed["addons"], limits)
+        return validated("invalid project lock") { ProjectLock.of(identity, addons, limits) }
     }
 
     fun encode(lock: ProjectLock): String =
@@ -72,37 +72,29 @@ object ProjectLockCodec {
             append("artifact_writer = ").append(lock.toolchain.artifactWriterVersion).append('\n')
             append("payload_sha256 = ").append(TomlSupport.quoted(lock.toolchain.payloadHash.hex())).append('\n')
             append("platform_abi_sha256 = ").append(TomlSupport.quoted(lock.toolchain.platformAbi.hex())).append('\n')
-            lock.modules.forEach { locked ->
-                val module = locked.identity
-                append("\n[[modules]]\n")
-                append("id = ").append(TomlSupport.quoted(module.id.value)).append('\n')
-                append("major = ").append(module.major.value).append('\n')
-                append("version = ").append(TomlSupport.quoted(module.version)).append('\n')
-                append("content_sha256 = ").append(TomlSupport.quoted(module.contentHash.hex())).append('\n')
-                append("direct = ").append(locked.direct).append('\n')
+            lock.addons.forEach { addon ->
+                append("\n[[addons]]\n")
+                append("id = ").append(TomlSupport.quoted(addon.id.value)).append('\n')
+                append("version = ").append(TomlSupport.quoted(addon.version)).append('\n')
+                append("content_sha256 = ").append(TomlSupport.quoted(addon.contentHash.hex())).append('\n')
             }
         }
 
-    private fun parseModules(
+    private fun parseAddons(
         raw: Any?,
         limits: ProjectLimits,
-    ): List<LockedModule> {
+    ): List<ResolvedAddon> {
         if (raw == null) return emptyList()
-        val array = raw as? TomlArray ?: throw ProjectLockException("lock modules must be an array of tables")
-        if (array.size() > limits.modules) throw ProjectLockException("project module count exceeds limit")
+        val array = raw as? TomlArray ?: throw ProjectLockException("lock addons must be an array of tables")
+        if (array.size() > limits.addons) throw ProjectLockException("project addon count exceeds limit")
         return List(array.size()) { index ->
-            val table = array[index] as? TomlTable ?: throw ProjectLockException("lock module $index must be a table")
-            rejectUnknown(table, MODULE_FIELDS, "module")
-            validated("invalid locked module at index $index") {
-                LockedModule(
-                    identity =
-                        ResolvedModule(
-                            id = ModuleId.parse(requiredString(table, "id", "module")),
-                            major = ApiMajor(requiredUInt(table, "major", "module", ApiMajor.MAXIMUM.toUInt()).toInt()),
-                            version = requiredString(table, "version", "module"),
-                            contentHash = requiredHash(table, "content_sha256", "module"),
-                        ),
-                    direct = requiredBoolean(table, "direct", "module"),
+            val table = array[index] as? TomlTable ?: throw ProjectLockException("lock addon $index must be a table")
+            rejectUnknown(table, ADDON_FIELDS, "addon")
+            validated("invalid locked addon at index $index") {
+                ResolvedAddon(
+                    id = AddonId(requiredString(table, "id", "addon")),
+                    version = requiredString(table, "version", "addon"),
+                    contentHash = requiredHash(table, "content_sha256", "addon"),
                 )
             }
         }
@@ -137,12 +129,6 @@ object ProjectLockCodec {
         owner: String,
     ): String = table[key] as? String ?: throw ProjectLockException("$owner $key must be a string")
 
-    private fun requiredBoolean(
-        table: TomlTable,
-        key: String,
-        owner: String,
-    ): Boolean = table[key] as? Boolean ?: throw ProjectLockException("$owner $key must be a boolean")
-
     private fun rejectUnknown(
         table: TomlTable,
         allowed: Set<String>,
@@ -164,8 +150,8 @@ object ProjectLockCodec {
             throw ProjectLockException("$message: ${exception.message}", exception)
         }
 
-    private val ROOT_FIELDS = setOf("format", "toolchain", "modules")
+    private val ROOT_FIELDS = setOf("format", "toolchain", "addons")
     private val TOOLCHAIN_FIELDS =
         setOf("compiler", "language", "codegen_abi", "artifact_abi", "artifact_writer", "payload_sha256", "platform_abi_sha256")
-    private val MODULE_FIELDS = setOf("id", "major", "version", "content_sha256", "direct")
+    private val ADDON_FIELDS = setOf("id", "version", "content_sha256")
 }

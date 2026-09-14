@@ -18,24 +18,25 @@
 
 package ru.lazyhat.compukters.ide.client.analysis
 
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
-import ru.lazyhat.compukters.ide.project.ModuleId
+import ru.lazyhat.compukters.ide.project.AddonId
 import ru.lazyhat.compukters.ide.project.ProjectManifest
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 
 data class IdeCompletionEntry(
     val proposal: CompletionItem,
     val actionText: String?,
-    val moduleRequirement: IdeCompletionModuleRequirement?,
+    val addonRequirement: IdeCompletionAddonRequirement?,
 )
 
-data class IdeCompletionModuleRequirement(
-    val id: ModuleId,
+data class IdeCompletionAddonRequirement(
+    val id: AddonId,
 )
 
 class IdeCompletionPlanner(
@@ -59,19 +60,13 @@ class IdeCompletionPlanner(
             val origin = proposal.origin
             val requirement =
                 if (origin is DeclarationOrigin.Platform && origin.identity != builtinsIdentity) {
-                    val identity =
-                        if (target == null) {
-                            catalog.entries
-                                .singleOrNull { candidate ->
-                                    candidate.identity.id.value == origin.identity.name &&
-                                        candidate.identity.contentHash == origin.identity.hash
-                                }?.identity
-                        } else {
-                            target.modules.singleOrNull { candidate ->
-                                candidate.id.value == origin.identity.name && candidate.contentHash == origin.identity.hash
-                            }
-                        } ?: return@mapNotNull null
-                    if (identity.id in manifest.modules) null else IdeCompletionModuleRequirement(identity.id)
+                    val addon =
+                        target
+                            ?.addonBundles
+                            ?.singleOrNull { payload ->
+                                payload.identity.name == origin.identity.name && payload.identity.hash == origin.identity.hash
+                            }?.let { payload -> AddonId(AddonGuestApiBundleCodec.decode(payload.content.toByteArray()).identity.addon) }
+                    if (addon == null || addon in manifest.addons) null else IdeCompletionAddonRequirement(addon)
                 } else {
                     null
                 }

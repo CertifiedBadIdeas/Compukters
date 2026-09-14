@@ -19,9 +19,8 @@
 package ru.lazyhat.compukters.ide.compiler.profile
 
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
-import ru.lazyhat.compukters.ide.project.LockedModule
 import ru.lazyhat.compukters.ide.project.ProjectLock
-import ru.lazyhat.compukters.ide.project.ResolvedModule
+import ru.lazyhat.compukters.ide.project.ResolvedAddon
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 
 class CompileProfileResolver(
@@ -39,10 +38,9 @@ class CompileProfileResolver(
         target: TargetCompileProfile,
     ): ProfileResolution {
         if (lock.toolchain != target.toolchain) return ProfileResolution.Failure.ToolchainMismatch(lock.toolchain, target.toolchain)
-        compareModules(lock.modules.map { it.identity }, target.modules)?.let { return it }
         compareLimits(requiredLimits, target.limits)?.let { return it }
         if (lock.toolchain != localToolchain) return ProfileResolution.Failure.ToolchainMismatch(lock.toolchain, localToolchain)
-        val targetCatalog = PlatformCatalog.forTarget(catalog.bundle, target.modules, target.addonBundles)
+        val targetCatalog = PlatformCatalog.forTarget(catalog.baseBundle, target.modules, target.addonBundles)
         return resolveBundles(lock, target.limits, targetCatalog)
     }
 
@@ -51,52 +49,39 @@ class CompileProfileResolver(
         limits: WorkerLimits,
         availableCatalog: PlatformCatalog,
     ): ProfileResolution {
-        val resolved =
-            lock.modules.map { locked ->
-                val expected = locked.identity
-                val available = availableCatalog.find(expected.id) ?: return ProfileResolution.Failure.MissingModule(expected.id)
-                compareModule(expected, available.identity)?.let { return it }
-                ResolvedPlatformModule(expected, available.descriptor, locked.direct)
+        lock.addons.forEach { expected ->
+            val available = availableCatalog.findAddon(expected.id)?.identity ?: return ProfileResolution.Failure.MissingAddon(expected.id)
+            compareAddon(expected, available)?.let { return it }
+        }
+        val selected =
+            try {
+                availableCatalog.resolve(lock.addons.mapTo(mutableSetOf()) { it.id })
+            } catch (failure: IllegalArgumentException) {
+                return ProfileResolution.Failure.MissingAddon(lock.addons.first().id)
             }
         return ProfileResolution.Resolved(
             CompileProfile(
                 lock.toolchain,
                 availableCatalog.bundle.identity,
-                lock.modules.filter(LockedModule::direct).mapTo(mutableSetOf()) { it.identity.id },
-                resolved,
+                lock.addons,
+                selected.modules,
                 limits,
-                availableCatalog.addonBundlesFor(resolved.mapTo(mutableSetOf()) { it.identity.id }),
+                availableCatalog.addonBundlesFor(lock.addons.mapTo(mutableSetOf()) { it.id }),
             ),
         )
     }
 
-    private fun compareModules(
-        expected: List<ResolvedModule>,
-        available: List<ResolvedModule>,
-    ): ProfileResolution.Failure? {
-        val availableById = available.associateBy(ResolvedModule::id)
-        expected.forEach { module ->
-            val actual = availableById[module.id] ?: return ProfileResolution.Failure.MissingModule(module.id)
-            compareModule(module, actual)?.let { return it }
-        }
-        return null
-    }
-
-    private fun compareModule(
-        expected: ResolvedModule,
-        available: ResolvedModule,
+    private fun compareAddon(
+        expected: ResolvedAddon,
+        available: ResolvedAddon,
     ): ProfileResolution.Failure? =
         when {
-            expected.major != available.major -> {
-                ProfileResolution.Failure.MajorMismatch(expected.id, expected.major, available.major)
-            }
-
             expected.version != available.version -> {
-                ProfileResolution.Failure.VersionMismatch(expected.id, expected.version, available.version)
+                ProfileResolution.Failure.AddonVersionMismatch(expected.id, expected.version, available.version)
             }
 
             expected.contentHash != available.contentHash -> {
-                ProfileResolution.Failure.ContentMismatch(expected.id, expected.contentHash, available.contentHash)
+                ProfileResolution.Failure.AddonContentMismatch(expected.id, expected.contentHash, available.contentHash)
             }
 
             else -> {

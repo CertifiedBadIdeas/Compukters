@@ -38,6 +38,7 @@ import ru.lazyhat.compukters.ide.compiler.ClientBuildSnapshot
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationService
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
+import ru.lazyhat.compukters.ide.project.AddonId
 import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
@@ -167,7 +168,7 @@ class IdeBuildCoordinatorTest {
         assertEquals(IdeBuildFailureKind.UnsatisfiedProfile, failed.kind)
         assertTrue(fixture.compilation.inputs.isEmpty())
 
-        val matching = TargetCompileProfile(fixture.toolchain, emptyList(), fixture.limits)
+        val matching = TargetCompileProfile(fixture.toolchain, fixture.catalog.entries.map { it.identity }, fixture.limits)
         val admitted = fixture.coordinator.build(9, fixture.input(fixture.canonicalLock()), target = matching)
         admitted.started.get(5, TimeUnit.SECONDS)
         val submitted = fixture.compilation.awaitInput()
@@ -176,31 +177,20 @@ class IdeBuildCoordinatorTest {
     }
 
     @Test
-    fun `module enablement publishes and rolls back dependency files`() {
+    fun `unavailable addon enablement does not publish dependency files`() {
         val manifestPath =
             fixture.descriptor.handle.canonicalPath
                 .resolve("compukter.toml")
         val manifestBefore = manifestPath.readBytes()
-        val update =
-            fixture.coordinator
-                .enableModule(fixture.descriptor.handle, ModuleId.parse("compukter:redstone"))
-                .get(5, TimeUnit.SECONDS)
+        val update = fixture.coordinator.enableAddon(fixture.descriptor.handle, AddonId("create")).get(5, TimeUnit.SECONDS)
 
-        val published = assertIs<ProjectDependencyUpdate.Published>(update)
-        assertTrue(fixture.lockPath.toFile().exists())
-        assertFalse(manifestBefore.contentEquals(manifestPath.readBytes()))
-
-        val rollback =
-            fixture.coordinator
-                .rollbackModule(fixture.descriptor.handle, published.receipt)
-                .get(5, TimeUnit.SECONDS)
-        assertEquals(ProjectDependencyRollback.Restored, rollback)
+        assertIs<ProjectDependencyUpdate.Conflict>(update)
         assertContentEquals(manifestBefore, manifestPath.readBytes())
         assertFalse(fixture.lockPath.toFile().exists())
     }
 
     @Test
-    fun `module enablement validates proposed lock against target before publication`() {
+    fun `addon enablement validates proposed lock against target before publication`() {
         val manifestPath =
             fixture.descriptor.handle.canonicalPath
                 .resolve("compukter.toml")
@@ -209,9 +199,9 @@ class IdeBuildCoordinatorTest {
 
         val update =
             fixture.coordinator
-                .enableModule(
+                .enableAddon(
                     fixture.descriptor.handle,
-                    ModuleId.parse("compukter:redstone"),
+                    AddonId("create"),
                     targetWithoutModule,
                 ).get(5, TimeUnit.SECONDS)
 

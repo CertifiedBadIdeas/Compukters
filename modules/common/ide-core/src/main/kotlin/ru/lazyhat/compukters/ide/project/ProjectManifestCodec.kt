@@ -47,75 +47,37 @@ object ProjectManifestCodec {
         }
         rejectUnknownKeys(parsed, ROOT_KEYS, "manifest")
         val format = parsed["format"] as? Long ?: throw ManifestException("manifest format must be an integer")
-        if (format !in 1L..ProjectManifest.FORMAT.toLong()) throw ManifestException("unsupported manifest format: $format")
+        if (format != ProjectManifest.FORMAT.toLong()) throw ManifestException("unsupported manifest format: $format")
         val name = parsed["name"] as? String ?: throw ManifestException("manifest name must be a string")
-        val moduleTable =
-            when (val modules = parsed["modules"]) {
+        val addonArray =
+            when (val addons = parsed["addons"]) {
                 null -> null
-                is TomlTable -> modules
-                else -> throw ManifestException("manifest modules must be a table")
+                is TomlArray -> addons
+                else -> throw ManifestException("manifest addons must be an array")
             }
-        val requirements = linkedSetOf<ModuleId>()
-        moduleTable?.entrySet()?.forEach { (provider, value) ->
-            val modules =
-                when (format) {
-                    1L -> {
-                        val providerTable =
-                            value as? TomlTable ?: throw ManifestException("module provider $provider must be a table")
-                        providerTable.entrySet().map { (module, rawMajor) ->
-                            val majorValue =
-                                rawMajor as? Long
-                                    ?: throw ManifestException("module $provider:$module major must be an integer")
-                            if (majorValue !in 1L..ApiMajor.MAXIMUM.toLong()) {
-                                throw ManifestException("module $provider:$module major is outside the supported range")
-                            }
-                            module
-                        }
-                    }
-
-                    2L -> {
-                        val providerArray =
-                            value as? TomlArray ?: throw ManifestException("module provider $provider must be an array")
-                        List(providerArray.size()) { index ->
-                            providerArray[index] as? String
-                                ?: throw ManifestException("module provider $provider entry $index must be a string")
-                        }
-                    }
-
-                    else -> {
-                        error("unreachable manifest format")
-                    }
-                }
-            modules.forEach { module ->
-                val id = validated("invalid module ID $provider:$module") { ModuleId(provider, module) }
-                if (!requirements.add(id)) throw ManifestException("duplicate module requirement: ${id.value}")
-                if (requirements.size > limits.modules) throw ManifestException("project module count exceeds limit")
+        val addons = linkedSetOf<AddonId>()
+        addonArray?.let { array ->
+            repeat(array.size()) { index ->
+                val value = array[index] as? String ?: throw ManifestException("manifest addon $index must be a string")
+                val id = validated("invalid addon ID $value") { AddonId(value) }
+                if (!addons.add(id)) throw ManifestException("duplicate addon requirement: ${id.value}")
+                if (addons.size > limits.addons) throw ManifestException("project addon count exceeds limit")
             }
         }
-        return validated("invalid project manifest") { ProjectManifest.of(name, requirements, limits) }
+        return validated("invalid project manifest") { ProjectManifest.of(name, addons, limits) }
     }
 
-    fun encode(manifest: ProjectManifest): String {
-        val providers =
-            manifest.modules
-                .groupBy(ModuleId::provider)
-                .toSortedMap(TomlSupport.utf8Comparator)
-        return buildString {
+    fun encode(manifest: ProjectManifest): String =
+        buildString {
             append("format = ").append(ProjectManifest.FORMAT).append('\n')
             append("name = ").append(TomlSupport.quoted(manifest.name)).append("\n\n")
-            append("[modules]\n")
-            providers.forEach { (provider, entries) ->
-                append(provider).append(" = [ ")
-                entries
-                    .sortedWith { left, right -> TomlSupport.utf8Comparator.compare(left.module, right.module) }
-                    .forEachIndexed { index, id ->
-                        if (index > 0) append(", ")
-                        append(TomlSupport.quoted(id.module))
-                    }
-                append(" ]\n")
+            append("addons = [")
+            manifest.addons.forEachIndexed { index, addon ->
+                if (index > 0) append(", ")
+                append(TomlSupport.quoted(addon.value))
             }
+            append("]\n")
         }
-    }
 
     private fun rejectUnknownKeys(
         table: TomlTable,
@@ -136,5 +98,5 @@ object ProjectManifestCodec {
             throw ManifestException("$message: ${exception.message}", exception)
         }
 
-    private val ROOT_KEYS = setOf("format", "name", "modules")
+    private val ROOT_KEYS = setOf("format", "name", "addons")
 }
