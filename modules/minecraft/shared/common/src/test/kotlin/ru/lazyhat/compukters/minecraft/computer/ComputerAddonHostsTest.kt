@@ -44,7 +44,7 @@ class ComputerAddonHostsTest {
                 "fixture",
                 PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
                 PlatformModule(
-                    PlatformModuleId("fixture", "meters"),
+                    PlatformModuleId("fixture", "api"),
                     "1.0.0",
                     emptyList(),
                     ImmutableBytes.of(byteArrayOf(1)),

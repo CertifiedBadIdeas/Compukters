@@ -234,7 +234,7 @@ private fun addonPayloads(catalog: AddonGuestApiCatalog): List<TrustedBundlePayl
     catalog.bundles.map { bundle ->
         TrustedBundlePayload(
             TrustedBundleIdentity.of(
-                bundle.identity.module,
+                bundle.identity.id,
                 ru.lazyhat.compukters.compiler.worker.protocol.Hash256
                     .of(bundle.identity.contentHash.toByteArray()),
             ),
@@ -249,10 +249,10 @@ private fun resolvedModule(bundle: AddonGuestApiBundle): ResolvedModule {
             .substringBefore('.')
             .toIntOrNull()
     require(major != null && major in 0..ApiMajor.MAXIMUM) {
-        "addon guest API module ${bundle.identity.module} version must begin with a supported API major"
+        "addon guest API ${bundle.identity.id} version must begin with a supported API major"
     }
     return ResolvedModule(
-        ModuleId.parse(bundle.identity.module),
+        ModuleId.parse(bundle.moduleDescriptor.id.toString()),
         ApiMajor(major),
         bundle.identity.version,
         ru.lazyhat.compukters.compiler.worker.protocol.Hash256

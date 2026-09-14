@@ -154,7 +154,7 @@ class IdeCompletionPlannerTest {
     )
 
     private fun addon(catalog: PlatformCatalog): Pair<ResolvedModule, TrustedBundlePayload> {
-        val id = PlatformModuleId("fixture", "telemetry")
+        val id = PlatformModuleId("fixture", "api")
         val path = "fixture/telemetry/Telemetry.kt"
         val source = "package fixture.telemetry\nprivate object Bindings { external fun read(): Int }\n"
         val capability = AddonCapabilityIdentity("fixture", "telemetry", 1, 0)
@@ -193,9 +193,9 @@ class IdeCompletionPlannerTest {
                 listOf(AddonGuestApiBinding("fixture.telemetry", "Bindings", "read", "fun():Int", capability, 0)),
             )
         val hash = Hash256.of(bundle.identity.contentHash.toByteArray())
-        return ResolvedModule(ModuleId("fixture", "telemetry"), ApiMajor(1), "1.0.0", hash) to
+        return ResolvedModule(ModuleId("fixture", "api"), ApiMajor(1), "1.0.0", hash) to
             TrustedBundlePayload(
-                TrustedBundleIdentity.of("fixture:telemetry", hash),
+                TrustedBundleIdentity.of("fixture", hash),
                 BinaryValue.of(AddonGuestApiBundleCodec.encode(bundle)),
             )
     }

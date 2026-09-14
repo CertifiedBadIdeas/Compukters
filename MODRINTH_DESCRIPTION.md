@@ -49,7 +49,7 @@ Programs can read and control all six sides of a computer relative to its facing
 
 ## Integrate with Create on Minecraft 1.21.1
 
-With Create 6.0.x installed, Guest Kotlin projects can select the optional `create:kinetics` module. Programs can read
+With Create 6.0.x installed, Guest Kotlin projects can enable the optional `create` addon. Programs can read
 adjacent speedometers and stressometers, suspend until their values change, and control an adjacent Rotation Speed
 Controller. The IDE exposes this API only when the attached server supports it, and Compukters remains usable without
 Create.

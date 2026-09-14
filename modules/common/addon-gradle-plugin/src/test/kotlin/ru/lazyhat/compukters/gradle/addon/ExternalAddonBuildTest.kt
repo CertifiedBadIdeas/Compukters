@@ -64,7 +64,7 @@ class ExternalAddonBuildTest {
                 version = "2.3.4"
 
                 compuktersAddon {
-                    module(addon = "fixture", name = "kinetics")
+                    register("fixture")
                 }
 
                 tasks.register("verifyCompuktersApiClasspath") {
@@ -108,7 +108,7 @@ class ExternalAddonBuildTest {
             assertTrue(project.resolve("build/generated/sources/compuktersAddon/kotlin/GeneratedAddonHostContract.kt").toFile().isFile)
             val jar = project.resolve("build/libs/external-addon-2.3.4.jar").toFile()
             ZipFile(jar).use { zip ->
-                assertEquals(1, zip.entries().asSequence().count { it.name == "META-INF/compukters/addons/fixture-kinetics.cagb" })
+                assertEquals(1, zip.entries().asSequence().count { it.name == "META-INF/compukters/addons/fixture.cagb" })
                 assertTrue(zip.entries().asSequence().none { it.name.startsWith("ru/lazyhat/compukters/") })
             }
         } finally {

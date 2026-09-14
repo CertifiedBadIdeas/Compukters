@@ -474,11 +474,10 @@ supported.
   time executes Guest instructions. Cooperative tasks provide concurrency at
   suspension points, not parallel instruction execution. Tracking: not scheduled
 
-## Native platform modules
+## Built-in Guest platform
 
-The platform catalog currently publishes these module identities. A project
-sees the modules selected by identity in `compukter.toml`, their lock-resolved transitive dependencies,
-and the mandatory built-ins module; there is no ambient Kotlin/JVM classpath.
+The platform internally uses the following modules to build and verify its Guest Kotlin surface. They form one atomic
+built-in platform and are not selected individually in `compukter.toml`; there is no ambient Kotlin/JVM classpath.
 
 | Module | Guest surface |
 | --- | --- |
@@ -491,7 +490,6 @@ and the mandatory built-ins module; there is no ambient Kotlin/JVM classpath.
 | `compukter:process` | Child process execution and explicit exit |
 | `compukter:redstone` | Side-oriented redstone reads, waits, and weak/direct output writes |
 | `compukter:sound` | Bounded one-shot computer beeps with admission feedback |
-| `create:kinetics` | Server-admitted addon bundle for optional Minecraft 1.21.1/Create 6.0.x access to adjacent speedometers, stressometers, and rotation speed controllers |
 
 Ordinary functions in these modules are compiled ahead of Guest projects into
 relocatable platform fragments. Only declarations explicitly marked as native
@@ -501,7 +499,7 @@ cannot become one merely by copying its package, name, and signature.
 The built-in modules are packaged with the tooling workers. Addons instead register an `AddonGuestApiBundle` on the
 server. Its deterministic identity covers metadata, sources, capability schemas, and exact callable bindings. An
 attached IDE receives the admitted data from the server. Completion can propose APIs from available inactive addons
-and enable their project modules; diagnostics, parameter information, navigation, compilation, and cache invalidation
+and enable their addon IDs; diagnostics, parameter information, navigation, compilation, and cache invalidation
 then use the same selected API identity without adding the addon JAR to either worker's JVM classpath. Evidence:
 [`CompletionQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/CompletionQueryTest.kt)
 and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-client/src/test/kotlin/ru/lazyhat/compukters/ide/client/analysis/IdeCompletionPlannerTest.kt).
@@ -539,7 +537,7 @@ and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters
 ## Compukters Guest APIs
 
 - [x] **Create kinetics on Minecraft 1.21.1** — when Create 6.0.10 through 6.0.x is loaded, the optional
-  `create:kinetics` module exposes computer-local sides through `Kinetics`. Programs can read exact `Float` speed,
+  `create` addon exposes computer-local sides through `Kinetics`. Programs can read exact `Float` speed,
   stress, and capacity values; wait for speed or load changes; and read or set a rotation controller's target speed.
   Handles remain bound to the exact adjacent block entity and fail rather than rebinding after replacement. Evidence:
   `KineticsHostStateTest`, `CreateKineticsArtifactTest`, neutral addon IDE
@@ -547,11 +545,11 @@ and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters
   GameTest. See [Create kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/) for the API and
   manifest entry.
 
-- [x] **Addon Guest API bundles** — a loader integration can register a bounded, versioned Kotlin metadata/source bundle
-  with exact capability schemas and intrinsic bindings. The server is the authority for availability; compiler and IDE
-  workers accept only the exact advertised bytes and content hash, reject malformed or shadowing modules, and never
-  execute addon JVM code. The first producer is the `create:kinetics` integration, whose declarations and contract are
-  owned by the Create module and built into a deterministic bundle against the canonical base platform.
+- [x] **Addon Guest API bundles** — a loader integration can register one bounded, versioned Kotlin metadata/source
+  bundle under its addon ID, with exact capability schemas and intrinsic bindings kept internal. The server is the
+  authority for availability; compiler and IDE workers accept only the exact advertised bytes and content hash, reject
+  malformed or shadowing bundles, and never execute addon JVM code. The first producer is the `create` integration,
+  whose declarations and contract are owned by the Create addon and built against the canonical base platform.
 
 - [x] **One-shot sound** — `Sound.beep(note, volume = 100)` emits the vanilla note-block pling from the
   computer and return whether the server admitted it. Notes are bounded to

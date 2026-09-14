@@ -224,7 +224,7 @@ class CompileRequest(
     init {
         requireUniqueBundles(this.platformModules, "platform modules")
         requireUniqueBundles(this.addonBundles.map(TrustedBundlePayload::identity), "addon bundles")
-        require(this.addonBundles.all { it.identity in this.platformModules }) {
+        require(this.addonBundles.all { payload -> this.platformModules.any { it.hash == payload.identity.hash } }) {
             "addon bundle payloads must belong to selected platform modules"
         }
     }

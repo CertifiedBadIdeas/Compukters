@@ -85,7 +85,7 @@ class NeoForgeCompilerServicesTest {
     fun `server advertises an admitted addon bundle with its exact content identity`() {
         val base = platform()
         val core = base.modules.single { it.id.toString() == "stdlib:core" }
-        val telemetry = module("fixture", "telemetry", listOf(core.id))
+        val telemetry = module("fixture", "api", listOf(core.id))
         val addon =
             AddonGuestApiBundleCodec.assemble(
                 "fixture",
@@ -107,11 +107,11 @@ class NeoForgeCompilerServicesTest {
         val unavailable = serverTargetProfile(identity, base, WorkerLimits())
         val available = serverTargetProfile(identity, base, WorkerLimits(), AddonGuestApiCatalog.of(listOf(addon)))
 
-        assertEquals(false, unavailable.modules.any { it.id.value == "fixture:telemetry" })
-        assertEquals(true, available.modules.any { it.id.value == "fixture:telemetry" })
+        assertEquals(false, unavailable.modules.any { it.id.value == "fixture:api" })
+        assertEquals(true, available.modules.any { it.id.value == "fixture:api" })
         assertEquals(1, available.addonBundles.size)
         assertEquals(
-            available.modules.single { it.id.value == "fixture:telemetry" }.contentHash,
+            available.modules.single { it.id.value == "fixture:api" }.contentHash,
             available.addonBundles
                 .single()
                 .identity.hash,

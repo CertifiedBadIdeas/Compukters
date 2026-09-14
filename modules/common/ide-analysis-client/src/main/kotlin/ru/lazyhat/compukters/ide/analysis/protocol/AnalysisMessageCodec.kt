@@ -168,7 +168,7 @@ private fun loadPlatformSourceLengths(
     }
     profile.platform.addonBundles.forEach { payload ->
         val bundle = AddonGuestApiBundleCodec.decode(payload.content.toByteArray())
-        require(bundle.identity.module == payload.identity.name) { "analysis addon bundle module identity mismatch" }
+        require(bundle.identity.id == payload.identity.name) { "analysis addon bundle identity mismatch" }
         require(
             bundle.identity.contentHash
                 .toByteArray()
@@ -176,7 +176,7 @@ private fun loadPlatformSourceLengths(
         ) {
             "analysis addon bundle content hash mismatch"
         }
-        result[payload.identity] =
+        result[AnalysisModuleIdentity(bundle.moduleDescriptor.id.toString(), payload.identity.hash)] =
             bundle.moduleDescriptor.sources.associate { source ->
                 VirtualSourcePath.kotlin(source.path) to decodeStrictUtf8(BinaryValue.of(source.content.toByteArray())).length
             }

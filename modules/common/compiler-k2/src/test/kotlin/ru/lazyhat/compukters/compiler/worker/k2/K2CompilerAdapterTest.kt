@@ -156,10 +156,14 @@ class K2CompilerAdapterTest {
                         module.id.toString(),
                         Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()),
                     )
-                } + TrustedBundleIdentity.of(addon.identity.module, Hash256.of(addon.identity.contentHash.toByteArray()))
+                } +
+                    TrustedBundleIdentity.of(
+                        addon.moduleDescriptor.id.toString(),
+                        Hash256.of(addon.identity.contentHash.toByteArray()),
+                    )
             val payload =
                 TrustedBundlePayload(
-                    selected.last(),
+                    TrustedBundleIdentity.of(addon.identity.id, selected.last().hash),
                     BinaryValue.of(AddonGuestApiBundleCodec.encode(addon)),
                 )
             val admitted =
@@ -175,7 +179,7 @@ class K2CompilerAdapterTest {
                 artifact.capabilities.any { capability ->
                     val strings = artifact.modules.first().strings
                     strings[capability.namespace.value.toInt()].toString() == "fixture" &&
-                        strings[capability.name.value.toInt()].toString() == "kinetics"
+                        strings[capability.name.value.toInt()].toString() == "fixture"
                 },
             )
 

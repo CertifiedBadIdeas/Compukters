@@ -24,8 +24,7 @@ import ru.lazyhat.compukters.worker.value.Sha256
 import java.util.Collections
 
 data class AddonGuestApiIdentity(
-    val addon: String,
-    val module: String,
+    val id: String,
     val version: String,
     val platformAbi: Int,
     val contentHash: Sha256,
@@ -119,22 +118,19 @@ class AddonGuestApiCatalog private constructor(
     bundles: List<AddonGuestApiBundle>,
 ) {
     val bundles: List<AddonGuestApiBundle> =
-        Collections.unmodifiableList(bundles.sortedBy { bundle -> bundle.identity.module })
+        Collections.unmodifiableList(bundles.sortedBy { bundle -> bundle.identity.id })
 
     init {
         require(this.bundles.size <= AddonGuestApiLimits.MAXIMUM_BUNDLES) { "addon guest API catalog contains too many bundles" }
-        require(this.bundles.distinctBy { it.identity.addon }.size == this.bundles.size) {
+        require(this.bundles.distinctBy { it.identity.id }.size == this.bundles.size) {
             "addon guest API catalog contains duplicate addon identities"
-        }
-        require(this.bundles.distinctBy { it.identity.module }.size == this.bundles.size) {
-            "addon guest API catalog contains duplicate module identities"
         }
         require(this.bundles.sumOf { AddonGuestApiBundleCodec.encode(it).size.toLong() } <= AddonGuestApiLimits.MAXIMUM_CATALOG_BYTES) {
             "addon guest API catalog exceeds byte limit"
         }
     }
 
-    fun find(module: String): AddonGuestApiBundle? = bundles.singleOrNull { it.identity.module == module }
+    fun find(id: String): AddonGuestApiBundle? = bundles.singleOrNull { it.identity.id == id }
 
     companion object {
         fun of(bundles: List<AddonGuestApiBundle>): AddonGuestApiCatalog = AddonGuestApiCatalog(bundles)

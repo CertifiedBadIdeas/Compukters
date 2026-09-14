@@ -41,7 +41,7 @@ class ProjectWorkerProtocolTest {
                 addonBundles =
                     listOf(
                         TrustedBundlePayload(
-                            TrustedBundleIdentity.of("redstone", Hash256.of(ByteArray(32) { 2 })),
+                            TrustedBundleIdentity.of("create", Hash256.of(ByteArray(32) { 2 })),
                             BinaryValue.of(byteArrayOf(3, 4, 5)),
                         ),
                     ),
@@ -67,7 +67,7 @@ class ProjectWorkerProtocolTest {
 
     @Test
     fun `request preserves topological platform module order and rejects duplicate identities`() {
-        val z = TrustedBundleIdentity.of("z", Hash256.zero())
+        val z = TrustedBundleIdentity.of("z", Hash256.of(ByteArray(32) { 1 }))
         val a = TrustedBundleIdentity.of("a", Hash256.zero())
         assertEquals(listOf(z, a), request(listOf(source("main.kt", "x")), WorkerLimits(), listOf(z, a)).platformModules)
         assertFailsWith<IllegalArgumentException> { request(listOf(source("main.kt", "x")), WorkerLimits(), listOf(a, a)) }

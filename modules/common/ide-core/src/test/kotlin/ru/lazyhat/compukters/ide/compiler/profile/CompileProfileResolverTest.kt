@@ -103,11 +103,11 @@ class CompileProfileResolverTest {
             fixture.bundle.modules
                 .map {
                     it.id.toString()
-                }.toSet() + "fixture:meters",
+                }.toSet() + "fixture:api",
             profile.modules.map { it.identity.id.value }.toSet(),
         )
         assertEquals(listOf("fixture"), profile.addons.map { it.id.value })
-        assertTrue(profile.modules.single { it.identity.id.value == "fixture:meters" }.direct)
+        assertTrue(profile.modules.single { it.identity.id.value == "fixture:api" }.direct)
     }
 
     private fun fixture(requiredLimits: WorkerLimits = WorkerLimits()): Fixture {

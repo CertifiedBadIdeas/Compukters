@@ -26,12 +26,13 @@ fun renderAddonHostContract(
     authoring: AddonAuthoringContract,
     resolved: AddonContract,
 ): String {
-    val packageName = "${authoring.addon}.${authoring.module.name}"
-    val contractName = "${authoring.module.name.pascalCase()}AddonContract"
-    val resourceName = "${authoring.addon}-${authoring.module.name}.cagb"
+    val packageName = authoring.addon
+    val contractName = "${authoring.addon.pascalCase()}AddonContract"
+    val resourceName = "${authoring.addon}.cagb"
+    val capabilities = listOf(authoring.capability)
     val handlers =
-        authoring.capabilities.associateWith { capability ->
-            "${capability.identity.name.pascalCase()}CapabilityHandler"
+        capabilities.associateWith { capability ->
+            "${capability.name.pascalCase()}CapabilityHandler"
         }
     val schemas = resolved.schemas.associateBy { it.identity }
     val bindings = resolved.bindings.groupBy(AddonGuestApiBinding::capability)
@@ -64,7 +65,7 @@ fun renderAddonHostContract(
         appendLine()
         handlers.forEach { (capability, handlerName) ->
             appendLine("public interface $handlerName : AddonHostHandler {")
-            bindings.getValue(capability.identity).sortedBy(AddonGuestApiBinding::operation).forEach { binding ->
+            bindings.getValue(capability).sortedBy(AddonGuestApiBinding::operation).forEach { binding ->
                 val operation = schemas.getValue(binding.capability).operations[binding.operation]
                 val parameters =
                     operation.arguments.mapIndexed { index, type -> "argument$index: ${type.kotlinType()}" }.joinToString()
@@ -83,19 +84,19 @@ fun renderAddonHostContract(
             "            checkNotNull(anchor.getResourceAsStream(GUEST_API_RESOURCE)) { \"packaged addon Guest API bundle is missing\" }",
         )
         appendLine("                .use { it.readBytes() },")
-        appendLine("        ).also { bundle -> require(bundle.identity.module == \"${authoring.module}\") }")
+        appendLine("        ).also { bundle -> require(bundle.identity.id == \"${authoring.addon}\") }")
         appendLine()
         val handlerParameters =
             handlers.entries.joinToString { (capability, handlerName) ->
-                "${capability.identity.name}Handler: $handlerName"
+                "${capability.name}Handler: $handlerName"
             }
-        val handlerArguments = handlers.keys.joinToString { "${it.identity.name}Handler" }
+        val handlerArguments = handlers.keys.joinToString { "${it.name}Handler" }
         appendLine("    public fun host($handlerParameters): ProgramAddonHost = GeneratedAddonHost($handlerArguments)")
         appendLine("}")
         appendLine()
         appendLine("private class GeneratedAddonHost(")
         handlers.forEach { (capability, handlerName) ->
-            appendLine("    private val ${capability.identity.name}Handler: $handlerName,")
+            appendLine("    private val ${capability.name}Handler: $handlerName,")
         }
         appendLine(") : ProgramAddonHost {")
         appendLine("    private val pending = linkedMapOf<VmHostRequestIdentity, () -> HostResponse?>()")
@@ -103,18 +104,18 @@ fun renderAddonHostContract(
         appendLine()
         appendLine("    override fun dispatch(request: ProgramAddonRequest): ProgramAddonDispatch =")
         appendLine("        when (request.capability) {")
-        authoring.capabilities.forEach { capability ->
-            appendLine("            ${capability.identity.identityConstant()} -> dispatch${capability.identity.name.pascalCase()}(request)")
+        capabilities.forEach { capability ->
+            appendLine("            ${capability.identityConstant()} -> dispatch${capability.name.pascalCase()}(request)")
         }
         appendLine("            else -> unavailableCapability()")
         appendLine("        }")
         appendLine()
-        authoring.capabilities.forEach { capability ->
+        capabilities.forEach { capability ->
             appendLine(
-                "    private fun dispatch${capability.identity.name.pascalCase()}(request: ProgramAddonRequest): ProgramAddonDispatch =",
+                "    private fun dispatch${capability.name.pascalCase()}(request: ProgramAddonRequest): ProgramAddonDispatch =",
             )
             appendLine("        when (request.operation) {")
-            bindings.getValue(capability.identity).sortedBy(AddonGuestApiBinding::operation).forEach { binding ->
+            bindings.getValue(capability).sortedBy(AddonGuestApiBinding::operation).forEach { binding ->
                 val operation = schemas.getValue(binding.capability).operations[binding.operation]
                 appendLine("            ${binding.operation} -> {")
                 appendLine("                if (request.arguments.size != ${operation.arguments.size}) return malformed()")
@@ -123,7 +124,7 @@ fun renderAddonHostContract(
                 }
                 val arguments = operation.arguments.indices.joinToString { "argument$it" }
                 appendLine(
-                    "                accept(request.identity, ${capability.identity.name}Handler.${binding.callableName}($arguments)) " +
+                    "                accept(request.identity, ${capability.name}Handler.${binding.callableName}($arguments)) " +
                         "{ ${operation.result.encodeExpression("it")} }",
                 )
                 appendLine("            }")
@@ -170,7 +171,7 @@ fun renderAddonHostContract(
         appendLine()
         appendLine("    override fun reset() {")
         appendLine("        pending.clear()")
-        handlers.keys.forEach { capability -> appendLine("        ${capability.identity.name}Handler.reset()") }
+        handlers.keys.forEach { capability -> appendLine("        ${capability.name}Handler.reset()") }
         appendLine("    }")
         appendLine()
         appendLine("    override fun close() {")
@@ -178,15 +179,15 @@ fun renderAddonHostContract(
         handlers.keys
             .toList()
             .asReversed()
-            .forEach { capability -> appendLine("        ${capability.identity.name}Handler.close()") }
+            .forEach { capability -> appendLine("        ${capability.name}Handler.close()") }
         appendLine("    }")
         appendLine("}")
         appendLine()
-        authoring.capabilities.forEach { capability ->
-            appendLine("private val ${capability.identity.identityConstant()}: CapabilityIdentity =")
+        capabilities.forEach { capability ->
+            appendLine("private val ${capability.identityConstant()}: CapabilityIdentity =")
             appendLine(
-                "    CapabilityIdentity(\"${capability.identity.namespace}\", \"${capability.identity.name}\", " +
-                    "${capability.identity.abiMajor}, ${capability.identity.abiMinor})",
+                "    CapabilityIdentity(\"${capability.namespace}\", \"${capability.name}\", " +
+                    "${capability.abiMajor}, ${capability.abiMinor})",
             )
         }
         appendLine("private val SCHEMAS: List<HostCapabilitySchema> =")

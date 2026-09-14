@@ -1,7 +1,3 @@
 # Test-only addon contract shared by compiler and IDE verification.
 addon fixture
-module fixture:kinetics
 version 1.0.0
-dependencies stdlib:core stdlib:ranges
-
-capability fixture kinetics 1 0 fixture.kinetics.KineticsBindings

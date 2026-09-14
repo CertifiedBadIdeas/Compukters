@@ -115,8 +115,8 @@ class PlatformCatalog private constructor(
                 addonBundles.map { payload ->
                     val decoded = AddonGuestApiBundleCodec.decode(payload.content.toByteArray())
                     require(
-                        decoded.identity.module == payload.identity.name,
-                    ) { "target addon bundle module identity does not match payload" }
+                        decoded.identity.id == payload.identity.name,
+                    ) { "target addon bundle identity does not match payload" }
                     require(
                         decoded.identity.platformAbi == bundle.identity.platformAbi,
                     ) { "target addon bundle platform ABI does not match bundle" }
@@ -128,11 +128,10 @@ class PlatformCatalog private constructor(
                         "target addon bundle content hash does not match payload"
                     }
                     val id = projectId(decoded.moduleDescriptor.id)
-                    require(id.value == payload.identity.name) { "target addon bundle module descriptor does not match identity" }
                     PlatformAddonEntry(
                         identity =
                             ResolvedAddon(
-                                AddonId(decoded.identity.addon),
+                                AddonId(decoded.identity.id),
                                 decoded.identity.version,
                                 payload.identity.hash,
                             ),

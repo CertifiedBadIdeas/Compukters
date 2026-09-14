@@ -37,8 +37,8 @@ import ru.lazyhat.compukters.ide.analysis.SemanticToken
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotId
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisPresentation
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
-import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionEntry
 import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionAddonRequirement
+import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionEntry
 import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionState
 import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationTarget
 import ru.lazyhat.compukters.ide.client.analysis.IdeParameterInfoState
@@ -74,8 +74,8 @@ import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.IncrementalKotlinHighlighter
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
-import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.AddonId
+import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath

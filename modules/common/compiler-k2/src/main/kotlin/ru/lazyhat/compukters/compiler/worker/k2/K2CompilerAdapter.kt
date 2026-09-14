@@ -254,7 +254,7 @@ class K2CompilerAdapter(
         val addonBundles =
             request.addonBundles.map { payload ->
                 AddonGuestApiBundleCodec.decode(payload.content.toByteArray()).also { bundle ->
-                    require(bundle.identity.module == payload.identity.name) { "addon bundle module identity mismatch" }
+                    require(bundle.identity.id == payload.identity.name) { "addon bundle identity mismatch" }
                     require(
                         bundle.identity.contentHash
                             .toByteArray()
@@ -265,11 +265,13 @@ class K2CompilerAdapter(
                     require(bundle.identity.platformAbi == platform.identity.platformAbi) { "addon bundle platform ABI mismatch" }
                 }
             }
-        val addonByName = addonBundles.associateBy { it.identity.module }
+        val addonById = addonBundles.associateBy { it.identity.id }
+        require(addonById.size == addonBundles.size) { "duplicate addon bundle identity" }
+        val addonByName = addonBundles.associateBy { it.moduleDescriptor.id.toString() }
         require(addonByName.size == addonBundles.size) { "duplicate addon bundle module identity" }
         val packagedByName = platform.modules.associateBy { it.id.toString() }
         require(addonByName.keys.intersect(packagedByName.keys).isEmpty()) { "addon bundle shadows a packaged platform module" }
-        val byName = packagedByName + addonBundles.associate { it.identity.module to it.moduleDescriptor }
+        val byName = packagedByName + addonBundles.associate { it.moduleDescriptor.id.toString() to it.moduleDescriptor }
         val requested =
             request.platformModules.map { identity ->
                 val module = requireNotNull(byName[identity.name]) { "unknown platform module ${identity.name}" }

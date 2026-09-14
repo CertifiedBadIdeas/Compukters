@@ -9,23 +9,22 @@ permalink: /CREATE-KINETICS/
 
 Compukters can expose adjacent Create kinetic devices directly to Guest Kotlin. This optional integration is available
 on **Minecraft 1.21.1** with **Create 6.0.10 through 6.0.x**. Compukters still starts normally when Create is absent;
-the `create:kinetics` platform module is then unavailable to projects.
+the `create` addon is then unavailable to projects.
 
-## Enable the project module
+## Enable the addon
 
-Choose a `Kinetics` completion in the attached IDE to add its import and enable the module automatically, or add the
-Create module to the project's `compukter.toml` manually:
+Choose a `Kinetics` completion in the attached IDE to add its import and enable the addon automatically, or add Create
+to the project's `compukter.toml` manually:
 
 ```toml
-format = 2
+format = 3
 name = "kinetic-monitor"
 
-[modules]
-create = [ "kinetics" ]
+addons = ["create"]
 ```
 
-The IDE, analysis worker, and compiler all use the attached server's target profile. A project that requests this module
-therefore resolves only when the target actually has the compatible Create integration loaded. Exact module versions
+The IDE, analysis worker, and compiler all use the attached server's target profile. A project that requests this addon
+therefore resolves only when the target actually has the compatible Create integration loaded. Exact addon versions
 and content hashes are recorded by the IDE in `compukter.lock`; they are not written by hand in this manifest.
 
 ## Sides and devices

@@ -72,11 +72,16 @@ internal fun platformResolutionWithAddon(addonVersion: String = "1.0.0"): Projec
     val addon = addonBundle(platform.modules.single { it.id.toString() == "stdlib:core" }.id, addonVersion)
     val encoded = AddonGuestApiBundleCodec.encode(addon)
     val hash = Hash256.of(addon.identity.contentHash.toByteArray())
-    val payload = TrustedBundlePayload(TrustedBundleIdentity.of(addon.identity.module, hash), BinaryValue.of(encoded))
+    val payload = TrustedBundlePayload(TrustedBundleIdentity.of(addon.identity.id, hash), BinaryValue.of(encoded))
     val local = PlatformCatalog.of(platform)
     val advertised =
         local.entries.map(PlatformCatalogEntry::identity) +
-            ResolvedModule(ModuleId.parse(addon.identity.module), ApiMajor(addonVersion.substringBefore('.').toInt()), addonVersion, hash)
+            ResolvedModule(
+                ModuleId.parse(addon.moduleDescriptor.id.toString()),
+                ApiMajor(addonVersion.substringBefore('.').toInt()),
+                addonVersion,
+                hash,
+            )
     return ProjectResolution(platformToolchain(platform), PlatformCatalog.forTarget(platform, advertised, listOf(payload)))
 }
 
@@ -128,7 +133,7 @@ private fun addonBundle(
     core: PlatformModuleId,
     version: String,
 ): ru.lazyhat.compukters.addon.api.AddonGuestApiBundle {
-    val id = PlatformModuleId("fixture", "meters")
+    val id = PlatformModuleId("fixture", "api")
     val path = "fixture/meters/Meters.kt"
     val source = "package fixture.meters\nprivate object Bindings { external fun read(value: Int): Int }\n"
     val capability = AddonCapabilityIdentity("fixture", "meters", 1, 0)

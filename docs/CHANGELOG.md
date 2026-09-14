@@ -32,12 +32,12 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   or wire decoding. Its Minecraft-independent host API and thin version-specific NeoForge adapter remain compile-only,
   so ordinary Compukters releases do not force an SDK version update or expose implementation classes. The compiler
   and IDE expose only the addons available on the attached server.
-- Addon projects declare a Guest module atomically; its version defaults to the addon's Gradle project version, while
-  single-capability modules require no separate capability declaration. Compukters projects select modules by identity
-  in `compukter.toml`, with exact versions and hashes retained in `compukter.lock`.
+- Addon projects register one atomic Guest API by addon ID; its version defaults to the addon's Gradle project version,
+  while platform dependencies and capability wiring remain internal. Compukters projects list only addon IDs in
+  `compukter.toml`, with exact versions and hashes retained in `compukter.lock`.
 - The separately installed Create addon supports Create 6.0.x on Minecraft 1.21.1 while the base Compukters mod remains
   usable without Create.
-- Its `create:kinetics` module reads exact `Float` speed, stress, and capacity values from adjacent speedometers and
+- The `create` addon reads exact `Float` speed, stress, and capacity values from adjacent speedometers and
   stressometers, waits for value changes without Guest-side polling, and controls rotation speed controllers.
 - Device handles remain bound to the exact adjacent block. Missing, unloaded, removed, or replaced devices fail
   deterministically and produce a descriptive terminal diagnostic.
@@ -46,7 +46,7 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 - Member completion includes the supported operations of built-in Guest Kotlin numeric types.
 - Completion, automatic imports, parameter information, and source navigation include compatible APIs supplied by
-  installed addons. Selecting `Kinetics` also enables the required project module.
+  installed addons. Selecting `Kinetics` also enables the `create` addon for the project.
 
 ## 0.4.0 — 2026-09-12
 

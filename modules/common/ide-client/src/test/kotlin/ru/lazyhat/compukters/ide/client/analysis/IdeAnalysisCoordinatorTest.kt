@@ -249,7 +249,7 @@ class IdeAnalysisCoordinatorTest {
     fun `platform declaration navigates to source supplied by active addon target`() {
         val sourcePath = VirtualSourcePath.kotlin("fixture/telemetry/Telemetry.kt")
         val sourceText = "package fixture.telemetry\nobject Telemetry"
-        val moduleId = PlatformModuleId("fixture", "telemetry")
+        val moduleId = PlatformModuleId("fixture", "api")
         val bundle =
             AddonGuestApiBundleCodec.assemble(
                 addon = "fixture",
@@ -271,12 +271,12 @@ class IdeAnalysisCoordinatorTest {
         val payloadBytes = AddonGuestApiBundleCodec.encode(bundle)
         val identity =
             ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity(
-                bundle.identity.module,
+                bundle.moduleDescriptor.id.toString(),
                 Hash256.of(bundle.identity.contentHash.toByteArray()),
             )
         val payload =
             TrustedBundlePayload(
-                TrustedBundleIdentity.of(identity.name, identity.hash),
+                TrustedBundleIdentity.of(bundle.identity.id, identity.hash),
                 BinaryValue.of(payloadBytes),
             )
         val target =

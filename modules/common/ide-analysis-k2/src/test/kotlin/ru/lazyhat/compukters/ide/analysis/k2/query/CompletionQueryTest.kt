@@ -387,7 +387,7 @@ class CompletionQueryTest {
             assertEquals("fixture.kinetics.Kinetics", kinetics.symbol?.fqName)
             assertEquals("fixture.kinetics.Kinetics", kinetics.symbol?.importFqName)
             assertEquals(
-                "fixture:kinetics",
+                "fixture:api",
                 assertIs<DeclarationOrigin.Platform>(kinetics.origin).identity.name,
             )
             val addon =

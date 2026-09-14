@@ -1,11 +1,11 @@
 lock 1
-operation fixture kinetics 1 0 active fixture.kinetics.KineticsBindings.acquireSpeedometer fun(Int):Int
-operation fixture kinetics 1 1 active fixture.kinetics.KineticsBindings.speed fun(Int):Float
-operation fixture kinetics 1 2 active fixture.kinetics.KineticsBindings.awaitSpeedChange fun(Int):Float
-operation fixture kinetics 1 3 active fixture.kinetics.KineticsBindings.acquireStressometer fun(Int):Int
-operation fixture kinetics 1 4 active fixture.kinetics.KineticsBindings.stress fun(Int):Float
-operation fixture kinetics 1 5 active fixture.kinetics.KineticsBindings.capacity fun(Int):Float
-operation fixture kinetics 1 6 active fixture.kinetics.KineticsBindings.awaitStressChange fun(Int):Unit
-operation fixture kinetics 1 7 active fixture.kinetics.KineticsBindings.acquireRotationController fun(Int):Int
-operation fixture kinetics 1 8 active fixture.kinetics.KineticsBindings.targetSpeed fun(Int):Int
-operation fixture kinetics 1 9 active fixture.kinetics.KineticsBindings.setTargetSpeed fun(Int,Int):Int
+operation fixture fixture 1 0 active fixture.kinetics.KineticsBindings.acquireSpeedometer fun(Int):Int
+operation fixture fixture 1 1 active fixture.kinetics.KineticsBindings.speed fun(Int):Float
+operation fixture fixture 1 2 active fixture.kinetics.KineticsBindings.awaitSpeedChange fun(Int):Float
+operation fixture fixture 1 3 active fixture.kinetics.KineticsBindings.acquireStressometer fun(Int):Int
+operation fixture fixture 1 4 active fixture.kinetics.KineticsBindings.stress fun(Int):Float
+operation fixture fixture 1 5 active fixture.kinetics.KineticsBindings.capacity fun(Int):Float
+operation fixture fixture 1 6 active fixture.kinetics.KineticsBindings.awaitStressChange fun(Int):Unit
+operation fixture fixture 1 7 active fixture.kinetics.KineticsBindings.acquireRotationController fun(Int):Int
+operation fixture fixture 1 8 active fixture.kinetics.KineticsBindings.targetSpeed fun(Int):Int
+operation fixture fixture 1 9 active fixture.kinetics.KineticsBindings.setTargetSpeed fun(Int,Int):Int

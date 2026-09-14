@@ -43,7 +43,8 @@ class AddonGuestApiBundleCodecTest {
 
         assertContentEquals(AddonGuestApiBundleCodec.encode(first), AddonGuestApiBundleCodec.encode(second))
         assertEquals(first, AddonGuestApiBundleCodec.decode(AddonGuestApiBundleCodec.encode(first)))
-        assertEquals("fixture:meters", first.identity.module)
+        assertEquals("fixture", first.identity.id)
+        assertEquals("fixture:api", first.moduleDescriptor.id.toString())
         assertEquals(listOf("fixture/meters/Meters.kt"), first.moduleDescriptor.sources.map(PlatformSource::path))
     }
 
@@ -129,7 +130,7 @@ class AddonGuestApiBundleCodecTest {
         includeSources: Boolean = true,
     ): AddonGuestApiBundle {
         val path = "fixture/meters/Meters.kt"
-        val moduleId = PlatformModuleId("fixture", "meters")
+        val moduleId = PlatformModuleId("fixture", "api")
         val declaration =
             PlatformDeclaration(
                 declarationSymbol,

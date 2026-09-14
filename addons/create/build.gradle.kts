@@ -30,7 +30,7 @@ plugins {
 }
 
 group = "ru.lazyhat.compukters"
-val addonSdkVersion = "0.1.0"
+val addonSdkVersion = "0.2.0"
 val compuktersModVersion = "1.21.1-neoforge-0.5.0-S"
 version = providers.gradleProperty("addonVersion").get()
 
@@ -56,11 +56,7 @@ architectury {
 }
 
 compuktersAddon {
-    module(
-        addon = "create",
-        name = "kinetics",
-        dependencies = listOf("stdlib:core", "stdlib:ranges"),
-    )
+    register("create")
 }
 
 repositories {
@@ -188,7 +184,7 @@ val verifyProductionJar =
                 "META-INF/neoforge.mods.toml",
                 "ru/lazyhat/compukters/integration/create/CompuktersCreateMod.class",
                 "ru/lazyhat/compukters/integration/create/CreateKineticsIntegration.class",
-                "META-INF/compukters/addons/create-kinetics.cagb",
+                "META-INF/compukters/addons/create.cagb",
             ).forEach { required ->
                 check(entries.count { it == required } == 1) { "$required is missing or duplicated in ${archive.name}" }
             }

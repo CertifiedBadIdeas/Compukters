@@ -18,10 +18,7 @@
 
 package ru.lazyhat.compukters.gradle.addon
 
-import org.gradle.api.Named
-import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.model.ObjectFactory
-import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import javax.inject.Inject
 
@@ -30,56 +27,20 @@ abstract class CompuktersAddonExtension
     constructor(
         objects: ObjectFactory,
     ) {
-        val addon: Property<String> = objects.property(String::class.java)
+        val id: Property<String> = objects.property(String::class.java)
 
-        val module: Property<String> = objects.property(String::class.java)
-
-        val moduleVersion: Property<String> = objects.property(String::class.java)
-
-        val dependencies: ListProperty<String> = objects.listProperty(String::class.java).convention(listOf("stdlib:core"))
+        val version: Property<String> = objects.property(String::class.java)
         val toolingCoordinate: Property<String> = objects.property(String::class.java)
         val platformCoordinate: Property<String> = objects.property(String::class.java)
         val commonApiCoordinate: Property<String> = objects.property(String::class.java)
         val adapterApiCoordinate: Property<String> = objects.property(String::class.java)
-        val capabilities: NamedDomainObjectContainer<CompuktersAddonCapability> =
-            objects.domainObjectContainer(CompuktersAddonCapability::class.java) { name ->
-                objects.newInstance(CompuktersAddonCapability::class.java, name)
-            }
 
-        fun module(
-            addon: String,
-            name: String,
-            dependencies: List<String> = listOf("stdlib:core"),
+        fun register(
+            id: String,
             version: String? = null,
-            capabilities: Map<String, String> = emptyMap(),
         ) {
-            check(!this.addon.isPresent && !this.module.isPresent) { "compuktersAddon.module(...) may only be called once" }
-            this.addon.set(addon)
-            this.module.set(name)
-            this.dependencies.set(dependencies)
-            version?.let(moduleVersion::set)
-            if (capabilities.isEmpty()) {
-                this.capabilities.create(name)
-            } else {
-                capabilities.forEach { (capability, bindingOwner) ->
-                    this.capabilities.create(capability) { it.bindingOwner.set(bindingOwner) }
-                }
-            }
+            check(!this.id.isPresent) { "compuktersAddon.register(...) may only be called once" }
+            this.id.set(id)
+            version?.let(this.version::set)
         }
-    }
-
-abstract class CompuktersAddonCapability
-    @Inject
-    constructor(
-        private val capabilityName: String,
-        objects: ObjectFactory,
-    ) : Named {
-        override fun getName(): String = capabilityName
-
-        @Deprecated("Capability ABI versions are managed by the Compukters Addon SDK", level = DeprecationLevel.ERROR)
-        val abiMajor: Property<Int> = objects.property(Int::class.java).convention(1)
-
-        @Deprecated("Capability ABI versions are managed by the Compukters Addon SDK", level = DeprecationLevel.ERROR)
-        val abiMinor: Property<Int> = objects.property(Int::class.java).convention(0)
-        val bindingOwner: Property<String> = objects.property(String::class.java)
     }
