@@ -16,10 +16,12 @@
  * limitations under the License.
  */
 
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Properties
 import kotlin.io.path.invariantSeparatorsPathString
 
 class OptionalIntegrationDependencyTest {
@@ -61,6 +63,36 @@ class OptionalIntegrationDependencyTest {
             )
         }
     }
+
+    @Test
+    fun createAddonPinsTheSdkGradleToolchain() {
+        val repoRoot = findRepoRoot()
+        val addonRoot = repoRoot.resolve("addons/create")
+        val addonWrapper = addonRoot.resolve("gradle/wrapper/gradle-wrapper.properties")
+        val wrapperFiles =
+            listOf(
+                addonRoot.resolve("gradlew"),
+                addonRoot.resolve("gradlew.bat"),
+                addonRoot.resolve("gradle/wrapper/gradle-wrapper.jar"),
+                addonWrapper,
+            )
+
+        assertTrue(
+            wrapperFiles.all(Files::isRegularFile),
+            "The standalone Create addon must own a complete Gradle wrapper",
+        )
+        assertEquals(
+            wrapperDistribution(repoRoot.resolve("gradle/wrapper/gradle-wrapper.properties")),
+            wrapperDistribution(addonWrapper),
+            "The standalone Create addon must use the Gradle distribution against which the addon SDK is built",
+        )
+    }
+
+    private fun wrapperDistribution(path: Path): String =
+        Properties()
+            .apply { Files.newInputStream(path).use(::load) }
+            .getProperty("distributionUrl")
+            ?: error("Missing distributionUrl in $path")
 
     private fun findRepoRoot(): Path {
         var current = Path.of(System.getProperty("user.dir")).toAbsolutePath()

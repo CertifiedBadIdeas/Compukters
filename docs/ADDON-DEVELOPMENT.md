@@ -34,7 +34,8 @@ the development SDK after that one bootstrap command. `stageAddonSdkMavenReposit
 builds and TestKit verification that need an explicit repository under `build/repositories/addon-sdk`.
 
 The first-party Create addon under `addons/create` is itself a separate Gradle root and serves as the complete example.
-It contains no project dependency, included build, shared source directory, or path back into the Compukters build.
+It contains no project dependency, included build, shared source directory, or path back into the Compukters build,
+and owns the Gradle wrapper that pins its build toolchain.
 From the Compukters root, `verifyCreateAddon`, `buildCreateAddon`, and `runCreateAddonClient` first publish the selected
 SDK version to Maven Local and then invoke that independent build. The Create addon also has its own release version,
 independent of both the SDK and the base mod.
