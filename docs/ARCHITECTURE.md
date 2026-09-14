@@ -150,11 +150,10 @@ created host must expose the exact registered capability schema. The actor trans
 the server thread, where the host may complete immediately or retain a bounded wait; completions resume the exact VM
 task on a later turn. The Minecraft 1.21.1 Create adapter and its Guest Kotlin declarations live in the standalone
 `addons/create` Gradle root. It consumes the public plugin, tooling, platform bundle, and NeoForge API exclusively as
-Maven coordinates; the Compukters root only publishes the selected SDK to Maven Local and invokes the independent
-build. The base platform, shared Minecraft code, and 26.1 code therefore have no direct Create ownership. The adapter
-resolves only the six
-adjacent loaded positions and binds handles to exact block-entity identities, preventing replacement from silently
-rebinding a running Guest program.
+Maven coordinates. The public plugin module can publish the complete SDK to Maven Local, but the Compukters root does
+not own or invoke Create tasks. The base platform, shared Minecraft code, and 26.1 code therefore have no direct Create
+ownership. The adapter resolves only the six adjacent loaded positions and binds handles to exact block-entity
+identities, preventing replacement from silently rebinding a running Guest program.
 
 `ProgramRuntimeHost` owns one current Rust `ComputerMachine`, advances it with bounded guest and maintenance budgets,
 commits terminal changes once per active server tick, and exposes typed full/delta states and failures through JDK 25

@@ -55,7 +55,6 @@ installation:
 ./gradlew-sandbox-dev-parallel :v26_1-neoforge:buildProductionUniversalJar
 ./gradlew-sandbox-dev-parallel :v1_21_1-neoforge:runClient
 ./gradlew-sandbox-dev-parallel :v1_21_1-neoforge:buildProductionUniversalJar
-./gradlew-sandbox-dev-parallel runCreateAddonClient
 ```
 
 Minecraft-independent Gradle modules are grouped beneath `modules/common`, while
@@ -71,8 +70,8 @@ canonical content.
 For fast feedback, `./gradlew-sandbox-dev-parallel verifyLocalFast` runs policy,
 build-script, and a curated JVM test slice. Before treating the current checkout
 as fully verified, run `./gradlew-sandbox-dev-parallel verifyLocalFull`; it covers
-every Gradle subproject check, the standalone Create addon build, all registered Kotlin-to-VM conformance scenarios,
-Rust and FFM checks, runtime integrations, the real GameTest server, and the
+every Gradle subproject check, all registered Kotlin-to-VM conformance scenarios, Rust and FFM checks, runtime
+integrations, the real GameTest server, and the
 production artifacts for the locally configured native platform.
 
 A distributable multi-platform release has a stricter, separate gate:

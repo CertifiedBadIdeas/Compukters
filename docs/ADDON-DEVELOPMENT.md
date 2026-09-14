@@ -26,19 +26,20 @@ Released coordinates are intended to resolve from Maven Central. Before SDK vers
 checkout can publish the same SDK coordinates to Maven Local with:
 
 ```shell
-./gradlew publishAddonSdkToMavenLocal
+./gradlew :addon-gradle-plugin:publishAddonSdkToMavenLocal
 ```
 
 The standalone addon checks `mavenLocal()` before public repositories, so direct Gradle runs and IDE imports resolve
-the development SDK after that one bootstrap command. `stageAddonSdkMavenRepository` remains available for isolated
-builds and TestKit verification that need an explicit repository under `build/repositories/addon-sdk`.
+the development SDK after that one bootstrap command. Isolated TestKit verification stages the same artifacts under
+`build/repositories/addon-sdk` without exposing another root task.
 
 The first-party Create addon under `addons/create` is itself a separate Gradle root and serves as the complete example.
 It contains no project dependency, included build, shared source directory, or path back into the Compukters build,
-and owns the Gradle wrapper that pins its build toolchain.
-From the Compukters root, `verifyCreateAddon`, `buildCreateAddon`, and `runCreateAddonClient` first publish the selected
-SDK version to Maven Local and then invoke that independent build. The Create addon also has its own release version,
-independent of both the SDK and the base mod.
+and owns the Gradle wrapper that pins its build toolchain. After publishing a development SDK, run `check`,
+`buildProductionJar`, or `runClient` from `addons/create`; its `gradlew-sandbox*` launchers provide the same isolated,
+parallel, interactive, and summarized modes as the main repository without referring back to it. The Compukters root
+does not own or invoke those tasks. The Create addon also has its own release version, independent of both the SDK and
+the base mod.
 
 ## Apply the plugin
 

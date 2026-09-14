@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -eu
+
+APP_HOME=$(CDPATH= cd -P "$(dirname "$0")" >/dev/null && pwd) || exit 1
+
+export GRADLE_USER_HOME="$APP_HOME/.gradle-sandbox"
+
+exec "$APP_HOME/gradlew" --no-daemon -Dorg.gradle.vfs.watch=false "$@"
