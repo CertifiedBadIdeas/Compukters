@@ -85,7 +85,9 @@ data class AddonAuthoringContract(
                             )
                     }
 
-                    else -> error("unsupported addon authoring directive at line ${index + 1}: ${fields.first()}")
+                    else -> {
+                        error("unsupported addon authoring directive at line ${index + 1}: ${fields.first()}")
+                    }
                 }
             }
             val identity = requireNotNull(addon) { "addon contract identity is missing" }
@@ -179,7 +181,9 @@ data class AddonAbiLock(
                             )
                     }
 
-                    else -> error("unsupported addon ABI lock directive at line ${index + 1}: ${fields.first()}")
+                    else -> {
+                        error("unsupported addon ABI lock directive at line ${index + 1}: ${fields.first()}")
+                    }
                 }
             }
             require(header) { "addon ABI lock header is missing" }
@@ -241,31 +245,49 @@ fun resolveAddonContract(
     }
 
     val actual =
-        byCapability.flatMap { (capability, declarations) ->
-            declarations.map { declaration -> capability.identity.capabilityKey() to (declaration.symbol to declaration.signature) }
-        }.toSet()
+        byCapability
+            .flatMap { (capability, declarations) ->
+                declarations.map { declaration -> capability.identity.capabilityKey() to (declaration.symbol to declaration.signature) }
+            }.toSet()
     val retained =
-        currentLock.entries.map { entry ->
-            entry.copy(state = if (entry.capabilityKey to entry.callableKey in actual) AddonAbiEntryState.ACTIVE else AddonAbiEntryState.TOMBSTONE)
-        }.toMutableList()
+        currentLock.entries
+            .map { entry ->
+                entry.copy(
+                    state =
+                        if (entry.capabilityKey to entry.callableKey in
+                            actual
+                        ) {
+                            AddonAbiEntryState.ACTIVE
+                        } else {
+                            AddonAbiEntryState.TOMBSTONE
+                        },
+                )
+            }.toMutableList()
     authoring.capabilities.forEach { capability ->
         val capabilityKey = capability.identity.capabilityKey()
-        var next = retained.filter { it.capabilityKey == capabilityKey }.maxOfOrNull(AddonAbiEntry::operation)?.plus(1) ?: 0
-        byCapability.getValue(capability).sortedWith(compareBy(PlatformDeclaration::symbol, PlatformDeclaration::signature)).forEach { declaration ->
-            val callableKey = declaration.symbol to declaration.signature
-            if (retained.none { it.capabilityKey == capabilityKey && it.callableKey == callableKey }) {
-                retained +=
-                    AddonAbiEntry(
-                        capability.identity.namespace,
-                        capability.identity.name,
-                        capability.identity.abiMajor,
-                        next++,
-                        AddonAbiEntryState.ACTIVE,
-                        declaration.symbol,
-                        declaration.signature,
-                    )
+        var next =
+            retained
+                .filter { it.capabilityKey == capabilityKey }
+                .maxOfOrNull(AddonAbiEntry::operation)
+                ?.plus(1) ?: 0
+        byCapability
+            .getValue(capability)
+            .sortedWith(compareBy(PlatformDeclaration::symbol, PlatformDeclaration::signature))
+            .forEach { declaration ->
+                val callableKey = declaration.symbol to declaration.signature
+                if (retained.none { it.capabilityKey == capabilityKey && it.callableKey == callableKey }) {
+                    retained +=
+                        AddonAbiEntry(
+                            capability.identity.namespace,
+                            capability.identity.name,
+                            capability.identity.abiMajor,
+                            next++,
+                            AddonAbiEntryState.ACTIVE,
+                            declaration.symbol,
+                            declaration.signature,
+                        )
+                }
             }
-        }
     }
     val expectedLock = AddonAbiLock(retained)
     val schemas =
