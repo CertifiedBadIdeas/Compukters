@@ -23,6 +23,8 @@ plugins {
     alias(libs.plugins.releaseConvention)
 }
 
+organizeCompuktersTasks()
+
 val compukterVmBuildJobs =
     providers
         .gradleProperty("compukterVmBuildJobs")
