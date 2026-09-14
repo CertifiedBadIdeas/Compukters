@@ -89,13 +89,26 @@ tasks.named<Jar>("jar") {
     archiveClassifier.set("dev")
 }
 
-val productionJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+fun com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar.mergeCompuktersRuntime() {
     configurations = listOf(shadowBundle)
-    archiveClassifier.set(if (needsRemap) "shadow-dev" else "")
     duplicatesStrategy = DuplicatesStrategy.FAIL
     exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
     relocate("org.tomlj", "ru.lazyhat.compukters.internal.vendor.tomlj")
     relocate("org.antlr.v4.runtime", "ru.lazyhat.compukters.internal.vendor.antlr.v4.runtime")
+}
+
+val productionJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+    mergeCompuktersRuntime()
+    archiveClassifier.set(if (needsRemap) "shadow-dev" else "")
+}
+
+tasks.register<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("developmentModJar") {
+    group = "build"
+    description = "Builds the named Compukters mod JAR used by dependent development runs."
+    from(sourceSets.main.map { it.output })
+    mergeCompuktersRuntime()
+    archiveFileName.set(COMPUKTERS_DEVELOPMENT_MOD_FILENAME)
+    destinationDirectory.set(layout.buildDirectory.dir(COMPUKTERS_DEVELOPMENT_MOD_DIRECTORY))
 }
 
 val devRuntimeLibrariesJar =
