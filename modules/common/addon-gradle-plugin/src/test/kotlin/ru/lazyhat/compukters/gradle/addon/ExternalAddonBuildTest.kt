@@ -66,6 +66,18 @@ class ExternalAddonBuildTest {
                     module.set("kinetics")
                     capability("kinetics")
                 }
+
+                tasks.register("verifyCompuktersApiClasspath") {
+                    doLast {
+                        val modules =
+                            configurations.compileOnly.get().dependencies
+                                .map { it.name }
+                                .toSet()
+                        check("compukters-addon-api" in modules) { "common API is missing from ${'$'}modules" }
+                        check("compukters-addon-neoforge-1.21.1" in modules) { "adapter API is missing from ${'$'}modules" }
+                        check("compukters-addon-api-neoforge-1.21.1" !in modules) { "legacy combined API remains in ${'$'}modules" }
+                    }
+                }
                 """.trimIndent(),
             )
             project.resolve("src/compuktersAddon/kotlin/fixture/kinetics/Kinetics.kt").also { source ->
@@ -82,6 +94,7 @@ class ExternalAddonBuildTest {
             }
 
             runner(project, "updateCompuktersAddonAbiLock").build()
+            runner(project, "verifyCompuktersApiClasspath").build()
             runner(project, "jar").build()
 
             assertTrue(project.resolve("src/compuktersAddon/addon.lock").toFile().isFile)

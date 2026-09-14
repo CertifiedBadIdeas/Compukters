@@ -42,9 +42,11 @@ tasks.jar {
 tasks.test {
     dependsOn(
         tasks.named("publishAllPublicationsToAddonSdkRepository"),
+        ":addon-api:publishAddonApiPublicationToAddonSdkRepository",
         ":compiler-k2-engine:publishAddonToolingPublicationToAddonSdkRepository",
         ":guest-platform:publishAddonPlatformPublicationToAddonSdkRepository",
-        ":v1_21_1-neoforge:publishAddonApiPublicationToAddonSdkRepository",
+        ":v1_21_1-addon-neoforge-api:publishAddonNeoForgeApiPublicationToAddonSdkRepository",
+        ":v26_1-addon-neoforge-api:publishAddonNeoForgeApiPublicationToAddonSdkRepository",
     )
     systemProperty(
         "compukters.addon.sdk.repository",
@@ -73,9 +75,11 @@ tasks.register("publishAddonSdkToMavenLocal") {
     group = "compukters addon sdk"
     dependsOn(
         tasks.named("publishToMavenLocal"),
+        ":addon-api:publishAddonApiPublicationToMavenLocal",
         ":compiler-k2-engine:publishAddonToolingPublicationToMavenLocal",
         ":guest-platform:publishAddonPlatformPublicationToMavenLocal",
-        ":v1_21_1-neoforge:publishAddonApiPublicationToMavenLocal",
+        ":v1_21_1-addon-neoforge-api:publishAddonNeoForgeApiPublicationToMavenLocal",
+        ":v26_1-addon-neoforge-api:publishAddonNeoForgeApiPublicationToMavenLocal",
     )
 }
 

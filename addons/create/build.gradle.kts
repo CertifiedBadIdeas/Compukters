@@ -31,6 +31,7 @@ plugins {
 
 group = "ru.lazyhat.compukters"
 val addonSdkVersion = "0.1.0"
+val compuktersModVersion = "1.21.1-neoforge-0.5.0-S"
 version = "1.21.1-neoforge-${providers.gradleProperty("addonVersion").get()}"
 
 kotlin {
@@ -73,7 +74,9 @@ repositories {
     maven("https://raw.githubusercontent.com/Fuzss/modresources/main/maven")
 }
 
-val compuktersApi = "ru.lazyhat.compukters:compukters-addon-api-neoforge-1.21.1:$addonSdkVersion"
+val compuktersCommonApi = "ru.lazyhat.compukters:compukters-addon-api:$addonSdkVersion"
+val compuktersAdapterApi = "ru.lazyhat.compukters:compukters-addon-neoforge-1.21.1:$addonSdkVersion"
+val compuktersDevelopmentMod = "ru.lazyhat.compukters:compukters-neoforge-1.21.1-dev:$compuktersModVersion"
 
 dependencies {
     minecraft("net.minecraft:minecraft:1.21.1")
@@ -85,8 +88,9 @@ dependencies {
     )
     neoForge("net.neoforged:neoforge:21.1.250")
 
-    modRuntimeOnly(compuktersApi)
-    testImplementation(compuktersApi)
+    modRuntimeOnly(compuktersDevelopmentMod)
+    testImplementation(compuktersCommonApi)
+    testImplementation(compuktersAdapterApi)
     modImplementation("com.simibubi.create:create-1.21.1:6.0.10-280:slim") { isTransitive = false }
     modImplementation("net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1")
     modCompileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-1.21.1:1.0.6")

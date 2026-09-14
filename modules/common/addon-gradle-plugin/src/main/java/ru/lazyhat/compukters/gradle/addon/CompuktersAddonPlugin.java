@@ -40,7 +40,8 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
                 project.getExtensions().create("compuktersAddon", CompuktersAddonExtension.class);
         extension.getToolingCoordinate().convention("ru.lazyhat.compukters:compukters-addon-tooling:" + sdkVersion);
         extension.getPlatformCoordinate().convention("ru.lazyhat.compukters:compukters-guest-platform:" + sdkVersion + "@cpb");
-        extension.getApiCoordinate().convention("ru.lazyhat.compukters:compukters-addon-api-neoforge-1.21.1:" + sdkVersion);
+        extension.getCommonApiCoordinate().convention("ru.lazyhat.compukters:compukters-addon-api:" + sdkVersion);
+        extension.getAdapterApiCoordinate().convention("ru.lazyhat.compukters:compukters-addon-neoforge-1.21.1:" + sdkVersion);
 
         Configuration tooling = project.getConfigurations().create("compuktersAddonTooling", configuration -> {
             configuration.setCanBeConsumed(false);
@@ -151,7 +152,8 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
             project.getDependencies().add(platform.getName(), extension.getPlatformCoordinate().get());
             Configuration apiClasspath = project.getConfigurations().findByName("compileOnly");
             if (apiClasspath != null) {
-                project.getDependencies().add(apiClasspath.getName(), extension.getApiCoordinate().get());
+                project.getDependencies().add(apiClasspath.getName(), extension.getCommonApiCoordinate().get());
+                project.getDependencies().add(apiClasspath.getName(), extension.getAdapterApiCoordinate().get());
             }
         });
         project.getPluginManager().withPlugin("org.jetbrains.kotlin.jvm", ignored -> {

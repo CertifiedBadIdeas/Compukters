@@ -37,7 +37,9 @@ publishing {
             groupId = project.group.toString()
             artifactId = "compukters-addon-neoforge-26.1.2"
             version = addonSdkVersion
-            artifact(tasks.jar)
+            artifact(tasks.jar) {
+                classifier = null
+            }
         }
     }
     repositories {
@@ -67,6 +69,7 @@ val verifyAddonNeoForgeApiJar =
                 setOf(
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersAddonHostFactory.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersAddonRegistry.class",
+                    "ru/lazyhat/compukters/api/addon/minecraft/CompuktersComputerContext.class",
                 )
             check(productClasses == expected) { "unexpected classes in ${archive.name}: ${productClasses - expected}" }
         }

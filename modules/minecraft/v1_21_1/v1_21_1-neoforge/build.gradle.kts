@@ -30,16 +30,15 @@ plugins {
     `maven-publish`
 }
 
-val addonApiJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("developmentModJar")
-val addonSdkVersion = libs.versions.addon.sdk.get()
+val developmentModJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("developmentModJar")
 
 publishing {
     publications {
-        create<MavenPublication>("addonApi") {
+        create<MavenPublication>("developmentMod") {
             groupId = project.group.toString()
-            artifactId = "compukters-addon-api-neoforge-1.21.1"
-            version = addonSdkVersion
-            artifact(addonApiJar)
+            artifactId = "compukters-neoforge-1.21.1-dev"
+            version = project.version.toString()
+            artifact(developmentModJar)
         }
     }
     repositories {
