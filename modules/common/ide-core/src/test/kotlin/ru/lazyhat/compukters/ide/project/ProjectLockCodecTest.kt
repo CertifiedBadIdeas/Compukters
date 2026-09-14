@@ -87,7 +87,7 @@ class ProjectLockCodecTest {
         invalid(validLock().replace("artifact_abi = 2", "artifact_abi = \"2\""))
         invalid(validLock().replace("payload_sha256 = \"${hash(1).hex()}\"", "payload_sha256 = \"BAD\""))
         invalid(validLock().replace("id = \"std:terminal\"", "id = \"bad\""))
-        invalid(validLock().replace("major = 2", "major = 0"))
+        invalid(validLock().replace("major = 2", "major = -1"))
         invalid(validLock().replace("version = \"2.3.1\"", "version = \"bad\\nversion\""))
         invalid(validLock() + "\n[[modules]]" + validLock().substringAfter("[[modules]]"))
     }

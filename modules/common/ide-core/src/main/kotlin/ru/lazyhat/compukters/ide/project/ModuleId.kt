@@ -47,7 +47,7 @@ value class ApiMajor(
     val value: Int,
 ) {
     init {
-        require(value in 1..MAXIMUM) { "API major must be between 1 and $MAXIMUM" }
+        require(value in 0..MAXIMUM) { "API major must be between 0 and $MAXIMUM" }
     }
 
     companion object {

@@ -38,6 +38,7 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
         String sdkVersion = implementationVersion != null ? implementationVersion : project.getRootProject().getVersion().toString();
         CompuktersAddonExtension extension =
                 project.getExtensions().create("compuktersAddon", CompuktersAddonExtension.class);
+        extension.getModuleVersion().convention(project.provider(() -> project.getVersion().toString()));
         extension.getToolingCoordinate().convention("ru.lazyhat.compukters:compukters-addon-tooling:" + sdkVersion);
         extension.getPlatformCoordinate().convention("ru.lazyhat.compukters:compukters-guest-platform:" + sdkVersion + "@cpb");
         extension.getCommonApiCoordinate().convention("ru.lazyhat.compukters:compukters-addon-api:" + sdkVersion);

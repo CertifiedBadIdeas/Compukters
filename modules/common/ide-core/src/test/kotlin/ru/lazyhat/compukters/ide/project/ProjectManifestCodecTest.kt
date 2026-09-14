@@ -127,7 +127,7 @@ class ProjectManifestCodecTest {
         ).forEach { (provider, module) ->
             assertFailsWith<IllegalArgumentException>("$provider:$module") { ModuleId(provider, module) }
         }
-        assertFailsWith<IllegalArgumentException> { ApiMajor(0) }
+        assertEquals(0, ApiMajor(0).value)
         assertFailsWith<IllegalArgumentException> { ApiMajor(65536) }
 
         invalid("format = 1\nname = \"x\"\n[modules]\nstd = { terminal = 0 }")
