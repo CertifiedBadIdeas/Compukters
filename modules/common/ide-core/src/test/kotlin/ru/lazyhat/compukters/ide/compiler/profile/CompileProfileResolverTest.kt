@@ -102,7 +102,7 @@ class CompileProfileResolverTest {
         val bundle = platformBundle()
         val catalog = platformCatalog(bundle)
         val toolchain = platformToolchain(bundle)
-        val selection = catalog.resolve(mapOf(ModuleId.parse("std:terminal") to ApiMajor(2)))
+        val selection = catalog.resolve(setOf(ModuleId.parse("std:terminal")))
         val lock = ProjectLock.of(toolchain, selection.modules.map { LockedModule(it.identity, it.direct) })
         return Fixture(bundle, catalog, toolchain, lock, CompileProfileResolver(toolchain, catalog, requiredLimits))
     }

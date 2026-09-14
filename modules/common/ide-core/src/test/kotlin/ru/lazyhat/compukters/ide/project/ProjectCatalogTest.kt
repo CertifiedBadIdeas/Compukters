@@ -100,7 +100,7 @@ class ProjectCatalogTest {
         assertFalse(project.handle.isValid())
 
         oldPath.createDirectory()
-        oldPath.resolve("compukter.toml").writeText(ProjectManifestCodec.encode(ProjectManifest.of("hello", emptyMap())))
+        oldPath.resolve("compukter.toml").writeText(ProjectManifestCodec.encode(ProjectManifest.of("hello", emptySet())))
         oldPath.resolve("src").createDirectory()
         oldPath.resolve("src/main.kt").writeText("fun main() {}")
         assertFalse(project.handle.isValid())

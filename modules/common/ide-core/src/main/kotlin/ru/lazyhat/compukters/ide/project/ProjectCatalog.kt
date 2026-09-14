@@ -85,7 +85,7 @@ class ProjectCatalog private constructor(
 
     fun create(name: String): ProjectDescriptor {
         validateDirectoryName(name)
-        val manifest = ProjectManifest.of(name, emptyMap(), limits)
+        val manifest = ProjectManifest.of(name, emptySet(), limits)
         val stagingName = "$STAGING_PREFIX${UUID.randomUUID()}"
         val stagingPath = rootIdentity.canonicalPath.resolve(stagingName)
         try {

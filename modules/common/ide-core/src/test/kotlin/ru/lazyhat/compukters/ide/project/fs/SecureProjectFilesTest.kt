@@ -60,7 +60,7 @@ class SecureProjectFilesTest {
         val root = createTempDirectory("compukters-lock-writer-")
         val project = ProjectCatalog.open(root).create("hello")
         val service = ProjectLockService(project.handle.lockFileWriter())
-        val manifest = ProjectManifest.of("hello", emptyMap())
+        val manifest = ProjectManifest.of("hello", emptySet())
         val first = resolution(1)
         val second = resolution(2)
 
@@ -97,12 +97,12 @@ class SecureProjectFilesTest {
         Files.createSymbolicLink(project.handle.canonicalPath.resolve("compukter.lock"), outside)
 
         val service = ProjectLockService(project.handle.lockFileWriter())
-        assertFailsWith<Exception> { service.updateLock(ProjectManifest.of("hello", emptyMap()), resolution(1)) }
+        assertFailsWith<Exception> { service.updateLock(ProjectManifest.of("hello", emptySet()), resolution(1)) }
         assertEquals("outside", Files.readString(outside))
 
         Files.delete(project.handle.canonicalPath.resolve("compukter.lock"))
         Files.move(project.handle.canonicalPath, root.resolve("moved"))
-        assertFailsWith<Exception> { service.createLock(ProjectManifest.of("hello", emptyMap()), resolution(1)) }
+        assertFailsWith<Exception> { service.createLock(ProjectManifest.of("hello", emptySet()), resolution(1)) }
     }
 
     private fun resolution(seed: Int): ProjectResolution =

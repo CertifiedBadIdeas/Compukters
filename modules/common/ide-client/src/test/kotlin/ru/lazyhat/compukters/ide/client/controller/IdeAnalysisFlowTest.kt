@@ -426,7 +426,7 @@ class IdeAnalysisFlowTest {
                     .toFile()
                     .readText(),
             )
-        assertEquals(module.identity.major, manifest.modules[module.identity.id])
+        assertTrue(module.identity.id in manifest.modules)
         assertTrue(
             fixture.workspace.descriptor.handle.canonicalPath
                 .resolve("compukter.lock")

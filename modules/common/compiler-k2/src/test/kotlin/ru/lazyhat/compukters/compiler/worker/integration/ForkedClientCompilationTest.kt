@@ -140,7 +140,7 @@ class ForkedClientCompilationTest {
         val lock = ProjectLock.of(toolchain, emptyList())
         val resolver = CompileProfileResolver(toolchain, emptyPlatformCatalog(toolchain), limits)
         val profile = assertIs<ProfileResolution.Resolved>(resolver.resolveLocal(lock)).profile
-        val manifest = ProjectManifest.of("forked-client", emptyMap())
+        val manifest = ProjectManifest.of("forked-client", emptySet())
         try {
             block(
                 Fixture(

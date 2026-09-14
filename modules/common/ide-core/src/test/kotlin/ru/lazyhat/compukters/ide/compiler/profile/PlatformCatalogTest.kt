@@ -48,7 +48,7 @@ class PlatformCatalogTest {
     fun `catalog resolves deterministic transitive closure and marks only manifest roots direct`() {
         val catalog = PlatformCatalog.of(bundle())
 
-        val selection = catalog.resolve(mapOf(ModuleId.parse("std:terminal") to ApiMajor(2)))
+        val selection = catalog.resolve(setOf(ModuleId.parse("std:terminal")))
 
         assertEquals(listOf("stdlib:core", "stdlib:ranges", "std:terminal"), selection.modules.map { it.identity.id.value })
         assertFalse(selection.modules[0].direct)
@@ -61,10 +61,7 @@ class PlatformCatalogTest {
     fun `catalog promotes a transitive dependency when manifest declares it`() {
         val selection =
             PlatformCatalog.of(bundle()).resolve(
-                mapOf(
-                    ModuleId.parse("std:terminal") to ApiMajor(2),
-                    ModuleId.parse("stdlib:ranges") to ApiMajor(1),
-                ),
+                setOf(ModuleId.parse("std:terminal"), ModuleId.parse("stdlib:ranges")),
             )
 
         assertTrue(selection.modules.single { it.identity.id == ModuleId.parse("stdlib:ranges") }.direct)
@@ -74,10 +71,7 @@ class PlatformCatalogTest {
     fun `catalog resolves a shared diamond dependency exactly once`() {
         val selection =
             PlatformCatalog.of(bundle()).resolve(
-                mapOf(
-                    ModuleId.parse("std:terminal") to ApiMajor(2),
-                    ModuleId.parse("std:filesystem") to ApiMajor(1),
-                ),
+                setOf(ModuleId.parse("std:terminal"), ModuleId.parse("std:filesystem")),
             )
 
         assertEquals(1, selection.modules.count { it.identity.id == ModuleId.parse("stdlib:core") })
@@ -101,7 +95,7 @@ class PlatformCatalogTest {
         val core = all.require(ModuleId.parse("stdlib:core")).identity
         val target = PlatformCatalog.forTarget(bundle, listOf(terminal, ranges, core))
         assertFailsWith<IllegalArgumentException> {
-            target.resolve(mapOf(ModuleId.parse("std:filesystem") to ApiMajor(1)))
+            target.resolve(setOf(ModuleId.parse("std:filesystem")))
         }
     }
 
@@ -142,7 +136,7 @@ class PlatformCatalogTest {
         val advertised = local.entries.map(PlatformCatalogEntry::identity) + external
 
         val target = PlatformCatalog.forTarget(platform, advertised, listOf(payload))
-        val selection = target.resolve(mapOf(external.id to external.major))
+        val selection = target.resolve(setOf(external.id))
 
         assertEquals(listOf("stdlib:core", "fixture:meters"), selection.modules.map { it.identity.id.value })
         assertEquals(listOf(payload), target.addonBundlesFor(selection.modules.mapTo(mutableSetOf()) { it.identity.id }))

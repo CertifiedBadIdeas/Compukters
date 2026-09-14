@@ -46,7 +46,7 @@ class ProjectLockServiceTest {
 
         assertTrue(lock.modules.none { it.identity.id == ModuleId.parse("std:filesystem") })
         assertFailsWith<ProjectResolutionException> {
-            service.resolve(ProjectManifest.of("hello", mapOf(ModuleId.parse("missing:module") to ApiMajor(1))), resolution())
+            service.resolve(ProjectManifest.of("hello", setOf(ModuleId.parse("missing:module"))), resolution())
         }
     }
 
@@ -55,7 +55,7 @@ class ProjectLockServiceTest {
         val promoted =
             ProjectManifest.of(
                 "hello",
-                mapOf(ModuleId.parse("std:terminal") to ApiMajor(2), ModuleId.parse("stdlib:ranges") to ApiMajor(1)),
+                setOf(ModuleId.parse("std:terminal"), ModuleId.parse("stdlib:ranges")),
             )
 
         val lock = ProjectLockService(RecordingLockFileWriter()).resolve(promoted, resolution())
@@ -122,14 +122,14 @@ class ProjectLockServiceTest {
         val before = writer.content!!.copyOf()
 
         assertFailsWith<ProjectResolutionException> {
-            service.updateLock(ProjectManifest.of("hello", mapOf(ModuleId.parse("missing:module") to ApiMajor(1))), resolution())
+            service.updateLock(ProjectManifest.of("hello", setOf(ModuleId.parse("missing:module"))), resolution())
         }
         assertTrue(before.contentEquals(writer.content))
         assertFailsWith<IllegalStateException> { service.updateLock(manifest(), resolution()) }
         assertTrue(before.contentEquals(writer.content))
     }
 
-    private fun manifest() = ProjectManifest.of("hello", mapOf(ModuleId.parse("std:terminal") to ApiMajor(2)))
+    private fun manifest() = ProjectManifest.of("hello", setOf(ModuleId.parse("std:terminal")))
 
     private fun resolution(): ProjectResolution {
         val bundle = platformBundle()

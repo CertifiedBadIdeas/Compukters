@@ -74,7 +74,6 @@ import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.IncrementalKotlinHighlighter
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
-import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
@@ -819,7 +818,6 @@ class IdeRendererStateTest {
                         action,
                         IdeCompletionModuleRequirement(
                             ModuleId.parse("compukter:redstone"),
-                            ApiMajor(2),
                         ),
                     ),
                 ),

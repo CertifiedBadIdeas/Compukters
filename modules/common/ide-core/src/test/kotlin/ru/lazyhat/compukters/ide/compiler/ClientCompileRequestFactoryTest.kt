@@ -90,7 +90,7 @@ class ClientCompileRequestFactoryTest {
         val bundle = platformBundle()
         val selection =
             platformCatalog(bundle).resolve(
-                mapOf(ModuleId.parse("std:terminal") to ApiMajor(2), ModuleId.parse("create:sensors") to ApiMajor(1)),
+                setOf(ModuleId.parse("std:terminal"), ModuleId.parse("create:sensors")),
             )
         val toolchain = platformToolchain(bundle)
         return ClientBuildSnapshot(
