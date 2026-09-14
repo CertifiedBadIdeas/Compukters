@@ -709,6 +709,17 @@ tasks.register("stageAddonSdkMavenRepository") {
     )
 }
 
+tasks.register("publishAddonSdkToMavenLocal") {
+    description = "Publishes the public addon SDK to Maven Local for standalone builds and IDE imports."
+    group = "compukters addon sdk"
+    dependsOn(
+        ":addon-gradle-plugin:publishToMavenLocal",
+        ":compiler-k2-engine:publishAddonToolingPublicationToMavenLocal",
+        ":guest-platform:publishAddonPlatformPublicationToMavenLocal",
+        ":v1_21_1-neoforge:publishAddonApiPublicationToMavenLocal",
+    )
+}
+
 fun registerCreateAddonBuild(
     name: String,
     description: String,
@@ -719,10 +730,9 @@ fun registerCreateAddonBuild(
         group = if (requestedTasks.any { it.startsWith("run") }) "loom" else "verification"
         dir = file("addons/create")
         tasks = requestedTasks.toList()
-        dependsOn("stageAddonSdkMavenRepository")
+        dependsOn("publishAddonSdkToMavenLocal")
         startParameter.projectProperties =
             mapOf(
-                "compuktersAddonSdkRepository" to layout.buildDirectory.dir("repositories/addon-sdk").get().asFile.toURI().toString(),
                 "compuktersAddonSdkVersion" to project.version.toString(),
             )
     }
@@ -730,19 +740,19 @@ fun registerCreateAddonBuild(
 val verifyCreateAddon =
     registerCreateAddonBuild(
         "verifyCreateAddon",
-        "Verifies the standalone Create addon against the staged public Compukters SDK.",
+        "Verifies the standalone Create addon against the Maven-published local Compukters SDK.",
         "check",
     )
 
 registerCreateAddonBuild(
     "buildCreateAddon",
-    "Builds the standalone Create addon against the staged public Compukters SDK.",
+    "Builds the standalone Create addon against the Maven-published local Compukters SDK.",
     "buildProductionJar",
 )
 
 registerCreateAddonBuild(
     "runCreateAddonClient",
-    "Runs the standalone Create addon client against the staged public Compukters SDK.",
+    "Runs the standalone Create addon client against the Maven-published local Compukters SDK.",
     "runClient",
 )
 
