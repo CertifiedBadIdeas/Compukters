@@ -32,7 +32,11 @@ plugins {
 group = "ru.lazyhat.compukters"
 val addonSdkVersion = "0.1.0"
 val compuktersModVersion = "1.21.1-neoforge-0.5.0-S"
-version = "1.21.1-neoforge-${providers.gradleProperty("addonVersion").get()}"
+version = providers.gradleProperty("addonVersion").get()
+
+base {
+    archivesName.set("compukters-create-1.21.1-neoforge")
+}
 
 kotlin {
     jvmToolchain(21)
@@ -52,10 +56,11 @@ architectury {
 }
 
 compuktersAddon {
-    addon.set("create")
-    module.set("kinetics")
-    dependencies.set(listOf("stdlib:core", "stdlib:ranges"))
-    capability("kinetics")
+    module(
+        addon = "create",
+        name = "kinetics",
+        dependencies = listOf("stdlib:core", "stdlib:ranges"),
+    )
 }
 
 repositories {

@@ -68,8 +68,8 @@ supported.
   Tracking: not scheduled
 
 - [ ] **Project manifests and modules — Partial** — `compukter.toml` selects a
-  portable native platform module graph; the IDE, analyzer, and compiler use
-  the same declarations and versions. Compiler output is still one application
+  portable native platform module graph by identity, while `compukter.lock`
+  records exact resolved versions and hashes for the IDE, analyzer, and compiler. Compiler output is still one application
   artifact rather than an independently distributable Kotlin module ecosystem.
   Tracking: not scheduled
 
@@ -477,7 +477,7 @@ supported.
 ## Native platform modules
 
 The platform catalog currently publishes these module identities. A project
-sees the modules selected by `compukter.toml`, their transitive dependencies,
+sees the modules selected by identity in `compukter.toml`, their lock-resolved transitive dependencies,
 and the mandatory built-ins module; there is no ambient Kotlin/JVM classpath.
 
 | Module | Guest surface |

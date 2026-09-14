@@ -32,6 +32,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   or wire decoding. Its Minecraft-independent host API and thin version-specific NeoForge adapter remain compile-only,
   so ordinary Compukters releases do not force an SDK version update or expose implementation classes. The compiler
   and IDE expose only the addons available on the attached server.
+- Addon projects declare a Guest module atomically; its version defaults to the addon's Gradle project version, while
+  single-capability modules require no separate capability declaration. Compukters projects select modules by identity
+  in `compukter.toml`, with exact versions and hashes retained in `compukter.lock`.
 - The separately installed Create addon supports Create 6.0.x on Minecraft 1.21.1 while the base Compukters mod remains
   usable without Create.
 - Its `create:kinetics` module reads exact `Float` speed, stress, and capacity values from adjacent speedometers and
