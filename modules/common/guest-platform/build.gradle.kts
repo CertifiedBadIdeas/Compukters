@@ -18,6 +18,7 @@
 
 plugins {
     alias(libs.plugins.kotlinConvention)
+    `maven-publish`
 }
 
 dependencies {
@@ -51,6 +52,26 @@ val assemblePlatformBundle = tasks.register<JavaExec>("assemblePlatformBundle") 
         "--output",
         platformBundle.get().asFile.absolutePath,
     )
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("addonPlatform") {
+            groupId = project.group.toString()
+            artifactId = "compukters-guest-platform"
+            version = project.version.toString()
+            artifact(platformBundle) {
+                extension = "cpb"
+                builtBy(assemblePlatformBundle)
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = "addonSdk"
+            url = rootProject.layout.buildDirectory.dir("repositories/addon-sdk").get().asFile.toURI()
+        }
+    }
 }
 
 val compuktersPlatformBundle = configurations.create("compuktersPlatformBundle") {

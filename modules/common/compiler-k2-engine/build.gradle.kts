@@ -18,6 +18,35 @@
 
 plugins {
     alias(libs.plugins.kotlinConvention)
+    id("com.gradleup.shadow")
+    `maven-publish`
+}
+
+val addonToolingJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+    archiveClassifier.set("addon-tooling")
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+    mergeServiceFiles()
+    exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("addonTooling") {
+            groupId = project.group.toString()
+            artifactId = "compukters-addon-tooling"
+            version = project.version.toString()
+            artifact(addonToolingJar) {
+                classifier = null
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = "addonSdk"
+            url = rootProject.layout.buildDirectory.dir("repositories/addon-sdk").get().asFile.toURI()
+        }
+    }
 }
 
 dependencies {
