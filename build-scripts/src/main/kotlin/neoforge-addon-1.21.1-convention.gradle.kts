@@ -31,33 +31,33 @@ architectury {
     neoForge()
 }
 
-loom {
-    mods {
-        maybeCreate("compukters").apply {
-            listOf(
-                ":addon-guest-api",
-                ":compiler-client",
-                ":compiler-runtime",
-                ":core",
-                ":ide-analysis-client",
-                ":ide-client",
-                ":ide-core",
-                ":native-runtime-api",
-                ":native-runtime-jni",
-                ":platform-bundle",
-                ":v1_21_1-common",
-                ":v1_21_1-neoforge",
-                ":worker-client",
-            ).forEach { projectPath -> sourceSet("main", project(projectPath)) }
-        }
-    }
-}
-
 dependencies {
     add("neoForge", versionLibrary("neoforge"))
 }
 
 addCompuktersNeoForgeDevelopmentRuntime()
+
+val compuktersProject = project(":v1_21_1-neoforge")
+val compuktersDevelopmentJar =
+    files(compuktersProject.compuktersDevelopmentModJar()).builtBy(":v1_21_1-neoforge:developmentModJar")
+
+mapOf(
+    "runClient" to "run/client",
+    "runClient2" to "run/client2",
+    "runClient3" to "run/client3",
+    "runClientWithoutCreate" to "run/clientWithoutCreate",
+    "runServer" to "run/server",
+).forEach { (runTask, runDirectory) ->
+    val suffix = runTask.removePrefix("run")
+    val stageDevelopmentMod =
+        tasks.register<Copy>("stageCompuktersDevelopmentModFor$suffix") {
+            from(compuktersDevelopmentJar)
+            into(layout.projectDirectory.dir("$runDirectory/mods"))
+        }
+    tasks.named(runTask) {
+        dependsOn(stageDevelopmentMod)
+    }
+}
 
 val forgeRuntimeLibraries = configurations.named("forgeRuntimeLibrary")
 val verifyAddonDevelopmentRuntime =
@@ -65,6 +65,7 @@ val verifyAddonDevelopmentRuntime =
         group = "verification"
         description = "Checks that the addon dev runtime provides Kotlin without duplicating Compukters classes."
         inputs.files(forgeRuntimeLibraries)
+        inputs.files(compuktersDevelopmentJar)
         doLast {
             val archives = forgeRuntimeLibraries.get().files.filter { it.extension == "jar" }
             var kotlinRuntimeFound = false
@@ -73,11 +74,22 @@ val verifyAddonDevelopmentRuntime =
                     val entries = zip.entries().asSequence().filterNot { it.isDirectory }.map { it.name }.toList()
                     kotlinRuntimeFound = kotlinRuntimeFound || "kotlin/jvm/internal/Intrinsics.class" in entries
                     check(entries.none { it.startsWith("ru/lazyhat/compukters/") }) {
-                        "Compukters classes must come from the base mod, not addon runtime library ${archive.name}"
+                        "Compukters classes leaked into addon runtime library ${archive.name}"
                     }
                 }
             }
             check(kotlinRuntimeFound) { "Kotlin stdlib is missing from the addon NeoForge development runtime" }
+            val developmentMod = compuktersDevelopmentJar.singleFile
+            ZipFile(developmentMod).use { zip ->
+                val entries = zip.entries().asSequence().filterNot { it.isDirectory }.map { it.name }.toList()
+                check("META-INF/neoforge.mods.toml" in entries) { "Compukters development mod manifest is missing" }
+                check("ru/lazyhat/compukters/impl/CompuktersMod.class" in entries) {
+                    "Compukters development mod entry point is missing"
+                }
+                check(entries.none { it.startsWith("META-INF/jars/") }) {
+                    "Compukters development mod must not duplicate nested runtime libraries"
+                }
+            }
         }
     }
 

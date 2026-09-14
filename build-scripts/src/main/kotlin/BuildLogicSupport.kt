@@ -22,6 +22,7 @@ import org.gradle.api.artifacts.ModuleDependency
 import org.gradle.api.artifacts.VersionCatalog
 import org.gradle.api.artifacts.dsl.DependencyHandler
 import org.gradle.api.artifacts.VersionCatalogsExtension
+import org.gradle.api.file.RegularFile
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.plugins.ExtraPropertiesExtension
 import org.gradle.api.provider.Provider
@@ -45,6 +46,8 @@ enum class LoaderKind(
 private const val BUILD_CONTEXT_KEY = "compukters.buildContext"
 private const val LOADER_KIND_KEY = "compukters.loaderKind"
 private const val EFFECTIVE_BUILD_VERSION_KEY = "compukters.effectiveBuildVersion"
+const val COMPUKTERS_DEVELOPMENT_MOD_DIRECTORY = "devlibs"
+const val COMPUKTERS_DEVELOPMENT_MOD_FILENAME = "compukters-development-mod.jar"
 
 fun ExtensionAware.libsCatalog(): VersionCatalog = extensions.getByType<VersionCatalogsExtension>().named("libs")
 
@@ -96,6 +99,9 @@ fun Project.addCompuktersNeoForgeDevelopmentRuntime() {
         }
     }
 }
+
+fun Project.compuktersDevelopmentModJar(): Provider<RegularFile> =
+    layout.buildDirectory.file("$COMPUKTERS_DEVELOPMENT_MOD_DIRECTORY/$COMPUKTERS_DEVELOPMENT_MOD_FILENAME")
 
 private fun DependencyHandler.addNonTransitive(
     configuration: String,
