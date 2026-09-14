@@ -93,7 +93,9 @@ dependencies {
     )
     neoForge("net.neoforged:neoforge:21.1.250")
 
-    modRuntimeOnly(compuktersDevelopmentMod)
+    modRuntimeOnly(compuktersDevelopmentMod) {
+        isChanging = true
+    }
     testImplementation(compuktersCommonApi)
     testImplementation(compuktersAdapterApi)
     modImplementation("com.simibubi.create:create-1.21.1:6.0.10-280:slim") { isTransitive = false }
@@ -112,6 +114,10 @@ dependencies {
     }
 
     testImplementation(kotlin("test"))
+}
+
+configurations.configureEach {
+    resolutionStrategy.cacheChangingModulesFor(0, "seconds")
 }
 
 loom {
