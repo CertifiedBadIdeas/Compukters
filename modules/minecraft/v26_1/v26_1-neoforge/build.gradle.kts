@@ -48,6 +48,10 @@ loom {
 }
 
 dependencies {
+    implementation(projects.addonApi)
+    shadowBundle(project(path = projects.addonApi.path)) { isTransitive = false }
+    implementation(projects.v261AddonNeoforgeApi)
+    shadowBundle(project(path = projects.v261AddonNeoforgeApi.path)) { isTransitive = false }
     implementation(projects.addonGuestApi)
     shadowBundle(project(path = projects.addonGuestApi.path)) { isTransitive = false }
     common(project(path = projects.v261Common.path)) { isTransitive = false }
@@ -242,6 +246,14 @@ val verifyPackagedCompukterFfi =
             validateNativeResources(nativeEntries, expectedPackagedNativeResources)
             check(entries.count { it == "META-INF/neoforge.mods.toml" } == 1) {
                 "expected exactly one META-INF/neoforge.mods.toml in ${archive.name}"
+            }
+            listOf(
+                "ru/lazyhat/compukters/api/addon/ProgramAddonHost.class",
+                "ru/lazyhat/compukters/api/addon/minecraft/CompuktersAddonRegistry.class",
+            ).forEach { required ->
+                check(entries.count { it == required } == 1) {
+                    "expected exactly one $required in ${archive.name}"
+                }
             }
             val toolingResources = entries.filter { it.startsWith("tooling/workers/") }.sorted()
             val toolingManifestResource = "tooling/workers/k2-tooling-workers.bundle"

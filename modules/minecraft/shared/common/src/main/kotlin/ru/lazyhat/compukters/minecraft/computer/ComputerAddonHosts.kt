@@ -25,12 +25,19 @@ import ru.lazyhat.compukters.addon.api.AddonCapabilitySchema
 import ru.lazyhat.compukters.addon.api.AddonCapabilityValueType
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.addon.api.AddonGuestApiCatalog
-import ru.lazyhat.compukters.api.addon.minecraft.CompuktersAddonHostFactory
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.programAddonHostOf
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import java.util.concurrent.CopyOnWriteArrayList
+
+fun interface ComputerAddonHostFactory {
+    fun create(
+        level: ServerLevel,
+        position: BlockPos,
+        state: BlockState,
+    ): ProgramAddonHost?
+}
 
 object ComputerAddonHosts {
     private val registrations = CopyOnWriteArrayList<Registration>()
@@ -38,12 +45,15 @@ object ComputerAddonHosts {
 
     @Synchronized
     fun register(
-        factory: CompuktersAddonHostFactory,
+        factory: ComputerAddonHostFactory,
         guestApiBundles: List<AddonGuestApiBundle> = emptyList(),
+        registrationIdentity: Any = factory,
     ) {
-        require(registrations.none { it.factory == factory }) { "computer addon host factory is already registered" }
+        require(registrations.none { it.identity == registrationIdentity }) {
+            "computer addon host factory is already registered"
+        }
         val updatedCatalog = AddonGuestApiCatalog.of(guestApiCatalog.bundles + guestApiBundles)
-        registrations += Registration(factory, guestApiBundles)
+        registrations += Registration(factory, guestApiBundles, registrationIdentity)
         guestApiCatalog = updatedCatalog
     }
 
@@ -70,8 +80,9 @@ object ComputerAddonHosts {
     }
 
     private data class Registration(
-        val factory: CompuktersAddonHostFactory,
+        val factory: ComputerAddonHostFactory,
         val guestApiBundles: List<AddonGuestApiBundle>,
+        val identity: Any,
     )
 }
 
