@@ -237,7 +237,7 @@ class WorldFileSystemStoreTest {
             taskId: Int,
             requestId: Long,
             kind: Int,
-            code: Long,
+            detail: ByteArray,
         ) = error("unused")
 
         override fun close(handle: Long) = error("unused")

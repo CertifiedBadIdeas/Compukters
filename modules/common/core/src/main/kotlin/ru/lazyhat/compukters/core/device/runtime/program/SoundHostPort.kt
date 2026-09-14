@@ -45,10 +45,6 @@ sealed interface SoundCommitResult {
 
     data class Failed(
         val kind: HostFailureKind,
-        val code: Long,
-    ) : SoundCommitResult {
-        init {
-            require(code in 0..UInt.MAX_VALUE.toLong()) { "sound failure code must fit u32" }
-        }
-    }
+        val detail: String,
+    ) : SoundCommitResult
 }

@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.lang.runtime.capability
 import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
+import ru.lazyhat.compukters.lang.runtime.vm.encodeHostFailureDetail
 
 sealed interface HostResponse {
     data object UnitSuccess : HostResponse
@@ -43,8 +44,12 @@ sealed interface HostResponse {
 
     data class Failure(
         val kind: HostFailureKind,
-        val code: Long,
-    ) : HostResponse
+        val detail: String,
+    ) : HostResponse {
+        init {
+            encodeHostFailureDetail(detail)
+        }
+    }
 }
 
 fun interface HostCapability {
@@ -65,5 +70,5 @@ class CapabilityRegistry(
 
     suspend fun dispatch(request: VmHostRequest): HostResponse =
         capabilities[request.capability]?.invoke(request)
-            ?: HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0)
+            ?: HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Host capability is unavailable")
 }

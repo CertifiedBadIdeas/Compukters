@@ -100,7 +100,11 @@ class KineticsHostStateTest {
         current = second
         val failure = assertIs<HostResponse.Failure>(host.completed(1, oldHandle))
         assertEquals(HostFailureKind.INPUT_OUTPUT, failure.kind)
-        assertEquals(HostFailureKind.INPUT_OUTPUT, assertIs<HostResponse.Failure>(host.poll(1).single().response).kind)
+        assertEquals("Create kinetic device was removed, replaced, or unloaded", failure.detail)
+        assertEquals(
+            failure,
+            assertIs<HostResponse.Failure>(host.poll(1).single().response),
+        )
         val newHandle = host.completed(0, 0).intValue()
 
         assertTrue(newHandle != oldHandle)
@@ -114,9 +118,18 @@ class KineticsHostStateTest {
         val state = KineticsHostState { side, kind -> if (side == 3 && kind == PeripheralKind.STRESSOMETER) stressometer else null }
         val host = KineticsAddonContract.host(state)
 
-        assertEquals(HostFailureKind.UNAVAILABLE, assertIs<HostResponse.Failure>(host.completed(0, 3)).kind)
-        assertEquals(HostFailureKind.UNAVAILABLE, assertIs<HostResponse.Failure>(host.completed(0, 2)).kind)
-        assertEquals(HostFailureKind.UNAVAILABLE, assertIs<HostResponse.Failure>(host.completed(1, 99)).kind)
+        assertEquals(
+            HostResponse.Failure(HostFailureKind.UNAVAILABLE, "No matching Create kinetic device is attached on that side"),
+            host.completed(0, 3),
+        )
+        assertEquals(
+            HostResponse.Failure(HostFailureKind.UNAVAILABLE, "No matching Create kinetic device is attached on that side"),
+            host.completed(0, 2),
+        )
+        assertEquals(
+            HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Create kinetic device handle is unavailable"),
+            host.completed(1, 99),
+        )
         assertEquals(HostResponse.FloatSuccess(4f), host.completed(4, host.completed(3, 3).intValue()))
     }
 
@@ -142,7 +155,10 @@ class KineticsHostStateTest {
         val state = KineticsHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) FakeSpeedometer(0f) else null }
         val host = KineticsAddonContract.host(state)
         repeat(64) { assertIs<HostResponse.IntSuccess>(host.completed(0, 0)) }
-        assertEquals(HostFailureKind.UNAVAILABLE, assertIs<HostResponse.Failure>(host.completed(0, 0)).kind)
+        assertEquals(
+            HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Create kinetic device handle limit was reached"),
+            host.completed(0, 0),
+        )
 
         host.reset()
         val speedometer = FakeSpeedometer(0f)
@@ -153,10 +169,10 @@ class KineticsHostStateTest {
             assertEquals(ProgramAddonDispatch.Pending, waitingHost.dispatch(request(2, handle, requestId = 1_000L + requestId)))
         }
         assertEquals(
-            HostFailureKind.UNAVAILABLE,
+            HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Addon pending request limit was reached"),
             assertIs<ProgramAddonDispatch.Completed>(waitingHost.dispatch(request(2, handle, requestId = 2_000)))
                 .response
-                .let { assertIs<HostResponse.Failure>(it).kind },
+                .let { assertIs<HostResponse.Failure>(it) },
         )
         waitingHost.reset()
         speedometer.speed = 1f

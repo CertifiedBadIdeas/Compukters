@@ -104,7 +104,7 @@ internal class KineticsHostState(
         return addonPending {
             if (!endpoint.valid()) {
                 removeEndpoint(endpoint)
-                addonPollFailed(HostFailureKind.INPUT_OUTPUT, FAILURE_STALE_PERIPHERAL)
+                addonPollFailed(HostFailureKind.INPUT_OUTPUT, STALE_PERIPHERAL_DETAIL)
             } else {
                 endpoint.speed().takeIf { it.toBits() != speedBits }?.let(::addonPollCompleted)
             }
@@ -125,7 +125,7 @@ internal class KineticsHostState(
         return addonPending {
             if (!endpoint.valid()) {
                 removeEndpoint(endpoint)
-                addonPollFailed(HostFailureKind.INPUT_OUTPUT, FAILURE_STALE_PERIPHERAL)
+                addonPollFailed(HostFailureKind.INPUT_OUTPUT, STALE_PERIPHERAL_DETAIL)
             } else if (endpoint.stress().toBits() != stressBits || endpoint.capacity().toBits() != capacityBits) {
                 addonPollCompleted(Unit)
             } else {
@@ -154,11 +154,15 @@ internal class KineticsHostState(
         side: Int,
         kind: PeripheralKind,
     ): AddonCallResult<Int> {
-        if (side !in 0..5) return addonFailed(HostFailureKind.OTHER, FAILURE_MALFORMED_REQUEST)
-        val endpoint = resolve(side, kind) ?: return addonFailed(HostFailureKind.UNAVAILABLE, FAILURE_MISSING_PERIPHERAL)
+        if (side !in 0..5) return addonFailed(HostFailureKind.OTHER, "Invalid Create kinetic side")
+        val endpoint =
+            resolve(side, kind)
+                ?: return addonFailed(HostFailureKind.UNAVAILABLE, "No matching Create kinetic device is attached on that side")
         val existing = handlesByEndpoint[endpoint.identity]
         if (existing != null) return addonCompleted(existing)
-        if (handles.size >= MAXIMUM_HANDLES) return addonFailed(HostFailureKind.UNAVAILABLE, FAILURE_HANDLE_LIMIT)
+        if (handles.size >= MAXIMUM_HANDLES) {
+            return addonFailed(HostFailureKind.UNAVAILABLE, "Create kinetic device handle limit was reached")
+        }
         val handle = nextHandle++
         handles[handle] = endpoint
         handlesByEndpoint[endpoint.identity] = handle
@@ -175,11 +179,12 @@ internal class KineticsHostState(
 
     private inline fun <reified T : KineticsEndpoint> endpoint(handle: Int): T? = handles[handle] as? T
 
-    private fun endpointFailure(): AddonCallResult<Nothing> = addonFailed(HostFailureKind.UNAVAILABLE, FAILURE_UNKNOWN_HANDLE)
+    private fun endpointFailure(): AddonCallResult<Nothing> =
+        addonFailed(HostFailureKind.UNAVAILABLE, "Create kinetic device handle is unavailable")
 
     private fun staleEndpoint(endpoint: KineticsEndpoint): AddonCallResult<Nothing> {
         removeEndpoint(endpoint)
-        return addonFailed(HostFailureKind.INPUT_OUTPUT, FAILURE_STALE_PERIPHERAL)
+        return addonFailed(HostFailureKind.INPUT_OUTPUT, STALE_PERIPHERAL_DETAIL)
     }
 
     private fun removeEndpoint(endpoint: KineticsEndpoint) {
@@ -284,8 +289,4 @@ private fun adjacentDirection(
 }
 
 private const val MAXIMUM_HANDLES = 64
-private const val FAILURE_MALFORMED_REQUEST = 2L
-private const val FAILURE_MISSING_PERIPHERAL = 3L
-private const val FAILURE_UNKNOWN_HANDLE = 4L
-private const val FAILURE_STALE_PERIPHERAL = 5L
-private const val FAILURE_HANDLE_LIMIT = 6L
+private const val STALE_PERIPHERAL_DETAIL = "Create kinetic device was removed, replaced, or unloaded"

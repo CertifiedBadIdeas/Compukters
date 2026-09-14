@@ -133,7 +133,7 @@ final class JniNative {
 
     static native int resumeString(long handle, int taskId, long requestId, char[] value);
 
-    static native int resumeFailure(long handle, int taskId, long requestId, int kind, int code);
+    static native int resumeFailure(long handle, int taskId, long requestId, int kind, byte[] detail);
 
     static native int terminalCommit(long handle);
 

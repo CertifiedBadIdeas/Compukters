@@ -223,7 +223,7 @@ class ProgramRuntimeHost internal constructor(
 
                 is VmOutcome.HostFailed -> {
                     finish(
-                        ProgramRuntimeState.Failed(ProgramFailure.Host(outcome.kind, outcome.code)),
+                        ProgramRuntimeState.Failed(ProgramFailure.Host(outcome.kind, outcome.detail)),
                     )
                     return
                 }
@@ -242,14 +242,26 @@ class ProgramRuntimeHost internal constructor(
                         .filterNot(::isSoundRequest)
                         .filterNot(::isAddonRequest)
                         .forEach { request ->
-                            if (!resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))) return
+                            if (!resume(
+                                    request,
+                                    HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Host capability is unavailable"),
+                                )
+                            ) {
+                                return
+                            }
                         }
                     addon.forEach { request ->
                         if (!deferAddonRequest(activeSession, request)) return
                     }
                     if (redstone.isNotEmpty() && sound.isNotEmpty()) {
                         (redstone + sound).forEach { request ->
-                            if (!resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))) return
+                            if (!resume(
+                                    request,
+                                    HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Host capability is unavailable"),
+                                )
+                            ) {
+                                return
+                            }
                         }
                         return@repeat
                     }
@@ -440,7 +452,7 @@ class ProgramRuntimeHost internal constructor(
                 }
 
                 is RedstoneCommitResult.Failed -> {
-                    HostResponse.Failure(result.kind, result.code)
+                    HostResponse.Failure(result.kind, result.detail)
                 }
 
                 RedstoneCommitResult.Deferred -> {
@@ -522,7 +534,7 @@ class ProgramRuntimeHost internal constructor(
                     }
 
                     is RedstoneCommitResult.Failed -> {
-                        HostResponse.Failure(result.kind, result.code)
+                        HostResponse.Failure(result.kind, result.detail)
                     }
 
                     RedstoneCommitResult.Deferred -> {
@@ -574,7 +586,7 @@ class ProgramRuntimeHost internal constructor(
 
             is SoundCommitResult.Failed -> {
                 pending.requests.forEach { request ->
-                    if (!resume(request, HostResponse.Failure(result.kind, result.code))) return
+                    if (!resume(request, HostResponse.Failure(result.kind, result.detail))) return
                 }
             }
 
@@ -672,9 +684,9 @@ class ProgramRuntimeHost internal constructor(
         val REDSTONE_CAPABILITY = CapabilityIdentity("compukter", "redstone", 1, 0)
         val SOUND_CAPABILITY = CapabilityIdentity("compukter", "sound", 1, 0)
         val UNAVAILABLE_REDSTONE_PORT =
-            RedstoneHostPort { RedstoneCommitResult.Failed(HostFailureKind.UNAVAILABLE, 0) }
+            RedstoneHostPort { RedstoneCommitResult.Failed(HostFailureKind.UNAVAILABLE, "Redstone is unavailable") }
         val UNAVAILABLE_SOUND_PORT =
-            SoundHostPort { SoundCommitResult.Failed(HostFailureKind.UNAVAILABLE, 0) }
+            SoundHostPort { SoundCommitResult.Failed(HostFailureKind.UNAVAILABLE, "Sound is unavailable") }
         val UNAVAILABLE_ADDON_PORT = ProgramAddonRequestPort { false }
         const val MAXIMUM_PENDING_ADDON_REQUESTS = 256
 
@@ -704,13 +716,13 @@ class ProgramRuntimeHost internal constructor(
             return true
         }
         if (pendingAddonRequests.size >= MAXIMUM_PENDING_ADDON_REQUESTS) {
-            return resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))
+            return resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Addon pending request limit was reached"))
         }
         val submitted =
             addonRequestPort.submit(
                 ProgramAddonRequest(request.identity, request.capability, request.operation, request.arguments),
             )
-        if (!submitted) return resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0))
+        if (!submitted) return resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Addon request was not accepted"))
         pendingAddonRequests[request.identity] = PendingAddonRequest(activeSession, request)
         return true
     }

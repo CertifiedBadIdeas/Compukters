@@ -28,6 +28,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   speed controllers through the `create:kinetics` Guest Kotlin module.
 - Added exact `Float` readings, blocking change waits, bounded stable device handles, and deterministic failure when
   an attached Create block is missing, unloaded, removed, or replaced.
+- Replaced opaque addon failure numbers with bounded descriptions that identify the unavailable or stale Create device
+  in terminal process diagnostics.
 - Made the IDE and compiler advertise `create:kinetics` only when the attached server has the compatible integration
   loaded; Compukters remains usable without Create installed.
 - Moved `create:kinetics` into a server-admitted addon Guest API bundle, including its Kotlin metadata and sources, so

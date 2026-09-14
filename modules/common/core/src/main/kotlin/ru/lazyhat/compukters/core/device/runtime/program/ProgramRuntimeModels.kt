@@ -173,6 +173,6 @@ sealed interface ProgramFailure {
 
     data class Host(
         val kind: HostFailureKind,
-        val code: Long,
+        val detail: String,
     ) : ProgramFailure
 }

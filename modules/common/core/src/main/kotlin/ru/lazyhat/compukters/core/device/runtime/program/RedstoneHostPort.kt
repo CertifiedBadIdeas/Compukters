@@ -31,10 +31,6 @@ sealed interface RedstoneCommitResult {
 
     data class Failed(
         val kind: HostFailureKind,
-        val code: Long,
-    ) : RedstoneCommitResult {
-        init {
-            require(code in 0..UInt.MAX_VALUE.toLong()) { "redstone failure code must fit u32" }
-        }
-    }
+        val detail: String,
+    ) : RedstoneCommitResult
 }

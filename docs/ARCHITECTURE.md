@@ -167,11 +167,13 @@ host counts Guest and maintenance budgets only when it actually invokes native a
 counters saturate explicitly instead of overflowing. These values describe VM work and granted capacity, not host CPU
 percentage. No sampling loop, history buffer, heap-content scan, or unsolicited FFM call runs for unobserved computers.
 
-Published Runtime 0.14.0 platform bundles use manifest schema 2 and contain the FFI and JNI native libraries for one
+Published Runtime 0.15.0 platform bundles use manifest schema 2 and contain the FFI and JNI native libraries for one
 operating-system target under a single Runtime, VM commit, and C ABI identity. Bundle validation covers both transport
 entries before staging; the Java 25 runtime module packages only FFI, while the Java 21 runtime module packages only
 JNI. The two Minecraft release artifacts therefore share one pinned native release without carrying an unusable
-transport.
+transport. FFI ABI 15 carries host failures as a stable category plus a non-empty, bounded UTF-8 detail instead of an
+opaque numeric producer code; the VM retains that detail without allocating while resuming and exposes it in terminal
+process diagnostics.
 Runtime ABI 1.3 adds exact decimal materialization for the existing `I64` scalar form; artifacts require it only when
 an `I64` value is converted to `String`, while purely numeric `Long` programs remain compatible with Runtime ABI 1.0.
 Runtime ABI 1.4 does the same for F32 using Kotlin/JVM-compatible spellings, including signed zero, infinities, NaN,
@@ -254,9 +256,9 @@ close. Initial store opening happens during server startup rather than an ordina
 native world-store handle are serialized by a fair lock across VM actors and persistence work, while ordinary VM
 execution stays on actor workers.
 
-The versioned C ABI v14 exposes opaque world-store lifecycle operations, machine creation inside a store, stateless
+The versioned C ABI v15 exposes opaque world-store lifecycle operations, machine creation inside a store, stateless
 artifact verification, dedicated bounded compilation request and completion calls, and typed `Unit`, `Int`, raw-bit
-`Float`, `Boolean`, `String`, or failure host-request completion. Kotlin can select a world
+`Float`, `Boolean`, `String`, or categorized and human-readable failure host-request completion. Kotlin can select a world
 store, identify a computer, request flush, tombstone, or recovery, and route compiler results, but it cannot perform
 arbitrary guest file operations. Guest code reaches Rust-owned state only through declared capabilities. The guest
 machine-creation calls carry a bounded, versioned schema for optional host capabilities; Rust validates and owns that
@@ -323,6 +325,9 @@ lock. Compiler and analysis workers decode only this data format: they never loa
 bindings extend intrinsic lowering, while a
 same-named Guest declaration remains ordinary Guest code. General stream handles, pipes, and process redirection remain
 later layers.
+Addon host handlers report failures with a broad `HostFailureKind` and a non-empty UTF-8 detail of at most 256 bytes.
+The kind remains suitable for runtime classification; the producer-owned detail is diagnostic text and is not a stable
+programmatic identifier.
 
 ## Module ownership
 

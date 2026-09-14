@@ -65,11 +65,11 @@ class TerminalCapability(
                 }
             }
         } catch (_: InputLimitExceeded) {
-            HostResponse.Failure(HostFailureKind.OTHER, INPUT_LIMIT_CODE)
+            HostResponse.Failure(HostFailureKind.OTHER, "Terminal input limit was exceeded")
         } catch (_: OutputLimitExceeded) {
-            HostResponse.Failure(HostFailureKind.OTHER, OUTPUT_LIMIT_CODE)
+            HostResponse.Failure(HostFailureKind.OTHER, "Terminal output limit was exceeded")
         } catch (_: IOException) {
-            HostResponse.Failure(HostFailureKind.INPUT_OUTPUT, 0)
+            HostResponse.Failure(HostFailureKind.INPUT_OUTPUT, "Terminal input/output operation failed")
         }
 
     private fun write(
@@ -96,7 +96,7 @@ class TerminalCapability(
             val byte = input.read()
             when (byte) {
                 -1 -> {
-                    if (bytes.size() == 0) return HostResponse.Failure(HostFailureKind.END_OF_FILE, 0)
+                    if (bytes.size() == 0) return HostResponse.Failure(HostFailureKind.END_OF_FILE, "Terminal input reached end of file")
                     break
                 }
 
@@ -126,7 +126,7 @@ class TerminalCapability(
         return HostResponse.StringSuccess(decoded)
     }
 
-    private fun invalidRequest() = HostResponse.Failure(HostFailureKind.OTHER, INVALID_REQUEST_CODE)
+    private fun invalidRequest() = HostResponse.Failure(HostFailureKind.OTHER, "Malformed terminal request")
 
     private fun sanitizeUtf16(value: String): String =
         buildString(value.length) {
@@ -156,10 +156,4 @@ class TerminalCapability(
     private data object InputLimitExceeded : RuntimeException()
 
     private data object OutputLimitExceeded : RuntimeException()
-
-    private companion object {
-        const val INVALID_REQUEST_CODE = 1L
-        const val INPUT_LIMIT_CODE = 2L
-        const val OUTPUT_LIMIT_CODE = 3L
-    }
 }

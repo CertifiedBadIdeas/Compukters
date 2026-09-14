@@ -69,7 +69,7 @@ sealed interface PlaygroundExecution {
 
     data class HostFailure(
         val kind: HostFailureKind,
-        val code: Long,
+        val detail: String,
     ) : PlaygroundExecution
 
     data class Quota(
@@ -130,7 +130,7 @@ class NativePlaygroundExecutor(
                                 }
 
                                 is HostResponse.Failure -> {
-                                    return PlaygroundExecution.HostFailure(response.kind, response.code)
+                                    return PlaygroundExecution.HostFailure(response.kind, response.detail)
                                 }
 
                                 HostResponse.UnitSuccess -> {
@@ -176,7 +176,7 @@ class NativePlaygroundExecutor(
                         }
 
                         is VmOutcome.HostFailed -> {
-                            return PlaygroundExecution.HostFailure(outcome.kind, outcome.code)
+                            return PlaygroundExecution.HostFailure(outcome.kind, outcome.detail)
                         }
 
                         is VmOutcome.CompilationRequested -> {
@@ -218,7 +218,7 @@ class NativePlaygroundExecutor(
         if (appended.isEmpty()) return null
         return when (val response = terminal.invoke(compatibilityRequest(WRITE_OPERATION, appended))) {
             HostResponse.UnitSuccess -> null
-            is HostResponse.Failure -> PlaygroundExecution.HostFailure(response.kind, response.code)
+            is HostResponse.Failure -> PlaygroundExecution.HostFailure(response.kind, response.detail)
             is HostResponse.IntSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned an Int")
             is HostResponse.FloatSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned a Float")
             is HostResponse.BoolSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned a Boolean")

@@ -68,7 +68,8 @@ either stress or capacity changes. These waits do not busy-poll in Guest code.
 
 A device accessor creates a handle for that exact adjacent block entity. Replacing the block invalidates the old
 handle; it never silently reconnects to the replacement. Missing, mismatched, unloaded, removed, or stale devices fail
-the Guest operation deterministically.
+the Guest operation deterministically, and the terminal process diagnostic identifies which condition prevented the
+operation.
 
 Each running computer may retain at most 64 Create device handles and 64 pending Create waits. Host requests and
 completions cross the same bounded asynchronous actor path as other world-facing computer operations and execute on the
