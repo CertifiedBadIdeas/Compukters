@@ -43,6 +43,25 @@ class OptionalIntegrationDependencyTest {
         assertTrue(offenders.isEmpty(), "Common code depends on the optional Create integration: ${offenders.joinToString()}")
     }
 
+    @Test
+    fun createAddonIsAStandaloneMavenConsumer() {
+        val repoRoot = findRepoRoot()
+        val rootSettings = Files.readString(repoRoot.resolve("settings.gradle.kts"))
+        val addonRoot = repoRoot.resolve("addons/create")
+        val addonBuildFiles = listOf(addonRoot.resolve("settings.gradle.kts"), addonRoot.resolve("build.gradle.kts"))
+        val forbidden = listOf("projects.", "project(\"", "includeBuild(", "../../", "build-scripts")
+
+        assertTrue(Files.isRegularFile(addonRoot.resolve("settings.gradle.kts")), "Create addon must own its Gradle settings")
+        assertTrue("create-addon" !in rootSettings, "The Compukters root must not include the Create addon as a subproject")
+        addonBuildFiles.forEach { buildFile ->
+            val content = Files.readString(buildFile)
+            assertTrue(
+                forbidden.none(content::contains),
+                "${repoRoot.relativize(buildFile)} crosses the standalone addon boundary",
+            )
+        }
+    }
+
     private fun findRepoRoot(): Path {
         var current = Path.of(System.getProperty("user.dir")).toAbsolutePath()
         while (true) {

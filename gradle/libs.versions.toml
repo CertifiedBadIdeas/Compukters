@@ -10,7 +10,6 @@ addonGuestApiConvention = { id = "addon-guest-api-convention" }
 minecraftSharedSourcesConvention = { id = "minecraft-shared-sources" }
 neoforgeConvention = { id = "neoforge-convention" }
 neoforge1211Convention = { id = "neoforge-1.21.1-convention" }
-neoforgeAddon1211Convention = { id = "neoforge-addon-1.21.1-convention" }
 metadataConvention = { id = "metadata" }
 releaseConvention = { id = "release-convention" }
 

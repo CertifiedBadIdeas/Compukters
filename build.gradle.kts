@@ -696,6 +696,54 @@ tasks.register("verifyLocalFast") {
     dependsOn(":v26_1-neoforge:test")
 }
 
+tasks.register("stageAddonSdkMavenRepository") {
+    description = "Builds the public addon SDK into the local Maven staging repository."
+    group = "publishing"
+    dependsOn(
+        ":addon-gradle-plugin:publishAllPublicationsToAddonSdkRepository",
+        ":compiler-k2-engine:publishAddonToolingPublicationToAddonSdkRepository",
+        ":guest-platform:publishAddonPlatformPublicationToAddonSdkRepository",
+        ":v1_21_1-neoforge:publishAddonApiPublicationToAddonSdkRepository",
+    )
+}
+
+fun registerCreateAddonBuild(
+    name: String,
+    description: String,
+    vararg requestedTasks: String,
+) =
+    tasks.register<GradleBuild>(name) {
+        this.description = description
+        group = if (requestedTasks.any { it.startsWith("run") }) "loom" else "verification"
+        dir = file("addons/create")
+        tasks = requestedTasks.toList()
+        dependsOn("stageAddonSdkMavenRepository")
+        startParameter.projectProperties =
+            mapOf(
+                "compuktersAddonSdkRepository" to layout.buildDirectory.dir("repositories/addon-sdk").get().asFile.toURI().toString(),
+                "compuktersAddonSdkVersion" to project.version.toString(),
+            )
+    }
+
+val verifyCreateAddon =
+    registerCreateAddonBuild(
+        "verifyCreateAddon",
+        "Verifies the standalone Create addon against the staged public Compukters SDK.",
+        "check",
+    )
+
+registerCreateAddonBuild(
+    "buildCreateAddon",
+    "Builds the standalone Create addon against the staged public Compukters SDK.",
+    "buildProductionJar",
+)
+
+registerCreateAddonBuild(
+    "runCreateAddonClient",
+    "Runs the standalone Create addon client against the staged public Compukters SDK.",
+    "runClient",
+)
+
 tasks.named("check") {
     dependsOn(verifyLicensePolicy)
 }
@@ -712,6 +760,7 @@ tasks.register("verifyLocalFull") {
     group = "verification"
     dependsOn("verifyLocalFast")
     dependsOn(verifyAllModuleChecks)
+    dependsOn(verifyCreateAddon)
     dependsOn(verifyKotlinVmConformance)
     dependsOn(testCompukterVmRust)
     dependsOn(testCompukterFfiRust)
