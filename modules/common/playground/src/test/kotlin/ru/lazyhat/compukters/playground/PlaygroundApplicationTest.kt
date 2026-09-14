@@ -118,7 +118,8 @@ class PlaygroundApplicationTest {
                     PlaygroundExecution.StartFailure(8) to PlaygroundExit.VM_START,
                     PlaygroundExecution.Trap(GuestTrap.DIVISION_BY_ZERO) to PlaygroundExit.GUEST_TRAP,
                     PlaygroundExecution.Fault(VmFault.CORRUPT_HEAP) to PlaygroundExit.VM_FAULT,
-                    PlaygroundExecution.HostFailure(HostFailureKind.END_OF_FILE, 0) to PlaygroundExit.HOST_FAILURE,
+                    PlaygroundExecution.HostFailure(HostFailureKind.END_OF_FILE, "Terminal input reached end of file") to
+                        PlaygroundExit.HOST_FAILURE,
                     PlaygroundExecution.Quota(QuotaKind.HOST_REQUESTS, 4, 5) to PlaygroundExit.QUOTA,
                     PlaygroundExecution.ResourceFailure(collectionAttempted = true) to PlaygroundExit.RESOURCE,
                     PlaygroundExecution.PlatformFailure("native bridge") to PlaygroundExit.PLATFORM,

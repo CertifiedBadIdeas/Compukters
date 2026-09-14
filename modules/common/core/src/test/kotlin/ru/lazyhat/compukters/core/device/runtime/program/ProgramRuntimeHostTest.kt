@@ -301,7 +301,7 @@ class ProgramRuntimeHostTest {
 
     @Test
     fun `redstone port failure fails every request while a no-op skips the physical port`() {
-        val failure = RedstoneCommitResult.Failed(HostFailureKind.INPUT_OUTPUT, 9)
+        val failure = RedstoneCommitResult.Failed(HostFailureKind.INPUT_OUTPUT, "Redstone output failed")
         val failedSession = ScriptedSession(outcomes = listOf(VmOutcome.HostRequestBatch(listOf(redstoneSide(1, 0, 4)))))
         val failedHost =
             ProgramRuntimeHost(
@@ -315,7 +315,7 @@ class ProgramRuntimeHostTest {
 
         assertEquals(emptyList(), failedSession.confirmedOutputs)
         assertEquals(
-            listOf(response(1, 1, HostResponse.Failure(HostFailureKind.INPUT_OUTPUT, 9))),
+            listOf(response(1, 1, HostResponse.Failure(HostFailureKind.INPUT_OUTPUT, "Redstone output failed"))),
             failedSession.responses,
         )
 
@@ -858,8 +858,8 @@ class ProgramRuntimeHostTest {
                     1,
                 ),
                 Triple(
-                    VmOutcome.HostFailed(HostFailureKind.INPUT_OUTPUT, 9),
-                    ProgramRuntimeState.Failed(ProgramFailure.Host(HostFailureKind.INPUT_OUTPUT, 9)),
+                    VmOutcome.HostFailed(HostFailureKind.INPUT_OUTPUT, "Addon request failed"),
+                    ProgramRuntimeState.Failed(ProgramFailure.Host(HostFailureKind.INPUT_OUTPUT, "Addon request failed")),
                     1,
                 ),
             )
@@ -915,8 +915,8 @@ class ProgramRuntimeHostTest {
         assertEquals(ProgramRuntimeState.Running, host.serverTick())
         assertEquals(
             listOf(
-                response(2, 1, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0)),
-                response(3, 2, HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0)),
+                response(2, 1, HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Host capability is unavailable")),
+                response(3, 2, HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Host capability is unavailable")),
             ),
             session.responses,
         )

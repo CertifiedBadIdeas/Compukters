@@ -75,8 +75,8 @@ enum class RuntimeBundleDownloadResult {
 
 fun currentRuntimeBundleContract(vmCommit: String): RuntimeBundleContract =
     RuntimeBundleContract(
-        runtimeVersion = "0.14.0",
-        ffiAbi = 14,
+        runtimeVersion = "0.15.0",
+        ffiAbi = 15,
         vmCommit = vmCommit,
         formats =
             sortedMapOf(

@@ -19,6 +19,8 @@
 package ru.lazyhat.compukters.api.addon
 
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
+import ru.lazyhat.compukters.lang.runtime.vm.MAXIMUM_HOST_FAILURE_DETAIL_BYTES
+import java.nio.charset.CharacterCodingException
 
 sealed interface AddonPollResult<out T> {
     data class Completed<T>(
@@ -27,8 +29,12 @@ sealed interface AddonPollResult<out T> {
 
     data class Failed(
         val kind: HostFailureKind,
-        val code: Long,
-    ) : AddonPollResult<Nothing>
+        val detail: String,
+    ) : AddonPollResult<Nothing> {
+        init {
+            requireValidFailureDetail(detail)
+        }
+    }
 }
 
 sealed interface AddonCallResult<out T> {
@@ -38,8 +44,12 @@ sealed interface AddonCallResult<out T> {
 
     data class Failed(
         val kind: HostFailureKind,
-        val code: Long,
-    ) : AddonCallResult<Nothing>
+        val detail: String,
+    ) : AddonCallResult<Nothing> {
+        init {
+            requireValidFailureDetail(detail)
+        }
+    }
 
     class Pending<T>(
         val poll: () -> AddonPollResult<T>?,
@@ -56,8 +66,8 @@ fun <T> addonCompleted(value: T): AddonCallResult<T> = AddonCallResult.Completed
 
 fun addonFailed(
     kind: HostFailureKind,
-    code: Long,
-): AddonCallResult<Nothing> = AddonCallResult.Failed(kind, code)
+    detail: String,
+): AddonCallResult<Nothing> = AddonCallResult.Failed(kind, detail)
 
 fun <T> addonPending(poll: () -> AddonPollResult<T>?): AddonCallResult<T> = AddonCallResult.Pending(poll)
 
@@ -65,5 +75,18 @@ fun <T> addonPollCompleted(value: T): AddonPollResult<T> = AddonPollResult.Compl
 
 fun addonPollFailed(
     kind: HostFailureKind,
-    code: Long,
-): AddonPollResult<Nothing> = AddonPollResult.Failed(kind, code)
+    detail: String,
+): AddonPollResult<Nothing> = AddonPollResult.Failed(kind, detail)
+
+private fun requireValidFailureDetail(detail: String) {
+    require(detail.isNotEmpty()) { "addon failure detail must not be empty" }
+    val encoded =
+        try {
+            detail.encodeToByteArray(throwOnInvalidSequence = true)
+        } catch (error: CharacterCodingException) {
+            throw IllegalArgumentException("addon failure detail must be valid UTF-8", error)
+        }
+    require(encoded.size <= MAXIMUM_HOST_FAILURE_DETAIL_BYTES) {
+        "addon failure detail exceeds $MAXIMUM_HOST_FAILURE_DETAIL_BYTES UTF-8 bytes"
+    }
+}

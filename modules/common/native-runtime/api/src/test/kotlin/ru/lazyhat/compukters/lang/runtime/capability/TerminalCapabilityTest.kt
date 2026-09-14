@@ -51,7 +51,10 @@ class TerminalCapabilityTest {
             val terminal = TerminalCapability(input, ByteArrayOutputStream())
 
             assertEquals(HostResponse.StringSuccess("A\ufffd"), terminal.invoke(request(2)))
-            assertEquals(HostResponse.Failure(HostFailureKind.END_OF_FILE, 0), terminal.invoke(request(2)))
+            assertEquals(
+                HostResponse.Failure(HostFailureKind.END_OF_FILE, "Terminal input reached end of file"),
+                terminal.invoke(request(2)),
+            )
         }
 
     @Test
@@ -62,7 +65,7 @@ class TerminalCapabilityTest {
 
             assertEquals(HostResponse.UnitSuccess, registry.dispatch(request(0, VmValue.StringValue("ok"))))
             assertEquals(
-                HostResponse.Failure(HostFailureKind.UNAVAILABLE, 0),
+                HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Host capability is unavailable"),
                 registry.dispatch(request(0, VmValue.StringValue("x"), namespace = "guest")),
             )
         }
@@ -107,11 +110,14 @@ class TerminalCapabilityTest {
                 )
 
             assertEquals(
-                HostResponse.Failure(HostFailureKind.OTHER, 3),
+                HostResponse.Failure(HostFailureKind.OTHER, "Terminal output limit was exceeded"),
                 outputLimited.invoke(request(0, VmValue.StringValue("abc"))),
             )
             assertEquals(0, output.size())
-            assertEquals(HostResponse.Failure(HostFailureKind.OTHER, 2), inputLimited.invoke(request(2)))
+            assertEquals(
+                HostResponse.Failure(HostFailureKind.OTHER, "Terminal input limit was exceeded"),
+                inputLimited.invoke(request(2)),
+            )
         }
 
     private fun request(

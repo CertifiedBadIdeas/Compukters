@@ -561,11 +561,22 @@ internal class FfmBridge private constructor(
         taskId: Int,
         requestId: Long,
         kind: Int,
-        code: Long,
-    ) = requireSuccess(
-        "resume failure",
-        resumeFailureHandle.invokeExact(handle, taskId, requestId, kind, code.toInt()) as Int,
-    )
+        detail: ByteArray,
+    ) {
+        Arena.ofConfined().use { callArena ->
+            requireSuccess(
+                "resume failure",
+                resumeFailureHandle.invokeExact(
+                    handle,
+                    taskId,
+                    requestId,
+                    kind,
+                    callArena.nativeBytes(detail),
+                    detail.size.toLong(),
+                ) as Int,
+            )
+        }
+    }
 
     override fun close(handle: Long) = requireSuccess("close", closeHandle.invokeExact(handle) as Int)
 
@@ -941,7 +952,7 @@ internal class FfmBridge private constructor(
                     terminalTextHandle =
                         downcall(FfmAbiFunction.TERMINAL_TEXT),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 14) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 15) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()

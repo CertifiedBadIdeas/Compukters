@@ -195,7 +195,7 @@ interface LowLevelVmBridge {
         taskId: Int,
         requestId: Long,
         kind: Int,
-        code: Long,
+        detail: ByteArray,
     )
 
     fun close(handle: Long)

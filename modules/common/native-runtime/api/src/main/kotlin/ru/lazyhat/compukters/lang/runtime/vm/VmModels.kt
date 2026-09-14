@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.lang.runtime.vm
 
+import java.nio.charset.CharacterCodingException
+
 data class CapabilityIdentity(
     val namespace: String,
     val name: String,
@@ -192,6 +194,22 @@ enum class HostFailureKind(
     OTHER(4),
 }
 
+const val MAXIMUM_HOST_FAILURE_DETAIL_BYTES: Int = 256
+
+internal fun encodeHostFailureDetail(detail: String): ByteArray {
+    require(detail.isNotEmpty()) { "host failure detail must not be empty" }
+    val bytes =
+        try {
+            detail.encodeToByteArray(throwOnInvalidSequence = true)
+        } catch (error: CharacterCodingException) {
+            throw IllegalArgumentException("host failure detail must be valid UTF-8", error)
+        }
+    require(bytes.size <= MAXIMUM_HOST_FAILURE_DETAIL_BYTES) {
+        "host failure detail exceeds $MAXIMUM_HOST_FAILURE_DETAIL_BYTES UTF-8 bytes"
+    }
+    return bytes
+}
+
 sealed interface VmOutcome {
     data object SliceExhausted : VmOutcome
 
@@ -247,8 +265,12 @@ sealed interface VmOutcome {
 
     data class HostFailed(
         val kind: HostFailureKind,
-        val code: Long,
-    ) : VmOutcome
+        val detail: String,
+    ) : VmOutcome {
+        init {
+            encodeHostFailureDetail(detail)
+        }
+    }
 
     data class CompilationRequested(
         val request: VmCompilationRequest,

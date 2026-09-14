@@ -301,8 +301,8 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
         taskId: Int,
         requestId: Long,
         kind: Int,
-        code: Long,
-    ) = requireSuccess("resume failure", JniNative.resumeFailure(handle, taskId, requestId, kind, code.toInt()))
+        detail: ByteArray,
+    ) = requireSuccess("resume failure", JniNative.resumeFailure(handle, taskId, requestId, kind, detail))
 
     override fun close(handle: Long) = requireSuccess("close", JniNative.close(handle))
 
@@ -521,7 +521,7 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
 
         fun open(library: Path): JniBridge {
             System.load(library.toAbsolutePath().normalize().toString())
-            if (JniNative.abiVersion() != 14) throw VmBridgeException("unsupported Compukter JNI ABI")
+            if (JniNative.abiVersion() != 15) throw VmBridgeException("unsupported Compukter JNI ABI")
             return JniBridge()
         }
     }

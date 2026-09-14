@@ -122,7 +122,7 @@ class PlaygroundApplication(
             }
 
             is PlaygroundExecution.HostFailure -> {
-                report(PlaygroundExit.HOST_FAILURE, "host failure: ${result.kind.name.lowercase()} (${result.code})")
+                report(PlaygroundExit.HOST_FAILURE, "host failure: ${result.kind.name.lowercase()}: ${result.detail}")
             }
 
             is PlaygroundExecution.Quota -> {

@@ -260,7 +260,7 @@ class VmSessionTest {
         bridge.outcomes += bytes(5, 7)
         bridge.outcomes += bytes(6, 7)
         bridge.outcomes += bytes(3, 1, long(4), long(3))
-        bridge.outcomes += bytes(7, 0, int(17))
+        bridge.outcomes += bytes(7, 0, text("Terminal input reached end of file"))
         bridge.outcomes += bytes(9)
 
         assertEquals(VmOutcome.SliceExhausted, session.advance(64, 64, Int.MAX_VALUE))
@@ -285,7 +285,10 @@ class VmSessionTest {
         assertEquals(VmOutcome.Crashed(GuestTrap.INVALID_ARGUMENT), session.advance(64, 64, Int.MAX_VALUE))
         assertEquals(VmOutcome.Faulted(VmFault.HANDLE_EXHAUSTED), session.advance(64, 64, Int.MAX_VALUE))
         assertEquals(VmOutcome.QuotaExhausted(QuotaKind.HOST_REQUESTS, 4, 3), session.advance(64, 64, Int.MAX_VALUE))
-        assertEquals(VmOutcome.HostFailed(HostFailureKind.END_OF_FILE, 17), session.advance(64, 64, Int.MAX_VALUE))
+        assertEquals(
+            VmOutcome.HostFailed(HostFailureKind.END_OF_FILE, "Terminal input reached end of file"),
+            session.advance(64, 64, Int.MAX_VALUE),
+        )
         assertEquals(VmOutcome.WaitingForTerminalEvent, session.advance(64, 64, Int.MAX_VALUE))
     }
 
@@ -408,7 +411,10 @@ class VmSessionTest {
         session.resume(VmHostRequestIdentity(5, 10), HostResponse.FloatSuccess(Float.fromBits(0x7fa1_2345)))
         session.resume(VmHostRequestIdentity(6, 11), HostResponse.BoolSuccess(true))
         session.resume(VmHostRequestIdentity(7, 12), HostResponse.StringSuccess("A\ud800B"))
-        session.resume(VmHostRequestIdentity(8, 13), HostResponse.Failure(HostFailureKind.END_OF_FILE, 17))
+        session.resume(
+            VmHostRequestIdentity(8, 13),
+            HostResponse.Failure(HostFailureKind.END_OF_FILE, "Terminal input reached end of file"),
+        )
 
         assertEquals(listOf(UnitResponse(11, 2, 7)), bridge.unitResponses)
         assertEquals(listOf(IntResponse(11, 3, 8, Int.MIN_VALUE)), bridge.intResponses)
@@ -421,7 +427,21 @@ class VmSessionTest {
         )
         assertEquals(listOf(BoolResponse(11, 6, 11, true)), bridge.boolResponses)
         assertEquals(listOf(StringResponse(11, 7, 12, "A\ud800B".toCharArray().toList())), bridge.stringResponses)
-        assertEquals(listOf(FailureResponse(11, 8, 13, 0, 17)), bridge.failures)
+        assertEquals(
+            listOf(FailureResponse(11, 8, 13, 0, "Terminal input reached end of file")),
+            bridge.failures,
+        )
+    }
+
+    @Test
+    fun `host failure details are non-empty valid UTF-8 and bounded`() {
+        assertFailsWith<IllegalArgumentException> { HostResponse.Failure(HostFailureKind.OTHER, "") }
+        assertFailsWith<IllegalArgumentException> {
+            HostResponse.Failure(HostFailureKind.OTHER, "x".repeat(MAXIMUM_HOST_FAILURE_DETAIL_BYTES + 1))
+        }
+        assertFailsWith<IllegalArgumentException> { HostResponse.Failure(HostFailureKind.OTHER, "\ud800") }
+
+        HostResponse.Failure(HostFailureKind.OTHER, "é".repeat(MAXIMUM_HOST_FAILURE_DETAIL_BYTES / 2))
     }
 
     @Test
@@ -818,9 +838,9 @@ class VmSessionTest {
             taskId: Int,
             requestId: Long,
             kind: Int,
-            code: Long,
+            detail: ByteArray,
         ) {
-            failures += FailureResponse(handle, taskId, requestId, kind, code)
+            failures += FailureResponse(handle, taskId, requestId, kind, detail.decodeToString())
         }
 
         override fun close(handle: Long) {
@@ -923,7 +943,7 @@ class VmSessionTest {
         val taskId: Int,
         val requestId: Long,
         val kind: Int,
-        val code: Long,
+        val detail: String,
     )
 
     private data class TerminalKeyInput(
@@ -1041,6 +1061,11 @@ private fun int(value: Int): ByteArray =
         .order(ByteOrder.LITTLE_ENDIAN)
         .putInt(value)
         .array()
+
+private fun text(value: String): ByteArray {
+    val bytes = value.encodeToByteArray()
+    return bytes(int(bytes.size), bytes)
+}
 
 private fun short(value: Int): ByteArray =
     ByteBuffer

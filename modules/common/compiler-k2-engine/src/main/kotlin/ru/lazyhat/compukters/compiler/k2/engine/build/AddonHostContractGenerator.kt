@@ -79,11 +79,16 @@ fun renderAddonHostContract(
         appendLine()
         appendLine("    public fun guestApi(anchor: Class<*>): AddonGuestApiBundle =")
         appendLine("        AddonGuestApiBundleCodec.decode(")
-        appendLine("            checkNotNull(anchor.getResourceAsStream(GUEST_API_RESOURCE)) { \"packaged addon Guest API bundle is missing\" }")
+        appendLine(
+            "            checkNotNull(anchor.getResourceAsStream(GUEST_API_RESOURCE)) { \"packaged addon Guest API bundle is missing\" }",
+        )
         appendLine("                .use { it.readBytes() },")
         appendLine("        ).also { bundle -> require(bundle.identity.module == \"${authoring.module}\") }")
         appendLine()
-        val handlerParameters = handlers.entries.joinToString { (capability, handlerName) -> "${capability.identity.name}Handler: $handlerName" }
+        val handlerParameters =
+            handlers.entries.joinToString { (capability, handlerName) ->
+                "${capability.identity.name}Handler: $handlerName"
+            }
         val handlerArguments = handlers.keys.joinToString { "${it.identity.name}Handler" }
         appendLine("    public fun host($handlerParameters): ProgramAddonHost = GeneratedAddonHost($handlerArguments)")
         appendLine("}")
@@ -101,11 +106,13 @@ fun renderAddonHostContract(
         authoring.capabilities.forEach { capability ->
             appendLine("            ${capability.identity.identityConstant()} -> dispatch${capability.identity.name.pascalCase()}(request)")
         }
-        appendLine("            else -> malformed(HostFailureKind.UNAVAILABLE)")
+        appendLine("            else -> unavailableCapability()")
         appendLine("        }")
         appendLine()
         authoring.capabilities.forEach { capability ->
-            appendLine("    private fun dispatch${capability.identity.name.pascalCase()}(request: ProgramAddonRequest): ProgramAddonDispatch =")
+            appendLine(
+                "    private fun dispatch${capability.identity.name.pascalCase()}(request: ProgramAddonRequest): ProgramAddonDispatch =",
+            )
             appendLine("        when (request.operation) {")
             bindings.getValue(capability.identity).sortedBy(AddonGuestApiBinding::operation).forEach { binding ->
                 val operation = schemas.getValue(binding.capability).operations[binding.operation]
@@ -132,13 +139,15 @@ fun renderAddonHostContract(
         appendLine("    ): ProgramAddonDispatch =")
         appendLine("        when (result) {")
         appendLine("            is AddonCallResult.Completed -> ProgramAddonDispatch.Completed(encode(result.value))")
-        appendLine("            is AddonCallResult.Failed -> ProgramAddonDispatch.Completed(HostResponse.Failure(result.kind, result.code))")
+        appendLine(
+            "            is AddonCallResult.Failed -> ProgramAddonDispatch.Completed(HostResponse.Failure(result.kind, result.detail))",
+        )
         appendLine("            is AddonCallResult.Pending -> {")
-        appendLine("                if (pending.size >= MAXIMUM_PENDING || identity in pending) return malformed(HostFailureKind.UNAVAILABLE)")
+        appendLine("                if (pending.size >= MAXIMUM_PENDING || identity in pending) return pendingUnavailable()")
         appendLine("                pending[identity] = {")
         appendLine("                    when (val completion = result.poll()) {")
         appendLine("                        is AddonPollResult.Completed -> encode(completion.value)")
-        appendLine("                        is AddonPollResult.Failed -> HostResponse.Failure(completion.kind, completion.code)")
+        appendLine("                        is AddonPollResult.Failed -> HostResponse.Failure(completion.kind, completion.detail)")
         appendLine("                        null -> null")
         appendLine("                    }")
         appendLine("                }")
@@ -166,7 +175,10 @@ fun renderAddonHostContract(
         appendLine()
         appendLine("    override fun close() {")
         appendLine("        pending.clear()")
-        handlers.keys.toList().asReversed().forEach { capability -> appendLine("        ${capability.identity.name}Handler.close()") }
+        handlers.keys
+            .toList()
+            .asReversed()
+            .forEach { capability -> appendLine("        ${capability.identity.name}Handler.close()") }
         appendLine("    }")
         appendLine("}")
         appendLine()
@@ -194,10 +206,19 @@ fun renderAddonHostContract(
         }
         appendLine("    )")
         appendLine("private const val MAXIMUM_PENDING: Int = 64")
-        appendLine("private const val FAILURE_MALFORMED_REQUEST: Long = 0L")
         appendLine()
-        appendLine("private fun malformed(kind: HostFailureKind = HostFailureKind.OTHER): ProgramAddonDispatch.Completed =")
-        appendLine("    ProgramAddonDispatch.Completed(HostResponse.Failure(kind, FAILURE_MALFORMED_REQUEST))")
+        appendLine("private fun malformed(): ProgramAddonDispatch.Completed =")
+        appendLine("    ProgramAddonDispatch.Completed(HostResponse.Failure(HostFailureKind.OTHER, \"Malformed addon request\"))")
+        appendLine()
+        appendLine("private fun unavailableCapability(): ProgramAddonDispatch.Completed =")
+        appendLine(
+            "    ProgramAddonDispatch.Completed(HostResponse.Failure(HostFailureKind.UNAVAILABLE, \"Addon capability is unavailable\"))",
+        )
+        appendLine()
+        appendLine("private fun pendingUnavailable(): ProgramAddonDispatch.Completed =")
+        appendLine(
+            "    ProgramAddonDispatch.Completed(HostResponse.Failure(HostFailureKind.UNAVAILABLE, \"Addon pending request limit was reached\"))",
+        )
     }
 }
 

@@ -51,7 +51,7 @@ class ActorProgramComputer(
     private val service: ProgramRuntimeActorService,
     private val lease: ProgramRuntimeActorLease,
     private val redstone: RedstoneHostPort,
-    private val sound: SoundHostPort = SoundHostPort { SoundCommitResult.Failed(HostFailureKind.UNAVAILABLE, 0) },
+    private val sound: SoundHostPort = SoundHostPort { SoundCommitResult.Failed(HostFailureKind.UNAVAILABLE, "Sound is unavailable") },
     private val addon: ProgramAddonHost = EmptyProgramAddonHost,
     private val stateSink: (ProgramRuntimeState) -> Unit = {},
 ) {
@@ -217,7 +217,7 @@ class ActorProgramComputer(
                             check(it != RedstoneCommitResult.Deferred) { "server redstone port must complete the world mutation" }
                         }
                     } catch (_: Exception) {
-                        RedstoneCommitResult.Failed(HostFailureKind.INPUT_OUTPUT, 0)
+                        RedstoneCommitResult.Failed(HostFailureKind.INPUT_OUTPUT, "Redstone output failed")
                     }
                 if (currentLifecycle != lifecycle || closeResult != null) return
                 pendingOutput = PendingOutput(reply.requestId, request.packed, result)
@@ -231,7 +231,7 @@ class ActorProgramComputer(
                             check(it != SoundCommitResult.Deferred) { "server sound port must complete the world mutation" }
                         }
                     } catch (_: Exception) {
-                        SoundCommitResult.Failed(HostFailureKind.INPUT_OUTPUT, 0)
+                        SoundCommitResult.Failed(HostFailureKind.INPUT_OUTPUT, "Sound output failed")
                     }
                 if (currentLifecycle != lifecycle || closeResult != null) return
                 pendingSound = PendingSound(reply.requestId, result)
@@ -247,7 +247,7 @@ class ActorProgramComputer(
                         try {
                             addon.dispatch(addonRequest)
                         } catch (_: Exception) {
-                            ProgramAddonDispatch.Completed(HostResponse.Failure(HostFailureKind.INPUT_OUTPUT, 0))
+                            ProgramAddonDispatch.Completed(HostResponse.Failure(HostFailureKind.INPUT_OUTPUT, "Addon request failed"))
                         }
                     if (result is ProgramAddonDispatch.Completed) {
                         pendingAddonCompletions += ProgramAddonCompletion(addonRequest.identity, result.response)

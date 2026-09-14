@@ -91,7 +91,7 @@ class VmSession private constructor(
             is HostResponse.FloatSuccess -> resumeFloat(identity, response.value)
             is HostResponse.BoolSuccess -> resumeBool(identity, response.value)
             is HostResponse.StringSuccess -> resumeString(identity, response.value)
-            is HostResponse.Failure -> resumeFailure(identity, response.kind, response.code)
+            is HostResponse.Failure -> resumeFailure(identity, response.kind, response.detail)
         }
     }
 
@@ -147,17 +147,20 @@ class VmSession private constructor(
     fun resumeFailure(
         identity: VmHostRequestIdentity,
         kind: HostFailureKind,
-        code: Long,
-    ) {
-        require(code in 0..UInt.MAX_VALUE.toLong()) { "host failure code must fit u32" }
-        bridge.resumeFailure(requireHandle(), identity.taskId, identity.requestId, kind.wireCode, code)
-    }
+        detail: String,
+    ) = bridge.resumeFailure(
+        requireHandle(),
+        identity.taskId,
+        identity.requestId,
+        kind.wireCode,
+        encodeHostFailureDetail(detail),
+    )
 
     fun resumeFailure(
         requestId: Long,
         kind: HostFailureKind,
-        code: Long,
-    ) = resumeFailure(VmHostRequestIdentity(1, requestId), kind, code)
+        detail: String,
+    ) = resumeFailure(VmHostRequestIdentity(1, requestId), kind, detail)
 
     fun commitTerminal(): Unit = bridge.terminalCommit(requireHandle())
 
@@ -609,7 +612,7 @@ private class WireDecoder(
             4 -> VmOutcome.Halted(optionalValue())
             5 -> VmOutcome.Crashed(guestTrap(u8()))
             6 -> VmOutcome.Faulted(vmFault(u8()))
-            7 -> VmOutcome.HostFailed(hostFailureKind(u8()), u32())
+            7 -> VmOutcome.HostFailed(hostFailureKind(u8()), text())
             9 -> VmOutcome.WaitingForTerminalEvent
             10 -> compilation(i64().also { require(it > 0) { "invalid native compilation token" } })
             11 -> VmOutcome.WaitingForHostQuota
