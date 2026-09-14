@@ -22,11 +22,11 @@ contracts without the Minecraft carrier.
 Built-in Guest Kotlin declarations are authored in `guest-platform` as separately versioned modules. Its build
 produces only the canonical base platform bundle consumed by both compilation and IDE analysis. Optional integrations
 own and build their Guest declarations as addon bundles against that base; `addons/create` owns the first such bundle.
-The public `ru.lazyhat.compukters.addon` Gradle plugin resolves an isolated builder, base bundle, and loader API from
-one independently versioned SDK release by Maven coordinate. The SDK version changes with its public compatibility
-boundary rather than every Compukters release. The plugin derives the wire schema and bindings from Guest Kotlin
-declarations, validates a checked-in selector lock, generates the typed JVM host contract, and packages the resulting
-`.cagb` in the independent addon JAR.
+The public `ru.lazyhat.compukters.addon` Gradle plugin resolves an isolated builder, base bundle, Minecraft-independent
+host API, and thin target adapter from one independently versioned SDK release by Maven coordinate. The SDK version
+changes with its public compatibility boundary rather than every Compukters release. The plugin derives the wire
+schema and bindings from Guest Kotlin declarations, validates a checked-in selector lock, generates the typed JVM host
+contract, and packages the resulting `.cagb` in the independent addon JAR.
 `platform-bundle` owns the base bundle model, codec, module graph, and default imports; `platform-k2` exposes that
 metadata to K2 without making the K2 implementation part of the platform format.
 Constant `Int` and qualified enum-entry defaults cross this bundle explicitly; compiler lowering materializes an
@@ -149,11 +149,13 @@ sources; it contains no executable addon JVM classes. Registration rejects dupli
 created host must expose the exact registered capability schema. The actor transfers immutable typed requests to
 the server thread, where the host may complete immediately or retain a bounded wait; completions resume the exact VM
 task on a later turn. The Minecraft 1.21.1 Create adapter and its Guest Kotlin declarations live in the standalone
-`addons/create` Gradle root. It consumes the public plugin, tooling, platform bundle, and NeoForge API exclusively as
-Maven coordinates. The public plugin module can publish the complete SDK to Maven Local, but the Compukters root does
-not own or invoke Create tasks. The base platform, shared Minecraft code, and 26.1 code therefore have no direct Create
-ownership. The adapter resolves only the six adjacent loaded positions and binds handles to exact block-entity
-identities, preventing replacement from silently rebinding a running Guest program.
+`addons/create` Gradle root. It consumes the public plugin, tooling, platform bundle, common host API, target adapter,
+and development mod exclusively as Maven coordinates. The API and adapter share the independent SDK version; the
+runtime-only development mod retains the product version. The public plugin module can publish the complete SDK to
+Maven Local, but the Compukters root does not own or invoke Create tasks. The base platform, shared Minecraft code, and
+26.1 code therefore have no direct Create ownership. The adapter resolves only the six adjacent loaded positions and
+binds handles to exact block-entity identities, preventing replacement from silently rebinding a running Guest
+program.
 
 `ProgramRuntimeHost` owns one current Rust `ComputerMachine`, advances it with bounded guest and maintenance budgets,
 commits terminal changes once per active server tick, and exposes typed full/delta states and failures through JDK 25
@@ -348,6 +350,7 @@ existing Gradle project paths and artifact names remain flat and stable.
 | `native-runtime-ffm` | Explicit JDK 25 FFM transport, native resource loading, and FFM integration evidence |
 | `native-runtime-jni` | Explicit Java 21 JNI transport, native resource loading, and JNI-to-C-ABI integration evidence |
 | `platform-bundle` | Canonical platform bundle model, codec, module graph, identities, and default imports |
+| `addon-api` | Minecraft-independent public host contracts and self-contained compile-only SDK artifact |
 | `addon-guest-api` | Loader-independent addon bundle model, codec, capability schemas, bindings, and admission limits |
 | `addon-gradle-plugin` | Public external-build DSL, generated-source wiring, ABI-lock workflow, and Maven-coordinate SDK boundary |
 | `addon-guest-api-fixture` | Test-only neutral addon bundle used by common compiler and IDE verification |
@@ -367,11 +370,14 @@ existing Gradle project paths and artifact names remain flat and stable.
 | `playground` | Standalone compile-and-run entry point with stdin and stdout |
 | `core` | Loader-independent server behavior and `ProgramRuntimeHost` |
 | `minecraft/shared/common` | Canonical loader-independent Minecraft sources, resources, and tests compiled against every supported game target |
+| `minecraft/shared/addon-neoforge-api` | Canonical public Minecraft registration adapter compiled into each supported target artifact |
 | `minecraft/shared/neoforge` | Canonical NeoForge integration sources, resources, and tests compiled against every supported loader target |
 | `v1_21_1-common` | Minecraft 1.21.1 compatibility adapters over the shared computer carrier |
+| `v1_21_1-addon-neoforge-api` | Thin NeoForge 1.21.1 addon SDK adapter |
 | `addons/create` | Standalone Gradle build for the independently packaged Create 6.0.x Guest API bundle, kinetic-device adapter, bounded host state, and focused tests |
 | `v1_21_1-neoforge` | NeoForge 1.21.1 compatibility adapters, Java 21 JNI packaging, and production archive |
 | `v26_1-common` | Minecraft 26.1 compatibility adapters over the shared computer carrier |
+| `v26_1-addon-neoforge-api` | Thin NeoForge 26.1.2 addon SDK adapter |
 | `v26_1-neoforge` | NeoForge 26.1 compatibility adapters, client UI, GameTests, resources, and production archive |
 | `host/compukter-vm` | Artifact verification, managed Rust execution runtime, and VM-owned versioned C ABI in its `ffi` workspace member |
 
