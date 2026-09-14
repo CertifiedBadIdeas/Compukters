@@ -20,11 +20,16 @@ import java.util.zip.ZipFile
 
 plugins {
     alias(libs.plugins.v1211)
+    alias(libs.plugins.commonConvention)
     alias(libs.plugins.minecraftSharedSourcesConvention)
     `maven-publish`
 }
 
 val addonSdkVersion = libs.versions.addon.sdk.get()
+
+architectury {
+    common("neoforge")
+}
 
 dependencies {
     compileOnly(projects.addonApi)

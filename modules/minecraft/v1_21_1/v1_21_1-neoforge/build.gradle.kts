@@ -32,6 +32,21 @@ plugins {
 
 val developmentModJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("developmentModJar")
 
+developmentModJar.configure {
+    doLast {
+        val archive = archiveFile.get().asFile
+        val adapterClass = "ru/lazyhat/compukters/api/addon/minecraft/CompuktersAddonRegistry.class"
+        val adapterBytes =
+            ZipFile(archive).use { zip ->
+                val entry = checkNotNull(zip.getEntry(adapterClass)) { "$adapterClass is missing from ${archive.name}" }
+                zip.getInputStream(entry).use { it.readBytes() }
+            }
+        check(!adapterBytes.toString(Charsets.ISO_8859_1).contains("net/minecraft/class_")) {
+            "$adapterClass was not transformed to the NeoForge development namespace"
+        }
+    }
+}
+
 publishing {
     publications {
         create<MavenPublication>("developmentMod") {
@@ -61,7 +76,7 @@ dependencies {
     implementation(projects.addonApi)
     shadowBundle(project(path = projects.addonApi.path)) { isTransitive = false }
     implementation(projects.v1211AddonNeoforgeApi)
-    shadowBundle(project(path = projects.v1211AddonNeoforgeApi.path)) { isTransitive = false }
+    shadowBundle(project(path = projects.v1211AddonNeoforgeApi.path, configuration = "transformProductionNeoForge"))
     implementation(projects.addonGuestApi)
     shadowBundle(project(path = projects.addonGuestApi.path)) { isTransitive = false }
     common(project(path = projects.v1211Common.path)) { isTransitive = false }
