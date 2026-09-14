@@ -27,7 +27,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 ### Addons and Create
 
 - Independently installed addon mods can provide typed Guest Kotlin APIs without becoming dependencies of Compukters.
-  The compiler and IDE expose only the addons available on the attached server.
+  A versioned Gradle SDK generates their stable ABI lock, typed host contract, capability schema, bindings and
+  packaged Guest API bundle from Kotlin declarations; addon authors do not maintain numeric operation IDs or wire
+  decoding. The compiler and IDE expose only the addons available on the attached server.
 - The separately installed Create addon supports Create 6.0.x on Minecraft 1.21.1 while the base Compukters mod remains
   usable without Create.
 - Its `create:kinetics` module reads exact `Float` speed, stress, and capacity values from adjacent speedometers and
