@@ -37,6 +37,7 @@ abstract class CompuktersAddonExtension
         val dependencies: ListProperty<String> = objects.listProperty(String::class.java).convention(listOf("stdlib:core"))
         val toolingCoordinate: Property<String> = objects.property(String::class.java)
         val platformCoordinate: Property<String> = objects.property(String::class.java)
+        val apiCoordinate: Property<String> = objects.property(String::class.java)
         val capabilities: NamedDomainObjectContainer<CompuktersAddonCapability> =
             objects.domainObjectContainer(CompuktersAddonCapability::class.java) { name ->
                 objects.newInstance(CompuktersAddonCapability::class.java, name)

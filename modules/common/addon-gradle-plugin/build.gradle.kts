@@ -42,12 +42,14 @@ tasks.test {
         tasks.named("publishAllPublicationsToAddonSdkRepository"),
         ":compiler-k2-engine:publishAddonToolingPublicationToAddonSdkRepository",
         ":guest-platform:publishAddonPlatformPublicationToAddonSdkRepository",
+        ":v1_21_1-neoforge:publishAddonApiPublicationToAddonSdkRepository",
     )
     systemProperty(
         "compukters.addon.sdk.repository",
         rootProject.layout.buildDirectory.dir("repositories/addon-sdk").get().asFile.absolutePath,
     )
     systemProperty("compukters.addon.sdk.version", project.version.toString())
+    systemProperty("compukters.addon.kotlin.version", libs.plugins.kotlin.get().version.requiredVersion)
 }
 
 publishing {

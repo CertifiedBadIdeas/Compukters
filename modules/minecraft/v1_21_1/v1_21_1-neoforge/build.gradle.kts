@@ -27,6 +27,26 @@ plugins {
     alias(libs.plugins.metadataConvention)
     alias(libs.plugins.minecraftSharedSourcesConvention)
     id("minecraft-gametest-convention")
+    `maven-publish`
+}
+
+val addonApiJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("developmentModJar")
+
+publishing {
+    publications {
+        create<MavenPublication>("addonApi") {
+            groupId = project.group.toString()
+            artifactId = "compukters-addon-api-neoforge-1.21.1"
+            version = rootProject.version.toString()
+            artifact(addonApiJar)
+        }
+    }
+    repositories {
+        maven {
+            name = "addonSdk"
+            url = rootProject.layout.buildDirectory.dir("repositories/addon-sdk").get().asFile.toURI()
+        }
+    }
 }
 
 loom {

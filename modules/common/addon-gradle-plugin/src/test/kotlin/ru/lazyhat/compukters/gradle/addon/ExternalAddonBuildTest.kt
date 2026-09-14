@@ -35,6 +35,7 @@ class ExternalAddonBuildTest {
         try {
             val repository = Path.of(requireNotNull(System.getProperty("compukters.addon.sdk.repository")))
             val sdkVersion = requireNotNull(System.getProperty("compukters.addon.sdk.version"))
+            val kotlinVersion = requireNotNull(System.getProperty("compukters.addon.kotlin.version"))
             project.resolve("settings.gradle.kts").writeText(
                 """
                 pluginManagement {
@@ -44,7 +45,10 @@ class ExternalAddonBuildTest {
                     }
                 }
                 dependencyResolutionManagement {
-                    repositories { maven { url = uri(${repository.toUri().toString().quoted()}) } }
+                    repositories {
+                        maven { url = uri(${repository.toUri().toString().quoted()}) }
+                        mavenCentral()
+                    }
                 }
                 rootProject.name = "external-addon"
                 """.trimIndent(),
@@ -53,6 +57,7 @@ class ExternalAddonBuildTest {
                 """
                 plugins {
                     java
+                    id("org.jetbrains.kotlin.jvm") version "$kotlinVersion"
                     id("ru.lazyhat.compukters.addon") version "$sdkVersion"
                 }
 

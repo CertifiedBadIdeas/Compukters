@@ -17,38 +17,92 @@
  */
 
 import net.fabricmc.loom.task.RemapJarTask
+import org.jmailen.gradle.kotlinter.tasks.ConfigurableKtLintTask
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.zip.ZipFile
 
 plugins {
-    alias(libs.plugins.neoforgeAddon1211Convention)
-    alias(libs.plugins.addonGuestApiConvention)
+    id("org.jetbrains.kotlin.jvm")
+    id("dev.architectury.loom")
+    id("architectury-plugin")
+    id("org.jmailen.kotlinter")
+    id("ru.lazyhat.compukters.addon")
+}
+
+group = "ru.lazyhat.compukters"
+val addonSdkVersion = providers.gradleProperty("compuktersAddonSdkVersion").orElse("0.5.0")
+version = "1.21.1-neoforge-${addonSdkVersion.get()}"
+
+kotlin {
+    jvmToolchain(21)
+    compilerOptions.jvmTarget.set(JvmTarget.JVM_21)
+}
+
+java {
+    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+architectury {
+    minecraft = "1.21.1"
+    platformSetupLoomIde()
+    neoForge()
+}
+
+compuktersAddon {
+    addon.set("create")
+    module.set("kinetics")
+    dependencies.set(listOf("stdlib:core", "stdlib:ranges"))
+    capability("kinetics")
 }
 
 repositories {
-    maven("https://maven.createmod.net") {
-        name = "Create"
+    providers.gradleProperty("compuktersAddonSdkRepository").orNull?.let { repository ->
+        maven { url = uri(repository) }
     }
-    maven("https://maven.ithundxr.dev/snapshots") {
-        name = "Registrate"
-    }
-    maven("https://raw.githubusercontent.com/Fuzss/modresources/main/maven") {
-        name = "NeoForgeConfigApiPort"
-    }
+    mavenCentral()
+    maven("https://maven.architectury.dev/")
+    maven("https://maven.fabricmc.net/")
+    maven("https://maven.neoforged.net/releases/")
+    maven("https://maven.parchmentmc.org/")
+    maven("https://api.modrinth.com/maven")
+    maven("https://maven.createmod.net")
+    maven("https://maven.ithundxr.dev/snapshots")
+    maven("https://raw.githubusercontent.com/Fuzss/modresources/main/maven")
 }
 
+val compuktersApi = "ru.lazyhat.compukters:compukters-addon-api-neoforge-1.21.1:${addonSdkVersion.get()}"
+
 dependencies {
-    implementation(projects.v1211Common)
-    modImplementation(variantOf(libs.create.v1211) { classifier("slim") }) {
-        isTransitive = false
+    minecraft("net.minecraft:minecraft:1.21.1")
+    mappings(
+        loom.layered {
+            officialMojangMappings()
+            parchment("org.parchmentmc.data:parchment-1.21.1:2024.11.17@zip")
+        },
+    )
+    neoForge("net.neoforged:neoforge:21.1.250")
+
+    modRuntimeOnly(compuktersApi)
+    testImplementation(compuktersApi)
+    modImplementation("com.simibubi.create:create-1.21.1:6.0.10-280:slim") { isTransitive = false }
+    modImplementation("net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1")
+    modCompileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-1.21.1:1.0.6")
+    modRuntimeOnly("dev.engine-room.flywheel:flywheel-neoforge-1.21.1:1.0.6")
+    modImplementation("com.tterrag.registrate:Registrate:MC1.21-1.3.0+67")
+
+    listOf(
+        "org.jetbrains.kotlin:kotlin-stdlib:2.4.10",
+        "io.github.oshai:kotlin-logging-jvm:8.0.4",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.11.0",
+        "org.tukaani:xz:1.10",
+        "org.tomlj:tomlj:1.1.1",
+        "org.antlr:antlr4-runtime:4.11.1",
+    ).forEach { dependency ->
+        forgeRuntimeLibrary(dependency) { isTransitive = false }
     }
-    modImplementation(libs.ponder.v1211)
-    modCompileOnly(libs.flywheel.api.v1211)
-    modRuntimeOnly(libs.flywheel.v1211)
-    modImplementation(libs.registrate.v1211)
-    testImplementation(projects.compilerArtifact)
-    testImplementation(projects.compilerClient)
-    testImplementation(projects.compilerK2)
-    testImplementation(projects.platformBundle)
+
     testImplementation(kotlin("test"))
 }
 
@@ -56,54 +110,32 @@ loom {
     mods {
         maybeCreate("compukters_create").sourceSet("main")
     }
-}
-
-val createKineticsAddonBundle = layout.buildDirectory.file("addon-guest-api/${project.name}.cagb")
-val compilerWorkerJar = configurations.create("compilerWorkerJar") {
-    isCanBeConsumed = false
-    isCanBeResolved = true
-}
-
-dependencies {
-    add(compilerWorkerJar.name, project(path = projects.compilerK2.path)) {
-        isTransitive = false
+    runs {
+        named("client") {
+            runDir("run/client")
+            ideConfigGenerated(true)
+            programArgs("--username", "DevA")
+        }
+        named("server") {
+            runDir("run/server")
+            ideConfigGenerated(true)
+        }
     }
 }
 
 tasks.processResources {
-    dependsOn("assembleAddonGuestApiBundle")
     inputs.property("addonVersion", project.version)
     filesMatching("META-INF/neoforge.mods.toml") {
         expand("addon_version" to project.version)
     }
-    from(createKineticsAddonBundle) {
-        into("META-INF/compukters/addons")
-        rename { "create-kinetics.cagb" }
-    }
 }
 
-tasks.withType<Test>().configureEach {
-    dependsOn("assembleAddonGuestApiBundle", compilerWorkerJar)
-    inputs.file(createKineticsAddonBundle)
-    inputs.files(compilerWorkerJar)
-    doFirst {
-        systemProperty("compukters.test.createKineticsGuestApi", createKineticsAddonBundle.get().asFile.absolutePath)
-        systemProperty("compukters.test.compilerWorkerJar", compilerWorkerJar.singleFile.absolutePath)
-    }
-}
-
-val createKineticsConformanceArtifact = layout.buildDirectory.file("generated/conformance/create-kinetics.cpkt")
-tasks.register<Test>("generateCreateKineticsConformanceArtifact") {
-    description = "Compiles the deterministic Create kinetics program for GameTest conformance."
-    group = "verification"
+tasks.test {
     useJUnitPlatform()
-    testClassesDirs = sourceSets.test.get().output.classesDirs
-    classpath = sourceSets.test.get().runtimeClasspath
-    filter.includeTestsMatching("*Create kinetics program lowers deterministically for GameTest conformance*")
-    outputs.file(createKineticsConformanceArtifact)
-    doFirst {
-        systemProperty("compukter.vm.createKineticsArtifact", createKineticsConformanceArtifact.get().asFile.absolutePath)
-    }
+}
+
+tasks.withType<ConfigurableKtLintTask>().configureEach {
+    exclude { it.file.path.contains("build/generated") }
 }
 
 tasks.jar {
@@ -117,7 +149,7 @@ val productionJar = tasks.named<RemapJarTask>("remapJar") {
 
 val verifyProductionJar = tasks.register("verifyProductionJar") {
     group = "verification"
-    description = "Checks that the standalone Create addon contains its mod entry point and Guest API bundle only once."
+    description = "Checks that the standalone Create addon contains only its own implementation and Guest API bundle."
     dependsOn(productionJar)
     inputs.file(productionJar.flatMap { it.archiveFile })
     doLast {
@@ -132,7 +164,9 @@ val verifyProductionJar = tasks.register("verifyProductionJar") {
             check(entries.count { it == required } == 1) { "$required is missing or duplicated in ${archive.name}" }
         }
         check(entries.none { it.startsWith("com/simibubi/create/") }) { "Create implementation classes leaked into ${archive.name}" }
-        check(entries.none { it.startsWith("ru/lazyhat/compukters/impl/") }) { "base Compukters implementation leaked into ${archive.name}" }
+        check(entries.none { it.startsWith("ru/lazyhat/compukters/api/") }) { "Compukters API classes leaked into ${archive.name}" }
+        check(entries.none { it.startsWith("ru/lazyhat/compukters/core/") }) { "Compukters core classes leaked into ${archive.name}" }
+        check(entries.none { it.startsWith("ru/lazyhat/compukters/impl/") }) { "Compukters implementation leaked into ${archive.name}" }
     }
 }
 
