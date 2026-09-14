@@ -121,7 +121,7 @@ fun main(args: Array<String>) {
     val base = PlatformBundleCodec.decode(Files.readAllBytes(platformInput))
     val authoring = AddonAuthoringContract.parse(descriptor.readLines())
     val currentLock = if (Files.exists(abiLock)) AddonAbiLock.parse(abiLock.readLines()) else AddonAbiLock.empty()
-    val resolved = resolveAddonContract(sourceRoot, authoring, currentLock)
+    val resolved = resolveAddonContract(sourceRoot, authoring, currentLock, base.modules.map(PlatformModule::id))
     val updateLock = arguments["--update-abi-lock"]?.toBooleanStrict() ?: false
     if (updateLock) {
         writeAtomically(abiLock, resolved.expectedLock.render().encodeToByteArray())

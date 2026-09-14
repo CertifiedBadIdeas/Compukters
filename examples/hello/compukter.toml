@@ -1,5 +1,2 @@
-format = 1
+format = 3
 name = "hello"
-
-[modules]
-std = { terminal = 1 }

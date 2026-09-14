@@ -75,21 +75,18 @@ dependencyResolutionManagement {
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.10"
-    id("ru.lazyhat.compukters.addon") version "0.1.0"
+    id("ru.lazyhat.compukters.addon") version "0.2.0"
     // Apply and configure Loom/NeoForge as usual for the target mod.
 }
 
 compuktersAddon {
-    module(
-        addon = "example",
-        name = "sensors",
-        dependencies = listOf("stdlib:core"),
-    )
+    register("example")
 }
 ```
 
-The Guest module version defaults to the Gradle project's `version`; pass `version = "..."` only when those versions
-intentionally differ. Addon and module names remain separate because one addon may publish several module groups.
+The Guest API version defaults to the Gradle project's `version`; pass `version = "..."` only when those versions
+intentionally differ. One registered addon produces one atomic Guest API bundle. Its packages can still be organized
+freely beneath the addon namespace, while base-platform dependencies and capability wiring remain SDK internals.
 
 The plugin adds the Minecraft-independent API and the NeoForge 1.21.1 adapter belonging to the selected SDK release as
 `compileOnly`. A build targeting another supported version can set `adapterApiCoordinate` to the matching coordinate.
@@ -115,34 +112,18 @@ private object SensorBindings {
 }
 ```
 
-For one capability the SDK infers the single external binding owner. If a Guest module exposes several capabilities,
-identify each owner explicitly:
-
-```kotlin
-compuktersAddon {
-    module(
-        addon = "example",
-        name = "devices",
-        capabilities = mapOf(
-            "sensors" to "example.devices.SensorBindings",
-            "motors" to "example.devices.MotorBindings",
-        ),
-    )
-}
-```
-
 The build derives operation signatures, asynchronous host operations, stable numeric selectors, capability schemas,
 bindings and request decoding. Addon source never contains those wire details.
 
 ## Implement and register the host
 
-`assembleCompuktersAddon` generates a typed contract in the Guest module package. For the example above it provides
-`SensorsCapabilityHandler` and `SensorsAddonContract`:
+`assembleCompuktersAddon` generates a typed contract in the addon package. For the example above it provides
+`ExampleCapabilityHandler` and `ExampleAddonContract`:
 
 ```kotlin
-CompuktersAddonRegistry.register(SensorsAddonContract.guestApi(MyAddon::class.java)) { computer ->
-    SensorsAddonContract.host(
-        object : SensorsCapabilityHandler {
+CompuktersAddonRegistry.register(ExampleAddonContract.guestApi(MyAddon::class.java)) { computer ->
+    ExampleAddonContract.host(
+        object : ExampleCapabilityHandler {
             override fun temperature(): AddonCallResult<Float> =
                 addonCompleted(readTemperature(computer.level, computer.position))
         },
@@ -159,8 +140,7 @@ must wait. The generated host validates and decodes requests and routes completi
 task.
 
 Call registration from your own NeoForge mod initialization. The generated `guestApi(...)` loader reads the bundle
-from the addon's JAR; the plugin automatically packages it as
-`META-INF/compukters/addons/<addon>-<module>.cagb`.
+from the addon's JAR; the plugin automatically packages it as `META-INF/compukters/addons/<addon>.cagb`.
 
 ## Preserve the ABI lock
 

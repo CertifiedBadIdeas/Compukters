@@ -61,8 +61,8 @@ internal class IdeClientServicesTest {
     @Test
     fun `analysis receives every addon advertised by the attached target`() {
         val selected = bundle("selected:module", 1)
-        val available = bundle("fixture:telemetry", 2)
-        val module = ResolvedModule(ModuleId("fixture", "telemetry"), ApiMajor(1), "1.0.0", available.identity.hash)
+        val available = bundle("fixture", 2)
+        val module = ResolvedModule(ModuleId("fixture", "api"), ApiMajor(1), "1.0.0", available.identity.hash)
         val toolchain = ToolchainLockIdentity("2.4.0", "2.4", 1u, 2u, 1u, hash(3), hash(4))
         val target = TargetCompileProfile(toolchain, listOf(module), WorkerLimits(), listOf(available))
 
@@ -192,14 +192,14 @@ internal class IdeClientServicesTest {
             val addonDescriptor =
                 modulesById
                     .getValue("std:terminal")
-                    .copy(id = PlatformModuleId("fixture", "telemetry"), version = "1.0.0")
-            val addonIdentity = ResolvedModule(ModuleId("fixture", "telemetry"), ApiMajor(1), "1.0.0", addonHash)
+                    .copy(id = PlatformModuleId("fixture", "api"), version = "1.0.0")
+            val addonIdentity = ResolvedModule(ModuleId("fixture", "api"), ApiMajor(1), "1.0.0", addonHash)
             val admittedAddon =
                 ProductionIdeApplicationFactory.admittedAnalysisModules(
                     platform,
                     listOf(ResolvedPlatformModule(addonIdentity, addonDescriptor, direct = true)),
                 )
-            assertEquals(addonHash, admittedAddon.single { it.identity.name == "fixture:telemetry" }.identity.hash)
+            assertEquals(addonHash, admittedAddon.single { it.identity.name == "fixture:api" }.identity.hash)
 
             val mismatch = compiler.manifest.identity.copy(platformAbi = Hash256.zero())
             assertFailsWith<IllegalStateException> {

@@ -113,12 +113,12 @@ class PlatformCatalogTest {
         val addon = addonBundle(platform.modules.single { it.id.toString() == "stdlib:core" }.id)
         val payload =
             TrustedBundlePayload(
-                TrustedBundleIdentity.of(addon.identity.module, Hash256.of(addon.identity.contentHash.toByteArray())),
+                TrustedBundleIdentity.of(addon.identity.id, Hash256.of(addon.identity.contentHash.toByteArray())),
                 BinaryValue.of(AddonGuestApiBundleCodec.encode(addon)),
             )
         val external =
             ru.lazyhat.compukters.ide.project.ResolvedModule(
-                ModuleId.parse(addon.identity.module),
+                ModuleId.parse(addon.moduleDescriptor.id.toString()),
                 ApiMajor(1),
                 addon.identity.version,
                 payload.identity.hash,
@@ -183,7 +183,7 @@ class PlatformCatalogTest {
     }
 
     private fun addonBundle(core: PlatformModuleId): ru.lazyhat.compukters.addon.api.AddonGuestApiBundle {
-        val id = PlatformModuleId("fixture", "meters")
+        val id = PlatformModuleId("fixture", "api")
         val path = "fixture/meters/Meters.kt"
         val source = "package fixture.meters\nprivate object Bindings { external fun read(value: Int): Int }\n"
         val capability = AddonCapabilityIdentity("fixture", "meters", 1, 0)

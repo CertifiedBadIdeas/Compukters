@@ -35,7 +35,7 @@ class AnalysisProfileIdentityTest {
         assertNotEquals(base, identity(lock = byteArrayOf(2)))
         assertNotEquals(base, identity(toolchain = toolchain(payload = 9)))
         assertNotEquals(base, identity(settings = AnalysisSemanticSettings("2.4", "2.4", true)))
-        assertNotEquals(base, identity(availableAddonModules = listOf(AnalysisModuleIdentity("fixture:telemetry", hash(4)))))
+        assertNotEquals(base, identity(availableAddonModules = listOf(AnalysisModuleIdentity("fixture", hash(4)))))
         assertNotEquals(
             base,
             identity(modules = listOf(AnalysisModuleIdentity("std.fs", hash(3)), AnalysisModuleIdentity("std.terminal", hash(1)))),

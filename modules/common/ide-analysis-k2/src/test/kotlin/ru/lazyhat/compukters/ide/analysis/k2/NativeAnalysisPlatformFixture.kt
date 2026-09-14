@@ -76,7 +76,7 @@ internal fun testAdmittedPlatform(
         if (includeAddonBundle) {
             listOf(
                 AdmittedAnalysisBundle(
-                    AnalysisModuleIdentity(addon.identity.module, Hash256.of(addon.identity.contentHash.toByteArray())),
+                    AnalysisModuleIdentity(addon.identity.id, Hash256.of(addon.identity.contentHash.toByteArray())),
                     BinaryValue.of(addonBytes),
                 ),
             )

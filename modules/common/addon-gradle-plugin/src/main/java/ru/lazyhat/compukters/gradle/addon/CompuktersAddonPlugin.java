@@ -30,7 +30,7 @@ import org.gradle.api.tasks.JavaExec;
 import org.gradle.api.tasks.TaskProvider;
 
 public final class CompuktersAddonPlugin implements Plugin<Project> {
-    private static final Pattern IDENTITY = Pattern.compile("[a-z][a-z0-9_-]*");
+    private static final Pattern IDENTITY = Pattern.compile("[a-z][a-z0-9_-]{0,63}");
 
     @Override
     public void apply(Project project) {
@@ -38,7 +38,7 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
         String sdkVersion = implementationVersion != null ? implementationVersion : project.getRootProject().getVersion().toString();
         CompuktersAddonExtension extension =
                 project.getExtensions().create("compuktersAddon", CompuktersAddonExtension.class);
-        extension.getModuleVersion().convention(project.provider(() -> project.getVersion().toString()));
+        extension.getVersion().convention(project.provider(() -> project.getVersion().toString()));
         extension.getToolingCoordinate().convention("ru.lazyhat.compukters:compukters-addon-tooling:" + sdkVersion);
         extension.getPlatformCoordinate().convention("ru.lazyhat.compukters:compukters-guest-platform:" + sdkVersion + "@cpb");
         extension.getCommonApiCoordinate().convention("ru.lazyhat.compukters:compukters-addon-api:" + sdkVersion);
@@ -62,37 +62,14 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
         TaskProvider<?> generateDescriptor = project.getTasks().register("generateCompuktersAddonDescriptor", task -> {
             task.setGroup("build");
             task.setDescription("Generates the internal Compukters addon descriptor from the public Gradle DSL.");
-            task.getInputs().property("addon", extension.getAddon());
-            task.getInputs().property("module", extension.getModule());
-            task.getInputs().property("moduleVersion", extension.getModuleVersion());
-            task.getInputs().property("dependencies", extension.getDependencies());
-            task.getInputs().property("capabilities", project.provider(() -> extension.getCapabilities().stream()
-                    .map(capability -> capability.getName() + ":" + capability.getAbiMajor().get() + ":"
-                            + capability.getAbiMinor().get() + ":" + capability.getBindingOwner().getOrElse(""))
-                    .sorted()
-                    .toList()));
+            task.getInputs().property("addon", extension.getId());
+            task.getInputs().property("addonVersion", extension.getVersion());
             task.getOutputs().file(descriptor);
             task.doLast(ignored -> {
-                String addon = validatedIdentity(extension.getAddon().get(), "addon");
-                String module = validatedIdentity(extension.getModule().get(), "module");
-                if (extension.getCapabilities().isEmpty()) {
-                    throw new IllegalArgumentException("compuktersAddon must declare at least one capability");
-                }
+                String addon = validatedIdentity(extension.getId().get(), "addon");
                 StringBuilder content = new StringBuilder();
                 content.append("addon ").append(addon).append('\n');
-                content.append("module ").append(addon).append(':').append(module).append('\n');
-                content.append("version ").append(extension.getModuleVersion().get()).append('\n');
-                content.append("dependencies ").append(String.join(" ", extension.getDependencies().get())).append('\n');
-                extension.getCapabilities().forEach(capability -> {
-                    content.append("capability ").append(addon).append(' ')
-                            .append(validatedIdentity(capability.getName(), "capability")).append(' ')
-                            .append(capability.getAbiMajor().get()).append(' ')
-                            .append(capability.getAbiMinor().get());
-                    if (capability.getBindingOwner().isPresent()) {
-                        content.append(' ').append(capability.getBindingOwner().get());
-                    }
-                    content.append('\n');
-                });
+                content.append("version ").append(extension.getVersion().get()).append('\n');
                 var output = descriptor.get().getAsFile();
                 if (!output.getParentFile().isDirectory() && !output.getParentFile().mkdirs()) {
                     throw new IllegalStateException("Cannot create " + output.getParent());
@@ -172,7 +149,7 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
                     copy.setDuplicatesStrategy(DuplicatesStrategy.FAIL);
                     copy.from(bundle, spec -> {
                         spec.into("META-INF/compukters/addons");
-                        spec.rename(ignored -> extension.getAddon().get() + "-" + extension.getModule().get() + ".cagb");
+                        spec.rename(ignored -> extension.getId().get() + ".cagb");
                     });
                 });
         project.getTasks().matching(task -> task.getName().equals("check"))
@@ -205,7 +182,7 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
     private static String validatedIdentity(String value, String kind) {
         if (!IDENTITY.matcher(value).matches()) {
             throw new IllegalArgumentException(
-                    "Compukters addon " + kind + " must match [a-z][a-z0-9_-]*: " + value);
+                    "Compukters addon " + kind + " must match [a-z][a-z0-9_-]{0,63}: " + value);
         }
         return value;
     }

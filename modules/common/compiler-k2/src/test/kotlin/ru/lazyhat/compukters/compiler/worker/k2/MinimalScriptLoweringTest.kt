@@ -459,7 +459,7 @@ class MinimalScriptLoweringTest {
                     .single { capability ->
                         val module = artifact.modules.first()
                         module.strings[capability.namespace.value.toInt()].toString() == "fixture" &&
-                            module.strings[capability.name.value.toInt()].toString() == "kinetics"
+                            module.strings[capability.name.value.toInt()].toString() == "fixture"
                     }.operationCount,
             )
             assertEquals(10, opcodes.count { it == 0xe9 }, "every addon access must yield its VM task: $opcodes")
@@ -2025,7 +2025,10 @@ class MinimalScriptLoweringTest {
             } else {
                 null
             }
-        val addonIdentity = addon?.let { TrustedBundleIdentity.of(it.identity.module, Hash256.of(it.identity.contentHash.toByteArray())) }
+        val addonModuleIdentity =
+            addon?.let {
+                TrustedBundleIdentity.of(it.moduleDescriptor.id.toString(), Hash256.of(it.identity.contentHash.toByteArray()))
+            }
         return CompileRequest(
             RequestId.of(1u),
             sources.map { (path, source) ->
@@ -2043,11 +2046,11 @@ class MinimalScriptLoweringTest {
                             .toByteArray(),
                     ),
                 )
-            } + listOfNotNull(addonIdentity),
+            } + listOfNotNull(addonModuleIdentity),
             addon?.let { bundle ->
                 listOf(
                     TrustedBundlePayload(
-                        requireNotNull(addonIdentity),
+                        TrustedBundleIdentity.of(bundle.identity.id, requireNotNull(addonModuleIdentity).hash),
                         BinaryValue.of(AddonGuestApiBundleCodec.encode(bundle)),
                     ),
                 )

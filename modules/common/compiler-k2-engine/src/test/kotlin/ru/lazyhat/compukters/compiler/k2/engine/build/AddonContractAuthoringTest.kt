@@ -28,7 +28,7 @@ import kotlin.test.assertFailsWith
 
 class AddonContractAuthoringTest {
     @Test
-    fun `single capability infers its binding owner from external declarations`() =
+    fun `addon derives its internal module and capability from one identity`() =
         withSources(
             """
             package fixture.kinetics
@@ -41,10 +41,7 @@ class AddonContractAuthoringTest {
                 AddonAuthoringContract.parse(
                     """
                     addon fixture
-                    module fixture:kinetics
                     version 1.0.0
-                    dependencies stdlib:core
-                    capability fixture kinetics 1 0
                     """.trimIndent().lines(),
                 )
 
@@ -55,6 +52,13 @@ class AddonContractAuthoringTest {
                 resolved.contract.bindings
                     .single()
                     .symbol,
+            )
+            assertEquals("fixture:api", resolved.contract.module.toString())
+            assertEquals(
+                "fixture",
+                resolved.contract.schemas
+                    .single()
+                    .identity.name,
             )
         }
 
@@ -161,10 +165,7 @@ class AddonContractAuthoringTest {
         AddonAuthoringContract.parse(
             """
             addon fixture
-            module fixture:kinetics
             version 1.0.0
-            dependencies stdlib:core
-            capability fixture kinetics 1 0 fixture.kinetics.Bindings
             """.trimIndent().lines(),
         )
 

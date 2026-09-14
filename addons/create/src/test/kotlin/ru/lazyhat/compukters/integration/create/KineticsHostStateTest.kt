@@ -18,7 +18,7 @@
 
 package ru.lazyhat.compukters.integration.create
 
-import create.kinetics.KineticsAddonContract
+import create.CreateAddonContract
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
@@ -38,7 +38,7 @@ class KineticsHostStateTest {
     fun `speedometer handle is stable and its Float wait completes after a change`() {
         val speedometer = FakeSpeedometer(16f)
         val state = KineticsHostState { side, kind -> if (side == 0 && kind == PeripheralKind.SPEEDOMETER) speedometer else null }
-        val host = KineticsAddonContract.host(state)
+        val host = CreateAddonContract.host(state)
 
         val firstHandle = host.completed(0, 0).intValue()
         val secondHandle = host.completed(0, 0).intValue()
@@ -69,7 +69,7 @@ class KineticsHostStateTest {
                     else -> null
                 }
             }
-        val host = KineticsAddonContract.host(state)
+        val host = CreateAddonContract.host(state)
         val stressHandle = host.completed(3, 2).intValue()
         val controllerHandle = host.completed(7, 1).intValue()
 
@@ -91,7 +91,7 @@ class KineticsHostStateTest {
         val second = FakeSpeedometer(32f)
         var current = first
         val state = KineticsHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) current else null }
-        val host = KineticsAddonContract.host(state)
+        val host = CreateAddonContract.host(state)
         val oldHandle = host.completed(0, 0).intValue()
         val wait = request(2, oldHandle, requestId = 12)
         assertEquals(ProgramAddonDispatch.Pending, host.dispatch(wait))
@@ -116,7 +116,7 @@ class KineticsHostStateTest {
     fun `missing wrong and unknown attachments fail without selecting another device`() {
         val stressometer = FakeStressometer(4f, 8f)
         val state = KineticsHostState { side, kind -> if (side == 3 && kind == PeripheralKind.STRESSOMETER) stressometer else null }
-        val host = KineticsAddonContract.host(state)
+        val host = CreateAddonContract.host(state)
 
         assertEquals(
             HostResponse.Failure(HostFailureKind.UNAVAILABLE, "No matching Create kinetic device is attached on that side"),
@@ -137,7 +137,7 @@ class KineticsHostStateTest {
     fun `Float responses preserve non-finite values and signed zero changes`() {
         val speedometer = FakeSpeedometer(Float.POSITIVE_INFINITY)
         val state = KineticsHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) speedometer else null }
-        val host = KineticsAddonContract.host(state)
+        val host = CreateAddonContract.host(state)
         val handle = host.completed(0, 0).intValue()
 
         assertEquals(Float.POSITIVE_INFINITY.toBits(), assertIs<HostResponse.FloatSuccess>(host.completed(1, handle)).value.toBits())
@@ -153,7 +153,7 @@ class KineticsHostStateTest {
     @Test
     fun `handle and wait limits are bounded and reset cancels retained state`() {
         val state = KineticsHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) FakeSpeedometer(0f) else null }
-        val host = KineticsAddonContract.host(state)
+        val host = CreateAddonContract.host(state)
         repeat(64) { assertIs<HostResponse.IntSuccess>(host.completed(0, 0)) }
         assertEquals(
             HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Create kinetic device handle limit was reached"),
@@ -163,7 +163,7 @@ class KineticsHostStateTest {
         host.reset()
         val speedometer = FakeSpeedometer(0f)
         val waiting = KineticsHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) speedometer else null }
-        val waitingHost = KineticsAddonContract.host(waiting)
+        val waitingHost = CreateAddonContract.host(waiting)
         val handle = waitingHost.completed(0, 0).intValue()
         repeat(64) { requestId ->
             assertEquals(ProgramAddonDispatch.Pending, waitingHost.dispatch(request(2, handle, requestId = 1_000L + requestId)))
@@ -187,7 +187,7 @@ class KineticsHostStateTest {
             dispatch(
                 ProgramAddonRequest(
                     VmHostRequestIdentity(1, nextRequestId++),
-                    CREATE_KINETICS,
+                    CREATE,
                     operation,
                     arguments.map(VmValue::I32),
                 ),
@@ -198,7 +198,7 @@ class KineticsHostStateTest {
         operation: Int,
         argument: Int,
         requestId: Long,
-    ) = ProgramAddonRequest(VmHostRequestIdentity(1, requestId), CREATE_KINETICS, operation, listOf(VmValue.I32(argument)))
+    ) = ProgramAddonRequest(VmHostRequestIdentity(1, requestId), CREATE, operation, listOf(VmValue.I32(argument)))
 
     private fun HostResponse.intValue(): Int = assertIs<HostResponse.IntSuccess>(this).value
 
@@ -241,7 +241,7 @@ class KineticsHostStateTest {
     }
 
     private companion object {
-        val CREATE_KINETICS = CapabilityIdentity("create", "kinetics", 1, 0)
+        val CREATE = CapabilityIdentity("create", "create", 1, 0)
         var nextRequestId = 100L
     }
 }

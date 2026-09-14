@@ -102,7 +102,7 @@ class TargetCompileProfile(
             "target addon bundle catalog exceeds byte limit"
         }
         val advertised = this.modules.associateBy { it.id.value }
-        require(this.addonBundles.all { bundle -> advertised[bundle.identity.name]?.contentHash == bundle.identity.hash }) {
+        require(this.addonBundles.all { payload -> advertised.values.any { it.contentHash == payload.identity.hash } }) {
             "target addon bundles must exactly match advertised modules"
         }
     }

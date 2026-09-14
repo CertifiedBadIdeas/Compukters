@@ -21,8 +21,8 @@ package ru.lazyhat.compukters.integration.create
 import com.simibubi.create.content.kinetics.gauge.SpeedGaugeBlockEntity
 import com.simibubi.create.content.kinetics.gauge.StressGaugeBlockEntity
 import com.simibubi.create.content.kinetics.speedController.SpeedControllerBlockEntity
-import create.kinetics.KineticsAddonContract
-import create.kinetics.KineticsCapabilityHandler
+import create.CreateAddonContract
+import create.CreateCapabilityHandler
 import net.minecraft.core.BlockPos
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.block.entity.BlockEntity
@@ -38,8 +38,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 
 object CreateKineticsIntegration {
     fun register() {
-        CompuktersAddonRegistry.register(KineticsAddonContract.guestApi(CreateKineticsIntegration::class.java)) { computer ->
-            KineticsAddonContract.host(
+        CompuktersAddonRegistry.register(CreateAddonContract.guestApi(CreateKineticsIntegration::class.java)) { computer ->
+            CreateAddonContract.host(
                 KineticsHostState { side, kind ->
                     resolveEndpoint(computer, side, kind)
                 },
@@ -87,7 +87,7 @@ object CreateKineticsIntegration {
 
 internal class KineticsHostState(
     private val resolve: (Int, PeripheralKind) -> KineticsEndpoint?,
-) : KineticsCapabilityHandler {
+) : CreateCapabilityHandler {
     private val handles = linkedMapOf<Int, KineticsEndpoint>()
     private val handlesByEndpoint = mutableMapOf<Any, Int>()
     private var nextHandle = 1

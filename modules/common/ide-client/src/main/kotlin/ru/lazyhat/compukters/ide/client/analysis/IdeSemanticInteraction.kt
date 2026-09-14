@@ -153,7 +153,7 @@ class IdeAttachedSourceCatalog private constructor(
         val additions =
             bundles.associate { payload ->
                 val bundle = AddonGuestApiBundleCodec.decode(payload.content.toByteArray())
-                require(bundle.identity.module == payload.identity.name) { "addon attached source module identity mismatch" }
+                require(bundle.identity.id == payload.identity.name) { "addon attached source identity mismatch" }
                 require(
                     bundle.identity.contentHash
                         .toByteArray()
@@ -161,7 +161,7 @@ class IdeAttachedSourceCatalog private constructor(
                 ) {
                     "addon attached source content hash mismatch"
                 }
-                AnalysisModuleIdentity(payload.identity.name, payload.identity.hash) to
+                AnalysisModuleIdentity(bundle.moduleDescriptor.id.toString(), payload.identity.hash) to
                     bundle.moduleDescriptor.sources.associate { source ->
                         VirtualSourcePath.kotlin(source.path) to
                             source.content.toByteArray().decodeToString(throwOnInvalidSequence = true)

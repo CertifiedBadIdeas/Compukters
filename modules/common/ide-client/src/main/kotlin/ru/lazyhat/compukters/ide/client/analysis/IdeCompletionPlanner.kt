@@ -64,8 +64,10 @@ class IdeCompletionPlanner(
                         target
                             ?.addonBundles
                             ?.singleOrNull { payload ->
-                                payload.identity.name == origin.identity.name && payload.identity.hash == origin.identity.hash
-                            }?.let { payload -> AddonId(AddonGuestApiBundleCodec.decode(payload.content.toByteArray()).identity.addon) }
+                                val bundle = AddonGuestApiBundleCodec.decode(payload.content.toByteArray())
+                                bundle.moduleDescriptor.id.toString() == origin.identity.name &&
+                                    payload.identity.hash == origin.identity.hash
+                            }?.let { payload -> AddonId(AddonGuestApiBundleCodec.decode(payload.content.toByteArray()).identity.id) }
                     if (addon == null || addon in manifest.addons) null else IdeCompletionAddonRequirement(addon)
                 } else {
                     null

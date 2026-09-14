@@ -32,25 +32,17 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.invariantSeparatorsPathString
 
-data class AddonCapabilityAuthoring(
-    val identity: AddonCapabilityIdentity,
-    val bindingOwner: String?,
-)
-
 data class AddonAuthoringContract(
     val addon: String,
-    val module: PlatformModuleId,
     val version: String,
-    val dependencies: List<PlatformModuleId>,
-    val capabilities: List<AddonCapabilityAuthoring>,
 ) {
+    val module: PlatformModuleId = PlatformModuleId(addon, "api")
+    val capability: AddonCapabilityIdentity = AddonCapabilityIdentity(addon, addon, 1, 0)
+
     companion object {
         fun parse(lines: List<String>): AddonAuthoringContract {
             var addon: String? = null
-            var module: PlatformModuleId? = null
             var version: String? = null
-            var dependencies: List<PlatformModuleId>? = null
-            val capabilities = mutableListOf<AddonCapabilityAuthoring>()
             lines.forEachIndexed { index, raw ->
                 val line = raw.substringBefore('#').trim()
                 if (line.isEmpty()) return@forEachIndexed
@@ -61,28 +53,9 @@ data class AddonAuthoringContract(
                         addon = fields[1]
                     }
 
-                    "module" -> {
-                        require(fields.size == 2 && module == null) { "invalid module directive at line ${index + 1}" }
-                        module = fields[1].authoringModuleId()
-                    }
-
                     "version" -> {
                         require(fields.size == 2 && version == null) { "invalid version directive at line ${index + 1}" }
                         version = fields[1]
-                    }
-
-                    "dependencies" -> {
-                        require(dependencies == null) { "duplicate dependencies directive at line ${index + 1}" }
-                        dependencies = fields.drop(1).map(String::authoringModuleId)
-                    }
-
-                    "capability" -> {
-                        require(fields.size == 5 || fields.size == 6) { "invalid capability directive at line ${index + 1}" }
-                        capabilities +=
-                            AddonCapabilityAuthoring(
-                                AddonCapabilityIdentity(fields[1], fields[2], fields[3].toInt(), fields[4].toInt()),
-                                fields.getOrNull(5),
-                            )
                     }
 
                     else -> {
@@ -91,24 +64,9 @@ data class AddonAuthoringContract(
                 }
             }
             val identity = requireNotNull(addon) { "addon contract identity is missing" }
-            val parsedModule = requireNotNull(module) { "addon contract module is missing" }
-            require(parsedModule.namespace == identity) { "addon module namespace must equal addon identity" }
-            require(capabilities.isNotEmpty()) { "addon contract contains no capabilities" }
-            require(capabilities.distinctBy { it.identity.capabilityKey() }.size == capabilities.size) {
-                "addon contract contains duplicate capability identities"
-            }
-            capabilities.forEach { capability ->
-                require(capability.identity.namespace == identity) { "addon capability namespace must equal addon identity" }
-                require(capability.bindingOwner == null || capability.bindingOwner.startsWith("$identity.")) {
-                    "addon binding owner escapes namespace: ${capability.bindingOwner}"
-                }
-            }
             return AddonAuthoringContract(
                 identity,
-                parsedModule,
                 requireNotNull(version) { "addon contract version is missing" },
-                requireNotNull(dependencies) { "addon contract dependencies are missing" },
-                capabilities,
             )
         }
     }
@@ -216,6 +174,7 @@ fun resolveAddonContract(
     sourceRoot: Path,
     authoring: AddonAuthoringContract,
     currentLock: AddonAbiLock,
+    dependencies: List<PlatformModuleId> = emptyList(),
 ): ResolvedAddonContract {
     val sources = discoverAuthoringSources(sourceRoot)
     require(sources.isNotEmpty()) { "addon module ${authoring.module} has no Kotlin sources" }
@@ -227,32 +186,13 @@ fun resolveAddonContract(
             .compile(authoring.module, sources)
             .declarations
             .filter(PlatformDeclaration::trustedExternal)
-    val resolvedOwners =
-        authoring.capabilities.associateWith { capability ->
-            capability.bindingOwner ?: inferBindingOwner(authoring, capability, external)
-        }
-    val byCapability =
-        resolvedOwners.mapValues { (_, bindingOwner) ->
-            external.filter { declaration ->
-                declaration.symbol.startsWith("$bindingOwner.") &&
-                    '.' !in declaration.symbol.removePrefix("$bindingOwner.")
-            }
-        }
-    val assigned = byCapability.values.flatten()
-    require(assigned.size == external.size && assigned.toSet().size == external.size) {
-        val unassigned = external - assigned.toSet()
-        "every external declaration must belong to exactly one configured binding owner; unassigned=$unassigned"
-    }
-    byCapability.forEach { (capability, declarations) ->
-        require(declarations.isNotEmpty()) { "addon capability ${capability.identity.capabilityKey()} has no external declarations" }
-        declarations.forEach { declaration -> AddonCapabilitySignature.parse(declaration.signature) }
-    }
+    require(external.isNotEmpty()) { "addon ${authoring.addon} contains no external declarations" }
+    external.forEach { declaration -> AddonCapabilitySignature.parse(declaration.signature) }
 
     val actual =
-        byCapability
-            .flatMap { (capability, declarations) ->
-                declarations.map { declaration -> capability.identity.capabilityKey() to (declaration.symbol to declaration.signature) }
-            }.toSet()
+        external.mapTo(mutableSetOf()) { declaration ->
+            authoring.capability.capabilityKey() to (declaration.symbol to declaration.signature)
+        }
     val retained =
         currentLock.entries
             .map { entry ->
@@ -267,49 +207,42 @@ fun resolveAddonContract(
                         },
                 )
             }.toMutableList()
-    authoring.capabilities.forEach { capability ->
-        val capabilityKey = capability.identity.capabilityKey()
-        var next =
-            retained
-                .filter { it.capabilityKey == capabilityKey }
-                .maxOfOrNull(AddonAbiEntry::operation)
-                ?.plus(1) ?: 0
-        byCapability
-            .getValue(capability)
-            .sortedWith(compareBy(PlatformDeclaration::symbol, PlatformDeclaration::signature))
-            .forEach { declaration ->
-                val callableKey = declaration.symbol to declaration.signature
-                if (retained.none { it.capabilityKey == capabilityKey && it.callableKey == callableKey }) {
-                    retained +=
-                        AddonAbiEntry(
-                            capability.identity.namespace,
-                            capability.identity.name,
-                            capability.identity.abiMajor,
-                            next++,
-                            AddonAbiEntryState.ACTIVE,
-                            declaration.symbol,
-                            declaration.signature,
-                        )
-                }
+    val capabilityKey = authoring.capability.capabilityKey()
+    var next =
+        retained
+            .filter { it.capabilityKey == capabilityKey }
+            .maxOfOrNull(AddonAbiEntry::operation)
+            ?.plus(1) ?: 0
+    external
+        .sortedWith(compareBy(PlatformDeclaration::symbol, PlatformDeclaration::signature))
+        .forEach { declaration ->
+            val callableKey = declaration.symbol to declaration.signature
+            if (retained.none { it.capabilityKey == capabilityKey && it.callableKey == callableKey }) {
+                retained +=
+                    AddonAbiEntry(
+                        authoring.capability.namespace,
+                        authoring.capability.name,
+                        authoring.capability.abiMajor,
+                        next++,
+                        AddonAbiEntryState.ACTIVE,
+                        declaration.symbol,
+                        declaration.signature,
+                    )
             }
-    }
-    val expectedLock = AddonAbiLock(retained)
-    val schemas =
-        authoring.capabilities.map { capability ->
-            val operations =
-                expectedLock.entries
-                    .filter { it.capabilityKey == capability.identity.capabilityKey() }
-                    .sortedBy(AddonAbiEntry::operation)
-                    .map { entry ->
-                        val signature = AddonCapabilitySignature.parse(entry.signature)
-                        AddonCapabilityOperation(signature.arguments, signature.result, asynchronous = true)
-                    }
-            AddonCapabilitySchema(capability.identity, operations)
         }
-    val identityByKey = authoring.capabilities.associate { it.identity.capabilityKey() to it.identity }
+    val expectedLock = AddonAbiLock(retained)
+    val operations =
+        expectedLock.entries
+            .filter { it.capabilityKey == capabilityKey }
+            .sortedBy(AddonAbiEntry::operation)
+            .map { entry ->
+                val signature = AddonCapabilitySignature.parse(entry.signature)
+                AddonCapabilityOperation(signature.arguments, signature.result, asynchronous = true)
+            }
+    val schemas = listOf(AddonCapabilitySchema(authoring.capability, operations))
     val bindings =
         expectedLock.entries
-            .filter { entry -> entry.state == AddonAbiEntryState.ACTIVE && entry.capabilityKey in identityByKey }
+            .filter { entry -> entry.state == AddonAbiEntryState.ACTIVE && entry.capabilityKey == capabilityKey }
             .map { entry ->
                 val ownerName = entry.symbol.substringBeforeLast('.')
                 AddonGuestApiBinding(
@@ -317,29 +250,14 @@ fun resolveAddonContract(
                     ownerName.substringAfterLast('.'),
                     entry.symbol.substringAfterLast('.'),
                     entry.signature,
-                    identityByKey.getValue(entry.capabilityKey),
+                    authoring.capability,
                     entry.operation,
                 )
             }
     return ResolvedAddonContract(
-        AddonContract(authoring.addon, authoring.module, authoring.version, authoring.dependencies, schemas, bindings),
+        AddonContract(authoring.addon, authoring.module, authoring.version, dependencies, schemas, bindings),
         expectedLock,
     )
-}
-
-private fun inferBindingOwner(
-    authoring: AddonAuthoringContract,
-    capability: AddonCapabilityAuthoring,
-    external: List<PlatformDeclaration>,
-): String {
-    require(authoring.capabilities.size == 1) {
-        "addon capability ${capability.identity.capabilityKey()} must configure a binding owner when the module has multiple capabilities"
-    }
-    val owners = external.map { it.symbol.substringBeforeLast('.') }.distinct()
-    require(owners.size == 1) {
-        "addon capability ${capability.identity.capabilityKey()} cannot infer a unique binding owner: $owners"
-    }
-    return owners.single()
 }
 
 private fun discoverAuthoringSources(root: Path): List<PlatformSource> =
@@ -354,6 +272,3 @@ private fun discoverAuthoringSources(root: Path): List<PlatformSource> =
     }
 
 private fun AddonCapabilityIdentity.capabilityKey(): Triple<String, String, Int> = Triple(namespace, name, abiMajor)
-
-private fun String.authoringModuleId(): PlatformModuleId =
-    PlatformModuleId(substringBefore(':', missingDelimiterValue = ""), substringAfter(':', missingDelimiterValue = ""))

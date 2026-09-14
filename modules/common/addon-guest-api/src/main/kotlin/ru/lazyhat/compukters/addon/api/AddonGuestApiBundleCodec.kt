@@ -38,11 +38,11 @@ import java.util.jar.JarInputStream
 import java.util.jar.JarOutputStream
 
 object AddonGuestApiBundleCodec {
-    private const val FORMAT_VERSION = 1
+    private const val FORMAT_VERSION = 2
     private const val METADATA_ENTRY = "META-INF/compukters/module.cpm"
     private val MANIFEST_BYTES = "Manifest-Version: 1.0\r\n\r\n".encodeToByteArray()
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'A'.code.toByte(), 'G'.code.toByte(), 'B'.code.toByte())
-    private val COMPONENT = Regex("[a-z][a-z0-9-]{0,63}")
+    private val COMPONENT = Regex("[a-z][a-z0-9_-]{0,63}")
     private val VERSION = Regex("[0-9]+(?:\\.[0-9]+){0,2}(?:[-+][0-9A-Za-z.-]+)?")
 
     fun assemble(
@@ -62,7 +62,7 @@ object AddonGuestApiBundleCodec {
     fun encode(bundle: AddonGuestApiBundle): ByteArray {
         val canonical =
             assembleEncoded(
-                bundle.identity.addon,
+                bundle.identity.id,
                 bundle.identity.platformAbi,
                 bundle.metadataJar.toByteArray(),
                 bundle.sourcesJar?.toByteArray(),
@@ -158,7 +158,9 @@ object AddonGuestApiBundleCodec {
         }
         val metadataModule = PlatformBundleCodec.decodeModule(metadataEntries.getValue(METADATA_ENTRY))
         require(metadataModule.sources.isEmpty()) { "addon metadata module must not embed sources" }
-        require(metadataModule.id.namespace == addon) { "addon module namespace must equal addon identity" }
+        require(metadataModule.id.namespace == addon && metadataModule.id.name == "api") {
+            "addon bundle must contain its canonical internal API module"
+        }
         require(VERSION.matches(metadataModule.version)) { "invalid addon module version: ${metadataModule.version}" }
         val sources =
             sourcesJar
@@ -181,7 +183,7 @@ object AddonGuestApiBundleCodec {
         validate(addon, module, orderedSchemas, orderedBindings)
         val placeholder =
             AddonGuestApiBundle(
-                AddonGuestApiIdentity(addon, module.id.toString(), module.version, platformAbi, Sha256.of(ByteArray(32))),
+                AddonGuestApiIdentity(addon, module.version, platformAbi, Sha256.of(ByteArray(32))),
                 module,
                 metadataJar,
                 sourcesJar,
@@ -311,7 +313,7 @@ object AddonGuestApiBundleCodec {
         ByteArrayOutputStream()
             .also { output ->
                 DataOutputStream(output).use { sink ->
-                    sink.text(bundle.identity.addon)
+                    sink.text(bundle.identity.id)
                     sink.writeInt(bundle.identity.platformAbi)
                     sink.bytes(bundle.metadataJar.toByteArray())
                     val sources = bundle.sourcesJar

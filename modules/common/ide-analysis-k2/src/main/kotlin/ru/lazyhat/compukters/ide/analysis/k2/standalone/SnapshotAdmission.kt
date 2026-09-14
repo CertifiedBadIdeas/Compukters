@@ -73,7 +73,7 @@ internal class SnapshotAdmission(
         val addonBundles =
             request.profile.platform.addonBundles.map { payload ->
                 AddonGuestApiBundleCodec.decode(payload.content.toByteArray()).also { bundle ->
-                    require(bundle.identity.module == payload.identity.name) { "analysis addon bundle module identity mismatch" }
+                    require(bundle.identity.id == payload.identity.name) { "analysis addon bundle identity mismatch" }
                     require(
                         bundle.identity.contentHash
                             .toByteArray()
@@ -86,7 +86,9 @@ internal class SnapshotAdmission(
                     }
                 }
             }
-        val addonByName = addonBundles.associateBy { it.identity.module }
+        val addonById = addonBundles.associateBy { it.identity.id }
+        require(addonById.size == addonBundles.size) { "duplicate analysis addon bundle identity" }
+        val addonByName = addonBundles.associateBy { it.moduleDescriptor.id.toString() }
         require(addonByName.size == addonBundles.size) { "duplicate analysis addon bundle module identity" }
         val packagedByName = platformBundle.modules.associateBy { it.id.toString() }
         require(addonByName.keys.intersect(packagedByName.keys).isEmpty()) { "analysis addon bundle shadows packaged module" }
@@ -163,7 +165,7 @@ internal class SnapshotAdmission(
                 addonBundles.associate { bundle ->
                     bundle.moduleDescriptor.id to
                         AnalysisModuleIdentity(
-                            bundle.identity.module,
+                            bundle.moduleDescriptor.id.toString(),
                             Hash256.of(bundle.identity.contentHash.toByteArray()),
                         )
                 }
