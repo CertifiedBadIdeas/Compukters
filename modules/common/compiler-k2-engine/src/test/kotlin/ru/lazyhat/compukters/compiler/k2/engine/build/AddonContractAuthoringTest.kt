@@ -54,7 +54,12 @@ class AddonContractAuthoringTest {
             val reordered = resolveAddonContract(root, contract, initial.expectedLock)
 
             assertEquals(initial.expectedLock, reordered.expectedLock)
-            assertEquals(listOf("alpha", "beta"), reordered.contract.bindings.sortedBy { it.operation }.map { it.callableName })
+            assertEquals(
+                listOf("alpha", "beta"),
+                reordered.contract.bindings
+                    .sortedBy { it.operation }
+                    .map { it.callableName },
+            )
         }
 
     @Test
@@ -83,10 +88,30 @@ class AddonContractAuthoringTest {
 
             val changed = resolveAddonContract(root, contract, initial.expectedLock)
 
-            assertEquals(AddonAbiEntryState.TOMBSTONE, changed.expectedLock.entries.single { it.symbol.endsWith(".alpha") }.state)
-            assertEquals(2, changed.expectedLock.entries.single { it.symbol.endsWith(".gamma") }.operation)
-            assertEquals(listOf(1, 2), changed.contract.bindings.map { it.operation }.sorted())
-            assertEquals(3, changed.contract.schemas.single().operations.size)
+            assertEquals(
+                AddonAbiEntryState.TOMBSTONE,
+                changed.expectedLock.entries
+                    .single { it.symbol.endsWith(".alpha") }
+                    .state,
+            )
+            assertEquals(
+                2,
+                changed.expectedLock.entries
+                    .single { it.symbol.endsWith(".gamma") }
+                    .operation,
+            )
+            assertEquals(
+                listOf(1, 2),
+                changed.contract.bindings
+                    .map { it.operation }
+                    .sorted(),
+            )
+            assertEquals(
+                3,
+                changed.contract.schemas
+                    .single()
+                    .operations.size,
+            )
         }
 
     @Test
