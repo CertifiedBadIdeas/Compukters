@@ -26,6 +26,7 @@ pluginManagement {
         if (addonSdkRepository.isPresent) {
             maven { url = uri(addonSdkRepository.get()) }
         }
+        mavenLocal()
         mavenCentral()
         maven("https://maven.architectury.dev/")
         maven("https://maven.fabricmc.net/")

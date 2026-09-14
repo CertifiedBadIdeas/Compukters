@@ -21,17 +21,21 @@ release version:
 | `ru.lazyhat.compukters:compukters-guest-platform` | Canonical base platform bundle with extension `cpb` |
 | `ru.lazyhat.compukters:compukters-addon-api-neoforge-1.21.1` | Compile-only host and registration API supplied by the installed base mod at runtime |
 
-Released coordinates are intended to resolve from Maven Central. A Compukters checkout can stage the same repository
-layout under `build/repositories/addon-sdk` with:
+Released coordinates are intended to resolve from Maven Central. Before version 0.5.0 is published, a Compukters
+checkout can publish the same SDK coordinates to Maven Local with:
 
 ```shell
-./gradlew stageAddonSdkMavenRepository
+./gradlew publishAddonSdkToMavenLocal
 ```
+
+The standalone addon checks `mavenLocal()` before public repositories, so direct Gradle runs and IDE imports resolve
+the development SDK after that one bootstrap command. `stageAddonSdkMavenRepository` remains available for isolated
+builds and TestKit verification that need an explicit repository under `build/repositories/addon-sdk`.
 
 The first-party Create addon under `addons/create` is itself a separate Gradle root and serves as the complete example.
 It contains no project dependency, included build, shared source directory, or path back into the Compukters build.
-From the Compukters root, `verifyCreateAddon`, `buildCreateAddon`, and `runCreateAddonClient` first stage the same Maven
-SDK and then invoke that independent build.
+From the Compukters root, `verifyCreateAddon`, `buildCreateAddon`, and `runCreateAddonClient` first publish the matching
+SDK to Maven Local and then invoke that independent build.
 
 ## Apply the plugin
 

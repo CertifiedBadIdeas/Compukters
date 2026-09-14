@@ -37,6 +37,7 @@ private val verificationTasks =
 private val addonSdkTasks =
     setOf(
         "stageAddonSdkMavenRepository",
+        "publishAddonSdkToMavenLocal",
         "assembleAddonGuestApiBundle",
         "assemblePlatformBundle",
         "updateAddonGuestApiAbiLock",

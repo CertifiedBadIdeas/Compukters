@@ -61,6 +61,7 @@ repositories {
     providers.gradleProperty("compuktersAddonSdkRepository").orNull?.let { repository ->
         maven { url = uri(repository) }
     }
+    mavenLocal()
     mavenCentral()
     maven("https://maven.architectury.dev/")
     maven("https://maven.fabricmc.net/")
