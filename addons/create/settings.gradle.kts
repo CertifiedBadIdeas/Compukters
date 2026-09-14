@@ -22,10 +22,6 @@ check(JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_25)) {
 
 pluginManagement {
     repositories {
-        val addonSdkRepository = providers.gradleProperty("compuktersAddonSdkRepository")
-        if (addonSdkRepository.isPresent) {
-            maven { url = uri(addonSdkRepository.get()) }
-        }
         mavenLocal()
         mavenCentral()
         maven("https://maven.architectury.dev/")
@@ -39,6 +35,17 @@ pluginManagement {
         id("architectury-plugin") version "3.5.169"
         id("org.jmailen.kotlinter") version "5.7.0"
         id("ru.lazyhat.compukters.addon") version "0.2.0"
+    }
+}
+
+includeBuild("../..") {
+    dependencySubstitution {
+        substitute(module("ru.lazyhat.compukters:compukters-addon-api"))
+            .using(project(":addon-api"))
+        substitute(module("ru.lazyhat.compukters:compukters-addon-neoforge-1.21.1"))
+            .using(project(":v1_21_1-addon-neoforge-api"))
+        substitute(module("ru.lazyhat.compukters:compukters-neoforge-1.21.1-dev"))
+            .using(project(":v1_21_1-neoforge"))
     }
 }
 

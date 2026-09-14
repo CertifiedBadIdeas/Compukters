@@ -39,21 +39,35 @@ tasks.jar {
     manifest.attributes["Implementation-Version"] = addonSdkVersion
 }
 
+val addonApiProject = project(":addon-api")
+val addonApiArtifact =
+    addonApiProject.layout.buildDirectory.file("libs/${addonApiProject.name}-${addonApiProject.version}-addon-api.jar")
+val addonToolingProject = project(":compiler-k2-engine")
+val addonToolingArtifact =
+    addonToolingProject.layout.buildDirectory.file(
+        "libs/${addonToolingProject.name}-${addonToolingProject.version}-addon-tooling.jar",
+    )
+val guestPlatformArtifact = project(":guest-platform").layout.buildDirectory.file("platform/compukters-platform.cpb")
+val addonAdapterProject = project(":v1_21_1-addon-neoforge-api")
+val addonAdapterArtifacts = addonAdapterProject.layout.buildDirectory.dir("libs")
+
 tasks.test {
     dependsOn(
-        tasks.named("publishAllPublicationsToAddonSdkRepository"),
-        ":addon-api:publishAddonApiPublicationToAddonSdkRepository",
-        ":compiler-k2-engine:publishAddonToolingPublicationToAddonSdkRepository",
-        ":guest-platform:publishAddonPlatformPublicationToAddonSdkRepository",
-        ":v1_21_1-addon-neoforge-api:publishAddonNeoForgeApiPublicationToAddonSdkRepository",
-        ":v26_1-addon-neoforge-api:publishAddonNeoForgeApiPublicationToAddonSdkRepository",
+        ":addon-api:shadowJar",
+        ":compiler-k2-engine:shadowJar",
+        ":guest-platform:assemblePlatformBundle",
+        ":v1_21_1-addon-neoforge-api:jar",
     )
-    systemProperty(
-        "compukters.addon.sdk.repository",
-        rootProject.layout.buildDirectory.dir("repositories/addon-sdk").get().asFile.absolutePath,
-    )
+    inputs.files(addonApiArtifact, addonToolingArtifact, guestPlatformArtifact)
+    inputs.dir(addonAdapterArtifacts)
     systemProperty("compukters.addon.sdk.version", addonSdkVersion)
     systemProperty("compukters.addon.kotlin.version", libs.plugins.kotlin.get().version.requiredVersion)
+    doFirst {
+        systemProperty("compukters.addon.test.api", addonApiArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.addon.test.tooling", addonToolingArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.addon.test.platform", guestPlatformArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.addon.test.adapter-dir", addonAdapterArtifacts.get().asFile.absolutePath)
+    }
 }
 
 publishing {
@@ -61,12 +75,6 @@ publishing {
         groupId = project.group.toString()
         version = addonSdkVersion
         if (name == "pluginMaven") artifactId = "compukters-addon-gradle-plugin"
-    }
-    repositories {
-        maven {
-            name = "addonSdk"
-            url = rootProject.layout.buildDirectory.dir("repositories/addon-sdk").get().asFile.toURI()
-        }
     }
 }
 

@@ -149,11 +149,12 @@ sources; it contains no executable addon JVM classes. Registration rejects dupli
 created host must expose the exact registered capability schema. The actor transfers immutable typed requests to
 the server thread, where the host may complete immediately or retain a bounded wait; completions resume the exact VM
 task on a later turn. The Minecraft 1.21.1 Create adapter and its Guest Kotlin declarations live in the standalone
-`addons/create` Gradle root. It consumes the public plugin, tooling, platform bundle, common host API, target adapter,
-and development mod exclusively as Maven coordinates. The API and adapter share the independent SDK version; the
-runtime-only development mod retains the product version. The public plugin module can publish the complete SDK to
-Maven Local, but the Compukters root does not own or invoke Create tasks. The base platform, shared Minecraft code, and
-26.1 code therefore have no direct Create ownership. The adapter resolves only the six adjacent loaded positions and
+`addons/create` Gradle root. It declares the public plugin, tooling, platform bundle, common host API, target adapter,
+and development mod through their external coordinates. For local co-development its composite build substitutes the
+adjacent Compukters projects, selecting the self-contained `namedElements` development mod instead of a republished
+Maven Local runtime. The API and adapter share the independent SDK version; the runtime-only development mod retains
+the product version. The Compukters root does not include or invoke Create tasks, so the base platform, shared
+Minecraft code, and 26.1 code have no direct Create ownership. The adapter resolves only the six adjacent loaded positions and
 binds handles to exact block-entity identities, preventing replacement from silently rebinding a running Guest
 program.
 

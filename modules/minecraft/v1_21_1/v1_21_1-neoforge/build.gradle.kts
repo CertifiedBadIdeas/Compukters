@@ -32,6 +32,11 @@ plugins {
 
 val developmentModJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("developmentModJar")
 
+configurations.named("namedElements") {
+    outgoing.artifacts.clear()
+    outgoing.artifact(developmentModJar)
+}
+
 developmentModJar.configure {
     doLast {
         val archive = archiveFile.get().asFile
@@ -54,12 +59,6 @@ publishing {
             artifactId = "compukters-neoforge-1.21.1-dev"
             version = project.version.toString()
             artifact(developmentModJar)
-        }
-    }
-    repositories {
-        maven {
-            name = "addonSdk"
-            url = rootProject.layout.buildDirectory.dir("repositories/addon-sdk").get().asFile.toURI()
         }
     }
 }
