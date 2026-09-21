@@ -11,7 +11,7 @@ A Compukters addon is an ordinary, independently installed NeoForge mod. It owns
 Kotlin declarations and generated `.cagb` bundle. Compukters reads that data bundle when the addon registers it, but
 the base mod never links to or packages the addon implementation.
 
-The public addon SDK uses version 0.2.0 independently of Compukters 0.5.0 for Minecraft 1.21.1. The SDK has its own
+The public addon SDK uses version 0.3.0 independently of Compukters 0.5.0. The SDK has its own
 compatibility version: Compukters releases do not require addon authors to update unless the public addon boundary
 changes. All artifacts belonging to one SDK release share that SDK version:
 
@@ -69,7 +69,7 @@ dependencyResolutionManagement {
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.10"
-    id("ru.lazyhat.compukters.addon") version "0.2.0"
+    id("ru.lazyhat.compukters.addon") version "0.3.0"
     // Apply and configure Loom/NeoForge as usual for the target mod.
 }
 
@@ -127,6 +127,28 @@ CompuktersAddonRegistry.register(ExampleAddonContract.guestApi(MyAddon::class.ja
 
 `CompuktersComputerContext` exposes the server level, computer position, and `adjacentDirection(side)` mapping without
 requiring the addon to link against Compukters block implementation classes.
+
+SDK 0.3.0 also lets an addon describe logical devices that a Compukters cable can touch. Pass a
+`CompuktersPeripheralProvider` as the third registration argument. It receives the loaded server level, contacted
+block position, and the face of that block touched by the cable, then returns a canonical anchor and an optional
+bounded provider key:
+
+```kotlin
+CompuktersAddonRegistry.register(
+    ExampleAddonContract.guestApi(MyAddon::class.java),
+    CompuktersAddonHostFactory { computer -> createExampleHost(computer) },
+    CompuktersPeripheralProvider { contact ->
+        resolveExampleMultiblock(contact)?.let { device ->
+            CompuktersPeripheralDevice(device.controllerPosition, device.portKey)
+        }
+    },
+)
+```
+
+Return the same canonical identity for every supported part of one multiblock. Compukters supplies the addon ID,
+dimension, and lifecycle checks around that identity; the provider key should distinguish logical devices sharing one
+anchor and must contain at most 128 printable ASCII characters. Existing addons may keep the two-argument
+registration call and side-based discovery unchanged.
 
 Handlers execute through the bounded server-side addon boundary. Return `addonCompleted(value)` for an immediate
 result, `addonFailed(kind, detail)` for a descriptive Guest failure, or `addonPending { ... }` when the world operation

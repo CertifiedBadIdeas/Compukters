@@ -30,7 +30,7 @@ plugins {
 }
 
 group = "ru.lazyhat.compukters"
-val addonSdkVersion = "0.2.0"
+val addonSdkVersion = "0.3.0"
 val compuktersModVersion = "1.21.1-neoforge-0.5.0-S"
 version = providers.gradleProperty("addonVersion").get()
 

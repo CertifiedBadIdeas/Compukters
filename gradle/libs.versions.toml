@@ -29,7 +29,7 @@ v1211 = { id = "1.21.1-convention" }
 [versions]
 
 # common
-addon-sdk = "0.2.0"
+addon-sdk = "0.3.0"
 kotlin = "2.4.10"
 coroutines = "1.11.0"
 kotlin-logging = "8.0.4"

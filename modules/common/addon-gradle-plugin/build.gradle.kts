@@ -23,6 +23,7 @@ plugins {
 }
 
 val addonSdkVersion = libs.versions.addon.sdk.get()
+version = addonSdkVersion
 
 gradlePlugin {
     plugins {
