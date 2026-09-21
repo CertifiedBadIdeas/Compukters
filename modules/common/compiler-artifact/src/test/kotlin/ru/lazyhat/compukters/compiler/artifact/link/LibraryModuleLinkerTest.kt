@@ -298,6 +298,82 @@ class LibraryModuleLinkerTest {
     }
 
     @Test
+    fun `library capability ids are matched by descriptor instead of local position`() {
+        val library =
+            libraryModule().let { source ->
+                source.copy(
+                    blocks =
+                        source.blocks.mapIndexed { index, block ->
+                            if (index == 0) {
+                                block.copy(
+                                    instructions =
+                                        listOf(
+                                            Instruction.CapabilityCallSync(
+                                                Destination.Unit,
+                                                CapabilityId.of(0u),
+                                                9u,
+                                                emptyList(),
+                                            ),
+                                        ) + block.instructions,
+                                )
+                            } else {
+                                block
+                            }
+                        },
+                )
+            }
+        val applicationSource = application(library)
+        val applicationModule =
+            applicationSource.modules.single().copy(
+                strings = applicationSource.modules.single().strings + listOf("zcompukter", "ztimer", "zzfixture").map(MetadataText::of),
+            )
+        val application =
+            applicationSource.copy(
+                semanticFeatures = applicationSource.semanticFeatures + SemanticFeature.CAPABILITIES,
+                modules = listOf(applicationModule),
+                capabilities =
+                    listOf(
+                        Capability(StringId.of(3u), StringId.of(4u), AbiVersion(1u, 0u), true, 1u),
+                        Capability(StringId.of(5u), StringId.of(5u), AbiVersion(1u, 0u), true, 10u),
+                    ),
+            )
+        val fragmentApplication =
+            applicationSource.modules.single().copy(
+                strings = applicationSource.modules.single().strings + MetadataText.of("zzfixture"),
+            )
+        val fragment =
+            applicationSource.copy(
+                semanticFeatures = applicationSource.semanticFeatures + SemanticFeature.CAPABILITIES,
+                modules = listOf(fragmentApplication, library),
+                capabilities =
+                    listOf(
+                        Capability(StringId.of(3u), StringId.of(3u), AbiVersion(1u, 0u), true, 10u),
+                    ),
+            )
+
+        val linked = LibraryModuleLinker.link(application, listOf(fragment))
+
+        assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(linked))
+        assertEquals(1, linked.capabilities.size)
+        val linkedApplication = linked.modules.first()
+        val capabilityName =
+            linked.capabilities
+                .single()
+                .name.value
+                .toInt()
+        assertEquals("zzfixture", linkedApplication.strings[capabilityName].toString())
+        val call =
+            linked.modules
+                .single { it.kind == ModuleKind.LIBRARY }
+                .blocks
+                .flatMap(Block::instructions)
+                .filterIsInstance<Instruction.CapabilityCallSync>()
+                .single()
+        assertEquals(CapabilityId.of(0u), call.capability)
+        assertEquals(9u, call.operation)
+    }
+
+    @Test
     fun `signature mismatch fails closed`() {
         val library = libraryModule()
         val source = application(library)

@@ -53,6 +53,10 @@ internal data class ReachabilityResult(
 
 internal class ReachabilityGraph(
     private val artifact: Artifact,
+    private val capabilityIds: List<Map<Int, Int>> =
+        List(artifact.modules.size) {
+            artifact.capabilities.indices.associateWith { index -> index }
+        },
 ) {
     private sealed interface Node {
         val module: Int
@@ -282,11 +286,16 @@ internal class ReachabilityGraph(
             is Instruction.Call -> markFunction(module, instruction.function)
             is Instruction.CallSuspend -> markFunction(module, instruction.function)
             is Instruction.TaskSpawn -> markFunction(module, instruction.function)
-            is Instruction.CapabilityCallSync -> capabilities += instruction.capability.value.toInt()
-            is Instruction.CapabilityCallAsync -> capabilities += instruction.capability.value.toInt()
+            is Instruction.CapabilityCallSync -> capabilities += capability(module, instruction.capability.value.toInt())
+            is Instruction.CapabilityCallAsync -> capabilities += capability(module, instruction.capability.value.toInt())
             else -> Unit
         }
     }
+
+    private fun capability(
+        module: Int,
+        local: Int,
+    ): Int = requireNotNull(capabilityIds.getOrNull(module)?.get(local)) { "capability $module:$local has no application descriptor" }
 
     private fun markCapabilityNames() {
         val application = artifact.modules.indexOfFirst { it.kind == ru.lazyhat.compukters.compiler.artifact.model.ModuleKind.APPLICATION }
