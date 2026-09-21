@@ -491,6 +491,10 @@ val verifyPackagedCompukterFfi =
                 "26.1 item model is missing from ${archive.name}"
             }
             listOf(
+                "assets/compukters/blockstates/peripheral_cable.json",
+                "assets/compukters/models/block/peripheral_cable.json",
+                "assets/compukters/items/peripheral_cable.json",
+                "data/compukters/loot_table/blocks/peripheral_cable.json",
                 "assets/compukters/font/terminal/cozette.json",
                 "assets/compukters/font/terminal/cozette-codepoints.txt",
                 "assets/compukters/textures/font/terminal/cozette.png",

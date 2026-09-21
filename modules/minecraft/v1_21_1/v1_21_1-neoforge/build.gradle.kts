@@ -144,9 +144,13 @@ val verifyProductionJar =
                 "tooling/workers/k2-tooling-workers.bundle",
                 "tooling/workers/k2-tooling-workers.zip.xz",
                 "assets/compukters/blockstates/compukter.json",
+                "assets/compukters/blockstates/peripheral_cable.json",
                 "assets/compukters/models/block/compukter.json",
+                "assets/compukters/models/block/peripheral_cable.json",
                 "assets/compukters/models/item/compukter.json",
+                "assets/compukters/models/item/peripheral_cable.json",
                 "assets/compukters/lang/en_us.json",
+                "data/compukters/loot_table/blocks/peripheral_cable.json",
                 "assets/compukters/textures/gui/ide_toolbar.png",
             ).forEach { required ->
                 check(entries.count { it == required } == 1) {
