@@ -37,9 +37,15 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   `compukter.toml`, with exact versions and hashes retained in `compukter.lock`.
 - The separately installed Create addon supports Create 6.0.x on Minecraft 1.21.1 while the base Compukters mod remains
   usable without Create.
-- The `create` addon reads exact `Float` speed, stress, and capacity values from adjacent speedometers and
-  stressometers, waits for value changes without Guest-side polling, and controls rotation speed controllers.
-- Device handles remain bound to the exact adjacent block. Missing, unloaded, removed, or replaced devices fail
+- Added passive peripheral cables for orthogonal, branching and looping connections between computers and supported
+  addon devices. Cables discover loaded chunks only and do not require adapters or a controller block.
+- Added the Peripheral Configurator: rename it in an anvil, use it directly on a supported device to assign the name,
+  or Shift-use it to clear the name. Device names persist independently of computers and cable topology; duplicate
+  reachable names fail as ambiguous.
+- The `create` addon reads exact `Float` speed, stress, and capacity values from adjacent or named cable-connected
+  speedometers and stressometers, waits for value changes without Guest-side polling, and controls rotation speed
+  controllers.
+- Device handles remain bound to the exact acquired block. Missing, unloaded, removed, or replaced devices fail
   deterministically and produce a descriptive terminal diagnostic.
 - Addon SDK 0.3.0 lets independent addons map a cable touching any supported block or multiblock part to one canonical
   logical device while preserving the existing adjacent-side registration API.

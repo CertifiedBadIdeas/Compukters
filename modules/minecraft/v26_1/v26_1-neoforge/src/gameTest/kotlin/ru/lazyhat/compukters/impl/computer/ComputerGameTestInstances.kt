@@ -57,6 +57,16 @@ internal class ComputerSoundGameTest(
     override fun typeDescription(): MutableComponent = Component.literal("Compukters one-shot sound")
 }
 
+internal class PeripheralCableGameTest(
+    testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
+) : GameTestInstance(testData) {
+    override fun run(helper: GameTestHelper) = PeripheralCableGameTestScenario.run(helper)
+
+    override fun codec(): MapCodec<out GameTestInstance> = MapCodec.unit(this)
+
+    override fun typeDescription(): MutableComponent = Component.literal("Compukters peripheral cable fabric")
+}
+
 internal class VmActorServiceGameTest(
     testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
 ) : GameTestInstance(testData) {

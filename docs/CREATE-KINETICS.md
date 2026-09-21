@@ -1,15 +1,15 @@
 ---
 layout: default
 title: Create kinetics
-description: Read and control adjacent Create kinetic devices from Guest Kotlin.
+description: Read and control adjacent or cable-connected Create kinetic devices from Guest Kotlin.
 permalink: /CREATE-KINETICS/
 ---
 
 # Create kinetics
 
-Compukters can expose adjacent Create kinetic devices directly to Guest Kotlin. This optional integration is available
-on **Minecraft 1.21.1** with **Create 6.0.10 through 6.0.x**. Compukters still starts normally when Create is absent;
-the `create` addon is then unavailable to projects.
+Compukters can expose adjacent or cable-connected Create kinetic devices directly to Guest Kotlin. This optional
+integration is available on **Minecraft 1.21.1** with **Create 6.0.10 through 6.0.x**. Compukters still starts normally
+when Create is absent; the `create` addon is then unavailable to projects.
 
 ## Enable the addon
 
@@ -27,7 +27,42 @@ The IDE, analysis worker, and compiler all use the attached server's target prof
 therefore resolves only when the target actually has the compatible Create integration loaded. Exact addon versions
 and content hashes are recorded by the IDE in `compukter.lock`; they are not written by hand in this manifest.
 
-## Sides and devices
+## Peripheral cables and names
+
+Place a Peripheral Cable next to any face of the computer, route cables orthogonally, and let the cable touch a
+supported Create device. Cables may branch and loop. Every computer on the same loaded cable component can reach the
+same devices; no controller or adapter block owns the network.
+
+To give a device a name:
+
+1. Take a Peripheral Configurator and rename it in an anvil. Names contain 1–32 lowercase letters, digits,
+   underscores, or hyphens and begin with a letter.
+2. Use the renamed configurator directly on a speedometer, stressometer, or rotation speed controller.
+3. Shift-use a configurator on the device to clear its name.
+
+The name belongs to the device rather than a computer or cable. It survives rewiring, computer replacement, chunk
+unload, and server restart. Names only need to be unique within the component where a computer performs lookup. If two
+reachable Create devices have the same name, acquisition fails as ambiguous instead of choosing one.
+
+```kotlin
+import create.kinetics.Kinetics
+
+fun main() {
+    val input = Kinetics.speedometer("input")
+    val load = Kinetics.stressometer("main_load")
+    val controller = Kinetics.rotationController("governor")
+
+    println(input.speed())
+    println(load.capacity())
+    println(controller.setTargetSpeed(128))
+}
+```
+
+Discovery uses loaded chunks only and never forces a chunk to load. Breaking the cable path makes subsequent
+acquisitions unavailable. An already acquired handle remains tied to its exact block entity and never follows another
+device that later receives the same name.
+
+## Direct sides and devices
 
 Sides are relative to the front of the computer, just like the redstone API:
 
@@ -66,7 +101,7 @@ either stress or capacity changes. These waits do not busy-poll in Guest code.
 
 ## Lifetime and limits
 
-A device accessor creates a handle for that exact adjacent block entity. Replacing the block invalidates the old
+A device accessor creates a handle for that exact acquired block entity. Replacing the block invalidates the old
 handle; it never silently reconnects to the replacement. Missing, mismatched, unloaded, removed, or stale devices fail
 the Guest operation deterministically, and the terminal process diagnostic identifies which condition prevented the
 operation.

@@ -129,6 +129,24 @@ object ComputerPeripheralLookup {
     }
 }
 
+object ComputerPeripheralNames {
+    @JvmStatic
+    fun setName(
+        level: ServerLevel,
+        identity: ComputerPeripheralIdentity,
+        requestedName: String,
+    ): String =
+        PeripheralDeviceNameStorage.get(level).setName(
+            PeripheralDeviceIdentity(
+                identity.providerId,
+                level.dimension().toString(),
+                identity.anchor.immutable(),
+                identity.deviceKey,
+            ),
+            requestedName,
+        )
+}
+
 internal fun lookupComputerPeripheral(
     providerId: String,
     requestedName: String,

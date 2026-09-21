@@ -224,6 +224,13 @@ VM task receives its Boolean admission result. Each loaded computer has a four-t
 counter admits at most 64 computer sounds per tick. Rejected sounds return `false` immediately and are never queued;
 unloaded block entities retain no sound state or background work.
 
+The Minecraft carrier also owns a direct-touch peripheral fabric. Passive orthogonal cables form bounded components
+across loaded chunks without forcing chunk loads. Addon providers map a touched block or multiblock part to a canonical
+logical identity; a versioned world directory stores normalized names against that identity independently of computers
+and cable topology. Lookup is scoped to one cable component and addon ID, rejects duplicate reachable names, and never
+returns a partial component after a traversal bound is exceeded. Typed addon host handles bind to the resolved device
+identity, so later rewiring or renaming cannot redirect an existing handle.
+
 The client renders the fixed 51x19 grid in a centered compact panel while the world remains visible through a
 translucent dim layer. A separate footer presents rolling `CPU` utilization, current Guest heap and virtual-disk
 usage, and concise lifecycle activity. Here `CPU` is the virtual computer's consumed/granted semantic Guest-unit
