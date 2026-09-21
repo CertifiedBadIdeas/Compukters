@@ -44,8 +44,6 @@ includeBuild("../..") {
             .using(project(":addon-api"))
         substitute(module("ru.lazyhat.compukters:compukters-addon-neoforge-1.21.1"))
             .using(project(":v1_21_1-addon-neoforge-api"))
-        substitute(module("ru.lazyhat.compukters:compukters-neoforge-1.21.1-dev"))
-            .using(project(":v1_21_1-neoforge"))
     }
 }
 
