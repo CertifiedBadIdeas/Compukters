@@ -244,6 +244,60 @@ class ProgramRuntimeHostTest {
     }
 
     @Test
+    fun `timer requests resume on deterministic server tick boundaries`() {
+        val requests = listOf(timer(1, 3, 2), timer(2, 0, 3))
+        val session = ScriptedSession(outcomes = listOf(VmOutcome.HostRequestBatch(requests)), defaultOutcome = VmOutcome.SliceExhausted)
+        val host = ProgramRuntimeHost(sessionFactory = ProgramVmSessionFactory { session })
+        host.start(byteArrayOf(1))
+
+        host.serverTick(10)
+        assertEquals(emptyList(), session.responses)
+        host.serverTick(11)
+        assertEquals(listOf(response(3, 2, HostResponse.UnitSuccess)), session.responses)
+        host.serverTick(12)
+        assertEquals(1, session.responses.size)
+        host.serverTick(13)
+        assertEquals(
+            listOf(
+                response(3, 2, HostResponse.UnitSuccess),
+                response(2, 1, HostResponse.UnitSuccess),
+            ),
+            session.responses,
+        )
+    }
+
+    @Test
+    fun `invalid timer request fails without being retained`() {
+        val request = timer(1, -1)
+        val session =
+            ScriptedSession(
+                outcomes = listOf(VmOutcome.HostRequestBatch(listOf(request))),
+                defaultOutcome = VmOutcome.SliceExhausted,
+            )
+        val host = ProgramRuntimeHost(sessionFactory = ProgramVmSessionFactory { session })
+        host.start(byteArrayOf(1))
+
+        host.serverTick(20)
+
+        assertEquals(
+            listOf(response(1, 1, HostResponse.Failure(HostFailureKind.OTHER, "Invalid timer sleep request"))),
+            session.responses,
+        )
+    }
+
+    @Test
+    fun `root completion discards pending timer requests`() {
+        val request = timer(1, 3)
+        val session = ScriptedSession(outcomes = listOf(VmOutcome.HostRequestBatch(listOf(request)), VmOutcome.Halted(null)))
+        val host = ProgramRuntimeHost(sessionFactory = ProgramVmSessionFactory { session })
+        host.start(byteArrayOf(1))
+
+        assertEquals(ProgramRuntimeState.Halted(null), host.serverTick(10))
+        assertEquals(ProgramRuntimeState.Halted(null), host.serverTick(13))
+        assertEquals(emptyList(), session.responses)
+    }
+
+    @Test
     fun `sound completion rejects a mismatched admission count without resuming the VM`() {
         val session = ScriptedSession(outcomes = listOf(VmOutcome.HostRequestBatch(listOf(sound(1, 12, 100)))))
         val host =
@@ -1195,6 +1249,7 @@ class ProgramRuntimeHostTest {
             )
         val REDSTONE = CapabilityIdentity("compukter", "redstone", 1, 0)
         val SOUND = CapabilityIdentity("compukter", "sound", 1, 0)
+        val TIMER = CapabilityIdentity("compukter", "timer", 1, 0)
 
         fun redstoneSide(
             id: Long,
@@ -1213,6 +1268,12 @@ class ProgramRuntimeHostTest {
             volume: Int,
             taskId: Int = 1,
         ): VmHostRequest = VmHostRequest(id, SOUND, 0, listOf(VmValue.I32(note), VmValue.I32(volume)), taskId)
+
+        fun timer(
+            id: Long,
+            ticks: Int,
+            taskId: Int = 1,
+        ): VmHostRequest = VmHostRequest(id, TIMER, 0, listOf(VmValue.I32(ticks)), taskId)
 
         fun fakeDeploymentCandidate(): ProgramDeploymentCandidate =
             object : ProgramDeploymentCandidate {

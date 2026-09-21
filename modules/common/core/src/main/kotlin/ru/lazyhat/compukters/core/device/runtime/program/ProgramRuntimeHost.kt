@@ -94,12 +94,14 @@ class ProgramRuntimeHost internal constructor(
     private var pendingRedstoneCommit: PendingRedstoneCommit? = null
     private var pendingSoundCommit: PendingSoundCommit? = null
     private val pendingAddonRequests = mutableMapOf<ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity, PendingAddonRequest>()
+    private val pendingTimerRequests = mutableMapOf<ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity, PendingTimerRequest>()
     private val addonCapabilitySchemas = addonCapabilitySchemas.toList()
     internal var lastClosedFileSystemGeneration: Long? = null
         private set
     private var confirmedRedstoneOutput = RedstoneWire.requireOutputRegister(initialRedstoneOutput)
     private var lastRedstoneInput = 0
     private val grantedBudgets = GrantedResourceBudgets()
+    private var lastObservedTick = -1L
     var state: ProgramRuntimeState = ProgramRuntimeState.Idle
         private set
 
@@ -144,9 +146,16 @@ class ProgramRuntimeHost internal constructor(
         }
     }
 
-    fun serverTick(): ProgramRuntimeState {
+    fun serverTick(): ProgramRuntimeState = serverTick(if (lastObservedTick == Long.MAX_VALUE) Long.MAX_VALUE else lastObservedTick + 1)
+
+    fun serverTick(worldTick: Long): ProgramRuntimeState {
+        require(worldTick >= 0) { "world tick must not be negative" }
+        require(worldTick >= lastObservedTick) { "world tick must not move backwards" }
+        lastObservedTick = worldTick
         if (state != ProgramRuntimeState.Running && state != ProgramRuntimeState.WaitingForCompiler) return state
         val activeSession = requireNotNull(session)
+        completeDueTimers(activeSession, worldTick)
+        if (session !== activeSession) return state
         compilerRouter?.routeCompletions()
         if (state == ProgramRuntimeState.WaitingForCompiler) {
             applyCompilationCompletion(activeSession)
@@ -193,6 +202,7 @@ class ProgramRuntimeHost internal constructor(
                 }
 
                 is VmOutcome.Halted -> {
+                    pendingTimerRequests.clear()
                     state = ProgramRuntimeState.Halted(outcome.value)
                     return
                 }
@@ -237,11 +247,13 @@ class ProgramRuntimeHost internal constructor(
                     remainingHostRequests -= outcome.requests.size
                     val redstone = outcome.requests.filter(::isRedstoneOutputRequest)
                     val sound = outcome.requests.filter(::isSoundRequest)
+                    val timers = outcome.requests.filter(::isTimerRequest)
                     val addon = outcome.requests.filter(::isAddonRequest)
                     outcome.requests
                         .asSequence()
                         .filterNot(::isRedstoneOutputRequest)
                         .filterNot(::isSoundRequest)
+                        .filterNot(::isTimerRequest)
                         .filterNot(::isAddonRequest)
                         .forEach { request ->
                             if (!resume(
@@ -254,6 +266,9 @@ class ProgramRuntimeHost internal constructor(
                         }
                     addon.forEach { request ->
                         if (!deferAddonRequest(activeSession, request)) return
+                    }
+                    timers.forEach { request ->
+                        if (!deferTimerRequest(activeSession, request, lastObservedTick)) return
                     }
                     if (redstone.isNotEmpty() && sound.isNotEmpty()) {
                         (redstone + sound).forEach { request ->
@@ -668,6 +683,7 @@ class ProgramRuntimeHost internal constructor(
         pendingRedstoneCommit = null
         pendingSoundCommit = null
         pendingAddonRequests.clear()
+        pendingTimerRequests.clear()
         activeVmEpoch = 0
         try {
             try {
@@ -685,17 +701,21 @@ class ProgramRuntimeHost internal constructor(
     private companion object {
         val REDSTONE_CAPABILITY = CapabilityIdentity("compukter", "redstone", 1, 0)
         val SOUND_CAPABILITY = CapabilityIdentity("compukter", "sound", 1, 0)
+        val TIMER_CAPABILITY = CapabilityIdentity("compukter", "timer", 1, 0)
         val UNAVAILABLE_REDSTONE_PORT =
             RedstoneHostPort { RedstoneCommitResult.Failed(HostFailureKind.UNAVAILABLE, "Redstone is unavailable") }
         val UNAVAILABLE_SOUND_PORT =
             SoundHostPort { SoundCommitResult.Failed(HostFailureKind.UNAVAILABLE, "Sound is unavailable") }
         val UNAVAILABLE_ADDON_PORT = ProgramAddonRequestPort { false }
         const val MAXIMUM_PENDING_ADDON_REQUESTS = 256
+        const val MAXIMUM_PENDING_TIMER_REQUESTS = 256
 
         fun isRedstoneOutputRequest(request: VmHostRequest): Boolean =
             request.capability == REDSTONE_CAPABILITY && request.operation in 6..7
 
         fun isSoundRequest(request: VmHostRequest): Boolean = request.capability == SOUND_CAPABILITY && request.operation == 0
+
+        fun isTimerRequest(request: VmHostRequest): Boolean = request.capability == TIMER_CAPABILITY && request.operation == 0
     }
 
     private fun isAddonRequest(request: VmHostRequest): Boolean =
@@ -729,6 +749,48 @@ class ProgramRuntimeHost internal constructor(
         return true
     }
 
+    private fun deferTimerRequest(
+        activeSession: ProgramVmSession,
+        request: VmHostRequest,
+        requestTick: Long,
+    ): Boolean {
+        val duration = (request.arguments.singleOrNull() as? VmValue.I32)?.value
+        if (duration == null || duration < 0) {
+            return resume(request, HostResponse.Failure(HostFailureKind.OTHER, "Invalid timer sleep request"))
+        }
+        val existing = pendingTimerRequests[request.identity]
+        if (existing != null) {
+            check(existing.session === activeSession && existing.request == request) {
+                "pending timer request identity changed before completion"
+            }
+            return true
+        }
+        if (pendingTimerRequests.size >= MAXIMUM_PENDING_TIMER_REQUESTS) {
+            return resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Timer pending request limit was reached"))
+        }
+        val delay = maxOf(1L, duration.toLong())
+        pendingTimerRequests[request.identity] = PendingTimerRequest(activeSession, request, requestTick.saturatingAdd(delay))
+        return true
+    }
+
+    private fun completeDueTimers(
+        activeSession: ProgramVmSession,
+        worldTick: Long,
+    ) {
+        val due =
+            pendingTimerRequests.values
+                .asSequence()
+                .filter { it.session === activeSession && it.wakeTick <= worldTick }
+                .sortedWith(compareBy({ it.request.taskId }, { it.request.id }))
+                .toList()
+        for (pending in due) {
+            pendingTimerRequests.remove(pending.request.identity)
+            if (!resume(pending.request, HostResponse.UnitSuccess)) return
+        }
+    }
+
+    private fun Long.saturatingAdd(value: Long): Long = if (this > Long.MAX_VALUE - value) Long.MAX_VALUE else this + value
+
     private data class PendingRedstoneCommit(
         val session: ProgramVmSession,
         val packed: Int,
@@ -743,6 +805,12 @@ class ProgramRuntimeHost internal constructor(
     private data class PendingAddonRequest(
         val session: ProgramVmSession,
         val request: VmHostRequest,
+    )
+
+    private data class PendingTimerRequest(
+        val session: ProgramVmSession,
+        val request: VmHostRequest,
+        val wakeTick: Long,
     )
 }
 

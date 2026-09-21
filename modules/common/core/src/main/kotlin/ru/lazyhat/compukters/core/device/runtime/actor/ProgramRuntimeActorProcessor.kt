@@ -62,7 +62,8 @@ internal class ProgramRuntimeActorProcessor(
 
     fun process(command: ProgramRuntimeActorCommand): ProgramRuntimeActorReply = reply(command.requestId) { execute(command) }
 
-    override fun advance(permit: ProgramRuntimeTickPermit): ProgramRuntimeActorReply = reply(permit.requestId) { advance(permit.requestId) }
+    override fun advance(permit: ProgramRuntimeTickPermit): ProgramRuntimeActorReply =
+        reply(permit.requestId) { advance(permit.requestId, permit.worldTick) }
 
     private fun reply(
         requestId: ProgramRuntimeRequestId,
@@ -225,8 +226,11 @@ internal class ProgramRuntimeActorProcessor(
         }
     }
 
-    private fun advance(requestId: ProgramRuntimeRequestId): ProgramRuntimeActorValue {
-        host.serverTick()
+    private fun advance(
+        requestId: ProgramRuntimeRequestId,
+        worldTick: Long,
+    ): ProgramRuntimeActorValue {
+        host.serverTick(worldTick)
         val redstone =
             redstonePort
                 ?.takeRequestedOutput()
