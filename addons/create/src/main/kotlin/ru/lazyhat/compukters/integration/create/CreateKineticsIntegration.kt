@@ -32,20 +32,49 @@ import ru.lazyhat.compukters.api.addon.addonFailed
 import ru.lazyhat.compukters.api.addon.addonPending
 import ru.lazyhat.compukters.api.addon.addonPollCompleted
 import ru.lazyhat.compukters.api.addon.addonPollFailed
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersAddonHostFactory
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersAddonRegistry
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersComputerContext
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralContact
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralDevice
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralLookupStatus
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralProvider
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 
 object CreateKineticsIntegration {
     fun register() {
-        CompuktersAddonRegistry.register(CreateAddonContract.guestApi(CreateKineticsIntegration::class.java)) { computer ->
-            CreateAddonContract.host(
-                KineticsHostState { side, kind ->
-                    resolveEndpoint(computer, side, kind)
-                },
-            )
-        }
+        CompuktersAddonRegistry.register(
+            CreateAddonContract.guestApi(CreateKineticsIntegration::class.java),
+            CompuktersAddonHostFactory { computer ->
+                CreateAddonContract.host(
+                    KineticsHostState(
+                        resolveSide = { side, kind -> resolveEndpoint(computer, side, kind) },
+                        resolveName = { name, kind -> resolveNamedEndpoint(computer, name, kind) },
+                    ),
+                )
+            },
+            CompuktersPeripheralProvider(::resolvePeripheral),
+        )
     }
+
+    private fun resolvePeripheral(contact: CompuktersPeripheralContact): CompuktersPeripheralDevice? =
+        when (contact.level.getBlockEntity(contact.position)) {
+            is SpeedGaugeBlockEntity -> {
+                CompuktersPeripheralDevice(contact.position, PeripheralKind.SPEEDOMETER.deviceKey)
+            }
+
+            is StressGaugeBlockEntity -> {
+                CompuktersPeripheralDevice(contact.position, PeripheralKind.STRESSOMETER.deviceKey)
+            }
+
+            is SpeedControllerBlockEntity -> {
+                CompuktersPeripheralDevice(contact.position, PeripheralKind.ROTATION_CONTROLLER.deviceKey)
+            }
+
+            else -> {
+                null
+            }
+        }
 
     private fun resolveEndpoint(
         computer: CompuktersComputerContext,
@@ -56,6 +85,55 @@ object CreateKineticsIntegration {
         check(level.server.isSameThread) { "Create kinetics must be accessed on the server thread" }
         val direction = computer.adjacentDirection(side) ?: return null
         val position = computer.position.relative(direction)
+        return resolveEndpoint(computer.level, position, kind)
+    }
+
+    private fun resolveNamedEndpoint(
+        computer: CompuktersComputerContext,
+        name: String,
+        kind: PeripheralKind,
+    ): KineticsNamedResolution {
+        val lookup = computer.findPeripheral(name)
+        return when (lookup.status) {
+            CompuktersPeripheralLookupStatus.FOUND -> {
+                val device = checkNotNull(lookup.device)
+                if (device.deviceKey != kind.deviceKey) {
+                    KineticsNamedResolution.Failed(
+                        HostFailureKind.UNAVAILABLE,
+                        "Named peripheral is not the requested Create kinetic device type",
+                    )
+                } else {
+                    resolveEndpoint(computer.level, device.anchor, kind)?.let(KineticsNamedResolution::Found)
+                        ?: KineticsNamedResolution.Failed(
+                            HostFailureKind.UNAVAILABLE,
+                            "Named Create kinetic device was removed, replaced, or unloaded",
+                        )
+                }
+            }
+
+            CompuktersPeripheralLookupStatus.MISSING -> {
+                KineticsNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "No reachable Create peripheral has that name")
+            }
+
+            CompuktersPeripheralLookupStatus.AMBIGUOUS -> {
+                KineticsNamedResolution.Failed(HostFailureKind.OTHER, "More than one reachable Create peripheral has that name")
+            }
+
+            CompuktersPeripheralLookupStatus.INVALID_NAME -> {
+                KineticsNamedResolution.Failed(HostFailureKind.OTHER, "Invalid peripheral name")
+            }
+
+            CompuktersPeripheralLookupStatus.TOPOLOGY_LIMIT_EXCEEDED -> {
+                KineticsNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "Peripheral cable topology limit was exceeded")
+            }
+        }
+    }
+
+    private fun resolveEndpoint(
+        level: ServerLevel,
+        position: BlockPos,
+        kind: PeripheralKind,
+    ): KineticsEndpoint? {
         if (!level.hasChunkAt(position)) return null
         return when (val entity = level.getBlockEntity(position)) {
             is SpeedGaugeBlockEntity -> {
@@ -86,8 +164,14 @@ object CreateKineticsIntegration {
 }
 
 internal class KineticsHostState(
-    private val resolve: (Int, PeripheralKind) -> KineticsEndpoint?,
+    private val resolveSide: (Int, PeripheralKind) -> KineticsEndpoint?,
+    private val resolveName: (String, PeripheralKind) -> KineticsNamedResolution,
 ) : CreateCapabilityHandler {
+    constructor(resolveSide: (Int, PeripheralKind) -> KineticsEndpoint?) : this(
+        resolveSide,
+        { _, _ -> KineticsNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "No reachable Create peripheral has that name") },
+    )
+
     private val handles = linkedMapOf<Int, KineticsEndpoint>()
     private val handlesByEndpoint = mutableMapOf<Any, Int>()
     private var nextHandle = 1
@@ -143,6 +227,13 @@ internal class KineticsHostState(
         argument1: Int,
     ): AddonCallResult<Int> = withEndpoint<RotationControllerAccess, Int>(argument0) { it.setTargetSpeed(argument1) }
 
+    override fun acquireRotationControllerByName(argument0: String): AddonCallResult<Int> =
+        acquireNamed(argument0, PeripheralKind.ROTATION_CONTROLLER)
+
+    override fun acquireSpeedometerByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.SPEEDOMETER)
+
+    override fun acquireStressometerByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.STRESSOMETER)
+
     override fun reset() {
         handles.clear()
         handlesByEndpoint.clear()
@@ -155,8 +246,21 @@ internal class KineticsHostState(
     ): AddonCallResult<Int> {
         if (side !in 0..5) return addonFailed(HostFailureKind.OTHER, "Invalid Create kinetic side")
         val endpoint =
-            resolve(side, kind)
+            resolveSide(side, kind)
                 ?: return addonFailed(HostFailureKind.UNAVAILABLE, "No matching Create kinetic device is attached on that side")
+        return retain(endpoint)
+    }
+
+    private fun acquireNamed(
+        name: String,
+        kind: PeripheralKind,
+    ): AddonCallResult<Int> =
+        when (val resolution = resolveName(name, kind)) {
+            is KineticsNamedResolution.Failed -> addonFailed(resolution.kind, resolution.detail)
+            is KineticsNamedResolution.Found -> retain(resolution.endpoint)
+        }
+
+    private fun retain(endpoint: KineticsEndpoint): AddonCallResult<Int> {
         val existing = handlesByEndpoint[endpoint.identity]
         if (existing != null) return addonCompleted(existing)
         if (handles.size >= MAXIMUM_HANDLES) {
@@ -196,6 +300,21 @@ internal enum class PeripheralKind {
     SPEEDOMETER,
     STRESSOMETER,
     ROTATION_CONTROLLER,
+    ;
+
+    val deviceKey: String
+        get() = name.lowercase()
+}
+
+internal sealed interface KineticsNamedResolution {
+    data class Found(
+        val endpoint: KineticsEndpoint,
+    ) : KineticsNamedResolution
+
+    data class Failed(
+        val kind: HostFailureKind,
+        val detail: String,
+    ) : KineticsNamedResolution
 }
 
 internal interface KineticsEndpoint {

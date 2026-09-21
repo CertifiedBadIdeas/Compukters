@@ -35,6 +35,58 @@ import kotlin.test.assertTrue
 
 class KineticsHostStateTest {
     @Test
+    fun `named acquisition routes every kinetic type and shares handles with side acquisition`() {
+        val speedometer = FakeSpeedometer(16f)
+        val stressometer = FakeStressometer(4f, 8f)
+        val controller = FakeController()
+        val state =
+            KineticsHostState(
+                resolveSide = { side, kind ->
+                    speedometer.takeIf { side == 0 && kind == PeripheralKind.SPEEDOMETER }
+                },
+                resolveName = { name, kind ->
+                    val endpoint =
+                        when (name to kind) {
+                            "wheel" to PeripheralKind.SPEEDOMETER -> speedometer
+                            "load" to PeripheralKind.STRESSOMETER -> stressometer
+                            "governor" to PeripheralKind.ROTATION_CONTROLLER -> controller
+                            else -> null
+                        }
+                    endpoint?.let(KineticsNamedResolution::Found)
+                        ?: KineticsNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "missing")
+                },
+            )
+        val host = CreateAddonContract.host(state)
+
+        val sideHandle = host.completed(0, 0).intValue()
+        assertEquals(sideHandle, host.completed(11, "wheel").intValue())
+        assertEquals(HostResponse.FloatSuccess(4f), host.completed(4, host.completed(12, "load").intValue()))
+        val controllerHandle = host.completed(10, "governor").intValue()
+        assertEquals(HostResponse.IntSuccess(32), host.completed(9, controllerHandle, 32))
+    }
+
+    @Test
+    fun `named acquisition preserves lookup failures without retaining a handle`() {
+        val failures =
+            mapOf(
+                "missing" to KineticsNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "missing device"),
+                "ambiguous" to KineticsNamedResolution.Failed(HostFailureKind.OTHER, "ambiguous device"),
+                "invalid name" to KineticsNamedResolution.Failed(HostFailureKind.OTHER, "invalid name"),
+                "unloaded" to KineticsNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "unloaded device"),
+            )
+        val state =
+            KineticsHostState(
+                resolveSide = { _, _ -> null },
+                resolveName = { name, _ -> checkNotNull(failures[name]) },
+            )
+        val host = CreateAddonContract.host(state)
+
+        failures.forEach { (name, failure) ->
+            assertEquals(HostResponse.Failure(failure.kind, failure.detail), host.completed(11, name))
+        }
+    }
+
+    @Test
     fun `speedometer handle is stable and its Float wait completes after a change`() {
         val speedometer = FakeSpeedometer(16f)
         val state = KineticsHostState { side, kind -> if (side == 0 && kind == PeripheralKind.SPEEDOMETER) speedometer else null }
@@ -190,6 +242,21 @@ class KineticsHostStateTest {
                     CREATE,
                     operation,
                     arguments.map(VmValue::I32),
+                ),
+            ),
+        ).response
+
+    private fun ProgramAddonHost.completed(
+        operation: Int,
+        argument: String,
+    ): HostResponse =
+        assertIs<ProgramAddonDispatch.Completed>(
+            dispatch(
+                ProgramAddonRequest(
+                    VmHostRequestIdentity(1, nextRequestId++),
+                    CREATE,
+                    operation,
+                    listOf(VmValue.StringValue(argument)),
                 ),
             ),
         ).response

@@ -537,13 +537,13 @@ and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters
 ## Compukters Guest APIs
 
 - [x] **Create kinetics on Minecraft 1.21.1** — when Create 6.0.10 through 6.0.x is loaded, the optional
-  `create` addon exposes computer-local sides through `Kinetics`. Programs can read exact `Float` speed,
-  stress, and capacity values; wait for speed or load changes; and read or set a rotation controller's target speed.
-  Handles remain bound to the exact adjacent block entity and fail rather than rebinding after replacement. Evidence:
-  `KineticsHostStateTest`, `CreateKineticsArtifactTest`, neutral addon IDE
-  diagnostic/completion/parameter-information tests, and the real NeoForge `createkinetics`
-  GameTest. See [Create kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/) for the API and
-  manifest entry.
+  `create` addon exposes computer-local sides and persistent names reachable over passive peripheral cables through
+  `Kinetics`. Programs can read exact `Float` speed, stress, and capacity values; wait for speed or load changes; and
+  read or set a rotation controller's target speed. Handles remain bound to the exact acquired block entity and fail
+  rather than rebinding after replacement. Evidence: `KineticsHostStateTest`, including `named acquisition routes
+  every kinetic type and shares handles with side acquisition`; `ComputerPeripheralLookupTest`; and neutral addon IDE
+  diagnostic/completion/parameter-information tests. See
+  [Create kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/) for the API and manifest entry.
 
 - [x] **Addon Guest API bundles** — a loader integration can register one bounded, versioned Kotlin metadata/source
   bundle under its addon ID, with exact capability schemas and intrinsic bindings kept internal. The server is the

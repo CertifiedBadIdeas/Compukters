@@ -28,11 +28,14 @@ import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
 import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralIdentity
 import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralProvider
+import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookup
+import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookupStatus
 
 class CompuktersComputerContext internal constructor(
     val level: ServerLevel,
     val position: BlockPos,
     private val facing: Direction,
+    private val providerId: String,
 ) {
     fun adjacentDirection(side: Int): Direction? =
         when (side) {
@@ -44,7 +47,26 @@ class CompuktersComputerContext internal constructor(
             5 -> Direction.DOWN
             else -> null
         }
+
+    fun findPeripheral(name: String): CompuktersPeripheralLookup {
+        val result = ComputerPeripheralLookup.find(level, position, providerId, name)
+        val device = result.identity?.let { identity -> CompuktersPeripheralDevice(identity.anchor, identity.deviceKey) }
+        return CompuktersPeripheralLookup(CompuktersPeripheralLookupStatus.valueOf(result.status.name), device)
+    }
 }
+
+enum class CompuktersPeripheralLookupStatus {
+    FOUND,
+    MISSING,
+    AMBIGUOUS,
+    INVALID_NAME,
+    TOPOLOGY_LIMIT_EXCEEDED,
+}
+
+data class CompuktersPeripheralLookup internal constructor(
+    val status: CompuktersPeripheralLookupStatus,
+    val device: CompuktersPeripheralDevice?,
+)
 
 fun interface CompuktersAddonHostFactory {
     fun create(context: CompuktersComputerContext): ProgramAddonHost?
@@ -96,7 +118,7 @@ object CompuktersAddonRegistry {
         val providerId = guestApi.identity.id
         ComputerAddonHosts.register(
             ComputerAddonHostFactory { level, position, state ->
-                factory.create(CompuktersComputerContext(level, position, state.getValue(ComputerBlock.FACING)))
+                factory.create(CompuktersComputerContext(level, position, state.getValue(ComputerBlock.FACING), providerId))
             },
             listOf(guestApi),
             factory,
