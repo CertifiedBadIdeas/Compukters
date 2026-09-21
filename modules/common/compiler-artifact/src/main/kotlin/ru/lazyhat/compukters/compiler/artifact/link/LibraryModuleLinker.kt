@@ -64,20 +64,64 @@ object LibraryModuleLinker {
     fun link(
         application: Artifact,
         libraries: Map<String, Module>,
+    ): Artifact =
+        linkInputs(
+            application,
+            libraries.mapValues { (_, module) ->
+                LibraryInput(module, application.capabilities.indices.associateWith { index -> index })
+            },
+        )
+
+    fun link(
+        application: Artifact,
+        libraryArtifacts: List<Artifact>,
+    ): Artifact {
+        val applicationModule = application.modules.single { it.kind == ModuleKind.APPLICATION }
+        val applicationCapabilities =
+            application.capabilities
+                .map { capability -> capabilityIdentity(capability, applicationModule) }
+                .withIndex()
+                .associate { (index, identity) -> identity to index }
+        require(applicationCapabilities.size == application.capabilities.size) { "application contains duplicate capability descriptors" }
+        val seen = application.modules.mapTo(mutableSetOf()) { ArtifactWriter.moduleSemanticHash(it).hex() }
+        val libraries = linkedMapOf<String, LibraryInput>()
+        libraryArtifacts.forEach { artifact ->
+            val descriptorModule = artifact.modules.single { it.kind == ModuleKind.APPLICATION }
+            val capabilityIds =
+                artifact.capabilities
+                    .mapIndexedNotNull { index, capability ->
+                        val identity = capabilityIdentity(capability, descriptorModule)
+                        applicationCapabilities[identity]?.let { applicationId -> index to applicationId }
+                    }.toMap()
+            artifact.modules.filter { it.kind == ModuleKind.LIBRARY }.forEach { module ->
+                val hash = ArtifactWriter.moduleSemanticHash(module).hex()
+                if (seen.add(hash)) libraries[hash] = LibraryInput(module, capabilityIds)
+            }
+        }
+        return linkInputs(application, libraries)
+    }
+
+    private fun linkInputs(
+        application: Artifact,
+        libraries: Map<String, LibraryInput>,
     ): Artifact {
         require(application.modules.count { it.kind == ModuleKind.APPLICATION } == 1) {
             "link input must contain exactly one application module"
         }
-        libraries.forEach { (name, module) -> require(module.kind == ModuleKind.LIBRARY) { "$name is not a library module" } }
+        libraries.forEach { (name, library) -> require(library.module.kind == ModuleKind.LIBRARY) { "$name is not a library module" } }
         val external =
             libraries.entries
                 .sortedWith(
-                    compareBy<Map.Entry<String, Module>>(
-                        { moduleName(it.value) },
-                        { ArtifactWriter.moduleSemanticHash(it.value).hex() },
+                    compareBy<Map.Entry<String, LibraryInput>>(
+                        { moduleName(it.value.module) },
+                        { ArtifactWriter.moduleSemanticHash(it.value.module).hex() },
                     ),
-                ).map(Map.Entry<String, Module>::value)
-        val combined = application.copy(modules = application.modules + external)
+                ).map(Map.Entry<String, LibraryInput>::value)
+        val combined = application.copy(modules = application.modules + external.map(LibraryInput::module))
+        val capabilityIds =
+            List(application.modules.size) {
+                application.capabilities.indices.associateWith { index -> index }
+            } + external.map(LibraryInput::capabilityIds)
         require(
             combined.modules
                 .map(ArtifactWriter::moduleSemanticHash)
@@ -86,7 +130,7 @@ object LibraryModuleLinker {
         ) {
             "link input contains duplicate module semantic identities"
         }
-        val reachability = ReachabilityGraph(combined).analyze()
+        val reachability = ReachabilityGraph(combined, capabilityIds).analyze()
         val selected =
             combined.modules.indices.filter { index ->
                 val module = combined.modules[index]
@@ -110,7 +154,10 @@ object LibraryModuleLinker {
             ordered.associateWith { old ->
                 ModuleRelocation(
                     reachability.modules[old],
-                    capabilityMap,
+                    capabilityIds[old]
+                        .mapNotNull { (localId, applicationId) ->
+                            capabilityMap[applicationId]?.let { relocated -> localId to relocated }
+                        }.toMap(),
                     canonicalImportOrder(
                         combined.modules[old],
                         old,
@@ -204,6 +251,31 @@ object LibraryModuleLinker {
         return linked
     }
 }
+
+private data class LibraryInput(
+    val module: Module,
+    val capabilityIds: Map<Int, Int>,
+)
+
+private data class CapabilityIdentity(
+    val namespace: String,
+    val name: String,
+    val abi: AbiVersion,
+    val required: Boolean,
+    val operationCount: UInt,
+)
+
+private fun capabilityIdentity(
+    capability: Capability,
+    descriptorModule: Module,
+): CapabilityIdentity =
+    CapabilityIdentity(
+        descriptorModule.strings[capability.namespace.value.toInt()].toString(),
+        descriptorModule.strings[capability.name.value.toInt()].toString(),
+        capability.abi,
+        capability.required,
+        capability.operationCount,
+    )
 
 private fun minimumRuntimeAbi(
     declared: AbiVersion,

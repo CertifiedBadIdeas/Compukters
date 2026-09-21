@@ -456,10 +456,11 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `addon fixture typed API lowers deterministically to blocking scalar operations`() =
+    fun `addon fixture typed API and built in timer lower with their own capability descriptors`() =
         withAdapter { adapter ->
             val source =
                 """
+                import compukter.concurrent.Tasks
                 import fixture.kinetics.Kinetics
 
                 fun main() {
@@ -473,6 +474,7 @@ class MinimalScriptLoweringTest {
                     val controller = Kinetics.back.rotationController()
                     println(controller.targetSpeed())
                     println(controller.setTargetSpeed(32))
+                    Tasks.sleepTicks(1)
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source, includeAddonFixture = true))
@@ -492,7 +494,16 @@ class MinimalScriptLoweringTest {
                             module.strings[capability.name.value.toInt()].toString() == "fixture"
                     }.operationCount,
             )
-            assertEquals(10, opcodes.count { it == 0xe9 }, "every addon access must yield its VM task: $opcodes")
+            assertEquals(
+                1u,
+                artifact.capabilities
+                    .single { capability ->
+                        val module = artifact.modules.first()
+                        module.strings[capability.namespace.value.toInt()].toString() == "compukter" &&
+                            module.strings[capability.name.value.toInt()].toString() == "timer"
+                    }.operationCount,
+            )
+            assertEquals(11, opcodes.count { it == 0xe9 }, "every blocking capability access must yield its VM task: $opcodes")
             assertTrue(0x35 !in opcodes, "kinetics value classes must not load fields: $opcodes")
         }
 

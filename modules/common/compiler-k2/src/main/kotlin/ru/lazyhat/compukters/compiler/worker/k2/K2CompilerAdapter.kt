@@ -412,15 +412,7 @@ class K2CompilerAdapter(
     private fun linkLibraries(
         application: Artifact,
         libraryArtifacts: List<Artifact>,
-    ): Artifact {
-        val seen = application.modules.mapTo(mutableSetOf()) { ArtifactWriter.moduleSemanticHash(it).toHex() }
-        val libraries = linkedMapOf<String, Module>()
-        libraryArtifacts.flatMap(Artifact::modules).filter { it.kind == ModuleKind.LIBRARY }.forEach { module ->
-            val hash = ArtifactWriter.moduleSemanticHash(module).toHex()
-            if (seen.add(hash)) libraries[hash] = module
-        }
-        return LibraryModuleLinker.link(application, libraries)
-    }
+    ): Artifact = LibraryModuleLinker.link(application, libraryArtifacts)
 
     private fun sourceFootprint(request: CompileRequest): TemporaryUsage {
         val directories = mutableSetOf("source")
