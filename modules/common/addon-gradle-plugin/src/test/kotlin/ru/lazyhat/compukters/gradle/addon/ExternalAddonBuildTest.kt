@@ -60,7 +60,7 @@ class ExternalAddonBuildTest {
                 repository,
                 "compukters-addon-neoforge-1.21.1",
                 sdkVersion,
-                singleJar(Path.of(requireNotNull(System.getProperty("compukters.addon.test.adapter-dir")))),
+                Path.of(requireNotNull(System.getProperty("compukters.addon.test.adapter"))),
             )
             project.resolve("settings.gradle.kts").writeText(
                 """
@@ -156,15 +156,6 @@ class ExternalAddonBuildTest {
             .withPluginClasspath()
             .forwardOutput()
 }
-
-private fun singleJar(directory: Path): Path =
-    Files.list(directory).use { files ->
-        files
-            .filter { file -> file.fileName.toString().endsWith(".jar") }
-            .filter { file -> "transformProductionNeoForge" !in file.fileName.toString() }
-            .toList()
-            .single()
-    }
 
 private fun stageModule(
     repository: Path,
