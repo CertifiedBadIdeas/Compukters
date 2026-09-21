@@ -167,6 +167,9 @@ instructions at once; suspension on a host request or `Task.join()` transfers ex
 FIFO order. Pending requests retain their `(TaskId, RequestId)` owner, so independent reads and writes may remain in
 flight and complete out of order without running Guest code re-entrantly. Returning from the root task ends the process
 and cancels its remaining task work.
+The built-in `compukter:timer` capability at ABI 1.0 backs `Tasks.sleepTicks`: the loader-independent runtime retains
+the bounded request and resumes its owning task at the requested server-tick boundary. It does not introduce a VM
+clock, background timer, wall-clock dependency, or work while the computer is not receiving tick permits.
 Guest Kotlin exposes this as transparent stackful blocking through ordinary functions: `suspend` declarations are
 outside the supported source subset, while legacy suspend-call artifact instructions remain decodable and executable.
 The production execution profile reserves a 256 KiB managed heap for each active foreground process; child-process

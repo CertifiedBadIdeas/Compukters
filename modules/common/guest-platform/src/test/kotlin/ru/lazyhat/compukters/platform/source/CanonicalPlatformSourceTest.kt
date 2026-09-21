@@ -89,6 +89,7 @@ class CanonicalPlatformSourceTest {
             modulesById.keys,
         )
         assertTrue(modulesById.getValue("kotlin:builtins").dependencies.isEmpty())
+        assertEquals("1.1.0", modulesById.getValue("stdlib:core").version)
         assertEquals("2.0.0", modulesById.getValue("compukter:redstone").version)
         assertEquals("1.0.0", modulesById.getValue("compukter:sound").version)
         catalog.modules.forEach { module ->

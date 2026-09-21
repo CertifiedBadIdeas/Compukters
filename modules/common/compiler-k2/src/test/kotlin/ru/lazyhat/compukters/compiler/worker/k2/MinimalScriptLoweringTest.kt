@@ -75,6 +75,36 @@ import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
     @Test
+    fun `task tick sleep lowers to one asynchronous timer request`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.concurrent.Tasks
+
+                fun main() {
+                    Tasks.sleepTicks(12)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val artifact = ArtifactReader.read(bytes)
+            val module = artifact.modules.first()
+            val timer =
+                artifact.capabilities.single { capability ->
+                    module.strings[capability.namespace.value.toInt()].toString() == "compukter" &&
+                        module.strings[capability.name.value.toInt()].toString() == "timer"
+                }
+
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+            assertEquals(AbiVersion(1u, 0u), timer.abi)
+            assertEquals(1u, timer.operationCount)
+            assertEquals(1, allOpcodes(bytes).count { it == 0xe9 })
+            System.getProperty("compukter.vm.timerArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `Long arithmetic conversions comparisons and text lower for vm conformance`() =
         withAdapter { adapter ->
             val source =

@@ -23,6 +23,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   text, including signed zero, infinities, NaN, and subnormal values.
 - Operations that wait for the world, another task, or a channel now block transparently inside ordinary functions;
   source-level `suspend` declarations are not part of the supported Guest Kotlin subset.
+- `Tasks.sleepTicks(n)` lets a program pace world interactions by server ticks while other Guest tasks continue and
+  without spending its instruction budget during the wait.
 
 ### Addons and Create
 

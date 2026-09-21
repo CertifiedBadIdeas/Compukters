@@ -20,6 +20,20 @@ public object Tasks {
      * Compukters currently accepts only a direct reference to a top-level, zero-argument function.
      */
     public external fun launch(block: () -> Unit): Task
+
+    /**
+     * Suspends the current task for at least [ticks] server ticks.
+     *
+     * A zero duration yields until the next server tick. Other runnable tasks in this VM may continue.
+     */
+    public fun sleepTicks(ticks: Int) {
+        if (ticks < 0) throw IllegalArgumentException("ticks must not be negative")
+        TimerBindings.sleepTicks(ticks)
+    }
+}
+
+private object TimerBindings {
+    external fun sleepTicks(ticks: Int)
 }
 
 /**

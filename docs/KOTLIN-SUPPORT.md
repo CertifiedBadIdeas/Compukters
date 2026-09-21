@@ -451,12 +451,17 @@ supported.
   `suspend declaration is outside the transparent Guest task model`.
 
 - [ ] **Cooperative Guest tasks — Partial** — `Tasks.launch(::worker)` starts an
-  ordinary top-level function as a
-  bounded task and `Task.join()` waits for it. Tasks share one VM and execute
+  ordinary top-level function as a bounded task, `Task.join()` waits for it,
+  and `Tasks.sleepTicks(n)` suspends the current task until a deterministic
+  server-tick boundary without consuming Guest instructions. Tasks share one VM and execute
   one at a time, but a task suspended on host I/O does not stop another runnable
   task. Scheduling and host-request ownership are deterministic. Public
-  cancellation, explicit yield, delay, scopes, and `kotlinx.coroutines` remain
-  unsupported. Tracking: [#567](https://github.com/CertifiedBadIdeas/Compukters/issues/567)
+  cancellation, explicit same-turn yield, wall-clock delay, scopes, and `kotlinx.coroutines` remain
+  unsupported. Evidence: `MinimalScriptLoweringTest`, test
+  `task tick sleep lowers to one asynchronous timer request`, the
+  `testKotlinTimerVmConformance` task, and `ProgramRuntimeHostTest`, test
+  `timer requests resume on deterministic server tick boundaries`. Tracking:
+  [#624](https://github.com/CertifiedBadIdeas/Compukters/issues/624)
 
 - [ ] **Bounded integer channels — Partial** — a top-level
   `IntChannel(capacity)` provides deterministic FIFO `send(Int)` and

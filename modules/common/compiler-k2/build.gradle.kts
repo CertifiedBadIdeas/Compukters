@@ -300,6 +300,7 @@ val blockingCallConformanceArtifact = layout.buildDirectory.file("generated/conf
 val transparentCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/transparent-call.cpkt")
 val tasksConformanceArtifact = layout.buildDirectory.file("generated/conformance/tasks.cpkt")
 val channelConformanceArtifact = layout.buildDirectory.file("generated/conformance/channel.cpkt")
+val timerConformanceArtifact = layout.buildDirectory.file("generated/conformance/timer.cpkt")
 val whenConformanceArtifact = layout.buildDirectory.file("generated/conformance/when.cpkt")
 val argvConformanceArtifact = layout.buildDirectory.file("generated/conformance/argv.cpkt")
 val platformScalarConformanceArtifact = layout.buildDirectory.file("generated/conformance/platform-scalar.cpkt")
@@ -375,6 +376,22 @@ val generateChannelConformanceArtifact = tasks.register<Test>("generateChannelCo
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.channelArtifact", channelConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateTimerConformanceArtifact = tasks.register<Test>("generateTimerConformanceArtifact") {
+    description = "Compiles a server-tick Guest task delay for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*task tick sleep lowers to one asynchronous timer request*")
+    inputs.file(workerJar)
+    outputs.file(timerConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.timerArtifact", timerConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

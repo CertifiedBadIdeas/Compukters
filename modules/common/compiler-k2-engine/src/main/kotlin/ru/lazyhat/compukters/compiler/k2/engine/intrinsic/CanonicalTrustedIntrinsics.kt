@@ -31,9 +31,10 @@ object CanonicalTrustedIntrinsics {
     val compiler = PlatformCapabilityId("compukter", "compiler", 1)
     val redstone = PlatformCapabilityId("compukter", "redstone", 1)
     val sound = PlatformCapabilityId("compukter", "sound", 1)
+    val timer = PlatformCapabilityId("compukter", "timer", 1)
 
     val executableCapabilities: Set<PlatformCapabilityId> =
-        setOf(terminal, stdio, process, filesystem, compiler, redstone, sound)
+        setOf(terminal, stdio, process, filesystem, compiler, redstone, sound, timer)
 
     val registry: TrustedIntrinsicRegistry = TrustedIntrinsicRegistry.create(registrations())
 
@@ -199,6 +200,16 @@ object CanonicalTrustedIntrinsics {
                 "compukter.concurrent",
                 "Tasks.launch",
                 "fun(()->Unit):Task",
+            )
+            capability(
+                "stdlib",
+                "core",
+                "compukter.concurrent",
+                "TimerBindings.sleepTicks",
+                "fun(Int):Unit",
+                timer,
+                0u,
+                true,
             )
             primitive("stdlib", "ranges", "kotlin.ranges", "IntRange.iterator", "fun():IntIterator")
             primitive("stdlib", "ranges", "kotlin.ranges", "rangeUntil", "fun(Int.Int):IntRange")

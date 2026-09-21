@@ -347,6 +347,15 @@ registerKotlinVmConformance(
     conformanceScenario = "channel",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinTimerVmConformance",
+    taskDescription = "Executes a K2-produced server-tick Guest task delay request.",
+    artifactTask = ":compiler-k2:generateTimerConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/timer.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-timer-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_TIMER_ARTIFACT",
+    conformanceScenario = "timer",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinWhenVmConformance",
     taskDescription = "Executes bounded K2 when branches with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateWhenConformanceArtifact",
