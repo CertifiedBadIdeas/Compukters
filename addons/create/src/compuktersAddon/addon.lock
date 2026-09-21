@@ -9,3 +9,6 @@ operation create create 1 6 active create.kinetics.KineticsBindings.awaitStressC
 operation create create 1 7 active create.kinetics.KineticsBindings.acquireRotationController fun(Int):Int
 operation create create 1 8 active create.kinetics.KineticsBindings.targetSpeed fun(Int):Int
 operation create create 1 9 active create.kinetics.KineticsBindings.setTargetSpeed fun(Int,Int):Int
+operation create create 1 10 active create.kinetics.KineticsBindings.acquireRotationControllerByName fun(String):Int
+operation create create 1 11 active create.kinetics.KineticsBindings.acquireSpeedometerByName fun(String):Int
+operation create create 1 12 active create.kinetics.KineticsBindings.acquireStressometerByName fun(String):Int

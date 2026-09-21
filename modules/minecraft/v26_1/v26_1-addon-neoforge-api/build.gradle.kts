@@ -66,6 +66,8 @@ val verifyAddonNeoForgeApiJar =
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersComputerContext.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralContact.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralDevice.class",
+                    "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralLookup.class",
+                    "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralLookupStatus.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralProvider.class",
                 )
             check(productClasses == expected) { "unexpected classes in ${archive.name}: ${productClasses - expected}" }

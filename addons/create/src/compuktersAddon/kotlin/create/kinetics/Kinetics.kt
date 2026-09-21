@@ -41,6 +41,13 @@ public value class RotationController internal constructor(private val handle: I
 }
 
 public object Kinetics {
+    public fun speedometer(name: String): Speedometer = Speedometer(KineticsBindings.acquireSpeedometerByName(name))
+
+    public fun stressometer(name: String): Stressometer = Stressometer(KineticsBindings.acquireStressometerByName(name))
+
+    public fun rotationController(name: String): RotationController =
+        RotationController(KineticsBindings.acquireRotationControllerByName(name))
+
     public val front: KineticSide
         get() = KineticSide(0)
 
@@ -80,4 +87,10 @@ private object KineticsBindings {
     external fun targetSpeed(handle: Int): Int
 
     external fun setTargetSpeed(handle: Int, speed: Int): Int
+
+    external fun acquireSpeedometerByName(name: String): Int
+
+    external fun acquireStressometerByName(name: String): Int
+
+    external fun acquireRotationControllerByName(name: String): Int
 }

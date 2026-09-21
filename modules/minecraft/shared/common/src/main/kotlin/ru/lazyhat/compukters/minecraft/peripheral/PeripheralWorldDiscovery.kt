@@ -25,6 +25,7 @@ import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
+import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralIdentity
 import java.util.WeakHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.function.Supplier
@@ -89,6 +90,87 @@ internal object PeripheralDeviceNames {
         level: ServerLevel,
         identity: PeripheralDeviceIdentity,
     ): String? = PeripheralDeviceNameStorage.get(level).clearName(identity)
+}
+
+enum class ComputerPeripheralLookupStatus {
+    FOUND,
+    MISSING,
+    AMBIGUOUS,
+    INVALID_NAME,
+    TOPOLOGY_LIMIT_EXCEEDED,
+}
+
+data class ComputerPeripheralLookupResult(
+    val status: ComputerPeripheralLookupStatus,
+    val identity: ComputerPeripheralIdentity? = null,
+) {
+    init {
+        require((status == ComputerPeripheralLookupStatus.FOUND) == (identity != null)) {
+            "only a found peripheral lookup may carry an identity"
+        }
+    }
+}
+
+object ComputerPeripheralLookup {
+    @JvmStatic
+    fun find(
+        level: ServerLevel,
+        computerPosition: BlockPos,
+        providerId: String,
+        requestedName: String,
+    ): ComputerPeripheralLookupResult {
+        val traversal = PeripheralWorldDiscovery.discover(level, computerPosition)
+        return lookupComputerPeripheral(
+            providerId,
+            requestedName,
+            traversal,
+            PeripheralDeviceNameStorage.get(level).directory,
+        )
+    }
+}
+
+internal fun lookupComputerPeripheral(
+    providerId: String,
+    requestedName: String,
+    traversal: PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity>,
+    directory: PeripheralDeviceDirectory,
+): ComputerPeripheralLookupResult {
+    val reachable =
+        when (traversal) {
+            is PeripheralCableTraversal.LimitExceeded -> {
+                return ComputerPeripheralLookupResult(ComputerPeripheralLookupStatus.TOPOLOGY_LIMIT_EXCEEDED)
+            }
+
+            is PeripheralCableTraversal.Complete -> {
+                traversal.contacts.filter { identity -> identity.providerId == providerId }
+            }
+        }
+    val lookup =
+        try {
+            directory.lookup(requestedName, reachable)
+        } catch (_: IllegalArgumentException) {
+            return ComputerPeripheralLookupResult(ComputerPeripheralLookupStatus.INVALID_NAME)
+        }
+    return when (lookup) {
+        PeripheralNameLookup.Missing -> {
+            ComputerPeripheralLookupResult(ComputerPeripheralLookupStatus.MISSING)
+        }
+
+        is PeripheralNameLookup.Ambiguous -> {
+            ComputerPeripheralLookupResult(ComputerPeripheralLookupStatus.AMBIGUOUS)
+        }
+
+        is PeripheralNameLookup.Found -> {
+            ComputerPeripheralLookupResult(
+                ComputerPeripheralLookupStatus.FOUND,
+                ComputerPeripheralIdentity(
+                    lookup.identity.providerId,
+                    lookup.identity.anchor,
+                    lookup.identity.deviceKey,
+                ),
+            )
+        }
+    }
 }
 
 internal object PeripheralWorldDiscovery {
