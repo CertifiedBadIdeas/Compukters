@@ -25,7 +25,6 @@ import net.minecraft.network.chat.Component
 import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.CreativeModeTab
 import net.minecraft.world.item.ItemStack
-import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockBehaviour
 import net.neoforged.bus.api.IEventBus
@@ -37,6 +36,8 @@ import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.impl.computer.NeoForgeComputerBlockEntity
 import ru.lazyhat.compukters.impl.terminal.TerminalNetwork
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralCableBlock
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralCableBlocks
 import java.util.function.Supplier
 
 object CompuktersRegistry {
@@ -60,13 +61,17 @@ object CompuktersRegistry {
 
     val COMPUTER_ITEM: DeferredItem<BlockItem> = items.registerSimpleBlockItem(COMPUTER)
 
-    val PERIPHERAL_CABLE: DeferredBlock<Block> =
+    val PERIPHERAL_CABLE: DeferredBlock<PeripheralCableBlock> =
         blocks.register(
             "peripheral_cable",
-            Supplier { Block(BlockBehaviour.Properties.of().strength(1.0f)) },
+            Supplier { PeripheralCableBlock(BlockBehaviour.Properties.of().strength(1.0f)) },
         )
 
     val PERIPHERAL_CABLE_ITEM: DeferredItem<BlockItem> = items.registerSimpleBlockItem(PERIPHERAL_CABLE)
+
+    init {
+        PeripheralCableBlocks.register(Supplier { PERIPHERAL_CABLE.get() })
+    }
 
     val COMPUKTERS_TAB: DeferredHolder<CreativeModeTab, CreativeModeTab> =
         creativeTabs.register(

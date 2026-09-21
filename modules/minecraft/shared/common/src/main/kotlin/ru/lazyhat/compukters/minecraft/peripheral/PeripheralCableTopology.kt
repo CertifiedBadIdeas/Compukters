@@ -53,9 +53,22 @@ internal class PeripheralCableTopology<N, C>(
     private val neighbors: (N) -> Iterable<N>,
     private val contacts: (N) -> Iterable<C>,
 ) {
-    fun traverse(start: N): PeripheralCableTraversal<N, C> {
-        val visited = linkedSetOf(start)
-        val pending = ArrayDeque<N>().apply { addLast(start) }
+    fun traverse(start: N): PeripheralCableTraversal<N, C> = traverse(listOf(start))
+
+    fun traverse(starts: Iterable<N>): PeripheralCableTraversal<N, C> {
+        val visited = linkedSetOf<N>()
+        val pending = ArrayDeque<N>()
+        for (start in starts) {
+            if (visited.add(start)) {
+                if (visited.size > limits.maximumCables) {
+                    return PeripheralCableTraversal.LimitExceeded(
+                        PeripheralCableLimit.CABLES,
+                        limits.maximumCables,
+                    )
+                }
+                pending.addLast(start)
+            }
+        }
         val discoveredContacts = linkedSetOf<C>()
         var neighborVisits = 0
 

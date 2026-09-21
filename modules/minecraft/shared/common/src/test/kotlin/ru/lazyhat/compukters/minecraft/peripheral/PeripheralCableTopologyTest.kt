@@ -114,6 +114,23 @@ class PeripheralCableTopologyTest {
         assertEquals(setOf("right"), right.contacts)
     }
 
+    @Test
+    fun `multiple roots join cable components through the attached computer`() {
+        val topology =
+            topology(
+                edges = mapOf("left" to emptyList(), "right" to emptyList()),
+                contacts = mapOf("left" to listOf("motor"), "right" to listOf("gauge")),
+            )
+
+        val complete =
+            assertIs<PeripheralCableTraversal.Complete<String, String>>(
+                topology.traverse(listOf("left", "right", "left")),
+            )
+
+        assertEquals(listOf("left", "right"), complete.cables.toList())
+        assertEquals(listOf("motor", "gauge"), complete.contacts.toList())
+    }
+
     private fun topology(
         edges: Map<String, List<String>>,
         contacts: Map<String, List<String>> = emptyMap(),
