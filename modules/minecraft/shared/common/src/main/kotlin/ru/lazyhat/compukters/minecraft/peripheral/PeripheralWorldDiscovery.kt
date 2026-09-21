@@ -66,6 +66,31 @@ object PeripheralCableTopologyCache {
     private const val MAXIMUM_COMPUTER_ENTRIES = 1024
 }
 
+internal object PeripheralDeviceNames {
+    fun resolveContact(
+        level: ServerLevel,
+        position: BlockPos,
+        contactedFace: Direction,
+    ): List<PeripheralDeviceIdentity> {
+        check(level.server.isSameThread) { "peripheral names must be changed on the server thread" }
+        val dimension = level.dimension().toString()
+        return ComputerAddonHosts.resolvePeripheralContact(level, position, contactedFace).map { device ->
+            PeripheralDeviceIdentity(device.providerId, dimension, device.anchor.immutable(), device.deviceKey)
+        }
+    }
+
+    fun setName(
+        level: ServerLevel,
+        identity: PeripheralDeviceIdentity,
+        name: String,
+    ): String = PeripheralDeviceNameStorage.get(level).setName(identity, name)
+
+    fun clearName(
+        level: ServerLevel,
+        identity: PeripheralDeviceIdentity,
+    ): String? = PeripheralDeviceNameStorage.get(level).clearName(identity)
+}
+
 internal object PeripheralWorldDiscovery {
     fun discover(
         level: ServerLevel,

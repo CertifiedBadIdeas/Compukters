@@ -35,6 +35,7 @@ import ru.lazyhat.compukters.impl.terminal.TerminalNetwork
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralCableBlock
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralCableBlocks
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorItem
 import java.util.function.Supplier
 import java.util.function.UnaryOperator
 
@@ -68,6 +69,12 @@ object CompuktersRegistry {
         )
 
     val PERIPHERAL_CABLE_ITEM: DeferredItem<BlockItem> = items.registerSimpleBlockItem(PERIPHERAL_CABLE)
+    val PERIPHERAL_CONFIGURATOR_ITEM: DeferredItem<PeripheralConfiguratorItem> =
+        items.registerItem(
+            "peripheral_configurator",
+            ::PeripheralConfiguratorItem,
+            UnaryOperator { properties -> properties.stacksTo(1) },
+        )
 
     init {
         PeripheralCableBlocks.register(Supplier { PERIPHERAL_CABLE.get() })
@@ -84,6 +91,7 @@ object CompuktersRegistry {
                     .displayItems { _, output ->
                         output.accept(COMPUTER_ITEM.get())
                         output.accept(PERIPHERAL_CABLE_ITEM.get())
+                        output.accept(PERIPHERAL_CONFIGURATOR_ITEM.get())
                     }.build()
             },
         )

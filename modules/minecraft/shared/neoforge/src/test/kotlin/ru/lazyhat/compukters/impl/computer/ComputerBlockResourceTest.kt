@@ -98,6 +98,18 @@ class ComputerBlockResourceTest {
         assertEquals("Peripheral Cable", translations["block.compukters.peripheral_cable"].asString)
     }
 
+    @Test
+    fun `peripheral configurator has an item model and instructions`() {
+        val model = resourceJson("/assets/compukters/models/item/peripheral_configurator.json")
+        assertEquals("minecraft:item/generated", model["parent"].asString)
+        assertEquals("compukters:block/compukter/front", model.getAsJsonObject("textures")["layer0"].asString)
+
+        val translations = resourceJson("/assets/compukters/lang/en_us.json")
+        assertEquals("Peripheral Configurator", translations["item.compukters.peripheral_configurator"].asString)
+        assertNotNull(translations["item.compukters.peripheral_configurator.rename"])
+        assertNotNull(translations["item.compukters.peripheral_configurator.cleared"])
+    }
+
     private fun resourceBytes(path: String): ByteArray = assertNotNull(javaClass.getResourceAsStream(path), path).use { it.readAllBytes() }
 
     private fun resourceJson(path: String): JsonObject =

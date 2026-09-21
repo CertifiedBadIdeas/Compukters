@@ -149,6 +149,7 @@ val verifyProductionJar =
                 "assets/compukters/models/block/peripheral_cable.json",
                 "assets/compukters/models/item/compukter.json",
                 "assets/compukters/models/item/peripheral_cable.json",
+                "assets/compukters/models/item/peripheral_configurator.json",
                 "assets/compukters/lang/en_us.json",
                 "data/compukters/loot_table/blocks/peripheral_cable.json",
                 "assets/compukters/textures/gui/ide_toolbar.png",

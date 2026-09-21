@@ -1,0 +1,65 @@
+/*
+ * The Compukters Developers
+ *
+ * Copyright 2026 Vsevolod Petrov (lazyhat)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package ru.lazyhat.compukters.minecraft.peripheral
+
+import net.minecraft.core.component.DataComponents
+import net.minecraft.network.chat.Component
+import net.minecraft.server.level.ServerLevel
+import net.minecraft.world.InteractionResult
+import net.minecraft.world.item.Item
+import net.minecraft.world.item.context.UseOnContext
+
+class PeripheralConfiguratorItem(
+    properties: Properties,
+) : Item(properties) {
+    override fun useOn(context: UseOnContext): InteractionResult {
+        if (context.level.isClientSide) return InteractionResult.SUCCESS
+        val level = context.level as? ServerLevel ?: return InteractionResult.PASS
+        val player = context.player ?: return InteractionResult.PASS
+        val identities = PeripheralDeviceNames.resolveContact(level, context.clickedPos, context.clickedFace)
+        if (identities.size != 1) {
+            val key =
+                if (identities.isEmpty()) {
+                    "item.compukters.peripheral_configurator.missing"
+                } else {
+                    "item.compukters.peripheral_configurator.ambiguous"
+                }
+            player.displayClientMessage(Component.translatable(key), false)
+            return InteractionResult.CONSUME
+        }
+        val identity = identities.single()
+        if (player.isShiftKeyDown) {
+            PeripheralDeviceNames.clearName(level, identity)
+            player.displayClientMessage(Component.translatable("item.compukters.peripheral_configurator.cleared"), false)
+            return InteractionResult.SUCCESS
+        }
+        val requestedName = context.itemInHand.get(DataComponents.CUSTOM_NAME)?.string
+        if (requestedName == null) {
+            player.displayClientMessage(Component.translatable("item.compukters.peripheral_configurator.rename"), false)
+            return InteractionResult.CONSUME
+        }
+        val normalized =
+            runCatching { PeripheralDeviceNames.setName(level, identity, requestedName) }.getOrElse {
+                player.displayClientMessage(Component.translatable("item.compukters.peripheral_configurator.invalid"), false)
+                return InteractionResult.CONSUME
+            }
+        player.displayClientMessage(Component.translatable("item.compukters.peripheral_configurator.named", normalized), false)
+        return InteractionResult.SUCCESS
+    }
+}
