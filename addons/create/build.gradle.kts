@@ -31,7 +31,6 @@ plugins {
 
 group = "ru.lazyhat.compukters"
 val addonSdkVersion = "0.3.0"
-val compuktersModVersion = "1.21.1-neoforge-0.5.0-S"
 version = providers.gradleProperty("addonVersion").get()
 
 base {
@@ -74,7 +73,9 @@ repositories {
 
 val compuktersCommonApi = "ru.lazyhat.compukters:compukters-addon-api:$addonSdkVersion"
 val compuktersAdapterApi = "ru.lazyhat.compukters:compukters-addon-neoforge-1.21.1:$addonSdkVersion"
-val compuktersDevelopmentMod = "ru.lazyhat.compukters:compukters-neoforge-1.21.1-dev:$compuktersModVersion"
+val compuktersDevelopmentMod =
+    files(rootProject.file("../../modules/minecraft/v1_21_1/v1_21_1-neoforge/build/devlibs/compukters-development-mod.jar"))
+        .builtBy(gradle.includedBuild("Compukters").task(":v1_21_1-neoforge:developmentModJar"))
 
 dependencies {
     minecraft("net.minecraft:minecraft:1.21.1")
@@ -86,10 +87,7 @@ dependencies {
     )
     neoForge("net.neoforged:neoforge:21.1.250")
 
-    modRuntimeOnly(compuktersDevelopmentMod) {
-        isTransitive = false
-        targetConfiguration = "namedElements"
-    }
+    runtimeOnly(compuktersDevelopmentMod)
     testImplementation(compuktersCommonApi)
     testImplementation(compuktersAdapterApi)
     modImplementation("com.simibubi.create:create-1.21.1:6.0.10-280:slim") { isTransitive = false }

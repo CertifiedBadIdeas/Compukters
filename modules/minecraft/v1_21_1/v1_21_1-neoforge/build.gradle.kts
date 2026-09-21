@@ -18,6 +18,7 @@
 
 import net.fabricmc.loom.task.RemapJarTask
 import java.util.Locale
+import java.util.jar.Manifest
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 
@@ -38,17 +39,22 @@ configurations.named("namedElements") {
 }
 
 developmentModJar.configure {
+    manifest.attributes["Fabric-Loom-Remap"] = "false"
     doLast {
         val archive = archiveFile.get().asFile
         val adapterClass = "ru/lazyhat/compukters/api/addon/minecraft/CompuktersAddonRegistry.class"
-        val adapterBytes =
+        val (adapterBytes, remapSetting) =
             ZipFile(archive).use { zip ->
                 val entry = checkNotNull(zip.getEntry(adapterClass)) { "$adapterClass is missing from ${archive.name}" }
-                zip.getInputStream(entry).use { it.readBytes() }
+                val manifestEntry = checkNotNull(zip.getEntry("META-INF/MANIFEST.MF")) { "manifest is missing from ${archive.name}" }
+                val adapterBytes = zip.getInputStream(entry).use { it.readBytes() }
+                val manifest = zip.getInputStream(manifestEntry).use(::Manifest)
+                adapterBytes to manifest.mainAttributes.getValue("Fabric-Loom-Remap")
             }
         check(!adapterBytes.toString(Charsets.ISO_8859_1).contains("net/minecraft/class_")) {
             "$adapterClass was not transformed to the NeoForge development namespace"
         }
+        check(remapSetting == "false") { "${archive.name} must opt out of a second Loom remap" }
     }
 }
 

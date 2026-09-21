@@ -36,10 +36,10 @@ verification creates its own temporary Maven layout directly from the built SDK 
 
 The first-party Create addon under `addons/create` is itself a separate Gradle root and serves as the complete example.
 It owns its Gradle wrapper and includes the adjacent Compukters checkout as a composite build for local co-development.
-Public SDK and development-mod coordinates remain in the addon build, but explicit substitutions select the matching
-local projects; the runtime mod selects the self-contained `namedElements` development artifact. A changed Compukters
-source therefore rebuilds the development mod for `runClient` without publishing it to Maven Local or relying on
-Loom's coordinate-keyed remap cache. After publishing the Gradle plugin and tooling SDK, run `check`,
+Public SDK coordinates remain in the addon build, and explicit substitutions select the matching local projects. The
+runtime uses the adjacent checkout's self-contained development JAR and carries its included-build task dependency, so
+Gradle rebuilds it before `runClient` without publishing it to Maven Local or passing it through Loom's mod remap cache.
+After publishing the Gradle plugin and tooling SDK, run `check`,
 `buildProductionJar`, or `runClient` from `addons/create`. The Compukters root remains unaware of the addon and does not
 own or invoke its tasks. The Create addon also has its own release version, independent of both the SDK and the base
 mod.
