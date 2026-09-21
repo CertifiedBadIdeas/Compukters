@@ -23,6 +23,7 @@ import net.minecraft.network.chat.Component
 import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.CreativeModeTab
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.neoforge.registries.DeferredBlock
@@ -58,6 +59,15 @@ object CompuktersRegistry {
 
     val COMPUTER_ITEM: DeferredItem<BlockItem> = items.registerSimpleBlockItem(COMPUTER)
 
+    val PERIPHERAL_CABLE: DeferredBlock<Block> =
+        blocks.registerBlock(
+            "peripheral_cable",
+            ::Block,
+            UnaryOperator { properties -> properties.strength(1.0f) },
+        )
+
+    val PERIPHERAL_CABLE_ITEM: DeferredItem<BlockItem> = items.registerSimpleBlockItem(PERIPHERAL_CABLE)
+
     val COMPUKTERS_TAB: DeferredHolder<CreativeModeTab, CreativeModeTab> =
         creativeTabs.register(
             "compukters",
@@ -66,8 +76,10 @@ object CompuktersRegistry {
                     .builder()
                     .title(Component.translatable("itemGroup.compukters"))
                     .icon { ItemStack(COMPUTER_ITEM.get()) }
-                    .displayItems { _, output -> output.accept(COMPUTER_ITEM.get()) }
-                    .build()
+                    .displayItems { _, output ->
+                        output.accept(COMPUTER_ITEM.get())
+                        output.accept(PERIPHERAL_CABLE_ITEM.get())
+                    }.build()
             },
         )
 

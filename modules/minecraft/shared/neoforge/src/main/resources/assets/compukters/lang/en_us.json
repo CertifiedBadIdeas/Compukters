@@ -1,5 +1,6 @@
 {
   "block.compukters.compukter": "Compukter",
+  "block.compukters.peripheral_cable": "Peripheral Cable",
   "itemGroup.compukters": "Compukters",
   "key.category.compukters.ide": "Compukters",
   "key.compukters.open_ide": "Open IDE"

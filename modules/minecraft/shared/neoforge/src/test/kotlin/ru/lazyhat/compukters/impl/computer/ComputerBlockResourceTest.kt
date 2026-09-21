@@ -76,6 +76,28 @@ class ComputerBlockResourceTest {
         assertEquals("Compukters", translations["itemGroup.compukters"].asString)
     }
 
+    @Test
+    fun `peripheral cable resources describe one passive block`() {
+        val model = resourceJson("/assets/compukters/models/block/peripheral_cable.json")
+        assertEquals("minecraft:block/cube_all", model["parent"].asString)
+        assertEquals("compukters:block/compukter/side", model.getAsJsonObject("textures")["all"].asString)
+
+        val variants = resourceJson("/assets/compukters/blockstates/peripheral_cable.json").getAsJsonObject("variants")
+        assertEquals("compukters:block/peripheral_cable", variants.getAsJsonObject("")["model"].asString)
+
+        val loot = resourceJson("/data/compukters/loot_table/blocks/peripheral_cable.json")
+        val entry =
+            loot
+                .getAsJsonArray("pools")[0]
+                .asJsonObject
+                .getAsJsonArray("entries")[0]
+                .asJsonObject
+        assertEquals("compukters:peripheral_cable", entry["name"].asString)
+
+        val translations = resourceJson("/assets/compukters/lang/en_us.json")
+        assertEquals("Peripheral Cable", translations["block.compukters.peripheral_cable"].asString)
+    }
+
     private fun resourceBytes(path: String): ByteArray = assertNotNull(javaClass.getResourceAsStream(path), path).use { it.readAllBytes() }
 
     private fun resourceJson(path: String): JsonObject =
