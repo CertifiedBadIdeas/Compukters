@@ -1,6 +1,13 @@
 {
   "block.compukters.compukter": "Compukter",
   "block.compukters.peripheral_cable": "Peripheral Cable",
+  "item.compukters.peripheral_configurator": "Peripheral Configurator",
+  "item.compukters.peripheral_configurator.ambiguous": "More than one addon recognizes this device",
+  "item.compukters.peripheral_configurator.cleared": "Peripheral name cleared",
+  "item.compukters.peripheral_configurator.invalid": "Use 1-32 lowercase letters, digits, underscores, or hyphens; start with a letter",
+  "item.compukters.peripheral_configurator.missing": "No supported peripheral on this face",
+  "item.compukters.peripheral_configurator.named": "Peripheral named %s",
+  "item.compukters.peripheral_configurator.rename": "Rename this configurator in an anvil, then use it on the peripheral",
   "itemGroup.compukters": "Compukters",
   "key.category.compukters.ide": "Compukters",
   "key.compukters.open_ide": "Open IDE"

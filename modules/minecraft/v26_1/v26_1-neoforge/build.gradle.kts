@@ -494,6 +494,8 @@ val verifyPackagedCompukterFfi =
                 "assets/compukters/blockstates/peripheral_cable.json",
                 "assets/compukters/models/block/peripheral_cable.json",
                 "assets/compukters/items/peripheral_cable.json",
+                "assets/compukters/items/peripheral_configurator.json",
+                "assets/compukters/models/item/peripheral_configurator.json",
                 "data/compukters/loot_table/blocks/peripheral_cable.json",
                 "assets/compukters/font/terminal/cozette.json",
                 "assets/compukters/font/terminal/cozette-codepoints.txt",
