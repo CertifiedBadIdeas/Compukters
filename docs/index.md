@@ -30,7 +30,7 @@ use semantic editing and analysis, then deploy verified programs into a determin
   </section>
   <section class="feature-card">
     <h3>Real automation</h3>
-    <p>Deploy from the IDE, automate redstone, and connect adjacent Create kinetic devices on Minecraft 1.21.1.</p>
+    <p>Deploy from the IDE, automate redstone, and connect named Create kinetic devices through passive cables on Minecraft 1.21.1.</p>
   </section>
 </div>
 
@@ -39,7 +39,7 @@ use semantic editing and analysis, then deploy verified programs into a determin
 - **New player:** follow [Getting started](https://certifiedbadideas.github.io/Compukters/GETTING-STARTED/) from installation to your first running program.
 - **Guest Kotlin author:** check the exact [Kotlin support matrix](https://certifiedbadideas.github.io/Compukters/KOTLIN-SUPPORT/) before relying on a language or library feature.
 - **Automation builder:** learn the local-side model in [Redstone GPIO](https://certifiedbadideas.github.io/Compukters/REDSTONE/).
-- **Create engineer:** connect speedometers, stressometers, and rotation controllers with the [Create kinetics API](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/).
+- **Create engineer:** connect and name speedometers, stressometers, and rotation controllers with the [Create kinetics API](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/).
 - **Addon developer:** expose a typed Guest Kotlin module from an independent mod with the [Addon SDK](https://certifiedbadideas.github.io/Compukters/ADDON-DEVELOPMENT/).
 - **Following development:** see the continuous [Changelog](https://certifiedbadideas.github.io/Compukters/CHANGELOG/).
 - **Contributor:** start with [Architecture](https://certifiedbadideas.github.io/Compukters/ARCHITECTURE/) and [Verification](https://certifiedbadideas.github.io/Compukters/VERIFICATION/).

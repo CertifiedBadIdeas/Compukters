@@ -58,6 +58,15 @@ object CompuktersGameTests {
 
     @JvmStatic
     @GameTest(
+        batch = "peripheral_cable",
+        template = EMPTY_TEMPLATE,
+        templateNamespace = "minecraft",
+        timeoutTicks = TIMEOUT_TICKS,
+    )
+    fun peripheralCable(helper: GameTestHelper) = PeripheralCableGameTestScenario.run(helper)
+
+    @JvmStatic
+    @GameTest(
         batch = "actor_service",
         template = EMPTY_TEMPLATE,
         templateNamespace = "minecraft",

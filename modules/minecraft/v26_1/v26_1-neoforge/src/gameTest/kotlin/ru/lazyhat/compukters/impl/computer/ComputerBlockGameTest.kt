@@ -65,6 +65,10 @@ object ComputerBlockGameTest {
             ComputerSoundGameTest(testData("computer_sound")),
         )
         event.registerTest(
+            Identifier.fromNamespaceAndPath(MOD_ID, "peripheral_cable"),
+            PeripheralCableGameTest(testData("peripheral_cable")),
+        )
+        event.registerTest(
             Identifier.fromNamespaceAndPath(MOD_ID, "vm_actor_service"),
             VmActorServiceGameTest(testData("vm_actor_service")),
         )
