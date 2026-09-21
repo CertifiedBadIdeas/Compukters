@@ -49,7 +49,10 @@ val addonToolingArtifact =
     )
 val guestPlatformArtifact = project(":guest-platform").layout.buildDirectory.file("platform/compukters-platform.cpb")
 val addonAdapterProject = project(":v1_21_1-addon-neoforge-api")
-val addonAdapterArtifacts = addonAdapterProject.layout.buildDirectory.dir("libs")
+val addonAdapterArtifact =
+    providers.provider {
+        addonAdapterProject.tasks.named<Jar>("jar").get().archiveFile.get()
+    }
 
 tasks.test {
     dependsOn(
@@ -58,15 +61,14 @@ tasks.test {
         ":guest-platform:assemblePlatformBundle",
         ":v1_21_1-addon-neoforge-api:jar",
     )
-    inputs.files(addonApiArtifact, addonToolingArtifact, guestPlatformArtifact)
-    inputs.dir(addonAdapterArtifacts)
+    inputs.files(addonApiArtifact, addonToolingArtifact, guestPlatformArtifact, addonAdapterArtifact)
     systemProperty("compukters.addon.sdk.version", addonSdkVersion)
     systemProperty("compukters.addon.kotlin.version", libs.plugins.kotlin.get().version.requiredVersion)
     doFirst {
         systemProperty("compukters.addon.test.api", addonApiArtifact.get().asFile.absolutePath)
         systemProperty("compukters.addon.test.tooling", addonToolingArtifact.get().asFile.absolutePath)
         systemProperty("compukters.addon.test.platform", guestPlatformArtifact.get().asFile.absolutePath)
-        systemProperty("compukters.addon.test.adapter-dir", addonAdapterArtifacts.get().asFile.absolutePath)
+        systemProperty("compukters.addon.test.adapter", addonAdapterArtifact.get().asFile.absolutePath)
     }
 }
 
