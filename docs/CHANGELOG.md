@@ -41,6 +41,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   stressometers, waits for value changes without Guest-side polling, and controls rotation speed controllers.
 - Device handles remain bound to the exact adjacent block. Missing, unloaded, removed, or replaced devices fail
   deterministically and produce a descriptive terminal diagnostic.
+- Addon SDK 0.3.0 lets independent addons map a cable touching any supported block or multiblock part to one canonical
+  logical device while preserving the existing adjacent-side registration API.
 
 ### In-game IDE
 

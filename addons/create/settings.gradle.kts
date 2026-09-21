@@ -34,7 +34,7 @@ pluginManagement {
         id("dev.architectury.loom") version "1.17.491"
         id("architectury-plugin") version "3.5.169"
         id("org.jmailen.kotlinter") version "5.7.0"
-        id("ru.lazyhat.compukters.addon") version "0.2.0"
+        id("ru.lazyhat.compukters.addon") version "0.3.0"
     }
 }
 

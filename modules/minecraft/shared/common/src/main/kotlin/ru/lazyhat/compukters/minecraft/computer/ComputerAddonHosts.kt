@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.minecraft.computer
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukters.addon.api.AddonCapabilitySchema
@@ -39,6 +40,20 @@ fun interface ComputerAddonHostFactory {
     ): ProgramAddonHost?
 }
 
+data class ComputerPeripheralIdentity(
+    val providerId: String,
+    val anchor: BlockPos,
+    val deviceKey: String,
+)
+
+fun interface ComputerPeripheralProvider {
+    fun resolve(
+        level: ServerLevel,
+        position: BlockPos,
+        contactedFace: Direction,
+    ): ComputerPeripheralIdentity?
+}
+
 object ComputerAddonHosts {
     private val registrations = CopyOnWriteArrayList<Registration>()
     private var guestApiCatalog = AddonGuestApiCatalog.empty()
@@ -48,17 +63,34 @@ object ComputerAddonHosts {
         factory: ComputerAddonHostFactory,
         guestApiBundles: List<AddonGuestApiBundle> = emptyList(),
         registrationIdentity: Any = factory,
+        peripheralProvider: ComputerPeripheralProvider? = null,
     ) {
         require(registrations.none { it.identity == registrationIdentity }) {
             "computer addon host factory is already registered"
         }
         val updatedCatalog = AddonGuestApiCatalog.of(guestApiCatalog.bundles + guestApiBundles)
-        registrations += Registration(factory, guestApiBundles, registrationIdentity)
+        registrations += Registration(factory, guestApiBundles, registrationIdentity, peripheralProvider)
         guestApiCatalog = updatedCatalog
     }
 
     @Synchronized
     fun availableGuestApiCatalog(): AddonGuestApiCatalog = guestApiCatalog
+
+    internal fun resolvePeripheralContact(
+        level: ServerLevel,
+        position: BlockPos,
+        contactedFace: Direction,
+    ): List<ComputerPeripheralIdentity> {
+        check(level.server.isSameThread) { "peripheral contacts must be resolved on the server thread" }
+        return registrations.mapNotNull { registration ->
+            val provider = registration.peripheralProvider ?: return@mapNotNull null
+            try {
+                provider.resolve(level, position, contactedFace)
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
 
     internal fun create(
         level: ServerLevel,
@@ -83,6 +115,7 @@ object ComputerAddonHosts {
         val factory: ComputerAddonHostFactory,
         val guestApiBundles: List<AddonGuestApiBundle>,
         val identity: Any,
+        val peripheralProvider: ComputerPeripheralProvider?,
     )
 }
 
