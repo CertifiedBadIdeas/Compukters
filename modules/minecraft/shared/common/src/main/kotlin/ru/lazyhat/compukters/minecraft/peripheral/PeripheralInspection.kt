@@ -26,7 +26,7 @@ internal enum class PeripheralCandidateStatus {
 }
 
 internal data class PeripheralInspectionEntry(
-    val name: String,
+    val name: String?,
     val providerId: String,
     val deviceKey: String,
     val duplicate: Boolean,
@@ -35,7 +35,7 @@ internal data class PeripheralInspectionEntry(
 internal sealed interface PeripheralInspection {
     data class Complete(
         val entries: List<PeripheralInspectionEntry>,
-        val totalNamedDevices: Int,
+        val totalDevices: Int,
         val truncated: Boolean,
         val nameCounts: Map<String, Int>,
         val targetName: String?,
@@ -67,22 +67,24 @@ internal fun inspectPeripheralComponent(
     val nameCounts = named.groupingBy(Pair<PeripheralDeviceIdentity, String>::second).eachCount().toSortedMap()
     val duplicateNames = nameCounts.filterValues { it > 1 }.keys
     val entries =
-        named
+        reachable
             .sortedWith(
-                compareBy<Pair<PeripheralDeviceIdentity, String>>(
-                    Pair<PeripheralDeviceIdentity, String>::second,
-                    { it.first.providerId },
-                    { it.first.deviceKey },
-                    { it.first.anchor.asLong() },
+                compareBy<PeripheralDeviceIdentity>(
+                    { directory.nameOf(it) == null },
+                    { directory.nameOf(it).orEmpty() },
+                    PeripheralDeviceIdentity::providerId,
+                    PeripheralDeviceIdentity::deviceKey,
+                    { it.anchor.asLong() },
                 ),
             ).take(maximumEntries)
-            .map { (identity, name) ->
-                PeripheralInspectionEntry(name, identity.providerId, identity.deviceKey, name in duplicateNames)
+            .map { identity ->
+                val name = directory.nameOf(identity)
+                PeripheralInspectionEntry(name, identity.providerId, identity.deviceKey, name != null && name in duplicateNames)
             }
     return PeripheralInspection.Complete(
         entries = entries,
-        totalNamedDevices = named.size,
-        truncated = named.size > entries.size,
+        totalDevices = reachable.size,
+        truncated = reachable.size > entries.size,
         nameCounts = nameCounts,
         targetName = target?.let(directory::nameOf),
         candidateStatus = evaluatePeripheralCandidate(candidate, nameCounts, target?.let(directory::nameOf)),

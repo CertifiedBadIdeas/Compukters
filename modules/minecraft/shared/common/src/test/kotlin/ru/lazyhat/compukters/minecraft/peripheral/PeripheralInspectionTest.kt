@@ -48,11 +48,28 @@ class PeripheralInspectionTest {
         assertEquals(listOf("motor", "shared"), inspection.entries.map(PeripheralInspectionEntry::name))
         assertFalse(inspection.entries.first().duplicate)
         assertTrue(inspection.entries.last().duplicate)
-        assertEquals(3, inspection.totalNamedDevices)
+        assertEquals(3, inspection.totalDevices)
         assertTrue(inspection.truncated)
         assertEquals(mapOf("motor" to 1, "shared" to 2), inspection.nameCounts)
         assertEquals("motor", inspection.targetName)
         assertEquals(PeripheralCandidateStatus.TARGET, inspection.candidateStatus)
+    }
+
+    @Test
+    fun `includes unnamed devices after named devices`() {
+        val named = device("create", "controller", 2)
+        val unnamed = device("create", "speedometer", 1)
+        val directory = PeripheralDeviceDirectory(listOf(PeripheralDeviceName(named, "motor")))
+
+        val inspection =
+            assertIs<PeripheralInspection.Complete>(
+                inspectPeripheralComponent(complete(unnamed, named), directory, null, "", maximumEntries = 2),
+            )
+
+        assertEquals(listOf("motor", null), inspection.entries.map(PeripheralInspectionEntry::name))
+        assertEquals(listOf("controller", "speedometer"), inspection.entries.map(PeripheralInspectionEntry::deviceKey))
+        assertEquals(2, inspection.totalDevices)
+        assertFalse(inspection.truncated)
     }
 
     @Test

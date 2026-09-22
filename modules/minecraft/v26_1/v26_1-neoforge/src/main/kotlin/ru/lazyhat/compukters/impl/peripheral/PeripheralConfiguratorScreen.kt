@@ -21,6 +21,7 @@ import net.minecraft.network.chat.Component
 import net.minecraft.world.InteractionHand
 import net.neoforged.neoforge.client.network.ClientPacketDistributor
 import org.lwjgl.glfw.GLFW
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorMode
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorSaveResult
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorSnapshot
 import java.util.Locale
@@ -28,36 +29,54 @@ import java.util.Locale
 internal class PeripheralConfiguratorScreen(
     private val hand: InteractionHand,
     private val snapshot: PeripheralConfiguratorSnapshot,
-) : Screen(Component.translatable("screen.compukters.peripheral_configurator")) {
-    private lateinit var nameBox: EditBox
+) : Screen(
+        Component.translatable(
+            if (snapshot.mode == PeripheralConfiguratorMode.EDIT_DEVICE) {
+                "screen.compukters.peripheral_configurator"
+            } else {
+                "screen.compukters.peripheral_configurator.network"
+            },
+        ),
+    ) {
+    private var nameBox: EditBox? = null
     private var saveResult: PeripheralConfiguratorSaveResult? = null
     private var rowOffset = 0
 
     override fun init() {
         val panelWidth = 260
         val left = (width - panelWidth) / 2
-        nameBox =
-            EditBox(font, left + 10, 48, panelWidth - 20, 20, Component.translatable("screen.compukters.peripheral_configurator.name"))
-        nameBox.setMaxLength(32)
-        nameBox.value = snapshot.configuredName
-        addRenderableWidget(nameBox)
-        addRenderableWidget(
-            Button
-                .builder(Component.translatable("gui.done")) { save() }
-                .bounds(left + 10, height - 38, 115, 20)
-                .build(),
-        )
-        addRenderableWidget(
-            Button
-                .builder(Component.translatable("gui.cancel")) { onClose() }
-                .bounds(left + 135, height - 38, 115, 20)
-                .build(),
-        )
-        setInitialFocus(nameBox)
+        if (snapshot.mode == PeripheralConfiguratorMode.EDIT_DEVICE) {
+            val editor =
+                EditBox(font, left + 10, 48, panelWidth - 20, 20, Component.translatable("screen.compukters.peripheral_configurator.name"))
+            editor.setMaxLength(32)
+            editor.value = snapshot.configuredName
+            nameBox = editor
+            addRenderableWidget(editor)
+            addRenderableWidget(
+                Button
+                    .builder(Component.translatable("gui.done")) { save() }
+                    .bounds(left + 10, height - 38, 115, 20)
+                    .build(),
+            )
+            addRenderableWidget(
+                Button
+                    .builder(Component.translatable("gui.cancel")) { onClose() }
+                    .bounds(left + 135, height - 38, 115, 20)
+                    .build(),
+            )
+            setInitialFocus(editor)
+        } else {
+            addRenderableWidget(
+                Button
+                    .builder(Component.translatable("gui.done")) { onClose() }
+                    .bounds(width / 2 - 57, height - 38, 115, 20)
+                    .build(),
+            )
+        }
     }
 
     override fun keyPressed(event: KeyEvent): Boolean {
-        if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
+        if (nameBox != null && (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER)) {
             save()
             return true
         }
@@ -81,8 +100,25 @@ internal class PeripheralConfiguratorScreen(
     ) {
         val left = (width - 260) / 2
         graphics.text(font, title, width / 2 - font.width(title) / 2, 24, 0xffffff, false)
-        graphics.text(font, status(), left + 10, 74, statusColor(), false)
-        var y = 94
+        var y = 48
+        if (snapshot.mode == PeripheralConfiguratorMode.EDIT_DEVICE) {
+            graphics.text(font, status(), left + 10, 74, statusColor(), false)
+            y = 94
+        } else {
+            graphics.text(
+                font,
+                Component.translatable(
+                    "screen.compukters.peripheral_configurator.summary",
+                    snapshot.totalDevices,
+                    snapshot.nameCounts.values.sum(),
+                ),
+                left + 10,
+                y,
+                0xaaaaaa,
+                false,
+            )
+            y += 20
+        }
         if (snapshot.topologyLimitExceeded) {
             graphics.text(
                 font,
@@ -93,10 +129,36 @@ internal class PeripheralConfiguratorScreen(
                 false,
             )
         } else {
+            if (snapshot.entries.isEmpty()) {
+                graphics.text(
+                    font,
+                    Component.translatable("screen.compukters.peripheral_configurator.empty"),
+                    left + 10,
+                    y,
+                    0xaaaaaa,
+                    false,
+                )
+            }
             snapshot.entries.drop(rowOffset).take(VISIBLE_ROWS).forEach { entry ->
-                val type = entry.deviceKey.replace('_', ' ')
-                val color = if (entry.duplicate) 0xff5555 else 0xaaaaaa
-                graphics.text(font, "${entry.name}  $type", left + 10, y, color, false)
+                val name =
+                    entry.name?.let(Component::literal) ?: Component.translatable("screen.compukters.peripheral_configurator.unnamed")
+                val type = "${entry.providerId}:${entry.deviceKey.replace('_', ' ')}"
+                val color =
+                    if (entry.duplicate) {
+                        0xff5555
+                    } else if (entry.name == null) {
+                        0x777777
+                    } else {
+                        0xaaaaaa
+                    }
+                graphics.text(
+                    font,
+                    Component.translatable("screen.compukters.peripheral_configurator.entry", name, type),
+                    left + 10,
+                    y,
+                    color,
+                    false,
+                )
                 y += 11
             }
             if (snapshot.entries.size > VISIBLE_ROWS || snapshot.truncated) {
@@ -106,7 +168,7 @@ internal class PeripheralConfiguratorScreen(
                         "screen.compukters.peripheral_configurator.more",
                         rowOffset + 1,
                         minOf(rowOffset + VISIBLE_ROWS, snapshot.entries.size),
-                        snapshot.totalNamedDevices,
+                        snapshot.totalDevices,
                     ),
                     left + 10,
                     y,
@@ -131,6 +193,7 @@ internal class PeripheralConfiguratorScreen(
     }
 
     internal fun handleSave(result: PeripheralConfiguratorSaveResult) {
+        if (nameBox == null) return
         saveResult = result
         if (result == PeripheralConfiguratorSaveResult.NAMED_DEVICE) {
             onClose()
@@ -138,12 +201,18 @@ internal class PeripheralConfiguratorScreen(
     }
 
     private fun save() {
-        ClientPacketDistributor.sendToServer(SavePayload(hand, snapshot.context.toWire(), nameBox.value))
+        val editor = nameBox ?: return
+        ClientPacketDistributor.sendToServer(SavePayload(hand, snapshot.context.toWire(), editor.value))
     }
 
     private fun status(): Component {
         saveResult?.let { return Component.translatable("screen.compukters.peripheral_configurator.result.${it.name.lowercase()}") }
-        val normalized = nameBox.value.trim().lowercase(Locale.ROOT)
+        val normalized =
+            nameBox
+                ?.value
+                .orEmpty()
+                .trim()
+                .lowercase(Locale.ROOT)
         if (!Regex("[a-z][a-z0-9_-]{0,31}").matches(normalized)) {
             return Component.translatable("screen.compukters.peripheral_configurator.invalid")
         }
@@ -156,7 +225,12 @@ internal class PeripheralConfiguratorScreen(
     }
 
     private fun statusColor(): Int {
-        val normalized = nameBox.value.trim().lowercase(Locale.ROOT)
+        val normalized =
+            nameBox
+                ?.value
+                .orEmpty()
+                .trim()
+                .lowercase(Locale.ROOT)
         val count = snapshot.nameCounts[normalized] ?: 0
         val valid = Regex("[a-z][a-z0-9_-]{0,31}").matches(normalized)
         val available = count == 0 || (snapshot.targetName == normalized && count == 1)

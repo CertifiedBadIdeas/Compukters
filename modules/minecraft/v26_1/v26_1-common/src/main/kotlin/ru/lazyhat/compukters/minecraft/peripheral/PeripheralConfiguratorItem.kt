@@ -32,6 +32,13 @@ class PeripheralConfiguratorItem(
         if (context.level.isClientSide) return InteractionResult.SUCCESS
         val level = context.level as? ServerLevel ?: return InteractionResult.PASS
         val player = context.player as? ServerPlayer ?: return InteractionResult.PASS
+        if (PeripheralCableBlocks.contains(level.getBlockState(context.clickedPos))) {
+            return if (PeripheralConfiguratorServer.openCable(player, context.hand, context.clickedPos, context.clickedFace)) {
+                InteractionResult.SUCCESS_SERVER
+            } else {
+                InteractionResult.CONSUME
+            }
+        }
         val identities = PeripheralDeviceNames.resolveContact(level, context.clickedPos, context.clickedFace)
         if (player.isShiftKeyDown && identities.size == 1) {
             val identity = identities.single()

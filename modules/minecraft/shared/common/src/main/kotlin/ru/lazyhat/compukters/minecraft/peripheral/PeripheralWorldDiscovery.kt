@@ -212,6 +212,16 @@ internal object PeripheralWorldDiscovery {
         }
     }
 
+    fun discoverFromCable(
+        level: ServerLevel,
+        cablePosition: BlockPos,
+    ): PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity> {
+        check(level.server.isSameThread) { "peripheral cables must be discovered on the server thread" }
+        return PeripheralCableTopologyCache.getOrCompute(level, cablePosition) {
+            discoverUncached(level, listOf(cablePosition.immutable()))
+        }
+    }
+
     private fun discoverUncached(
         level: ServerLevel,
         starts: List<BlockPos>,
