@@ -33,6 +33,7 @@ import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralProvider
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookup
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookupStatus
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralNames
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralCableBlock
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorContext
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorSaveResult
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorServer
@@ -65,7 +66,15 @@ internal object PeripheralCableGameTestScenario {
 
         helper
             .startSequence()
-            .thenExecute {
+            .thenExecuteAfter(2) {
+                helper.assertTrue(
+                    helper.getBlockState(BlockPos(4, 2, 3)).getValue(PeripheralCableBlock.EAST),
+                    "cable did not connect to the first compatible block",
+                )
+                helper.assertTrue(
+                    helper.getBlockState(BlockPos(4, 2, 1)).getValue(PeripheralCableBlock.EAST),
+                    "cable did not connect to the second compatible block",
+                )
                 assertFound(helper, computer, "input", helper.absolutePos(firstDevice))
                 assertFound(helper, computer, "output", helper.absolutePos(secondDevice))
                 verifyConfiguratorSave(helper, computer, firstIdentity, secondIdentity)
@@ -136,10 +145,14 @@ internal object PeripheralCableGameTestScenario {
             registrationIdentity = PeripheralCableGameTestScenario,
             peripheralProvider =
                 ComputerPeripheralProvider { level, position, _ ->
-                    when (level.getBlockState(position).block) {
-                        Blocks.BARREL -> ComputerPeripheralIdentity(TEST_PROVIDER_ID, position.immutable(), FIRST_DEVICE_KEY)
-                        Blocks.DROPPER -> ComputerPeripheralIdentity(TEST_PROVIDER_ID, position.immutable(), SECOND_DEVICE_KEY)
-                        else -> null
+                    if (level.getBlockEntity(position) == null) {
+                        null
+                    } else {
+                        when (level.getBlockState(position).block) {
+                            Blocks.BARREL -> ComputerPeripheralIdentity(TEST_PROVIDER_ID, position.immutable(), FIRST_DEVICE_KEY)
+                            Blocks.DROPPER -> ComputerPeripheralIdentity(TEST_PROVIDER_ID, position.immutable(), SECOND_DEVICE_KEY)
+                            else -> null
+                        }
                     }
                 },
         )
