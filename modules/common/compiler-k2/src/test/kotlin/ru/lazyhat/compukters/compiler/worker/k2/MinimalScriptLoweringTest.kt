@@ -709,6 +709,90 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `guest instance methods lower with deterministic owners flags and method ranges`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                open class Base {
+                    open fun value(): Int = 1
+                }
+                class Child : Base() {
+                    override fun value(): Int = 2
+                }
+                interface Reader {
+                    fun read(): Int
+                }
+                class Box : Reader {
+                    override fun read(): Int = 3
+                }
+
+                fun main() {
+                    Child()
+                    Box()
+                }
+                """.trimIndent()
+
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val bytes = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            val application = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+            val namedTypes =
+                application.types.withIndex().associateBy(
+                    keySelector = { (_, type) -> application.strings[type.name.value.toInt()].toString() },
+                    valueTransform = { it },
+                )
+
+            fun methods(name: String): List<ru.lazyhat.compukters.compiler.artifact.model.Function> {
+                val (_, type) = assertNotNull(namedTypes[name], "missing $name in ${namedTypes.keys}")
+                val start =
+                    when (type) {
+                        is NominalType.Class -> type.methodStart
+                        is NominalType.Interface -> type.methodStart
+                        else -> error("$name is not nominal")
+                    }.toInt()
+                val count =
+                    when (type) {
+                        is NominalType.Class -> type.methodCount
+                        is NominalType.Interface -> type.methodCount
+                        else -> error("$name is not nominal")
+                    }.toInt()
+                return application.functions.subList(start, start + count)
+            }
+
+            assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
+            assertEquals(setOf(FunctionFlag.VIRTUAL), methods("Base").single().flags)
+            assertEquals(setOf(FunctionFlag.VIRTUAL), methods("Child").single().flags)
+            assertEquals(setOf(FunctionFlag.ABSTRACT), methods("Reader").single().flags)
+            assertEquals(setOf(FunctionFlag.VIRTUAL), methods("Box").single().flags)
+            assertTrue(methods("Reader").single().blockCount == 0u)
+            assertTrue(listOf("Base", "Child", "Reader", "Box").flatMap(::methods).all { it.owner != null })
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+        }
+
+    @Test
+    fun `guest instance methods reject unsupported callable shapes`() =
+        withAdapter { adapter ->
+            val unsupported =
+                listOf(
+                    "class Worker { suspend fun run() {} }\nfun main() {}" to "suspend functions are unsupported",
+                    "class Box { fun <T> keep(value: T): T = value }\nfun main() { Box() }" to "generic instance methods",
+                    "class Scope { fun String.sizeAgain(): Int = length }\nfun main() { Scope() }" to "member extension functions",
+                    "interface Reader { fun read(): Int = 1 }\nclass Box : Reader\nfun main() { Box() }" to
+                        "default interface method bodies",
+                )
+
+            unsupported.forEach { (source, message) ->
+                val result = adapter.compile(request(source))
+
+                assertNull(result.artifact, source)
+                assertTrue(
+                    result.diagnostics.any { it.code == "UNSUPPORTED_IR" && message in it.message },
+                    result.diagnostics.toString(),
+                )
+            }
+        }
+
+    @Test
     fun `both legal main forms lower deterministically with an explicit entry contract`() =
         withAdapter { adapter ->
             val sources =

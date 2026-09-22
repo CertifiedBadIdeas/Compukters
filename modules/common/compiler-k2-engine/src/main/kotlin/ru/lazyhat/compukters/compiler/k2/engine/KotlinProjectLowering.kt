@@ -525,16 +525,23 @@ internal object KotlinProjectLowering {
                     ),
                 ).map(::topLevelProperty)
         val inlineValueClasses = InlineValueClassRegistry.build(classes, pluginContext)
+        val sourceClassSymbols = sourceClasses.mapTo(mutableSetOf()) { it.symbol }
         val playerFunctions =
             functions
                 .filter { function ->
+                    val owner = function.parent as? IrClass
                     includeTrustedPlatformBodies ||
                         function.parent is IrFile ||
                         (
-                            inlineValueClasses.contains((function.parent as? IrClass)?.symbol) &&
+                            inlineValueClasses.contains(owner?.symbol) &&
                                 function.origin == IrDeclarationOrigin.DEFINED
+                        ) ||
+                        (
+                            owner?.symbol in sourceClassSymbols &&
+                                function.origin != IrDeclarationOrigin.FAKE_OVERRIDE &&
+                                function.correspondingPropertySymbol == null
                         )
-                }.filter { function -> function.body != null }
+                }.filter { function -> function.body != null || function.modality == Modality.ABSTRACT }
                 .filterNot { function ->
                     !includeTrustedPlatformBodies &&
                         session.trustedPlatformModule(function.file.fileEntry.name) != null
@@ -543,6 +550,8 @@ internal object KotlinProjectLowering {
             playerFunctions.sortedWith(
                 compareBy<IrSimpleFunction>(
                     { if (it === entry) 0 else 1 },
+                    { if (it.parent is IrFile || inlineValueClasses.contains((it.parent as? IrClass)?.symbol)) 0 else 1 },
+                    { (it.parent as? IrClass)?.fqNameWhenAvailable?.asString().orEmpty() },
                     { session.virtualSourcePath(it.file.fileEntry.name)?.value.orEmpty() },
                     { it.startOffset },
                     { it.name.asString() },
@@ -822,6 +831,12 @@ internal object KotlinProjectLowering {
                 externalClassTypes,
             )
         val classLayoutsBySymbol = classLayouts.associateBy { it.declaration.symbol }
+        val memberFunctionsByOwner =
+            userFunctions
+                .filter { function ->
+                    val owner = function.parent as? IrClass
+                    owner?.symbol in classLayoutsBySymbol && !inlineValueClasses.contains(owner?.symbol)
+                }.groupBy { function -> (function.parent as IrClass).symbol }
         val firstTopLevelField = classLayouts.sumOf { layout -> layout.fields.size + layout.enumEntries.size }
         val topLevelFields =
             topLevelProperties.mapIndexed { index, property ->
@@ -855,56 +870,59 @@ internal object KotlinProjectLowering {
         userFunctions.forEach { function ->
             val functionId = requireNotNull(functionIds[function.symbol])
             val firstBlock = blocks.size
-            val compiler =
-                FunctionCompiler(
-                    function = function,
-                    functionId = functionId,
-                    blockBase = firstBlock,
-                    stringType = stringType,
-                    charArrayType = charArrayType,
-                    intArrayType = intArrayType,
-                    stringArrayType = stringArrayType,
-                    guestTypes = guestTypes,
-                    unitType = pluginContext.irBuiltIns.unitType,
-                    kotlinStringType = pluginContext.irBuiltIns.stringType,
-                    kotlinCharArrayClass = pluginContext.irBuiltIns.charArray,
-                    kotlinIntArrayClass = pluginContext.irBuiltIns.intArray,
-                    intType = pluginContext.irBuiltIns.intType,
-                    longType = pluginContext.irBuiltIns.longType,
-                    floatType = pluginContext.irBuiltIns.floatType,
-                    booleanType = pluginContext.irBuiltIns.booleanType,
-                    charType = pluginContext.irBuiltIns.charType,
-                    functionIds = functionIds,
-                    constantIds = constantIds,
-                    literalIds = literalIds,
-                    session = session,
-                    capabilityIds = capabilityIds,
-                    classTypeIds = classTypeIds,
-                    externalClassTypes = externalClassTypes,
-                    inlineValueClasses = inlineValueClasses,
-                    platformScalars = platformScalars,
-                    constructorLayouts =
-                        classLayouts
-                            .mapNotNull { layout ->
-                                layout.declaration.constructors.singleOrNull { it.isPrimary }?.symbol?.let { symbol ->
-                                    constructorFunctionIds[symbol]?.let { symbol to GuestConstructorTarget(layout, it) }
-                                }
-                            }.toMap(),
-                    fieldsByGetter =
-                        classLayouts
-                            .flatMap { layout ->
-                                layout.fields.map { field -> requireNotNull(field.property.getter).symbol to field }
-                            }.toMap(),
-                    topLevelFieldsByBacking = topLevelFieldsByBacking,
-                    topLevelFieldsByGetter = topLevelFieldsByGetter,
-                    enumEntries =
-                        classLayouts.flatMap { layout -> layout.enumEntries }.associateBy { it.declaration.symbol },
-                    externalFieldsByGetter = externalGetterFieldImports,
-                    externalEnumEntries = externalEnumFieldImports,
-                    externalDefaultEnumEntries = externalDefaultEnumFieldImports,
-                    externalFunctions = externalFunctionImports,
-                )
-            val compiled = compiler.compile()
+            val compiled =
+                if (function.body == null) {
+                    CompiledFunction(emptyList(), emptyList())
+                } else {
+                    FunctionCompiler(
+                        function = function,
+                        functionId = functionId,
+                        blockBase = firstBlock,
+                        stringType = stringType,
+                        charArrayType = charArrayType,
+                        intArrayType = intArrayType,
+                        stringArrayType = stringArrayType,
+                        guestTypes = guestTypes,
+                        unitType = pluginContext.irBuiltIns.unitType,
+                        kotlinStringType = pluginContext.irBuiltIns.stringType,
+                        kotlinCharArrayClass = pluginContext.irBuiltIns.charArray,
+                        kotlinIntArrayClass = pluginContext.irBuiltIns.intArray,
+                        intType = pluginContext.irBuiltIns.intType,
+                        longType = pluginContext.irBuiltIns.longType,
+                        floatType = pluginContext.irBuiltIns.floatType,
+                        booleanType = pluginContext.irBuiltIns.booleanType,
+                        charType = pluginContext.irBuiltIns.charType,
+                        functionIds = functionIds,
+                        constantIds = constantIds,
+                        literalIds = literalIds,
+                        session = session,
+                        capabilityIds = capabilityIds,
+                        classTypeIds = classTypeIds,
+                        externalClassTypes = externalClassTypes,
+                        inlineValueClasses = inlineValueClasses,
+                        platformScalars = platformScalars,
+                        constructorLayouts =
+                            classLayouts
+                                .mapNotNull { layout ->
+                                    layout.declaration.constructors.singleOrNull { it.isPrimary }?.symbol?.let { symbol ->
+                                        constructorFunctionIds[symbol]?.let { symbol to GuestConstructorTarget(layout, it) }
+                                    }
+                                }.toMap(),
+                        fieldsByGetter =
+                            classLayouts
+                                .flatMap { layout ->
+                                    layout.fields.map { field -> requireNotNull(field.property.getter).symbol to field }
+                                }.toMap(),
+                        topLevelFieldsByBacking = topLevelFieldsByBacking,
+                        topLevelFieldsByGetter = topLevelFieldsByGetter,
+                        enumEntries =
+                            classLayouts.flatMap { layout -> layout.enumEntries }.associateBy { it.declaration.symbol },
+                        externalFieldsByGetter = externalGetterFieldImports,
+                        externalEnumEntries = externalEnumFieldImports,
+                        externalDefaultEnumEntries = externalDefaultEnumFieldImports,
+                        externalFunctions = externalFunctionImports,
+                    ).compile()
+                }
             blocks += compiled.blocks
             val resultType =
                 valueType(
@@ -936,10 +954,24 @@ internal object KotlinProjectLowering {
                         it,
                     )
                 }
-            val flags = setOfNotNull(FunctionFlag.STATIC, FunctionFlag.SUSPENDING.takeIf { function.isSuspend })
+            val ownerClass = function.parent as? IrClass
+            val memberOwner =
+                ownerClass
+                    ?.takeIf { it.symbol in classLayoutsBySymbol && !inlineValueClasses.contains(it.symbol) }
+                    ?.let { TypeRef.Local(requireNotNull(classTypeIds[it.symbol])) }
+            val flags =
+                setOfNotNull(
+                    FunctionFlag.STATIC.takeIf { memberOwner == null },
+                    FunctionFlag.SUSPENDING.takeIf { function.isSuspend },
+                    FunctionFlag.ABSTRACT.takeIf { function.body == null },
+                    FunctionFlag.VIRTUAL.takeIf {
+                        memberOwner != null && ownerClass?.kind != ClassKind.INTERFACE &&
+                            (function.modality != Modality.FINAL || function.overriddenSymbols.isNotEmpty())
+                    },
+                )
             loweredFunctions +=
                 Function(
-                    owner = null,
+                    owner = memberOwner,
                     name = requireNotNull(metadataIds[functionArtifactNames[function.symbol]]),
                     signature = TypeRef.Local(requireNotNull(functionTypeIds[function.symbol])),
                     flags = flags,
@@ -1171,13 +1203,17 @@ internal object KotlinProjectLowering {
                 val superType = sourceParents.firstOrNull { (symbol, _) -> symbol.owner.kind != ClassKind.INTERFACE }?.second
                 val name = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
                 if (declaration.kind == ClassKind.INTERFACE) {
+                    val methods = memberFunctionsByOwner[declaration.symbol].orEmpty()
                     NominalType.Interface(
                         name = requireNotNull(metadataIds[name]),
                         sealed = declaration.modality == Modality.SEALED,
                         superType = superType,
                         interfaces = interfaces,
+                        methodStart = methods.firstOrNull()?.let { requireNotNull(functionIds[it.symbol]).value } ?: 0u,
+                        methodCount = methods.size.toUInt(),
                     )
                 } else {
+                    val methods = memberFunctionsByOwner[declaration.symbol].orEmpty()
                     NominalType.Class(
                         name = requireNotNull(metadataIds[name]),
                         abstract = declaration.modality == Modality.ABSTRACT || declaration.modality == Modality.SEALED,
@@ -1186,6 +1222,8 @@ internal object KotlinProjectLowering {
                         interfaces = interfaces,
                         fieldStart = layout.firstField,
                         fieldCount = (layout.fields.size + layout.enumEntries.size).toUInt(),
+                        methodStart = methods.firstOrNull()?.let { requireNotNull(functionIds[it.symbol]).value } ?: 0u,
+                        methodCount = methods.size.toUInt(),
                         initializer = initializerFunctionIds[declaration.symbol],
                     )
                 }
@@ -1539,6 +1577,21 @@ internal object KotlinProjectLowering {
         platformScalars: PlatformScalarRegistry,
         session: CompilationSession,
     ) {
+        val owner = function.parent as? IrClass
+        if (owner != null && !inlineValueClasses.contains(owner.symbol)) {
+            if (function.isSuspend) {
+                throw UnsupportedKotlinIr(function, "suspending instance methods are not supported")
+            }
+            if (function.typeParameters.isNotEmpty()) {
+                throw UnsupportedKotlinIr(function, "generic instance methods are not supported")
+            }
+            if (function.parameters.any { it.kind == IrParameterKind.ExtensionReceiver }) {
+                throw UnsupportedKotlinIr(function, "member extension functions are not supported")
+            }
+            if (owner.kind == ClassKind.INTERFACE && function.body != null) {
+                throw UnsupportedKotlinIr(function, "default interface method bodies are not supported")
+            }
+        }
         val supported =
             setOf(
                 pluginContext.irBuiltIns.unitType,
