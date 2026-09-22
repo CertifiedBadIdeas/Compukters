@@ -315,6 +315,10 @@ current process. Guest code does not select an explicit capability mask when sta
 top-level references as static spawns; other function values cross the existing spawn boundary as one managed
 reference into a private Guest trampoline, which invokes `Function0<Unit>` through normal dynamic dispatch. The child
 frame retains that reference after the launching function returns, and shared capture cells remain VM-owned.
+Ordinary higher-order Guest calls admit non-null function values whose parameter and result types are supported by
+Guest Kotlin. The compiler creates one managed interface per concrete signature and lowers calls through the same
+interface-call instruction, preserving unboxed primitive values and ordinary reference ownership. There is no special
+arity transition at 22 or 23 arguments in the Guest artifact.
 
 `/rom/kotlinc source.kt [-o output]` accepts exactly one source file today; its default output is the source basename
 without `.kt`. This single-file in-computer command is distinct from the IDE and compiler protocol, which support

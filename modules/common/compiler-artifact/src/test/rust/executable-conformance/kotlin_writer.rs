@@ -112,18 +112,19 @@ fn k2_function_values_preserve_distinct_captures_and_dispatch() {
         .expect("K2 function-values program must start");
 
     for expected in [
-        "3\n", "4\n", "9\n", "11\n", "1\n", "11\n", "2\n", "31\n", "42\n", "32\n", "7\n",
+        "3\n", "4\n", "9\n", "11\n", "1\n", "11\n", "2\n", "31\n", "42\n", "32\n", "7\n", "12\n",
+        "15\n", "4\n", "11\n", "10\n", "12\n", "6\n", "10\n", "24\n", "42\n", "5\n", "v8\n", "13\n", "6\n", "10\n",
     ] {
         let value = utf16(expected);
         let (task, write) =
-            next_host_request_identity(&mut session, "function-value println", 1, Some(&value));
+            next_host_request_identity_with_budget(&mut session, "function-value println", 1, Some(&value), 512);
         session
             .resume_for(task, write, HostResponse::Success(HostValueInput::Unit))
             .expect("println must resume the function-values program");
     }
     loop {
         match session
-            .advance(64, 64)
+            .advance(512, 64)
             .expect("K2 function-values program must finish")
         {
             AdvanceOutcome::SliceExhausted => {}
@@ -1187,9 +1188,19 @@ fn next_host_request_identity(
     expected_operation: u32,
     expected_string: Option<&[u16]>,
 ) -> (TaskId, RequestId) {
+    next_host_request_identity_with_budget(session, operation_name, expected_operation, expected_string, 64)
+}
+
+fn next_host_request_identity_with_budget(
+    session: &mut Session,
+    operation_name: &str,
+    expected_operation: u32,
+    expected_string: Option<&[u16]>,
+    slice_budget: u32,
+) -> (TaskId, RequestId) {
     loop {
         match session
-            .advance(64, 64)
+            .advance(slice_budget, 64)
             .unwrap_or_else(|error| panic!("K2 program failed before {operation_name}: {error:?}"))
         {
             AdvanceOutcome::SliceExhausted => {}

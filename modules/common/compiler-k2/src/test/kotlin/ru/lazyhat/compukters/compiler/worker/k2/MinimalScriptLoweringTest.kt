@@ -339,7 +339,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `zero argument Unit lambdas lower to managed closures and shared capture cells`() =
+    fun `supported function values lower to managed closures and shared capture cells`() =
         withAdapter { adapter ->
             val source =
                 """
@@ -368,6 +368,37 @@ class MinimalScriptLoweringTest {
                     val block: () -> Unit = { println(value) }
                     return Tasks.launch(block)
                 }
+
+                fun transform(value: Int, operation: (Int) -> Int): Int = operation(value)
+
+                fun multiplier(factor: Int): (Int) -> Int = { it * factor }
+
+                fun accumulator(): (Int) -> Int {
+                    var total = 0
+                    return {
+                        total += it
+                        total
+                    }
+                }
+
+                fun combine(a: Int, b: Int, operation: (Int, Int) -> Int): Int = operation(a, b)
+
+                fun offsetAdder(offset: Int): (Int, Int) -> Int = { a, b -> a + b + offset }
+
+                fun foldThree(operation: (Int, Int, Int) -> Int): Int = operation(1, 2, 3)
+
+                fun foldFour(operation: (Int, Int, Int, Int) -> Int): Int = operation(1, 2, 3, 4)
+
+                fun wide(operation: (${List(23) { "Int" }.joinToString(", ")}) -> Int): Int =
+                    operation(${(1..23).joinToString(", ")})
+
+                fun presenter(prefix: String): (Boolean, Int) -> String =
+                    { enabled, value -> if (enabled) "${'$'}prefix${'$'}value" else "off" }
+
+                fun render(block: (Boolean, Int) -> String): String = block(true, 8)
+
+                fun applyWith(value: Int, block: ((Int) -> Int, Int) -> Int, transform: (Int) -> Int): Int =
+                    block(transform, value)
 
                 fun main() {
                     val first = make(3)
@@ -400,6 +431,31 @@ class MinimalScriptLoweringTest {
                     Tasks.launch(increment).join()
                     println(shared)
                     Tasks.launch { println(7) }.join()
+
+                    val twice: (Int) -> Int = { it * 2 }
+                    println(twice(6))
+                    println(transform(5, multiplier(3)))
+                    val accumulate = accumulator()
+                    println(accumulate(4))
+                    println(accumulate(7))
+                    val sum: (Int, Int) -> Int = { a, b -> a + b }
+                    println(sum(2, 8))
+                    println(combine(3, 4, offsetAdder(5)))
+                    println(foldThree { a, b, c -> a + b + c })
+                    println(foldFour { a, b, c, d -> a + b + c + d })
+                    println(wide { ${(1..23).joinToString(", ") { "p$it" }} -> p1 + p23 })
+                    val answer: () -> Int = { 42 }
+                    println(answer())
+                    val textLength: (String) -> Int = { it.length }
+                    println(textLength("guest"))
+                    println(render(presenter("v")))
+                    val boxValue: (Box) -> Int = { it.value }
+                    println(boxValue(Box(13)))
+                    val nextLong: (Long) -> Long = { it + 1L }
+                    println(nextLong(5L))
+                    val step: (Int) -> Int = { it + 1 }
+                    val runner: ((Int) -> Int, Int) -> Int = { operation, value -> operation(value) * 2 }
+                    println(applyWith(4, runner, step))
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))
@@ -429,6 +485,30 @@ class MinimalScriptLoweringTest {
                     ),
                 )
             assertNotNull(higherOrderDeclarationOnly.artifact, higherOrderDeclarationOnly.diagnostics.joinToString())
+            val integerFunctionsOnly =
+                adapter.compile(
+                    request(
+                        """
+                        fun useOne(block: (Int) -> Int): Int = block(2)
+                        fun useTwo(block: (Int, Int) -> Int): Int = block(3, 4)
+                        fun main() {
+                            println(useOne { it + 1 })
+                            println(useTwo { a, b -> a * b })
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+            assertNotNull(integerFunctionsOnly.artifact, integerFunctionsOnly.diagnostics.joinToString())
+            val nestedSignatureOnly =
+                adapter.compile(
+                    request(
+                        """
+                        fun use(block: ((Int) -> Int) -> Int): Int = 0
+                        fun main() { println(0) }
+                        """.trimIndent(),
+                    ),
+                )
+            assertNotNull(nestedSignatureOnly.artifact, nestedSignatureOnly.diagnostics.joinToString())
             System.getProperty("compukter.vm.functionValuesArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }
@@ -441,17 +521,39 @@ class MinimalScriptLoweringTest {
                 adapter.compile(
                     request(
                         """
-                        fun run(block: (Int) -> Unit) { block(1) }
-                        fun main() { run { println(it) } }
+                        fun run(block: ((Int) -> Int)?) { println(0) }
+                        fun main() { run { it + 1 } }
                         """.trimIndent(),
                     ),
                 )
             assertNull(argumentLambda.artifact)
             assertTrue(
                 argumentLambda.diagnostics.any {
-                    it.severity.name == "ERROR" && "only non-suspending () -> Unit lambdas are supported" in it.message
+                    it.severity.name == "ERROR" && "unsupported" in it.message
                 },
                 argumentLambda.diagnostics.toString(),
+            )
+        }
+
+    @Test
+    fun `function value variance conversion is rejected before artifact publication`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        open class Base
+                        class Child : Base()
+                        fun make(): (Base) -> Int = { 1 }
+                        fun use(block: (Child) -> Int): Int = block(Child())
+                        fun main() { println(use(make())) }
+                        """.trimIndent(),
+                    ),
+                )
+            assertNull(result.artifact)
+            assertTrue(
+                result.diagnostics.any { it.severity.name == "ERROR" && "function-value variance" in it.message },
+                result.diagnostics.toString(),
             )
         }
 
