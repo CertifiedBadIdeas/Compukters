@@ -31,6 +31,7 @@ import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrParameterKind
 import org.jetbrains.kotlin.ir.declarations.IrProperty
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
+import org.jetbrains.kotlin.ir.declarations.IrValueDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrVariable
 import org.jetbrains.kotlin.ir.expressions.IrBlock
 import org.jetbrains.kotlin.ir.expressions.IrBlockBody
@@ -42,6 +43,7 @@ import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.expressions.IrContinue
 import org.jetbrains.kotlin.ir.expressions.IrExpression
+import org.jetbrains.kotlin.ir.expressions.IrFunctionExpression
 import org.jetbrains.kotlin.ir.expressions.IrFunctionReference
 import org.jetbrains.kotlin.ir.expressions.IrGetEnumValue
 import org.jetbrains.kotlin.ir.expressions.IrGetField
@@ -180,6 +182,31 @@ private data class GuestConstructorTarget(
     val layout: GuestClassLayout,
     val functionId: FunctionId,
 )
+
+private data class GuestClosureCapture(
+    val symbol: IrValueSymbol,
+    val fieldId: FieldId,
+    val type: ValueType,
+)
+
+private data class GuestClosureSource(
+    val expression: IrFunctionExpression,
+    val function: IrSimpleFunction,
+    val ordinal: Int,
+    val captures: List<IrValueDeclaration>,
+)
+
+private data class GuestClosureLayout(
+    val expression: IrFunctionExpression,
+    val function: IrSimpleFunction,
+    val ordinal: Int,
+    val typeId: TypeId,
+    val invokeFunctionId: FunctionId,
+    val invokeSignatureTypeId: TypeId,
+    val captures: List<GuestClosureCapture>,
+) {
+    val name: String get() = closureName(ordinal)
+}
 
 private data class InlineValueClassLayout(
     val declaration: IrClass,
@@ -557,6 +584,15 @@ internal object KotlinProjectLowering {
                     { it.name.asString() },
                 ),
             )
+        val closureSources = collectGuestClosures(userFunctions, pluginContext.irBuiltIns.unitType)
+        val usesFunction0Unit =
+            closureSources.isNotEmpty() ||
+                userFunctions.any { function ->
+                    function.returnType.isFunction0Unit(pluginContext.irBuiltIns.unitType) ||
+                        loweredParameters(function, session).any { parameter ->
+                            parameter.type.isFunction0Unit(pluginContext.irBuiltIns.unitType)
+                        }
+                }
         val externalFunctions = linkedPlatformFunctions(userFunctions, session)
         val linkedSymbols = linkedPlatformSymbols(userFunctions, session)
         require(userFunctions.firstOrNull() === entry)
@@ -630,6 +666,12 @@ internal object KotlinProjectLowering {
                     linkedSymbols.enumEntries.values.map(ExternalFieldTarget::exportName) +
                     linkedSymbols.defaultEnumEntries.values.map(ExternalFieldTarget::exportName) +
                     userFunctions.map { requireNotNull(functionArtifactNames[it.symbol]) } +
+                    listOfNotNull("kotlin.Function0<Unit>".takeIf { usesFunction0Unit }) +
+                    listOfNotNull("invoke".takeIf { usesFunction0Unit }) +
+                    closureSources.flatMap { closure ->
+                        listOf(closureName(closure.ordinal)) +
+                            closure.captures.indices.map { capture -> closureCaptureName(capture) }
+                    } +
                     userClasses.map { it.fqNameWhenAvailable?.asString() ?: it.name.asString() } +
                     userClasses.flatMap { declaration ->
                         val owner = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
@@ -729,32 +771,54 @@ internal object KotlinProjectLowering {
         val intArrayType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(INT_ARRAY_RUNTIME_TYPE)))
         val functionIds = userFunctions.withIndex().associate { (index, function) -> function.symbol to FunctionId.of(index.toUInt()) }
         val functionTypeIds = userFunctions.withIndex().associate { (index, function) -> function.symbol to TypeId.of(index.toUInt()) }
+        val function0InvokeFunctionId =
+            FunctionId.of(userFunctions.size.toUInt()).takeIf { usesFunction0Unit }
+        val function0InvokeSignatureTypeId =
+            TypeId.of(userFunctions.size.toUInt()).takeIf { usesFunction0Unit }
+        val closureInvokeFunctionIds =
+            closureSources.withIndex().associate { (index, source) ->
+                source.expression to FunctionId.of((userFunctions.size + 1 + index).toUInt())
+            }
+        val closureInvokeSignatureTypeIds =
+            closureSources.withIndex().associate { (index, source) ->
+                source.expression to TypeId.of((userFunctions.size + 1 + index).toUInt())
+            }
+        val syntheticFunctionCount = closureSources.size + if (usesFunction0Unit) 1 else 0
+        val constructorFunctionBase = userFunctions.size + syntheticFunctionCount
         val constructorFunctionIds =
             constructorClasses.withIndex().associate { (index, declaration) ->
                 requireNotNull(declaration.constructors.singleOrNull { it.isPrimary }).symbol to
-                    FunctionId.of((userFunctions.size + index).toUInt())
+                    FunctionId.of((constructorFunctionBase + index).toUInt())
             }
         val constructorTypeIds =
             constructorClasses.withIndex().associate { (index, declaration) ->
-                declaration.symbol to TypeId.of((userFunctions.size + index).toUInt())
+                declaration.symbol to TypeId.of((constructorFunctionBase + index).toUInt())
             }
         val initializerFunctionIds =
             initializerClasses.withIndex().associate { (index, declaration) ->
-                declaration.symbol to FunctionId.of((userFunctions.size + constructorClasses.size + index).toUInt())
+                declaration.symbol to FunctionId.of((constructorFunctionBase + constructorClasses.size + index).toUInt())
             }
+        val classTypeBase = constructorFunctionBase + constructorClasses.size
         val classTypeIds =
             userClasses.withIndex().associate { (index, declaration) ->
-                declaration.symbol to TypeId.of((userFunctions.size + constructorClasses.size + index).toUInt())
+                declaration.symbol to TypeId.of((classTypeBase + index).toUInt())
             }
+        val function0InterfaceTypeId =
+            TypeId.of((classTypeBase + userClasses.size).toUInt()).takeIf { usesFunction0Unit }
+        val closureTypeIds =
+            closureSources.withIndex().associate { (index, source) ->
+                source.expression to TypeId.of((classTypeBase + userClasses.size + 1 + index).toUInt())
+            }
+        val syntheticClassCount = closureSources.size + if (usesFunction0Unit) 1 else 0
         val topLevelStateTypeId =
             TypeId
-                .of((userFunctions.size + constructorClasses.size + userClasses.size).toUInt())
+                .of((classTypeBase + userClasses.size + syntheticClassCount).toUInt())
                 .takeIf { topLevelProperties.isNotEmpty() }
         val stateTypeCount = if (topLevelStateTypeId == null) 0 else 1
         val initializerTypeBase =
-            userFunctions.size +
-                constructorClasses.size +
+            classTypeBase +
                 userClasses.size +
+                syntheticClassCount +
                 stateTypeCount +
                 if (usesStringArray) 1 else 0
         val initializerTypeIds =
@@ -763,7 +827,7 @@ internal object KotlinProjectLowering {
             }
         val topLevelInitializerFunctionId =
             FunctionId
-                .of((userFunctions.size + constructorClasses.size + initializerClasses.size).toUInt())
+                .of((constructorFunctionBase + constructorClasses.size + initializerClasses.size).toUInt())
                 .takeIf { topLevelProperties.isNotEmpty() }
         val topLevelInitializerTypeId =
             TypeId
@@ -810,12 +874,22 @@ internal object KotlinProjectLowering {
                 type =
                     TypeRef.Local(
                         TypeId.of(
-                            (userFunctions.size + constructorClasses.size + userClasses.size + stateTypeCount).toUInt(),
+                            (classTypeBase + userClasses.size + syntheticClassCount + stateTypeCount).toUInt(),
                         ),
                     ),
             )
         userFunctions.forEach {
-            validateFunction(it, pluginContext, guestTypes, classTypeIds, externalClassTypes, inlineValueClasses, platformScalars, session)
+            validateFunction(
+                it,
+                pluginContext,
+                guestTypes,
+                classTypeIds,
+                externalClassTypes,
+                inlineValueClasses,
+                platformScalars,
+                session,
+                function0InterfaceTypeId?.let(TypeRef::Local),
+            )
         }
         val classLayouts =
             buildClassLayouts(
@@ -831,13 +905,48 @@ internal object KotlinProjectLowering {
                 externalClassTypes,
             )
         val classLayoutsBySymbol = classLayouts.associateBy { it.declaration.symbol }
+        var nextClosureField = classLayouts.sumOf { layout -> layout.fields.size + layout.enumEntries.size }
+        val closureLayouts =
+            closureSources.map { source ->
+                GuestClosureLayout(
+                    expression = source.expression,
+                    function = source.function,
+                    ordinal = source.ordinal,
+                    typeId = requireNotNull(closureTypeIds[source.expression]),
+                    invokeFunctionId = requireNotNull(closureInvokeFunctionIds[source.expression]),
+                    invokeSignatureTypeId = requireNotNull(closureInvokeSignatureTypeIds[source.expression]),
+                    captures =
+                        source.captures.map { declaration ->
+                            GuestClosureCapture(
+                                symbol = declaration.symbol,
+                                fieldId = FieldId.of(nextClosureField++.toUInt()),
+                                type =
+                                    valueType(
+                                        declaration.type,
+                                        pluginContext,
+                                        guestTypes,
+                                        stringType,
+                                        charArrayType,
+                                        stringArrayType,
+                                        classTypeIds,
+                                        externalClassTypes,
+                                        inlineValueClasses,
+                                        platformScalars,
+                                        declaration,
+                                        function0InterfaceTypeId?.let(TypeRef::Local),
+                                    ),
+                            )
+                        },
+                )
+            }
+        val closureLayoutsByExpression = closureLayouts.associateBy { it.expression }
         val memberFunctionsByOwner =
             userFunctions
                 .filter { function ->
                     val owner = function.parent as? IrClass
                     owner?.symbol in classLayoutsBySymbol && !inlineValueClasses.contains(owner?.symbol)
                 }.groupBy { function -> (function.parent as IrClass).symbol }
-        val firstTopLevelField = classLayouts.sumOf { layout -> layout.fields.size + layout.enumEntries.size }
+        val firstTopLevelField = nextClosureField
         val topLevelFields =
             topLevelProperties.mapIndexed { index, property ->
                 val backingField = requireNotNull(property.declaration.backingField)
@@ -921,6 +1030,9 @@ internal object KotlinProjectLowering {
                         externalEnumEntries = externalEnumFieldImports,
                         externalDefaultEnumEntries = externalDefaultEnumFieldImports,
                         externalFunctions = externalFunctionImports,
+                        function0UnitType = function0InterfaceTypeId?.let(TypeRef::Local),
+                        function0InvokeFunctionId = function0InvokeFunctionId,
+                        closureLayouts = closureLayoutsByExpression,
                     ).compile()
                 }
             blocks += compiled.blocks
@@ -937,6 +1049,7 @@ internal object KotlinProjectLowering {
                     inlineValueClasses,
                     platformScalars,
                     function,
+                    function0InterfaceTypeId?.let(TypeRef::Local),
                 )
             val parameterTypes =
                 loweredParameters(function, session).map {
@@ -952,6 +1065,7 @@ internal object KotlinProjectLowering {
                         inlineValueClasses,
                         platformScalars,
                         it,
+                        function0InterfaceTypeId?.let(TypeRef::Local),
                     )
                 }
             val ownerClass = function.parent as? IrClass
@@ -977,6 +1091,97 @@ internal object KotlinProjectLowering {
                     flags = flags,
                     values = (parameterTypes + compiled.localTypes).map(FunctionValue::scalar),
                     parameterCount = parameterTypes.size.toUInt(),
+                    firstBlock = BlockId.of(firstBlock.toUInt()),
+                    blockCount = compiled.blocks.size.toUInt(),
+                    firstException = 0u,
+                    exceptionCount = 0u,
+                )
+        }
+
+        if (function0InvokeFunctionId != null) {
+            val interfaceType = TypeRef.Local(requireNotNull(function0InterfaceTypeId))
+            loweredFunctions +=
+                Function(
+                    owner = interfaceType,
+                    name = requireNotNull(metadataIds["invoke"]),
+                    signature = TypeRef.Local(requireNotNull(function0InvokeSignatureTypeId)),
+                    flags = setOf(FunctionFlag.ABSTRACT),
+                    values = listOf(FunctionValue.scalar(ValueType.Ref(nullable = false, type = interfaceType))),
+                    parameterCount = 1u,
+                    firstBlock = BlockId.of(blocks.size.toUInt()),
+                    blockCount = 0u,
+                    firstException = 0u,
+                    exceptionCount = 0u,
+                )
+        }
+
+        closureLayouts.forEach { layout ->
+            val closureType = TypeRef.Local(layout.typeId)
+            val receiverType = ValueType.Ref(nullable = false, type = closureType)
+            val firstBlock = blocks.size
+            val compiled =
+                FunctionCompiler(
+                    function = layout.function,
+                    functionId = layout.invokeFunctionId,
+                    blockBase = firstBlock,
+                    stringType = stringType,
+                    charArrayType = charArrayType,
+                    intArrayType = intArrayType,
+                    stringArrayType = stringArrayType,
+                    guestTypes = guestTypes,
+                    unitType = pluginContext.irBuiltIns.unitType,
+                    kotlinStringType = pluginContext.irBuiltIns.stringType,
+                    kotlinCharArrayClass = pluginContext.irBuiltIns.charArray,
+                    kotlinIntArrayClass = pluginContext.irBuiltIns.intArray,
+                    intType = pluginContext.irBuiltIns.intType,
+                    longType = pluginContext.irBuiltIns.longType,
+                    floatType = pluginContext.irBuiltIns.floatType,
+                    booleanType = pluginContext.irBuiltIns.booleanType,
+                    charType = pluginContext.irBuiltIns.charType,
+                    functionIds = functionIds,
+                    constantIds = constantIds,
+                    literalIds = literalIds,
+                    session = session,
+                    capabilityIds = capabilityIds,
+                    classTypeIds = classTypeIds,
+                    externalClassTypes = externalClassTypes,
+                    inlineValueClasses = inlineValueClasses,
+                    platformScalars = platformScalars,
+                    constructorLayouts =
+                        classLayouts
+                            .mapNotNull { classLayout ->
+                                classLayout.declaration.constructors.singleOrNull { it.isPrimary }?.symbol?.let { symbol ->
+                                    constructorFunctionIds[symbol]?.let { symbol to GuestConstructorTarget(classLayout, it) }
+                                }
+                            }.toMap(),
+                    fieldsByGetter =
+                        classLayouts
+                            .flatMap { classLayout ->
+                                classLayout.fields.map { field -> requireNotNull(field.property.getter).symbol to field }
+                            }.toMap(),
+                    topLevelFieldsByBacking = topLevelFieldsByBacking,
+                    topLevelFieldsByGetter = topLevelFieldsByGetter,
+                    enumEntries = classLayouts.flatMap { it.enumEntries }.associateBy { it.declaration.symbol },
+                    externalFieldsByGetter = externalGetterFieldImports,
+                    externalEnumEntries = externalEnumFieldImports,
+                    externalDefaultEnumEntries = externalDefaultEnumFieldImports,
+                    externalFunctions = externalFunctionImports,
+                    function0UnitType = function0InterfaceTypeId?.let(TypeRef::Local),
+                    function0InvokeFunctionId = function0InvokeFunctionId,
+                    closureLayouts = closureLayoutsByExpression,
+                    leadingParameterTypes = listOf(receiverType),
+                    captureFields = layout.captures.associateBy { it.symbol },
+                    closureReceiver = RegisterId.of(0u),
+                ).compile()
+            blocks += compiled.blocks
+            loweredFunctions +=
+                Function(
+                    owner = closureType,
+                    name = requireNotNull(metadataIds["invoke"]),
+                    signature = TypeRef.Local(layout.invokeSignatureTypeId),
+                    flags = setOf(FunctionFlag.VIRTUAL),
+                    values = (listOf(receiverType) + compiled.localTypes).map(FunctionValue::scalar),
+                    parameterCount = 1u,
                     firstBlock = BlockId.of(firstBlock.toUInt()),
                     blockCount = compiled.blocks.size.toUInt(),
                     firstException = 0u,
@@ -1142,6 +1347,7 @@ internal object KotlinProjectLowering {
                             inlineValueClasses,
                             platformScalars,
                             function,
+                            function0InterfaceTypeId?.let(TypeRef::Local),
                         ),
                     parameters =
                         loweredParameters(function, session).map {
@@ -1157,10 +1363,36 @@ internal object KotlinProjectLowering {
                                 inlineValueClasses,
                                 platformScalars,
                                 it,
+                                function0InterfaceTypeId?.let(TypeRef::Local),
                             )
                         },
                 )
             }
+        val closureFunctionTypes =
+            listOfNotNull(
+                function0InterfaceTypeId?.let { interfaceTypeId ->
+                    NominalType.Function(
+                        name = requireNotNull(metadataIds["invoke"]),
+                        suspending = false,
+                        result = ValueType.Unit,
+                        parameters =
+                            listOf(
+                                ValueType.Ref(nullable = false, type = TypeRef.Local(interfaceTypeId)),
+                            ),
+                    )
+                },
+            ) +
+                closureLayouts.map { layout ->
+                    NominalType.Function(
+                        name = requireNotNull(metadataIds["invoke"]),
+                        suspending = false,
+                        result = ValueType.Unit,
+                        parameters =
+                            listOf(
+                                ValueType.Ref(nullable = false, type = TypeRef.Local(layout.typeId)),
+                            ),
+                    )
+                }
         val constructorTypes =
             constructorClasses.map { declaration ->
                 val layout = requireNotNull(classLayoutsBySymbol[declaration.symbol])
@@ -1228,6 +1460,31 @@ internal object KotlinProjectLowering {
                     )
                 }
             }
+        val closureClassTypes =
+            listOfNotNull(
+                function0InterfaceTypeId?.let {
+                    NominalType.Interface(
+                        name = requireNotNull(metadataIds["kotlin.Function0<Unit>"]),
+                        methodStart = requireNotNull(function0InvokeFunctionId).value,
+                        methodCount = 1u,
+                    )
+                },
+            ) +
+                closureLayouts.map { layout ->
+                    NominalType.Class(
+                        name = requireNotNull(metadataIds[layout.name]),
+                        final = true,
+                        interfaces = listOf(TypeRef.Local(requireNotNull(function0InterfaceTypeId))),
+                        fieldStart =
+                            layout.captures
+                                .firstOrNull()
+                                ?.fieldId
+                                ?.value ?: 0u,
+                        fieldCount = layout.captures.size.toUInt(),
+                        methodStart = layout.invokeFunctionId.value,
+                        methodCount = 1u,
+                    )
+                }
         val topLevelStateTypes =
             listOfNotNull(
                 topLevelStateTypeId?.let { stateType ->
@@ -1262,6 +1519,18 @@ internal object KotlinProjectLowering {
                         )
                     }
             } +
+                closureLayouts.flatMap { layout ->
+                    val owner = TypeRef.Local(layout.typeId)
+                    layout.captures.mapIndexed { index, capture ->
+                        Field(
+                            owner = owner,
+                            name = requireNotNull(metadataIds[closureCaptureName(index)]),
+                            type = capture.type,
+                            mutable = true,
+                            static = false,
+                        )
+                    }
+                } +
                 topLevelFields.map { field ->
                     Field(
                         owner = TypeRef.Local(requireNotNull(topLevelStateTypeId)),
@@ -1325,8 +1594,10 @@ internal object KotlinProjectLowering {
                 utf16Literals = literals,
                 types =
                     functionTypes +
+                        closureFunctionTypes +
                         constructorTypes +
                         classTypes +
+                        closureClassTypes +
                         topLevelStateTypes +
                         if (usesStringArray) {
                             listOf(
@@ -1576,6 +1847,7 @@ internal object KotlinProjectLowering {
         inlineValueClasses: InlineValueClassRegistry,
         platformScalars: PlatformScalarRegistry,
         session: CompilationSession,
+        function0UnitType: TypeRef.Local?,
     ) {
         val owner = function.parent as? IrClass
         if (owner != null && !inlineValueClasses.contains(owner.symbol)) {
@@ -1613,6 +1885,7 @@ internal object KotlinProjectLowering {
                         inlineValueClasses.contains((type as? IrSimpleType)?.classifier as? IrClassSymbol)
                 ) ||
                 (!type.isNullable() && platformScalars.representation(type) != null) ||
+                (function0UnitType != null && type.isFunction0Unit(pluginContext.irBuiltIns.unitType)) ||
                 classTypeIds.containsKey((type as? IrSimpleType)?.classifier) ||
                 externalClassTypes.containsKey((type as? IrSimpleType)?.classifier)
         if (loweredParameters(function, session).any { !isSupported(it.type) } ||
@@ -1634,6 +1907,7 @@ internal object KotlinProjectLowering {
         inlineValueClasses: InlineValueClassRegistry,
         platformScalars: PlatformScalarRegistry,
         element: IrElement,
+        function0UnitType: TypeRef.Local? = null,
     ): ValueType =
         when (type) {
             pluginContext.irBuiltIns.unitType -> {
@@ -1673,6 +1947,8 @@ internal object KotlinProjectLowering {
                     ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(INT_ARRAY_RUNTIME_TYPE)))
                 } else if (guestTypes.isStringArray(type)) {
                     stringArrayType
+                } else if (function0UnitType != null && type.isFunction0Unit(pluginContext.irBuiltIns.unitType)) {
+                    ValueType.Ref(nullable = false, type = function0UnitType)
                 } else if (type is IrSimpleType && type.classifier is IrClassSymbol) {
                     val classifier = type.classifier as IrClassSymbol
                     val inline = inlineValueClasses[classifier]
@@ -1700,6 +1976,7 @@ internal object KotlinProjectLowering {
                             inlineValueClasses,
                             platformScalars,
                             element,
+                            function0UnitType,
                         )
                     } else if (id != null) {
                         ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Local(id))
@@ -1923,6 +2200,10 @@ private fun collectGuestClasses(
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private fun constructorName(declaration: IrClass): String =
     "<init:${declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()}>"
+
+private fun closureName(ordinal: Int): String = "app.<lambda-$ordinal>"
+
+private fun closureCaptureName(ordinal: Int): String = "<capture-$ordinal>"
 
 private data class CompiledFunction(
     val localTypes: List<ValueType>,
@@ -2150,6 +2431,12 @@ private class FunctionCompiler(
     private val externalEnumEntries: Map<IrEnumEntrySymbol, ExternalFieldTarget>,
     private val externalDefaultEnumEntries: Map<String, ExternalFieldTarget>,
     private val externalFunctions: Map<IrSimpleFunctionSymbol, ExternalFunctionTarget>,
+    private val function0UnitType: TypeRef.Local?,
+    private val function0InvokeFunctionId: FunctionId?,
+    private val closureLayouts: Map<IrFunctionExpression, GuestClosureLayout>,
+    private val leadingParameterTypes: List<ValueType> = emptyList(),
+    private val captureFields: Map<IrValueSymbol, GuestClosureCapture> = emptyMap(),
+    private val closureReceiver: RegisterId? = null,
 ) {
     private val localTypes = mutableListOf<ValueType>()
     private val values = mutableMapOf<IrValueSymbol, RegisterId>()
@@ -2159,7 +2446,7 @@ private class FunctionCompiler(
 
     fun compile(): CompiledFunction {
         loweredParameters(function, session).forEachIndexed { index, parameter ->
-            values[parameter.symbol] = RegisterId.of(index.toUInt())
+            values[parameter.symbol] = RegisterId.of((leadingParameterTypes.size + index).toUInt())
         }
         val body = function.body as? IrBlockBody ?: throw UnsupportedKotlinIr(function, "function body is not a block")
         body.statements.forEach(::compileStatement)
@@ -2273,7 +2560,7 @@ private class FunctionCompiler(
             }
 
             is IrGetValue -> {
-                values[expression.symbol] ?: throw UnsupportedKotlinIr(expression, "unknown local value")
+                loadValue(expression.symbol, expression)
             }
 
             is IrGetField -> {
@@ -2291,6 +2578,10 @@ private class FunctionCompiler(
 
             is IrConstructorCall -> {
                 compileConstructor(expression)
+            }
+
+            is IrFunctionExpression -> {
+                compileClosure(expression)
             }
 
             is IrGetEnumValue -> {
@@ -2328,6 +2619,30 @@ private class FunctionCompiler(
                 throw UnsupportedKotlinIr(expression, "unsupported expression ${expression::class.simpleName}")
             }
         }
+
+    private fun loadValue(
+        symbol: IrValueSymbol,
+        element: IrElement,
+    ): RegisterId {
+        values[symbol]?.let { return it }
+        val capture = captureFields[symbol] ?: throw UnsupportedKotlinIr(element, "unknown local value")
+        val receiver = closureReceiver ?: throw UnsupportedKotlinIr(element, "closure capture has no environment receiver")
+        return allocate(capture.type).also { destination ->
+            emit(Instruction.FieldGet(destination, receiver, FieldRef.Local(capture.fieldId)))
+        }
+    }
+
+    private fun compileClosure(expression: IrFunctionExpression): RegisterId {
+        val layout = closureLayouts[expression] ?: throw UnsupportedKotlinIr(expression, "unknown closure expression")
+        prepareAllocationBlock()
+        val closureType = TypeRef.Local(layout.typeId)
+        val destination = allocate(ValueType.Ref(nullable = false, type = closureType))
+        emit(Instruction.NewObject(destination, closureType))
+        layout.captures.forEach { capture ->
+            emit(Instruction.FieldSet(destination, FieldRef.Local(capture.fieldId), loadValue(capture.symbol, expression)))
+        }
+        return destination
+    }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun compileConstructor(call: IrConstructorCall): RegisterId {
@@ -2514,6 +2829,20 @@ private class FunctionCompiler(
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun compileCall(call: IrCall): RegisterId? {
         val target = call.symbol.owner
+        if (target.fqNameWhenAvailable?.asString() == "kotlin.Function0.invoke" &&
+            call.type == unitType &&
+            function0InvokeFunctionId != null
+        ) {
+            val receiver = compileExpression(dispatchReceiver(call, target, "Function0.invoke"))
+            emit(
+                Instruction.CallInterface(
+                    Destination.Unit,
+                    FunctionRef.Local(function0InvokeFunctionId),
+                    listOf(receiver),
+                ),
+            )
+            return null
+        }
         when (target.fqNameWhenAvailable?.asString().takeIf { target.isExternal }) {
             "compukter.concurrent.Tasks.launch" -> return compileTaskLaunch(call, target)
             "compukter.concurrent.Task.join" -> return compileTaskJoin(call, target)
@@ -3756,6 +4085,8 @@ private class FunctionCompiler(
                     intArrayType
                 } else if (guestTypes.isStringArray(type)) {
                     stringArrayType
+                } else if (function0UnitType != null && type.isFunction0Unit(unitType)) {
+                    ValueType.Ref(nullable = false, type = function0UnitType)
                 } else if (type is IrSimpleType && type.classifier is IrClassSymbol) {
                     val classifier = type.classifier as IrClassSymbol
                     val inline = inlineValueClasses[classifier]
@@ -3817,7 +4148,9 @@ private class FunctionCompiler(
         }
 
     private fun allocate(type: ValueType): RegisterId =
-        RegisterId.of((loweredParameters(function, session).size + localTypes.size).toUInt()).also { localTypes += type }
+        RegisterId
+            .of((leadingParameterTypes.size + loweredParameters(function, session).size + localTypes.size).toUInt())
+            .also { localTypes += type }
 
     private fun emit(instruction: Instruction) {
         blocks[currentBlock].instructions += instruction
@@ -3876,6 +4209,99 @@ private class FunctionCompiler(
 }
 
 private fun IrType.isExactClass(symbol: IrClassSymbol): Boolean = (this as? IrSimpleType)?.classifier == symbol
+
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+private fun IrType.isFunction0Unit(unitType: IrType): Boolean {
+    val simple = this as? IrSimpleType ?: return false
+    if (simple.isNullable()) return false
+    val owner = (simple.classifier as? IrClassSymbol)?.owner ?: return false
+    if (owner.fqNameWhenAvailable?.asString() != "kotlin.Function0") return false
+    val result = (simple.arguments.singleOrNull() as? IrTypeProjection)?.type ?: return false
+    return result == unitType
+}
+
+private fun collectGuestClosures(
+    functions: List<IrSimpleFunction>,
+    unitType: IrType,
+): List<GuestClosureSource> {
+    val expressions = mutableListOf<IrFunctionExpression>()
+    var closureDepth = 0
+    val collector =
+        object : IrVisitorVoid() {
+            override fun visitElement(element: IrElement) {
+                element.acceptChildren(this, null)
+            }
+
+            override fun visitFunctionExpression(expression: IrFunctionExpression) {
+                if (closureDepth > 0) {
+                    throw UnsupportedKotlinIr(expression, "nested lambdas are outside the initial function-value subset")
+                }
+                expressions += expression
+                closureDepth++
+                super.visitFunctionExpression(expression)
+                closureDepth--
+            }
+        }
+    functions.forEach { it.accept(collector, null) }
+    return expressions.mapIndexed { ordinal, expression ->
+        val function = expression.function
+        if (!expression.type.isFunction0Unit(unitType) ||
+            function.isSuspend ||
+            function.returnType != unitType ||
+            function.parameters.isNotEmpty()
+        ) {
+            throw UnsupportedKotlinIr(expression, "only non-suspending () -> Unit lambdas are supported")
+        }
+        val owned: MutableSet<IrValueSymbol> = function.parameters.mapTo(mutableSetOf()) { it.symbol }
+        function.body?.accept(
+            object : IrVisitorVoid() {
+                override fun visitElement(element: IrElement) {
+                    element.acceptChildren(this, null)
+                }
+
+                override fun visitVariable(declaration: IrVariable) {
+                    owned += declaration.symbol
+                    super.visitVariable(declaration)
+                }
+            },
+            null,
+        )
+        val captures = linkedMapOf<IrValueSymbol, IrValueDeclaration>()
+        function.body?.accept(
+            object : IrVisitorVoid() {
+                override fun visitElement(element: IrElement) {
+                    element.acceptChildren(this, null)
+                }
+
+                override fun visitGetValue(expression: IrGetValue) {
+                    if (expression.symbol !in owned) {
+                        val declaration = expression.symbol.owner
+                        if (declaration is IrVariable && declaration.isVar) {
+                            throw UnsupportedKotlinIr(
+                                expression,
+                                "captured mutable locals require shared typed cells and are not supported yet",
+                            )
+                        }
+                        captures.putIfAbsent(expression.symbol, declaration)
+                    }
+                    super.visitGetValue(expression)
+                }
+
+                override fun visitSetValue(expression: IrSetValue) {
+                    if (expression.symbol !in owned) {
+                        throw UnsupportedKotlinIr(
+                            expression,
+                            "captured mutable locals require shared typed cells and are not supported yet",
+                        )
+                    }
+                    super.visitSetValue(expression)
+                }
+            },
+            null,
+        )
+        GuestClosureSource(expression, function, ordinal, captures.values.toList())
+    }
+}
 
 private fun loweredParameters(
     function: IrSimpleFunction,

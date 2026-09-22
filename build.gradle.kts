@@ -329,6 +329,15 @@ registerKotlinVmConformance(
     conformanceScenario = "dispatch",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinFunctionValuesVmConformance",
+    taskDescription = "Executes K2-lowered zero-argument function values with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateFunctionValuesConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-function-values.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-function-values-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_FUNCTION_VALUES_ARTIFACT",
+    conformanceScenario = "function-values",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinTransparentCallVmConformance",
     taskDescription = "Executes an ordinary K2 project call across VM-task blocking with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateTransparentCallConformanceArtifact",
