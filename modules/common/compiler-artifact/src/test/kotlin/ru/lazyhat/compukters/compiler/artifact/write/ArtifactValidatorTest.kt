@@ -766,6 +766,33 @@ class ArtifactValidatorTest {
     }
 
     @Test
+    fun `dynamic calls require dispatchable targets`() {
+        val virtual =
+            executableArtifact(
+                Instruction.CallVirtual(
+                    Destination.Register(RegisterId.of(0u)),
+                    FunctionRef.Local(FunctionId.of(1u)),
+                    listOf(RegisterId.of(0u), RegisterId.of(1u)),
+                ),
+            )
+        val interfaceCall =
+            executableArtifact(
+                Instruction.CallInterface(
+                    Destination.Register(RegisterId.of(0u)),
+                    FunctionRef.Local(FunctionId.of(1u)),
+                    listOf(RegisterId.of(0u), RegisterId.of(1u)),
+                ),
+            )
+
+        assertTrue(validateArtifact(virtual, ArtifactWriteLimits()).any { it.detail.contains("virtual call target is not virtual") })
+        assertTrue(
+            validateArtifact(interfaceCall, ArtifactWriteLimits()).any {
+                it.detail.contains("interface call target owner is not an interface")
+            },
+        )
+    }
+
+    @Test
     fun `imported calls resolve the unique export matching the expected signature`() {
         val call =
             Instruction.Call(

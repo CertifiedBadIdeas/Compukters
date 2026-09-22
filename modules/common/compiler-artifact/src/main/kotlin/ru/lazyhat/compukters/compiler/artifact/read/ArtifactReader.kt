@@ -672,6 +672,14 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                     Instruction.Call(d(), frame.uleb().functionRef(), args())
                 }
 
+                0x41u -> {
+                    Instruction.CallVirtual(d(), frame.uleb().functionRef(), args())
+                }
+
+                0x42u -> {
+                    Instruction.CallInterface(d(), frame.uleb().functionRef(), args())
+                }
+
                 0xe5u -> {
                     Instruction.CallSuspend(d(), frame.uleb().functionRef(), args(), BlockId.of(frame.uleb()))
                 }

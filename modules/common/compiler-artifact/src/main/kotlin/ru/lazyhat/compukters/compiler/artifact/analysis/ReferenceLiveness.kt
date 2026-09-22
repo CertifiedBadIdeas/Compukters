@@ -256,6 +256,10 @@ internal fun Instruction.readRegisters(): List<RegisterId> =
 
         is Instruction.Call -> arguments
 
+        is Instruction.CallVirtual -> arguments
+
+        is Instruction.CallInterface -> arguments
+
         is Instruction.CallSuspend -> arguments
 
         is Instruction.TaskSpawn -> arguments
@@ -357,6 +361,10 @@ internal fun Instruction.writtenRegisters(): List<RegisterId> =
 
         is Instruction.Call -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
 
+        is Instruction.CallVirtual -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
+
+        is Instruction.CallInterface -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
+
         is Instruction.CallSuspend -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
 
         is Instruction.TaskSpawn -> listOf(destination)
@@ -421,6 +429,8 @@ internal fun Instruction.mayThrow(): Boolean =
         this is Instruction.StaticSet ||
         this is Instruction.CheckedCast ||
         this is Instruction.Call ||
+        this is Instruction.CallVirtual ||
+        this is Instruction.CallInterface ||
         this is Instruction.CallSuspend ||
         this is Instruction.TaskSpawn ||
         this is Instruction.TaskJoin ||

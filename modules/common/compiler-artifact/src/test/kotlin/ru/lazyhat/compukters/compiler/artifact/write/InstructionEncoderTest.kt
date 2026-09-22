@@ -233,6 +233,53 @@ class InstructionEncoderTest {
     }
 
     @Test
+    fun `dynamic calls preserve virtual and interface opcodes`() {
+        val virtual =
+            encodeInstruction(
+                Instruction.CallVirtual(
+                    Destination.Register(RegisterId.of(1u)),
+                    FunctionRef.Local(FunctionId.of(2u)),
+                    listOf(RegisterId.of(0u)),
+                ),
+                64,
+            )
+        val interfaceCall =
+            encodeInstruction(
+                Instruction.CallInterface(
+                    Destination.Unit,
+                    FunctionRef.Imported(ImportId.of(3u)),
+                    listOf(RegisterId.of(4u), RegisterId.of(5u)),
+                ),
+                64,
+            )
+
+        assertContentEquals(byteArrayOf(0x41, 0, 10, 0, 1, 0, 2, 1, 0, 0), virtual.bytes)
+        assertEquals(6u, virtual.fixedCost)
+        assertContentEquals(
+            byteArrayOf(
+                0x42,
+                0,
+                16,
+                0,
+                0xff.toByte(),
+                0xff.toByte(),
+                0x83.toByte(),
+                0x80.toByte(),
+                0x80.toByte(),
+                0x80.toByte(),
+                0x08,
+                2,
+                4,
+                0,
+                5,
+                0,
+            ),
+            interfaceCall.bytes,
+        )
+        assertEquals(8u, interfaceCall.fixedCost)
+    }
+
+    @Test
     fun `suspending calls encode resume block after canonical arguments`() {
         val localUnit =
             encodeInstruction(
