@@ -37,6 +37,7 @@ import ru.lazyhat.compukters.impl.config.CompuktersServerConfig
 import ru.lazyhat.compukters.impl.fs.NeoForgeWorldFileSystemStores
 import ru.lazyhat.compukters.impl.ide.IdeClientBootstrap
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetNetwork
+import ru.lazyhat.compukters.impl.peripheral.PeripheralConfiguratorNetwork
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.impl.terminal.TerminalNetwork
 import ru.lazyhat.compukters.lang.runtime.vm.FfmRuntimeBackend
@@ -52,6 +53,7 @@ class CompuktersMod(
         CompuktersRegistry.register(eventBus)
         eventBus.addListener(TerminalNetwork::register)
         eventBus.addListener(IdeTargetNetwork::register)
+        eventBus.addListener(PeripheralConfiguratorNetwork::register)
         if (FMLEnvironment.getDist() == Dist.CLIENT) IdeClientBootstrap.register(eventBus)
         NeoForge.EVENT_BUS.addListener(NeoForgeWorldFileSystemStores::onLevelSave)
         NeoForge.EVENT_BUS.addListener(VmBenchmarkCommands::register)

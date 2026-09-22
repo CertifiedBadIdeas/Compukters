@@ -55,6 +55,15 @@ internal class PeripheralDeviceNameStorage(
         name: String,
     ): String = directory.setName(identity, name).also { setDirty() }
 
+    fun assignName(
+        reachable: Set<PeripheralDeviceIdentity>,
+        target: PeripheralDeviceIdentity,
+        requestedName: String,
+    ): PeripheralCandidateStatus =
+        assignPeripheralName(directory, reachable, target, requestedName).also { result ->
+            if (result == PeripheralCandidateStatus.TARGET) setDirty()
+        }
+
     fun clearName(identity: PeripheralDeviceIdentity): String? = directory.clearName(identity)?.also { setDirty() }
 
     companion object {

@@ -19,7 +19,11 @@
 package ru.lazyhat.compukters.impl.computer
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Direction
+import net.minecraft.core.component.DataComponents
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.world.InteractionHand
+import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Blocks
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHostFactory
@@ -29,6 +33,9 @@ import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralProvider
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookup
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookupStatus
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralNames
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorContext
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorSaveResult
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorServer
 
 internal object PeripheralCableGameTestScenario {
     private var providerRegistered = false
@@ -61,6 +68,7 @@ internal object PeripheralCableGameTestScenario {
             .thenExecute {
                 assertFound(helper, computer, "input", helper.absolutePos(firstDevice))
                 assertFound(helper, computer, "output", helper.absolutePos(secondDevice))
+                verifyConfiguratorSave(helper, computer, firstIdentity, secondIdentity)
             }.thenExecute {
                 helper.setBlock(junction, Blocks.AIR)
                 assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.MISSING)
@@ -73,6 +81,51 @@ internal object PeripheralCableGameTestScenario {
                 ComputerPeripheralNames.setName(level, secondIdentity, "input")
                 assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.AMBIGUOUS)
             }.thenSucceed()
+    }
+
+    private fun verifyConfiguratorSave(
+        helper: GameTestHelper,
+        computer: BlockPos,
+        firstIdentity: ComputerPeripheralIdentity,
+        secondIdentity: ComputerPeripheralIdentity,
+    ) {
+        val player = helper.makeMockServerPlayerInLevel()
+        player.setPos(firstIdentity.anchor.x + 0.5, firstIdentity.anchor.y + 0.5, firstIdentity.anchor.z + 0.5)
+        val configurator = ItemStack(CompuktersRegistry.PERIPHERAL_CONFIGURATOR_ITEM.get())
+        player.setItemInHand(InteractionHand.MAIN_HAND, configurator)
+        val firstContext =
+            PeripheralConfiguratorContext(
+                firstIdentity.anchor,
+                Direction.WEST,
+            )
+        val secondContext = firstContext.copy(position = secondIdentity.anchor)
+
+        val renamed = PeripheralConfiguratorServer.save(player, InteractionHand.MAIN_HAND, firstContext, "sensor")
+        helper.assertTrue(renamed == PeripheralConfiguratorSaveResult.NAMED_DEVICE, "configurator did not rename the target: $renamed")
+        assertFound(helper, computer, "sensor", firstIdentity.anchor)
+        helper.assertTrue(configurator.get(DataComponents.CUSTOM_NAME) == null, "configurator renamed itself")
+
+        val conflict = PeripheralConfiguratorServer.save(player, InteractionHand.MAIN_HAND, secondContext, "sensor")
+        helper.assertTrue(conflict == PeripheralConfiguratorSaveResult.CONFLICT, "duplicate name was accepted: $conflict")
+        assertFound(helper, computer, "output", secondIdentity.anchor)
+
+        val restored = PeripheralConfiguratorServer.save(player, InteractionHand.MAIN_HAND, firstContext, "input")
+        helper.assertTrue(restored == PeripheralConfiguratorSaveResult.NAMED_DEVICE, "configurator did not restore the fixture: $restored")
+        assertFound(helper, computer, "input", firstIdentity.anchor)
+
+        player.setPos(firstIdentity.anchor.x + 20.0, firstIdentity.anchor.y + 0.5, firstIdentity.anchor.z + 0.5)
+        val remote = PeripheralConfiguratorServer.save(player, InteractionHand.MAIN_HAND, firstContext, "remote")
+        helper.assertTrue(remote == PeripheralConfiguratorSaveResult.OUT_OF_RANGE, "out-of-range change was accepted: $remote")
+        assertFound(helper, computer, "input", firstIdentity.anchor)
+
+        player.setPos(firstIdentity.anchor.x + 0.5, firstIdentity.anchor.y + 0.5, firstIdentity.anchor.z + 0.5)
+        player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Blocks.STONE))
+        val wrongItem = PeripheralConfiguratorServer.save(player, InteractionHand.MAIN_HAND, firstContext, "hijacked")
+        helper.assertTrue(
+            wrongItem == PeripheralConfiguratorSaveResult.INVALID_TARGET,
+            "save without a configurator was accepted: $wrongItem",
+        )
+        assertFound(helper, computer, "input", firstIdentity.anchor)
     }
 
     @Synchronized

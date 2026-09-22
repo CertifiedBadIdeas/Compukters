@@ -21,16 +21,31 @@ package ru.lazyhat.compukters.minecraft.peripheral
 import net.minecraft.core.BlockPos
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class PeripheralDeviceNameStorageTest {
     @Test
     fun `device names survive the version-specific saved data round trip`() {
         val identity = PeripheralDeviceIdentity("create", "minecraft:overworld", BlockPos(4, 70, -2), "controller")
         val storage = PeripheralDeviceNameStorage()
-        storage.setName(identity, "main_motor")
+        assertFalse(storage.isDirty)
+        assertEquals(PeripheralCandidateStatus.TARGET, storage.assignName(setOf(identity), identity, "main_motor"))
+        assertTrue(storage.isDirty)
 
         val restored = PeripheralDeviceNameStorageTestPersistence.roundTrip(storage)
 
         assertEquals("main_motor", restored.directory.nameOf(identity))
+    }
+
+    @Test
+    fun `conflicting assignment does not dirty saved data`() {
+        val target = PeripheralDeviceIdentity("create", "minecraft:overworld", BlockPos(4, 70, -2), "controller")
+        val occupied = PeripheralDeviceIdentity("create", "minecraft:overworld", BlockPos(5, 70, -2), "speedometer")
+        val storage = PeripheralDeviceNameStorage(PeripheralDeviceDirectory(listOf(PeripheralDeviceName(occupied, "main_motor"))))
+
+        assertEquals(PeripheralCandidateStatus.CONFLICT, storage.assignName(setOf(target, occupied), target, "main_motor"))
+        assertFalse(storage.isDirty)
+        assertEquals(null, storage.directory.nameOf(target))
     }
 }

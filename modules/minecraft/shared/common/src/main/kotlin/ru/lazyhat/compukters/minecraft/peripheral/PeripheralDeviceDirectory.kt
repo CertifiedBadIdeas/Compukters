@@ -80,7 +80,6 @@ internal class PeripheralDeviceDirectory(
     }
 
     fun snapshot(): List<PeripheralDeviceName> = names.map { (identity, name) -> PeripheralDeviceName(identity, name) }
-
 }
 
 internal fun normalizePeripheralName(requestedName: String): String {

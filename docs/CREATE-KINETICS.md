@@ -35,10 +35,11 @@ same devices; no controller or adapter block owns the network.
 
 To give a device a name:
 
-1. Take a Peripheral Configurator and rename it in an anvil. Names contain 1–32 lowercase letters, digits,
-   underscores, or hyphens and begin with a letter.
-2. Use the renamed configurator directly on a speedometer, stressometer, or rotation speed controller.
-3. Shift-use a configurator on the device to clear its name.
+1. Use a Peripheral Configurator directly on a speedometer, stressometer, or rotation speed controller. This opens its
+   name editor and inspects the cable network attached to that device.
+2. Enter a name containing 1–32 lowercase letters, digits, underscores, or hyphens and beginning with a letter. The
+   editor immediately highlights a name already used by a reachable device.
+3. Save to assign the name, or Shift-use a configurator on the device to clear it.
 
 The name belongs to the device rather than a computer or cable. It survives rewiring, computer replacement, chunk
 unload, and server restart. Names only need to be unique within the component where a computer performs lookup. If two

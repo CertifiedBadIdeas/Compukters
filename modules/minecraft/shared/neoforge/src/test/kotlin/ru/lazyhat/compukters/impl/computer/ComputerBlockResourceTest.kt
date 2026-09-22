@@ -106,7 +106,7 @@ class ComputerBlockResourceTest {
 
         val translations = resourceJson("/assets/compukters/lang/en_us.json")
         assertEquals("Peripheral Configurator", translations["item.compukters.peripheral_configurator"].asString)
-        assertNotNull(translations["item.compukters.peripheral_configurator.rename"])
+        assertNotNull(translations["screen.compukters.peripheral_configurator.name"])
         assertNotNull(translations["item.compukters.peripheral_configurator.cleared"])
     }
 
