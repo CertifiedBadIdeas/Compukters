@@ -66,7 +66,14 @@ object CompuktersRegistry {
     val PERIPHERAL_CABLE: DeferredBlock<PeripheralCableBlock> =
         blocks.register(
             "peripheral_cable",
-            Supplier { PeripheralCableBlock(BlockBehaviour.Properties.of().strength(1.0f)) },
+            Supplier {
+                PeripheralCableBlock(
+                    BlockBehaviour.Properties
+                        .of()
+                        .strength(1.0f)
+                        .noOcclusion(),
+                )
+            },
         )
 
     val PERIPHERAL_CABLE_ITEM: DeferredItem<BlockItem> = items.registerSimpleBlockItem(PERIPHERAL_CABLE)

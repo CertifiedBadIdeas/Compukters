@@ -1,0 +1,6 @@
+{
+  "textures": {
+    "cable": "compukters:block/compukter/side",
+    "particle": "compukters:block/compukter/side"
+  }
+}

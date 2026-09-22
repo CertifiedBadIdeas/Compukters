@@ -79,11 +79,41 @@ class ComputerBlockResourceTest {
     @Test
     fun `peripheral cable resources describe one passive block`() {
         val model = resourceJson("/assets/compukters/models/block/peripheral_cable.json")
-        assertEquals("minecraft:block/cube_all", model["parent"].asString)
-        assertEquals("compukters:block/compukter/side", model.getAsJsonObject("textures")["all"].asString)
+        assertEquals("compukters:block/compukter/side", model.getAsJsonObject("textures")["cable"].asString)
+        assertEquals(7, model.getAsJsonArray("elements").size())
+        assertEquals(
+            listOf(5, 5, 5) to listOf(11, 11, 11),
+            model.getAsJsonArray("elements")[0].asJsonObject.bounds(),
+        )
 
-        val variants = resourceJson("/assets/compukters/blockstates/peripheral_cable.json").getAsJsonObject("variants")
-        assertEquals("compukters:block/peripheral_cable", variants.getAsJsonObject("")["model"].asString)
+        val multipart = resourceJson("/assets/compukters/blockstates/peripheral_cable.json").getAsJsonArray("multipart")
+        assertEquals(7, multipart.size())
+        assertEquals(
+            "compukters:block/peripheral_cable_center",
+            multipart[0].asJsonObject.getAsJsonObject("apply")["model"].asString,
+        )
+        val expectedArms =
+            linkedMapOf(
+                "down" to (listOf(5, 0, 5) to listOf(11, 5, 11)),
+                "up" to (listOf(5, 11, 5) to listOf(11, 16, 11)),
+                "north" to (listOf(5, 5, 0) to listOf(11, 11, 5)),
+                "south" to (listOf(5, 5, 11) to listOf(11, 11, 16)),
+                "west" to (listOf(0, 5, 5) to listOf(5, 11, 11)),
+                "east" to (listOf(11, 5, 5) to listOf(16, 11, 11)),
+            )
+        expectedArms.entries.forEachIndexed { index, (direction, expectedBounds) ->
+            val part = multipart[index + 1].asJsonObject
+            assertEquals("true", part.getAsJsonObject("when")[direction].asString, direction)
+            assertEquals(
+                "compukters:block/peripheral_cable_$direction",
+                part.getAsJsonObject("apply")["model"].asString,
+                direction,
+            )
+            val arm = resourceJson("/assets/compukters/models/block/peripheral_cable_$direction.json")
+            assertEquals("compukters:block/peripheral_cable_component", arm["parent"].asString, direction)
+            assertEquals(1, arm.getAsJsonArray("elements").size(), direction)
+            assertEquals(expectedBounds, arm.getAsJsonArray("elements")[0].asJsonObject.bounds(), direction)
+        }
 
         val loot = resourceJson("/data/compukters/loot_table/blocks/peripheral_cable.json")
         val entry =
@@ -122,6 +152,9 @@ class ComputerBlockResourceTest {
             .joinToString("") { byte -> "%02x".format(byte) }
 
     private fun JsonObject.textureFor(face: String): String = getAsJsonObject(face)["texture"].asString
+
+    private fun JsonObject.bounds(): Pair<List<Int>, List<Int>> =
+        getAsJsonArray("from").map { it.asInt } to getAsJsonArray("to").map { it.asInt }
 
     companion object {
         private val EXPECTED_TEXTURE_HASHES =

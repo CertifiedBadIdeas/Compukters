@@ -65,7 +65,7 @@ object CompuktersRegistry {
         blocks.registerBlock(
             "peripheral_cable",
             ::PeripheralCableBlock,
-            UnaryOperator { properties -> properties.strength(1.0f) },
+            UnaryOperator { properties -> properties.strength(1.0f).noOcclusion() },
         )
 
     val PERIPHERAL_CABLE_ITEM: DeferredItem<BlockItem> = items.registerSimpleBlockItem(PERIPHERAL_CABLE)
