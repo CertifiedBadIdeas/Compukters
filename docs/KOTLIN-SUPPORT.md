@@ -255,18 +255,22 @@ supported.
   signatures and locals: values may be passed, returned, stored, and invoked.
   Each lambda evaluation creates an ordinary managed closure object; lambdas
   may capture immutable scalar and reference values, and reference captures
-  preserve the original referent and aliasing. `Tasks.launch(::worker)` also
+  preserve the original referent and aliasing. A captured local `var` uses one
+  ordinary managed typed cell per dynamic variable instance, shared by the
+  enclosing code and every sibling closure; primitive payloads remain unboxed.
+  `Tasks.launch(::worker)` also
   accepts a direct top-level zero-argument `Unit` function reference without a
-  closure allocation. Mutable captures, nested lambdas, other arities or result
-  types, local and bound references, and spawning a task from an arbitrary
+  closure allocation. Nested lambdas, other arities or result types, local and
+  bound references, and spawning a task from an arbitrary
   function value remain unsupported. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  tests `zero argument Unit lambdas lower to managed closures with interface dispatch`,
+  tests `zero argument Unit lambdas lower to managed closures and shared capture cells`,
   `unsupported closure shapes produce stable diagnostics`,
   `direct top level ordinary task lowers to spawn and join`, and
   `task launch rejects callable shapes that require runtime function objects`;
   root task `testKotlinFunctionValuesVmConformance`.
-  Tracking: [#627](https://github.com/CertifiedBadIdeas/Compukters/issues/627)
+  Tracking: [#627](https://github.com/CertifiedBadIdeas/Compukters/issues/627),
+  [#628](https://github.com/CertifiedBadIdeas/Compukters/issues/628)
 
 - [ ] **Recursion — Partial** — direct calls and bounded VM call depth can
   represent recursion, but no Kotlin-to-VM recursive source conformance test

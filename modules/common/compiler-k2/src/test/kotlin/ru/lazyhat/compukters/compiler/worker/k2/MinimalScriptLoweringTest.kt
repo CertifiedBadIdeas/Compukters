@@ -339,7 +339,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `zero argument Unit lambdas lower to managed closures with interface dispatch`() =
+    fun `zero argument Unit lambdas lower to managed closures and shared capture cells`() =
         withAdapter { adapter ->
             val source =
                 """
@@ -351,6 +351,14 @@ class MinimalScriptLoweringTest {
 
                 fun run(block: () -> Unit) {
                     block()
+                }
+
+                fun counter(start: Int): () -> Unit {
+                    var value = start
+                    return {
+                        value = value + 1
+                        println(value)
+                    }
                 }
 
                 fun main() {
@@ -366,6 +374,19 @@ class MinimalScriptLoweringTest {
                     run {
                         println(11)
                     }
+
+                    val firstCounter = counter(0)
+                    val secondCounter = counter(10)
+                    firstCounter()
+                    secondCounter()
+                    firstCounter()
+
+                    var shared = 20
+                    val increment: () -> Unit = { shared = shared + 1 }
+                    val addTen: () -> Unit = { shared = shared + 10 }
+                    increment()
+                    addTen()
+                    println(shared)
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))
@@ -403,27 +424,6 @@ class MinimalScriptLoweringTest {
     @Test
     fun `unsupported closure shapes produce stable diagnostics`() =
         withAdapter { adapter ->
-            val mutableCapture =
-                adapter.compile(
-                    request(
-                        """
-                        fun main() {
-                            var value = 1
-                            val block: () -> Unit = { println(value) }
-                            block()
-                        }
-                        """.trimIndent(),
-                    ),
-                )
-            assertNull(mutableCapture.artifact)
-            assertTrue(
-                mutableCapture.diagnostics.any {
-                    it.severity.name == "ERROR" &&
-                        "captured mutable locals require shared typed cells" in it.message
-                },
-                mutableCapture.diagnostics.toString(),
-            )
-
             val argumentLambda =
                 adapter.compile(
                     request(

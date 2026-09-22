@@ -28,7 +28,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - Guest classes and interfaces support ordinary non-suspending instance methods, overrides, and runtime class or
   interface dispatch.
 - Zero-argument `Unit` function values can be passed, returned, stored locally, and invoked. Lambdas use ordinary
-  managed closure objects and can capture immutable scalar or reference values while preserving reference aliasing.
+  managed closure objects, preserve reference aliasing for immutable captures, and share mutations through unboxed
+  typed cells when local `var` values are captured.
 
 ### Addons and Create
 
