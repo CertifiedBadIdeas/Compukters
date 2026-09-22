@@ -50,10 +50,12 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - The `create` addon reads exact `Float` speed, stress, and capacity values from adjacent or named cable-connected
   speedometers and stressometers, waits for value changes without Guest-side polling, and controls rotation speed
   controllers.
-- Device handles remain bound to the exact acquired block. Missing, unloaded, removed, or replaced devices fail
-  deterministically and produce a descriptive terminal diagnostic.
-- Addon SDK 0.3.0 lets independent addons map a cable touching any supported block or multiblock part to one canonical
-  logical device while preserving the existing adjacent-side registration API.
+- Device handles remain bound to the exact acquired block, and named handles expire when their cable path disconnects.
+  Missing, disconnected, unloaded, removed, or replaced devices fail deterministically and produce a descriptive
+  terminal diagnostic.
+- Addon SDK 0.3.1 lets independent addons map a cable touching any supported block or multiblock part to one canonical
+  logical device, validate retained handles against current reachability, and preserve the existing adjacent-side
+  registration API.
 
 ### In-game IDE
 

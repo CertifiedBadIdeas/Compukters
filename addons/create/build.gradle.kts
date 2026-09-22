@@ -30,7 +30,7 @@ plugins {
 }
 
 group = "ru.lazyhat.compukters"
-val addonSdkVersion = "0.3.0"
+val addonSdkVersion = "0.3.1"
 version = providers.gradleProperty("addonVersion").get()
 
 base {

@@ -30,6 +30,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -152,7 +153,7 @@ class KineticsHostStateTest {
         current = second
         val failure = assertIs<HostResponse.Failure>(host.completed(1, oldHandle))
         assertEquals(HostFailureKind.INPUT_OUTPUT, failure.kind)
-        assertEquals("Create kinetic device was removed, replaced, or unloaded", failure.detail)
+        assertEquals("Create kinetic device was removed, replaced, disconnected, or unloaded", failure.detail)
         assertEquals(
             failure,
             assertIs<HostResponse.Failure>(host.poll(1).single().response),
@@ -183,6 +184,18 @@ class KineticsHostStateTest {
             host.completed(1, 99),
         )
         assertEquals(HostResponse.FloatSuccess(4f), host.completed(4, host.completed(3, 3).intValue()))
+    }
+
+    @Test
+    fun `named reachability stays invalid after a cable reconnects`() {
+        var connected = true
+        val valid = latchingValidity { connected }
+
+        assertTrue(valid())
+        connected = false
+        assertFalse(valid())
+        connected = true
+        assertFalse(valid())
     }
 
     @Test

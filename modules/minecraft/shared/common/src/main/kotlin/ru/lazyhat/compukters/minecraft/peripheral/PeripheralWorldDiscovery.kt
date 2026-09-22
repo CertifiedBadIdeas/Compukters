@@ -127,6 +127,22 @@ object ComputerPeripheralLookup {
             PeripheralDeviceNameStorage.get(level).directory,
         )
     }
+
+    @JvmStatic
+    fun isReachable(
+        level: ServerLevel,
+        computerPosition: BlockPos,
+        identity: ComputerPeripheralIdentity,
+    ): Boolean =
+        isPeripheralReachable(
+            PeripheralDeviceIdentity(
+                identity.providerId,
+                level.dimension().toString(),
+                identity.anchor.immutable(),
+                identity.deviceKey,
+            ),
+            PeripheralWorldDiscovery.discover(level, computerPosition),
+        )
 }
 
 object ComputerPeripheralNames {
@@ -190,6 +206,11 @@ internal fun lookupComputerPeripheral(
         }
     }
 }
+
+internal fun isPeripheralReachable(
+    identity: PeripheralDeviceIdentity,
+    traversal: PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity>,
+): Boolean = traversal is PeripheralCableTraversal.Complete && identity in traversal.contacts
 
 internal object PeripheralWorldDiscovery {
     fun discover(

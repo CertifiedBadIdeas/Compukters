@@ -53,6 +53,13 @@ class CompuktersComputerContext internal constructor(
         val device = result.identity?.let { identity -> CompuktersPeripheralDevice(identity.anchor, identity.deviceKey) }
         return CompuktersPeripheralLookup(CompuktersPeripheralLookupStatus.valueOf(result.status.name), device)
     }
+
+    fun isPeripheralReachable(device: CompuktersPeripheralDevice): Boolean =
+        ComputerPeripheralLookup.isReachable(
+            level,
+            position,
+            ComputerPeripheralIdentity(providerId, device.anchor, device.deviceKey),
+        )
 }
 
 enum class CompuktersPeripheralLookupStatus {

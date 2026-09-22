@@ -103,7 +103,12 @@ object CreateKineticsIntegration {
                         "Named peripheral is not the requested Create kinetic device type",
                     )
                 } else {
-                    resolveEndpoint(computer.level, device.anchor, kind)?.let(KineticsNamedResolution::Found)
+                    resolveEndpoint(
+                        computer.level,
+                        device.anchor,
+                        kind,
+                        latchingValidity { computer.isPeripheralReachable(device) },
+                    )?.let(KineticsNamedResolution::Found)
                         ?: KineticsNamedResolution.Failed(
                             HostFailureKind.UNAVAILABLE,
                             "Named Create kinetic device was removed, replaced, or unloaded",
@@ -133,12 +138,13 @@ object CreateKineticsIntegration {
         level: ServerLevel,
         position: BlockPos,
         kind: PeripheralKind,
+        reachable: () -> Boolean = { true },
     ): KineticsEndpoint? {
         if (!level.hasChunkAt(position)) return null
         return when (val entity = level.getBlockEntity(position)) {
             is SpeedGaugeBlockEntity -> {
                 if (kind == PeripheralKind.SPEEDOMETER) {
-                    SpeedometerEndpoint(level, position, entity)
+                    SpeedometerEndpoint(level, position, entity, reachable)
                 } else {
                     null
                 }
@@ -146,14 +152,18 @@ object CreateKineticsIntegration {
 
             is StressGaugeBlockEntity -> {
                 if (kind == PeripheralKind.STRESSOMETER) {
-                    StressometerEndpoint(level, position, entity)
+                    StressometerEndpoint(level, position, entity, reachable)
                 } else {
                     null
                 }
             }
 
             is SpeedControllerBlockEntity -> {
-                if (kind == PeripheralKind.ROTATION_CONTROLLER) RotationControllerEndpoint(level, position, entity) else null
+                if (kind == PeripheralKind.ROTATION_CONTROLLER) {
+                    RotationControllerEndpoint(level, position, entity, reachable)
+                } else {
+                    null
+                }
             }
 
             else -> {
@@ -343,13 +353,14 @@ private abstract class CreateEndpoint<T : BlockEntity>(
     protected val level: ServerLevel,
     private val position: BlockPos,
     protected val entity: T,
+    private val reachable: () -> Boolean,
 ) : KineticsEndpoint {
     override val identity: Any
         get() = entity
 
     override fun valid(): Boolean {
         check(level.server.isSameThread) { "Create kinetics must be accessed on the server thread" }
-        return !entity.isRemoved && level.hasChunkAt(position) && level.getBlockEntity(position) === entity
+        return reachable() && !entity.isRemoved && level.hasChunkAt(position) && level.getBlockEntity(position) === entity
     }
 }
 
@@ -357,7 +368,8 @@ private class SpeedometerEndpoint(
     level: ServerLevel,
     position: BlockPos,
     entity: SpeedGaugeBlockEntity,
-) : CreateEndpoint<SpeedGaugeBlockEntity>(level, position, entity),
+    reachable: () -> Boolean,
+) : CreateEndpoint<SpeedGaugeBlockEntity>(level, position, entity, reachable),
     SpeedometerAccess {
     override fun speed(): Float = entity.getSpeed()
 }
@@ -366,7 +378,8 @@ private class StressometerEndpoint(
     level: ServerLevel,
     position: BlockPos,
     entity: StressGaugeBlockEntity,
-) : CreateEndpoint<StressGaugeBlockEntity>(level, position, entity),
+    reachable: () -> Boolean,
+) : CreateEndpoint<StressGaugeBlockEntity>(level, position, entity, reachable),
     StressometerAccess {
     override fun stress(): Float = entity.getNetworkStress()
 
@@ -377,7 +390,8 @@ private class RotationControllerEndpoint(
     level: ServerLevel,
     position: BlockPos,
     entity: SpeedControllerBlockEntity,
-) : CreateEndpoint<SpeedControllerBlockEntity>(level, position, entity),
+    reachable: () -> Boolean,
+) : CreateEndpoint<SpeedControllerBlockEntity>(level, position, entity, reachable),
     RotationControllerAccess {
     override fun targetSpeed(): Int = entity.targetSpeed.getValue()
 
@@ -388,4 +402,12 @@ private class RotationControllerEndpoint(
 }
 
 private const val MAXIMUM_HANDLES = 64
-private const val STALE_PERIPHERAL_DETAIL = "Create kinetic device was removed, replaced, or unloaded"
+private const val STALE_PERIPHERAL_DETAIL = "Create kinetic device was removed, replaced, disconnected, or unloaded"
+
+internal fun latchingValidity(check: () -> Boolean): () -> Boolean {
+    var valid = true
+    return {
+        if (valid) valid = check()
+        valid
+    }
+}
