@@ -11,7 +11,7 @@ A Compukters addon is an ordinary, independently installed NeoForge mod. It owns
 Kotlin declarations and generated `.cagb` bundle. Compukters reads that data bundle when the addon registers it, but
 the base mod never links to or packages the addon implementation.
 
-The public addon SDK uses version 0.3.0 independently of Compukters 0.5.0. The SDK has its own
+The public addon SDK uses version 0.3.1 independently of Compukters 0.5.0. The SDK has its own
 compatibility version: Compukters releases do not require addon authors to update unless the public addon boundary
 changes. All artifacts belonging to one SDK release share that SDK version:
 
@@ -69,7 +69,7 @@ dependencyResolutionManagement {
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.10"
-    id("ru.lazyhat.compukters.addon") version "0.3.0"
+    id("ru.lazyhat.compukters.addon") version "0.3.1"
     // Apply and configure Loom/NeoForge as usual for the target mod.
 }
 
@@ -149,6 +149,11 @@ Return the same canonical identity for every supported part of one multiblock. C
 dimension, and lifecycle checks around that identity; the provider key should distinguish logical devices sharing one
 anchor and must contain at most 128 printable ASCII characters. Existing addons may keep the two-argument
 registration call and side-based discovery unchanged.
+
+SDK 0.3.1 adds `CompuktersComputerContext.isPeripheralReachable(device)` for validating retained handles against the
+computer's current loaded cable component. The check uses the canonical provider identity rather than the device name,
+so renaming the same reachable device does not redirect or invalidate its handle. Addons should latch the first
+`false` result when a handle must never revive after disconnection.
 
 Handlers execute through the bounded server-side addon boundary. Return `addonCompleted(value)` for an immediate
 result, `addonFailed(kind, detail)` for a descriptive Guest failure, or `addonPending { ... }` when the world operation

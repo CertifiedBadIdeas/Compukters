@@ -25,6 +25,8 @@ import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookupStatus
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookupStatus.TOPOLOGY_LIMIT_EXCEEDED
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class ComputerPeripheralLookupTest {
     @Test
@@ -64,6 +66,22 @@ class ComputerPeripheralLookupTest {
         assertEquals(
             TOPOLOGY_LIMIT_EXCEEDED,
             lookupComputerPeripheral("create", "motor", traversal, PeripheralDeviceDirectory()).status,
+        )
+    }
+
+    @Test
+    fun `reachability follows exact device identity independently of its name`() {
+        val device = identity("create", 1)
+        val traversal = complete(device)
+
+        assertTrue(isPeripheralReachable(device, traversal))
+        assertFalse(isPeripheralReachable(device.copy(deviceKey = "stressometer"), traversal))
+        assertFalse(isPeripheralReachable(identity("create", 2), traversal))
+        assertFalse(
+            isPeripheralReachable(
+                device,
+                PeripheralCableTraversal.LimitExceeded(PeripheralCableLimit.CABLES, 4096),
+            ),
         )
     }
 
