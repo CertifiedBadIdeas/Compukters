@@ -310,6 +310,7 @@ val intLoopsConformanceArtifact = layout.buildDirectory.file("generated/conforma
 val intArrayConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-array.cpkt")
 val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-long.cpkt")
 val floatConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-float.cpkt")
+val dispatchConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-dispatch.cpkt")
 val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = layout.buildDirectory.file("generated/system/shell.cpkt")
 val kotlincArtifact = layout.buildDirectory.file("generated/system/kotlinc.cpkt")
@@ -328,6 +329,22 @@ val generateKotlinSubsetConformanceArtifact = tasks.register<Test>("generateKotl
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.kotlinSubsetArtifact", kotlinSubsetConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateDispatchConformanceArtifact = tasks.register<Test>("generateDispatchConformanceArtifact") {
+    description = "Compiles Guest class and interface dispatch for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*guest instance methods lower with deterministic owners flags and method ranges*")
+    inputs.file(workerJar)
+    outputs.file(dispatchConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.dispatchArtifact", dispatchConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

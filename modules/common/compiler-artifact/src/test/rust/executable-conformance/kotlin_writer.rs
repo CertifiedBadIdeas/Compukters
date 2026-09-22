@@ -25,6 +25,7 @@ fn main() {
         "platform-scalar" => k2_platform_scalar_precondition_traps_before_publishing_a_value(),
         "argv" => k2_string_array_entry_executes_exact_utf16_arguments(),
         "subset" => k2_string_materialization_executes_char_arrays_and_scalar_templates(),
+        "dispatch" => k2_class_and_interface_dispatch_select_runtime_implementations(),
         "transparent-call" => k2_ordinary_project_call_resumes_across_async_capability(),
         "tasks" => k2_tasks_keep_independent_host_requests_in_flight(),
         "channel" => k2_channel_handoff_stays_inside_the_vm(),
@@ -34,6 +35,42 @@ fn main() {
     }
 
     println!("Kotlin-to-VM conformance scenario passed: {scenario}");
+}
+
+fn k2_class_and_interface_dispatch_select_runtime_implementations() {
+    let path = std::env::var("COMPUKTER_KOTLIN_DISPATCH_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_DISPATCH_ARTIFACT must be set for this conformance test");
+    let bytes = fs::read(path).expect("K2 dispatch output must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("pinned VM must verify K2 dispatch output");
+    let profile = ExecutionProfile {
+        heap_bytes: 1024 * 1024,
+        frame_storage_bytes: 1024 * 1024,
+        maximum_call_depth: 64,
+        maximum_coroutines: 1,
+        maximum_channels: 64,
+        maximum_channel_values: 4096,
+        maximum_host_requests: 64,
+        maximum_events: 0,
+        maximum_slice_budget: u32::MAX,
+        compiler_abi: [0; 32],
+        platform_abi: [0; 32],
+        maximum_host_arguments: 16,
+        maximum_outbound_utf16_code_units: 4096,
+        maximum_inbound_utf16_code_units: 4096,
+        maximum_accepted_responses: 64,
+        entry_argument_limits: entry_argument_limits(),
+    };
+    let mut session = Session::admit(verified, profile, &[]).expect("K2 dispatch program must admit");
+    session.start(&[]).expect("K2 dispatch program must start");
+
+    loop {
+        match session.advance(4096, 64).expect("K2 dispatch program must finish") {
+            AdvanceOutcome::SliceExhausted => {}
+            AdvanceOutcome::Halted(None) => break,
+            outcome => panic!("unexpected K2 dispatch outcome: {outcome:?}"),
+        }
+    }
 }
 
 fn k2_timer_sleep_publishes_one_bounded_request() {

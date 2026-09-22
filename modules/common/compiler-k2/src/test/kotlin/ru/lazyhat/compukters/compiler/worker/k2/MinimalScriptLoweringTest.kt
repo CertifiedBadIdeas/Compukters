@@ -726,9 +726,11 @@ class MinimalScriptLoweringTest {
                     override fun read(): Int = 3
                 }
 
+                fun classValue(value: Base): Int = value.value()
+                fun interfaceValue(value: Reader): Int = value.read()
+
                 fun main() {
-                    Child()
-                    Box()
+                    classValue(Child()) + interfaceValue(Box())
                 }
                 """.trimIndent()
 
@@ -766,7 +768,13 @@ class MinimalScriptLoweringTest {
             assertEquals(setOf(FunctionFlag.VIRTUAL), methods("Box").single().flags)
             assertTrue(methods("Reader").single().blockCount == 0u)
             assertTrue(listOf("Base", "Child", "Reader", "Box").flatMap(::methods).all { it.owner != null })
+            val instructions = application.blocks.flatMap(Block::instructions)
+            assertTrue(instructions.any { it is Instruction.CallVirtual })
+            assertTrue(instructions.any { it is Instruction.CallInterface })
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukter.vm.dispatchArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
         }
 
     @Test

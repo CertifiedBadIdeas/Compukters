@@ -793,6 +793,47 @@ class ArtifactValidatorTest {
     }
 
     @Test
+    fun `nominal method ranges stay in bounds and contain only owned functions`() {
+        val base = executableArtifact(Instruction.Jump(BlockId.of(1u)))
+        val module = base.modules[0]
+        val outside =
+            base.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            types =
+                                module.types +
+                                    NominalType.Class(
+                                        name = StringId.of(0u),
+                                        methodStart = 99u,
+                                        methodCount = 1u,
+                                    ),
+                        ),
+                        base.modules[1],
+                    ),
+            )
+        val wrongOwner =
+            base.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            types =
+                                module.types +
+                                    NominalType.Interface(
+                                        name = StringId.of(0u),
+                                        methodStart = 1u,
+                                        methodCount = 1u,
+                                    ),
+                        ),
+                        base.modules[1],
+                    ),
+            )
+
+        assertTrue(validateArtifact(outside, ArtifactWriteLimits()).any { it.detail.contains("method range is outside") })
+        assertTrue(validateArtifact(wrongOwner, ArtifactWriteLimits()).any { it.detail.contains("different owner") })
+    }
+
+    @Test
     fun `imported calls resolve the unique export matching the expected signature`() {
         val call =
             Instruction.Call(
