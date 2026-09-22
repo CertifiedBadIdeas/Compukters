@@ -448,6 +448,10 @@ class MinimalScriptLoweringTest {
 
                 fun retain(reader: Reader): () -> Int = reader::read
 
+                fun unbound(): (Adder, Int) -> Int = Adder::add
+
+                fun applyUnbound(operation: (Adder, Int) -> Int, receiver: Adder): Int = operation(receiver, 5)
+
                 fun main() {
                     val first = make(3)
                     val second = make(4)
@@ -532,6 +536,14 @@ class MinimalScriptLoweringTest {
                     val virtual = supplier()::value
                     println(evaluations)
                     println(virtual())
+                    val unboundAdder = Adder::add
+                    println(unboundAdder(Adder(4), 6))
+                    println(unbound()(Adder(8), 3))
+                    println(applyUnbound(Adder::add, Adder(9)))
+                    val unboundVirtual: (Base) -> Int = Base::value
+                    println(unboundVirtual(Child()))
+                    val unboundInterface: (Reader) -> Int = Reader::read
+                    println(unboundInterface(ReaderImpl(29)))
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))
@@ -634,7 +646,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `unbound instance function reference is rejected before artifact publication`() =
+    fun `constructor reference is rejected before artifact publication`() =
         withAdapter { adapter ->
             val result =
                 adapter.compile(
@@ -642,8 +654,8 @@ class MinimalScriptLoweringTest {
                         """
                         class Reader { fun read(): Int = 1 }
                         fun main() {
-                            val read: (Reader) -> Int = Reader::read
-                            println(read(Reader()))
+                            val make: () -> Reader = ::Reader
+                            println(make().read())
                         }
                         """.trimIndent(),
                     ),
@@ -652,7 +664,7 @@ class MinimalScriptLoweringTest {
             assertTrue(
                 result.diagnostics.any {
                     it.severity.name == "ERROR" &&
-                        "only bound Guest instance or unbound top-level function references are supported" in it.message
+                        "only Guest function and instance-method references are supported" in it.message
                 },
                 result.diagnostics.toString(),
             )
