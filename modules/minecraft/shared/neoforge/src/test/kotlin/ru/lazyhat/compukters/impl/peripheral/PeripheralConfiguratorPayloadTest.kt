@@ -19,6 +19,7 @@ import net.minecraft.core.RegistryAccess
 import net.minecraft.network.RegistryFriendlyByteBuf
 import net.minecraft.network.codec.StreamCodec
 import net.minecraft.world.InteractionHand
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorMode
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorSaveResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -36,8 +37,12 @@ class PeripheralConfiguratorPayloadTest {
                 InteractionHand.MAIN_HAND,
                 ConfiguratorSnapshotPayload(
                     context,
+                    PeripheralConfiguratorMode.INSPECT_NETWORK,
                     "motor",
-                    listOf(ConfiguratorEntryPayload("motor", "create", "rotation_controller", false)),
+                    listOf(
+                        ConfiguratorEntryPayload("motor", "create", "rotation_controller", false),
+                        ConfiguratorEntryPayload(null, "create", "speedometer", false),
+                    ),
                     mapOf("motor" to 1, "shared" to 2),
                     "motor",
                     3,

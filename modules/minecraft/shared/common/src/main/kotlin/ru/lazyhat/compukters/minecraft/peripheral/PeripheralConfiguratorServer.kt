@@ -30,19 +30,25 @@ data class PeripheralConfiguratorContext(
 )
 
 data class PeripheralConfiguratorEntry(
-    val name: String,
+    val name: String?,
     val providerId: String,
     val deviceKey: String,
     val duplicate: Boolean,
 )
 
+enum class PeripheralConfiguratorMode {
+    EDIT_DEVICE,
+    INSPECT_NETWORK,
+}
+
 data class PeripheralConfiguratorSnapshot(
     val context: PeripheralConfiguratorContext,
+    val mode: PeripheralConfiguratorMode,
     val configuredName: String,
     val entries: List<PeripheralConfiguratorEntry>,
     val nameCounts: Map<String, Int>,
     val targetName: String?,
-    val totalNamedDevices: Int,
+    val totalDevices: Int,
     val truncated: Boolean,
     val topologyLimitExceeded: Boolean,
 )
@@ -74,7 +80,19 @@ object PeripheralConfiguratorServer {
     ): Boolean {
         val level = player.level() as? ServerLevel ?: return false
         if (PeripheralDeviceNames.resolveContact(level, position, face).size != 1) return false
-        return open(player, hand, PeripheralConfiguratorContext(position.immutable(), face))
+        return open(player, hand, PeripheralConfiguratorContext(position.immutable(), face), PeripheralConfiguratorMode.EDIT_DEVICE)
+    }
+
+    @JvmStatic
+    fun openCable(
+        player: ServerPlayer,
+        hand: InteractionHand,
+        position: BlockPos,
+        face: Direction,
+    ): Boolean {
+        val level = player.level() as? ServerLevel ?: return false
+        if (!PeripheralCableBlocks.contains(level.getBlockState(position))) return false
+        return open(player, hand, PeripheralConfiguratorContext(position.immutable(), face), PeripheralConfiguratorMode.INSPECT_NETWORK)
     }
 
     @JvmStatic
@@ -111,11 +129,12 @@ object PeripheralConfiguratorServer {
         player: ServerPlayer,
         hand: InteractionHand,
         context: PeripheralConfiguratorContext,
+        mode: PeripheralConfiguratorMode,
     ): Boolean {
         val sender = opener ?: return false
         val level = player.level() as? ServerLevel ?: return false
         if (!validRange(player, context)) return false
-        val inspection = inspection(level, context)
+        val inspection = inspection(level, context, mode)
         sender(player, hand, inspection)
         return true
     }
@@ -123,25 +142,36 @@ object PeripheralConfiguratorServer {
     private fun inspection(
         level: ServerLevel,
         context: PeripheralConfiguratorContext,
+        mode: PeripheralConfiguratorMode,
     ): PeripheralConfiguratorSnapshot {
         val position = context.position
-        val target = PeripheralDeviceNames.resolveContact(level, position, context.face).singleOrNull()
-        val traversal = PeripheralWorldDiscovery.discoverFromDevice(level, position)
+        val target =
+            if (mode == PeripheralConfiguratorMode.EDIT_DEVICE) {
+                PeripheralDeviceNames.resolveContact(level, position, context.face).singleOrNull()
+            } else {
+                null
+            }
+        val traversal =
+            when (mode) {
+                PeripheralConfiguratorMode.EDIT_DEVICE -> PeripheralWorldDiscovery.discoverFromDevice(level, position)
+                PeripheralConfiguratorMode.INSPECT_NETWORK -> PeripheralWorldDiscovery.discoverFromCable(level, position)
+            }
         val directory = PeripheralDeviceNameStorage.get(level).directory
         val targetName = target?.let(directory::nameOf)
         return when (val value = inspectPeripheralComponent(traversal, directory, target, targetName.orEmpty())) {
             is PeripheralInspection.LimitExceeded -> {
-                PeripheralConfiguratorSnapshot(context, targetName.orEmpty(), emptyList(), emptyMap(), targetName, 0, false, true)
+                PeripheralConfiguratorSnapshot(context, mode, targetName.orEmpty(), emptyList(), emptyMap(), targetName, 0, false, true)
             }
 
             is PeripheralInspection.Complete -> {
                 PeripheralConfiguratorSnapshot(
                     context,
-                    value.targetName.orEmpty(),
+                    mode,
+                    if (mode == PeripheralConfiguratorMode.EDIT_DEVICE) value.targetName.orEmpty() else "",
                     value.entries.map { PeripheralConfiguratorEntry(it.name, it.providerId, it.deviceKey, it.duplicate) },
                     value.nameCounts,
                     value.targetName,
-                    value.totalNamedDevices,
+                    value.totalDevices,
                     value.truncated,
                     false,
                 )

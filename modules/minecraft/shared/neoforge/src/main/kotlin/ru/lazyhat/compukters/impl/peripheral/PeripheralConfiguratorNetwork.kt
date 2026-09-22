@@ -29,13 +29,14 @@ import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.impl.compat.Identifier
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorContext
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorEntry
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorMode
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorSaveResult
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorServer
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorSnapshot
 
 object PeripheralConfiguratorNetwork {
     fun register(event: RegisterPayloadHandlersEvent) {
-        val registrar = event.registrar("1")
+        val registrar = event.registrar("2")
         registrar.playToClient(OpenPayload.TYPE, OpenPayload.CODEC, ::handleOpen)
         registrar.playToServer(SavePayload.TYPE, SavePayload.CODEC, ::handleSave)
         registrar.playToClient(SaveReplyPayload.TYPE, SaveReplyPayload.CODEC, ::handleReply)
@@ -106,7 +107,7 @@ internal data class ConfiguratorContextPayload(
 )
 
 internal data class ConfiguratorEntryPayload(
-    val name: String,
+    val name: String?,
     val providerId: String,
     val deviceKey: String,
     val duplicate: Boolean,
@@ -114,11 +115,12 @@ internal data class ConfiguratorEntryPayload(
 
 internal data class ConfiguratorSnapshotPayload(
     val context: ConfiguratorContextPayload,
+    val mode: PeripheralConfiguratorMode,
     val configuredName: String,
     val entries: List<ConfiguratorEntryPayload>,
     val nameCounts: Map<String, Int>,
     val targetName: String?,
-    val totalNamedDevices: Int,
+    val totalDevices: Int,
     val truncated: Boolean,
     val topologyLimitExceeded: Boolean,
 )
@@ -144,10 +146,11 @@ private fun writeOpen(
 ) {
     buffer.writeEnum(value.hand)
     writeContext(buffer, value.snapshot.context)
+    buffer.writeEnum(value.snapshot.mode)
     buffer.writeUtf(value.snapshot.configuredName, 32)
     buffer.writeVarInt(value.snapshot.entries.size)
     value.snapshot.entries.forEach { entry ->
-        buffer.writeUtf(entry.name, 32)
+        buffer.writeNullable(entry.name) { sink, name -> sink.writeUtf(name, 32) }
         buffer.writeUtf(entry.providerId, 128)
         buffer.writeUtf(entry.deviceKey, 128)
         buffer.writeBoolean(entry.duplicate)
@@ -158,7 +161,7 @@ private fun writeOpen(
         buffer.writeVarInt(count)
     }
     buffer.writeNullable(value.snapshot.targetName) { sink, name -> sink.writeUtf(name, 32) }
-    buffer.writeVarInt(value.snapshot.totalNamedDevices)
+    buffer.writeVarInt(value.snapshot.totalDevices)
     buffer.writeBoolean(value.snapshot.truncated)
     buffer.writeBoolean(value.snapshot.topologyLimitExceeded)
 }
@@ -166,10 +169,11 @@ private fun writeOpen(
 private fun readOpen(buffer: RegistryFriendlyByteBuf): OpenPayload {
     val hand = buffer.readEnum(InteractionHand::class.java)
     val context = readContext(buffer)
+    val mode = buffer.readEnum(PeripheralConfiguratorMode::class.java)
     val configured = buffer.readUtf(32)
     val entries =
         List(buffer.readVarInt().also { require(it in 0..64) }) {
-            ConfiguratorEntryPayload(buffer.readUtf(32), buffer.readUtf(128), buffer.readUtf(128), buffer.readBoolean())
+            ConfiguratorEntryPayload(buffer.readNullable { it.readUtf(32) }, buffer.readUtf(128), buffer.readUtf(128), buffer.readBoolean())
         }
     val counts =
         buildMap {
@@ -186,7 +190,17 @@ private fun readOpen(buffer: RegistryFriendlyByteBuf): OpenPayload {
     val total = buffer.readVarInt().also { require(it in 0..1024) }
     return OpenPayload(
         hand,
-        ConfiguratorSnapshotPayload(context, configured, entries, counts, targetName, total, buffer.readBoolean(), buffer.readBoolean()),
+        ConfiguratorSnapshotPayload(
+            context,
+            mode,
+            configured,
+            entries,
+            counts,
+            targetName,
+            total,
+            buffer.readBoolean(),
+            buffer.readBoolean(),
+        ),
     )
 }
 
@@ -211,11 +225,12 @@ private fun ConfiguratorContextPayload.toDomain() = PeripheralConfiguratorContex
 private fun PeripheralConfiguratorSnapshot.toWire() =
     ConfiguratorSnapshotPayload(
         context.toWire(),
+        mode,
         configuredName,
         entries.map { ConfiguratorEntryPayload(it.name, it.providerId, it.deviceKey, it.duplicate) },
         nameCounts,
         targetName,
-        totalNamedDevices,
+        totalDevices,
         truncated,
         topologyLimitExceeded,
     )
@@ -223,11 +238,12 @@ private fun PeripheralConfiguratorSnapshot.toWire() =
 private fun ConfiguratorSnapshotPayload.toDomain() =
     PeripheralConfiguratorSnapshot(
         context.toDomain(),
+        mode,
         configuredName,
         entries.map { PeripheralConfiguratorEntry(it.name, it.providerId, it.deviceKey, it.duplicate) },
         nameCounts,
         targetName,
-        totalNamedDevices,
+        totalDevices,
         truncated,
         topologyLimitExceeded,
     )
