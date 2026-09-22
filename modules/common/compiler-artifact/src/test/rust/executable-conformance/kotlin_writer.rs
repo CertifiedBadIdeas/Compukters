@@ -111,7 +111,7 @@ fn k2_function_values_preserve_distinct_captures_and_dispatch() {
         .start(&[])
         .expect("K2 function-values program must start");
 
-    for expected in ["3\n", "4\n", "9\n", "11\n"] {
+    for expected in ["3\n", "4\n", "9\n", "11\n", "1\n", "11\n", "2\n", "31\n"] {
         let value = utf16(expected);
         let write = next_host_request(&mut session, "function-value println", 1, Some(&value));
         session

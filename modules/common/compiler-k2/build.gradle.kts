@@ -356,7 +356,7 @@ val generateFunctionValuesConformanceArtifact = tasks.register<Test>("generateFu
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
-    filter.includeTestsMatching("*zero argument Unit lambdas lower to managed closures with interface dispatch*")
+    filter.includeTestsMatching("*zero argument Unit lambdas lower to managed closures and shared capture cells*")
     inputs.file(workerJar)
     outputs.file(functionValuesConformanceArtifact)
     doFirst {

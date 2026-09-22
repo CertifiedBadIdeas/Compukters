@@ -187,7 +187,18 @@ private data class GuestClosureCapture(
     val symbol: IrValueSymbol,
     val fieldId: FieldId,
     val type: ValueType,
+    val cell: GuestCaptureCellLayout?,
 )
+
+private data class GuestCaptureCellLayout(
+    val declaration: IrVariable,
+    val ordinal: Int,
+    val typeId: TypeId,
+    val fieldId: FieldId,
+    val valueType: ValueType,
+) {
+    val name: String get() = "app.<capture-cell-$ordinal>"
+}
 
 private data class GuestClosureSource(
     val expression: IrFunctionExpression,
@@ -585,6 +596,14 @@ internal object KotlinProjectLowering {
                 ),
             )
         val closureSources = collectGuestClosures(userFunctions, pluginContext.irBuiltIns.unitType)
+        val captureCellDeclarations =
+            closureSources
+                .flatMap { it.captures }
+                .filterIsInstance<IrVariable>()
+                .filter { it.isVar }
+                .associateByTo(linkedMapOf()) { it.symbol }
+                .values
+                .toList()
         val usesFunction0Unit =
             closureSources.isNotEmpty() ||
                 userFunctions.any { function ->
@@ -672,6 +691,8 @@ internal object KotlinProjectLowering {
                         listOf(closureName(closure.ordinal)) +
                             closure.captures.indices.map { capture -> closureCaptureName(capture) }
                     } +
+                    captureCellDeclarations.indices.map { cell -> captureCellName(cell) } +
+                    listOfNotNull("<value>".takeIf { captureCellDeclarations.isNotEmpty() }) +
                     userClasses.map { it.fqNameWhenAvailable?.asString() ?: it.name.asString() } +
                     userClasses.flatMap { declaration ->
                         val owner = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
@@ -809,7 +830,15 @@ internal object KotlinProjectLowering {
             closureSources.withIndex().associate { (index, source) ->
                 source.expression to TypeId.of((classTypeBase + userClasses.size + 1 + index).toUInt())
             }
-        val syntheticClassCount = closureSources.size + if (usesFunction0Unit) 1 else 0
+        val captureCellTypeIds =
+            captureCellDeclarations.withIndex().associate { (index, declaration) ->
+                declaration.symbol to
+                    TypeId.of(
+                        (classTypeBase + userClasses.size + 1 + closureSources.size + index).toUInt(),
+                    )
+            }
+        val syntheticClassCount =
+            closureSources.size + captureCellDeclarations.size + if (usesFunction0Unit) 1 else 0
         val topLevelStateTypeId =
             TypeId
                 .of((classTypeBase + userClasses.size + syntheticClassCount).toUInt())
@@ -906,6 +935,32 @@ internal object KotlinProjectLowering {
             )
         val classLayoutsBySymbol = classLayouts.associateBy { it.declaration.symbol }
         var nextClosureField = classLayouts.sumOf { layout -> layout.fields.size + layout.enumEntries.size }
+        val captureCellLayouts =
+            captureCellDeclarations.mapIndexed { ordinal, declaration ->
+                GuestCaptureCellLayout(
+                    declaration = declaration,
+                    ordinal = ordinal,
+                    typeId = requireNotNull(captureCellTypeIds[declaration.symbol]),
+                    fieldId = FieldId.of(nextClosureField++.toUInt()),
+                    valueType =
+                        valueType(
+                            declaration.type,
+                            pluginContext,
+                            guestTypes,
+                            stringType,
+                            charArrayType,
+                            stringArrayType,
+                            classTypeIds,
+                            externalClassTypes,
+                            inlineValueClasses,
+                            platformScalars,
+                            declaration,
+                            function0InterfaceTypeId?.let(TypeRef::Local),
+                        ),
+                )
+            }
+        val captureCellLayoutsBySymbol: Map<IrValueSymbol, GuestCaptureCellLayout> =
+            captureCellLayouts.associateBy { it.declaration.symbol }
         val closureLayouts =
             closureSources.map { source ->
                 GuestClosureLayout(
@@ -917,11 +972,14 @@ internal object KotlinProjectLowering {
                     invokeSignatureTypeId = requireNotNull(closureInvokeSignatureTypeIds[source.expression]),
                     captures =
                         source.captures.map { declaration ->
+                            val cell = captureCellLayoutsBySymbol[declaration.symbol]
                             GuestClosureCapture(
                                 symbol = declaration.symbol,
                                 fieldId = FieldId.of(nextClosureField++.toUInt()),
                                 type =
-                                    valueType(
+                                    cell?.let {
+                                        ValueType.Ref(nullable = false, type = TypeRef.Local(it.typeId))
+                                    } ?: valueType(
                                         declaration.type,
                                         pluginContext,
                                         guestTypes,
@@ -935,6 +993,7 @@ internal object KotlinProjectLowering {
                                         declaration,
                                         function0InterfaceTypeId?.let(TypeRef::Local),
                                     ),
+                                cell = cell,
                             )
                         },
                 )
@@ -1033,6 +1092,7 @@ internal object KotlinProjectLowering {
                         function0UnitType = function0InterfaceTypeId?.let(TypeRef::Local),
                         function0InvokeFunctionId = function0InvokeFunctionId,
                         closureLayouts = closureLayoutsByExpression,
+                        captureCells = captureCellLayoutsBySymbol,
                     ).compile()
                 }
             blocks += compiled.blocks
@@ -1169,6 +1229,7 @@ internal object KotlinProjectLowering {
                     function0UnitType = function0InterfaceTypeId?.let(TypeRef::Local),
                     function0InvokeFunctionId = function0InvokeFunctionId,
                     closureLayouts = closureLayoutsByExpression,
+                    captureCells = captureCellLayoutsBySymbol,
                     leadingParameterTypes = listOf(receiverType),
                     captureFields = layout.captures.associateBy { it.symbol },
                     closureReceiver = RegisterId.of(0u),
@@ -1485,6 +1546,15 @@ internal object KotlinProjectLowering {
                         methodCount = 1u,
                     )
                 }
+        val captureCellClassTypes =
+            captureCellLayouts.map { cell ->
+                NominalType.Class(
+                    name = requireNotNull(metadataIds[captureCellName(cell.ordinal)]),
+                    final = true,
+                    fieldStart = cell.fieldId.value,
+                    fieldCount = 1u,
+                )
+            }
         val topLevelStateTypes =
             listOfNotNull(
                 topLevelStateTypeId?.let { stateType ->
@@ -1519,6 +1589,15 @@ internal object KotlinProjectLowering {
                         )
                     }
             } +
+                captureCellLayouts.map { cell ->
+                    Field(
+                        owner = TypeRef.Local(cell.typeId),
+                        name = requireNotNull(metadataIds["<value>"]),
+                        type = cell.valueType,
+                        mutable = true,
+                        static = false,
+                    )
+                } +
                 closureLayouts.flatMap { layout ->
                     val owner = TypeRef.Local(layout.typeId)
                     layout.captures.mapIndexed { index, capture ->
@@ -1598,6 +1677,7 @@ internal object KotlinProjectLowering {
                         constructorTypes +
                         classTypes +
                         closureClassTypes +
+                        captureCellClassTypes +
                         topLevelStateTypes +
                         if (usesStringArray) {
                             listOf(
@@ -2205,6 +2285,8 @@ private fun closureName(ordinal: Int): String = "app.<lambda-$ordinal>"
 
 private fun closureCaptureName(ordinal: Int): String = "<capture-$ordinal>"
 
+private fun captureCellName(ordinal: Int): String = "app.<capture-cell-$ordinal>"
+
 private data class CompiledFunction(
     val localTypes: List<ValueType>,
     val blocks: List<Block>,
@@ -2434,6 +2516,7 @@ private class FunctionCompiler(
     private val function0UnitType: TypeRef.Local?,
     private val function0InvokeFunctionId: FunctionId?,
     private val closureLayouts: Map<IrFunctionExpression, GuestClosureLayout>,
+    private val captureCells: Map<IrValueSymbol, GuestCaptureCellLayout>,
     private val leadingParameterTypes: List<ValueType> = emptyList(),
     private val captureFields: Map<IrValueSymbol, GuestClosureCapture> = emptyMap(),
     private val closureReceiver: RegisterId? = null,
@@ -2462,14 +2545,40 @@ private class FunctionCompiler(
             is IrVariable -> {
                 val initializer = statement.initializer ?: throw UnsupportedKotlinIr(statement, "local without initializer")
                 val source = compileExpression(initializer)
-                val destination = allocate(valueType(statement.type, statement))
-                emit(Instruction.Move(destination, source))
-                values[statement.symbol] = destination
+                val cell = captureCells[statement.symbol]
+                if (cell == null) {
+                    if (initializer is IrFunctionExpression) {
+                        values[statement.symbol] = source
+                    } else {
+                        val destination = allocate(valueType(statement.type, statement))
+                        emit(Instruction.Move(destination, source))
+                        values[statement.symbol] = destination
+                    }
+                } else {
+                    prepareAllocationBlock()
+                    val cellType = TypeRef.Local(cell.typeId)
+                    val destination = allocate(ValueType.Ref(nullable = false, type = cellType))
+                    emit(Instruction.NewObject(destination, cellType))
+                    emit(Instruction.FieldSet(destination, FieldRef.Local(cell.fieldId), source))
+                    values[statement.symbol] = destination
+                }
             }
 
             is IrSetValue -> {
-                val destination = values[statement.symbol] ?: throw UnsupportedKotlinIr(statement, "unknown mutable local")
-                emit(Instruction.Move(destination, compileExpression(statement.value)))
+                val source = compileExpression(statement.value)
+                val cell = captureCells[statement.symbol]
+                if (cell == null) {
+                    val destination = values[statement.symbol] ?: throw UnsupportedKotlinIr(statement, "unknown mutable local")
+                    emit(Instruction.Move(destination, source))
+                } else {
+                    emit(
+                        Instruction.FieldSet(
+                            loadCellReference(statement.symbol, statement),
+                            FieldRef.Local(cell.fieldId),
+                            source,
+                        ),
+                    )
+                }
             }
 
             is IrCall -> {
@@ -2624,10 +2733,28 @@ private class FunctionCompiler(
         symbol: IrValueSymbol,
         element: IrElement,
     ): RegisterId {
+        captureCells[symbol]?.let { cell ->
+            return allocate(cell.valueType).also { destination ->
+                emit(Instruction.FieldGet(destination, loadCellReference(symbol, element), FieldRef.Local(cell.fieldId)))
+            }
+        }
         values[symbol]?.let { return it }
         val capture = captureFields[symbol] ?: throw UnsupportedKotlinIr(element, "unknown local value")
         val receiver = closureReceiver ?: throw UnsupportedKotlinIr(element, "closure capture has no environment receiver")
         return allocate(capture.type).also { destination ->
+            emit(Instruction.FieldGet(destination, receiver, FieldRef.Local(capture.fieldId)))
+        }
+    }
+
+    private fun loadCellReference(
+        symbol: IrValueSymbol,
+        element: IrElement,
+    ): RegisterId {
+        values[symbol]?.let { return it }
+        val capture = captureFields[symbol] ?: throw UnsupportedKotlinIr(element, "unknown captured mutable local")
+        val cell = capture.cell ?: throw UnsupportedKotlinIr(element, "captured value is not backed by a mutable cell")
+        val receiver = closureReceiver ?: throw UnsupportedKotlinIr(element, "closure capture has no environment receiver")
+        return allocate(ValueType.Ref(nullable = false, type = TypeRef.Local(cell.typeId))).also { destination ->
             emit(Instruction.FieldGet(destination, receiver, FieldRef.Local(capture.fieldId)))
         }
     }
@@ -2639,7 +2766,13 @@ private class FunctionCompiler(
         val destination = allocate(ValueType.Ref(nullable = false, type = closureType))
         emit(Instruction.NewObject(destination, closureType))
         layout.captures.forEach { capture ->
-            emit(Instruction.FieldSet(destination, FieldRef.Local(capture.fieldId), loadValue(capture.symbol, expression)))
+            val value =
+                if (capture.cell == null) {
+                    loadValue(capture.symbol, expression)
+                } else {
+                    loadCellReference(capture.symbol, expression)
+                }
+            emit(Instruction.FieldSet(destination, FieldRef.Local(capture.fieldId), value))
         }
         return destination
     }
@@ -4276,12 +4409,6 @@ private fun collectGuestClosures(
                 override fun visitGetValue(expression: IrGetValue) {
                     if (expression.symbol !in owned) {
                         val declaration = expression.symbol.owner
-                        if (declaration is IrVariable && declaration.isVar) {
-                            throw UnsupportedKotlinIr(
-                                expression,
-                                "captured mutable locals require shared typed cells and are not supported yet",
-                            )
-                        }
                         captures.putIfAbsent(expression.symbol, declaration)
                     }
                     super.visitGetValue(expression)
@@ -4289,10 +4416,7 @@ private fun collectGuestClosures(
 
                 override fun visitSetValue(expression: IrSetValue) {
                     if (expression.symbol !in owned) {
-                        throw UnsupportedKotlinIr(
-                            expression,
-                            "captured mutable locals require shared typed cells and are not supported yet",
-                        )
+                        captures.putIfAbsent(expression.symbol, expression.symbol.owner)
                     }
                     super.visitSetValue(expression)
                 }
