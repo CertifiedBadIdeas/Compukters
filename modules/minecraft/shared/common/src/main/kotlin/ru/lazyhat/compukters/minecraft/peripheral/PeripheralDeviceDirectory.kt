@@ -52,7 +52,7 @@ internal class PeripheralDeviceDirectory(
 
     init {
         initialEntries.forEach { entry ->
-            val normalized = normalizeName(entry.name)
+            val normalized = normalizePeripheralName(entry.name)
             require(names.put(entry.identity, normalized) == null) { "duplicate peripheral device identity" }
         }
     }
@@ -62,7 +62,7 @@ internal class PeripheralDeviceDirectory(
     fun setName(
         identity: PeripheralDeviceIdentity,
         requestedName: String,
-    ): String = normalizeName(requestedName).also { normalized -> names[identity] = normalized }
+    ): String = normalizePeripheralName(requestedName).also { normalized -> names[identity] = normalized }
 
     fun clearName(identity: PeripheralDeviceIdentity): String? = names.remove(identity)
 
@@ -70,7 +70,7 @@ internal class PeripheralDeviceDirectory(
         requestedName: String,
         reachable: Iterable<PeripheralDeviceIdentity>,
     ): PeripheralNameLookup {
-        val normalized = normalizeName(requestedName)
+        val normalized = normalizePeripheralName(requestedName)
         val matches = reachable.distinct().filter { identity -> names[identity] == normalized }
         return when (matches.size) {
             0 -> PeripheralNameLookup.Missing
@@ -81,15 +81,14 @@ internal class PeripheralDeviceDirectory(
 
     fun snapshot(): List<PeripheralDeviceName> = names.map { (identity, name) -> PeripheralDeviceName(identity, name) }
 
-    private fun normalizeName(requestedName: String): String {
-        val normalized = requestedName.trim().lowercase(Locale.ROOT)
-        require(NAME_PATTERN.matches(normalized)) {
-            "peripheral name must match ${NAME_PATTERN.pattern}"
-        }
-        return normalized
-    }
-
-    private companion object {
-        val NAME_PATTERN = Regex("[a-z][a-z0-9_-]{0,31}")
-    }
 }
+
+internal fun normalizePeripheralName(requestedName: String): String {
+    val normalized = requestedName.trim().lowercase(Locale.ROOT)
+    require(PERIPHERAL_NAME_PATTERN.matches(normalized)) {
+        "peripheral name must match ${PERIPHERAL_NAME_PATTERN.pattern}"
+    }
+    return normalized
+}
+
+private val PERIPHERAL_NAME_PATTERN = Regex("[a-z][a-z0-9_-]{0,31}")

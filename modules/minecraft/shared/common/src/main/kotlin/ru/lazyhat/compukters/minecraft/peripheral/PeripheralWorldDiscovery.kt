@@ -198,18 +198,24 @@ internal object PeripheralWorldDiscovery {
     ): PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity> {
         check(level.server.isSameThread) { "peripheral cables must be discovered on the server thread" }
         return PeripheralCableTopologyCache.getOrCompute(level, computerPosition) {
-            discoverUncached(level, computerPosition)
+            discoverUncached(level, adjacentCables(level, computerPosition))
+        }
+    }
+
+    fun discoverFromDevice(
+        level: ServerLevel,
+        contactedPosition: BlockPos,
+    ): PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity> {
+        check(level.server.isSameThread) { "peripheral cables must be discovered on the server thread" }
+        return PeripheralCableTopologyCache.getOrCompute(level, contactedPosition) {
+            discoverUncached(level, adjacentCables(level, contactedPosition))
         }
     }
 
     private fun discoverUncached(
         level: ServerLevel,
-        computerPosition: BlockPos,
+        starts: List<BlockPos>,
     ): PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity> {
-        val starts =
-            Direction.entries.mapNotNull { direction ->
-                computerPosition.relative(direction).immutable().takeIf { position -> isLoadedCable(level, position) }
-            }
         val dimension = level.dimension().toString()
         return PeripheralCableTopology<BlockPos, PeripheralDeviceIdentity>(
             limits = DEFAULT_LIMITS,
@@ -221,6 +227,14 @@ internal object PeripheralWorldDiscovery {
             contacts = { cable -> contacts(level, dimension, cable) },
         ).traverse(starts)
     }
+
+    private fun adjacentCables(
+        level: ServerLevel,
+        position: BlockPos,
+    ): List<BlockPos> =
+        Direction.entries.mapNotNull { direction ->
+            position.relative(direction).immutable().takeIf { adjacent -> isLoadedCable(level, adjacent) }
+        }
 
     private fun contacts(
         level: ServerLevel,
