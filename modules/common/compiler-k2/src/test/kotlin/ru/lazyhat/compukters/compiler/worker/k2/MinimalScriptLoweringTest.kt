@@ -400,6 +400,26 @@ class MinimalScriptLoweringTest {
                 fun applyWith(value: Int, block: ((Int) -> Int, Int) -> Int, transform: (Int) -> Int): Int =
                     block(transform, value)
 
+                fun nested(offset: Int): (Int) -> (Int) -> Int = { x -> { y -> offset + x + y } }
+
+                fun deep(seed: Int): () -> () -> () -> Int = { { { seed } } }
+
+                fun nestedCounter(): () -> () -> Int {
+                    var total = 0
+                    return { { total += 1; total } }
+                }
+
+                fun sibling(): () -> Int {
+                    val outer: () -> () -> Int = {
+                        var total = 1
+                        val first: () -> Int = { total += 1; total }
+                        val second: () -> Int = { total += 10; total }
+                        second()
+                        first
+                    }
+                    return outer()
+                }
+
                 fun main() {
                     val first = make(3)
                     val second = make(4)
@@ -456,6 +476,15 @@ class MinimalScriptLoweringTest {
                     val step: (Int) -> Int = { it + 1 }
                     val runner: ((Int) -> Int, Int) -> Int = { operation, value -> operation(value) * 2 }
                     println(applyWith(4, runner, step))
+                    val add = nested(2)(3)
+                    println(add(4))
+                    println(deep(17)()()())
+                    val makeCounter = nestedCounter()
+                    val nestedFirst = makeCounter()
+                    val nestedSecond = makeCounter()
+                    println(nestedFirst())
+                    println(nestedSecond())
+                    println(sibling()())
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))

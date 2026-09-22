@@ -256,7 +256,8 @@ supported.
   returned, stored, and invoked. The compiler generates an interface for each
   distinct concrete signature without a fixed arity cut-off; artifact and VM
   limits still apply. A function value can also be passed as an argument to
-  another function value.
+  another function value. Nested lambdas may capture values through multiple
+  lexical scopes and remain callable after the enclosing invocation returns.
   Each lambda evaluation creates an ordinary managed closure object; lambdas
   may capture immutable scalar and reference values, and reference captures
   preserve the original referent and aliasing. A captured local `var` uses one
@@ -264,12 +265,13 @@ supported.
   enclosing code and every sibling closure; primitive payloads remain unboxed.
   `Tasks.launch` accepts direct, stored, and returned `() -> Unit` values. A
   direct top-level `Tasks.launch(::worker)` remains a static spawn without a
-  closure allocation. Nested lambdas, types
-  unsupported elsewhere in Guest Kotlin, local or bound references, and
-  variance conversions between different function signatures remain unsupported.
+  closure allocation. Types unsupported elsewhere in Guest Kotlin, local or
+  bound references, and variance conversions between different function
+  signatures remain unsupported.
   Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  tests `supported function values lower to managed closures and shared capture cells`,
+  tests `supported function values lower to managed closures and shared capture cells`
+  (including nested closures and shared mutable captures),
   `task launch accepts direct stored and returned Unit lambdas`,
   `unsupported closure shapes produce stable diagnostics`,
   `direct top level ordinary task lowers to spawn and join`,
@@ -278,7 +280,8 @@ supported.
   root task `testKotlinFunctionValuesVmConformance`.
   Tracking: [#627](https://github.com/CertifiedBadIdeas/Compukters/issues/627),
   [#631](https://github.com/CertifiedBadIdeas/Compukters/issues/631),
-  [#628](https://github.com/CertifiedBadIdeas/Compukters/issues/628)
+  [#628](https://github.com/CertifiedBadIdeas/Compukters/issues/628),
+  [#632](https://github.com/CertifiedBadIdeas/Compukters/issues/632)
 
 - [ ] **Recursion — Partial** — direct calls and bounded VM call depth can
   represent recursion, but no Kotlin-to-VM recursive source conformance test

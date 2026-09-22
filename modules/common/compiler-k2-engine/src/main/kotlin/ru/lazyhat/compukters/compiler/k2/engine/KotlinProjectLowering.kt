@@ -4500,7 +4500,6 @@ private fun functionShapeName(
 
 private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestClosureSource> {
     val expressions = mutableListOf<IrFunctionExpression>()
-    var closureDepth = 0
     val collector =
         object : IrVisitorVoid() {
             override fun visitElement(element: IrElement) {
@@ -4508,13 +4507,8 @@ private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestC
             }
 
             override fun visitFunctionExpression(expression: IrFunctionExpression) {
-                if (closureDepth > 0) {
-                    throw UnsupportedKotlinIr(expression, "nested lambdas are outside the initial function-value subset")
-                }
                 expressions += expression
-                closureDepth++
                 super.visitFunctionExpression(expression)
-                closureDepth--
             }
         }
     functions.forEach { it.accept(collector, null) }
@@ -4538,6 +4532,11 @@ private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestC
                 override fun visitVariable(declaration: IrVariable) {
                     owned += declaration.symbol
                     super.visitVariable(declaration)
+                }
+
+                override fun visitFunctionExpression(expression: IrFunctionExpression) {
+                    owned += expression.function.parameters.map { it.symbol }
+                    super.visitFunctionExpression(expression)
                 }
             },
             null,
