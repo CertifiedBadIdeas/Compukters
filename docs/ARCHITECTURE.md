@@ -321,6 +321,9 @@ interface-call instruction, preserving unboxed primitive values and ordinary ref
 arity transition at 22 or 23 arguments in the Guest artifact.
 Nested closures capture free values through their enclosing closure objects. Mutable captured locals retain a single
 VM-owned typed cell shared across nesting levels and sibling closures, including after the enclosing call returns.
+An unbound top-level Guest function reference uses the same managed function-value interface and a capture-free
+closure whose `invoke` method calls the referenced project function. An inferred `KFunction` value has the same Guest
+call behavior; reflection is not part of the Guest function-value contract.
 
 `/rom/kotlinc source.kt [-o output]` accepts exactly one source file today; its default output is the source basename
 without `.kt`. This single-file in-computer command is distinct from the IDE and compiler protocol, which support

@@ -201,8 +201,9 @@ private data class GuestCaptureCellLayout(
 }
 
 private data class GuestClosureSource(
-    val expression: IrFunctionExpression,
-    val function: IrSimpleFunction,
+    val expression: IrExpression,
+    val function: IrSimpleFunction?,
+    val referenceTarget: IrSimpleFunction?,
     val ordinal: Int,
     val captures: List<IrValueDeclaration>,
 )
@@ -215,8 +216,9 @@ private data class GuestFunctionShape(
 }
 
 private data class GuestClosureLayout(
-    val expression: IrFunctionExpression,
-    val function: IrSimpleFunction,
+    val expression: IrExpression,
+    val function: IrSimpleFunction?,
+    val referenceTarget: IrSimpleFunction?,
     val ordinal: Int,
     val typeId: TypeId,
     val invokeFunctionId: FunctionId,
@@ -993,6 +995,7 @@ internal object KotlinProjectLowering {
                 GuestClosureLayout(
                     expression = source.expression,
                     function = source.function,
+                    referenceTarget = source.referenceTarget,
                     ordinal = source.ordinal,
                     typeId = requireNotNull(closureTypeIds[source.expression]),
                     invokeFunctionId = requireNotNull(closureInvokeFunctionIds[source.expression]),
@@ -1227,61 +1230,94 @@ internal object KotlinProjectLowering {
             val receiverType = ValueType.Ref(nullable = false, type = closureType)
             val firstBlock = blocks.size
             val compiled =
-                FunctionCompiler(
-                    function = layout.function,
-                    functionId = layout.invokeFunctionId,
-                    blockBase = firstBlock,
-                    stringType = stringType,
-                    charArrayType = charArrayType,
-                    intArrayType = intArrayType,
-                    stringArrayType = stringArrayType,
-                    guestTypes = guestTypes,
-                    unitType = pluginContext.irBuiltIns.unitType,
-                    kotlinStringType = pluginContext.irBuiltIns.stringType,
-                    kotlinCharArrayClass = pluginContext.irBuiltIns.charArray,
-                    kotlinIntArrayClass = pluginContext.irBuiltIns.intArray,
-                    intType = pluginContext.irBuiltIns.intType,
-                    longType = pluginContext.irBuiltIns.longType,
-                    floatType = pluginContext.irBuiltIns.floatType,
-                    booleanType = pluginContext.irBuiltIns.booleanType,
-                    charType = pluginContext.irBuiltIns.charType,
-                    functionIds = functionIds,
-                    constantIds = constantIds,
-                    literalIds = literalIds,
-                    session = session,
-                    capabilityIds = capabilityIds,
-                    classTypeIds = classTypeIds,
-                    externalClassTypes = externalClassTypes,
-                    inlineValueClasses = inlineValueClasses,
-                    platformScalars = platformScalars,
-                    constructorLayouts =
-                        classLayouts
-                            .mapNotNull { classLayout ->
-                                classLayout.declaration.constructors.singleOrNull { it.isPrimary }?.symbol?.let { symbol ->
-                                    constructorFunctionIds[symbol]?.let { symbol to GuestConstructorTarget(classLayout, it) }
-                                }
-                            }.toMap(),
-                    fieldsByGetter =
-                        classLayouts
-                            .flatMap { classLayout ->
-                                classLayout.fields.map { field -> requireNotNull(field.property.getter).symbol to field }
-                            }.toMap(),
-                    topLevelFieldsByBacking = topLevelFieldsByBacking,
-                    topLevelFieldsByGetter = topLevelFieldsByGetter,
-                    enumEntries = classLayouts.flatMap { it.enumEntries }.associateBy { it.declaration.symbol },
-                    externalFieldsByGetter = externalGetterFieldImports,
-                    externalEnumEntries = externalEnumFieldImports,
-                    externalDefaultEnumEntries = externalDefaultEnumFieldImports,
-                    externalFunctions = externalFunctionImports,
-                    functionTypes = shapeInterfaceTypes,
-                    invokeFunctionIds = shapeInvokeFunctionIds,
-                    taskLaunchTrampolineFunctionId = taskLaunchTrampolineFunctionId,
-                    closureLayouts = closureLayoutsByExpression,
-                    captureCells = captureCellLayoutsBySymbol,
-                    leadingParameterTypes = listOf(receiverType),
-                    captureFields = layout.captures.associateBy { it.symbol },
-                    closureReceiver = RegisterId.of(0u),
-                ).compile()
+                if (layout.referenceTarget != null) {
+                    val targetId =
+                        functionIds[layout.referenceTarget.symbol]
+                            ?: throw UnsupportedKotlinIr(layout.expression, "function reference target is not in the Guest project")
+                    val resultType = shapeValueType(layout.shape.result)
+                    val destination =
+                        if (resultType ==
+                            ValueType.Unit
+                        ) {
+                            Destination.Unit
+                        } else {
+                            Destination.Register(RegisterId.of((layout.shape.arity + 1).toUInt()))
+                        }
+                    CompiledFunction(
+                        localTypes = if (resultType == ValueType.Unit) emptyList() else listOf(resultType),
+                        blocks =
+                            listOf(
+                                Block(
+                                    layout.invokeFunctionId,
+                                    false,
+                                    listOf(
+                                        Instruction.Call(
+                                            destination,
+                                            FunctionRef.Local(targetId),
+                                            (1..layout.shape.arity).map { RegisterId.of(it.toUInt()) },
+                                        ),
+                                        Instruction.Return(destination),
+                                    ),
+                                ),
+                            ),
+                    )
+                } else {
+                    FunctionCompiler(
+                        function = requireNotNull(layout.function),
+                        functionId = layout.invokeFunctionId,
+                        blockBase = firstBlock,
+                        stringType = stringType,
+                        charArrayType = charArrayType,
+                        intArrayType = intArrayType,
+                        stringArrayType = stringArrayType,
+                        guestTypes = guestTypes,
+                        unitType = pluginContext.irBuiltIns.unitType,
+                        kotlinStringType = pluginContext.irBuiltIns.stringType,
+                        kotlinCharArrayClass = pluginContext.irBuiltIns.charArray,
+                        kotlinIntArrayClass = pluginContext.irBuiltIns.intArray,
+                        intType = pluginContext.irBuiltIns.intType,
+                        longType = pluginContext.irBuiltIns.longType,
+                        floatType = pluginContext.irBuiltIns.floatType,
+                        booleanType = pluginContext.irBuiltIns.booleanType,
+                        charType = pluginContext.irBuiltIns.charType,
+                        functionIds = functionIds,
+                        constantIds = constantIds,
+                        literalIds = literalIds,
+                        session = session,
+                        capabilityIds = capabilityIds,
+                        classTypeIds = classTypeIds,
+                        externalClassTypes = externalClassTypes,
+                        inlineValueClasses = inlineValueClasses,
+                        platformScalars = platformScalars,
+                        constructorLayouts =
+                            classLayouts
+                                .mapNotNull { classLayout ->
+                                    classLayout.declaration.constructors.singleOrNull { it.isPrimary }?.symbol?.let { symbol ->
+                                        constructorFunctionIds[symbol]?.let { symbol to GuestConstructorTarget(classLayout, it) }
+                                    }
+                                }.toMap(),
+                        fieldsByGetter =
+                            classLayouts
+                                .flatMap { classLayout ->
+                                    classLayout.fields.map { field -> requireNotNull(field.property.getter).symbol to field }
+                                }.toMap(),
+                        topLevelFieldsByBacking = topLevelFieldsByBacking,
+                        topLevelFieldsByGetter = topLevelFieldsByGetter,
+                        enumEntries = classLayouts.flatMap { it.enumEntries }.associateBy { it.declaration.symbol },
+                        externalFieldsByGetter = externalGetterFieldImports,
+                        externalEnumEntries = externalEnumFieldImports,
+                        externalDefaultEnumEntries = externalDefaultEnumFieldImports,
+                        externalFunctions = externalFunctionImports,
+                        functionTypes = shapeInterfaceTypes,
+                        invokeFunctionIds = shapeInvokeFunctionIds,
+                        taskLaunchTrampolineFunctionId = taskLaunchTrampolineFunctionId,
+                        closureLayouts = closureLayoutsByExpression,
+                        captureCells = captureCellLayoutsBySymbol,
+                        leadingParameterTypes = listOf(receiverType),
+                        captureFields = layout.captures.associateBy { it.symbol },
+                        closureReceiver = RegisterId.of(0u),
+                    ).compile()
+                }
             blocks += compiled.blocks
             loweredFunctions +=
                 Function(
@@ -2603,7 +2639,7 @@ private class FunctionCompiler(
     private val functionTypes: Map<GuestFunctionShape, TypeRef.Local>,
     private val invokeFunctionIds: Map<GuestFunctionShape, FunctionId>,
     private val taskLaunchTrampolineFunctionId: FunctionId?,
-    private val closureLayouts: Map<IrFunctionExpression, GuestClosureLayout>,
+    private val closureLayouts: Map<IrExpression, GuestClosureLayout>,
     private val captureCells: Map<IrValueSymbol, GuestCaptureCellLayout>,
     private val leadingParameterTypes: List<ValueType> = emptyList(),
     private val captureFields: Map<IrValueSymbol, GuestClosureCapture> = emptyMap(),
@@ -2636,7 +2672,10 @@ private class FunctionCompiler(
                 val source = compileExpression(initializer)
                 val cell = captureCells[statement.symbol]
                 if (cell == null) {
-                    if (initializer is IrFunctionExpression) {
+                    if (initializer is IrFunctionExpression ||
+                        initializer is IrFunctionReference ||
+                        initializer is IrRichFunctionReference
+                    ) {
                         values[statement.symbol] = source
                     } else {
                         val destination = allocate(valueType(statement.type, statement))
@@ -2784,6 +2823,10 @@ private class FunctionCompiler(
                 compileClosure(expression)
             }
 
+            is IrRichFunctionReference, is IrFunctionReference -> {
+                compileClosure(expression)
+            }
+
             is IrGetEnumValue -> {
                 val entry = enumEntries[expression.symbol]
                 if (entry != null) {
@@ -2850,8 +2893,10 @@ private class FunctionCompiler(
         }
     }
 
-    private fun compileClosure(expression: IrFunctionExpression): RegisterId {
-        val layout = closureLayouts[expression] ?: throw UnsupportedKotlinIr(expression, "unknown closure expression")
+    private fun compileClosure(expression: IrExpression): RegisterId {
+        val layout =
+            closureLayouts[expression]
+                ?: throw UnsupportedKotlinIr(expression, "only unbound top-level Guest function references are supported")
         prepareAllocationBlock()
         val closureType = TypeRef.Local(layout.typeId)
         val destination = allocate(ValueType.Ref(nullable = false, type = closureType))
@@ -3069,7 +3114,12 @@ private class FunctionCompiler(
     private fun compileCall(call: IrCall): RegisterId? {
         val target = call.symbol.owner
         val targetName = target.fqNameWhenAvailable?.asString()
-        if (targetName?.startsWith("kotlin.Function") == true && targetName.endsWith(".invoke")) {
+        if ((
+                targetName?.startsWith("kotlin.Function") == true ||
+                    targetName?.startsWith("kotlin.reflect.KFunction") == true
+            ) &&
+            targetName.endsWith(".invoke")
+        ) {
             val receiverExpression = dispatchReceiver(call, target, targetName)
             val shape =
                 receiverExpression.type.guestFunctionShape()
@@ -4483,8 +4533,12 @@ private fun IrType.guestFunctionShape(): GuestFunctionShape? {
     if (simple.isNullable()) return null
     val owner = (simple.classifier as? IrClassSymbol)?.owner ?: return null
     val name = owner.fqNameWhenAvailable?.asString() ?: return null
-    if (!name.startsWith("kotlin.Function")) return null
-    val arity = name.removePrefix("kotlin.Function").toIntOrNull() ?: return null
+    val arity =
+        when {
+            name.startsWith("kotlin.Function") -> name.removePrefix("kotlin.Function").toIntOrNull()
+            name.startsWith("kotlin.reflect.KFunction") -> name.removePrefix("kotlin.reflect.KFunction").toIntOrNull()
+            else -> null
+        } ?: return null
     val arguments = simple.arguments.map { (it as? IrTypeProjection)?.type ?: return null }
     if (arguments.size != arity + 1) return null
     return GuestFunctionShape(arguments.dropLast(1), arguments.last())
@@ -4498,8 +4552,9 @@ private fun functionShapeName(
     unitBlockShape: GuestFunctionShape,
 ): String = if (shape == unitBlockShape) "kotlin.Function0<Unit>" else "app.<function-shape-$index>"
 
+@OptIn(UnsafeDuringIrConstructionAPI::class)
 private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestClosureSource> {
-    val expressions = mutableListOf<IrFunctionExpression>()
+    val expressions = mutableListOf<IrExpression>()
     val collector =
         object : IrVisitorVoid() {
             override fun visitElement(element: IrElement) {
@@ -4510,10 +4565,45 @@ private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestC
                 expressions += expression
                 super.visitFunctionExpression(expression)
             }
+
+            override fun visitRichFunctionReference(expression: IrRichFunctionReference) {
+                val target = expression.reflectionTargetSymbol?.owner as? IrSimpleFunction
+                if (target?.parent is IrFile && expression.boundValues.isEmpty()) expressions += expression
+                super.visitRichFunctionReference(expression)
+            }
+
+            override fun visitFunctionReference(expression: IrFunctionReference) {
+                val target = (expression.reflectionTarget?.owner ?: expression.symbol.owner) as? IrSimpleFunction
+                if (target?.parent is IrFile && expression.arguments.all { it == null }) expressions += expression
+                super.visitFunctionReference(expression)
+            }
         }
     functions.forEach { it.accept(collector, null) }
     return expressions.mapIndexed { ordinal, expression ->
-        val function = expression.function
+        val referenceTarget =
+            when (expression) {
+                is IrRichFunctionReference -> expression.reflectionTargetSymbol?.owner as? IrSimpleFunction
+                is IrFunctionReference -> (expression.reflectionTarget?.owner ?: expression.symbol.owner) as? IrSimpleFunction
+                else -> null
+            }
+        if (referenceTarget != null) {
+            val shape = expression.type.guestFunctionShape()
+            if (expression is IrRichFunctionReference &&
+                (expression.hasUnitConversion || expression.hasSuspendConversion || expression.hasVarargConversion)
+            ) {
+                throw UnsupportedKotlinIr(expression, "adapted function references are not supported")
+            }
+            if (shape == null || referenceTarget.isSuspend ||
+                referenceTarget.returnType != shape.result ||
+                referenceTarget.parameters.map { it.type } != shape.parameters
+            ) {
+                throw UnsupportedKotlinIr(expression, "function reference signature is not supported")
+            }
+            return@mapIndexed GuestClosureSource(expression, null, referenceTarget, ordinal, emptyList())
+        }
+        val function =
+            (expression as? IrFunctionExpression)?.function
+                ?: throw UnsupportedKotlinIr(expression, "unsupported function reference")
         val shape = expression.type.guestFunctionShape()
         if (shape == null ||
             function.isSuspend ||
@@ -4565,7 +4655,7 @@ private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestC
             },
             null,
         )
-        GuestClosureSource(expression, function, ordinal, captures.values.toList())
+        GuestClosureSource(expression, function, null, ordinal, captures.values.toList())
     }
 }
 
