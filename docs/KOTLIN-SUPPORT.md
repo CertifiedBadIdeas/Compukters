@@ -263,7 +263,9 @@ supported.
   `KFunction` type. Only invocation is supported; reflection operations are not.
   Bound references to ordinary Guest instance methods also work: the receiver
   expression is evaluated once, retained by the function value, and dispatched
-  virtually or through its interface when invoked.
+  virtually or through its interface when invoked. Unbound instance-method
+  references (`Type::method`) accept the receiver as their first argument and
+  use the same runtime dispatch.
   Each lambda evaluation creates an ordinary managed closure object; lambdas
   may capture immutable scalar and reference values, and reference captures
   preserve the original referent and aliasing. A captured local `var` uses one
@@ -271,9 +273,9 @@ supported.
   enclosing code and every sibling closure; primitive payloads remain unboxed.
   `Tasks.launch` accepts direct, stored, and returned `() -> Unit` values. A
   direct top-level `Tasks.launch(::worker)` remains a static spawn without a
-  closure allocation. Types unsupported elsewhere in Guest Kotlin, local and
-  unbound instance references, adapted references, and variance conversions between
-  different function signatures remain unsupported.
+  closure allocation. Types unsupported elsewhere in Guest Kotlin, local,
+  property, and constructor references, adapted references, and variance
+  conversions between different function signatures remain unsupported.
   Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `supported function values lower to managed closures and shared capture cells`
@@ -283,14 +285,15 @@ supported.
   `direct top level ordinary task lowers to spawn and join`,
   `task launch rejects unsupported local and bound references`,
   `function value variance conversion is rejected before artifact publication`,
-  and `unbound instance function reference is rejected before artifact publication`;
+  and `constructor reference is rejected before artifact publication`;
   root task `testKotlinFunctionValuesVmConformance`.
   Tracking: [#627](https://github.com/CertifiedBadIdeas/Compukters/issues/627),
   [#631](https://github.com/CertifiedBadIdeas/Compukters/issues/631),
   [#628](https://github.com/CertifiedBadIdeas/Compukters/issues/628),
   [#632](https://github.com/CertifiedBadIdeas/Compukters/issues/632),
   [#633](https://github.com/CertifiedBadIdeas/Compukters/issues/633),
-  [#634](https://github.com/CertifiedBadIdeas/Compukters/issues/634)
+  [#634](https://github.com/CertifiedBadIdeas/Compukters/issues/634),
+  [#635](https://github.com/CertifiedBadIdeas/Compukters/issues/635)
 
 - [ ] **Recursion — Partial** — direct calls and bounded VM call depth can
   represent recursion, but no Kotlin-to-VM recursive source conformance test

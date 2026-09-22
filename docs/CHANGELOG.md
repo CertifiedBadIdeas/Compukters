@@ -33,7 +33,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   typed cells when local `var` values are captured, including across nested lambdas. `Tasks.launch` accepts
   `() -> Unit` values as bounded cooperative tasks. Unbound references to Guest top-level functions can be passed,
   returned, stored, and invoked as typed function values. Bound Guest instance-method references retain their receiver
-  and preserve virtual and interface dispatch.
+  and preserve virtual and interface dispatch. Unbound `Type::method` references accept the receiver as their first
+  argument and use the same dispatch.
 
 ### Addons and Create
 

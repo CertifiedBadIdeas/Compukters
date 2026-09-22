@@ -326,6 +326,8 @@ closure whose `invoke` method calls the referenced project function. An inferred
 call behavior; reflection is not part of the Guest function-value contract.
 A bound Guest instance-method reference evaluates its receiver once and stores that object in the closure. Its `invoke`
 method loads the stored receiver and uses the target method's static, virtual, or interface dispatch mode.
+An unbound instance-method reference has no receiver field; its first function parameter supplies the receiver for
+the same dispatch path.
 
 `/rom/kotlinc source.kt [-o output]` accepts exactly one source file today; its default output is the source basename
 without `.kt`. This single-file in-computer command is distinct from the IDE and compiler protocol, which support

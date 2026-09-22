@@ -2949,7 +2949,7 @@ private class FunctionCompiler(
     private fun compileClosure(expression: IrExpression): RegisterId {
         val layout =
             closureLayouts[expression]
-                ?: throw UnsupportedKotlinIr(expression, "only bound Guest instance or unbound top-level function references are supported")
+                ?: throw UnsupportedKotlinIr(expression, "only Guest function and instance-method references are supported")
         val boundValue = layout.captures.firstOrNull { it.initialValue != null }?.let { compileExpression(requireNotNull(it.initialValue)) }
         prepareAllocationBlock()
         val closureType = TypeRef.Local(layout.typeId)
@@ -4639,7 +4639,7 @@ private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestC
             override fun visitRichFunctionReference(expression: IrRichFunctionReference) {
                 val target = expression.reflectionTargetSymbol?.owner as? IrSimpleFunction
                 if ((target?.parent is IrFile && expression.boundValues.isEmpty()) ||
-                    (target?.parent is IrClass && expression.boundReferenceReceiver(target) != null)
+                    target?.parent is IrClass
                 ) {
                     expressions += expression
                 }
@@ -4649,7 +4649,10 @@ private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestC
             override fun visitFunctionReference(expression: IrFunctionReference) {
                 val target = (expression.reflectionTarget?.owner ?: expression.symbol.owner) as? IrSimpleFunction
                 if ((target?.parent is IrFile && expression.arguments.all { it == null }) ||
-                    (target?.parent is IrClass && expression.boundReferenceReceiver(target) != null)
+                    (
+                        target?.parent is IrClass &&
+                            (expression.boundReferenceReceiver(target) != null || expression.arguments.all { it == null })
+                    )
                 ) {
                     expressions += expression
                 }
@@ -4667,6 +4670,11 @@ private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestC
         if (referenceTarget != null) {
             val shape = expression.type.guestFunctionShape()
             val boundReceiver = expression.boundReferenceReceiver(referenceTarget)
+            val instanceMethod = referenceTarget.parent is IrClass
+            val dispatchReceiver = referenceTarget.parameters.singleOrNull { it.kind == IrParameterKind.DispatchReceiver }
+            val sourceParameters =
+                listOfNotNull(dispatchReceiver?.type?.takeIf { instanceMethod && boundReceiver == null }) +
+                    referenceTarget.parameters.filter { it.kind == IrParameterKind.Regular }.map { it.type }
             if (expression is IrRichFunctionReference &&
                 (expression.hasUnitConversion || expression.hasSuspendConversion || expression.hasVarargConversion)
             ) {
@@ -4674,8 +4682,11 @@ private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestC
             }
             if (shape == null || referenceTarget.isSuspend ||
                 referenceTarget.returnType != shape.result ||
-                referenceTarget.parameters.filter { it.kind == IrParameterKind.Regular }.map { it.type } != shape.parameters ||
-                (referenceTarget.parent is IrClass && boundReceiver == null)
+                sourceParameters != shape.parameters ||
+                (instanceMethod && dispatchReceiver == null) ||
+                referenceTarget.parameters.any {
+                    it.kind != IrParameterKind.DispatchReceiver && it.kind != IrParameterKind.Regular
+                }
             ) {
                 throw UnsupportedKotlinIr(expression, "function reference signature is not supported")
             }
