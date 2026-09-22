@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.minecraft.peripheral
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
+import net.minecraft.util.RandomSource
 import net.minecraft.world.item.context.BlockPlaceContext
 import net.minecraft.world.level.BlockGetter
 import net.minecraft.world.level.Level
@@ -112,6 +113,17 @@ class PeripheralCableBlock(
     ) {
         super.neighborChanged(state, level, position, neighborBlock, neighborPosition, movedByPiston)
         PeripheralCableTopologyCache.invalidate(level)
+        if (!level.isClientSide) level.scheduleTick(position, this, CONNECTION_REFRESH_DELAY)
+    }
+
+    override fun tick(
+        state: BlockState,
+        level: ServerLevel,
+        position: BlockPos,
+        random: RandomSource,
+    ) {
+        val connected = connectedState(state, level, position)
+        if (connected != state) level.setBlock(position, connected, UPDATE_CLIENTS)
     }
 
     private fun connectedState(
@@ -140,6 +152,8 @@ class PeripheralCableBlock(
     }
 
     companion object {
+        private const val CONNECTION_REFRESH_DELAY = 1
+
         val DOWN: BooleanProperty = BlockStateProperties.DOWN
         val UP: BooleanProperty = BlockStateProperties.UP
         val NORTH: BooleanProperty = BlockStateProperties.NORTH
