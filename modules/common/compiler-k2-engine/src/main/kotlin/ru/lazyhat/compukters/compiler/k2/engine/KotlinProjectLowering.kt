@@ -207,6 +207,13 @@ private data class GuestClosureSource(
     val captures: List<IrValueDeclaration>,
 )
 
+private data class GuestFunctionShape(
+    val parameters: List<IrType>,
+    val result: IrType,
+) {
+    val arity: Int get() = parameters.size
+}
+
 private data class GuestClosureLayout(
     val expression: IrFunctionExpression,
     val function: IrSimpleFunction,
@@ -214,6 +221,7 @@ private data class GuestClosureLayout(
     val typeId: TypeId,
     val invokeFunctionId: FunctionId,
     val invokeSignatureTypeId: TypeId,
+    val shape: GuestFunctionShape,
     val captures: List<GuestClosureCapture>,
 ) {
     val name: String get() = closureName(ordinal)
@@ -595,7 +603,7 @@ internal object KotlinProjectLowering {
                     { it.name.asString() },
                 ),
             )
-        val closureSources = collectGuestClosures(userFunctions, pluginContext.irBuiltIns.unitType)
+        val closureSources = collectGuestClosures(userFunctions)
         val captureCellDeclarations =
             closureSources
                 .flatMap { it.captures }
@@ -604,14 +612,21 @@ internal object KotlinProjectLowering {
                 .associateByTo(linkedMapOf()) { it.symbol }
                 .values
                 .toList()
-        val usesFunction0Unit =
-            closureSources.isNotEmpty() ||
-                userFunctions.any { function ->
-                    function.returnType.isFunction0Unit(pluginContext.irBuiltIns.unitType) ||
-                        loweredParameters(function, session).any { parameter ->
-                            parameter.type.isFunction0Unit(pluginContext.irBuiltIns.unitType)
-                        }
+        val functionShapes =
+            buildList {
+                fun include(shape: GuestFunctionShape) {
+                    if (shape in this) return
+                    add(shape)
+                    (shape.parameters + shape.result).mapNotNull(IrType::guestFunctionShape).forEach(::include)
                 }
+                closureSources.mapNotNull { it.expression.type.guestFunctionShape() }.forEach(::include)
+                userFunctions.forEach { function ->
+                    function.returnType.guestFunctionShape()?.let(::include)
+                    loweredParameters(function, session).mapNotNull { it.type.guestFunctionShape() }.forEach(::include)
+                }
+            }
+        val unitBlockShape = GuestFunctionShape(emptyList(), pluginContext.irBuiltIns.unitType)
+        val usesFunction0Unit = unitBlockShape in functionShapes
         val externalFunctions = linkedPlatformFunctions(userFunctions, session)
         val linkedSymbols = linkedPlatformSymbols(userFunctions, session)
         require(userFunctions.firstOrNull() === entry)
@@ -685,8 +700,8 @@ internal object KotlinProjectLowering {
                     linkedSymbols.enumEntries.values.map(ExternalFieldTarget::exportName) +
                     linkedSymbols.defaultEnumEntries.values.map(ExternalFieldTarget::exportName) +
                     userFunctions.map { requireNotNull(functionArtifactNames[it.symbol]) } +
-                    listOfNotNull("kotlin.Function0<Unit>".takeIf { usesFunction0Unit }) +
-                    listOfNotNull("invoke".takeIf { usesFunction0Unit }) +
+                    functionShapes.indices.map { index -> functionShapeName(index, functionShapes[index], unitBlockShape) } +
+                    listOfNotNull("invoke".takeIf { functionShapes.isNotEmpty() }) +
                     listOfNotNull("<task-launch>".takeIf { usesFunction0Unit }) +
                     closureSources.flatMap { closure ->
                         listOf(closureName(closure.ordinal)) +
@@ -793,23 +808,27 @@ internal object KotlinProjectLowering {
         val intArrayType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(INT_ARRAY_RUNTIME_TYPE)))
         val functionIds = userFunctions.withIndex().associate { (index, function) -> function.symbol to FunctionId.of(index.toUInt()) }
         val functionTypeIds = userFunctions.withIndex().associate { (index, function) -> function.symbol to TypeId.of(index.toUInt()) }
-        val function0InvokeFunctionId =
-            FunctionId.of(userFunctions.size.toUInt()).takeIf { usesFunction0Unit }
-        val function0InvokeSignatureTypeId =
-            TypeId.of(userFunctions.size.toUInt()).takeIf { usesFunction0Unit }
+        val shapeInvokeFunctionIds =
+            functionShapes.withIndex().associate { (index, shape) ->
+                shape to FunctionId.of((userFunctions.size + index).toUInt())
+            }
+        val shapeInvokeSignatureTypeIds =
+            functionShapes.withIndex().associate { (index, shape) ->
+                shape to TypeId.of((userFunctions.size + index).toUInt())
+            }
         val closureInvokeFunctionIds =
             closureSources.withIndex().associate { (index, source) ->
-                source.expression to FunctionId.of((userFunctions.size + 1 + index).toUInt())
+                source.expression to FunctionId.of((userFunctions.size + functionShapes.size + index).toUInt())
             }
         val closureInvokeSignatureTypeIds =
             closureSources.withIndex().associate { (index, source) ->
-                source.expression to TypeId.of((userFunctions.size + 1 + index).toUInt())
+                source.expression to TypeId.of((userFunctions.size + functionShapes.size + index).toUInt())
             }
         val taskLaunchTrampolineFunctionId =
-            FunctionId.of((userFunctions.size + 1 + closureSources.size).toUInt()).takeIf { usesFunction0Unit }
+            FunctionId.of((userFunctions.size + functionShapes.size + closureSources.size).toUInt()).takeIf { usesFunction0Unit }
         val taskLaunchTrampolineSignatureTypeId =
-            TypeId.of((userFunctions.size + 1 + closureSources.size).toUInt()).takeIf { usesFunction0Unit }
-        val syntheticFunctionCount = closureSources.size + if (usesFunction0Unit) 2 else 0
+            TypeId.of((userFunctions.size + functionShapes.size + closureSources.size).toUInt()).takeIf { usesFunction0Unit }
+        val syntheticFunctionCount = closureSources.size + functionShapes.size + if (usesFunction0Unit) 1 else 0
         val constructorFunctionBase = userFunctions.size + syntheticFunctionCount
         val constructorFunctionIds =
             constructorClasses.withIndex().associate { (index, declaration) ->
@@ -829,21 +848,24 @@ internal object KotlinProjectLowering {
             userClasses.withIndex().associate { (index, declaration) ->
                 declaration.symbol to TypeId.of((classTypeBase + index).toUInt())
             }
-        val function0InterfaceTypeId =
-            TypeId.of((classTypeBase + userClasses.size).toUInt()).takeIf { usesFunction0Unit }
+        val shapeInterfaceTypeIds =
+            functionShapes.withIndex().associate { (index, shape) ->
+                shape to TypeId.of((classTypeBase + userClasses.size + index).toUInt())
+            }
+        val shapeInterfaceTypes = shapeInterfaceTypeIds.mapValues { (_, id) -> TypeRef.Local(id) }
         val closureTypeIds =
             closureSources.withIndex().associate { (index, source) ->
-                source.expression to TypeId.of((classTypeBase + userClasses.size + 1 + index).toUInt())
+                source.expression to TypeId.of((classTypeBase + userClasses.size + functionShapes.size + index).toUInt())
             }
         val captureCellTypeIds =
             captureCellDeclarations.withIndex().associate { (index, declaration) ->
                 declaration.symbol to
                     TypeId.of(
-                        (classTypeBase + userClasses.size + 1 + closureSources.size + index).toUInt(),
+                        (classTypeBase + userClasses.size + functionShapes.size + closureSources.size + index).toUInt(),
                     )
             }
         val syntheticClassCount =
-            closureSources.size + captureCellDeclarations.size + if (usesFunction0Unit) 1 else 0
+            closureSources.size + captureCellDeclarations.size + functionShapes.size
         val topLevelStateTypeId =
             TypeId
                 .of((classTypeBase + userClasses.size + syntheticClassCount).toUInt())
@@ -922,7 +944,7 @@ internal object KotlinProjectLowering {
                 inlineValueClasses,
                 platformScalars,
                 session,
-                function0InterfaceTypeId?.let(TypeRef::Local),
+                shapeInterfaceTypes,
             )
         }
         val classLayouts =
@@ -960,7 +982,7 @@ internal object KotlinProjectLowering {
                             inlineValueClasses,
                             platformScalars,
                             declaration,
-                            function0InterfaceTypeId?.let(TypeRef::Local),
+                            shapeInterfaceTypes,
                         ),
                 )
             }
@@ -975,6 +997,7 @@ internal object KotlinProjectLowering {
                     typeId = requireNotNull(closureTypeIds[source.expression]),
                     invokeFunctionId = requireNotNull(closureInvokeFunctionIds[source.expression]),
                     invokeSignatureTypeId = requireNotNull(closureInvokeSignatureTypeIds[source.expression]),
+                    shape = requireNotNull(source.expression.type.guestFunctionShape()),
                     captures =
                         source.captures.map { declaration ->
                             val cell = captureCellLayoutsBySymbol[declaration.symbol]
@@ -996,7 +1019,7 @@ internal object KotlinProjectLowering {
                                         inlineValueClasses,
                                         platformScalars,
                                         declaration,
-                                        function0InterfaceTypeId?.let(TypeRef::Local),
+                                        shapeInterfaceTypes,
                                     ),
                                 cell = cell,
                             )
@@ -1094,8 +1117,8 @@ internal object KotlinProjectLowering {
                         externalEnumEntries = externalEnumFieldImports,
                         externalDefaultEnumEntries = externalDefaultEnumFieldImports,
                         externalFunctions = externalFunctionImports,
-                        function0UnitType = function0InterfaceTypeId?.let(TypeRef::Local),
-                        function0InvokeFunctionId = function0InvokeFunctionId,
+                        functionTypes = shapeInterfaceTypes,
+                        invokeFunctionIds = shapeInvokeFunctionIds,
                         taskLaunchTrampolineFunctionId = taskLaunchTrampolineFunctionId,
                         closureLayouts = closureLayoutsByExpression,
                         captureCells = captureCellLayoutsBySymbol,
@@ -1115,7 +1138,7 @@ internal object KotlinProjectLowering {
                     inlineValueClasses,
                     platformScalars,
                     function,
-                    function0InterfaceTypeId?.let(TypeRef::Local),
+                    shapeInterfaceTypes,
                 )
             val parameterTypes =
                 loweredParameters(function, session).map {
@@ -1131,7 +1154,7 @@ internal object KotlinProjectLowering {
                         inlineValueClasses,
                         platformScalars,
                         it,
-                        function0InterfaceTypeId?.let(TypeRef::Local),
+                        shapeInterfaceTypes,
                     )
                 }
             val ownerClass = function.parent as? IrClass
@@ -1164,16 +1187,34 @@ internal object KotlinProjectLowering {
                 )
         }
 
-        if (function0InvokeFunctionId != null) {
-            val interfaceType = TypeRef.Local(requireNotNull(function0InterfaceTypeId))
+        val shapeValueType: (IrType) -> ValueType = { type ->
+            valueType(
+                type,
+                pluginContext,
+                guestTypes,
+                stringType,
+                charArrayType,
+                stringArrayType,
+                classTypeIds,
+                externalClassTypes,
+                inlineValueClasses,
+                platformScalars,
+                entry,
+                shapeInterfaceTypes,
+            )
+        }
+        functionShapes.forEach { shape ->
+            val interfaceType = requireNotNull(shapeInterfaceTypes[shape])
             loweredFunctions +=
                 Function(
                     owner = interfaceType,
                     name = requireNotNull(metadataIds["invoke"]),
-                    signature = TypeRef.Local(requireNotNull(function0InvokeSignatureTypeId)),
+                    signature = TypeRef.Local(requireNotNull(shapeInvokeSignatureTypeIds[shape])),
                     flags = setOf(FunctionFlag.ABSTRACT),
-                    values = listOf(FunctionValue.scalar(ValueType.Ref(nullable = false, type = interfaceType))),
-                    parameterCount = 1u,
+                    values =
+                        (listOf(ValueType.Ref(nullable = false, type = interfaceType)) + shape.parameters.map(shapeValueType))
+                            .map(FunctionValue::scalar),
+                    parameterCount = (shape.arity + 1).toUInt(),
                     firstBlock = BlockId.of(blocks.size.toUInt()),
                     blockCount = 0u,
                     firstException = 0u,
@@ -1232,8 +1273,8 @@ internal object KotlinProjectLowering {
                     externalEnumEntries = externalEnumFieldImports,
                     externalDefaultEnumEntries = externalDefaultEnumFieldImports,
                     externalFunctions = externalFunctionImports,
-                    function0UnitType = function0InterfaceTypeId?.let(TypeRef::Local),
-                    function0InvokeFunctionId = function0InvokeFunctionId,
+                    functionTypes = shapeInterfaceTypes,
+                    invokeFunctionIds = shapeInvokeFunctionIds,
                     taskLaunchTrampolineFunctionId = taskLaunchTrampolineFunctionId,
                     closureLayouts = closureLayoutsByExpression,
                     captureCells = captureCellLayoutsBySymbol,
@@ -1248,8 +1289,10 @@ internal object KotlinProjectLowering {
                     name = requireNotNull(metadataIds["invoke"]),
                     signature = TypeRef.Local(layout.invokeSignatureTypeId),
                     flags = setOf(FunctionFlag.VIRTUAL),
-                    values = (listOf(receiverType) + compiled.localTypes).map(FunctionValue::scalar),
-                    parameterCount = 1u,
+                    values =
+                        (listOf(receiverType) + layout.shape.parameters.map(shapeValueType) + compiled.localTypes)
+                            .map(FunctionValue::scalar),
+                    parameterCount = (layout.shape.arity + 1).toUInt(),
                     firstBlock = BlockId.of(firstBlock.toUInt()),
                     blockCount = compiled.blocks.size.toUInt(),
                     firstException = 0u,
@@ -1258,7 +1301,7 @@ internal object KotlinProjectLowering {
         }
 
         if (taskLaunchTrampolineFunctionId != null) {
-            val interfaceType = TypeRef.Local(requireNotNull(function0InterfaceTypeId))
+            val interfaceType = requireNotNull(shapeInterfaceTypes[unitBlockShape])
             val receiverType = ValueType.Ref(nullable = false, type = interfaceType)
             val firstBlock = blocks.size
             blocks +=
@@ -1268,7 +1311,7 @@ internal object KotlinProjectLowering {
                     listOf(
                         Instruction.CallInterface(
                             Destination.Unit,
-                            FunctionRef.Local(requireNotNull(function0InvokeFunctionId)),
+                            FunctionRef.Local(requireNotNull(shapeInvokeFunctionIds[unitBlockShape])),
                             listOf(RegisterId.of(0u)),
                         ),
                         Instruction.Return(Destination.Unit),
@@ -1447,7 +1490,7 @@ internal object KotlinProjectLowering {
                             inlineValueClasses,
                             platformScalars,
                             function,
-                            function0InterfaceTypeId?.let(TypeRef::Local),
+                            shapeInterfaceTypes,
                         ),
                     parameters =
                         loweredParameters(function, session).map {
@@ -1463,43 +1506,40 @@ internal object KotlinProjectLowering {
                                 inlineValueClasses,
                                 platformScalars,
                                 it,
-                                function0InterfaceTypeId?.let(TypeRef::Local),
+                                shapeInterfaceTypes,
                             )
                         },
                 )
             }
         val closureFunctionTypes =
-            listOfNotNull(
-                function0InterfaceTypeId?.let { interfaceTypeId ->
-                    NominalType.Function(
-                        name = requireNotNull(metadataIds["invoke"]),
-                        suspending = false,
-                        result = ValueType.Unit,
-                        parameters =
-                            listOf(
-                                ValueType.Ref(nullable = false, type = TypeRef.Local(interfaceTypeId)),
-                            ),
-                    )
-                },
-            ) +
+            functionShapes.map { shape ->
+                val interfaceType = requireNotNull(shapeInterfaceTypes[shape])
+                NominalType.Function(
+                    name = requireNotNull(metadataIds["invoke"]),
+                    suspending = false,
+                    result = shapeValueType(shape.result),
+                    parameters =
+                        listOf(ValueType.Ref(nullable = false, type = interfaceType)) +
+                            shape.parameters.map(shapeValueType),
+                )
+            } +
                 closureLayouts.map { layout ->
                     NominalType.Function(
                         name = requireNotNull(metadataIds["invoke"]),
                         suspending = false,
-                        result = ValueType.Unit,
+                        result = shapeValueType(layout.shape.result),
                         parameters =
-                            listOf(
-                                ValueType.Ref(nullable = false, type = TypeRef.Local(layout.typeId)),
-                            ),
+                            listOf(ValueType.Ref(nullable = false, type = TypeRef.Local(layout.typeId))) +
+                                layout.shape.parameters.map(shapeValueType),
                     )
                 } +
                 listOfNotNull(
-                    function0InterfaceTypeId?.let { interfaceTypeId ->
+                    shapeInterfaceTypes[unitBlockShape]?.let { interfaceType ->
                         NominalType.Function(
                             name = requireNotNull(metadataIds["<task-launch>"]),
                             suspending = false,
                             result = ValueType.Unit,
-                            parameters = listOf(ValueType.Ref(nullable = false, type = TypeRef.Local(interfaceTypeId))),
+                            parameters = listOf(ValueType.Ref(nullable = false, type = interfaceType)),
                         )
                     },
                 )
@@ -1571,20 +1611,18 @@ internal object KotlinProjectLowering {
                 }
             }
         val closureClassTypes =
-            listOfNotNull(
-                function0InterfaceTypeId?.let {
-                    NominalType.Interface(
-                        name = requireNotNull(metadataIds["kotlin.Function0<Unit>"]),
-                        methodStart = requireNotNull(function0InvokeFunctionId).value,
-                        methodCount = 1u,
-                    )
-                },
-            ) +
+            functionShapes.mapIndexed { index, shape ->
+                NominalType.Interface(
+                    name = requireNotNull(metadataIds[functionShapeName(index, shape, unitBlockShape)]),
+                    methodStart = requireNotNull(shapeInvokeFunctionIds[shape]).value,
+                    methodCount = 1u,
+                )
+            } +
                 closureLayouts.map { layout ->
                     NominalType.Class(
                         name = requireNotNull(metadataIds[layout.name]),
                         final = true,
-                        interfaces = listOf(TypeRef.Local(requireNotNull(function0InterfaceTypeId))),
+                        interfaces = listOf(requireNotNull(shapeInterfaceTypes[layout.shape])),
                         fieldStart =
                             layout.captures
                                 .firstOrNull()
@@ -1976,7 +2014,7 @@ internal object KotlinProjectLowering {
         inlineValueClasses: InlineValueClassRegistry,
         platformScalars: PlatformScalarRegistry,
         session: CompilationSession,
-        function0UnitType: TypeRef.Local?,
+        functionTypes: Map<GuestFunctionShape, TypeRef.Local>,
     ) {
         val owner = function.parent as? IrClass
         if (owner != null && !inlineValueClasses.contains(owner.symbol)) {
@@ -2014,7 +2052,7 @@ internal object KotlinProjectLowering {
                         inlineValueClasses.contains((type as? IrSimpleType)?.classifier as? IrClassSymbol)
                 ) ||
                 (!type.isNullable() && platformScalars.representation(type) != null) ||
-                (function0UnitType != null && type.isFunction0Unit(pluginContext.irBuiltIns.unitType)) ||
+                (functionTypes.forType(type) != null) ||
                 classTypeIds.containsKey((type as? IrSimpleType)?.classifier) ||
                 externalClassTypes.containsKey((type as? IrSimpleType)?.classifier)
         if (loweredParameters(function, session).any { !isSupported(it.type) } ||
@@ -2036,7 +2074,7 @@ internal object KotlinProjectLowering {
         inlineValueClasses: InlineValueClassRegistry,
         platformScalars: PlatformScalarRegistry,
         element: IrElement,
-        function0UnitType: TypeRef.Local? = null,
+        functionTypes: Map<GuestFunctionShape, TypeRef.Local> = emptyMap(),
     ): ValueType =
         when (type) {
             pluginContext.irBuiltIns.unitType -> {
@@ -2076,8 +2114,8 @@ internal object KotlinProjectLowering {
                     ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(INT_ARRAY_RUNTIME_TYPE)))
                 } else if (guestTypes.isStringArray(type)) {
                     stringArrayType
-                } else if (function0UnitType != null && type.isFunction0Unit(pluginContext.irBuiltIns.unitType)) {
-                    ValueType.Ref(nullable = false, type = function0UnitType)
+                } else if (functionTypes.forType(type) != null) {
+                    ValueType.Ref(nullable = false, type = requireNotNull(functionTypes.forType(type)))
                 } else if (type is IrSimpleType && type.classifier is IrClassSymbol) {
                     val classifier = type.classifier as IrClassSymbol
                     val inline = inlineValueClasses[classifier]
@@ -2105,7 +2143,7 @@ internal object KotlinProjectLowering {
                             inlineValueClasses,
                             platformScalars,
                             element,
-                            function0UnitType,
+                            functionTypes,
                         )
                     } else if (id != null) {
                         ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Local(id))
@@ -2562,8 +2600,8 @@ private class FunctionCompiler(
     private val externalEnumEntries: Map<IrEnumEntrySymbol, ExternalFieldTarget>,
     private val externalDefaultEnumEntries: Map<String, ExternalFieldTarget>,
     private val externalFunctions: Map<IrSimpleFunctionSymbol, ExternalFunctionTarget>,
-    private val function0UnitType: TypeRef.Local?,
-    private val function0InvokeFunctionId: FunctionId?,
+    private val functionTypes: Map<GuestFunctionShape, TypeRef.Local>,
+    private val invokeFunctionIds: Map<GuestFunctionShape, FunctionId>,
     private val taskLaunchTrampolineFunctionId: FunctionId?,
     private val closureLayouts: Map<IrFunctionExpression, GuestClosureLayout>,
     private val captureCells: Map<IrValueSymbol, GuestCaptureCellLayout>,
@@ -2594,6 +2632,7 @@ private class FunctionCompiler(
         when (statement) {
             is IrVariable -> {
                 val initializer = statement.initializer ?: throw UnsupportedKotlinIr(statement, "local without initializer")
+                rejectFunctionVariance(initializer.type, statement.type, statement)
                 val source = compileExpression(initializer)
                 val cell = captureCells[statement.symbol]
                 if (cell == null) {
@@ -2615,6 +2654,7 @@ private class FunctionCompiler(
             }
 
             is IrSetValue -> {
+                rejectFunctionVariance(statement.value.type, statement.symbol.owner.type, statement)
                 val source = compileExpression(statement.value)
                 val cell = captureCells[statement.symbol]
                 if (cell == null) {
@@ -2636,6 +2676,7 @@ private class FunctionCompiler(
             }
 
             is IrReturn -> {
+                rejectFunctionVariance(statement.value.type, function.returnType, statement)
                 if (function.returnType.isNothing()) {
                     compileStatement(statement.value)
                 } else {
@@ -2937,6 +2978,9 @@ private class FunctionCompiler(
     }
 
     private fun compileTypeOperator(expression: IrTypeOperatorCall): RegisterId {
+        if (expression.operator == IrTypeOperator.IMPLICIT_CAST) {
+            rejectFunctionVariance(expression.argument.type, expression.typeOperand, expression)
+        }
         val source = compileExpression(expression.argument)
         val target = valueType(expression.typeOperand, expression)
         return when (expression.operator) {
@@ -2958,6 +3002,18 @@ private class FunctionCompiler(
             else -> {
                 throw UnsupportedKotlinIr(expression, "cast ${expression.operator} is outside the project subset")
             }
+        }
+    }
+
+    private fun rejectFunctionVariance(
+        actualType: IrType,
+        expectedType: IrType,
+        element: IrElement,
+    ) {
+        val actual = actualType.guestFunctionShape()
+        val expected = expectedType.guestFunctionShape()
+        if (actual != expected && (actual != null || expected != null)) {
+            throw UnsupportedKotlinIr(element, "function-value variance conversions are not supported")
         }
     }
 
@@ -3012,19 +3068,33 @@ private class FunctionCompiler(
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun compileCall(call: IrCall): RegisterId? {
         val target = call.symbol.owner
-        if (target.fqNameWhenAvailable?.asString() == "kotlin.Function0.invoke" &&
-            call.type == unitType &&
-            function0InvokeFunctionId != null
-        ) {
-            val receiver = compileExpression(dispatchReceiver(call, target, "Function0.invoke"))
+        val targetName = target.fqNameWhenAvailable?.asString()
+        if (targetName?.startsWith("kotlin.Function") == true && targetName.endsWith(".invoke")) {
+            val receiverExpression = dispatchReceiver(call, target, targetName)
+            val shape =
+                receiverExpression.type.guestFunctionShape()
+                    ?: throw UnsupportedKotlinIr(call, "unsupported function-value receiver type")
+            val invokeId =
+                invokeFunctionIds[shape]
+                    ?: throw UnsupportedKotlinIr(call, "unsupported function-value signature")
+            val arguments =
+                target.parameters.mapIndexedNotNull { index, parameter ->
+                    call.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.Regular }
+                }
+            if (arguments.size != shape.arity) {
+                throw UnsupportedKotlinIr(call, "function-value call has the wrong number of arguments")
+            }
+            val receiver = compileExpression(receiverExpression)
+            val values = arguments.map(::compileExpression)
+            val destination = destinationFor(call.type, call)
             emit(
                 Instruction.CallInterface(
-                    Destination.Unit,
-                    FunctionRef.Local(function0InvokeFunctionId),
-                    listOf(receiver),
+                    destination,
+                    FunctionRef.Local(invokeId),
+                    listOf(receiver) + values,
                 ),
             )
-            return null
+            return (destination as? Destination.Register)?.id
         }
         when (target.fqNameWhenAvailable?.asString().takeIf { target.isExternal }) {
             "compukter.concurrent.Tasks.launch" -> return compileTaskLaunch(call, target)
@@ -3136,7 +3206,10 @@ private class FunctionCompiler(
         }
         externalFunctions[target.symbol]?.let { external ->
             val argumentExpressions = resolveProjectCallArguments(call, target)
-            val arguments = argumentExpressions.map(::compileCallArgument)
+            val arguments =
+                argumentExpressions.zip(loweredParameters(target, session)).map { (argument, parameter) ->
+                    compileCallArgument(argument, parameter.type)
+                }
             val destination = destinationFor(target.returnType, call)
             if (target.isSuspend) {
                 val resume = createBlock()
@@ -3155,7 +3228,10 @@ private class FunctionCompiler(
             val arguments = argumentExpressions.map(::compileExpression)
             return compileBuiltinCall(call, target, argumentExpressions, arguments)
         }
-        val arguments = resolveProjectCallArguments(call, target).map(::compileCallArgument)
+        val arguments =
+            resolveProjectCallArguments(call, target).zip(loweredParameters(target, session)).map { (argument, parameter) ->
+                compileCallArgument(argument, parameter.type)
+            }
         val destination = destinationFor(target.returnType, call)
         if (target.isSuspend) {
             val resume = createBlock()
@@ -3324,9 +3400,13 @@ private class FunctionCompiler(
         }
     }
 
-    private fun compileCallArgument(argument: ResolvedCallArgument): RegisterId =
+    private fun compileCallArgument(
+        argument: ResolvedCallArgument,
+        expectedType: IrType,
+    ): RegisterId =
         when (argument) {
             is ResolvedCallArgument.Expression -> {
+                rejectFunctionVariance(argument.expression.type, expectedType, argument.expression)
                 compileExpression(argument.expression)
             }
 
@@ -4272,8 +4352,8 @@ private class FunctionCompiler(
                     intArrayType
                 } else if (guestTypes.isStringArray(type)) {
                     stringArrayType
-                } else if (function0UnitType != null && type.isFunction0Unit(unitType)) {
-                    ValueType.Ref(nullable = false, type = function0UnitType)
+                } else if (functionTypes.forType(type) != null) {
+                    ValueType.Ref(nullable = false, type = requireNotNull(functionTypes.forType(type)))
                 } else if (type is IrSimpleType && type.classifier is IrClassSymbol) {
                     val classifier = type.classifier as IrClassSymbol
                     val inline = inlineValueClasses[classifier]
@@ -4398,19 +4478,27 @@ private class FunctionCompiler(
 private fun IrType.isExactClass(symbol: IrClassSymbol): Boolean = (this as? IrSimpleType)?.classifier == symbol
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
-private fun IrType.isFunction0Unit(unitType: IrType): Boolean {
-    val simple = this as? IrSimpleType ?: return false
-    if (simple.isNullable()) return false
-    val owner = (simple.classifier as? IrClassSymbol)?.owner ?: return false
-    if (owner.fqNameWhenAvailable?.asString() != "kotlin.Function0") return false
-    val result = (simple.arguments.singleOrNull() as? IrTypeProjection)?.type ?: return false
-    return result == unitType
+private fun IrType.guestFunctionShape(): GuestFunctionShape? {
+    val simple = this as? IrSimpleType ?: return null
+    if (simple.isNullable()) return null
+    val owner = (simple.classifier as? IrClassSymbol)?.owner ?: return null
+    val name = owner.fqNameWhenAvailable?.asString() ?: return null
+    if (!name.startsWith("kotlin.Function")) return null
+    val arity = name.removePrefix("kotlin.Function").toIntOrNull() ?: return null
+    val arguments = simple.arguments.map { (it as? IrTypeProjection)?.type ?: return null }
+    if (arguments.size != arity + 1) return null
+    return GuestFunctionShape(arguments.dropLast(1), arguments.last())
 }
 
-private fun collectGuestClosures(
-    functions: List<IrSimpleFunction>,
-    unitType: IrType,
-): List<GuestClosureSource> {
+private fun Map<GuestFunctionShape, TypeRef.Local>.forType(type: IrType): TypeRef.Local? = type.guestFunctionShape()?.let(::get)
+
+private fun functionShapeName(
+    index: Int,
+    shape: GuestFunctionShape,
+    unitBlockShape: GuestFunctionShape,
+): String = if (shape == unitBlockShape) "kotlin.Function0<Unit>" else "app.<function-shape-$index>"
+
+private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestClosureSource> {
     val expressions = mutableListOf<IrFunctionExpression>()
     var closureDepth = 0
     val collector =
@@ -4432,12 +4520,13 @@ private fun collectGuestClosures(
     functions.forEach { it.accept(collector, null) }
     return expressions.mapIndexed { ordinal, expression ->
         val function = expression.function
-        if (!expression.type.isFunction0Unit(unitType) ||
+        val shape = expression.type.guestFunctionShape()
+        if (shape == null ||
             function.isSuspend ||
-            function.returnType != unitType ||
-            function.parameters.isNotEmpty()
+            function.returnType != shape.result ||
+            function.parameters.map { it.type } != shape.parameters
         ) {
-            throw UnsupportedKotlinIr(expression, "only non-suspending () -> Unit lambdas are supported")
+            throw UnsupportedKotlinIr(expression, "only non-suspending function values with supported signatures are admitted")
         }
         val owned: MutableSet<IrValueSymbol> = function.parameters.mapTo(mutableSetOf()) { it.symbol }
         function.body?.accept(
