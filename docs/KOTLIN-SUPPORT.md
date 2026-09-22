@@ -258,7 +258,7 @@ supported.
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `direct top level ordinary task lowers to spawn and join` and
   `task launch rejects callable shapes that require runtime function objects`.
-  Tracking: [#567](https://github.com/CertifiedBadIdeas/Compukters/issues/567)
+  Tracking: [#581](https://github.com/CertifiedBadIdeas/Compukters/issues/581)
 
 - [ ] **Recursion — Partial** — direct calls and bounded VM call depth can
   represent recursion, but no Kotlin-to-VM recursive source conformance test
@@ -275,6 +275,17 @@ supported.
   Tracking: [#614](https://github.com/CertifiedBadIdeas/Compukters/issues/614)
 
 ## Classes and object model
+
+- [ ] **Instance methods and dynamic dispatch — Partial** — supported Guest
+  classes may declare ordinary non-suspending methods, override class methods,
+  and implement abstract interface methods. Calls through class and interface
+  references select the runtime implementation. Generic or suspending methods,
+  member extensions, and default interface bodies remain unsupported. Evidence:
+  [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  tests `guest instance methods lower with deterministic owners flags and method ranges`
+  and `guest instance methods reject unsupported callable shapes`, paired with
+  the `testKotlinDispatchVmConformance` Kotlin-to-VM execution gate.
+  Tracking: [#626](https://github.com/CertifiedBadIdeas/Compukters/issues/626)
 
 - [ ] **Immutable constructor classes — Partial** — classes with a primary
   constructor whose every parameter is an immutable backed property lower to

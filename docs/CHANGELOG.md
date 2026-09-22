@@ -25,6 +25,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   source-level `suspend` declarations are not part of the supported Guest Kotlin subset.
 - `Tasks.sleepTicks(n)` lets a program pace world interactions by server ticks while other Guest tasks continue and
   without spending its instruction budget during the wait.
+- Guest classes and interfaces support ordinary non-suspending instance methods, overrides, and runtime class or
+  interface dispatch. This supplies the method-call foundation for first-class function values and captured lambdas.
 
 ### Addons and Create
 
