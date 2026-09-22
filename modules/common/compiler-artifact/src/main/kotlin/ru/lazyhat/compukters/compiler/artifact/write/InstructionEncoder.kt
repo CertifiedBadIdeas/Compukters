@@ -251,6 +251,20 @@ internal fun encodeInstruction(
             operands.writeArguments(instruction.arguments)
         }
 
+        is Instruction.CallVirtual -> {
+            opcode = 0x41u
+            operands.writeDestination(instruction.destination)
+            operands.writeUleb128(encodeFunctionRef(instruction.function))
+            operands.writeArguments(instruction.arguments)
+        }
+
+        is Instruction.CallInterface -> {
+            opcode = 0x42u
+            operands.writeDestination(instruction.destination)
+            operands.writeUleb128(encodeFunctionRef(instruction.function))
+            operands.writeArguments(instruction.arguments)
+        }
+
         is Instruction.CallSuspend -> {
             opcode = 0xe5u
             operands.writeDestination(instruction.destination)
@@ -490,6 +504,10 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
         -> 4u
 
         is Instruction.Call -> variableCost(4u, instruction.arguments.size)
+
+        is Instruction.CallVirtual -> variableCost(5u, instruction.arguments.size)
+
+        is Instruction.CallInterface -> variableCost(6u, instruction.arguments.size)
 
         is Instruction.CallSuspend -> variableCost(5u, instruction.arguments.size)
 

@@ -664,6 +664,14 @@ private fun relocateInstruction(
             Instruction.Call(instruction.destination, ids.function(instruction.function), instruction.arguments)
         }
 
+        is Instruction.CallVirtual -> {
+            Instruction.CallVirtual(instruction.destination, ids.function(instruction.function), instruction.arguments)
+        }
+
+        is Instruction.CallInterface -> {
+            Instruction.CallInterface(instruction.destination, ids.function(instruction.function), instruction.arguments)
+        }
+
         is Instruction.CallSuspend -> {
             Instruction.CallSuspend(
                 instruction.destination,

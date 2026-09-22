@@ -274,6 +274,36 @@ sealed interface Instruction {
         override fun toString(): String = "Call(destination=$destination, function=$function, arguments=$arguments)"
     }
 
+    class CallVirtual(
+        val destination: Destination,
+        val function: FunctionRef,
+        arguments: List<RegisterId>,
+    ) : Instruction {
+        val arguments: List<RegisterId> = Collections.unmodifiableList(ArrayList(arguments))
+
+        override fun equals(other: Any?): Boolean =
+            other is CallVirtual && destination == other.destination && function == other.function && arguments == other.arguments
+
+        override fun hashCode(): Int = 31 * (31 * destination.hashCode() + function.hashCode()) + arguments.hashCode()
+
+        override fun toString(): String = "CallVirtual(destination=$destination, function=$function, arguments=$arguments)"
+    }
+
+    class CallInterface(
+        val destination: Destination,
+        val function: FunctionRef,
+        arguments: List<RegisterId>,
+    ) : Instruction {
+        val arguments: List<RegisterId> = Collections.unmodifiableList(ArrayList(arguments))
+
+        override fun equals(other: Any?): Boolean =
+            other is CallInterface && destination == other.destination && function == other.function && arguments == other.arguments
+
+        override fun hashCode(): Int = 31 * (31 * destination.hashCode() + function.hashCode()) + arguments.hashCode()
+
+        override fun toString(): String = "CallInterface(destination=$destination, function=$function, arguments=$arguments)"
+    }
+
     class CallSuspend(
         val destination: Destination,
         val function: FunctionRef,

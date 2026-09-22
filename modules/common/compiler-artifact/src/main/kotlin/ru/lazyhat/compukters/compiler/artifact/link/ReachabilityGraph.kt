@@ -284,6 +284,8 @@ internal class ReachabilityGraph(
             is Instruction.IsType -> markType(module, instruction.type)
             is Instruction.CheckedCast -> markType(module, instruction.type)
             is Instruction.Call -> markFunction(module, instruction.function)
+            is Instruction.CallVirtual -> markFunction(module, instruction.function)
+            is Instruction.CallInterface -> markFunction(module, instruction.function)
             is Instruction.CallSuspend -> markFunction(module, instruction.function)
             is Instruction.TaskSpawn -> markFunction(module, instruction.function)
             is Instruction.CapabilityCallSync -> capabilities += capability(module, instruction.capability.value.toInt())

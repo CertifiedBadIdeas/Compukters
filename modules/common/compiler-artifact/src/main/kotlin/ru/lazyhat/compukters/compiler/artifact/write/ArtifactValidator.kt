@@ -781,6 +781,7 @@ internal fun validateArtifact(
                         callDestination: Destination,
                         arguments: List<RegisterId>,
                         suspending: Boolean?,
+                        dispatch: CallDispatch = CallDispatch.DIRECT,
                     ) {
                         val argumentTypes = arguments.map { register(it, "argument") }
                         val identity = resolveFunction(moduleIndex, targetReference)
@@ -793,7 +794,23 @@ internal fun validateArtifact(
                         val targetModule = artifact.modules[identity.module]
                         val target = targetModule.functions[identity.function]
                         if (suspending == false && FunctionFlag.ABSTRACT in target.flags) {
-                            add(ArtifactWriteErrorCode.INVALID_RANGE, "direct call targets an abstract function", location)
+                            if (dispatch == CallDispatch.DIRECT) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "direct call targets an abstract function", location)
+                            }
+                        }
+                        if (dispatch == CallDispatch.VIRTUAL && FunctionFlag.VIRTUAL !in target.flags) {
+                            add(ArtifactWriteErrorCode.INVALID_RANGE, "virtual call target is not virtual", location)
+                        }
+                        if (dispatch == CallDispatch.INTERFACE) {
+                            val ownerIdentity = target.owner?.let { resolveType(identity.module, it) }
+                            val ownerType = ownerIdentity?.let { artifact.modules[it.module].types[it.type] }
+                            if (ownerType !is NominalType.Interface) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "interface call target owner is not an interface",
+                                    location,
+                                )
+                            }
                         }
                         if (suspending != null && suspending != (FunctionFlag.SUSPENDING in target.flags)) {
                             val detail =
@@ -1254,6 +1271,26 @@ internal fun validateArtifact(
 
                         is Instruction.Call -> {
                             call(instruction.function, instruction.destination, instruction.arguments, suspending = false)
+                        }
+
+                        is Instruction.CallVirtual -> {
+                            call(
+                                instruction.function,
+                                instruction.destination,
+                                instruction.arguments,
+                                suspending = false,
+                                dispatch = CallDispatch.VIRTUAL,
+                            )
+                        }
+
+                        is Instruction.CallInterface -> {
+                            call(
+                                instruction.function,
+                                instruction.destination,
+                                instruction.arguments,
+                                suspending = false,
+                                dispatch = CallDispatch.INTERFACE,
+                            )
                         }
 
                         is Instruction.CallSuspend -> {
@@ -1796,3 +1833,9 @@ private fun Instruction.isTerminator(): Boolean =
         this is Instruction.CapabilityCallAsync
 
 private fun Instruction.isKotlinSuspendingTerminator(): Boolean = this is Instruction.CallSuspend
+
+private enum class CallDispatch {
+    DIRECT,
+    VIRTUAL,
+    INTERFACE,
+}
