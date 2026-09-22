@@ -40,7 +40,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - The separately installed Create addon supports Create 6.0.x on Minecraft 1.21.1 while the base Compukters mod remains
   usable without Create.
 - Added passive peripheral cables for orthogonal, branching and looping connections between computers and supported
-  addon devices. Cables discover loaded chunks only and do not require adapters or a controller block.
+  addon devices. Their thin model follows the actual connections in all six directions. Cables discover loaded chunks
+  only and do not require adapters or a controller block.
 - Added a Peripheral Configurator editor that opens on supported devices and inspects their bounded cable network. It
   reports available and duplicate names before assignment, while using it on a cable opens a read-only list of every
   connected device and its name when assigned. The server rejects stale or conflicting changes; Shift-use clears a

@@ -1,5 +1,11 @@
 {
-  "variants": {
-    "": { "model": "compukters:block/peripheral_cable" }
-  }
+  "multipart": [
+    { "apply": { "model": "compukters:block/peripheral_cable_center" } },
+    { "when": { "down": "true" }, "apply": { "model": "compukters:block/peripheral_cable_down" } },
+    { "when": { "up": "true" }, "apply": { "model": "compukters:block/peripheral_cable_up" } },
+    { "when": { "north": "true" }, "apply": { "model": "compukters:block/peripheral_cable_north" } },
+    { "when": { "south": "true" }, "apply": { "model": "compukters:block/peripheral_cable_south" } },
+    { "when": { "west": "true" }, "apply": { "model": "compukters:block/peripheral_cable_west" } },
+    { "when": { "east": "true" }, "apply": { "model": "compukters:block/peripheral_cable_east" } }
+  ]
 }
