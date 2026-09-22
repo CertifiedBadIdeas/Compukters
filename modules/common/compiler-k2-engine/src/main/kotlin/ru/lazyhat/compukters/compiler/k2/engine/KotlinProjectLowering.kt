@@ -687,6 +687,7 @@ internal object KotlinProjectLowering {
                     userFunctions.map { requireNotNull(functionArtifactNames[it.symbol]) } +
                     listOfNotNull("kotlin.Function0<Unit>".takeIf { usesFunction0Unit }) +
                     listOfNotNull("invoke".takeIf { usesFunction0Unit }) +
+                    listOfNotNull("<task-launch>".takeIf { usesFunction0Unit }) +
                     closureSources.flatMap { closure ->
                         listOf(closureName(closure.ordinal)) +
                             closure.captures.indices.map { capture -> closureCaptureName(capture) }
@@ -804,7 +805,11 @@ internal object KotlinProjectLowering {
             closureSources.withIndex().associate { (index, source) ->
                 source.expression to TypeId.of((userFunctions.size + 1 + index).toUInt())
             }
-        val syntheticFunctionCount = closureSources.size + if (usesFunction0Unit) 1 else 0
+        val taskLaunchTrampolineFunctionId =
+            FunctionId.of((userFunctions.size + 1 + closureSources.size).toUInt()).takeIf { usesFunction0Unit }
+        val taskLaunchTrampolineSignatureTypeId =
+            TypeId.of((userFunctions.size + 1 + closureSources.size).toUInt()).takeIf { usesFunction0Unit }
+        val syntheticFunctionCount = closureSources.size + if (usesFunction0Unit) 2 else 0
         val constructorFunctionBase = userFunctions.size + syntheticFunctionCount
         val constructorFunctionIds =
             constructorClasses.withIndex().associate { (index, declaration) ->
@@ -1091,6 +1096,7 @@ internal object KotlinProjectLowering {
                         externalFunctions = externalFunctionImports,
                         function0UnitType = function0InterfaceTypeId?.let(TypeRef::Local),
                         function0InvokeFunctionId = function0InvokeFunctionId,
+                        taskLaunchTrampolineFunctionId = taskLaunchTrampolineFunctionId,
                         closureLayouts = closureLayoutsByExpression,
                         captureCells = captureCellLayoutsBySymbol,
                     ).compile()
@@ -1228,6 +1234,7 @@ internal object KotlinProjectLowering {
                     externalFunctions = externalFunctionImports,
                     function0UnitType = function0InterfaceTypeId?.let(TypeRef::Local),
                     function0InvokeFunctionId = function0InvokeFunctionId,
+                    taskLaunchTrampolineFunctionId = taskLaunchTrampolineFunctionId,
                     closureLayouts = closureLayoutsByExpression,
                     captureCells = captureCellLayoutsBySymbol,
                     leadingParameterTypes = listOf(receiverType),
@@ -1245,6 +1252,38 @@ internal object KotlinProjectLowering {
                     parameterCount = 1u,
                     firstBlock = BlockId.of(firstBlock.toUInt()),
                     blockCount = compiled.blocks.size.toUInt(),
+                    firstException = 0u,
+                    exceptionCount = 0u,
+                )
+        }
+
+        if (taskLaunchTrampolineFunctionId != null) {
+            val interfaceType = TypeRef.Local(requireNotNull(function0InterfaceTypeId))
+            val receiverType = ValueType.Ref(nullable = false, type = interfaceType)
+            val firstBlock = blocks.size
+            blocks +=
+                Block(
+                    taskLaunchTrampolineFunctionId,
+                    false,
+                    listOf(
+                        Instruction.CallInterface(
+                            Destination.Unit,
+                            FunctionRef.Local(requireNotNull(function0InvokeFunctionId)),
+                            listOf(RegisterId.of(0u)),
+                        ),
+                        Instruction.Return(Destination.Unit),
+                    ),
+                )
+            loweredFunctions +=
+                Function(
+                    owner = null,
+                    name = requireNotNull(metadataIds["<task-launch>"]),
+                    signature = TypeRef.Local(requireNotNull(taskLaunchTrampolineSignatureTypeId)),
+                    flags = setOf(FunctionFlag.STATIC),
+                    values = listOf(FunctionValue.scalar(receiverType)),
+                    parameterCount = 1u,
+                    firstBlock = BlockId.of(firstBlock.toUInt()),
+                    blockCount = 1u,
                     firstException = 0u,
                     exceptionCount = 0u,
                 )
@@ -1453,7 +1492,17 @@ internal object KotlinProjectLowering {
                                 ValueType.Ref(nullable = false, type = TypeRef.Local(layout.typeId)),
                             ),
                     )
-                }
+                } +
+                listOfNotNull(
+                    function0InterfaceTypeId?.let { interfaceTypeId ->
+                        NominalType.Function(
+                            name = requireNotNull(metadataIds["<task-launch>"]),
+                            suspending = false,
+                            result = ValueType.Unit,
+                            parameters = listOf(ValueType.Ref(nullable = false, type = TypeRef.Local(interfaceTypeId))),
+                        )
+                    },
+                )
         val constructorTypes =
             constructorClasses.map { declaration ->
                 val layout = requireNotNull(classLayoutsBySymbol[declaration.symbol])
@@ -2515,6 +2564,7 @@ private class FunctionCompiler(
     private val externalFunctions: Map<IrSimpleFunctionSymbol, ExternalFunctionTarget>,
     private val function0UnitType: TypeRef.Local?,
     private val function0InvokeFunctionId: FunctionId?,
+    private val taskLaunchTrampolineFunctionId: FunctionId?,
     private val closureLayouts: Map<IrFunctionExpression, GuestClosureLayout>,
     private val captureCells: Map<IrValueSymbol, GuestCaptureCellLayout>,
     private val leadingParameterTypes: List<ValueType> = emptyList(),
@@ -3144,10 +3194,7 @@ private class FunctionCompiler(
                 .mapIndexedNotNull { index, parameter ->
                     call.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.Regular }
                 }.singleOrNull()
-                ?: throw UnsupportedKotlinIr(
-                    call,
-                    "Tasks.launch requires a direct reference to a top-level, zero-argument function",
-                )
+                ?: throw UnsupportedKotlinIr(call, "Tasks.launch requires a non-null () -> Unit callable")
         val referenced =
             when (block) {
                 is IrRichFunctionReference -> {
@@ -3162,26 +3209,33 @@ private class FunctionCompiler(
                     null
                 }
             }
-                ?: throw UnsupportedKotlinIr(
-                    block,
-                    "Tasks.launch requires a direct reference to a top-level, zero-argument function",
-                )
-        if (
-            referenced.parent !is IrFile ||
-            referenced.isSuspend ||
-            referenced.returnType != unitType ||
-            loweredParameters(referenced, session).isNotEmpty()
-        ) {
-            throw UnsupportedKotlinIr(
-                block,
-                "Tasks.launch requires a direct reference to a top-level, zero-argument function",
-            )
-        }
-        val functionRef =
-            functionIds[referenced.symbol]?.let(FunctionRef::Local)
-                ?: throw UnsupportedKotlinIr(block, "Tasks.launch target must be declared in the Guest project")
         return allocate(valueType(call.type, call)).also { destination ->
-            emit(Instruction.TaskSpawn(destination, functionRef, emptyList()))
+            if (referenced != null) {
+                if (
+                    referenced.parent !is IrFile ||
+                    referenced.isSuspend ||
+                    referenced.returnType != unitType ||
+                    loweredParameters(referenced, session).isNotEmpty()
+                ) {
+                    throw UnsupportedKotlinIr(
+                        block,
+                        "Tasks.launch requires a direct reference to a top-level, zero-argument function",
+                    )
+                }
+                val functionRef =
+                    functionIds[referenced.symbol]?.let(FunctionRef::Local)
+                        ?: throw UnsupportedKotlinIr(block, "Tasks.launch target must be declared in the Guest project")
+                emit(Instruction.TaskSpawn(destination, functionRef, emptyList()))
+            } else {
+                if (block is IrRichFunctionReference || block is IrFunctionReference) {
+                    throw UnsupportedKotlinIr(block, "Tasks.launch does not support bound function references")
+                }
+                val callable = compileExpression(block)
+                val trampoline =
+                    taskLaunchTrampolineFunctionId
+                        ?: throw UnsupportedKotlinIr(block, "Tasks.launch requires a non-null () -> Unit callable")
+                emit(Instruction.TaskSpawn(destination, FunctionRef.Local(trampoline), listOf(callable)))
+            }
         }
     }
 
