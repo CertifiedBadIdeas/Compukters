@@ -588,7 +588,7 @@ private fun relocateFunction(
         name = ids.string(function.name),
         signature = ids.type(function.signature),
         values = function.values.map { it.copy(semanticType = ids.value(it.semanticType)) },
-        firstBlock = ids.block(function.firstBlock),
+        firstBlock = BlockId.of(relocateStart(function.firstBlock.value, function.blockCount, ids.blocks, "block")),
         firstException = relocateStart(function.firstException, function.exceptionCount, ids.exceptions, "exception"),
         safepointRoots = function.safepointRoots.map { it.copy(block = ids.block(it.block)) },
     )
