@@ -258,16 +258,16 @@ supported.
   preserve the original referent and aliasing. A captured local `var` uses one
   ordinary managed typed cell per dynamic variable instance, shared by the
   enclosing code and every sibling closure; primitive payloads remain unboxed.
-  `Tasks.launch(::worker)` also
-  accepts a direct top-level zero-argument `Unit` function reference without a
-  closure allocation. Nested lambdas, other arities or result types, local and
-  bound references, and spawning a task from an arbitrary
-  function value remain unsupported. Evidence:
+  `Tasks.launch` accepts these function values, including direct, stored, and
+  returned lambdas. A direct top-level `Tasks.launch(::worker)` remains a
+  static spawn without a closure allocation. Nested lambdas, other arities or
+  result types, local and bound references remain unsupported. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `zero argument Unit lambdas lower to managed closures and shared capture cells`,
+  `task launch accepts direct stored and returned Unit lambdas`,
   `unsupported closure shapes produce stable diagnostics`,
   `direct top level ordinary task lowers to spawn and join`, and
-  `task launch rejects callable shapes that require runtime function objects`;
+  `task launch rejects unsupported local and bound references`;
   root task `testKotlinFunctionValuesVmConformance`.
   Tracking: [#627](https://github.com/CertifiedBadIdeas/Compukters/issues/627),
   [#628](https://github.com/CertifiedBadIdeas/Compukters/issues/628)
@@ -473,8 +473,8 @@ supported.
   and `DiagnosticQueryTest`, test
   `suspend declaration is outside the transparent Guest task model`.
 
-- [ ] **Cooperative Guest tasks — Partial** — `Tasks.launch(::worker)` starts an
-  ordinary top-level function as a bounded task, `Task.join()` waits for it,
+- [ ] **Cooperative Guest tasks — Partial** — `Tasks.launch(block)` starts any
+  supported non-null `() -> Unit` value as a bounded task, `Task.join()` waits for it,
   and `Tasks.sleepTicks(n)` suspends the current task until a deterministic
   server-tick boundary without consuming Guest instructions. Tasks share one VM and execute
   one at a time, but a task suspended on host I/O does not stop another runnable

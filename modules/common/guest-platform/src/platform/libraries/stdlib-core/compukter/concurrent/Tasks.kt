@@ -17,7 +17,7 @@ public object Tasks {
     /**
      * Starts [block] and returns its task handle.
      *
-     * Compukters currently accepts only a direct reference to a top-level, zero-argument function.
+     * Accepts a non-null zero-argument [Unit] function value, including a lambda with captures.
      */
     public external fun launch(block: () -> Unit): Task
 
