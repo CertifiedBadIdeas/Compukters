@@ -426,6 +426,28 @@ class MinimalScriptLoweringTest {
 
                 fun announce() { println(19) }
 
+                open class Base {
+                    open fun value(): Int = 1
+                }
+
+                class Child : Base() {
+                    override fun value(): Int = 2
+                }
+
+                class Adder(val base: Int) {
+                    fun add(value: Int): Int = base + value
+                }
+
+                interface Reader {
+                    fun read(): Int
+                }
+
+                class ReaderImpl(val number: Int) : Reader {
+                    override fun read(): Int = number
+                }
+
+                fun retain(reader: Reader): () -> Int = reader::read
+
                 fun main() {
                     val first = make(3)
                     val second = make(4)
@@ -500,6 +522,16 @@ class MinimalScriptLoweringTest {
                     val inferredReference = ::doubled
                     println(inferredReference(6))
                     Tasks.launch(unitReference).join()
+                    val adder = Adder(7)
+                    val bound: (Int) -> Int = adder::add
+                    println(bound(5))
+                    println(transform(5, Adder(11)::add))
+                    println(retain(ReaderImpl(23))())
+                    var evaluations = 0
+                    val supplier: () -> Base = { evaluations += 1; Child() }
+                    val virtual = supplier()::value
+                    println(evaluations)
+                    println(virtual())
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))
@@ -602,7 +634,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `bound function reference is rejected before artifact publication`() =
+    fun `unbound instance function reference is rejected before artifact publication`() =
         withAdapter { adapter ->
             val result =
                 adapter.compile(
@@ -610,8 +642,8 @@ class MinimalScriptLoweringTest {
                         """
                         class Reader { fun read(): Int = 1 }
                         fun main() {
-                            val read: () -> Int = Reader()::read
-                            println(read())
+                            val read: (Reader) -> Int = Reader::read
+                            println(read(Reader()))
                         }
                         """.trimIndent(),
                     ),
@@ -620,7 +652,7 @@ class MinimalScriptLoweringTest {
             assertTrue(
                 result.diagnostics.any {
                     it.severity.name == "ERROR" &&
-                        "only unbound top-level Guest function references are supported" in it.message
+                        "only bound Guest instance or unbound top-level function references are supported" in it.message
                 },
                 result.diagnostics.toString(),
             )

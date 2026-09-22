@@ -115,6 +115,7 @@ fn k2_function_values_preserve_distinct_captures_and_dispatch() {
         "3\n", "4\n", "9\n", "11\n", "1\n", "11\n", "2\n", "31\n", "42\n", "32\n", "7\n", "12\n",
         "15\n", "4\n", "11\n", "10\n", "12\n", "6\n", "10\n", "24\n", "42\n", "5\n", "v8\n", "13\n", "6\n", "10\n",
         "9\n", "17\n", "1\n", "2\n", "12\n", "14\n", "10\n", "18\n", "19\n", "12\n", "19\n",
+        "12\n", "16\n", "23\n", "1\n", "2\n",
     ] {
         let value = utf16(expected);
         let (task, write) =
