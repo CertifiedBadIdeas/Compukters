@@ -443,15 +443,54 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `task launch rejects callable shapes that require runtime function objects`() =
+    fun `task launch accepts direct stored and returned Unit lambdas`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        import compukter.concurrent.Tasks
+
+                        fun identity(block: () -> Unit): () -> Unit = block
+
+                        fun worker() {}
+
+                        fun main() {
+                            var count = 0
+                            val stored: () -> Unit = { count += 1 }
+                            val direct = Tasks.launch { count += 1 }
+                            val fromLocal = Tasks.launch(stored)
+                            val returned = Tasks.launch(identity(stored))
+                            val static = Tasks.launch(::worker)
+                            direct.join()
+                            fromLocal.join()
+                            returned.join()
+                            static.join()
+                            println(count)
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+            val artifact = ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray())
+            val instructions =
+                artifact.modules
+                    .single { it.kind.name == "APPLICATION" }
+                    .blocks
+                    .flatMap { it.instructions }
+            assertEquals(4, instructions.count { it is Instruction.TaskSpawn })
+            assertTrue(instructions.any { it is Instruction.CallInterface })
+        }
+
+    @Test
+    fun `task launch rejects unsupported local and bound references`() =
         withAdapter { adapter ->
             val unsupported =
                 listOf(
-                    "Tasks.launch { reader() }",
-                    "fun local() {}\n    Tasks.launch(::local)",
-                    "Tasks.launch(Reader()::read)",
+                    "fun local() {}\n    Tasks.launch(::local)" to
+                        "Tasks.launch requires a direct reference to a top-level, zero-argument function",
+                    "Tasks.launch(Reader()::read)" to "Tasks.launch does not support bound function references",
                 )
-            unsupported.forEach { launch ->
+            unsupported.forEach { (launch, expectedDiagnostic) ->
                 val result =
                     adapter.compile(
                         request(
@@ -473,9 +512,7 @@ class MinimalScriptLoweringTest {
                 assertTrue(
                     result.diagnostics.any {
                         it.severity.name == "ERROR" &&
-                            it.message.contains(
-                                "Tasks.launch requires a direct reference to a top-level, zero-argument function",
-                            )
+                            it.message.contains(expectedDiagnostic)
                     },
                     "$launch: ${result.diagnostics}",
                 )
