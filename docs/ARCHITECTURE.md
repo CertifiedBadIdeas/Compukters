@@ -319,6 +319,8 @@ Ordinary higher-order Guest calls admit non-null function values whose parameter
 Guest Kotlin. The compiler creates one managed interface per concrete signature and lowers calls through the same
 interface-call instruction, preserving unboxed primitive values and ordinary reference ownership. There is no special
 arity transition at 22 or 23 arguments in the Guest artifact.
+Nested closures capture free values through their enclosing closure objects. Mutable captured locals retain a single
+VM-owned typed cell shared across nesting levels and sibling closures, including after the enclosing call returns.
 
 `/rom/kotlinc source.kt [-o output]` accepts exactly one source file today; its default output is the source basename
 without `.kt`. This single-file in-computer command is distinct from the IDE and compiler protocol, which support
