@@ -555,6 +555,33 @@ internal fun validateArtifact(
             }
         }
         module.types.forEachIndexed { typeIndex, nominal ->
+            val methodRange =
+                when (nominal) {
+                    is NominalType.Class -> nominal.methodStart to nominal.methodCount
+
+                    is NominalType.Interface -> nominal.methodStart to nominal.methodCount
+
+                    is NominalType.Array,
+                    is NominalType.Function,
+                    -> null
+                } ?: return@forEachIndexed
+            val location = ArtifactWriteLocation(moduleLocation, "TYPES", typeIndex.toUInt())
+            val start = methodRange.first.toLong()
+            val end = start + methodRange.second.toLong()
+            if (start > module.functions.size.toLong() || end > module.functions.size.toLong()) {
+                add(ArtifactWriteErrorCode.INVALID_RANGE, "method range is outside the function table", location)
+            } else {
+                val expectedOwner = TypeRef.Local(TypeId.of(typeIndex.toUInt()))
+                if (
+                    module.functions
+                        .subList(start.toInt(), end.toInt())
+                        .any { function -> function.owner != expectedOwner }
+                ) {
+                    add(ArtifactWriteErrorCode.INVALID_RANGE, "method range contains a different owner", location)
+                }
+            }
+        }
+        module.types.forEachIndexed { typeIndex, nominal ->
             val initializer = (nominal as? NominalType.Class)?.initializer ?: return@forEachIndexed
             val location = ArtifactWriteLocation(moduleLocation, "TYPES", typeIndex.toUInt())
             val function = module.functions.getOrNull(initializer.value.toInt())

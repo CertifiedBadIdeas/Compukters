@@ -2650,7 +2650,23 @@ private class FunctionCompiler(
             emit(Instruction.CallSuspend(destination, FunctionRef.Local(targetId), arguments, blockId(resume)))
             currentBlock = resume
         } else {
-            emit(Instruction.Call(destination, FunctionRef.Local(targetId), arguments))
+            val owner = target.parent as? IrClass
+            val instruction =
+                when {
+                    owner?.kind == ClassKind.INTERFACE -> {
+                        Instruction.CallInterface(destination, FunctionRef.Local(targetId), arguments)
+                    }
+
+                    owner != null && !inlineValueClasses.contains(owner.symbol) &&
+                        (target.modality != Modality.FINAL || target.overriddenSymbols.isNotEmpty()) -> {
+                        Instruction.CallVirtual(destination, FunctionRef.Local(targetId), arguments)
+                    }
+
+                    else -> {
+                        Instruction.Call(destination, FunctionRef.Local(targetId), arguments)
+                    }
+                }
+            emit(instruction)
         }
         if (target.returnType.isNothing()) emit(Instruction.Unreachable)
         return (destination as? Destination.Register)?.id

@@ -320,6 +320,15 @@ registerKotlinVmConformance(
     conformanceScenario = "subset",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinDispatchVmConformance",
+    taskDescription = "Executes K2-lowered class and interface dispatch with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateDispatchConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-dispatch.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-dispatch-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_DISPATCH_ARTIFACT",
+    conformanceScenario = "dispatch",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinTransparentCallVmConformance",
     taskDescription = "Executes an ordinary K2 project call across VM-task blocking with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateTransparentCallConformanceArtifact",
