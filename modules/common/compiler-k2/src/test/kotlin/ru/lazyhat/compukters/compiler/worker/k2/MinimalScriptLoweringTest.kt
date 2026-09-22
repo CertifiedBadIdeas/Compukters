@@ -339,6 +339,110 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `zero argument Unit lambdas lower to managed closures with interface dispatch`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class Box(val value: Int)
+
+                fun make(value: Int): () -> Unit = {
+                    println(value)
+                }
+
+                fun run(block: () -> Unit) {
+                    block()
+                }
+
+                fun main() {
+                    val first = make(3)
+                    val second = make(4)
+                    first()
+                    second()
+
+                    val box = Box(9)
+                    run {
+                        println(box.value)
+                    }
+                    run {
+                        println(11)
+                    }
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val bytes = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            val artifact = ArtifactReader.read(bytes)
+            val instructions =
+                artifact.modules
+                    .single { it.kind.name == "APPLICATION" }
+                    .blocks
+                    .flatMap { it.instructions }
+
+            assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
+            assertTrue(instructions.count { it is Instruction.NewObject } >= 4, instructions.toString())
+            assertTrue(instructions.any { it is Instruction.FieldSet }, instructions.toString())
+            assertTrue(instructions.any { it is Instruction.FieldGet }, instructions.toString())
+            assertTrue(instructions.any { it is Instruction.CallInterface }, instructions.toString())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+
+            val higherOrderDeclarationOnly =
+                adapter.compile(
+                    request(
+                        """
+                        fun run(block: () -> Unit) { block() }
+                        fun main() { println(0) }
+                        """.trimIndent(),
+                    ),
+                )
+            assertNotNull(higherOrderDeclarationOnly.artifact, higherOrderDeclarationOnly.diagnostics.joinToString())
+            System.getProperty("compukter.vm.functionValuesArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `unsupported closure shapes produce stable diagnostics`() =
+        withAdapter { adapter ->
+            val mutableCapture =
+                adapter.compile(
+                    request(
+                        """
+                        fun main() {
+                            var value = 1
+                            val block: () -> Unit = { println(value) }
+                            block()
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+            assertNull(mutableCapture.artifact)
+            assertTrue(
+                mutableCapture.diagnostics.any {
+                    it.severity.name == "ERROR" &&
+                        "captured mutable locals require shared typed cells" in it.message
+                },
+                mutableCapture.diagnostics.toString(),
+            )
+
+            val argumentLambda =
+                adapter.compile(
+                    request(
+                        """
+                        fun run(block: (Int) -> Unit) { block(1) }
+                        fun main() { run { println(it) } }
+                        """.trimIndent(),
+                    ),
+                )
+            assertNull(argumentLambda.artifact)
+            assertTrue(
+                argumentLambda.diagnostics.any {
+                    it.severity.name == "ERROR" && "only non-suspending () -> Unit lambdas are supported" in it.message
+                },
+                argumentLambda.diagnostics.toString(),
+            )
+        }
+
+    @Test
     fun `task launch rejects callable shapes that require runtime function objects`() =
         withAdapter { adapter ->
             val unsupported =

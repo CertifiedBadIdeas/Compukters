@@ -26,7 +26,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - `Tasks.sleepTicks(n)` lets a program pace world interactions by server ticks while other Guest tasks continue and
   without spending its instruction budget during the wait.
 - Guest classes and interfaces support ordinary non-suspending instance methods, overrides, and runtime class or
-  interface dispatch. This supplies the method-call foundation for first-class function values and captured lambdas.
+  interface dispatch.
+- Zero-argument `Unit` function values can be passed, returned, stored locally, and invoked. Lambdas use ordinary
+  managed closure objects and can capture immutable scalar or reference values while preserving reference aliasing.
 
 ### Addons and Create
 
