@@ -3,7 +3,7 @@ use std::{fs, sync::Arc};
 use compukter_vm::{
     verify_artifact, AdvanceOutcome, ArtifactLimits, CapabilityBinding, EntryArgumentLimits,
     EntryValue, ExecutionProfile, GuestTrap, HostResponse, HostValueInput, HostValueType,
-    HostValueView, OperationSchema, RequestId, Session,
+    HostValueView, OperationSchema, RequestId, Session, TaskId,
 };
 
 fn main() {
@@ -91,7 +91,7 @@ fn k2_function_values_preserve_distinct_captures_and_dispatch() {
         heap_bytes: 1024 * 1024,
         frame_storage_bytes: 1024 * 1024,
         maximum_call_depth: 64,
-        maximum_coroutines: 1,
+        maximum_coroutines: 64,
         maximum_channels: 0,
         maximum_channel_values: 0,
         maximum_host_requests: 64,
@@ -111,11 +111,14 @@ fn k2_function_values_preserve_distinct_captures_and_dispatch() {
         .start(&[])
         .expect("K2 function-values program must start");
 
-    for expected in ["3\n", "4\n", "9\n", "11\n", "1\n", "11\n", "2\n", "31\n"] {
+    for expected in [
+        "3\n", "4\n", "9\n", "11\n", "1\n", "11\n", "2\n", "31\n", "42\n", "32\n", "7\n",
+    ] {
         let value = utf16(expected);
-        let write = next_host_request(&mut session, "function-value println", 1, Some(&value));
+        let (task, write) =
+            next_host_request_identity(&mut session, "function-value println", 1, Some(&value));
         session
-            .resume(write, HostResponse::Success(HostValueInput::Unit))
+            .resume_for(task, write, HostResponse::Success(HostValueInput::Unit))
             .expect("println must resume the function-values program");
     }
     loop {
@@ -1175,6 +1178,15 @@ fn next_host_request(
     expected_operation: u32,
     expected_string: Option<&[u16]>,
 ) -> RequestId {
+    next_host_request_identity(session, operation_name, expected_operation, expected_string).1
+}
+
+fn next_host_request_identity(
+    session: &mut Session,
+    operation_name: &str,
+    expected_operation: u32,
+    expected_string: Option<&[u16]>,
+) -> (TaskId, RequestId) {
     loop {
         match session
             .advance(64, 64)
@@ -1191,7 +1203,7 @@ fn next_host_request(
                         "{operation_name}",
                     );
                 }
-                return request.id();
+                return (request.task_id(), request.id());
             }
             outcome => panic!("unexpected K2 program outcome before {operation_name}: {outcome:?}"),
         }

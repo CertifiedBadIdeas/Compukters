@@ -29,7 +29,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   interface dispatch.
 - Zero-argument `Unit` function values can be passed, returned, stored locally, and invoked. Lambdas use ordinary
   managed closure objects, preserve reference aliasing for immutable captures, and share mutations through unboxed
-  typed cells when local `var` values are captured.
+  typed cells when local `var` values are captured. `Tasks.launch` also accepts these function values as bounded
+  cooperative tasks.
 
 ### Addons and Create
 

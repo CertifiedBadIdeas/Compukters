@@ -311,6 +311,11 @@ given.
 return `ProcessResult.Exited(code)` or `ProcessResult.Failed(reason, diagnostic)`. `Process.exit(code)` terminates the
 current process. Guest code does not select an explicit capability mask when starting a child.
 
+`Tasks.launch` starts a supported `() -> Unit` value in a bounded cooperative task. The compiler keeps direct
+top-level references as static spawns; other function values cross the existing spawn boundary as one managed
+reference into a private Guest trampoline, which invokes `Function0<Unit>` through normal dynamic dispatch. The child
+frame retains that reference after the launching function returns, and shared capture cells remain VM-owned.
+
 `/rom/kotlinc source.kt [-o output]` accepts exactly one source file today; its default output is the source basename
 without `.kt`. This single-file in-computer command is distinct from the IDE and compiler protocol, which support
 bounded multi-file project snapshots.

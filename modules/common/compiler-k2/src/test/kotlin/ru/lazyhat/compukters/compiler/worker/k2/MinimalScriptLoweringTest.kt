@@ -343,6 +343,9 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val source =
                 """
+                import compukter.concurrent.Task
+                import compukter.concurrent.Tasks
+
                 class Box(val value: Int)
 
                 fun make(value: Int): () -> Unit = {
@@ -359,6 +362,11 @@ class MinimalScriptLoweringTest {
                         value = value + 1
                         println(value)
                     }
+                }
+
+                fun spawnAfterReturn(value: Int): Task {
+                    val block: () -> Unit = { println(value) }
+                    return Tasks.launch(block)
                 }
 
                 fun main() {
@@ -387,6 +395,11 @@ class MinimalScriptLoweringTest {
                     increment()
                     addTen()
                     println(shared)
+
+                    spawnAfterReturn(42).join()
+                    Tasks.launch(increment).join()
+                    println(shared)
+                    Tasks.launch { println(7) }.join()
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))
