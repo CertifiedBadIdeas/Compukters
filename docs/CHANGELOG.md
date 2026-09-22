@@ -31,7 +31,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   and invoked without a fixed two-argument or JVM 22/23 cut-off. Lambdas use ordinary
   managed closure objects, preserve reference aliasing for immutable captures, and share mutations through unboxed
   typed cells when local `var` values are captured, including across nested lambdas. `Tasks.launch` accepts
-  `() -> Unit` values as bounded cooperative tasks.
+  `() -> Unit` values as bounded cooperative tasks. Unbound references to Guest top-level functions can be passed,
+  returned, stored, and invoked as typed function values.
 
 ### Addons and Create
 

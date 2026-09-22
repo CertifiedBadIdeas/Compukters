@@ -420,6 +420,12 @@ class MinimalScriptLoweringTest {
                     return outer()
                 }
 
+                fun doubled(value: Int): Int = value * 2
+
+                fun doubledReference(): (Int) -> Int = ::doubled
+
+                fun announce() { println(19) }
+
                 fun main() {
                     val first = make(3)
                     val second = make(4)
@@ -485,6 +491,15 @@ class MinimalScriptLoweringTest {
                     println(nestedFirst())
                     println(nestedSecond())
                     println(sibling()())
+                    val storedReference: (Int) -> Int = ::doubled
+                    println(storedReference(7))
+                    println(transform(5, ::doubled))
+                    println(doubledReference()(9))
+                    val unitReference: () -> Unit = ::announce
+                    unitReference()
+                    val inferredReference = ::doubled
+                    println(inferredReference(6))
+                    Tasks.launch(unitReference).join()
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))
@@ -582,6 +597,31 @@ class MinimalScriptLoweringTest {
             assertNull(result.artifact)
             assertTrue(
                 result.diagnostics.any { it.severity.name == "ERROR" && "function-value variance" in it.message },
+                result.diagnostics.toString(),
+            )
+        }
+
+    @Test
+    fun `bound function reference is rejected before artifact publication`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        class Reader { fun read(): Int = 1 }
+                        fun main() {
+                            val read: () -> Int = Reader()::read
+                            println(read())
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+            assertNull(result.artifact)
+            assertTrue(
+                result.diagnostics.any {
+                    it.severity.name == "ERROR" &&
+                        "only unbound top-level Guest function references are supported" in it.message
+                },
                 result.diagnostics.toString(),
             )
         }
