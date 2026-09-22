@@ -41,9 +41,10 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   usable without Create.
 - Added passive peripheral cables for orthogonal, branching and looping connections between computers and supported
   addon devices. Cables discover loaded chunks only and do not require adapters or a controller block.
-- Added the Peripheral Configurator: rename it in an anvil, use it directly on a supported device to assign the name,
-  or Shift-use it to clear the name. Device names persist independently of computers and cable topology; duplicate
-  reachable names fail as ambiguous.
+- Added a Peripheral Configurator editor that opens on supported devices and inspects their bounded cable network. It
+  reports available and duplicate names before assignment, while the server rejects stale or conflicting changes;
+  Shift-use clears a name. The configurator item remains unnamed, while device names persist with the world
+  independently of computers and cable topology.
 - The `create` addon reads exact `Float` speed, stress, and capacity values from adjacent or named cable-connected
   speedometers and stressometers, waits for value changes without Guest-side polling, and controls rotation speed
   controllers.
