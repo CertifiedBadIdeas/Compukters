@@ -51,3 +51,9 @@ id = "compukter:sound"
 version = "1.0.0"
 dependencies = ["stdlib:core"]
 sources = ["libraries/compukter-sound/**/*.kt"]
+
+[[module]]
+id = "compukter:display"
+version = "1.0.0"
+dependencies = ["stdlib:core", "stdlib:ranges"]
+sources = ["libraries/compukter-display/**/*.kt"]

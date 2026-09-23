@@ -5394,6 +5394,7 @@ private fun capabilityShape(
                 "compukter" to "compiler" -> 2u
                 "compukter" to "redstone" -> 8u
                 "compukter" to "sound" -> 1u
+                "compukters" to "display" -> 4u
                 "compukter" to "timer" -> 1u
                 else -> error("unknown Compukters capability ${capability.namespace}:${capability.name}")
             },

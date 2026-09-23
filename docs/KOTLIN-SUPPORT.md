@@ -619,6 +619,7 @@ built-in platform and are not selected individually in `compukter.toml`; there i
 | `compukter:process` | Child process execution and explicit exit |
 | `compukter:redstone` | Side-oriented redstone reads, waits, and weak/direct output writes |
 | `compukter:sound` | Bounded one-shot computer beeps with admission feedback |
+| `compukter:display` | Typed text-display declarations; the world host and renderer are being implemented in [#650](https://github.com/CertifiedBadIdeas/Compukters/issues/650) |
 
 Ordinary functions in these modules are compiled ahead of Guest projects into
 relocatable platform fragments. Only declarations explicitly marked as native
