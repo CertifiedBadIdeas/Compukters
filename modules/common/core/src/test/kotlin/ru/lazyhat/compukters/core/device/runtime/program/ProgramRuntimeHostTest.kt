@@ -49,6 +49,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmAdmissionException
+import ru.lazyhat.compukters.lang.runtime.vm.VmAdvanceResult
 import ru.lazyhat.compukters.lang.runtime.vm.VmBootException
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmCompilationRequest
@@ -71,6 +72,25 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class ProgramRuntimeHostTest {
+    @Test
+    fun `retirement allowance is shared across advances and resets on the next tick`() {
+        val session =
+            ScriptedSession(
+                outcomes = listOf(VmOutcome.SliceExhausted, VmOutcome.SliceExhausted, VmOutcome.SliceExhausted),
+                retiredCounts = listOf(2L, 1L, 0L),
+            )
+        val host = host(session, ProgramTickBudget(maximumAdvancesPerTick = 4))
+        host.start(byteArrayOf(1))
+
+        assertEquals(ProgramRuntimeState.Running, host.serverTick(0, retirementAllowance = 3))
+        assertEquals(3L, host.retiredInstructionsLastTick)
+        assertEquals(listOf(3, 1), session.retirementLimits)
+
+        assertEquals(ProgramRuntimeState.Running, host.serverTick(1, retirementAllowance = 0))
+        assertEquals(0L, host.retiredInstructionsLastTick)
+        assertEquals(listOf(3, 1, 0), session.retirementLimits)
+    }
+
     @Test
     fun `addon requests suspend independently and reject completions after lifecycle reset`() {
         val first = VmHostRequest(11, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(3)), taskId = 2)
@@ -1051,6 +1071,7 @@ class ProgramRuntimeHostTest {
 
     private class ScriptedSession(
         outcomes: List<VmOutcome> = emptyList(),
+        retiredCounts: List<Long> = emptyList(),
         private val defaultOutcome: VmOutcome? = null,
         private val resumeError: VmBridgeException? = null,
         val terminalState: TerminalState = terminalState(0),
@@ -1069,7 +1090,9 @@ class ProgramRuntimeHostTest {
         private val resourceSnapshotError: VmBridgeException? = null,
     ) : ProgramVmSession {
         private val outcomes = ArrayDeque(outcomes)
+        private val retiredCounts = ArrayDeque(retiredCounts)
         val advances = mutableListOf<AdvanceBudget>()
+        val retirementLimits = mutableListOf<Int>()
         val responses = mutableListOf<Pair<VmHostRequestIdentity, HostResponse>>()
         var closeCalls = 0
         var terminalCommits = 0
@@ -1092,6 +1115,17 @@ class ProgramRuntimeHostTest {
         ): VmOutcome {
             advances += AdvanceBudget(guestBudget, maintenanceBudget, hostRequestBudget)
             return outcomes.removeFirstOrNull() ?: requireNotNull(defaultOutcome) { "no scripted outcome" }
+        }
+
+        override fun advanceWithRetirementLimit(
+            guestBudget: Int,
+            maintenanceBudget: Int,
+            hostRequestBudget: Int,
+            retirementLimit: Int,
+        ): VmAdvanceResult {
+            retirementLimits += retirementLimit
+            val outcome = advance(guestBudget, maintenanceBudget, hostRequestBudget)
+            return VmAdvanceResult(outcome, retiredCounts.removeFirst())
         }
 
         override fun resume(

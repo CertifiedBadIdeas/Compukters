@@ -31,6 +31,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
+import ru.lazyhat.compukters.lang.runtime.vm.VmAdvanceResult
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentCandidate
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
@@ -45,6 +46,13 @@ internal interface ProgramVmSession : AutoCloseable {
         maintenanceBudget: Int,
         hostRequestBudget: Int,
     ): VmOutcome
+
+    fun advanceWithRetirementLimit(
+        guestBudget: Int,
+        maintenanceBudget: Int,
+        hostRequestBudget: Int,
+        retirementLimit: Int,
+    ): VmAdvanceResult = error("retirement-limited advance is unavailable")
 
     fun resume(
         identity: VmHostRequestIdentity,
@@ -164,6 +172,19 @@ private class NativeProgramVmSession(
         maintenanceBudget: Int,
         hostRequestBudget: Int,
     ): VmOutcome = session.advance(guestBudget, maintenanceBudget, hostRequestBudget)
+
+    override fun advanceWithRetirementLimit(
+        guestBudget: Int,
+        maintenanceBudget: Int,
+        hostRequestBudget: Int,
+        retirementLimit: Int,
+    ): VmAdvanceResult =
+        session.advanceWithRetirementLimit(
+            guestBudget,
+            maintenanceBudget,
+            hostRequestBudget,
+            retirementLimit,
+        )
 
     override fun resume(
         identity: VmHostRequestIdentity,

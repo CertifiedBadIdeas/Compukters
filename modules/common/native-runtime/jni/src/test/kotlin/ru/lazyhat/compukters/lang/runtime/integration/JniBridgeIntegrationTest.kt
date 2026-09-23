@@ -29,10 +29,28 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
 import java.nio.file.Path
 import kotlin.io.path.readBytes
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class JniBridgeIntegrationTest {
+    @Test
+    fun `JNI retirement limit reports exact work without executing at zero allowance`() {
+        val bridge = JniBridge.open(Path.of(requiredProperty("compukter.jni.library")))
+        val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
+        VmSession.open(artifact, bridge).use { session ->
+            val initial = session.resourceSnapshot().executedInstructions
+            val zero = session.advanceWithRetirementLimit(64, 64, Int.MAX_VALUE, 0)
+            assertEquals(VmOutcome.SliceExhausted, zero.outcome)
+            assertEquals(0L, zero.retiredInstructions)
+            assertEquals(initial, session.resourceSnapshot().executedInstructions)
+
+            val one = session.advanceWithRetirementLimit(64, 64, Int.MAX_VALUE, 1)
+            assertEquals(1L, one.retiredInstructions)
+            assertEquals(initial + 1, session.resourceSnapshot().executedInstructions)
+        }
+    }
+
     @Test
     fun `JNI admits a machine with a typed addon capability schema`() {
         val bridge = JniBridge.open(Path.of(requiredProperty("compukter.jni.library")))

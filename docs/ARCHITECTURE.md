@@ -284,13 +284,15 @@ close. Initial store opening happens during server startup rather than an ordina
 native world-store handle are serialized by a fair lock across VM actors and persistence work, while ordinary VM
 execution stays on actor workers.
 
-The versioned C ABI v15 exposes opaque world-store lifecycle operations, machine creation inside a store, stateless
+The versioned C ABI v16 exposes opaque world-store lifecycle operations, machine creation inside a store, stateless
 artifact verification, dedicated bounded compilation request and completion calls, and typed `Unit`, `Int`, raw-bit
 `Float`, `Boolean`, `String`, or categorized and human-readable failure host-request completion. Kotlin can select a world
 store, identify a computer, request flush, tombstone, or recovery, and route compiler results, but it cannot perform
 arbitrary guest file operations. Guest code reaches Rust-owned state only through declared capabilities. The guest
 machine-creation calls carry a bounded, versioned schema for optional host capabilities; Rust validates and owns that
 schema before admitting the executable, so addon operations use the same typed verifier contract as built-in devices.
+ABI v16 also adds an instruction-limited advance that returns retired instruction count separately from the existing
+weighted guest and maintenance budgets. The earlier advance wire result and its meaning remain unchanged.
 The guest filesystem facade exposes bounded `stat`, `list`, `readText`, and `writeText`; Rust validates paths, UTF-8, permissions,
 quotas, and atomic replacement while `/rom` remains immutable. The shell and editor map stable failures to user-facing
 diagnostics. Executable installation remains a Rust-owned filesystem transaction and never accepts a host path.

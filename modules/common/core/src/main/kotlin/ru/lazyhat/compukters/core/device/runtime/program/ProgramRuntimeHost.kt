@@ -102,6 +102,8 @@ class ProgramRuntimeHost internal constructor(
     private var lastRedstoneInput = 0
     private val grantedBudgets = GrantedResourceBudgets()
     private var lastObservedTick = -1L
+    var retiredInstructionsLastTick: Long = 0
+        private set
     var state: ProgramRuntimeState = ProgramRuntimeState.Idle
         private set
 
@@ -148,9 +150,14 @@ class ProgramRuntimeHost internal constructor(
 
     fun serverTick(): ProgramRuntimeState = serverTick(if (lastObservedTick == Long.MAX_VALUE) Long.MAX_VALUE else lastObservedTick + 1)
 
-    fun serverTick(worldTick: Long): ProgramRuntimeState {
+    fun serverTick(
+        worldTick: Long,
+        retirementAllowance: Int = Int.MAX_VALUE,
+    ): ProgramRuntimeState {
         require(worldTick >= 0) { "world tick must not be negative" }
         require(worldTick >= lastObservedTick) { "world tick must not move backwards" }
+        require(retirementAllowance >= 0) { "retirement allowance must not be negative" }
+        retiredInstructionsLastTick = 0
         lastObservedTick = worldTick
         if (state != ProgramRuntimeState.Running && state != ProgramRuntimeState.WaitingForCompiler) return state
         val activeSession = requireNotNull(session)
@@ -162,7 +169,7 @@ class ProgramRuntimeHost internal constructor(
             return state
         }
         if (pendingRedstoneCommit != null || pendingSoundCommit != null) return state
-        advanceForTick(activeSession)
+        advanceForTick(activeSession, retirementAllowance)
         if (session !== activeSession) return state
         try {
             activeSession.commitTerminal()
@@ -172,23 +179,43 @@ class ProgramRuntimeHost internal constructor(
         return state
     }
 
-    private fun advanceForTick(activeSession: ProgramVmSession) {
+    private fun advanceForTick(
+        activeSession: ProgramVmSession,
+        retirementAllowance: Int,
+    ) {
         var remainingHostRequests = tickBudget.hostRequestsPerTick
         repeat(tickBudget.maximumAdvancesPerTick) {
             val outcome =
                 try {
                     grantedBudgets.grant(tickBudget.guestBudgetPerAdvance, tickBudget.maintenanceBudgetPerAdvance)
-                    activeSession.advance(
-                        tickBudget.guestBudgetPerAdvance,
-                        tickBudget.maintenanceBudgetPerAdvance,
-                        remainingHostRequests,
-                    )
+                    if (retirementAllowance == Int.MAX_VALUE) {
+                        activeSession.advance(
+                            tickBudget.guestBudgetPerAdvance,
+                            tickBudget.maintenanceBudgetPerAdvance,
+                            remainingHostRequests,
+                        )
+                    } else {
+                        val remaining = (retirementAllowance.toLong() - retiredInstructionsLastTick).coerceAtLeast(0)
+                        val result =
+                            activeSession.advanceWithRetirementLimit(
+                                tickBudget.guestBudgetPerAdvance,
+                                tickBudget.maintenanceBudgetPerAdvance,
+                                remainingHostRequests,
+                                remaining.toInt(),
+                            )
+                        check(result.retiredInstructions in 0..remaining) {
+                            "native VM exceeded supplied retirement allowance"
+                        }
+                        retiredInstructionsLastTick += result.retiredInstructions
+                        result.outcome
+                    }
                 } catch (error: VmBridgeException) {
                     finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))
                     return
                 }
             when (outcome) {
                 VmOutcome.SliceExhausted -> {
+                    if (retirementAllowance != Int.MAX_VALUE && retiredInstructionsLastTick >= retirementAllowance) return
                     return@repeat
                 }
 
