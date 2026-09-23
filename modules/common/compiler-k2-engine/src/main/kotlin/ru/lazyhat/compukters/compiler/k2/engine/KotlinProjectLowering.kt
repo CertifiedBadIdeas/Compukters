@@ -2385,9 +2385,6 @@ internal object KotlinProjectLowering {
                 throw UnsupportedKotlinIr(declaration, "property accessor body is missing")
             }
             val properties = declaredProperties.filter { it.backingField != null }
-            if (parameters.any { it.defaultValue != null }) {
-                throw UnsupportedKotlinIr(declaration, "default constructor arguments are not supported")
-            }
             if (declaration.kind == ClassKind.ENUM_CLASS && (parameters.isNotEmpty() || properties.isNotEmpty())) {
                 throw UnsupportedKotlinIr(declaration, "enum constructor state is not supported")
             }
@@ -3237,14 +3234,36 @@ private class FunctionCompiler(
         val targetConstructor =
             constructorLayouts[call.symbol] ?: throw UnsupportedKotlinIr(call, "constructor is outside the project subset")
         val layout = targetConstructor.layout
-        val regularArguments =
-            target.parameters.mapIndexedNotNull { index, parameter ->
-                call.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.Regular }
+        val parameters = target.parameters.withIndex().filter { it.value.kind == IrParameterKind.Regular }
+        val previousBindings = parameters.associate { it.value.symbol to values[it.value.symbol] }
+        val compiledArguments =
+            try {
+                val explicit =
+                    parameters
+                        .mapNotNull { (index, parameter) ->
+                            call.arguments.getOrNull(index)?.let { expression -> Triple(index, parameter, expression) }
+                        }.sortedWith(compareBy({ it.third.startOffset.takeIf { offset -> offset >= 0 } ?: Int.MAX_VALUE }, { it.first }))
+                explicit.forEach { (_, parameter, expression) ->
+                    rejectFunctionVariance(expression.type, parameter.type, expression)
+                    values[parameter.symbol] = compileExpression(expression)
+                }
+                parameters.forEach { (index, parameter) ->
+                    if (call.arguments.getOrNull(index) == null) {
+                        val default =
+                            parameter.defaultValue?.expression
+                                ?: throw UnsupportedKotlinIr(call, "constructor argument ${parameter.name} is missing")
+                        rejectFunctionVariance(default.type, parameter.type, default)
+                        values[parameter.symbol] = compileExpression(default)
+                    }
+                }
+                parameters.map { (_, parameter) ->
+                    values[parameter.symbol] ?: throw UnsupportedKotlinIr(call, "constructor argument ${parameter.name} is missing")
+                }
+            } finally {
+                previousBindings.forEach { (symbol, previous) ->
+                    if (previous == null) values.remove(symbol) else values[symbol] = previous
+                }
             }
-        if (regularArguments.size != target.parameters.count { it.kind == IrParameterKind.Regular }) {
-            throw UnsupportedKotlinIr(call, "constructor arguments are missing")
-        }
-        val compiledArguments = regularArguments.map(::compileExpression)
         val ownerType = TypeRef.Local(layout.typeId)
         prepareAllocationBlock()
         return allocate(ValueType.Ref(nullable = false, type = ownerType)).also { destination ->
