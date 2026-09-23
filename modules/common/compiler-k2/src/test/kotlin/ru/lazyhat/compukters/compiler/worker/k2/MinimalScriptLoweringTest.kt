@@ -1185,7 +1185,86 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `guest object subset rejects generic secondary defaulted uninitialized computed stateful and explicit cast shapes`() =
+    fun `computed and custom class accessors lower with backing fields and override dispatch`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class Meter(start: Int) {
+                    var raw = start
+                    var measured: Int = 0
+                        get() = field + raw
+                        set(value) { field = value * 2 }
+                    val computed: Int get() = measured + 1
+                    var twice: Int
+                        get() = raw * 2
+                        set(value) { raw = value / 2 }
+                }
+                open class Base {
+                    open val signal: Int get() = 1
+                    open var state: Int = 0
+                        get() = field + 1
+                        set(value) { field = value + 1 }
+                }
+                class Child : Base() {
+                    override val signal: Int get() = 2
+                    override var state: Int = 0
+                        get() = field + 10
+                        set(value) { field = value * 2 }
+                }
+                open class Ancestor { open val inherited: Int get() = 7 }
+                class Descendant : Ancestor()
+                open class Plain(open var value: Int)
+                class Fancy : Plain(1) {
+                    override var value: Int = 2
+                        get() = field + 20
+                        set(next) { field = next * 3 }
+                }
+                class Probe {
+                    var order = 0
+                    val meter = Meter(1)
+                    fun receiver(): Meter {
+                        order = order * 10 + 1
+                        return meter
+                    }
+                    fun next(): Int {
+                        order = order * 10 + 2
+                        return 4
+                    }
+                }
+                fun main() {
+                    val meter = Meter(3)
+                    meter.measured = 4
+                    println(meter.measured)
+                    println(meter.computed)
+                    meter.twice = 10
+                    println(meter.twice)
+                    val base: Base = Base()
+                    base.state = 4
+                    println(base.state)
+                    val child: Base = Child()
+                    child.state = 4
+                    println(child.state)
+                    println(child.signal)
+                    println(Descendant().inherited)
+                    val plain: Plain = Fancy()
+                    plain.value = 4
+                    println(plain.value)
+                    val probe = Probe()
+                    probe.receiver().measured = probe.next()
+                    println(probe.order)
+                    println(probe.meter.measured)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.propertyAccessorsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `guest object subset rejects generic secondary defaulted uninitialized abstract stateful and explicit cast shapes`() =
         withAdapter { adapter ->
             val unsupported =
                 listOf(
@@ -1193,7 +1272,7 @@ class MinimalScriptLoweringTest {
                     "class Secondary(val value: Int) { constructor() : this(0) }\nfun main() { Secondary() }",
                     "class Defaulted(val value: Int = 1)\nfun main() { Defaulted() }",
                     "class Uninitialized { lateinit var value: String }\nfun main() { Uninitialized() }",
-                    "class Computed(val value: Int) { val doubled: Int get() = value + value }\nfun main() { Computed(1) }",
+                    "abstract class Abstract { abstract val value: Int }\nclass Concrete : Abstract() { override val value: Int get() = 1 }\nfun main() { Concrete().value }",
                     "enum class Stateful(val code: Int) { ONE(1) }\nfun main() { Stateful.ONE }",
                     "sealed interface Value\ndata class NumberValue(val value: Int) : Value\nfun read(value: Value): Int = (value as NumberValue).value\nfun main() { read(NumberValue(1)) }",
                 )

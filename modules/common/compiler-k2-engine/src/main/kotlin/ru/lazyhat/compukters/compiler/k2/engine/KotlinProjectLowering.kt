@@ -55,6 +55,7 @@ import org.jetbrains.kotlin.ir.expressions.IrInstanceInitializerCall
 import org.jetbrains.kotlin.ir.expressions.IrLoop
 import org.jetbrains.kotlin.ir.expressions.IrReturn
 import org.jetbrains.kotlin.ir.expressions.IrRichFunctionReference
+import org.jetbrains.kotlin.ir.expressions.IrSetField
 import org.jetbrains.kotlin.ir.expressions.IrSetValue
 import org.jetbrains.kotlin.ir.expressions.IrStringConcatenation
 import org.jetbrains.kotlin.ir.expressions.IrThrow
@@ -594,7 +595,7 @@ internal object KotlinProjectLowering {
                         (
                             owner?.symbol in sourceClassSymbols &&
                                 function.origin != IrDeclarationOrigin.FAKE_OVERRIDE &&
-                                function.correspondingPropertySymbol == null
+                                (function.correspondingPropertySymbol == null || !function.isDirectFieldAccessor())
                         )
                 }.filter { function -> function.body != null || function.modality == Modality.ABSTRACT }
                 .filterNot { function ->
@@ -979,6 +980,31 @@ internal object KotlinProjectLowering {
                 externalClassTypes,
             )
         val classLayoutsBySymbol = classLayouts.associateBy { it.declaration.symbol }
+        val fieldsByBacking =
+            classLayouts
+                .flatMap { layout ->
+                    layout.fields.map { field -> requireNotNull(field.property.backingField).symbol to field }
+                }.toMap()
+        val fieldsByGetter =
+            classLayouts
+                .flatMap { layout ->
+                    layout.fields.mapNotNull { field ->
+                        field.property.getter
+                            ?.takeIf(IrSimpleFunction::isDirectFieldAccessor)
+                            ?.symbol
+                            ?.let { it to field }
+                    }
+                }.toMap()
+        val fieldsBySetter =
+            classLayouts
+                .flatMap { layout ->
+                    layout.fields.mapNotNull { field ->
+                        field.property.setter
+                            ?.takeIf(IrSimpleFunction::isDirectFieldAccessor)
+                            ?.symbol
+                            ?.let { it to field }
+                    }
+                }.toMap()
         val constructorTargets =
             classLayouts
                 .mapNotNull { layout ->
@@ -1151,20 +1177,9 @@ internal object KotlinProjectLowering {
                         inlineValueClasses = inlineValueClasses,
                         platformScalars = platformScalars,
                         constructorLayouts = constructorTargets,
-                        fieldsBySetter =
-                            classLayouts
-                                .flatMap { layout ->
-                                    layout.fields.mapNotNull { field ->
-                                        field.property.setter
-                                            ?.symbol
-                                            ?.let { it to field }
-                                    }
-                                }.toMap(),
-                        fieldsByGetter =
-                            classLayouts
-                                .flatMap { layout ->
-                                    layout.fields.map { field -> requireNotNull(field.property.getter).symbol to field }
-                                }.toMap(),
+                        fieldsBySetter = fieldsBySetter,
+                        fieldsByGetter = fieldsByGetter,
+                        fieldsByBacking = fieldsByBacking,
                         topLevelFieldsByBacking = topLevelFieldsByBacking,
                         topLevelFieldsByGetter = topLevelFieldsByGetter,
                         enumEntries =
@@ -1397,20 +1412,9 @@ internal object KotlinProjectLowering {
                         inlineValueClasses = inlineValueClasses,
                         platformScalars = platformScalars,
                         constructorLayouts = constructorTargets,
-                        fieldsBySetter =
-                            classLayouts
-                                .flatMap { classLayout ->
-                                    classLayout.fields.mapNotNull { field ->
-                                        field.property.setter
-                                            ?.symbol
-                                            ?.let { it to field }
-                                    }
-                                }.toMap(),
-                        fieldsByGetter =
-                            classLayouts
-                                .flatMap { classLayout ->
-                                    classLayout.fields.map { field -> requireNotNull(field.property.getter).symbol to field }
-                                }.toMap(),
+                        fieldsBySetter = fieldsBySetter,
+                        fieldsByGetter = fieldsByGetter,
+                        fieldsByBacking = fieldsByBacking,
                         topLevelFieldsByBacking = topLevelFieldsByBacking,
                         topLevelFieldsByGetter = topLevelFieldsByGetter,
                         enumEntries = classLayouts.flatMap { it.enumEntries }.associateBy { it.declaration.symbol },
@@ -1514,20 +1518,9 @@ internal object KotlinProjectLowering {
                     inlineValueClasses = inlineValueClasses,
                     platformScalars = platformScalars,
                     constructorLayouts = constructorTargets,
-                    fieldsBySetter =
-                        classLayouts
-                            .flatMap { classLayout ->
-                                classLayout.fields.mapNotNull { field ->
-                                    field.property.setter
-                                        ?.symbol
-                                        ?.let { it to field }
-                                }
-                            }.toMap(),
-                    fieldsByGetter =
-                        classLayouts
-                            .flatMap { classLayout ->
-                                classLayout.fields.map { field -> requireNotNull(field.property.getter).symbol to field }
-                            }.toMap(),
+                    fieldsBySetter = fieldsBySetter,
+                    fieldsByGetter = fieldsByGetter,
+                    fieldsByBacking = fieldsByBacking,
                     topLevelFieldsByBacking = topLevelFieldsByBacking,
                     topLevelFieldsByGetter = topLevelFieldsByGetter,
                     enumEntries = classLayouts.flatMap { it.enumEntries }.associateBy { it.declaration.symbol },
@@ -2380,8 +2373,13 @@ internal object KotlinProjectLowering {
             }
             val parameters = constructor?.parameters?.filter { it.kind == IrParameterKind.Regular }.orEmpty()
             val declaredProperties = declaration.declarations.filterIsInstance<IrProperty>()
-            if (declaredProperties.any { it.backingField == null && it.origin == IrDeclarationOrigin.DEFINED }) {
-                throw UnsupportedKotlinIr(declaration, "computed or abstract properties are not supported")
+            if (declaredProperties.any { property ->
+                    property.backingField == null &&
+                        property.origin == IrDeclarationOrigin.DEFINED &&
+                        (property.getter?.body == null || (property.isVar && property.setter?.body == null))
+                }
+            ) {
+                throw UnsupportedKotlinIr(declaration, "abstract properties are not supported")
             }
             val properties = declaredProperties.filter { it.backingField != null }
             if (parameters.any { it.defaultValue != null }) {
@@ -2392,11 +2390,6 @@ internal object KotlinProjectLowering {
             }
             val fields =
                 properties.map { property ->
-                    if (property.getter?.origin != IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR ||
-                        (property.isVar && property.setter?.origin != IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR)
-                    ) {
-                        throw UnsupportedKotlinIr(property, "only properties with default accessors are supported")
-                    }
                     val parameterIndex = parameters.indexOfFirst { it.name == property.name }
                     if (parameterIndex < 0 && property.backingField?.initializer == null) {
                         throw UnsupportedKotlinIr(property, "body property requires an initializer")
@@ -2781,6 +2774,7 @@ private class FunctionCompiler(
     private val constructorLayouts: Map<IrConstructorSymbol, GuestConstructorTarget>,
     private val fieldsBySetter: Map<IrSimpleFunctionSymbol, GuestFieldLayout>,
     private val fieldsByGetter: Map<IrSimpleFunctionSymbol, GuestFieldLayout>,
+    private val fieldsByBacking: Map<IrFieldSymbol, GuestFieldLayout>,
     private val topLevelFieldsByBacking: Map<IrFieldSymbol, TopLevelFieldLayout>,
     private val topLevelFieldsByGetter: Map<IrSimpleFunctionSymbol, TopLevelFieldLayout>,
     private val enumEntries: Map<IrEnumEntrySymbol, GuestEnumEntryLayout>,
@@ -2831,7 +2825,7 @@ private class FunctionCompiler(
             is IrVariable -> {
                 val initializer = statement.initializer ?: throw UnsupportedKotlinIr(statement, "local without initializer")
                 rejectFunctionVariance(initializer.type, statement.type, statement)
-                val source = compileExpression(initializer)
+                val source = coerceLocalValue(compileExpression(initializer), initializer.type, statement.type, statement)
                 val cell = captureCells[statement.symbol]
                 if (cell == null) {
                     if (initializer is IrFunctionExpression ||
@@ -2856,7 +2850,13 @@ private class FunctionCompiler(
 
             is IrSetValue -> {
                 rejectFunctionVariance(statement.value.type, statement.symbol.owner.type, statement)
-                val source = compileExpression(statement.value)
+                val source =
+                    coerceLocalValue(
+                        compileExpression(statement.value),
+                        statement.value.type,
+                        statement.symbol.owner.type,
+                        statement,
+                    )
                 val cell = captureCells[statement.symbol]
                 if (cell == null) {
                     val destination = values[statement.symbol] ?: throw UnsupportedKotlinIr(statement, "unknown mutable local")
@@ -2870,6 +2870,15 @@ private class FunctionCompiler(
                         ),
                     )
                 }
+            }
+
+            is IrSetField -> {
+                val field = fieldsByBacking[statement.symbol] ?: throw UnsupportedKotlinIr(statement, "unknown instance field")
+                val receiver =
+                    statement.receiver?.let(::compileExpression)
+                        ?: throw UnsupportedKotlinIr(statement, "instance field receiver is missing")
+                val value = compileExpression(statement.value)
+                emit(Instruction.FieldSet(receiver, FieldRef.Local(field.id), value))
             }
 
             is IrCall -> {
@@ -3017,11 +3026,21 @@ private class FunctionCompiler(
             }
 
             is IrGetField -> {
-                val field =
-                    topLevelFieldsByBacking[expression.symbol]
-                        ?: throw UnsupportedKotlinIr(expression, "unknown or non-top-level field")
-                allocate(field.type).also { destination ->
-                    emit(Instruction.StaticGet(destination, FieldRef.Local(field.fieldId)))
+                val instanceField = fieldsByBacking[expression.symbol]
+                if (instanceField != null) {
+                    val receiver =
+                        expression.receiver?.let(::compileExpression)
+                            ?: throw UnsupportedKotlinIr(expression, "instance field receiver is missing")
+                    allocate(instanceField.type).also { destination ->
+                        emit(Instruction.FieldGet(destination, receiver, FieldRef.Local(instanceField.id)))
+                    }
+                } else {
+                    val field =
+                        topLevelFieldsByBacking[expression.symbol]
+                            ?: throw UnsupportedKotlinIr(expression, "unknown field")
+                    allocate(field.type).also { destination ->
+                        emit(Instruction.StaticGet(destination, FieldRef.Local(field.fieldId)))
+                    }
                 }
             }
 
@@ -3265,6 +3284,21 @@ private class FunctionCompiler(
         }
     }
 
+    private fun coerceLocalValue(
+        source: RegisterId,
+        sourceType: IrType,
+        targetType: IrType,
+        element: IrElement,
+    ): RegisterId {
+        val from = valueType(sourceType, element)
+        val to = valueType(targetType, element)
+        if (from == to) return source
+        if (from is ValueType.Ref && to is ValueType.Ref) {
+            return allocate(to).also { destination -> emit(Instruction.CheckedCast(destination, source, to.type)) }
+        }
+        throw UnsupportedKotlinIr(element, "local assignment types do not match")
+    }
+
     private fun rejectFunctionVariance(
         actualType: IrType,
         expectedType: IrType,
@@ -3505,7 +3539,7 @@ private class FunctionCompiler(
             return (destination as? Destination.Register)?.id
         }
         compileCompareToPredicate(call, target.name.asString())?.let { return it }
-        val targetId = functionIds[target.symbol]
+        val targetId = projectFunctionId(target.symbol)
         if (targetId == null) {
             val argumentExpressions = call.arguments.filterNotNull()
             val arguments = argumentExpressions.map(::compileExpression)
@@ -4482,6 +4516,13 @@ private class FunctionCompiler(
         fields: Map<IrSimpleFunctionSymbol, GuestFieldLayout>,
     ): GuestFieldLayout? = fields[symbol] ?: symbol.owner.overriddenSymbols.firstNotNullOfOrNull { resolveFieldAccessor(it, fields) }
 
+    private fun projectFunctionId(symbol: IrSimpleFunctionSymbol): FunctionId? =
+        functionIds[symbol]
+            ?: symbol.owner
+                .takeIf { it.origin == IrDeclarationOrigin.FAKE_OVERRIDE && it.correspondingPropertySymbol != null }
+                ?.overriddenSymbols
+                ?.firstNotNullOfOrNull(::projectFunctionId)
+
     private inline fun withLoopContext(
         context: LoopContext,
         action: () -> Unit,
@@ -4812,6 +4853,9 @@ private fun IrExpression.constructorReferenceTarget(): IrConstructorSymbol? =
         is IrFunctionReference -> ((reflectionTarget?.owner ?: symbol.owner) as? IrConstructor)?.symbol
         else -> null
     }
+
+private fun IrSimpleFunction.isDirectFieldAccessor(): Boolean =
+    origin == IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR && modality == Modality.FINAL && overriddenSymbols.isEmpty()
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureSource> {
