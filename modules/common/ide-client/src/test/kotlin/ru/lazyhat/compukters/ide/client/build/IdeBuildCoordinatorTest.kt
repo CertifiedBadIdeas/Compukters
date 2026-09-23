@@ -299,9 +299,11 @@ private class ControlledCompilationService : ClientCompilationService {
     var cancelCalls = 0
 
     override fun build(input: ClientBuildSnapshot): CompletableFuture<ClientBuildResult> {
+        val future = CompletableFuture<ClientBuildResult>()
         synchronized(inputs) { inputs += input }
+        futures.addLast(future)
         submitted.add(input)
-        return CompletableFuture<ClientBuildResult>().also(futures::addLast)
+        return future
     }
 
     fun awaitInput(): ClientBuildSnapshot = requireNotNull(submitted.poll(5, TimeUnit.SECONDS))
