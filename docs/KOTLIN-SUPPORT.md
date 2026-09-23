@@ -682,6 +682,12 @@ and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters
   the independent Create addon `check`, and its packaged Guest API bundle. See
   [Create logistics](https://certifiedbadideas.github.io/Compukters/CREATE-LOGISTICS/).
 
+- [x] **Create steam boiler on Minecraft 1.21.1** — the optional `create` addon exposes adjacent or named active
+  boilers through `Boilers`. Programs read water supply in mB/t, its 0–18 water level, active heat, effective boiler
+  level, and passive-heating status. Handles stay bound to the selected Fluid Tank segment and controller. Evidence:
+  `BoilerHostStateTest`, the independent Create addon `check`, and its packaged Guest API bundle. See
+  [Create boilers](https://certifiedbadideas.github.io/Compukters/CREATE-BOILERS/).
+
 - [x] **Addon Guest API bundles** — a loader integration can register one bounded, versioned Kotlin metadata/source
   bundle under its addon ID, with exact capability schemas and intrinsic bindings kept internal. The server is the
   authority for availability; compiler and IDE workers accept only the exact advertised bytes and content hash, reject

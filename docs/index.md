@@ -40,7 +40,7 @@ use semantic editing and analysis, then deploy verified programs into a determin
 - **Guest Kotlin author:** check the exact [Kotlin support matrix](https://certifiedbadideas.github.io/Compukters/KOTLIN-SUPPORT/) before relying on a language or library feature.
 - **Automation builder:** learn the local-side model in [Redstone GPIO](https://certifiedbadideas.github.io/Compukters/REDSTONE/).
 - **Dashboard builder:** write to an independent in-world [Text display](https://certifiedbadideas.github.io/Compukters/DISPLAY/) beside the computer or over peripheral cables.
-- **Create engineer:** connect and name kinetic devices with the [Create kinetics API](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/), or inspect Stock Tickers and request packages with [Create logistics](https://certifiedbadideas.github.io/Compukters/CREATE-LOGISTICS/).
+- **Create engineer:** connect and name kinetic devices with the [Create kinetics API](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/), inspect Stock Tickers with [Create logistics](https://certifiedbadideas.github.io/Compukters/CREATE-LOGISTICS/), or monitor a [steam boiler](https://certifiedbadideas.github.io/Compukters/CREATE-BOILERS/).
 - **Addon developer:** expose a typed Guest Kotlin module from an independent mod with the [Addon SDK](https://certifiedbadideas.github.io/Compukters/ADDON-DEVELOPMENT/).
 - **Following development:** see the continuous [Changelog](https://certifiedbadideas.github.io/Compukters/CHANGELOG/).
 - **Contributor:** start with [Architecture](https://certifiedbadideas.github.io/Compukters/ARCHITECTURE/) and [Verification](https://certifiedbadideas.github.io/Compukters/VERIFICATION/).

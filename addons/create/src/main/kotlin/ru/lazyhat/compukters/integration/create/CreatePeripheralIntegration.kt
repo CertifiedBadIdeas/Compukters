@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.integration.create
 
+import com.simibubi.create.content.fluids.tank.BoilerData
+import com.simibubi.create.content.fluids.tank.FluidTankBlockEntity
 import com.simibubi.create.content.kinetics.gauge.SpeedGaugeBlockEntity
 import com.simibubi.create.content.kinetics.gauge.StressGaugeBlockEntity
 import com.simibubi.create.content.kinetics.speedController.SpeedControllerBlockEntity
@@ -65,7 +67,7 @@ object CreatePeripheralIntegration {
     }
 
     private fun resolvePeripheral(contact: CompuktersPeripheralContact): CompuktersPeripheralDevice? =
-        when (contact.level.getBlockEntity(contact.position)) {
+        when (val entity = contact.level.getBlockEntity(contact.position)) {
             is SpeedGaugeBlockEntity -> {
                 CompuktersPeripheralDevice(contact.position, PeripheralKind.SPEEDOMETER.deviceKey)
             }
@@ -80,6 +82,14 @@ object CreatePeripheralIntegration {
 
             is StockTickerBlockEntity -> {
                 CompuktersPeripheralDevice(contact.position, PeripheralKind.STOCK_TICKER.deviceKey)
+            }
+
+            is FluidTankBlockEntity -> {
+                if (boilerController(contact.level, entity) != null) {
+                    CompuktersPeripheralDevice(contact.position, PeripheralKind.BOILER.deviceKey)
+                } else {
+                    null
+                }
             }
 
             else -> {
@@ -185,6 +195,16 @@ object CreatePeripheralIntegration {
                 }
             }
 
+            is FluidTankBlockEntity -> {
+                if (kind == PeripheralKind.BOILER) {
+                    boilerController(level, entity)?.let { controller ->
+                        BoilerEndpoint(level, position, entity, controller, reachable)
+                    }
+                } else {
+                    null
+                }
+            }
+
             else -> {
                 null
             }
@@ -268,6 +288,20 @@ internal class CreateHostState(
     override fun acquireStockTicker(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.STOCK_TICKER)
 
     override fun acquireStockTickerByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.STOCK_TICKER)
+
+    override fun acquire(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.BOILER)
+
+    override fun acquireByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.BOILER)
+
+    override fun waterSupply(argument0: Int): AddonCallResult<Float> = withEndpoint<BoilerAccess, Float>(argument0) { it.waterSupply() }
+
+    override fun waterLevel(argument0: Int): AddonCallResult<Int> = withEndpoint<BoilerAccess, Int>(argument0) { it.waterLevel() }
+
+    override fun heatLevel(argument0: Int): AddonCallResult<Int> = withEndpoint<BoilerAccess, Int>(argument0) { it.heatLevel() }
+
+    override fun level(argument0: Int): AddonCallResult<Int> = withEndpoint<BoilerAccess, Int>(argument0) { it.level() }
+
+    override fun isPassive(argument0: Int): AddonCallResult<Boolean> = withEndpoint<BoilerAccess, Boolean>(argument0) { it.isPassive() }
 
     override fun snapshot(argument0: Int): AddonCallResult<Int> {
         val endpoint = endpoint<StockTickerAccess>(argument0) ?: return endpointFailure()
@@ -362,10 +396,10 @@ internal class CreateHostState(
             resolveSide(side, kind)
                 ?: return addonFailed(
                     HostFailureKind.UNAVAILABLE,
-                    if (kind == PeripheralKind.STOCK_TICKER) {
-                        "No Create Stock Ticker is attached on that side"
-                    } else {
-                        "No matching Create kinetic device is attached on that side"
+                    when (kind) {
+                        PeripheralKind.STOCK_TICKER -> "No Create Stock Ticker is attached on that side"
+                        PeripheralKind.BOILER -> "No active Create boiler is attached on that side"
+                        else -> "No matching Create kinetic device is attached on that side"
                     },
                 )
         return retain(endpoint)
@@ -382,7 +416,11 @@ internal class CreateHostState(
 
     private fun retain(endpoint: CreateDeviceEndpoint): AddonCallResult<Int> {
         val existing = handlesByEndpoint[endpoint.identity]
-        if (existing != null) return addonCompleted(existing)
+        if (existing != null) {
+            val retained = handles[existing]
+            if (retained != null && retained.valid()) return addonCompleted(existing)
+            if (retained != null) removeEndpoint(retained) else handlesByEndpoint.remove(endpoint.identity)
+        }
         if (handles.size >= MAXIMUM_HANDLES) {
             return addonFailed(HostFailureKind.UNAVAILABLE, "Create kinetic device handle limit was reached")
         }
@@ -430,7 +468,11 @@ internal class CreateHostState(
         removeEndpoint(endpoint)
         return addonFailed(
             HostFailureKind.INPUT_OUTPUT,
-            if (endpoint is StockTickerAccess) STALE_STOCK_TICKER_DETAIL else STALE_PERIPHERAL_DETAIL,
+            when (endpoint) {
+                is StockTickerAccess -> STALE_STOCK_TICKER_DETAIL
+                is BoilerAccess -> STALE_BOILER_DETAIL
+                else -> STALE_PERIPHERAL_DETAIL
+            },
         )
     }
 
@@ -484,6 +526,7 @@ internal enum class PeripheralKind {
     STRESSOMETER,
     ROTATION_CONTROLLER,
     STOCK_TICKER,
+    BOILER,
     ;
 
     val deviceKey: String
@@ -521,6 +564,18 @@ internal interface RotationControllerAccess : CreateDeviceEndpoint {
     fun targetSpeed(): Int
 
     fun setTargetSpeed(speed: Int): Int
+}
+
+internal interface BoilerAccess : CreateDeviceEndpoint {
+    fun waterSupply(): Float
+
+    fun waterLevel(): Int
+
+    fun heatLevel(): Int
+
+    fun level(): Int
+
+    fun isPassive(): Boolean
 }
 
 private abstract class BoundCreateEndpoint<T : BlockEntity>(
@@ -592,6 +647,67 @@ private class StockTickerEndpoint(
     }
 }
 
+private class BoilerEndpoint(
+    level: ServerLevel,
+    position: BlockPos,
+    entity: FluidTankBlockEntity,
+    private val controller: FluidTankBlockEntity,
+    reachable: () -> Boolean,
+) : BoundCreateEndpoint<FluidTankBlockEntity>(level, position, entity, reachable),
+    BoilerAccess {
+    private val originalSize = controller.getTotalTankSize()
+    private val originalWidth = controller.getWidth()
+    private val originalHeight = controller.getHeight()
+
+    override fun valid(): Boolean =
+        super.valid() &&
+            level.hasChunkAt(controller.blockPos) &&
+            !controller.isRemoved &&
+            level.getBlockEntity(controller.blockPos) === controller &&
+            entity.getControllerBE() === controller &&
+            controller.getTotalTankSize() == originalSize &&
+            controller.getWidth() == originalWidth &&
+            controller.getHeight() == originalHeight &&
+            controller.boiler.isActive
+
+    override fun waterSupply(): Float = controller.boiler.waterSupply
+
+    override fun waterLevel(): Int = controller.boiler.getMaxHeatLevelForWaterSupply()
+
+    override fun heatLevel(): Int = displayHeatLevel(controller.boiler)
+
+    override fun level(): Int = activeBoilerLevel(controller.boiler, originalSize)
+
+    override fun isPassive(): Boolean = passiveBoilerStatus(controller.boiler, originalSize)
+}
+
+internal fun activeBoilerLevel(
+    boiler: BoilerData,
+    tankSize: Int,
+): Int =
+    minOf(
+        boiler.activeHeat,
+        boiler.getMaxHeatLevelForWaterSupply(),
+        boiler.getMaxHeatLevelForBoilerSize(tankSize),
+    )
+
+internal fun displayHeatLevel(boiler: BoilerData): Int = if (boiler.passiveHeat) 1 else boiler.activeHeat
+
+internal fun passiveBoilerStatus(
+    boiler: BoilerData,
+    tankSize: Int,
+): Boolean = boiler.isPassive(tankSize)
+
+private fun boilerController(
+    level: ServerLevel,
+    tank: FluidTankBlockEntity,
+): FluidTankBlockEntity? {
+    val controllerPosition = tank.getController()
+    if (!level.hasChunkAt(controllerPosition)) return null
+    val controller = level.getBlockEntity(controllerPosition) as? FluidTankBlockEntity ?: return null
+    return controller.takeIf { it.isController && it.boiler.isActive && tank.getControllerBE() === it }
+}
+
 private class TickerStockEntry(
     private val ticker: StockTickerBlockEntity,
     private val stack: ItemStack,
@@ -620,6 +736,7 @@ private const val MAXIMUM_ITEM_ID_BYTES = 256
 private const val MAXIMUM_DISPLAY_NAME_LENGTH = 128
 private const val STALE_PERIPHERAL_DETAIL = "Create kinetic device was removed, replaced, disconnected, or unloaded"
 private const val STALE_STOCK_TICKER_DETAIL = "Create Stock Ticker was removed, replaced, disconnected, or unloaded"
+private const val STALE_BOILER_DETAIL = "Create boiler was removed, reconfigured, disconnected, or unloaded"
 
 internal fun latchingValidity(check: () -> Boolean): () -> Boolean {
     var valid = true
