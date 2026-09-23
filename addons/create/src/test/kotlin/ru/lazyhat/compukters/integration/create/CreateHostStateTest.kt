@@ -34,14 +34,14 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-class KineticsHostStateTest {
+class CreateHostStateTest {
     @Test
     fun `named acquisition routes every kinetic type and shares handles with side acquisition`() {
         val speedometer = FakeSpeedometer(16f)
         val stressometer = FakeStressometer(4f, 8f)
         val controller = FakeController()
         val state =
-            KineticsHostState(
+            CreateHostState(
                 resolveSide = { side, kind ->
                     speedometer.takeIf { side == 0 && kind == PeripheralKind.SPEEDOMETER }
                 },
@@ -53,8 +53,8 @@ class KineticsHostStateTest {
                             "governor" to PeripheralKind.ROTATION_CONTROLLER -> controller
                             else -> null
                         }
-                    endpoint?.let(KineticsNamedResolution::Found)
-                        ?: KineticsNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "missing")
+                    endpoint?.let(CreateNamedResolution::Found)
+                        ?: CreateNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "missing")
                 },
             )
         val host = CreateAddonContract.host(state)
@@ -70,13 +70,13 @@ class KineticsHostStateTest {
     fun `named acquisition preserves lookup failures without retaining a handle`() {
         val failures =
             mapOf(
-                "missing" to KineticsNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "missing device"),
-                "ambiguous" to KineticsNamedResolution.Failed(HostFailureKind.OTHER, "ambiguous device"),
-                "invalid name" to KineticsNamedResolution.Failed(HostFailureKind.OTHER, "invalid name"),
-                "unloaded" to KineticsNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "unloaded device"),
+                "missing" to CreateNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "missing device"),
+                "ambiguous" to CreateNamedResolution.Failed(HostFailureKind.OTHER, "ambiguous device"),
+                "invalid name" to CreateNamedResolution.Failed(HostFailureKind.OTHER, "invalid name"),
+                "unloaded" to CreateNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "unloaded device"),
             )
         val state =
-            KineticsHostState(
+            CreateHostState(
                 resolveSide = { _, _ -> null },
                 resolveName = { name, _ -> checkNotNull(failures[name]) },
             )
@@ -90,7 +90,7 @@ class KineticsHostStateTest {
     @Test
     fun `speedometer handle is stable and its Float wait completes after a change`() {
         val speedometer = FakeSpeedometer(16f)
-        val state = KineticsHostState { side, kind -> if (side == 0 && kind == PeripheralKind.SPEEDOMETER) speedometer else null }
+        val state = CreateHostState { side, kind -> if (side == 0 && kind == PeripheralKind.SPEEDOMETER) speedometer else null }
         val host = CreateAddonContract.host(state)
 
         val firstHandle = host.completed(0, 0).intValue()
@@ -115,7 +115,7 @@ class KineticsHostStateTest {
         val stressometer = FakeStressometer(4f, 8f)
         val controller = FakeController()
         val state =
-            KineticsHostState { side, kind ->
+            CreateHostState { side, kind ->
                 when (side to kind) {
                     2 to PeripheralKind.STRESSOMETER -> stressometer
                     1 to PeripheralKind.ROTATION_CONTROLLER -> controller
@@ -143,7 +143,7 @@ class KineticsHostStateTest {
         val first = FakeSpeedometer(16f)
         val second = FakeSpeedometer(32f)
         var current = first
-        val state = KineticsHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) current else null }
+        val state = CreateHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) current else null }
         val host = CreateAddonContract.host(state)
         val oldHandle = host.completed(0, 0).intValue()
         val wait = request(2, oldHandle, requestId = 12)
@@ -168,7 +168,7 @@ class KineticsHostStateTest {
     @Test
     fun `missing wrong and unknown attachments fail without selecting another device`() {
         val stressometer = FakeStressometer(4f, 8f)
-        val state = KineticsHostState { side, kind -> if (side == 3 && kind == PeripheralKind.STRESSOMETER) stressometer else null }
+        val state = CreateHostState { side, kind -> if (side == 3 && kind == PeripheralKind.STRESSOMETER) stressometer else null }
         val host = CreateAddonContract.host(state)
 
         assertEquals(
@@ -201,7 +201,7 @@ class KineticsHostStateTest {
     @Test
     fun `Float responses preserve non-finite values and signed zero changes`() {
         val speedometer = FakeSpeedometer(Float.POSITIVE_INFINITY)
-        val state = KineticsHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) speedometer else null }
+        val state = CreateHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) speedometer else null }
         val host = CreateAddonContract.host(state)
         val handle = host.completed(0, 0).intValue()
 
@@ -217,7 +217,7 @@ class KineticsHostStateTest {
 
     @Test
     fun `handle and wait limits are bounded and reset cancels retained state`() {
-        val state = KineticsHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) FakeSpeedometer(0f) else null }
+        val state = CreateHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) FakeSpeedometer(0f) else null }
         val host = CreateAddonContract.host(state)
         repeat(64) { assertIs<HostResponse.IntSuccess>(host.completed(0, 0)) }
         assertEquals(
@@ -227,7 +227,7 @@ class KineticsHostStateTest {
 
         host.reset()
         val speedometer = FakeSpeedometer(0f)
-        val waiting = KineticsHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) speedometer else null }
+        val waiting = CreateHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) speedometer else null }
         val waitingHost = CreateAddonContract.host(waiting)
         val handle = waitingHost.completed(0, 0).intValue()
         repeat(64) { requestId ->
