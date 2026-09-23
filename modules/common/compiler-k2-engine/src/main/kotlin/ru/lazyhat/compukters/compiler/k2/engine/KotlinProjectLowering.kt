@@ -3364,10 +3364,14 @@ private class FunctionCompiler(
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun compileCall(call: IrCall): RegisterId? {
-        if (call.superQualifierSymbol?.owner?.kind == ClassKind.INTERFACE) {
-            throw UnsupportedKotlinIr(call, "explicit super interface calls are not supported")
-        }
-        val target = call.symbol.owner
+        val interfaceSuper = call.superQualifierSymbol?.owner?.kind == ClassKind.INTERFACE
+        val target =
+            if (interfaceSuper) {
+                interfaceSuperBody(call.symbol.owner)
+                    ?: throw UnsupportedKotlinIr(call, "interface super call requires one concrete default body")
+            } else {
+                call.symbol.owner
+            }
         val targetName = target.fqNameWhenAvailable?.asString()
         if ((
                 targetName?.startsWith("kotlin.Function") == true ||
@@ -3547,6 +3551,9 @@ private class FunctionCompiler(
         compileCompareToPredicate(call, target.name.asString())?.let { return it }
         val targetId = projectFunctionId(target.symbol)
         if (targetId == null) {
+            if (interfaceSuper) {
+                throw UnsupportedKotlinIr(call, "interface super target is outside the project subset")
+            }
             val argumentExpressions = call.arguments.filterNotNull()
             val arguments = argumentExpressions.map(::compileExpression)
             return compileBuiltinCall(call, target, argumentExpressions, arguments)
@@ -3564,6 +3571,10 @@ private class FunctionCompiler(
             val owner = target.parent as? IrClass
             val instruction =
                 when {
+                    interfaceSuper -> {
+                        Instruction.Call(destination, FunctionRef.Local(targetId), arguments)
+                    }
+
                     owner?.kind == ClassKind.INTERFACE -> {
                         Instruction.CallInterface(destination, FunctionRef.Local(targetId), arguments)
                     }
@@ -3581,6 +3592,14 @@ private class FunctionCompiler(
         }
         if (target.returnType.isNothing()) emit(Instruction.Unreachable)
         return (destination as? Destination.Register)?.id
+    }
+
+    private fun interfaceSuperBody(function: IrSimpleFunction): IrSimpleFunction? {
+        if (function.body != null) return function
+        if (function.origin != IrDeclarationOrigin.FAKE_OVERRIDE) return null
+        val inherited = function.overriddenSymbols.map { interfaceSuperBody(it.owner) }
+        if (inherited.any { it == null }) return null
+        return inherited.filterNotNull().distinctBy { it.symbol }.singleOrNull()
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)

@@ -365,6 +365,15 @@ registerKotlinVmConformance(
     conformanceScenario = "interface-defaults",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinInterfaceSuperVmConformance",
+    taskDescription = "Executes qualified Guest interface super calls with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateInterfaceSuperConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-interface-super.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-interface-super-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_INTERFACE_SUPER_ARTIFACT",
+    conformanceScenario = "interface-super",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinMutableFieldsVmConformance",
     taskDescription = "Executes K2-lowered mutable Guest class fields with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateMutableFieldsConformanceArtifact",

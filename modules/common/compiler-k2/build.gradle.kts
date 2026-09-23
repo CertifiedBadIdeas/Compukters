@@ -315,6 +315,7 @@ val objectModelConformanceArtifact = layout.buildDirectory.file("generated/confo
 val propertyAccessorsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-property-accessors.cpkt")
 val abstractPropertiesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-abstract-properties.cpkt")
 val interfaceDefaultsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-interface-defaults.cpkt")
+val interfaceSuperConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-interface-super.cpkt")
 val classInitializationConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-class-initialization.cpkt")
 val mutableFieldsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-mutable-fields.cpkt")
 val functionValuesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-function-values.cpkt")
@@ -416,6 +417,22 @@ val generateInterfaceDefaultsConformanceArtifact = tasks.register<Test>("generat
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.interfaceDefaultsArtifact", interfaceDefaultsConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateInterfaceSuperConformanceArtifact = tasks.register<Test>("generateInterfaceSuperConformanceArtifact") {
+    description = "Compiles qualified Guest interface super calls for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*qualified interface super calls use direct default bodies*")
+    inputs.file(workerJar)
+    outputs.file(interfaceSuperConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.interfaceSuperArtifact", interfaceSuperConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
