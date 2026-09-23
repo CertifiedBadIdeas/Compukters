@@ -1028,8 +1028,11 @@ fn k2_int_loops_execute_across_quota_slices_without_host_io() {
         maximum_accepted_responses: 64,
         entry_argument_limits: entry_argument_limits(),
     };
-    let mut session = Session::admit(verified, profile, &[]).expect("K2 Int loops must admit");
-    session.start(&[]).expect("K2 Int loops must start");
+    let mut session = Session::admit(verified, profile.clone(), &[]).expect("K2 Int loops must admit");
+    let empty_arguments: [Box<[u16]>; 0] = [];
+    session
+        .start(&[EntryValue::StringArray(&empty_arguments)])
+        .expect("K2 Int loops must start");
     let mut exhausted_slices = 0;
 
     loop {
@@ -1044,6 +1047,27 @@ fn k2_int_loops_execute_across_quota_slices_without_host_io() {
         exhausted_slices > 0,
         "long Int loop must cross a quota boundary"
     );
+
+    let bytes = fs::read(std::env::var("COMPUKTER_KOTLIN_INT_LOOPS_ARTIFACT").unwrap())
+        .expect("K2 Int loops output must still exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("pinned VM must verify the invalid-step program");
+    let mut invalid =
+        Session::admit(verified, profile, &[]).expect("invalid-step program must admit");
+    let arguments = [vec![0x0078].into_boxed_slice()];
+    invalid
+        .start(&[EntryValue::StringArray(&arguments)])
+        .expect("invalid-step program must start");
+    loop {
+        match invalid
+            .advance(64, 16)
+            .expect("invalid-step program must advance")
+        {
+            AdvanceOutcome::SliceExhausted => {}
+            AdvanceOutcome::Crashed(GuestTrap::InvalidArgument) => break,
+            outcome => panic!("unexpected invalid-step outcome: {outcome:?}"),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]

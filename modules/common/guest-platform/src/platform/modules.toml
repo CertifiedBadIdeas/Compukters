@@ -12,7 +12,7 @@ sources = ["libraries/stdlib-core/**/*.kt"]
 
 [[module]]
 id = "stdlib:ranges"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = ["stdlib:core"]
 sources = ["libraries/stdlib-ranges/**/*.kt"]
 
