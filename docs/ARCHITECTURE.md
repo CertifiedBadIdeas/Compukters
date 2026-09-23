@@ -341,6 +341,10 @@ Interface method and computed property bodies use the same function records and 
 artifact admission the VM first searches the class inheritance chain, then chooses the most specific matching
 interface declaration. An abstract redeclaration suppresses an inherited default; missing or ambiguous concrete
 targets reject admission. Dispatch entries are shared by all VMs using the admitted execution image.
+An explicit `super<Interface>` call in an override resolves the concrete interface body at compile time and emits a
+direct call. If the named interface only inherits the body, K2's fake override resolves to that concrete ancestor.
+Abstract or ambiguous targets publish no artifact; the direct call retains the original receiver and skips the
+override's dynamic dispatch entry.
 A bound Guest instance-method reference evaluates its receiver once and stores that object in the closure. Its `invoke`
 method loads the stored receiver and uses the target method's static, virtual, or interface dispatch mode.
 An unbound instance-method reference has no receiver field; its first function parameter supplies the receiver for

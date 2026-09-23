@@ -30,6 +30,7 @@ fn main() {
         "property-accessors" => k2_property_accessors_preserve_backing_and_dispatch(),
         "abstract-properties" => k2_abstract_properties_dispatch_through_base_and_interface(),
         "interface-defaults" => k2_interface_defaults_preserve_override_precedence(),
+        "interface-super" => k2_interface_super_calls_direct_default_bodies(),
         "mutable-fields" => k2_mutable_class_fields_preserve_aliases_and_evaluation_order(),
         "class-initialization" => k2_class_initialization_preserves_source_and_super_order(),
         "function-values" => k2_function_values_preserve_distinct_captures_and_dispatch(),
@@ -154,6 +155,63 @@ fn k2_interface_defaults_preserve_override_precedence() {
             AdvanceOutcome::SliceExhausted => {}
             AdvanceOutcome::Halted(None) => break,
             outcome => panic!("unexpected K2 interface defaults outcome: {outcome:?}"),
+        }
+    }
+}
+
+fn k2_interface_super_calls_direct_default_bodies() {
+    let path = std::env::var("COMPUKTER_KOTLIN_INTERFACE_SUPER_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_INTERFACE_SUPER_ARTIFACT must be set for this conformance test");
+    let bytes = fs::read(path).expect("K2 interface super output must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("pinned VM must verify K2 interface super output");
+    let string_argument = [HostValueType::String];
+    let operations = [
+        OperationSchema::asynchronous(&[], HostValueType::String),
+        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
+        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
+    ];
+    let stdio = CapabilityBinding::new("compukter", "stdio", 1, 0, &operations);
+    let profile = ExecutionProfile {
+        heap_bytes: 1024 * 1024,
+        frame_storage_bytes: 1024 * 1024,
+        maximum_call_depth: 64,
+        maximum_coroutines: 1,
+        maximum_channels: 0,
+        maximum_channel_values: 0,
+        maximum_host_requests: 64,
+        maximum_events: 0,
+        maximum_slice_budget: u32::MAX,
+        compiler_abi: [0; 32],
+        platform_abi: [0; 32],
+        maximum_host_arguments: 16,
+        maximum_outbound_utf16_code_units: 4096,
+        maximum_inbound_utf16_code_units: 4096,
+        maximum_accepted_responses: 64,
+        entry_argument_limits: entry_argument_limits(),
+    };
+    let mut session = Session::admit(verified, profile, &[stdio])
+        .expect("K2 interface super program must admit");
+    session.start(&[]).expect("K2 interface super program must start");
+
+    for expected in ["12\n", "16\n", "4\n", "106\n", "21\n"] {
+        let value = utf16(expected);
+        let (task, write) = next_host_request_identity_with_budget(
+            &mut session,
+            "interface super println",
+            1,
+            Some(&value),
+            512,
+        );
+        session
+            .resume_for(task, write, HostResponse::Success(HostValueInput::Unit))
+            .expect("println must resume the interface super program");
+    }
+    loop {
+        match session.advance(512, 64).expect("K2 interface super program must finish") {
+            AdvanceOutcome::SliceExhausted => {}
+            AdvanceOutcome::Halted(None) => break,
+            outcome => panic!("unexpected K2 interface super outcome: {outcome:?}"),
         }
     }
 }

@@ -1381,6 +1381,65 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `qualified interface super calls use direct default bodies`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                interface Base {
+                    fun base(): Int = 10
+                    val value: Int get() = base() + 1
+                    var signal: Int
+                        get() = 0
+                        set(value) { println(value + 100) }
+                }
+                class Child : Base {
+                    override fun base(): Int = super<Base>.base() + 2
+                    override val value: Int get() = super<Base>.value + 3
+                    override var signal: Int
+                        get() = super<Base>.signal + 4
+                        set(value) { super<Base>.signal = value + 1 }
+                }
+                interface Ancestor { fun inherited(): Int = 20 }
+                interface Middle : Ancestor
+                class Descendant : Middle {
+                    override fun inherited(): Int = super<Middle>.inherited() + 1
+                }
+                fun main() {
+                    val child: Base = Child()
+                    println(child.base())
+                    println(child.value)
+                    println(child.signal)
+                    child.signal = 5
+                    println(Descendant().inherited())
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val application = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+            assertTrue(application.blocks.flatMap(Block::instructions).any { it is Instruction.Call })
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.interfaceSuperArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `qualified interface super call requires a concrete body`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                interface Base { fun value(): Int }
+                class Child : Base {
+                    override fun value(): Int = super<Base>.value()
+                }
+                fun main() { println(Child().value()) }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            assertNull(result.artifact)
+            assertTrue(result.diagnostics.any { it.severity.name == "ERROR" }, result.diagnostics.toString())
+        }
+
+    @Test
     fun `guest object subset rejects generic secondary defaulted uninitialized stateful and explicit cast shapes`() =
         withAdapter { adapter ->
             val unsupported =
@@ -1488,12 +1547,6 @@ class MinimalScriptLoweringTest {
                     "class Worker { suspend fun run() {} }\nfun main() {}" to "suspend functions are unsupported",
                     "class Box { fun <T> keep(value: T): T = value }\nfun main() { Box() }" to "generic instance methods",
                     "class Scope { fun String.sizeAgain(): Int = length }\nfun main() { Scope() }" to "member extension functions",
-                    """
-                    interface Base { fun value(): Int = 1 }
-                    class Child : Base { override fun value(): Int = super<Base>.value() + 1 }
-                    fun main() { println(Child().value()) }
-                    """.trimIndent() to
-                        "explicit super interface calls",
                 )
 
             unsupported.forEach { (source, message) ->

@@ -321,18 +321,23 @@ supported.
   classes may declare ordinary non-suspending methods, override class methods,
   and implement abstract interface methods. Calls through class and interface
   references select the runtime implementation. Generic or suspending methods,
-  member extensions, and explicit `super<Interface>` calls remain unsupported.
+  member extensions remain unsupported.
   Interface methods may have supported non-suspending bodies; an inherited
   default uses the most specific interface declaration unless a class overrides
-  it. Evidence:
+  it. An override may call a concrete interface body with `super<Interface>`,
+  including one inherited through that interface; the call bypasses dynamic
+  dispatch to the override. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `guest instance methods lower with deterministic owners flags and method ranges`
   and `guest instance methods reject unsupported callable shapes`, paired with
   the `testKotlinDispatchVmConformance` Kotlin-to-VM execution gate, and test
   `interface defaults lower to methods and computed accessors` paired with
-  `testKotlinInterfaceDefaultsVmConformance`.
+  `testKotlinInterfaceDefaultsVmConformance`, and test
+  `qualified interface super calls use direct default bodies` paired with
+  `testKotlinInterfaceSuperVmConformance`.
   Tracking: [#626](https://github.com/CertifiedBadIdeas/Compukters/issues/626)
-  and [#641](https://github.com/CertifiedBadIdeas/Compukters/issues/641).
+  [#641](https://github.com/CertifiedBadIdeas/Compukters/issues/641), and
+  [#642](https://github.com/CertifiedBadIdeas/Compukters/issues/642).
 
 - [ ] **Guest class initialization — Partial** — supported primary constructors
   initialize backed `val` and `var` properties, class-body properties, and `init`
@@ -372,10 +377,14 @@ supported.
   `abstract class and interface properties lower to dispatched accessors without fields`
   paired with `testKotlinAbstractPropertiesVmConformance`, and test
   `interface defaults lower to methods and computed accessors` paired with
-  `testKotlinInterfaceDefaultsVmConformance`.
+  `testKotlinInterfaceDefaultsVmConformance`. Qualified `super<Interface>`
+  getter and setter calls are covered by
+  `qualified interface super calls use direct default bodies` and
+  `testKotlinInterfaceSuperVmConformance`.
   Tracking: [#639](https://github.com/CertifiedBadIdeas/Compukters/issues/639),
   [#640](https://github.com/CertifiedBadIdeas/Compukters/issues/640), and
-  [#641](https://github.com/CertifiedBadIdeas/Compukters/issues/641).
+  [#641](https://github.com/CertifiedBadIdeas/Compukters/issues/641), and
+  [#642](https://github.com/CertifiedBadIdeas/Compukters/issues/642).
 
 - [ ] **Sealed interfaces, data classes, and stateless enums — Partial** — the
   admitted fixture lowers sealed result types, immutable data values, enum
