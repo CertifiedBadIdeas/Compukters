@@ -2920,7 +2920,7 @@ private class FunctionCompiler(
 
             is IrBlock -> {
                 if (statement.origin?.toString() == "FOR_LOOP") {
-                    compileIntForLoop(statement)
+                    compileForLoop(statement)
                 } else {
                     statement.statements.forEach(::compileStatement)
                 }
@@ -4407,6 +4407,64 @@ private class FunctionCompiler(
         currentBlock = exit
     }
 
+    private fun compileForLoop(block: IrBlock) {
+        val iterator = block.statements.firstOrNull() as? IrVariable
+        val iteratorCall = iterator?.initializer as? IrCall
+        if (iteratorCall?.targetFqName() == "kotlin.IntArray.iterator") {
+            compileIntArrayForLoop(block)
+        } else {
+            compileIntForLoop(block)
+        }
+    }
+
+    private fun compileIntArrayForLoop(block: IrBlock) {
+        val plan = intArrayForLoopPlan(block) ?: throw UnsupportedKotlinIr(block, "unsupported canonical IntArray for-loop shape")
+        val source = compileExpression(plan.array)
+        val array = allocate(valueType(plan.array.type, plan.array))
+        emit(Instruction.Move(array, source))
+        val length = allocate(ValueType.I32)
+        emit(Instruction.ArrayLength(length, array))
+        val index = allocate(ValueType.I32)
+        emit(Instruction.Move(index, emitI32Constant(0, block)))
+
+        val initialHasNext = allocate(ValueType.Bool)
+        emit(Instruction.Less(OrderedScalarValueType.I32, initialHasNext, index, length))
+        val initialBranchBlock = currentBlock
+        val initialBranchIndex = blocks[initialBranchBlock].instructions.size
+        val body = createBlock(loopHeader = true)
+        emit(Instruction.Branch(initialHasNext, blockId(body), blockId(body)))
+
+        currentBlock = body
+        val loopValue = allocate(ValueType.I32)
+        values[plan.canonical.loopVariable.symbol] = loopValue
+        emit(Instruction.ArrayLoad(loopValue, array, index))
+        val context = LoopContext(plan.canonical.loop, continueTarget = null, placeholderTarget = body)
+        withLoopContext(context) {
+            compileStatement(plan.canonical.body)
+        }
+
+        val condition = createBlock()
+        if (!isTerminated()) jumpTo(condition)
+        context.continueBlocks.forEach { patchJumpTarget(it, condition) }
+        currentBlock = condition
+        val next = allocate(ValueType.I32)
+        emit(Instruction.Add(next, index, emitI32Constant(1, block)))
+        emit(Instruction.Move(index, next))
+        val hasNext = allocate(ValueType.Bool)
+        emit(Instruction.Less(OrderedScalarValueType.I32, hasNext, index, length))
+        val repeatBranchBlock = currentBlock
+        val repeatBranchIndex = blocks[repeatBranchBlock].instructions.size
+        emit(Instruction.Branch(hasNext, blockId(body), blockId(body)))
+
+        val exit = createBlock()
+        blocks[initialBranchBlock].instructions[initialBranchIndex] =
+            Instruction.Branch(initialHasNext, blockId(body), blockId(exit))
+        blocks[repeatBranchBlock].instructions[repeatBranchIndex] =
+            Instruction.Branch(hasNext, blockId(body), blockId(exit))
+        context.breakBlocks.forEach { patchJumpTarget(it, exit) }
+        currentBlock = exit
+    }
+
     private fun compileIntForLoop(block: IrBlock) {
         val plan = intForLoopPlan(block) ?: throw UnsupportedKotlinIr(block, "unsupported canonical for-loop shape")
         val startValue = compileExpression(plan.start)
@@ -4514,6 +4572,28 @@ private class FunctionCompiler(
         val bounds = rangeCall.arguments.filterNotNull()
         if (bounds.size != 2 || bounds.any { it.type != intType }) return null
 
+        val canonical = canonicalIntForLoopBody(block, iterator) ?: return null
+        return IntForLoopPlan(canonical.loop, canonical.loopVariable, bounds[0], bounds[1], inclusive, descending, step, canonical.body)
+    }
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    private fun intArrayForLoopPlan(block: IrBlock): IntArrayForLoopPlan? {
+        if (block.statements.size != 2) return null
+        val iterator = block.statements[0] as? IrVariable ?: return null
+        if (iterator.origin.toString() != "FOR_LOOP_ITERATOR") return null
+        val iteratorCall = iterator.initializer as? IrCall ?: return null
+        if (iteratorCall.targetFqName() != "kotlin.IntArray.iterator") return null
+        val array = iteratorCall.arguments.filterNotNull().singleOrNull() ?: return null
+        if (!array.type.isExactClass(kotlinIntArrayClass)) return null
+        val canonical = canonicalIntForLoopBody(block, iterator) ?: return null
+        return IntArrayForLoopPlan(canonical, array)
+    }
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    private fun canonicalIntForLoopBody(
+        block: IrBlock,
+        iterator: IrVariable,
+    ): CanonicalIntForLoopBody? {
         val loop = block.statements[1] as? IrWhileLoop ?: return null
         if (loop.origin?.toString() != "FOR_LOOP_INNER_WHILE") return null
         val hasNext = loop.condition as? IrCall ?: return null
@@ -4530,7 +4610,7 @@ private class FunctionCompiler(
         val nextReceiver = nextCall.arguments.filterNotNull().singleOrNull() as? IrGetValue ?: return null
         if (nextReceiver.symbol !== iterator.symbol) return null
         val body = loopBody.statements[1] as? IrExpression ?: return null
-        return IntForLoopPlan(loop, loopVariable, bounds[0], bounds[1], inclusive, descending, step, body)
+        return CanonicalIntForLoopBody(loop, loopVariable, body)
     }
 
     private fun compileLoopJump(
@@ -4874,6 +4954,17 @@ private class FunctionCompiler(
                 else -> Instruction.Less(type, destination, value, bound)
             }
     }
+
+    private data class CanonicalIntForLoopBody(
+        val loop: IrWhileLoop,
+        val loopVariable: IrVariable,
+        val body: IrExpression,
+    )
+
+    private data class IntArrayForLoopPlan(
+        val canonical: CanonicalIntForLoopBody,
+        val array: IrExpression,
+    )
 }
 
 private fun IrType.isExactClass(symbol: IrClassSymbol): Boolean = (this as? IrSimpleType)?.classifier == symbol

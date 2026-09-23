@@ -1948,7 +1948,7 @@ class MinimalScriptLoweringTest {
             listOf(
                 "fun main() { IntArray(2) { it } }",
                 "fun main() { arrayOf(1, 2) }",
-                "fun main() { val values = intArrayOf(1); for (value in values) value + 1 }",
+                "fun main() { val values = intArrayOf(1); values.iterator() }",
                 "fun main() { val values = intArrayOf(1); values.indices }",
                 "fun main() { val values = intArrayOf(1); intArrayOf(*values) }",
                 "fun main() { LongArray(1) }",
@@ -1986,12 +1986,35 @@ class MinimalScriptLoweringTest {
                         val emptyLiteral = intArrayOf()
                         verify(empty.size, 0)
                         verify(emptyLiteral.size, 0)
+                        var emptyVisits = 0
+                        for (value in empty) emptyVisits = emptyVisits + value + 1
+                        verify(emptyVisits, 0)
 
                         val values = intArrayOf(marked(7), marked(11), marked(13))
                         verify(values.size, 3)
                         verify(values[0], 7)
                         values[1] = values[1] + values[2]
                         verify(values[1], 24)
+
+                        var selected = values
+                        var traversed = 0
+                        for (value in selected) {
+                            if (value == 7) {
+                                selected = intArrayOf(100)
+                                values[1] = 25
+                                continue
+                            }
+                            if (value == 13) break
+                            traversed = traversed + value
+                        }
+                        verify(traversed, 25)
+                        verify(selected[0], 100)
+
+                        var nested = 0
+                        for (outer in intArrayOf(1, 2)) {
+                            for (inner in values) nested = nested + outer * inner
+                        }
+                        verify(nested, 135)
 
                         val filled = IntArray(256)
                         var index = 0
@@ -2000,6 +2023,9 @@ class MinimalScriptLoweringTest {
                             index = index + 1
                         }
                         verify(filled[255], 255)
+                        var checksum = 0
+                        for (value in filled) checksum = checksum + value
+                        verify(checksum, 32640)
                     } else if (mode == 1) {
                         IntArray(-1)
                     } else if (mode == 2) {
