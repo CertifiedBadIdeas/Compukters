@@ -34,6 +34,48 @@ import kotlin.test.assertTrue
 
 class StockTickerHostStateTest {
     @Test
+    fun `item ID lookup finds later component variants without Guest-side scanning`() {
+        val ticker =
+            FakeTicker(
+                mutableListOf(
+                    FakeItem("minecraft:book", "Book", 12),
+                    FakeItem("minecraft:iron_ingot", "Iron Ingot", 8),
+                    FakeItem("minecraft:book", "Named Book", 3),
+                ),
+            )
+        val host = host(ticker)
+        val device = host.call(13, VmValue.I32(0)).intValue()
+        val snapshot = host.call(16, VmValue.I32(device)).intValue()
+
+        assertEquals(
+            HostResponse.IntSuccess(0),
+            host.call(22, VmValue.I32(snapshot), VmValue.StringValue("minecraft:book"), VmValue.I32(0)),
+        )
+        assertEquals(
+            HostResponse.IntSuccess(2),
+            host.call(22, VmValue.I32(snapshot), VmValue.StringValue("minecraft:book"), VmValue.I32(1)),
+        )
+        assertEquals(
+            HostResponse.IntSuccess(-1),
+            host.call(22, VmValue.I32(snapshot), VmValue.StringValue("minecraft:book"), VmValue.I32(3)),
+        )
+        assertEquals(
+            HostResponse.IntSuccess(-1),
+            host.call(22, VmValue.I32(snapshot), VmValue.StringValue("minecraft:stick"), VmValue.I32(0)),
+        )
+        assertEquals(
+            HostFailureKind.OTHER,
+            assertIs<HostResponse.Failure>(
+                host.call(22, VmValue.I32(snapshot), VmValue.StringValue("minecraft:book"), VmValue.I32(-1)),
+            ).kind,
+        )
+        assertEquals(
+            HostFailureKind.OTHER,
+            assertIs<HostResponse.Failure>(host.call(22, VmValue.I32(snapshot), VmValue.StringValue(""), VmValue.I32(0))).kind,
+        )
+    }
+
+    @Test
     fun `snapshot preserves variants and requests the selected one`() {
         val plain = FakeItem("minecraft:book", "Book", 12)
         val named = FakeItem("minecraft:book", "Named Book", 3)

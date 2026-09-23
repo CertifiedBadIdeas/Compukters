@@ -300,6 +300,19 @@ internal class CreateHostState(
         argument1: Int,
     ): AddonCallResult<Int> = withStockEntry(argument0, argument1) { addonCompleted(it.count) }
 
+    override fun findItem(
+        argument0: Int,
+        argument1: String,
+        argument2: Int,
+    ): AddonCallResult<Int> =
+        withSnapshot(argument0) { snapshot ->
+            when {
+                !validItemId(argument1) -> addonFailed(HostFailureKind.OTHER, "Create item ID is invalid")
+                argument2 < 0 -> addonFailed(HostFailureKind.OTHER, "Create stock search start index is negative")
+                else -> addonCompleted(snapshot.entries.indexOfFirstFrom(argument2) { it.itemId == argument1 })
+            }
+        }
+
     override fun closeSnapshot(argument0: Int): AddonCallResult<Unit> {
         snapshots.remove(argument0)
         return addonCompleted(Unit)
@@ -453,6 +466,19 @@ internal interface StockTickerAccess : CreateDeviceEndpoint {
 private fun validPackageAddress(address: String): Boolean =
     address.isNotBlank() && address.toByteArray(Charsets.UTF_8).size <= MAXIMUM_ADDRESS_BYTES && address.none(Char::isISOControl)
 
+private fun validItemId(itemId: String): Boolean =
+    itemId.isNotBlank() && itemId.toByteArray(Charsets.UTF_8).size <= MAXIMUM_ITEM_ID_BYTES && itemId.none(Char::isISOControl)
+
+private inline fun <T> List<T>.indexOfFirstFrom(
+    fromIndex: Int,
+    predicate: (T) -> Boolean,
+): Int {
+    for (index in fromIndex until size) {
+        if (predicate(this[index])) return index
+    }
+    return -1
+}
+
 internal enum class PeripheralKind {
     SPEEDOMETER,
     STRESSOMETER,
@@ -590,6 +616,7 @@ private const val MAXIMUM_STOCK_SNAPSHOTS = 4
 private const val MAXIMUM_STOCK_ENTRIES = 256
 private const val MAXIMUM_REQUEST_QUANTITY = 4_096
 private const val MAXIMUM_ADDRESS_BYTES = 64
+private const val MAXIMUM_ITEM_ID_BYTES = 256
 private const val MAXIMUM_DISPLAY_NAME_LENGTH = 128
 private const val STALE_PERIPHERAL_DETAIL = "Create kinetic device was removed, replaced, disconnected, or unloaded"
 private const val STALE_STOCK_TICKER_DETAIL = "Create Stock Ticker was removed, replaced, disconnected, or unloaded"
