@@ -70,10 +70,23 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ProgramRuntimeActorProcessorTest {
+    @Test
+    fun `expired queued turn without retired work is not a host deadline overrun`() {
+        val processor = ProgramRuntimeActorProcessor(ProgramRuntimeHost())
+        try {
+            val reply = processor.advance(ProgramRuntimeTickPermit(ProgramRuntimeRequestId(1), 0, 1, deadlineNanos = 1))
+            assertEquals(0, reply.retiredInstructions)
+            assertFalse(reply.hostDeadlineMissed)
+        } finally {
+            processor.close()
+        }
+    }
+
     @Test
     fun `addon actor batches are owned unique and bounded`() {
         val mutable =

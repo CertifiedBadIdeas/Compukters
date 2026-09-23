@@ -333,6 +333,7 @@ internal object VmBenchmarkCommands {
             "pumpLastUs=${metrics.lastPumpNanos / 1_000}, " +
             "mailboxRejected=${metrics.scheduler.mailboxFullRejections - baseline.scheduler.mailboxFullRejections}, " +
             "permitRejected=${metrics.scheduler.permitPendingRejections - baseline.scheduler.permitPendingRejections}" +
+            metrics.latencyPercentiles() +
             metrics.capacitySummary() +
             capacityDetails
     }
@@ -388,8 +389,17 @@ internal object VmBenchmarkCommands {
             "inputCoalesced=${metrics.coalescedRedstoneInputs - baseline.coalescedRedstoneInputs}, " +
             "mailboxRejected=${metrics.scheduler.mailboxFullRejections - baseline.scheduler.mailboxFullRejections}, " +
             "permitRejected=${metrics.scheduler.permitPendingRejections - baseline.scheduler.permitPendingRejections}" +
+            metrics.latencyPercentiles() +
             metrics.capacitySummary()
     }
+
+    private fun ProgramRuntimeActorMetrics.latencyPercentiles(): String =
+        ", queueP50Us=${scheduler.queueLatencyMedianNanos / 1_000}, " +
+            "queueP95Us=${scheduler.queueLatencyP95Nanos / 1_000}, " +
+            "executionP50Us=${scheduler.executionLatencyMedianNanos / 1_000}, " +
+            "executionP95Us=${scheduler.executionLatencyP95Nanos / 1_000}, " +
+            "resultP50Us=${scheduler.resultLatencyMedianNanos / 1_000}, " +
+            "resultP95Us=${scheduler.resultLatencyP95Nanos / 1_000}"
 
     private fun ProgramRuntimeActorMetrics.capacitySummary(): String =
         ", capacity=$currentInstructionCapacity/$calibratedInstructionCapacity instructions/tick, " +

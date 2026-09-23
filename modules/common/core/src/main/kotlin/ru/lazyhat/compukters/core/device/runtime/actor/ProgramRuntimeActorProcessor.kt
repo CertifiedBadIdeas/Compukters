@@ -69,7 +69,7 @@ internal class ProgramRuntimeActorProcessor(
             }
         val retired = if (reply.value is ProgramRuntimeActorValue.Rejected) 0 else host.retiredInstructionsLastTick
         val missed =
-            permit.retirementAllowance > 0 &&
+            retired > 0 &&
                 permit.deadlineNanos != Long.MAX_VALUE &&
                 System.nanoTime() - permit.deadlineNanos >= 0
         return reply.copy(retiredInstructions = retired, hostDeadlineMissed = missed)

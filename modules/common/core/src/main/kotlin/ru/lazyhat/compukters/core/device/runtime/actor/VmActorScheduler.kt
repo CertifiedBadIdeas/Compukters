@@ -61,8 +61,10 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
     private val processedPermits = AtomicLong()
     private val totalQueueLatencyNanos = AtomicLong()
     private val maximumQueueLatencyNanos = AtomicLong()
+    private val queueLatencyHistogram = VmActorLatencyHistogram()
     private val totalExecutionNanos = AtomicLong()
     private val maximumExecutionNanos = AtomicLong()
+    private val executionLatencyHistogram = VmActorLatencyHistogram()
     private val mailboxFullRejections = AtomicLong()
     private val permitPendingRejections = AtomicLong()
     private val staleEndpointRejections = AtomicLong()
@@ -70,6 +72,7 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
     private val drainedEvents = AtomicLong()
     private val totalResultLatencyNanos = AtomicLong()
     private val maximumResultLatencyNanos = AtomicLong()
+    private val resultLatencyHistogram = VmActorLatencyHistogram()
     private val drainCursor = AtomicInteger()
     private val workers =
         List(config.workerCount) { index ->
@@ -250,6 +253,7 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
                 val latency = (System.nanoTime() - queued.completedAtNanos).coerceAtLeast(0)
                 latencyTotal += latency
                 latencyMaximum = maxOf(latencyMaximum, latency)
+                resultLatencyHistogram.record(latency)
                 drained += queued.event
                 emptyLanes = 0
             }
@@ -261,8 +265,11 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
         return drained
     }
 
-    fun metrics(): VmActorSchedulerMetrics =
-        VmActorSchedulerMetrics(
+    fun metrics(): VmActorSchedulerMetrics {
+        val queueLatency = queueLatencyHistogram.snapshot()
+        val executionLatency = executionLatencyHistogram.snapshot()
+        val resultLatency = resultLatencyHistogram.snapshot()
+        return VmActorSchedulerMetrics(
             maximumActors = config.maximumActors,
             registeredActors = registeredActors.get(),
             scheduledActors = scheduledActors.get(),
@@ -285,7 +292,14 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
             drainedEvents = drainedEvents.get(),
             totalResultLatencyNanos = totalResultLatencyNanos.get(),
             maximumResultLatencyNanos = maximumResultLatencyNanos.get(),
+            queueLatencyMedianNanos = queueLatency.medianNanos,
+            queueLatencyP95Nanos = queueLatency.p95Nanos,
+            executionLatencyMedianNanos = executionLatency.medianNanos,
+            executionLatencyP95Nanos = executionLatency.p95Nanos,
+            resultLatencyMedianNanos = resultLatency.medianNanos,
+            resultLatencyP95Nanos = resultLatency.p95Nanos,
         )
+    }
 
     override fun close() {
         if (!accepting.compareAndSet(true, false)) return
@@ -373,6 +387,7 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
                 } ?: return@repeat
             val queueLatency = (System.nanoTime() - action.enqueuedAtNanos).coerceAtLeast(0)
             totalQueueLatencyNanos.addAndGet(queueLatency)
+            queueLatencyHistogram.record(queueLatency)
             maximumQueueLatencyNanos.accumulateAndGet(queueLatency) { previous, current -> maxOf(previous, current) }
             val startedAt = System.nanoTime()
             val result =
@@ -402,6 +417,7 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
                         }
                     }
                     totalExecutionNanos.addAndGet(elapsed)
+                    executionLatencyHistogram.record(elapsed)
                     maximumExecutionNanos.accumulateAndGet(elapsed) { previous, current -> maxOf(previous, current) }
                 }
             if (result != null) {

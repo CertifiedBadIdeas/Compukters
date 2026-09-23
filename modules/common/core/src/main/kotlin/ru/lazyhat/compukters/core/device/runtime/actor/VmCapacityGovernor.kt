@@ -58,6 +58,8 @@ class VmCapacityGovernor(
         private set
     var measuredWorkers: Int = 0
         private set
+    val minimumCapacity: Long
+        get() = minOf(calibratedCapacity, config.fallbackCapacity)
     val hostTimeBudgetNanos: Long =
         BigInteger
             .valueOf(config.tickNanos)
@@ -106,7 +108,7 @@ class VmCapacityGovernor(
         if (deadlineOverrun) {
             headroomStreak = 0
             if (++overrunStreak >= OVERRUN_TICKS) {
-                currentCapacity = (currentCapacity - maxOf(1, currentCapacity / 5)).coerceAtLeast(1)
+                currentCapacity = (currentCapacity - maxOf(1, currentCapacity / 5)).coerceAtLeast(minimumCapacity)
                 overrunStreak = 0
             }
         } else {

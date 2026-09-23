@@ -107,6 +107,12 @@ data class VmActorSchedulerMetrics(
     val drainedEvents: Long,
     val totalResultLatencyNanos: Long,
     val maximumResultLatencyNanos: Long,
+    val queueLatencyMedianNanos: Long = 0,
+    val queueLatencyP95Nanos: Long = 0,
+    val executionLatencyMedianNanos: Long = 0,
+    val executionLatencyP95Nanos: Long = 0,
+    val resultLatencyMedianNanos: Long = 0,
+    val resultLatencyP95Nanos: Long = 0,
 )
 
 data class ProgramRuntimeActorMetrics(
