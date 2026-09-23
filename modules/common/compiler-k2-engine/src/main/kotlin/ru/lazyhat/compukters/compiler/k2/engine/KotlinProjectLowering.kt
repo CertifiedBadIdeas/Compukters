@@ -2376,10 +2376,16 @@ internal object KotlinProjectLowering {
             if (declaredProperties.any { property ->
                     property.backingField == null &&
                         property.origin == IrDeclarationOrigin.DEFINED &&
-                        (property.getter?.body == null || (property.isVar && property.setter?.body == null))
+                        (
+                            (property.getter?.body == null && property.getter?.modality != Modality.ABSTRACT) ||
+                                (
+                                    property.isVar && property.setter?.body == null &&
+                                        property.setter?.modality != Modality.ABSTRACT
+                                )
+                        )
                 }
             ) {
-                throw UnsupportedKotlinIr(declaration, "abstract properties are not supported")
+                throw UnsupportedKotlinIr(declaration, "property accessor body is missing")
             }
             val properties = declaredProperties.filter { it.backingField != null }
             if (parameters.any { it.defaultValue != null }) {

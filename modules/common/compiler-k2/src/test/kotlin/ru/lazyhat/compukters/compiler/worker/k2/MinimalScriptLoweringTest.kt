@@ -1264,7 +1264,70 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `guest object subset rejects generic secondary defaulted uninitialized abstract stateful and explicit cast shapes`() =
+    fun `abstract class and interface properties lower to dispatched accessors without fields`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                abstract class Counter {
+                    abstract var value: Int
+                    abstract val label: Int
+                    fun increment() { value = value + 1 }
+                }
+                class Backed(override var value: Int) : Counter() {
+                    override val label: Int get() = value * 10
+                }
+                interface Reading {
+                    val magnitude: Int
+                    var stamp: Int
+                }
+                class Device(var raw: Int) : Reading {
+                    override val magnitude: Int get() = raw * 2
+                    override var stamp: Int = 0
+                }
+                class Adapted : Reading {
+                    var state = 0
+                    override val magnitude: Int get() = state * 3
+                    override var stamp: Int
+                        get() = state
+                        set(value) { state = value + 1 }
+                }
+                fun main() {
+                    val counter: Counter = Backed(2)
+                    println(counter.value)
+                    counter.increment()
+                    println(counter.value)
+                    println(counter.label)
+                    val reading: Reading = Device(4)
+                    println(reading.magnitude)
+                    reading.stamp = 7
+                    println(reading.stamp)
+                    val adapted: Reading = Adapted()
+                    adapted.stamp = 5
+                    println(adapted.stamp)
+                    println(adapted.magnitude)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val application = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+            val counter =
+                application.types.filterIsInstance<NominalType.Class>().single { type ->
+                    application.strings[type.name.value.toInt()].toString() == "Counter"
+                }
+            val reading =
+                application.types.filterIsInstance<NominalType.Interface>().single { type ->
+                    application.strings[type.name.value.toInt()].toString() == "Reading"
+                }
+            assertEquals(0u, counter.fieldCount)
+            assertEquals(3u, reading.methodCount)
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.abstractPropertiesArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `guest object subset rejects generic secondary defaulted uninitialized interface body stateful and explicit cast shapes`() =
         withAdapter { adapter ->
             val unsupported =
                 listOf(
@@ -1272,7 +1335,7 @@ class MinimalScriptLoweringTest {
                     "class Secondary(val value: Int) { constructor() : this(0) }\nfun main() { Secondary() }",
                     "class Defaulted(val value: Int = 1)\nfun main() { Defaulted() }",
                     "class Uninitialized { lateinit var value: String }\nfun main() { Uninitialized() }",
-                    "abstract class Abstract { abstract val value: Int }\nclass Concrete : Abstract() { override val value: Int get() = 1 }\nfun main() { Concrete().value }",
+                    "interface DefaultProperty { val value: Int get() = 1 }\nclass Concrete : DefaultProperty\nfun main() { Concrete().value }",
                     "enum class Stateful(val code: Int) { ONE(1) }\nfun main() { Stateful.ONE }",
                     "sealed interface Value\ndata class NumberValue(val value: Int) : Value\nfun read(value: Value): Int = (value as NumberValue).value\nfun main() { read(NumberValue(1)) }",
                 )

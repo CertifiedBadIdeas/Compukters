@@ -334,6 +334,9 @@ Source-defined class getters and setters lower as ordinary non-suspending instan
 use the existing virtual dispatch table. A computed property has no managed field; `field` inside a backed accessor
 lowers to verified `field_get` or `field_set` on its receiver. Non-overriding final default accessors retain direct
 field access.
+Abstract class and interface properties contribute getter and setter method signatures without managed fields.
+Implementing classes provide backed or computed accessors, selected through the existing virtual or interface call
+instruction when the property is used through a base reference.
 A bound Guest instance-method reference evaluates its receiver once and stores that object in the closure. Its `invoke`
 method loads the stored receiver and uses the target method's static, virtual, or interface dispatch mode.
 An unbound instance-method reference has no receiver field; its first function parameter supplies the receiver for

@@ -313,6 +313,7 @@ val floatConformanceArtifact = layout.buildDirectory.file("generated/conformance
 val dispatchConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-dispatch.cpkt")
 val objectModelConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-object-model.cpkt")
 val propertyAccessorsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-property-accessors.cpkt")
+val abstractPropertiesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-abstract-properties.cpkt")
 val classInitializationConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-class-initialization.cpkt")
 val mutableFieldsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-mutable-fields.cpkt")
 val functionValuesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-function-values.cpkt")
@@ -382,6 +383,22 @@ val generatePropertyAccessorsConformanceArtifact = tasks.register<Test>("generat
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.propertyAccessorsArtifact", propertyAccessorsConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateAbstractPropertiesConformanceArtifact = tasks.register<Test>("generateAbstractPropertiesConformanceArtifact") {
+    description = "Compiles abstract Guest class and interface properties for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*abstract class and interface properties lower to dispatched accessors without fields*")
+    inputs.file(workerJar)
+    outputs.file(abstractPropertiesConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.abstractPropertiesArtifact", abstractPropertiesConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
