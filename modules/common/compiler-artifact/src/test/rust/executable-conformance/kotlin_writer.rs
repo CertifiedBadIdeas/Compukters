@@ -26,6 +26,7 @@ fn main() {
         "argv" => k2_string_array_entry_executes_exact_utf16_arguments(),
         "subset" => k2_string_materialization_executes_char_arrays_and_scalar_templates(),
         "dispatch" => k2_class_and_interface_dispatch_select_runtime_implementations(),
+        "mutable-fields" => k2_mutable_class_fields_preserve_aliases_and_evaluation_order(),
         "function-values" => k2_function_values_preserve_distinct_captures_and_dispatch(),
         "transparent-call" => k2_ordinary_project_call_resumes_across_async_capability(),
         "tasks" => k2_tasks_keep_independent_host_requests_in_flight(),
@@ -70,6 +71,62 @@ fn k2_class_and_interface_dispatch_select_runtime_implementations() {
             AdvanceOutcome::SliceExhausted => {}
             AdvanceOutcome::Halted(None) => break,
             outcome => panic!("unexpected K2 dispatch outcome: {outcome:?}"),
+        }
+    }
+}
+
+fn k2_mutable_class_fields_preserve_aliases_and_evaluation_order() {
+    let path = std::env::var("COMPUKTER_KOTLIN_MUTABLE_FIELDS_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_MUTABLE_FIELDS_ARTIFACT must be set for this conformance test");
+    let bytes = fs::read(path).expect("K2 mutable-fields output must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("pinned VM must verify K2 mutable-fields output");
+    let string_argument = [HostValueType::String];
+    let operations = [
+        OperationSchema::asynchronous(&[], HostValueType::String),
+        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
+        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
+    ];
+    let stdio = CapabilityBinding::new("compukter", "stdio", 1, 0, &operations);
+    let profile = ExecutionProfile {
+        heap_bytes: 1024 * 1024,
+        frame_storage_bytes: 1024 * 1024,
+        maximum_call_depth: 64,
+        maximum_coroutines: 1,
+        maximum_channels: 0,
+        maximum_channel_values: 0,
+        maximum_host_requests: 64,
+        maximum_events: 0,
+        maximum_slice_budget: u32::MAX,
+        compiler_abi: [0; 32],
+        platform_abi: [0; 32],
+        maximum_host_arguments: 16,
+        maximum_outbound_utf16_code_units: 4096,
+        maximum_inbound_utf16_code_units: 4096,
+        maximum_accepted_responses: 64,
+        entry_argument_limits: entry_argument_limits(),
+    };
+    let mut session = Session::admit(verified, profile, &[stdio]).expect("K2 mutable-fields program must admit");
+    session.start(&[]).expect("K2 mutable-fields program must start");
+
+    for expected in ["5\n", "10\n", "7\n", "7\n", "12\n", "90\n"] {
+        let value = utf16(expected);
+        let (task, write) = next_host_request_identity_with_budget(
+            &mut session,
+            "mutable-fields println",
+            1,
+            Some(&value),
+            512,
+        );
+        session
+            .resume_for(task, write, HostResponse::Success(HostValueInput::Unit))
+            .expect("println must resume the mutable-fields program");
+    }
+    loop {
+        match session.advance(512, 64).expect("K2 mutable-fields program must finish") {
+            AdvanceOutcome::SliceExhausted => {}
+            AdvanceOutcome::Halted(None) => break,
+            outcome => panic!("unexpected K2 mutable-fields outcome: {outcome:?}"),
         }
     }
 }
