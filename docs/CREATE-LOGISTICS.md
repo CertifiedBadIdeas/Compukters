@@ -22,8 +22,10 @@ import create.logistics.Logistics
 fun main() {
     val ticker = Logistics.stockTicker("warehouse")
     val stock = ticker.snapshot()
-    for (index in 0 until stock.size()) {
-        println("${stock.itemId(index)}: ${stock.count(index)}")
+    val index = stock.findItem("minecraft:iron_ingot")
+    if (index >= 0) {
+        println("Available: ${stock.count(index)}")
+        println("Accepted: ${stock.request(index, 16, "workshop")}")
     }
     stock.close()
 }
@@ -32,15 +34,19 @@ fun main() {
 `Logistics.front.stockTicker()` and the other five side accessors use an adjacent block instead of a cable name.
 `snapshot()` captures an immutable list of at most 256 entries. Each entry has a registry item ID, a display name, and
 an available count. Its index identifies the **exact ItemStack variant**, including components: two entries may have
-the same item ID and different names or components. The list does not change after capture. A larger stock summary
-fails explicitly instead of returning an incomplete list. Create represents infinite stock with counts of at least
-1,000,000,000.
+the same item ID and different names or components. The list does not change after capture. `findItem(itemId)` searches
+the snapshot in one bounded host call and returns the first matching index, or `-1` if absent. To inspect another
+variant with the same ID, call `findItem(itemId, previousIndex + 1)`; the start index is inclusive. IDs are exact,
+case-sensitive registry IDs such as `minecraft:iron_ingot`. Searching by ID does not merge or choose among variants.
+A larger stock summary fails explicitly instead of returning an incomplete list. Create represents infinite stock with
+counts of at least 1,000,000,000.
 
-To request packaging, choose an index from the snapshot:
+To request packaging, use the index found in the snapshot:
 
 ```kotlin
 val stock = ticker.snapshot()
-val accepted = stock.request(0, 16, "workshop")
+val index = stock.findItem("minecraft:iron_ingot")
+val accepted = if (index >= 0) stock.request(index, 16, "workshop") else false
 stock.close()
 println(accepted)
 ```

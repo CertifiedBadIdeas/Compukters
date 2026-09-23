@@ -75,8 +75,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - The `create` addon reads exact `Float` speed, stress, and capacity values from adjacent or named cable-connected
   speedometers and stressometers, waits for value changes without Guest-side polling, and controls rotation speed
   controllers.
-- The `create` addon also exposes adjacent or named Stock Tickers. Computer programs can inspect bounded snapshots of
-  exact item variants and request packaging to an address; acceptance is reported without implying delivery.
+- The `create` addon also exposes adjacent or named Stock Tickers. Computer programs can search bounded stock snapshots
+  by item ID, distinguish exact item variants, and request packaging to an address; acceptance is reported without
+  implying delivery.
 - Device handles remain bound to the exact acquired block, and named handles expire when their cable path disconnects.
   Missing, disconnected, unloaded, removed, or replaced devices fail deterministically and produce a descriptive
   terminal diagnostic.
