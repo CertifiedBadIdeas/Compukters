@@ -266,6 +266,9 @@ supported.
   virtually or through its interface when invoked. Unbound instance-method
   references (`Type::method`) accept the receiver as their first argument and
   use the same runtime dispatch.
+  References to supported Guest primary constructors (`::Type`) can be stored,
+  passed, returned, and invoked, including zero- and multi-argument constructors.
+  Each invocation constructs a fresh instance through the existing class layout.
   Each lambda evaluation creates an ordinary managed closure object; lambdas
   may capture immutable scalar and reference values, and reference captures
   preserve the original referent and aliasing. A captured local `var` uses one
@@ -274,7 +277,8 @@ supported.
   `Tasks.launch` accepts direct, stored, and returned `() -> Unit` values. A
   direct top-level `Tasks.launch(::worker)` remains a static spawn without a
   closure allocation. Types unsupported elsewhere in Guest Kotlin, local,
-  property, and constructor references, adapted references, and variance
+  property references, constructors outside the admitted Guest class subset,
+  adapted references, and variance
   conversions between different function signatures remain unsupported.
   Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
@@ -285,7 +289,8 @@ supported.
   `direct top level ordinary task lowers to spawn and join`,
   `task launch rejects unsupported local and bound references`,
   `function value variance conversion is rejected before artifact publication`,
-  and `constructor reference is rejected before artifact publication`;
+  `supported constructor references lower to ordinary function values`, and
+  `unsupported constructor reference is rejected before artifact publication`;
   root task `testKotlinFunctionValuesVmConformance`.
   Tracking: [#627](https://github.com/CertifiedBadIdeas/Compukters/issues/627),
   [#631](https://github.com/CertifiedBadIdeas/Compukters/issues/631),
@@ -293,7 +298,8 @@ supported.
   [#632](https://github.com/CertifiedBadIdeas/Compukters/issues/632),
   [#633](https://github.com/CertifiedBadIdeas/Compukters/issues/633),
   [#634](https://github.com/CertifiedBadIdeas/Compukters/issues/634),
-  [#635](https://github.com/CertifiedBadIdeas/Compukters/issues/635)
+  [#635](https://github.com/CertifiedBadIdeas/Compukters/issues/635),
+  [#636](https://github.com/CertifiedBadIdeas/Compukters/issues/636)
 
 - [ ] **Recursion — Partial** — direct calls and bounded VM call depth can
   represent recursion, but no Kotlin-to-VM recursive source conformance test

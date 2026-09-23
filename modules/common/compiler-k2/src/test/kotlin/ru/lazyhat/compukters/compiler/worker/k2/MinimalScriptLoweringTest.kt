@@ -347,6 +347,8 @@ class MinimalScriptLoweringTest {
                 import compukter.concurrent.Tasks
 
                 class Box(val value: Int)
+                class Empty { fun value(): Int = 30 }
+                class Duo(val first: Int, val second: Int)
 
                 fun make(value: Int): () -> Unit = {
                     println(value)
@@ -452,6 +454,10 @@ class MinimalScriptLoweringTest {
 
                 fun applyUnbound(operation: (Adder, Int) -> Int, receiver: Adder): Int = operation(receiver, 5)
 
+                fun boxMaker(): (Int) -> Box = ::Box
+
+                fun applyBox(make: (Int) -> Box): Int = make(31).value
+
                 fun main() {
                     val first = make(3)
                     val second = make(4)
@@ -544,6 +550,14 @@ class MinimalScriptLoweringTest {
                     println(unboundVirtual(Child()))
                     val unboundInterface: (Reader) -> Int = Reader::read
                     println(unboundInterface(ReaderImpl(29)))
+                    val makeEmpty: () -> Empty = ::Empty
+                    println(makeEmpty().value())
+                    println(applyBox(::Box))
+                    println(boxMaker()(32).value)
+                    val makeDuo = ::Duo
+                    val firstDuo = makeDuo(7, 8)
+                    val secondDuo = makeDuo(9, 4)
+                    println(firstDuo.first * 10 + secondDuo.second)
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))
@@ -646,16 +660,38 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `constructor reference is rejected before artifact publication`() =
+    fun `supported constructor references lower to ordinary function values`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class Reader { fun read(): Int = 1 }
+                class Pair(val first: Int, val second: Int)
+                fun create(): (Int, Int) -> Pair = ::Pair
+                fun apply(make: (Int, Int) -> Pair): Pair = make(2, 3)
+                fun main() {
+                    val make: () -> Reader = ::Reader
+                    println(make().read())
+                    val inferred = ::Pair
+                    println(inferred(4, 5).first)
+                    println(apply(create()).second)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+        }
+
+    @Test
+    fun `unsupported constructor reference is rejected before artifact publication`() =
         withAdapter { adapter ->
             val result =
                 adapter.compile(
                     request(
                         """
-                        class Reader { fun read(): Int = 1 }
+                        import compukter.concurrent.IntChannel
                         fun main() {
-                            val make: () -> Reader = ::Reader
-                            println(make().read())
+                            val make: (Int) -> IntChannel = ::IntChannel
+                            make(2)
                         }
                         """.trimIndent(),
                     ),
@@ -664,7 +700,7 @@ class MinimalScriptLoweringTest {
             assertTrue(
                 result.diagnostics.any {
                     it.severity.name == "ERROR" &&
-                        "only Guest function and instance-method references are supported" in it.message
+                        "constructor reference target is outside the supported Guest project subset" in it.message
                 },
                 result.diagnostics.toString(),
             )
