@@ -45,7 +45,7 @@ class VmCapacityGovernorTest {
 
     @Test
     fun `governor needs sustained pressure and restores slowly`() {
-        val governor = VmCapacityGovernor(VmCapacityGovernorConfig(hostSharePercent = 100, safetyPercent = 100))
+        val governor = VmCapacityGovernor(VmCapacityGovernorConfig(hostSharePercent = 100, safetyPercent = 100, fallbackCapacity = 1))
         governor.calibrated(VmCapacityCalibration(10_000, 50_000_000, 1))
         repeat(3) { governor.observeTick(hadDemand = true, deadlineOverrun = true) }
         assertEquals(10_000, governor.currentCapacity)
@@ -57,5 +57,17 @@ class VmCapacityGovernorTest {
         assertEquals(8_400, governor.currentCapacity)
         repeat(100) { governor.observeTick(hadDemand = false, deadlineOverrun = false) }
         assertEquals(8_400, governor.currentCapacity)
+    }
+
+    @Test
+    fun `governor keeps a conservative progress floor under persistent deadline misses`() {
+        val governor = VmCapacityGovernor(VmCapacityGovernorConfig(hostSharePercent = 100, safetyPercent = 100))
+        governor.calibrated(VmCapacityCalibration(100_000, 50_000_000, 8))
+        repeat(200) { governor.observeTick(hadDemand = true, deadlineOverrun = true) }
+        assertEquals(8_192, governor.currentCapacity)
+
+        governor.calibrated(VmCapacityCalibration(100, 50_000_000, 8))
+        repeat(200) { governor.observeTick(hadDemand = true, deadlineOverrun = true) }
+        assertEquals(100, governor.currentCapacity)
     }
 }

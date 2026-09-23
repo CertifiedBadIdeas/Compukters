@@ -58,6 +58,11 @@ internal object VmBenchmarkGameTestScenario {
                 helper.assertTrue(snapshot.admittedActors == 2, "headless benchmark did not admit both actors")
                 helper.assertTrue(snapshot.completedActors == 2, "headless benchmark actors did not halt")
                 helper.assertTrue(snapshot.failedActors == 0, "headless benchmark actor failed")
+                helper.assertTrue(
+                    snapshot.metrics.scheduler.executionLatencyP95Nanos > 0 &&
+                        snapshot.metrics.scheduler.resultLatencyP95Nanos > 0,
+                    "actor latency percentiles were not recorded",
+                )
             }.thenExecute {
                 server.commands.performPrefixedCommand(
                     server.createCommandSourceStack(),
@@ -80,10 +85,12 @@ internal object VmBenchmarkGameTestScenario {
                 helper.assertTrue(snapshot.wakeTicks.samples == 2, "capacity wake distribution is incomplete")
                 helper.assertTrue(snapshot.completionTicks.samples == 2, "capacity completion distribution is incomplete")
                 helper.assertTrue(snapshot.memory.availableSamples == 2, "capacity memory samples are incomplete")
-                helper.assertTrue(
-                    snapshot.metrics.capacityFallbackReason == null,
-                    "VM calibration fell back: ${snapshot.metrics.capacityFallbackReason}",
-                )
+            }.thenWaitUntil {
+                val reason = requireNotNull(VmBenchmarkCommands.snapshot(server)).metrics.capacityFallbackReason
+                if (reason != null && reason != "calibration pending") {
+                    helper.fail("VM calibration fell back: $reason")
+                }
+                helper.assertTrue(reason == null, "VM calibration is still pending")
             }.thenWaitUntil {
                 helper.assertTrue(
                     first.runtimeState == ProgramComputerState.WaitingForInput &&

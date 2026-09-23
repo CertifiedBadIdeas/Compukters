@@ -157,6 +157,9 @@ internal object NeoForgeVmActorServices {
                 "executionMaxUs=${scheduler.maximumExecutionNanos / 1_000}, " +
                 "resultAvgUs=${scheduler.totalResultLatencyNanos / drained / 1_000}, " +
                 "resultMaxUs=${scheduler.maximumResultLatencyNanos / 1_000}, " +
+                "queueP95Us=${scheduler.queueLatencyP95Nanos / 1_000}, " +
+                "executionP95Us=${scheduler.executionLatencyP95Nanos / 1_000}, " +
+                "resultP95Us=${scheduler.resultLatencyP95Nanos / 1_000}, " +
                 "drainedLast=${metrics.lastPumpEvents}, pumpLastUs=${metrics.lastPumpNanos / 1_000}, " +
                 "worldDeferred=${metrics.deferredWorldRequests}, worldTotal=${metrics.totalDeferredWorldRequests}, " +
                 "hostToAdvance=n=${metrics.hostContinuationSamples}/" +

@@ -217,7 +217,6 @@ class ProgramRuntimeActorService(
         require(worldTick >= 0) { "world tick must not be negative" }
         synchronized(frameLock) {
             check(capacityFrame == null) { "previous capacity frame has not been flushed" }
-            lastCapacityAllocation = PerComputerCapacityAllocation(emptyList(), 0, 0)
             capacityFrame = CapacityFrame(worldTick)
         }
     }
@@ -259,11 +258,9 @@ class ProgramRuntimeActorService(
 
     /** Called once at the next server tick boundary, after draining the prior frame's results. */
     fun observePreviousCapacityFrame() {
-        val schedulerMetrics = scheduler.metrics()
         capacityGovernor.observeTick(
             hadDemand = previousFrameHadDemand,
-            deadlineOverrun =
-                observedLateTurn || schedulerMetrics.pendingPermits > 0 || schedulerMetrics.busyWorkers > 0,
+            deadlineOverrun = observedLateTurn,
         )
         observedLateTurn = false
         previousFrameHadDemand = false

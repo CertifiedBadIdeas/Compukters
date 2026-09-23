@@ -55,6 +55,7 @@ class ProgramRuntimeActorServiceTest {
             assertEquals(2, service.metrics().processedPermits)
 
             service.beginCapacityFrame(1)
+            assertEquals(1L, service.runtimeMetrics().reservedInstructionsLastFrame)
             service.turn(first, 1, listOf(ProgramRuntimeActorEffect.RedstoneInput(0)))
             service.turn(second, 1)
             service.flushCapacityFrame()
