@@ -67,6 +67,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - Added passive peripheral cables for orthogonal, branching and looping connections between computers and supported
   addon devices. Their thin model follows the actual connections in all six directions. Cables discover loaded chunks
   only and do not require adapters or a controller block.
+- Added a one-block text display to the base mod. Guest programs can address it beside the computer or by name over
+  peripheral cables, write to an independent 20x10 grid, and clear it. One computer controls a display at a time; the
+  screen clears when its writer stops or disconnects.
 - Added a Peripheral Configurator editor that opens on supported devices and inspects their bounded cable network. It
   reports available and duplicate names before assignment, while using it on a cable opens a read-only list of every
   connected device and its name when assigned. The server rejects stale or conflicting changes; Shift-use clears a

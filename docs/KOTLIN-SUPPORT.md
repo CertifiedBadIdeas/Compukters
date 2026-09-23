@@ -619,7 +619,7 @@ built-in platform and are not selected individually in `compukter.toml`; there i
 | `compukter:process` | Child process execution and explicit exit |
 | `compukter:redstone` | Side-oriented redstone reads, waits, and weak/direct output writes |
 | `compukter:sound` | Bounded one-shot computer beeps with admission feedback |
-| `compukter:display` | Typed text-display declarations; the world host and renderer are being implemented in [#650](https://github.com/CertifiedBadIdeas/Compukters/issues/650) |
+| `compukter:display` | Typed adjacent and named text-display writes and clearing |
 
 Ordinary functions in these modules are compiled ahead of Guest projects into
 relocatable platform fragments. Only declarations explicitly marked as native
@@ -700,6 +700,12 @@ and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters
   test `sound beep lowers deterministically to a blocking Boolean capability operation`,
   [`computer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/computer.rs), sound request tests, and
   [`ComputerSoundGameTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/minecraft/v26_1/v26_1-neoforge/src/gameTest/kotlin/ru/lazyhat/compukters/impl/computer/ComputerSoundGameTest.kt).
+
+- [x] **In-world text display** — `Display.open(name)` or `Display.<side>.open()` acquires an exact display block.
+  Programs write and clear its independent 20x10 grid. One computer holds the active output lease; the screen clears
+  when that computer stops or disconnects. Bounds and text are validated on the server. Evidence:
+  `MinimalScriptLoweringTest`, `DisplayBufferTest`, `DisplayHostStateTest`, and the real `TextDisplayGameTestScenario`.
+  See [Text display](https://certifiedbadideas.github.io/Compukters/DISPLAY/).
 
 - [x] **Redstone GPIO** — `Redstone.<side>` exposes immediate `get()`,
   edge-triggered `await()`, exact `await(level)`, threshold
