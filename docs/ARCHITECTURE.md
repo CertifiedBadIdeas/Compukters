@@ -162,9 +162,10 @@ and development mod through their external coordinates. For local co-development
 adjacent Compukters projects, selecting the self-contained `namedElements` development mod instead of a republished
 Maven Local runtime. The API and adapter share the independent SDK version; the runtime-only development mod retains
 the product version. The Compukters root does not include or invoke Create tasks, so the base platform, shared
-Minecraft code, and 26.1 code have no direct Create ownership. The adapter resolves only the six adjacent loaded positions and
-binds handles to exact block-entity identities, preventing replacement from silently rebinding a running Guest
-program.
+Minecraft code, and 26.1 code have no direct Create ownership. The adapter resolves adjacent loaded positions or
+named devices across loaded peripheral cables and binds handles to exact block-entity identities, preventing replacement
+from silently rebinding a running Guest program. Stock Ticker snapshots and package requests remain inside that addon
+and use the same bounded server-thread host boundary.
 
 `ProgramRuntimeHost` owns one current Rust `ComputerMachine`, advances it with bounded guest and maintenance budgets,
 commits terminal changes once per active server tick, and exposes typed full/delta states and failures through JDK 25

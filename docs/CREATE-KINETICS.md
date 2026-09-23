@@ -11,6 +11,9 @@ Compukters can expose adjacent or cable-connected Create kinetic devices directl
 integration is available on **Minecraft 1.21.1** with **Create 6.0.10 through 6.0.x**. Compukters still starts normally
 when Create is absent; the `create` addon is then unavailable to projects.
 
+The same addon also exposes [Stock Ticker logistics](https://certifiedbadideas.github.io/Compukters/CREATE-LOGISTICS/)
+for stock snapshots and package requests.
+
 ## Enable the addon
 
 Choose a `Kinetics` completion in the attached IDE to add its import and enable the addon automatically, or add Create

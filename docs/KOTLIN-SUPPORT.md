@@ -674,6 +674,13 @@ and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters
   diagnostic/completion/parameter-information tests. See
   [Create kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/) for the API and manifest entry.
 
+- [x] **Create Stock Ticker on Minecraft 1.21.1** — the optional `create` addon exposes adjacent or named Stock
+  Tickers through `Logistics`. Programs can capture bounded stock snapshots, inspect each exact item variant's ID,
+  display name, and count, and request bounded packaging to a validated address. A request reports Create's acceptance,
+  not delivery. Snapshots must be closed after use and stale device handles fail. Evidence: `StockTickerHostStateTest`,
+  the independent Create addon `check`, and its packaged Guest API bundle. See
+  [Create logistics](https://certifiedbadideas.github.io/Compukters/CREATE-LOGISTICS/).
+
 - [x] **Addon Guest API bundles** — a loader integration can register one bounded, versioned Kotlin metadata/source
   bundle under its addon ID, with exact capability schemas and intrinsic bindings kept internal. The server is the
   authority for availability; compiler and IDE workers accept only the exact advertised bytes and content hash, reject
