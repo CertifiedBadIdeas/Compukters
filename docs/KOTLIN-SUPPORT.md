@@ -270,7 +270,9 @@ supported.
   use the same runtime dispatch.
   References to supported Guest primary constructors (`::Type`) can be stored,
   passed, returned, and invoked, including zero- and multi-argument constructors.
-  Each invocation constructs a fresh instance through the existing class layout.
+  An expected function type may omit trailing constructor parameters with
+  supported defaults. Each invocation evaluates those defaults and constructs a
+  fresh instance through the existing class layout.
   Each lambda evaluation creates an ordinary managed closure object; lambdas
   may capture immutable scalar and reference values, and reference captures
   preserve the original referent and aliasing. A captured local `var` uses one
@@ -280,7 +282,7 @@ supported.
   direct top-level `Tasks.launch(::worker)` remains a static spawn without a
   closure allocation. Types unsupported elsewhere in Guest Kotlin, local,
   property references, constructors outside the admitted Guest class subset,
-  adapted references, and variance
+  other adapted references, and variance
   conversions between different function signatures remain unsupported.
   Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
@@ -291,9 +293,11 @@ supported.
   `direct top level ordinary task lowers to spawn and join`,
   `task launch rejects unsupported local and bound references`,
   `function value variance conversion is rejected before artifact publication`,
-  `supported constructor references lower to ordinary function values`, and
+  `supported constructor references lower to ordinary function values`,
+  `default adapted constructor references lower to managed function values`, and
   `unsupported constructor reference is rejected before artifact publication`;
-  root task `testKotlinFunctionValuesVmConformance`.
+  root tasks `testKotlinFunctionValuesVmConformance` and
+  `testKotlinAdaptedConstructorsVmConformance`.
   Tracking: [#627](https://github.com/CertifiedBadIdeas/Compukters/issues/627),
   [#631](https://github.com/CertifiedBadIdeas/Compukters/issues/631),
   [#628](https://github.com/CertifiedBadIdeas/Compukters/issues/628),
@@ -301,7 +305,8 @@ supported.
   [#633](https://github.com/CertifiedBadIdeas/Compukters/issues/633),
   [#634](https://github.com/CertifiedBadIdeas/Compukters/issues/634),
   [#635](https://github.com/CertifiedBadIdeas/Compukters/issues/635),
-  [#636](https://github.com/CertifiedBadIdeas/Compukters/issues/636)
+  [#636](https://github.com/CertifiedBadIdeas/Compukters/issues/636),
+  [#644](https://github.com/CertifiedBadIdeas/Compukters/issues/644)
 
 - [ ] **Recursion — Partial** — direct calls and bounded VM call depth can
   represent recursion, but no Kotlin-to-VM recursive source conformance test
@@ -351,8 +356,8 @@ supported.
   supported Guest expressions. Explicit arguments evaluate in call-site order,
   followed by omitted defaults in parameter order; the constructor receives
   the complete values before its property and `init` work. Constructor
-  references retain their declared full arity. Secondary constructors remain
-  unsupported. Evidence:
+  references retain their declared full arity unless an expected function type
+  selects supported trailing defaults. Secondary constructors remain unsupported. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `guest object subset lowers sealed results data values enum identity and type branches`,
   paired with [`heap_tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/heap_tests.rs),
@@ -365,10 +370,13 @@ supported.
   `class body properties and init blocks lower in construction order` paired
   with `testKotlinClassInitializationVmConformance`, and test
   `primary constructor defaults preserve argument order and earlier parameters`
-  paired with `testKotlinConstructorDefaultsVmConformance`.
+  paired with `testKotlinConstructorDefaultsVmConformance`, and test
+  `default adapted constructor references lower to managed function values`
+  paired with `testKotlinAdaptedConstructorsVmConformance`.
   Tracking: [#637](https://github.com/CertifiedBadIdeas/Compukters/issues/637),
-  [#638](https://github.com/CertifiedBadIdeas/Compukters/issues/638), and
-  [#643](https://github.com/CertifiedBadIdeas/Compukters/issues/643).
+  [#638](https://github.com/CertifiedBadIdeas/Compukters/issues/638),
+  [#643](https://github.com/CertifiedBadIdeas/Compukters/issues/643), and
+  [#644](https://github.com/CertifiedBadIdeas/Compukters/issues/644).
 
 - [ ] **Class property accessors — Partial** — class `val` and `var` properties
   support computed getters and source-defined non-suspending getters/setters.

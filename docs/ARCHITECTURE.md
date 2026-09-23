@@ -333,7 +333,10 @@ calls lower to verified `field_set` instructions after evaluating the receiver a
 For primary constructors, the compiler evaluates explicitly supplied arguments once in call-site order, then omitted
 default expressions in parameter order. Earlier constructor parameters are available while evaluating later defaults.
 The existing full-arity constructor function receives the resolved values, so field initialization and `init` blocks
-observe the same values and object identity. Constructor references retain their declared full function arity.
+observe the same values and object identity. A constructor reference retains its full arity when the expected function
+type supplies every parameter. When the expected type omits supported trailing defaults, K2 supplies an adapter
+function whose body calls that constructor. The compiler lowers the adapter as a managed closure, so each invocation
+evaluates defaults and allocates a new object without another VM instruction or ABI change.
 Source-defined class getters and setters lower as ordinary non-suspending instance methods, so overridden accessors
 use the existing virtual dispatch table. A computed property has no managed field; `field` inside a backed accessor
 lowers to verified `field_get` or `field_set` on its receiver. Non-overriding final default accessors retain direct
