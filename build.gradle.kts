@@ -329,6 +329,15 @@ registerKotlinVmConformance(
     conformanceScenario = "dispatch",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinMutableFieldsVmConformance",
+    taskDescription = "Executes K2-lowered mutable Guest class fields with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateMutableFieldsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-mutable-fields.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-mutable-fields-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_MUTABLE_FIELDS_ARTIFACT",
+    conformanceScenario = "mutable-fields",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinFunctionValuesVmConformance",
     taskDescription = "Executes K2-lowered zero-argument function values with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateFunctionValuesConformanceArtifact",

@@ -1140,6 +1140,15 @@ internal object KotlinProjectLowering {
                                         constructorFunctionIds[symbol]?.let { symbol to GuestConstructorTarget(layout, it) }
                                     }
                                 }.toMap(),
+                        fieldsBySetter =
+                            classLayouts
+                                .flatMap { layout ->
+                                    layout.fields.mapNotNull { field ->
+                                        field.property.setter
+                                            ?.symbol
+                                            ?.let { it to field }
+                                    }
+                                }.toMap(),
                         fieldsByGetter =
                             classLayouts
                                 .flatMap { layout ->
@@ -1358,6 +1367,15 @@ internal object KotlinProjectLowering {
                                 .mapNotNull { classLayout ->
                                     classLayout.declaration.constructors.singleOrNull { it.isPrimary }?.symbol?.let { symbol ->
                                         constructorFunctionIds[symbol]?.let { symbol to GuestConstructorTarget(classLayout, it) }
+                                    }
+                                }.toMap(),
+                        fieldsBySetter =
+                            classLayouts
+                                .flatMap { classLayout ->
+                                    classLayout.fields.mapNotNull { field ->
+                                        field.property.setter
+                                            ?.symbol
+                                            ?.let { it to field }
                                     }
                                 }.toMap(),
                         fieldsByGetter =
@@ -2303,11 +2321,10 @@ internal object KotlinProjectLowering {
             }
             val fields =
                 properties.map { property ->
-                    if (property.isVar ||
-                        property.getter == null ||
-                        property.getter?.origin != IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR
+                    if (property.getter?.origin != IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR ||
+                        (property.isVar && property.setter?.origin != IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR)
                     ) {
-                        throw UnsupportedKotlinIr(property, "only immutable constructor properties are supported")
+                        throw UnsupportedKotlinIr(property, "only constructor properties with default accessors are supported")
                     }
                     val parameterIndex = parameters.indexOfFirst { it.name == property.name }
                     if (parameterIndex < 0) {
@@ -2330,7 +2347,7 @@ internal object KotlinProjectLowering {
                     GuestFieldLayout(property, parameterIndex, FieldId.of(nextField++), fieldType)
                 }
             if (declaration.kind == ClassKind.CLASS && fields.size != parameters.size) {
-                throw UnsupportedKotlinIr(declaration, "every constructor parameter must be an immutable property")
+                throw UnsupportedKotlinIr(declaration, "every constructor parameter must be a property")
             }
             val owner = TypeRef.Local(typeId)
             val entries =
@@ -2692,6 +2709,7 @@ private class FunctionCompiler(
     private val inlineValueClasses: InlineValueClassRegistry,
     private val platformScalars: PlatformScalarRegistry,
     private val constructorLayouts: Map<IrConstructorSymbol, GuestConstructorTarget>,
+    private val fieldsBySetter: Map<IrSimpleFunctionSymbol, GuestFieldLayout>,
     private val fieldsByGetter: Map<IrSimpleFunctionSymbol, GuestFieldLayout>,
     private val topLevelFieldsByBacking: Map<IrFieldSymbol, TopLevelFieldLayout>,
     private val topLevelFieldsByGetter: Map<IrSimpleFunctionSymbol, TopLevelFieldLayout>,
@@ -3266,6 +3284,24 @@ private class FunctionCompiler(
                     }.singleOrNull()
                     ?: throw UnsupportedKotlinIr(call, "value class property getter receiver is missing")
             return compileExpression(receiver)
+        }
+        fieldsBySetter[target.symbol]?.let { field ->
+            val receiverExpression =
+                target.parameters
+                    .mapIndexedNotNull { index, parameter ->
+                        call.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.DispatchReceiver }
+                    }.singleOrNull()
+                    ?: throw UnsupportedKotlinIr(call, "property setter receiver is missing")
+            val valueExpression =
+                target.parameters
+                    .mapIndexedNotNull { index, parameter ->
+                        call.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.Regular }
+                    }.singleOrNull()
+                    ?: throw UnsupportedKotlinIr(call, "property setter value is missing")
+            val receiver = compileExpression(receiverExpression)
+            val value = compileExpression(valueExpression)
+            emit(Instruction.FieldSet(receiver, FieldRef.Local(field.id), value))
+            return null
         }
         fieldsByGetter[target.symbol]?.let { field ->
             val receiverExpression =

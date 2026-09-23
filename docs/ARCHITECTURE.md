@@ -326,6 +326,8 @@ closure whose `invoke` method calls the referenced project function. An inferred
 call behavior; reflection is not part of the Guest function-value contract.
 A reference to an admitted Guest primary constructor uses a capture-free managed closure. Its `invoke` method calls
 the existing constructor function and returns the new object, without a constructor-specific VM type or instruction.
+Constructor-backed Guest `var` properties use the same managed instance fields as `val` properties. Default setter
+calls lower to verified `field_set` instructions after evaluating the receiver and assigned value in source order.
 A bound Guest instance-method reference evaluates its receiver once and stores that object in the closure. Its `invoke`
 method loads the stored receiver and uses the target method's static, virtual, or interface dispatch mode.
 An unbound instance-method reference has no receiver field; its first function parameter supplies the receiver for

@@ -1089,11 +1089,58 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `mutable constructor properties lower to instance field writes`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class Counter(var value: Int) {
+                    fun add(amount: Int) { value = value + amount }
+                }
+                class Holder(var current: Counter)
+                class Probe(var order: Int, val holder: Holder) {
+                    fun receiver(): Holder {
+                        order = order * 10 + 1
+                        return holder
+                    }
+                    fun next(): Counter {
+                        order = order * 10 + 2
+                        return Counter(90)
+                    }
+                }
+                fun main() {
+                    val first = Counter(1)
+                    val alias = first
+                    val second = Counter(10)
+                    alias.add(4)
+                    println(first.value)
+                    println(second.value)
+                    second.value = 7
+                    println(second.value)
+                    val holder = Holder(first)
+                    holder.current = second
+                    println(holder.current.value)
+                    val probe = Probe(0, holder)
+                    probe.receiver().current = probe.next()
+                    println(probe.order)
+                    println(holder.current.value)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val application = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+            assertTrue(application.blocks.flatMap(Block::instructions).any { it is Instruction.FieldSet })
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.mutableFieldsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `guest object subset rejects mutable generic initialized secondary and explicitly cast shapes`() =
         withAdapter { adapter ->
             val unsupported =
                 listOf(
-                    "data class Mutable(var value: Int)\nfun main() { Mutable(1) }",
+                    "class MutableBody(var value: Int) { var other: Int = 1 }\nfun main() { MutableBody(1) }",
                     "data class Generic<T>(val value: T)\nfun main() { Generic(1) }",
                     "class Initialized(val value: Int) { init { value + 1 } }\nfun main() { Initialized(1) }",
                     "class Secondary(val value: Int) { constructor() : this(0) }\nfun main() { Secondary() }",
@@ -1111,6 +1158,14 @@ class MinimalScriptLoweringTest {
                     result.diagnostics.toString(),
                 )
             }
+        }
+
+    @Test
+    fun `immutable constructor property assignment remains rejected`() =
+        withAdapter { adapter ->
+            val result = adapter.compile(request("class Box(val value: Int)\nfun main() { val box = Box(1); box.value = 2 }"))
+            assertNull(result.artifact)
+            assertTrue(result.diagnostics.any { it.severity.name == "ERROR" }, result.diagnostics.toString())
         }
 
     @Test
