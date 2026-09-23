@@ -57,6 +57,7 @@ internal class FfmBridge private constructor(
     private val submitRedstoneInputHandle: MethodHandle,
     private val confirmRedstoneOutputHandle: MethodHandle,
     private val advanceHandle: MethodHandle,
+    private val advanceWithRetirementLimitHandle: MethodHandle,
     private val compilationRequestSizeHandle: MethodHandle,
     private val compilationRequestCopyHandle: MethodHandle,
     private val compilationCompleteHandle: MethodHandle,
@@ -467,6 +468,37 @@ internal class FfmBridge private constructor(
                 ) as Int
             requireSuccess("advance", status)
             copyResult("advance", output, written, maximum)
+        }
+
+    override fun advanceWithRetirementLimit(
+        handle: Long,
+        guestBudget: Int,
+        maintenanceBudget: Int,
+        hostRequestBudget: Int,
+        retirementLimit: Int,
+    ): NativeAdvanceResult =
+        Arena.ofConfined().use { callArena ->
+            val maximum = maximumOutcomeBytes
+            val output = callArena.allocate(maximum.toLong())
+            val written = callArena.allocate(ValueLayout.JAVA_LONG)
+            val retired = callArena.allocate(ValueLayout.JAVA_LONG)
+            val status =
+                advanceWithRetirementLimitHandle.invokeExact(
+                    handle,
+                    guestBudget,
+                    maintenanceBudget,
+                    hostRequestBudget,
+                    retirementLimit,
+                    output,
+                    maximum.toLong(),
+                    written,
+                    retired,
+                ) as Int
+            requireSuccess("advance with retirement limit", status)
+            NativeAdvanceResult(
+                copyResult("advance with retirement limit", output, written, maximum),
+                retired.get(ValueLayout.JAVA_LONG, 0),
+            )
         }
 
     override fun compilationRequest(
@@ -921,6 +953,8 @@ internal class FfmBridge private constructor(
                         downcall(FfmAbiFunction.REDSTONE_CONFIRM_OUTPUT),
                     advanceHandle =
                         downcall(FfmAbiFunction.ADVANCE),
+                    advanceWithRetirementLimitHandle =
+                        downcall(FfmAbiFunction.ADVANCE_WITH_RETIREMENT_LIMIT),
                     compilationRequestSizeHandle =
                         downcall(FfmAbiFunction.COMPILATION_REQUEST_SIZE),
                     compilationRequestCopyHandle =
@@ -952,7 +986,7 @@ internal class FfmBridge private constructor(
                     terminalTextHandle =
                         downcall(FfmAbiFunction.TERMINAL_TEXT),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 15) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 16) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()

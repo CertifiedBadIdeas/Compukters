@@ -277,6 +277,11 @@ sealed interface VmOutcome {
     ) : VmOutcome
 }
 
+data class VmAdvanceResult(
+    val outcome: VmOutcome,
+    val retiredInstructions: Long,
+)
+
 data class VmResourceSnapshot(
     val fixedGuestUnits: Long,
     val dynamicGuestUnits: Long,

@@ -18,6 +18,11 @@
 
 package ru.lazyhat.compukters.lang.runtime.vm
 
+data class NativeAdvanceResult(
+    val outcomeWire: ByteArray,
+    val retiredInstructions: Long,
+)
+
 interface LowLevelVmBridge {
     fun openTerminalTransport(): TerminalWireTransport = ByteArrayTerminalWireTransport(this)
 
@@ -138,6 +143,14 @@ interface LowLevelVmBridge {
         maintenanceBudget: Int,
         hostRequestBudget: Int,
     ): ByteArray
+
+    fun advanceWithRetirementLimit(
+        handle: Long,
+        guestBudget: Int,
+        maintenanceBudget: Int,
+        hostRequestBudget: Int,
+        retirementLimit: Int,
+    ): NativeAdvanceResult = error("retirement-limited advance is unavailable")
 
     fun compilationRequest(
         handle: Long,

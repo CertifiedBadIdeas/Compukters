@@ -55,7 +55,7 @@ class FfmBridgeIntegrationTest {
     @Test
     fun `JDK 25 FFM reads the native ABI version`() {
         FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
-            assertEquals(15, bridge.abiVersion())
+            assertEquals(16, bridge.abiVersion())
         }
     }
 
@@ -74,6 +74,24 @@ class FfmBridgeIntegrationTest {
                 assertTrue(advanced.fixedGuestUnits >= initial.fixedGuestUnits)
                 assertTrue(advanced.dynamicGuestUnits >= initial.dynamicGuestUnits)
                 assertTrue(advanced.executedInstructions > initial.executedInstructions)
+            }
+        }
+    }
+
+    @Test
+    fun `FFM retirement limit reports exact work without executing at zero allowance`() {
+        FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
+            val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
+            VmSession.open(artifact, bridge).use { session ->
+                val initial = session.resourceSnapshot().executedInstructions
+                val zero = session.advanceWithRetirementLimit(64, 64, Int.MAX_VALUE, 0)
+                assertEquals(VmOutcome.SliceExhausted, zero.outcome)
+                assertEquals(0L, zero.retiredInstructions)
+                assertEquals(initial, session.resourceSnapshot().executedInstructions)
+
+                val one = session.advanceWithRetirementLimit(64, 64, Int.MAX_VALUE, 1)
+                assertEquals(1L, one.retiredInstructions)
+                assertEquals(initial + 1, session.resourceSnapshot().executedInstructions)
             }
         }
     }

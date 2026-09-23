@@ -117,6 +117,16 @@ final class JniNative {
             byte[] output,
             long[] written);
 
+    static native int advanceWithRetirementLimit(
+            long handle,
+            int guestBudget,
+            int maintenanceBudget,
+            int hostRequestBudget,
+            int retirementLimit,
+            byte[] output,
+            long[] written,
+            long[] retiredOut);
+
     static native int compilationRequestSize(long handle, long token, long[] requiredOut);
 
     static native int compilationRequestCopy(long handle, long token, byte[] output, long[] written);

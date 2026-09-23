@@ -65,6 +65,38 @@ class VmSession private constructor(
         }
     }
 
+    fun advanceWithRetirementLimit(
+        guestBudget: Int,
+        maintenanceBudget: Int,
+        hostRequestBudget: Int,
+        retirementLimit: Int,
+    ): VmAdvanceResult {
+        require(guestBudget >= 0 && maintenanceBudget >= 0 && hostRequestBudget >= 0 && retirementLimit >= 0) {
+            "VM budgets must be non-negative"
+        }
+        val activeHandle = requireHandle()
+        return decodeNative {
+            val native =
+                bridge.advanceWithRetirementLimit(
+                    activeHandle,
+                    guestBudget,
+                    maintenanceBudget,
+                    hostRequestBudget,
+                    retirementLimit,
+                )
+            require(native.retiredInstructions in 0..retirementLimit.toLong()) {
+                "native VM exceeded supplied retirement limit"
+            }
+            val outcome =
+                WireDecoder(native.outcomeWire).outcome { token ->
+                    val request = CompilationWireDecoder(bridge.compilationRequest(activeHandle, token)).request()
+                    require(request.token == token) { "native compilation token mismatch" }
+                    VmOutcome.CompilationRequested(request)
+                }
+            VmAdvanceResult(outcome, native.retiredInstructions)
+        }
+    }
+
     fun completeCompilationArtifact(
         token: Long,
         artifact: ByteArray,

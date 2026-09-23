@@ -233,6 +233,30 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
             JniNative.advance(handle, guestBudget, maintenanceBudget, hostRequestBudget, output, written)
         }
 
+    override fun advanceWithRetirementLimit(
+        handle: Long,
+        guestBudget: Int,
+        maintenanceBudget: Int,
+        hostRequestBudget: Int,
+        retirementLimit: Int,
+    ): NativeAdvanceResult {
+        val retired = LongArray(1)
+        val outcome =
+            fixedOutput("advance with retirement limit", maximumOutcomeBytes) { output, written ->
+                JniNative.advanceWithRetirementLimit(
+                    handle,
+                    guestBudget,
+                    maintenanceBudget,
+                    hostRequestBudget,
+                    retirementLimit,
+                    output,
+                    written,
+                    retired,
+                )
+            }
+        return NativeAdvanceResult(outcome, retired[0])
+    }
+
     override fun compilationRequest(
         handle: Long,
         token: Long,
@@ -521,7 +545,7 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
 
         fun open(library: Path): JniBridge {
             System.load(library.toAbsolutePath().normalize().toString())
-            if (JniNative.abiVersion() != 15) throw VmBridgeException("unsupported Compukter JNI ABI")
+            if (JniNative.abiVersion() != 16) throw VmBridgeException("unsupported Compukter JNI ABI")
             return JniBridge()
         }
     }
