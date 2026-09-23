@@ -62,8 +62,18 @@ internal class ProgramRuntimeActorProcessor(
 
     fun process(command: ProgramRuntimeActorCommand): ProgramRuntimeActorReply = reply(command.requestId) { execute(command) }
 
-    override fun advance(permit: ProgramRuntimeTickPermit): ProgramRuntimeActorReply =
-        reply(permit.requestId) { advance(permit.requestId, permit.worldTick) }
+    override fun advance(permit: ProgramRuntimeTickPermit): ProgramRuntimeActorReply {
+        val reply =
+            reply(permit.requestId) {
+                advance(permit.requestId, permit.worldTick, permit.retirementAllowance, permit.deadlineNanos)
+            }
+        val retired = if (reply.value is ProgramRuntimeActorValue.Rejected) 0 else host.retiredInstructionsLastTick
+        val missed =
+            permit.retirementAllowance > 0 &&
+                permit.deadlineNanos != Long.MAX_VALUE &&
+                System.nanoTime() - permit.deadlineNanos >= 0
+        return reply.copy(retiredInstructions = retired, hostDeadlineMissed = missed)
+    }
 
     private fun reply(
         requestId: ProgramRuntimeRequestId,
@@ -229,8 +239,10 @@ internal class ProgramRuntimeActorProcessor(
     private fun advance(
         requestId: ProgramRuntimeRequestId,
         worldTick: Long,
+        retirementAllowance: Int,
+        deadlineNanos: Long,
     ): ProgramRuntimeActorValue {
-        host.serverTick(worldTick)
+        host.serverTick(worldTick, retirementAllowance, deadlineNanos)
         val redstone =
             redstonePort
                 ?.takeRequestedOutput()

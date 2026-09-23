@@ -333,6 +333,7 @@ internal object VmBenchmarkCommands {
             "pumpLastUs=${metrics.lastPumpNanos / 1_000}, " +
             "mailboxRejected=${metrics.scheduler.mailboxFullRejections - baseline.scheduler.mailboxFullRejections}, " +
             "permitRejected=${metrics.scheduler.permitPendingRejections - baseline.scheduler.permitPendingRejections}" +
+            metrics.capacitySummary() +
             capacityDetails
     }
 
@@ -386,8 +387,18 @@ internal object VmBenchmarkCommands {
             "inputRejected=${metrics.rejectedInputRequests - baseline.rejectedInputRequests}, " +
             "inputCoalesced=${metrics.coalescedRedstoneInputs - baseline.coalescedRedstoneInputs}, " +
             "mailboxRejected=${metrics.scheduler.mailboxFullRejections - baseline.scheduler.mailboxFullRejections}, " +
-            "permitRejected=${metrics.scheduler.permitPendingRejections - baseline.scheduler.permitPendingRejections}"
+            "permitRejected=${metrics.scheduler.permitPendingRejections - baseline.scheduler.permitPendingRejections}" +
+            metrics.capacitySummary()
     }
+
+    private fun ProgramRuntimeActorMetrics.capacitySummary(): String =
+        ", capacity=$currentInstructionCapacity/$calibratedInstructionCapacity instructions/tick, " +
+            "workersMeasured=$measuredCapacityWorkers, runnable=$runnableComputersLastFrame, " +
+            "waiting=$waitingComputersLastFrame, throttled=$throttledComputersLastFrame, " +
+            "requested=$requestedInstructionsLastFrame, reserved=$reservedInstructionsLastFrame, " +
+            "missed=$missedInstructionsLastFrame, retiredTotal=$retiredInstructionsTotal, " +
+            "unusedTotal=$unusedReservationsTotal, saturated=$countersSaturated, " +
+            "fallback=${capacityFallbackReason ?: "none"}"
 
     private const val MAXIMUM_ACTORS = VmActorSchedulerConfig.DEFAULT_MAXIMUM_ACTORS
     private const val MAXIMUM_ROUNDS = 1_000_000

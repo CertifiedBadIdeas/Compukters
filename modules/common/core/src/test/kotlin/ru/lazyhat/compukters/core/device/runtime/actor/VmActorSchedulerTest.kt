@@ -31,6 +31,32 @@ import kotlin.test.assertTrue
 
 class VmActorSchedulerTest {
     @Test
+    fun `deferred permit holds later commands without occupying a worker`() {
+        val endpoint = endpoint(901)
+        scheduler(workerCount = 1, messagesPerTurn = 4).use { scheduler ->
+            assertTrue(
+                scheduler.register(
+                    endpoint,
+                    object : VmActorProcessor<Int, Int, Int> {
+                        override fun process(command: Int): Int = command
+
+                        override fun advance(permit: Int): Int = permit
+                    },
+                ),
+            )
+            assertEquals(VmActorSubmission.ACCEPTED, scheduler.submitWithDeferredPermit(endpoint, listOf(1), 100))
+            assertEquals(VmActorSubmission.ACCEPTED, scheduler.submit(endpoint, 2))
+            assertEquals(listOf(1), scheduler.awaitResults(1).map { it.value })
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS)
+            while (scheduler.metrics().scheduledActors != 0 && System.nanoTime() < deadline) Thread.onSpinWait()
+            assertEquals(0, scheduler.metrics().scheduledActors)
+            assertEquals(0, scheduler.metrics().processedPermits)
+            assertTrue(scheduler.releaseDeferredPermit(endpoint, 100))
+            assertEquals(listOf(100, 2), scheduler.awaitResults(2).map { it.value })
+        }
+    }
+
+    @Test
     fun `default worker count scales with processors and remains bounded`() {
         val defaults =
             listOf(1, 2, 4, 8, 16, 32, 64).associateWith(VmActorSchedulerConfig::defaultWorkerCount)

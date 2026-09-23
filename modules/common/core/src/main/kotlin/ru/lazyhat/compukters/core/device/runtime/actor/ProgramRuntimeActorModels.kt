@@ -232,9 +232,12 @@ sealed interface ProgramRuntimeActorEffect : ProgramRuntimeActorMessage {
 data class ProgramRuntimeTickPermit(
     val requestId: ProgramRuntimeRequestId,
     val worldTick: Long,
+    val retirementAllowance: Int = Int.MAX_VALUE,
+    val deadlineNanos: Long = Long.MAX_VALUE,
 ) {
     init {
         require(worldTick >= 0) { "world tick must not be negative" }
+        require(retirementAllowance >= 0) { "retirement allowance must not be negative" }
     }
 }
 
@@ -243,6 +246,8 @@ data class ProgramRuntimeActorReply(
     val state: ProgramRuntimeState,
     val value: ProgramRuntimeActorValue,
     val fileSystemGeneration: Long? = null,
+    val retiredInstructions: Long = 0,
+    val hostDeadlineMissed: Boolean = false,
 )
 
 sealed interface ProgramRuntimeActorValue {

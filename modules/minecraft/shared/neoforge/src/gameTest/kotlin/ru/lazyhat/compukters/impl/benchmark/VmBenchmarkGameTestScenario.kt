@@ -80,6 +80,10 @@ internal object VmBenchmarkGameTestScenario {
                 helper.assertTrue(snapshot.wakeTicks.samples == 2, "capacity wake distribution is incomplete")
                 helper.assertTrue(snapshot.completionTicks.samples == 2, "capacity completion distribution is incomplete")
                 helper.assertTrue(snapshot.memory.availableSamples == 2, "capacity memory samples are incomplete")
+                helper.assertTrue(
+                    snapshot.metrics.capacityFallbackReason == null,
+                    "VM calibration fell back: ${snapshot.metrics.capacityFallbackReason}",
+                )
             }.thenWaitUntil {
                 helper.assertTrue(
                     first.runtimeState == ProgramComputerState.WaitingForInput &&

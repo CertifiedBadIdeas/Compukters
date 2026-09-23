@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.impl.config
 
 import net.neoforged.neoforge.common.ModConfigSpec
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
+import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityGovernorConfig
 
 object CompuktersServerConfig {
     private val builder = ModConfigSpec.Builder()
@@ -50,10 +51,16 @@ object CompuktersServerConfig {
         builder
             .comment("Maximum undelivered actor replies retained by each VM worker")
             .defineInRange("vm.result_capacity_per_worker", 256, 1, 4_096)
+    private val hostSharePercent =
+        builder
+            .comment("Maximum calibrated share of one server tick granted to Guest VM instructions, in percent")
+            .defineInRange("vm.host_share_percent", 5, 1, 50)
 
     val SPEC: ModConfigSpec = builder.build()
 
     fun maximumActors(): Int = maximumActors.get()
+
+    fun capacityGovernorConfig(): VmCapacityGovernorConfig = VmCapacityGovernorConfig(hostSharePercent = hostSharePercent.get())
 
     fun schedulerConfig(): VmActorSchedulerConfig =
         VmActorSchedulerConfig(

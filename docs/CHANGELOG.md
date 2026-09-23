@@ -88,6 +88,12 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - Completion, automatic imports, parameter information, and source navigation include compatible APIs supplied by
   installed addons. Selecting `Kinetics` also enables the `create` addon for the project.
 
+### Computer runtime
+
+- Active computers now share a calibrated server-wide Guest instruction capacity each tick. Reservations rotate
+  fairly between computers under overload, while waiting computers leave the runnable pool until input or a world
+  completion wakes them. Server operators can inspect the capacity and throttling counters with `vmbench status`.
+
 ## 0.4.0 — 2026-09-12
 
 This release makes the integrated multi-file Kotlin IDE available on both supported Minecraft versions, adds a Java

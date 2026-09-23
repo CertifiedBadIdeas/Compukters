@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRout
 import ru.lazyhat.compukters.core.device.runtime.program.EmptyProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonRequestPort
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneHostPort
@@ -33,17 +34,34 @@ import ru.lazyhat.compukters.core.device.runtime.program.SoundRequest
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /** Owns runtime actors and is the only supported cross-thread entry point to their native sessions. */
 class ProgramRuntimeActorService(
     config: VmActorSchedulerConfig = VmActorSchedulerConfig(),
+    private val perComputerEntitlement: Int = 131_072,
+    private val safeInstructionCapacity: Long? = null,
+    private val capacityGovernor: VmCapacityGovernor = VmCapacityGovernor(),
 ) : AutoCloseable {
+    init {
+        require(perComputerEntitlement > 0) { "per-computer entitlement must be positive" }
+        require(safeInstructionCapacity == null || safeInstructionCapacity >= 0) {
+            "safe instruction capacity must not be negative"
+        }
+    }
+
+    private val frameLock = Any()
+    private var capacityFrame: CapacityFrame? = null
+    internal var lastCapacityAllocation = PerComputerCapacityAllocation(emptyList(), 0, 0)
+        private set
     internal val redstoneInputCapacity = config.mailboxCapacity
     private val scheduler =
         VmActorScheduler<ProgramRuntimeActorMessage, ProgramRuntimeTickPermit, ProgramRuntimeActorReply>(config)
     private val pending = ConcurrentHashMap<RequestAddress, PendingRequest>()
+    private val reservations = ConcurrentHashMap<RequestAddress, Long>()
+    private val knownRunnable = ConcurrentHashMap<VmActorEndpoint, Boolean>()
     private val deferredWorldRequests = ConcurrentHashMap.newKeySet<VmActorEndpoint>()
     private val nextRequestId = AtomicLong()
     private val totalDeferredWorldRequests = AtomicLong()
@@ -54,6 +72,14 @@ class ProgramRuntimeActorService(
     private val coalescedRedstoneInputs = AtomicLong()
     private val lastPumpEvents = AtomicInteger()
     private val lastPumpNanos = AtomicLong()
+    private val lastRunnableComputers = AtomicInteger()
+    private val lastWaitingComputers = AtomicInteger()
+    private val lastThrottledComputers = AtomicInteger()
+    private val totalRetiredInstructions = AtomicLong()
+    private val totalUnusedReservations = AtomicLong()
+    private val countersSaturated = AtomicBoolean()
+    private var previousFrameHadDemand = false
+    private var observedLateTurn = false
 
     fun registerStandalone(
         endpoint: VmActorEndpoint,
@@ -113,7 +139,7 @@ class ProgramRuntimeActorService(
     ): ProgramRuntimeActorLease? {
         val processor = ProgramRuntimeActorProcessor(host, port, soundPort, addonPort)
         if (!scheduler.register(endpoint, processor)) return null
-        return ProgramRuntimeActorLease(endpoint, processor.closed) { scheduler.unregister(endpoint) }
+        return ProgramRuntimeActorLease(endpoint, processor.closed) { unregister(endpoint) }
     }
 
     fun request(
@@ -133,6 +159,7 @@ class ProgramRuntimeActorService(
             if (preparedCommand.isInput()) rejectedInputRequests.incrementAndGet()
             future.completeExceptionally(ProgramRuntimeActorRequestException(submission))
         } else {
+            if (preparedCommand.isInput()) knownRunnable[endpoint] = true
             future.whenComplete { _, _ ->
                 if (future.isCancelled) pending.remove(address, pendingRequest)
             }
@@ -159,7 +186,20 @@ class ProgramRuntimeActorService(
                 },
             )
         check(pending.putIfAbsent(address, pendingRequest) == null) { "runtime request id collision" }
-        val submission = scheduler.submitWithPermit(endpoint, effects, ProgramRuntimeTickPermit(requestId, worldTick))
+        val permit = ProgramRuntimeTickPermit(requestId, worldTick)
+        val submission =
+            synchronized(frameLock) {
+                val frame = capacityFrame
+                if (frame == null) {
+                    scheduler.submitWithPermit(endpoint, effects, permit)
+                } else {
+                    scheduler.submitWithDeferredPermit(endpoint, effects, permit).also { accepted ->
+                        if (accepted == VmActorSubmission.ACCEPTED) {
+                            frame.turns += PendingTurn(endpoint, permit, address, pendingRequest, effects.isNotEmpty())
+                        }
+                    }
+                }
+            }
         if (submission != VmActorSubmission.ACCEPTED) {
             pending.remove(address, pendingRequest)
             if (effects.any { it is ProgramRuntimeActorEffect.RedstoneInput }) rejectedInputRequests.incrementAndGet()
@@ -172,8 +212,82 @@ class ProgramRuntimeActorService(
         return future
     }
 
-    fun unregister(endpoint: VmActorEndpoint): CompletableFuture<Boolean> =
-        scheduler.unregister(endpoint).whenComplete { _, _ -> deferredWorldRequests.remove(endpoint) }
+    /** Starts collection for the server tick; carrier turns retain their mailbox fences until flush. */
+    fun beginCapacityFrame(worldTick: Long) {
+        require(worldTick >= 0) { "world tick must not be negative" }
+        synchronized(frameLock) {
+            check(capacityFrame == null) { "previous capacity frame has not been flushed" }
+            lastCapacityAllocation = PerComputerCapacityAllocation(emptyList(), 0, 0)
+            capacityFrame = CapacityFrame(worldTick)
+        }
+    }
+
+    /** Releases only the computers that submitted a turn, with reservations from one shared capacity. */
+    fun flushCapacityFrame() {
+        synchronized(frameLock) {
+            val frame = capacityFrame ?: return
+            capacityFrame = null
+            val allocation =
+                PerComputerCapacityAllocator.allocate(
+                    frame.turns.filter { knownRunnable[it.endpoint] != false || it.wakesGuest }.map(PendingTurn::endpoint),
+                    perComputerEntitlement,
+                    safeInstructionCapacity ?: capacityGovernor.currentCapacity,
+                    frame.worldTick,
+                )
+            val grants = allocation.grants.associateBy(PerComputerCapacityGrant::endpoint)
+            lastCapacityAllocation = allocation
+            previousFrameHadDemand = allocation.grants.isNotEmpty()
+            lastRunnableComputers.set(allocation.grants.size)
+            lastWaitingComputers.set(frame.turns.size - allocation.grants.size)
+            lastThrottledComputers.set(allocation.grants.count { it.retiredInstructionLimit < perComputerEntitlement })
+            val deadlineNanos = capacityDeadlineNanos()
+            frame.turns.forEach { turn ->
+                val allowance = grants[turn.endpoint]?.retiredInstructionLimit?.toInt() ?: 0
+                if (allowance > 0) reservations[turn.address] = allowance.toLong()
+                if (!scheduler.releaseDeferredPermit(
+                        turn.endpoint,
+                        turn.permit.copy(retirementAllowance = allowance, deadlineNanos = deadlineNanos),
+                    )
+                ) {
+                    reservations.remove(turn.address)?.let { addSaturating(totalUnusedReservations, it) }
+                    pending.remove(turn.address, turn.request)
+                    turn.request.future.completeExceptionally(ProgramRuntimeActorRequestException(VmActorSubmission.STALE_ENDPOINT))
+                }
+            }
+        }
+    }
+
+    /** Called once at the next server tick boundary, after draining the prior frame's results. */
+    fun observePreviousCapacityFrame() {
+        val schedulerMetrics = scheduler.metrics()
+        capacityGovernor.observeTick(
+            hadDemand = previousFrameHadDemand,
+            deadlineOverrun =
+                observedLateTurn || schedulerMetrics.pendingPermits > 0 || schedulerMetrics.busyWorkers > 0,
+        )
+        observedLateTurn = false
+        previousFrameHadDemand = false
+    }
+
+    fun unregister(endpoint: VmActorEndpoint): CompletableFuture<Boolean> {
+        knownRunnable.remove(endpoint)
+        val deferred =
+            synchronized(frameLock) {
+                capacityFrame?.turns?.firstOrNull { it.endpoint == endpoint }?.also { turn ->
+                    capacityFrame?.turns?.remove(turn)
+                }
+            }
+        if (deferred != null) {
+            // A closing computer may drain its queued effects, but receives no Guest execution.
+            if (!scheduler.releaseDeferredPermit(endpoint, deferred.permit.copy(retirementAllowance = 0))) {
+                pending.remove(deferred.address, deferred.request)
+                deferred.request.future.completeExceptionally(
+                    ProgramRuntimeActorRequestException(VmActorSubmission.STALE_ENDPOINT),
+                )
+            }
+        }
+        return scheduler.unregister(endpoint).whenComplete { _, _ -> deferredWorldRequests.remove(endpoint) }
+    }
 
     fun pump(maximumEvents: Int): Int {
         val startedAt = System.nanoTime()
@@ -182,7 +296,16 @@ class ProgramRuntimeActorService(
             when (event) {
                 is VmActorEvent.Result -> {
                     val reply = event.value
-                    val request = pending.remove(RequestAddress(event.endpoint, reply.requestId)) ?: return@forEach
+                    if (reply.hostDeadlineMissed) observedLateTurn = true
+                    knownRunnable[event.endpoint] = reply.state == ProgramRuntimeState.Running
+                    val address = RequestAddress(event.endpoint, reply.requestId)
+                    val reserved = reservations.remove(address)
+                    if (reserved != null) {
+                        check(reply.retiredInstructions in 0..reserved) { "actor exceeded its instruction reservation" }
+                        addSaturating(totalRetiredInstructions, reply.retiredInstructions)
+                        addSaturating(totalUnusedReservations, (reserved - reply.retiredInstructions).coerceAtLeast(0))
+                    }
+                    val request = pending.remove(address) ?: return@forEach
                     if (request.completesWorldRequest) deferredWorldRequests.remove(event.endpoint)
                     if (
                         (
@@ -200,6 +323,12 @@ class ProgramRuntimeActorService(
                 is VmActorEvent.Failed -> {
                     val failure = ProgramRuntimeActorFailedException(event.endpoint, event.cause)
                     deferredWorldRequests.remove(event.endpoint)
+                    knownRunnable.remove(event.endpoint)
+                    reservations.entries.removeIf { (address, reserved) ->
+                        if (address.endpoint != event.endpoint) return@removeIf false
+                        addSaturating(totalUnusedReservations, reserved)
+                        true
+                    }
                     pending.entries.removeIf { (address, request) ->
                         if (address.endpoint != event.endpoint) return@removeIf false
                         request.future.completeExceptionally(failure)
@@ -214,6 +343,20 @@ class ProgramRuntimeActorService(
     }
 
     fun metrics(): VmActorSchedulerMetrics = scheduler.metrics()
+
+    fun calibratedCapacity(): Long = capacityGovernor.calibratedCapacity
+
+    fun currentSafeCapacity(): Long = safeInstructionCapacity ?: capacityGovernor.currentCapacity
+
+    fun capacityFallbackReason(): String? = capacityGovernor.fallbackReason
+
+    fun acceptCapacityCalibration(measurement: VmCapacityCalibration) {
+        capacityGovernor.calibrated(measurement)
+    }
+
+    fun rejectCapacityCalibration(reason: String) {
+        capacityGovernor.calibrationFailed(reason)
+    }
 
     internal fun recordHostContinuationDelay(delayTicks: Long) {
         require(delayTicks >= 0) { "host continuation delay must not be negative" }
@@ -239,14 +382,35 @@ class ProgramRuntimeActorService(
             coalescedRedstoneInputs = coalescedRedstoneInputs.get(),
             lastPumpEvents = lastPumpEvents.get(),
             lastPumpNanos = lastPumpNanos.get(),
+            calibratedInstructionCapacity = capacityGovernor.calibratedCapacity,
+            currentInstructionCapacity = currentSafeCapacity(),
+            measuredCapacityWorkers = capacityGovernor.measuredWorkers,
+            capacityFallbackReason = capacityGovernor.fallbackReason,
+            runnableComputersLastFrame = lastRunnableComputers.get(),
+            waitingComputersLastFrame = lastWaitingComputers.get(),
+            throttledComputersLastFrame = lastThrottledComputers.get(),
+            requestedInstructionsLastFrame = lastCapacityAllocation.requestedInstructions,
+            reservedInstructionsLastFrame = lastCapacityAllocation.reservedInstructions,
+            missedInstructionsLastFrame = lastCapacityAllocation.missedInstructions,
+            retiredInstructionsTotal = totalRetiredInstructions.get(),
+            unusedReservationsTotal = totalUnusedReservations.get(),
+            countersSaturated = countersSaturated.get(),
         )
 
     override fun close() {
+        synchronized(frameLock) {
+            capacityFrame?.turns?.forEach { turn ->
+                scheduler.releaseDeferredPermit(turn.endpoint, turn.permit.copy(retirementAllowance = 0))
+            }
+            capacityFrame = null
+        }
         scheduler.close()
         val failure = ProgramRuntimeActorServiceClosedException()
         pending.values.forEach { it.future.completeExceptionally(failure) }
         pending.clear()
+        reservations.clear()
         deferredWorldRequests.clear()
+        knownRunnable.clear()
     }
 
     private data class RequestAddress(
@@ -258,6 +422,39 @@ class ProgramRuntimeActorService(
         val future: CompletableFuture<ProgramRuntimeActorReply>,
         val completesWorldRequest: Boolean,
     )
+
+    private data class PendingTurn(
+        val endpoint: VmActorEndpoint,
+        val permit: ProgramRuntimeTickPermit,
+        val address: RequestAddress,
+        val request: PendingRequest,
+        val wakesGuest: Boolean,
+    )
+
+    private data class CapacityFrame(
+        val worldTick: Long,
+        val turns: MutableList<PendingTurn> = ArrayList(),
+    )
+
+    private fun addSaturating(
+        counter: AtomicLong,
+        value: Long,
+    ) {
+        require(value >= 0) { "capacity counter increment must not be negative" }
+        counter.updateAndGet { previous ->
+            if (Long.MAX_VALUE - previous < value) {
+                countersSaturated.set(true)
+                Long.MAX_VALUE
+            } else {
+                previous + value
+            }
+        }
+    }
+
+    private fun capacityDeadlineNanos(): Long {
+        if (safeInstructionCapacity != null) return Long.MAX_VALUE
+        return System.nanoTime() + capacityGovernor.hostTimeBudgetNanos
+    }
 
     private companion object {
         fun incrementRequestId(previous: Long): Long = if (previous == Long.MAX_VALUE) 1 else previous + 1

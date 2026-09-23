@@ -153,6 +153,7 @@ class ProgramRuntimeHost internal constructor(
     fun serverTick(
         worldTick: Long,
         retirementAllowance: Int = Int.MAX_VALUE,
+        deadlineNanos: Long = Long.MAX_VALUE,
     ): ProgramRuntimeState {
         require(worldTick >= 0) { "world tick must not be negative" }
         require(worldTick >= lastObservedTick) { "world tick must not move backwards" }
@@ -169,7 +170,7 @@ class ProgramRuntimeHost internal constructor(
             return state
         }
         if (pendingRedstoneCommit != null || pendingSoundCommit != null) return state
-        advanceForTick(activeSession, retirementAllowance)
+        advanceForTick(activeSession, retirementAllowance, deadlineNanos)
         if (session !== activeSession) return state
         try {
             activeSession.commitTerminal()
@@ -182,9 +183,17 @@ class ProgramRuntimeHost internal constructor(
     private fun advanceForTick(
         activeSession: ProgramVmSession,
         retirementAllowance: Int,
+        deadlineNanos: Long,
     ) {
         var remainingHostRequests = tickBudget.hostRequestsPerTick
         repeat(tickBudget.maximumAdvancesPerTick) {
+            if (
+                retirementAllowance > retiredInstructionsLastTick &&
+                deadlineNanos != Long.MAX_VALUE &&
+                System.nanoTime() - deadlineNanos >= 0
+            ) {
+                return
+            }
             val outcome =
                 try {
                     grantedBudgets.grant(tickBudget.guestBudgetPerAdvance, tickBudget.maintenanceBudgetPerAdvance)
