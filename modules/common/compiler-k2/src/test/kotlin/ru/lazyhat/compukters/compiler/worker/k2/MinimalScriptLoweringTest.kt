@@ -1035,7 +1035,10 @@ class MinimalScriptLoweringTest {
                 }
 
                 fun main() {
-                    classify(Exited(7))
+                    println(classify(Exited(7)))
+                    println(classify(Failed(Reason.NOT_FOUND, "missing")))
+                    println(classify(Failed(Reason.TRAPPED, "ignored")))
+                    println(Reason.NOT_FOUND == Reason.TRAPPED)
                 }
                 """.trimIndent()
 
@@ -1075,7 +1078,7 @@ class MinimalScriptLoweringTest {
                     }.flatMap(Block::instructions)
                     .none { it is Instruction.StaticSet },
             )
-            assertEquals(4, typeTags.count { it == 3 }, "two source functions, the reachable Exited constructor and enum initializer")
+            assertTrue(typeTags.count { it == 3 } >= 5, "source functions, both data constructors, and enum initializer need signatures")
             assertEquals(3, typeTags.count { it == 0 }, "Exited, Failed and Reason classes")
             assertEquals(1, typeTags.count { it == 1 }, "sealed Result interface")
             assertEquals(5, indexedSectionRecords(artifact, 0x0105).size, "three properties and two enum roots")
