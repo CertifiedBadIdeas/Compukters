@@ -1440,13 +1440,53 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `guest object subset rejects generic secondary defaulted uninitialized stateful and explicit cast shapes`() =
+    fun `primary constructor defaults preserve argument order and earlier parameters`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                fun mark(value: Int): Int { println(value); return value }
+                class Packet(
+                    val first: Int = mark(1),
+                    val second: Int = first + mark(2),
+                    var third: Int = mark(3),
+                ) {
+                    init { println(first * 100 + second * 10 + third) }
+                }
+                fun main() {
+                    val one = Packet(third = mark(30), first = mark(10))
+                    val two = Packet()
+                    val factory: (Int, Int, Int) -> Packet = ::Packet
+                    factory(4, 5, 6)
+                    println(one.second)
+                    one.third = 99
+                    println(one.third)
+                    println(two.third)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.constructorDefaultsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `unsupported omitted constructor default publishes no artifact`() =
+        withAdapter { adapter ->
+            val source = "class Box(val value: Int = 1 as Int)\nfun main() { Box() }"
+            val result = adapter.compile(request(source))
+            assertNull(result.artifact)
+            assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" }, result.diagnostics.toString())
+        }
+
+    @Test
+    fun `guest object subset rejects generic secondary uninitialized stateful and explicit cast shapes`() =
         withAdapter { adapter ->
             val unsupported =
                 listOf(
                     "data class Generic<T>(val value: T)\nfun main() { Generic(1) }",
                     "class Secondary(val value: Int) { constructor() : this(0) }\nfun main() { Secondary() }",
-                    "class Defaulted(val value: Int = 1)\nfun main() { Defaulted() }",
                     "class Uninitialized { lateinit var value: String }\nfun main() { Uninitialized() }",
                     "enum class Stateful(val code: Int) { ONE(1) }\nfun main() { Stateful.ONE }",
                     "sealed interface Value\ndata class NumberValue(val value: Int) : Value\nfun read(value: Value): Int = (value as NumberValue).value\nfun main() { read(NumberValue(1)) }",

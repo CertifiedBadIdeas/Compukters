@@ -317,6 +317,7 @@ val abstractPropertiesConformanceArtifact = layout.buildDirectory.file("generate
 val interfaceDefaultsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-interface-defaults.cpkt")
 val interfaceSuperConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-interface-super.cpkt")
 val classInitializationConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-class-initialization.cpkt")
+val constructorDefaultsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-constructor-defaults.cpkt")
 val mutableFieldsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-mutable-fields.cpkt")
 val functionValuesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-function-values.cpkt")
 val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
@@ -449,6 +450,22 @@ val generateClassInitializationConformanceArtifact = tasks.register<Test>("gener
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.classInitializationArtifact", classInitializationConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateConstructorDefaultsConformanceArtifact = tasks.register<Test>("generateConstructorDefaultsConformanceArtifact") {
+    description = "Compiles Guest primary constructor defaults for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*primary constructor defaults preserve argument order and earlier parameters*")
+    inputs.file(workerJar)
+    outputs.file(constructorDefaultsConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.constructorDefaultsArtifact", constructorDefaultsConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

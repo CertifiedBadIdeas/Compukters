@@ -28,7 +28,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - Guest classes and interfaces support ordinary non-suspending instance methods, overrides, and runtime class or
   interface dispatch. Primary-constructor `var` properties can be assigned through object references and instance
   methods; aliases observe the updated field. Class-body properties and `init` blocks run in source order after the
-  superclass initializer on the same object, including construction through a constructor reference. Computed class
+  superclass initializer on the same object, including construction through a constructor reference. Primary
+  constructors can use Guest expressions for default arguments in ordinary calls, including values derived from
+  earlier parameters; explicit arguments run before omitted defaults. Computed class
   properties and custom getters/setters can read or update backing fields and dispatch through base-class references.
   Abstract class and interface `val`/`var` properties dispatch to concrete implementations without storing fields in
   their abstract declarations. Interfaces can also provide default method bodies and computed property accessors;
