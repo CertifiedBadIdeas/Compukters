@@ -31,6 +31,38 @@ import kotlin.test.assertTrue
 
 class ProgramRuntimeActorServiceTest {
     @Test
+    fun `capacity frame divides one reservation among submitted computers`() {
+        val first = VmActorEndpoint(ComputerId.fromLongs(0, 1), 1)
+        val second = VmActorEndpoint(ComputerId.fromLongs(0, 2), 1)
+        val config = VmActorSchedulerConfig(workerCount = 1, maximumActors = 2, mailboxCapacity = 4, messagesPerTurn = 1)
+        ProgramRuntimeActorService(config, perComputerEntitlement = 2, safeInstructionCapacity = 1).use { service ->
+            assertTrue(service.registerStandalone(first))
+            assertTrue(service.registerStandalone(second))
+            service.beginCapacityFrame(0)
+            val firstTurn = service.turn(first, 0)
+            val secondTurn = service.turn(second, 0)
+            assertEquals(0, service.metrics().processedPermits)
+
+            service.flushCapacityFrame()
+            assertEquals(listOf(1L, 0L), service.lastCapacityAllocation.grants.map { it.retiredInstructionLimit })
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS)
+            while ((!firstTurn.isDone || !secondTurn.isDone) && System.nanoTime() < deadline) {
+                service.pump(2)
+                Thread.onSpinWait()
+            }
+            assertTrue(firstTurn.isDone)
+            assertTrue(secondTurn.isDone)
+            assertEquals(2, service.metrics().processedPermits)
+
+            service.beginCapacityFrame(1)
+            service.turn(first, 1, listOf(ProgramRuntimeActorEffect.RedstoneInput(0)))
+            service.turn(second, 1)
+            service.flushCapacityFrame()
+            assertEquals(listOf(first), service.lastCapacityAllocation.grants.map { it.endpoint })
+        }
+    }
+
+    @Test
     fun `accepted request completes only when the server pumps its result`() {
         val endpoint = VmActorEndpoint(ComputerId.fromLongs(1, 2), 1)
         ProgramRuntimeActorService(testConfig()).use { service ->

@@ -121,6 +121,19 @@ data class ProgramRuntimeActorMetrics(
     val coalescedRedstoneInputs: Long,
     val lastPumpEvents: Int,
     val lastPumpNanos: Long,
+    val calibratedInstructionCapacity: Long = 0,
+    val currentInstructionCapacity: Long = 0,
+    val measuredCapacityWorkers: Int = 0,
+    val capacityFallbackReason: String? = null,
+    val runnableComputersLastFrame: Int = 0,
+    val waitingComputersLastFrame: Int = 0,
+    val throttledComputersLastFrame: Int = 0,
+    val requestedInstructionsLastFrame: Long = 0,
+    val reservedInstructionsLastFrame: Long = 0,
+    val missedInstructionsLastFrame: Long = 0,
+    val retiredInstructionsTotal: Long = 0,
+    val unusedReservationsTotal: Long = 0,
+    val countersSaturated: Boolean = false,
 )
 
 interface VmActorProcessor<in C : Any, in P : Any, out R : Any> : AutoCloseable {

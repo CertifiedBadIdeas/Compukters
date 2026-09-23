@@ -22,7 +22,9 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorComman
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
+import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityCalibration
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -33,6 +35,39 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class VmActorServiceRegistryTest {
+    @Test
+    fun `completed startup calibration replaces fallback and failure keeps it bounded`() {
+        val successful =
+            VmActorServiceRegistry<Any>(
+                checkOwner = {},
+                opener = ::service,
+                calibrator = { CompletableFuture.completedFuture(VmCapacityCalibration(1_000_000, 100_000_000, 2)) },
+            )
+        val failed =
+            VmActorServiceRegistry<Any>(
+                checkOwner = {},
+                opener = ::service,
+                calibrator = { CompletableFuture.failedFuture(IllegalStateException("sample failed")) },
+            )
+        val first = Any()
+        val second = Any()
+        successful.start(first)
+        failed.start(second)
+        try {
+            val calibrated = successful.service(first)
+            val fallback = failed.service(second)
+            successful.tick(first)
+            failed.tick(second)
+            assertEquals(12_500L, calibrated.currentSafeCapacity())
+            assertNull(calibrated.capacityFallbackReason())
+            assertEquals(8_192L, fallback.currentSafeCapacity())
+            assertEquals("sample failed", fallback.capacityFallbackReason())
+        } finally {
+            successful.stop(first)
+            failed.stop(second)
+        }
+    }
+
     @Test
     fun `idle server ticks allocate no worker service and stop forbids reopening`() {
         var opened = 0
@@ -55,7 +90,12 @@ class VmActorServiceRegistryTest {
     @Test
     fun `each server owns one service and ticks deliver at most the configured budget`() {
         val owner = Thread.currentThread()
-        val registry = VmActorServiceRegistry<Any>({ check(Thread.currentThread() === owner) }, ::service, 1)
+        val registry =
+            VmActorServiceRegistry<Any>(
+                { check(Thread.currentThread() === owner) },
+                ::service,
+                maximumEventsPerTick = 1,
+            )
         val first = Any()
         val second = Any()
         registry.start(first)

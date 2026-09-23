@@ -73,6 +73,19 @@ import kotlin.test.assertTrue
 
 class ProgramRuntimeHostTest {
     @Test
+    fun `expired host deadline skips guest execution without consuming the tick allowance`() {
+        val session = ScriptedSession(outcomes = listOf(VmOutcome.SliceExhausted), retiredCounts = listOf(2L))
+        val host = host(session, ProgramTickBudget(maximumAdvancesPerTick = 4))
+        host.start(byteArrayOf(1))
+
+        assertEquals(ProgramRuntimeState.Running, host.serverTick(0, retirementAllowance = 3, deadlineNanos = 1))
+        assertEquals(0L, host.retiredInstructionsLastTick)
+        assertTrue(session.retirementLimits.isEmpty())
+        assertEquals(ProgramRuntimeState.Running, host.serverTick(1, retirementAllowance = 2))
+        assertEquals(2L, host.retiredInstructionsLastTick)
+    }
+
+    @Test
     fun `retirement allowance is shared across advances and resets on the next tick`() {
         val session =
             ScriptedSession(

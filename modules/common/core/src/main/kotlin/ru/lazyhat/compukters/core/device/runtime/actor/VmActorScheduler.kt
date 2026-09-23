@@ -138,6 +138,19 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
         endpoint: VmActorEndpoint,
         commands: List<C>,
         permit: P,
+    ): VmActorSubmission = submitWithPermit(endpoint, commands, permit, ready = true)
+
+    fun submitWithDeferredPermit(
+        endpoint: VmActorEndpoint,
+        commands: List<C>,
+        permit: P,
+    ): VmActorSubmission = submitWithPermit(endpoint, commands, permit, ready = false)
+
+    private fun submitWithPermit(
+        endpoint: VmActorEndpoint,
+        commands: List<C>,
+        permit: P,
+        ready: Boolean,
     ): VmActorSubmission {
         if (!accepting.get()) {
             closedRejections.incrementAndGet()
@@ -166,7 +179,7 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
             commands.forEach { command ->
                 actor.mailbox.addLast(QueuedCommand(++actor.mailboxSequence, command, enqueuedAt))
             }
-            actor.pendingPermit = QueuedPermit(actor.mailboxSequence, permit, enqueuedAt)
+            actor.pendingPermit = QueuedPermit(actor.mailboxSequence, permit, enqueuedAt, ready)
             queuedMessages.addAndGet(commands.size)
             pendingPermits.incrementAndGet()
             acceptedMessages.addAndGet(commands.size.toLong())
@@ -179,6 +192,28 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
         }
         if (schedule) enqueue(actor)
         return VmActorSubmission.ACCEPTED
+    }
+
+    fun releaseDeferredPermit(
+        endpoint: VmActorEndpoint,
+        permit: P,
+    ): Boolean {
+        val actor = actors[endpoint.computerId] ?: return false
+        var schedule = false
+        synchronized(actor.lock) {
+            if (actor.endpoint != endpoint || actor.closed) return false
+            val pending = actor.pendingPermit ?: return false
+            if (pending.ready || pending.executing) return false
+            pending.permit = permit
+            pending.ready = true
+            if (!actor.scheduled) {
+                actor.scheduled = true
+                scheduledActors.incrementAndGet()
+                schedule = true
+            }
+        }
+        if (schedule) enqueue(actor)
+        return true
     }
 
     fun unregister(endpoint: VmActorEndpoint): CompletableFuture<Boolean> {
@@ -329,7 +364,7 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
                         actor.mailbox.removeFirst()
                         queuedMessages.decrementAndGet()
                         ActorAction(command = command)
-                    } else if (permit != null && !permit.executing) {
+                    } else if (permit != null && permit.ready && !permit.executing) {
                         permit.executing = true
                         ActorAction(permit = permit)
                     } else {
@@ -379,7 +414,12 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
         var reschedule = false
         synchronized(actor.lock) {
             if (actor.closed) return
-            if (actor.mailbox.isNotEmpty() || actor.pendingPermit != null) {
+            val permit = actor.pendingPermit
+            val command = actor.mailbox.firstOrNull()
+            if (
+                (command != null && (permit == null || command.sequence <= permit.fenceSequence)) ||
+                (permit != null && permit.ready)
+            ) {
                 reschedule = true
             } else if (actor.closing) {
                 close = true
@@ -397,6 +437,12 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
     private fun closeActor(actor: ActorCell<C, P, R>) {
         synchronized(actor.lock) {
             if (actor.closed) return
+            queuedMessages.addAndGet(-actor.mailbox.size)
+            actor.mailbox.clear()
+            if (actor.pendingPermit != null) {
+                actor.pendingPermit = null
+                pendingPermits.decrementAndGet()
+            }
             actor.closed = true
             actor.scheduled = false
             scheduledActors.decrementAndGet()
@@ -480,8 +526,9 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
 
     private class QueuedPermit<P : Any>(
         val fenceSequence: Long,
-        val permit: P,
+        var permit: P,
         val enqueuedAtNanos: Long,
+        var ready: Boolean,
     ) {
         var executing = false
     }

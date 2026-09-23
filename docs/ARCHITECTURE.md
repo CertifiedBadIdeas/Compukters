@@ -293,6 +293,10 @@ machine-creation calls carry a bounded, versioned schema for optional host capab
 schema before admitting the executable, so addon operations use the same typed verifier contract as built-in devices.
 ABI v16 also adds an instruction-limited advance that returns retired instruction count separately from the existing
 weighted guest and maintenance budgets. The earlier advance wire result and its meaning remain unchanged.
+Server tick requests enter actor mailboxes with a deferred permit. After block entities and benchmark carriers submit
+their requests, the NeoForge post-tick hook divides aggregate instruction capacity among the submitted runnable
+computers and releases their permits. World effects remain ahead of each permit, while later actor commands stay behind
+it. A deferred permit releases its worker token while waiting for the post-tick allocation.
 The guest filesystem facade exposes bounded `stat`, `list`, `readText`, and `writeText`; Rust validates paths, UTF-8, permissions,
 quotas, and atomic replacement while `/rom` remains immutable. The shell and editor map stable failures to user-facing
 diagnostics. Executable installation remains a Rust-owned filesystem transaction and never accepts a host path.

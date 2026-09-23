@@ -25,13 +25,18 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent
 import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorMetrics
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
+import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityCalibration
+import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityGovernor
+import ru.lazyhat.compukters.impl.benchmark.VmCapacityCalibrator
 import ru.lazyhat.compukters.impl.config.CompuktersServerConfig
 import java.util.IdentityHashMap
+import java.util.concurrent.CompletableFuture
 
 /** Server-thread-owned lifecycle; a started server allocates workers only on first use. */
 internal class VmActorServiceRegistry<S : Any>(
     private val checkOwner: (S) -> Unit,
     private val opener: () -> ProgramRuntimeActorService = ::ProgramRuntimeActorService,
+    private val calibrator: (ProgramRuntimeActorService) -> CompletableFuture<VmCapacityCalibration>? = { null },
     private val maximumEventsPerTick: Int = 1_024,
 ) {
     private val servers = IdentityHashMap<S, Entry>()
@@ -49,12 +54,42 @@ internal class VmActorServiceRegistry<S : Any>(
     fun service(server: S): ProgramRuntimeActorService {
         checkOwner(server)
         val entry = checkNotNull(servers[server]) { "VM service requires a running server" }
-        return entry.service ?: opener().also { entry.service = it }
+        return entry.service ?: opener().also { service ->
+            entry.frameTick?.let(service::beginCapacityFrame)
+            entry.service = service
+            entry.calibration = calibrator(service)
+        }
     }
 
-    fun tick(server: S): Int {
+    fun tick(
+        server: S,
+        worldTick: Long? = null,
+    ): Int {
         checkOwner(server)
-        return servers[server]?.service?.pump(maximumEventsPerTick) ?: 0
+        val entry = servers[server] ?: return 0
+        entry.calibration?.takeIf { it.isDone }?.let { calibration ->
+            entry.calibration = null
+            val service = checkNotNull(entry.service)
+            try {
+                service.acceptCapacityCalibration(calibration.join())
+            } catch (failure: Exception) {
+                service.rejectCapacityCalibration(failure.cause?.message ?: failure.message ?: "calibration failed")
+            }
+        }
+        val pumped = entry.service?.pump(maximumEventsPerTick) ?: 0
+        if (worldTick != null) {
+            entry.service?.observePreviousCapacityFrame()
+            entry.frameTick = worldTick
+            entry.service?.beginCapacityFrame(worldTick)
+        }
+        return pumped
+    }
+
+    fun afterTick(server: S) {
+        checkOwner(server)
+        val entry = servers[server] ?: return
+        entry.service?.flushCapacityFrame()
+        entry.frameTick = null
     }
 
     fun metrics(server: S): ProgramRuntimeActorMetrics? {
@@ -69,6 +104,8 @@ internal class VmActorServiceRegistry<S : Any>(
 
     private class Entry {
         var service: ProgramRuntimeActorService? = null
+        var frameTick: Long? = null
+        var calibration: CompletableFuture<VmCapacityCalibration>? = null
     }
 }
 
@@ -78,7 +115,13 @@ internal object NeoForgeVmActorServices {
             checkOwner = { server ->
                 check(server.isSameThread) { "VM service lifecycle must run on the server thread" }
             },
-            opener = { ProgramRuntimeActorService(CompuktersServerConfig.schedulerConfig()) },
+            opener = {
+                ProgramRuntimeActorService(
+                    CompuktersServerConfig.schedulerConfig(),
+                    capacityGovernor = VmCapacityGovernor(CompuktersServerConfig.capacityGovernorConfig()),
+                )
+            },
+            calibrator = { VmCapacityCalibrator.start(CompuktersServerConfig.schedulerConfig().workerCount) },
         )
 
     fun service(server: MinecraftServer): ProgramRuntimeActorService = registry.service(server)
@@ -88,11 +131,13 @@ internal object NeoForgeVmActorServices {
     fun onServerStarting(event: ServerStartingEvent) = registry.start(event.server)
 
     fun beforeServerTick(event: ServerTickEvent.Pre) {
-        registry.tick(event.server)
+        registry.tick(event.server, event.server.tickCount.toLong())
         if (event.server.tickCount % METRICS_LOG_INTERVAL_TICKS == 0) {
             registry.metrics(event.server)?.let(::logMetrics)
         }
     }
+
+    fun afterServerTick(event: ServerTickEvent.Post) = registry.afterTick(event.server)
 
     fun onServerStopping(event: ServerStoppingEvent) = registry.stop(event.server)
 
@@ -119,7 +164,13 @@ internal object NeoForgeVmActorServices {
                 "max=${metrics.maximumHostContinuationDelayTicks} ticks, " +
                 "inputRejected=${metrics.rejectedInputRequests}, inputCoalesced=${metrics.coalescedRedstoneInputs}, " +
                 "mailboxRejected=${scheduler.mailboxFullRejections}, " +
-                "permitRejected=${scheduler.permitPendingRejections}"
+                "permitRejected=${scheduler.permitPendingRejections}, " +
+                "capacity=${metrics.currentInstructionCapacity}/${metrics.calibratedInstructionCapacity}, " +
+                "runnableComputers=${metrics.runnableComputersLastFrame}, waitingComputers=${metrics.waitingComputersLastFrame}, " +
+                "throttled=${metrics.throttledComputersLastFrame}, " +
+                "requested=${metrics.requestedInstructionsLastFrame}, reserved=${metrics.reservedInstructionsLastFrame}, " +
+                "missed=${metrics.missedInstructionsLastFrame}, retiredTotal=${metrics.retiredInstructionsTotal}, " +
+                "unusedTotal=${metrics.unusedReservationsTotal}"
         }
     }
 

@@ -92,6 +92,22 @@ command remains available for an immediate snapshot. Admission may be lower than
 already occupy the configured actor capacity. Run `stop` before changing the workload, and wait for `STOPPED` before
 starting another fleet.
 
+The same report includes `capacity=current/calibrated` retired Guest instructions per tick, `runnable`, `waiting`,
+`throttled`, `requested`, `reserved`, `missed`, lifetime `retired` and `unused`, and a calibration fallback reason when
+the conservative fallback is active. These are aggregate server diagnostics, not a computer's resource gauge.
+Calibration runs off-thread when the actor service first opens. It measures the packaged interpreter workload with
+integer control and managed allocations through the configured worker count and uses the slower measured rate.
+The `vm.host_share_percent` server config sets the fraction of one tick's measured host throughput available to Guest
+execution; the built-in safety factor reduces that further. A cooperative host-time deadline prevents another native
+advance after its window ends, and sustained late frames reduce the next frames' capacity.
+
+For #617 capacity evidence, record matching profiles with 1, 2, 4, 8, and 14 physical computers, then run the
+1000-computer headless `capacity`, CPU, and physical redstone workloads. For each profile retain the server config,
+calibrated and current capacity, runnable/throttled counts, retired and missed deltas, worker occupancy, queue and
+result latency, p50/p95/max completion ticks, and the equal-duration baseline and loaded MSPT. Repeat the settled
+idle window and wakeup phase before the CPU phase. Compare progress and server latency together; a high instruction
+throughput alone does not establish a sustainable setting.
+
 For an initial saturation profile, record an idle baseline and compare equal intervals at 1, 10, 100, 500, 1000, and
 4096 actors. Use enough rounds that the fleet remains active for the complete observation interval. Scheduler
 saturation should increase queue latency and completion time rather than Minecraft MSPT.

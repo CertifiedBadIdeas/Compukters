@@ -67,3 +67,18 @@ internal fun runVmbenchCpu(rounds: Int): Int {
     }
     return checksum
 }
+
+internal fun runVmbenchAlloc(rounds: Int): Int {
+    var checksum = 0
+    var round = 0
+    while (round < rounds) {
+        val values = IntArray(4)
+        values[0] = round
+        values[1] = round + 1
+        values[2] = round + 2
+        values[3] = round + 3
+        checksum = checksum xor values[round and 3]
+        round = round + 1
+    }
+    return checksum
+}

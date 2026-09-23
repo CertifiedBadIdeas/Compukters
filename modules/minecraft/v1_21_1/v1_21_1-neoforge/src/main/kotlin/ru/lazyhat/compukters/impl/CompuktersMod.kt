@@ -71,6 +71,11 @@ class CompuktersMod(
             ServerTickEvent.Post::class.java,
             VmBenchmarkCommands::afterServerTick,
         )
+        NeoForge.EVENT_BUS.addListener(
+            EventPriority.LOWEST,
+            ServerTickEvent.Post::class.java,
+            NeoForgeVmActorServices::afterServerTick,
+        )
         NeoForge.EVENT_BUS.addListener(VmBenchmarkCommands::onServerStopping)
         NeoForge.EVENT_BUS.addListener(NeoForgeVmActorServices::onServerStopping)
         NeoForge.EVENT_BUS.addListener(NeoForgeWorldFileSystemStores::onServerStopping)
