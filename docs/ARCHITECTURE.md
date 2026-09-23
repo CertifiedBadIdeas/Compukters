@@ -243,6 +243,12 @@ and cable topology. Lookup is scoped to one cable component and addon ID, reject
 returns a partial component after a traversal bound is exceeded. Typed addon host handles bind to the resolved device
 identity, so later rewiring or renaming cannot redirect an existing handle.
 
+The base text display uses the same bounded world-request path with an internal `compukters:display` capability. Its
+20x10 buffer and exclusive writer lease belong to the display block entity on the server, outside the VM terminal.
+The block tick checks its writer and cable reachability even while Guest code is idle. Stopping or disconnecting that
+writer clears the screen, and no display text is saved in world NBT. Clients receive at most one full-grid block-entity
+update per changed server tick and render text on the oriented front face.
+
 The client renders the fixed 51x19 grid in a centered compact panel while the world remains visible through a
 translucent dim layer. A separate footer presents rolling `CPU` utilization, current Guest heap and virtual-disk
 usage, and concise lifecycle activity. Here `CPU` is the virtual computer's consumed/granted semantic Guest-unit

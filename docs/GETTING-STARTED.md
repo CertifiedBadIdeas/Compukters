@@ -124,6 +124,7 @@ I/O, processes, and redstone are admitted through bounded runtime contracts.
 ## Next steps
 
 - Connect a program to the world with [Redstone GPIO](https://certifiedbadideas.github.io/Compukters/REDSTONE/).
+- Put program output on an in-world [Text display](https://certifiedbadideas.github.io/Compukters/DISPLAY/).
 - Read and control adjacent Create devices with [Create kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/).
 - Check exact language support in the [Guest Kotlin support matrix](https://certifiedbadideas.github.io/Compukters/KOTLIN-SUPPORT/).
 - Contributors can continue with [Architecture](https://certifiedbadideas.github.io/Compukters/ARCHITECTURE/) and [Verification](https://certifiedbadideas.github.io/Compukters/VERIFICATION/).
