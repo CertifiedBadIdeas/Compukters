@@ -324,8 +324,10 @@ VM-owned typed cell shared across nesting levels and sibling closures, including
 An unbound top-level Guest function reference uses the same managed function-value interface and a capture-free
 closure whose `invoke` method calls the referenced project function. An inferred `KFunction` value has the same Guest
 call behavior; reflection is not part of the Guest function-value contract.
-A reference to an admitted Guest primary constructor uses a capture-free managed closure. Its `invoke` method calls
-the existing constructor function and returns the new object, without a constructor-specific VM type or instruction.
+A reference to an admitted Guest primary constructor uses a capture-free managed closure. Its `invoke` method allocates
+the object, calls its constructor function with that receiver, and returns the object, without a constructor-specific
+VM type or instruction. Direct construction follows the same path. The constructor calls its superclass constructor
+on the same receiver before evaluating backed properties and `init` blocks in declaration order.
 Constructor-backed Guest `var` properties use the same managed instance fields as `val` properties. Default setter
 calls lower to verified `field_set` instructions after evaluating the receiver and assigned value in source order.
 A bound Guest instance-method reference evaluates its receiver once and stores that object in the closure. Its `invoke`

@@ -338,6 +338,15 @@ registerKotlinVmConformance(
     conformanceScenario = "mutable-fields",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinClassInitializationVmConformance",
+    taskDescription = "Executes K2-lowered Guest class initialization with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateClassInitializationConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-class-initialization.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-class-initialization-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_CLASS_INITIALIZATION_ARTIFACT",
+    conformanceScenario = "class-initialization",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinFunctionValuesVmConformance",
     taskDescription = "Executes K2-lowered zero-argument function values with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateFunctionValuesConformanceArtifact",

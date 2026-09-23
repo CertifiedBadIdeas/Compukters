@@ -1136,15 +1136,60 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `guest object subset rejects mutable generic initialized secondary and explicitly cast shapes`() =
+    fun `class body properties and init blocks lower in construction order`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                open class Base(val seed: Int) {
+                    var trace = seed
+                    init {
+                        println("base")
+                        trace = trace * 10 + 1
+                    }
+                }
+                class Child(value: Int) : Base(value) {
+                    val before = trace
+                    init {
+                        println("child")
+                        trace = trace * 10 + 2
+                    }
+                    val after = trace
+                }
+                class Counter(var value: Int) {
+                    fun next(): Int {
+                        value = value + 1
+                        return value
+                    }
+                }
+                fun main() {
+                    val counter = Counter(0)
+                    val child = Child(counter.next())
+                    println(child.before)
+                    println(child.after)
+                    println(counter.value)
+                    val make: (Int) -> Child = ::Child
+                    val other = make(4)
+                    println(other.before)
+                    println(other.after)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.classInitializationArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `guest object subset rejects generic secondary defaulted uninitialized computed stateful and explicit cast shapes`() =
         withAdapter { adapter ->
             val unsupported =
                 listOf(
-                    "class MutableBody(var value: Int) { var other: Int = 1 }\nfun main() { MutableBody(1) }",
                     "data class Generic<T>(val value: T)\nfun main() { Generic(1) }",
-                    "class Initialized(val value: Int) { init { value + 1 } }\nfun main() { Initialized(1) }",
                     "class Secondary(val value: Int) { constructor() : this(0) }\nfun main() { Secondary() }",
                     "class Defaulted(val value: Int = 1)\nfun main() { Defaulted() }",
+                    "class Uninitialized { lateinit var value: String }\nfun main() { Uninitialized() }",
                     "class Computed(val value: Int) { val doubled: Int get() = value + value }\nfun main() { Computed(1) }",
                     "enum class Stateful(val code: Int) { ONE(1) }\nfun main() { Stateful.ONE }",
                     "sealed interface Value\ndata class NumberValue(val value: Int) : Value\nfun read(value: Value): Int = (value as NumberValue).value\nfun main() { read(NumberValue(1)) }",
