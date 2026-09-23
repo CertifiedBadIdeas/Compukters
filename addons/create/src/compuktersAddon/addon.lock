@@ -21,3 +21,4 @@ operation create create 1 18 active create.logistics.LogisticsBindings.snapshotD
 operation create create 1 19 active create.logistics.LogisticsBindings.snapshotItemId fun(Int,Int):String
 operation create create 1 20 active create.logistics.LogisticsBindings.snapshotSize fun(Int):Int
 operation create create 1 21 active create.logistics.LogisticsBindings.closeSnapshot fun(Int):Unit
+operation create create 1 22 active create.logistics.LogisticsBindings.findItem fun(Int,String,Int):Int

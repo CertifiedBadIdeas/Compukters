@@ -27,6 +27,9 @@ public value class StockSnapshot internal constructor(private val handle: Int) {
 
     public fun count(index: Int): Int = LogisticsBindings.snapshotCount(handle, index)
 
+    /** Returns the next exact item-ID match at or after [fromIndex], or -1 when none remains. */
+    public fun findItem(itemId: String, fromIndex: Int = 0): Int = LogisticsBindings.findItem(handle, itemId, fromIndex)
+
     public fun request(index: Int, quantity: Int, address: String): Boolean =
         LogisticsBindings.request(handle, index, quantity, address)
 
@@ -71,6 +74,8 @@ private object LogisticsBindings {
     external fun snapshotDisplayName(handle: Int, index: Int): String
 
     external fun snapshotCount(handle: Int, index: Int): Int
+
+    external fun findItem(handle: Int, itemId: String, fromIndex: Int): Int
 
     external fun request(handle: Int, index: Int, quantity: Int, address: String): Boolean
 
