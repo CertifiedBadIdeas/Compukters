@@ -34,7 +34,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   `() -> Unit` values as bounded cooperative tasks. Unbound references to Guest top-level functions can be passed,
   returned, stored, and invoked as typed function values. Bound Guest instance-method references retain their receiver
   and preserve virtual and interface dispatch. Unbound `Type::method` references accept the receiver as their first
-  argument and use the same dispatch.
+  argument and use the same dispatch. References to supported Guest class constructors can also be passed, returned,
+  stored, and invoked as typed function values.
 
 ### Addons and Create
 

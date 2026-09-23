@@ -324,6 +324,8 @@ VM-owned typed cell shared across nesting levels and sibling closures, including
 An unbound top-level Guest function reference uses the same managed function-value interface and a capture-free
 closure whose `invoke` method calls the referenced project function. An inferred `KFunction` value has the same Guest
 call behavior; reflection is not part of the Guest function-value contract.
+A reference to an admitted Guest primary constructor uses a capture-free managed closure. Its `invoke` method calls
+the existing constructor function and returns the new object, without a constructor-specific VM type or instruction.
 A bound Guest instance-method reference evaluates its receiver once and stores that object in the closure. Its `invoke`
 method loads the stored receiver and uses the target method's static, virtual, or interface dispatch mode.
 An unbound instance-method reference has no receiver field; its first function parameter supplies the receiver for

@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrAnonymousInitializer
 import org.jetbrains.kotlin.ir.declarations.IrClass
+import org.jetbrains.kotlin.ir.declarations.IrConstructor
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrEnumEntry
@@ -205,6 +206,7 @@ private data class GuestClosureSource(
     val expression: IrExpression,
     val function: IrSimpleFunction?,
     val referenceTarget: IrSimpleFunction?,
+    val constructorTarget: IrConstructorSymbol?,
     val boundReceiver: IrExpression?,
     val ordinal: Int,
     val captures: List<IrValueDeclaration>,
@@ -221,6 +223,7 @@ private data class GuestClosureLayout(
     val expression: IrExpression,
     val function: IrSimpleFunction?,
     val referenceTarget: IrSimpleFunction?,
+    val constructorTarget: IrConstructorSymbol?,
     val ordinal: Int,
     val typeId: TypeId,
     val invokeFunctionId: FunctionId,
@@ -999,6 +1002,7 @@ internal object KotlinProjectLowering {
                     expression = source.expression,
                     function = source.function,
                     referenceTarget = source.referenceTarget,
+                    constructorTarget = source.constructorTarget,
                     ordinal = source.ordinal,
                     typeId = requireNotNull(closureTypeIds[source.expression]),
                     invokeFunctionId = requireNotNull(closureInvokeFunctionIds[source.expression]),
@@ -1259,9 +1263,16 @@ internal object KotlinProjectLowering {
             val receiverType = ValueType.Ref(nullable = false, type = closureType)
             val firstBlock = blocks.size
             val compiled =
-                if (layout.referenceTarget != null) {
+                if (layout.referenceTarget != null || layout.constructorTarget != null) {
                     val targetId =
-                        functionIds[layout.referenceTarget.symbol]
+                        layout.referenceTarget?.let { functionIds[it.symbol] }
+                            ?: layout.constructorTarget?.let { constructor ->
+                                constructorFunctionIds[constructor]
+                                    ?: throw UnsupportedKotlinIr(
+                                        layout.expression,
+                                        "constructor reference target is outside the supported Guest project subset",
+                                    )
+                            }
                             ?: throw UnsupportedKotlinIr(layout.expression, "function reference target is not in the Guest project")
                     val boundCapture = layout.captures.singleOrNull { it.initialValue != null }
                     val boundRegister = boundCapture?.let { RegisterId.of((layout.shape.arity + 1).toUInt()) }
@@ -1275,7 +1286,7 @@ internal object KotlinProjectLowering {
                             Destination.Register(RegisterId.of((layout.shape.arity + 1 + if (boundRegister == null) 0 else 1).toUInt()))
                         }
                     val arguments = listOfNotNull(boundRegister) + (1..layout.shape.arity).map { RegisterId.of(it.toUInt()) }
-                    val owner = layout.referenceTarget.parent as? IrClass
+                    val owner = layout.referenceTarget?.parent as? IrClass
                     val call =
                         when {
                             owner?.kind == ClassKind.INTERFACE -> {
@@ -2949,7 +2960,7 @@ private class FunctionCompiler(
     private fun compileClosure(expression: IrExpression): RegisterId {
         val layout =
             closureLayouts[expression]
-                ?: throw UnsupportedKotlinIr(expression, "only Guest function and instance-method references are supported")
+                ?: throw UnsupportedKotlinIr(expression, "only Guest function, method, and constructor references are supported")
         val boundValue = layout.captures.firstOrNull { it.initialValue != null }?.let { compileExpression(requireNotNull(it.initialValue)) }
         prepareAllocationBlock()
         val closureType = TypeRef.Local(layout.typeId)
@@ -4622,6 +4633,13 @@ private fun IrExpression.boundReferenceReceiver(target: IrSimpleFunction): IrExp
         }
     }
 
+private fun IrExpression.constructorReferenceTarget(): IrConstructorSymbol? =
+    when (this) {
+        is IrRichFunctionReference -> (reflectionTargetSymbol?.owner as? IrConstructor)?.symbol
+        is IrFunctionReference -> ((reflectionTarget?.owner ?: symbol.owner) as? IrConstructor)?.symbol
+        else -> null
+    }
+
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestClosureSource> {
     val expressions = mutableListOf<IrExpression>()
@@ -4639,7 +4657,8 @@ private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestC
             override fun visitRichFunctionReference(expression: IrRichFunctionReference) {
                 val target = expression.reflectionTargetSymbol?.owner as? IrSimpleFunction
                 if ((target?.parent is IrFile && expression.boundValues.isEmpty()) ||
-                    target?.parent is IrClass
+                    target?.parent is IrClass ||
+                    (expression.constructorReferenceTarget() != null && expression.boundValues.isEmpty())
                 ) {
                     expressions += expression
                 }
@@ -4652,7 +4671,8 @@ private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestC
                     (
                         target?.parent is IrClass &&
                             (expression.boundReferenceReceiver(target) != null || expression.arguments.all { it == null })
-                    )
+                    ) ||
+                    (expression.constructorReferenceTarget() != null && expression.arguments.all { it == null })
                 ) {
                     expressions += expression
                 }
@@ -4690,7 +4710,23 @@ private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestC
             ) {
                 throw UnsupportedKotlinIr(expression, "function reference signature is not supported")
             }
-            return@mapIndexed GuestClosureSource(expression, null, referenceTarget, boundReceiver, ordinal, emptyList())
+            return@mapIndexed GuestClosureSource(expression, null, referenceTarget, null, boundReceiver, ordinal, emptyList())
+        }
+        expression.constructorReferenceTarget()?.let { constructorSymbol ->
+            val constructor = constructorSymbol.owner
+            val shape = expression.type.guestFunctionShape()
+            val parameters = constructor.parameters.filter { it.kind == IrParameterKind.Regular }.map { it.type }
+            if (shape == null || !constructor.isPrimary ||
+                constructor.returnType != shape.result || parameters != shape.parameters ||
+                constructor.parameters.any { it.kind != IrParameterKind.Regular } ||
+                (
+                    expression is IrRichFunctionReference &&
+                        (expression.hasUnitConversion || expression.hasSuspendConversion || expression.hasVarargConversion)
+                )
+            ) {
+                throw UnsupportedKotlinIr(expression, "constructor reference signature is not supported")
+            }
+            return@mapIndexed GuestClosureSource(expression, null, null, constructorSymbol, null, ordinal, emptyList())
         }
         val function =
             (expression as? IrFunctionExpression)?.function
@@ -4746,7 +4782,7 @@ private fun collectGuestClosures(functions: List<IrSimpleFunction>): List<GuestC
             },
             null,
         )
-        GuestClosureSource(expression, function, null, null, ordinal, captures.values.toList())
+        GuestClosureSource(expression, function, null, null, null, ordinal, captures.values.toList())
     }
 }
 
