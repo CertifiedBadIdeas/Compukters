@@ -35,8 +35,10 @@ import net.neoforged.neoforge.registries.DeferredItem
 import net.neoforged.neoforge.registries.DeferredRegister
 import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.impl.computer.NeoForgeComputerBlockEntity
+import ru.lazyhat.compukters.impl.display.NeoForgeDisplayBlockEntity
 import ru.lazyhat.compukters.impl.terminal.TerminalNetwork
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
+import ru.lazyhat.compukters.minecraft.display.DisplayBlock
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralCableBlock
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralCableBlocks
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorItem
@@ -62,6 +64,20 @@ object CompuktersRegistry {
         )
 
     val COMPUTER_ITEM: DeferredItem<BlockItem> = items.registerSimpleBlockItem(COMPUTER)
+
+    val DISPLAY: DeferredBlock<DisplayBlock> =
+        blocks.register(
+            "display",
+            Supplier {
+                DisplayBlock(
+                    BlockBehaviour.Properties.of().strength(2.0f),
+                    ::NeoForgeDisplayBlockEntity,
+                    Supplier { DISPLAY_BLOCK_ENTITY.get() },
+                )
+            },
+        )
+
+    val DISPLAY_ITEM: DeferredItem<BlockItem> = items.registerSimpleBlockItem(DISPLAY)
 
     val PERIPHERAL_CABLE: DeferredBlock<PeripheralCableBlock> =
         blocks.register(
@@ -98,6 +114,7 @@ object CompuktersRegistry {
                     .icon { ItemStack(COMPUTER_ITEM.get()) }
                     .displayItems { _, output ->
                         output.accept(COMPUTER_ITEM.get())
+                        output.accept(DISPLAY_ITEM.get())
                         output.accept(PERIPHERAL_CABLE_ITEM.get())
                         output.accept(PERIPHERAL_CONFIGURATOR_ITEM.get())
                     }.build()
@@ -110,6 +127,12 @@ object CompuktersRegistry {
             Supplier {
                 BlockEntityType.Builder.of(::NeoForgeComputerBlockEntity, COMPUTER.get()).build(null)
             },
+        )
+
+    val DISPLAY_BLOCK_ENTITY: DeferredHolder<BlockEntityType<*>, BlockEntityType<NeoForgeDisplayBlockEntity>> =
+        blockEntities.register(
+            "display",
+            Supplier { BlockEntityType.Builder.of(::NeoForgeDisplayBlockEntity, DISPLAY.get()).build(null) },
         )
 
     fun register(eventBus: IEventBus) {

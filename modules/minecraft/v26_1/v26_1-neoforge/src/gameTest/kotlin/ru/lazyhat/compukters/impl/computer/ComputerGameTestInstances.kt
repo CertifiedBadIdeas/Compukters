@@ -67,6 +67,16 @@ internal class PeripheralCableGameTest(
     override fun typeDescription(): MutableComponent = Component.literal("Compukters peripheral cable fabric")
 }
 
+internal class TextDisplayGameTest(
+    testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
+) : GameTestInstance(testData) {
+    override fun run(helper: GameTestHelper) = TextDisplayGameTestScenario.run(helper)
+
+    override fun codec(): MapCodec<out GameTestInstance> = MapCodec.unit(this)
+
+    override fun typeDescription(): MutableComponent = Component.literal("Compukters text display")
+}
+
 internal class VmActorServiceGameTest(
     testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
 ) : GameTestInstance(testData) {

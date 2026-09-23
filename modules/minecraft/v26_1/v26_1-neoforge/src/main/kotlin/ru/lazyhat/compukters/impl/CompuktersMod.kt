@@ -34,6 +34,7 @@ import ru.lazyhat.compukters.impl.compiler.NeoForgeCompilerServices
 import ru.lazyhat.compukters.impl.computer.NeoForgeVmActorServices
 import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
 import ru.lazyhat.compukters.impl.config.CompuktersServerConfig
+import ru.lazyhat.compukters.impl.display.DisplayClientBootstrap
 import ru.lazyhat.compukters.impl.fs.NeoForgeWorldFileSystemStores
 import ru.lazyhat.compukters.impl.ide.IdeClientBootstrap
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetNetwork
@@ -42,6 +43,7 @@ import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.impl.terminal.TerminalNetwork
 import ru.lazyhat.compukters.lang.runtime.vm.FfmRuntimeBackend
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
+import ru.lazyhat.compukters.minecraft.display.DisplayPeripheralIntegration
 
 @Mod(MOD_ID)
 class CompuktersMod(
@@ -51,10 +53,14 @@ class CompuktersMod(
     init {
         val native = requireNativeRuntime()
         CompuktersRegistry.register(eventBus)
+        DisplayPeripheralIntegration.register()
         eventBus.addListener(TerminalNetwork::register)
         eventBus.addListener(IdeTargetNetwork::register)
         eventBus.addListener(PeripheralConfiguratorNetwork::register)
-        if (FMLEnvironment.getDist() == Dist.CLIENT) IdeClientBootstrap.register(eventBus)
+        if (FMLEnvironment.getDist() == Dist.CLIENT) {
+            IdeClientBootstrap.register(eventBus)
+            DisplayClientBootstrap.register(eventBus)
+        }
         NeoForge.EVENT_BUS.addListener(NeoForgeWorldFileSystemStores::onLevelSave)
         NeoForge.EVENT_BUS.addListener(VmBenchmarkCommands::register)
         NeoForge.EVENT_BUS.addListener(NeoForgeVmActorServices::onServerStarting)
