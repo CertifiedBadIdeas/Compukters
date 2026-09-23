@@ -328,12 +328,14 @@ supported.
   the `testKotlinDispatchVmConformance` Kotlin-to-VM execution gate.
   Tracking: [#626](https://github.com/CertifiedBadIdeas/Compukters/issues/626)
 
-- [ ] **Constructor-backed classes — Partial** — classes with a primary
-  constructor whose every parameter is a backed `val` or `var` property lower
-  to managed objects. Mutable properties with default accessors can be read and
-  assigned through aliases and instance methods; each object retains its own
-  field state. VM allocation, field access, inheritance layout, and type checks
-  are verified independently; the broader sealed/data/enum source fixture is
+- [ ] **Guest class initialization — Partial** — supported primary constructors
+  initialize backed `val` and `var` properties, class-body properties, and `init`
+  blocks in source order after superclass initialization on the same managed
+  object. Plain constructor parameters may be used without becoming fields.
+  Mutable properties with default accessors can be read and assigned through
+  aliases and instance methods; each object retains its own field state.
+  Secondary constructors, default arguments, computed properties, and custom
+  accessors remain unsupported. The broader sealed/data/enum source fixture is
   not yet executed end to end. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `guest object subset lowers sealed results data values enum identity and type branches`,
@@ -343,8 +345,11 @@ supported.
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `mutable constructor properties lower to instance field writes` and
   `immutable constructor property assignment remains rejected`, paired with
-  root task `testKotlinMutableFieldsVmConformance`.
-  Tracking: [#637](https://github.com/CertifiedBadIdeas/Compukters/issues/637)
+  root task `testKotlinMutableFieldsVmConformance`, and test
+  `class body properties and init blocks lower in construction order` paired
+  with `testKotlinClassInitializationVmConformance`.
+  Tracking: [#637](https://github.com/CertifiedBadIdeas/Compukters/issues/637),
+  [#638](https://github.com/CertifiedBadIdeas/Compukters/issues/638)
 
 - [ ] **Sealed interfaces, data classes, and stateless enums — Partial** — the
   admitted fixture lowers sealed result types, immutable data values, enum
@@ -355,11 +360,11 @@ supported.
   test `guest object subset lowers sealed results data values enum identity and type branches`.
   Tracking: not scheduled
 
-- [ ] **Body-declared properties, custom initializers, computed properties,
-  constructor defaults, secondary constructors, and stateful enums — Unsupported** —
-  each of these shapes is rejected before artifact publication. Evidence:
+- [ ] **Computed properties, custom accessors, constructor defaults, secondary
+  constructors, and stateful enums — Unsupported** — these shapes are rejected
+  before artifact publication. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `guest object subset rejects mutable generic initialized secondary and explicitly cast shapes`.
+  test `guest object subset rejects generic secondary defaulted uninitialized computed stateful and explicit cast shapes`.
   Tracking: not scheduled
 
 - [ ] **User `object` declarations — Unsupported** — the source class layout

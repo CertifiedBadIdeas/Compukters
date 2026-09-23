@@ -311,6 +311,7 @@ val intArrayConformanceArtifact = layout.buildDirectory.file("generated/conforma
 val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-long.cpkt")
 val floatConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-float.cpkt")
 val dispatchConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-dispatch.cpkt")
+val classInitializationConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-class-initialization.cpkt")
 val mutableFieldsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-mutable-fields.cpkt")
 val functionValuesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-function-values.cpkt")
 val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
@@ -347,6 +348,22 @@ val generateDispatchConformanceArtifact = tasks.register<Test>("generateDispatch
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.dispatchArtifact", dispatchConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateClassInitializationConformanceArtifact = tasks.register<Test>("generateClassInitializationConformanceArtifact") {
+    description = "Compiles Guest class initialization for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*class body properties and init blocks lower in construction order*")
+    inputs.file(workerJar)
+    outputs.file(classInitializationConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.classInitializationArtifact", classInitializationConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
