@@ -225,7 +225,7 @@ supported.
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `sound beep lowers deterministically to a blocking Boolean capability operation`,
   `string arrays support copyOfRange and supported default arguments`, and
-  `guest object subset rejects generic secondary defaulted uninitialized interface body stateful and explicit cast shapes`;
+  `guest object subset rejects generic secondary defaulted uninitialized stateful and explicit cast shapes`;
   [`ParameterInfoQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/ParameterInfoQueryTest.kt),
   test `parameter info exposes a platform Int default`.
   Tracking: not scheduled
@@ -247,7 +247,7 @@ supported.
 - [ ] **Generic functions and classes — Unsupported** — user type parameters
   are outside the Guest object and signature subset. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `guest object subset rejects generic secondary defaulted uninitialized interface body stateful and explicit cast shapes`.
+  test `guest object subset rejects generic secondary defaulted uninitialized stateful and explicit cast shapes`.
   Tracking: not scheduled
 
 - [ ] **Lambdas, local functions, and function references — Partial** —
@@ -321,12 +321,18 @@ supported.
   classes may declare ordinary non-suspending methods, override class methods,
   and implement abstract interface methods. Calls through class and interface
   references select the runtime implementation. Generic or suspending methods,
-  member extensions, and default interface bodies remain unsupported. Evidence:
+  member extensions, and explicit `super<Interface>` calls remain unsupported.
+  Interface methods may have supported non-suspending bodies; an inherited
+  default uses the most specific interface declaration unless a class overrides
+  it. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `guest instance methods lower with deterministic owners flags and method ranges`
   and `guest instance methods reject unsupported callable shapes`, paired with
-  the `testKotlinDispatchVmConformance` Kotlin-to-VM execution gate.
+  the `testKotlinDispatchVmConformance` Kotlin-to-VM execution gate, and test
+  `interface defaults lower to methods and computed accessors` paired with
+  `testKotlinInterfaceDefaultsVmConformance`.
   Tracking: [#626](https://github.com/CertifiedBadIdeas/Compukters/issues/626)
+  and [#641](https://github.com/CertifiedBadIdeas/Compukters/issues/641).
 
 - [ ] **Guest class initialization — Partial** — supported primary constructors
   initialize backed `val` and `var` properties, class-body properties, and `init`
@@ -357,15 +363,19 @@ supported.
   retain direct field access. Abstract `val` and `var` declarations in classes
   and interfaces contribute accessor methods without allocating fields; calls
   through either base type select a concrete backed or computed implementation.
-  Interface property bodies, top-level custom accessors, delegated properties,
+  Interface properties can also define computed getter and setter bodies;
+  interface backing fields, top-level custom accessors, delegated properties,
   and unsupported Guest types remain outside this subset.
   Evidence: [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `computed and custom class accessors lower with backing fields and override dispatch`,
   paired with root task `testKotlinPropertyAccessorsVmConformance`, and test
   `abstract class and interface properties lower to dispatched accessors without fields`
-  paired with `testKotlinAbstractPropertiesVmConformance`.
+  paired with `testKotlinAbstractPropertiesVmConformance`, and test
+  `interface defaults lower to methods and computed accessors` paired with
+  `testKotlinInterfaceDefaultsVmConformance`.
   Tracking: [#639](https://github.com/CertifiedBadIdeas/Compukters/issues/639),
-  [#640](https://github.com/CertifiedBadIdeas/Compukters/issues/640)
+  [#640](https://github.com/CertifiedBadIdeas/Compukters/issues/640), and
+  [#641](https://github.com/CertifiedBadIdeas/Compukters/issues/641).
 
 - [ ] **Sealed interfaces, data classes, and stateless enums — Partial** — the
   admitted fixture lowers sealed result types, immutable data values, enum
@@ -377,11 +387,10 @@ supported.
   paired with root task `testKotlinObjectModelVmConformance`.
   Tracking: not scheduled
 
-- [ ] **Interface property bodies, constructor defaults, secondary constructors,
-  and stateful enums — Unsupported** — these shapes are rejected before artifact
+- [ ] **Constructor defaults, secondary constructors, and stateful enums — Unsupported** — these shapes are rejected before artifact
   publication. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `guest object subset rejects generic secondary defaulted uninitialized interface body stateful and explicit cast shapes`.
+  test `guest object subset rejects generic secondary defaulted uninitialized stateful and explicit cast shapes`.
   Tracking: not scheduled
 
 - [ ] **User `object` declarations — Unsupported** — the source class layout
@@ -394,7 +403,7 @@ supported.
   casts; explicit `as` source casts are rejected. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `guest object subset lowers sealed results data values enum identity and type branches`
-  and `guest object subset rejects generic secondary defaulted uninitialized interface body stateful and explicit cast shapes`,
+  and `guest object subset rejects generic secondary defaulted uninitialized stateful and explicit cast shapes`,
   paired with [`heap_tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/heap_tests.rs),
   test `heap_instructions_checked_cast_handles_nullability_and_incompatibility`.
   Tracking: not scheduled

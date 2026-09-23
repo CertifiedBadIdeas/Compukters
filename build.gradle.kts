@@ -356,6 +356,15 @@ registerKotlinVmConformance(
     conformanceScenario = "abstract-properties",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinInterfaceDefaultsVmConformance",
+    taskDescription = "Executes Guest interface default methods and accessors with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateInterfaceDefaultsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-interface-defaults.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-interface-defaults-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_INTERFACE_DEFAULTS_ARTIFACT",
+    conformanceScenario = "interface-defaults",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinMutableFieldsVmConformance",
     taskDescription = "Executes K2-lowered mutable Guest class fields with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateMutableFieldsConformanceArtifact",

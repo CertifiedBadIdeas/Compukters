@@ -31,7 +31,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   superclass initializer on the same object, including construction through a constructor reference. Computed class
   properties and custom getters/setters can read or update backing fields and dispatch through base-class references.
   Abstract class and interface `val`/`var` properties dispatch to concrete implementations without storing fields in
-  their abstract declarations.
+  their abstract declarations. Interfaces can also provide default method bodies and computed property accessors;
+  classes inherit them unless they override the member.
 - Guest programs can use sealed interfaces, data class values, and stateless enums for type branches, property reads,
   and enum identity comparisons.
 - Non-null function values with Guest-supported parameter and result types can be passed, returned, stored locally,

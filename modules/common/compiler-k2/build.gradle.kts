@@ -314,6 +314,7 @@ val dispatchConformanceArtifact = layout.buildDirectory.file("generated/conforma
 val objectModelConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-object-model.cpkt")
 val propertyAccessorsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-property-accessors.cpkt")
 val abstractPropertiesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-abstract-properties.cpkt")
+val interfaceDefaultsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-interface-defaults.cpkt")
 val classInitializationConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-class-initialization.cpkt")
 val mutableFieldsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-mutable-fields.cpkt")
 val functionValuesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-function-values.cpkt")
@@ -399,6 +400,22 @@ val generateAbstractPropertiesConformanceArtifact = tasks.register<Test>("genera
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.abstractPropertiesArtifact", abstractPropertiesConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateInterfaceDefaultsConformanceArtifact = tasks.register<Test>("generateInterfaceDefaultsConformanceArtifact") {
+    description = "Compiles Guest interface default methods and accessors for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*interface defaults lower to methods and computed accessors*")
+    inputs.file(workerJar)
+    outputs.file(interfaceDefaultsConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.interfaceDefaultsArtifact", interfaceDefaultsConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
