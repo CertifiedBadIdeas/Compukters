@@ -29,6 +29,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   interface dispatch. Primary-constructor `var` properties can be assigned through object references and instance
   methods; aliases observe the updated field. Class-body properties and `init` blocks run in source order after the
   superclass initializer on the same object, including construction through a constructor reference.
+- Guest programs can use sealed interfaces, data class values, and stateless enums for type branches, property reads,
+  and enum identity comparisons.
 - Non-null function values with Guest-supported parameter and result types can be passed, returned, stored locally,
   and invoked without a fixed two-argument or JVM 22/23 cut-off. Lambdas use ordinary
   managed closure objects, preserve reference aliasing for immutable captures, and share mutations through unboxed

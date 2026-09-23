@@ -311,6 +311,7 @@ val intArrayConformanceArtifact = layout.buildDirectory.file("generated/conforma
 val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-long.cpkt")
 val floatConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-float.cpkt")
 val dispatchConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-dispatch.cpkt")
+val objectModelConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-object-model.cpkt")
 val classInitializationConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-class-initialization.cpkt")
 val mutableFieldsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-mutable-fields.cpkt")
 val functionValuesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-function-values.cpkt")
@@ -348,6 +349,22 @@ val generateDispatchConformanceArtifact = tasks.register<Test>("generateDispatch
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.dispatchArtifact", dispatchConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateObjectModelConformanceArtifact = tasks.register<Test>("generateObjectModelConformanceArtifact") {
+    description = "Compiles sealed, data, and enum Guest objects for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*guest object subset lowers sealed results data values enum identity and type branches*")
+    inputs.file(workerJar)
+    outputs.file(objectModelConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.objectArtifact", objectModelConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
