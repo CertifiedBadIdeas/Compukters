@@ -167,11 +167,13 @@ supported.
   `while loop jumps lower locally and reject outer targets`.
   Tracking: not scheduled
 
-- [x] **Allocation-free unit-step `Int` `for` loops** — `start..endInclusive`,
-  `start until endExclusive`, and `start..<endExclusive` evaluate and snapshot
-  both bounds once, then execute as scalar frame slots with no `IntRange` or
-  iterator allocation. Empty, reversed, singleton, negative, and
-  `Int.MAX_VALUE` boundaries preserve Kotlin behavior. `break` and `continue`
+- [x] **Allocation-free `Int` `for` loops** — `start..endInclusive`,
+  `start until endExclusive`, `start..<endExclusive`, `start downTo endInclusive`,
+  and one positive `step` on those progressions evaluate and snapshot their bounds
+  and step once, then execute as scalar frame slots with no range, progression,
+  or iterator allocation. Invalid dynamic steps throw a Guest argument error.
+  Empty, reversed, singleton, negative, `Int.MIN_VALUE`, and `Int.MAX_VALUE`
+  boundaries preserve Kotlin behavior. `break` and `continue`
   targeting the current innermost `for` are supported, including nested loops.
   Every repeated path crosses an existing loop-header quota safepoint.
   Evidence:
@@ -179,14 +181,16 @@ supported.
   tests `inclusive Int for loops lower without range or iterator allocation`,
   `exclusive Int for loops lower without range or iterator allocation`,
   `Int for loop supplies its generated increment constant`, and
-  `allocation free Int loops lower deterministically for vm execution`, plus
+  `allocation free Int loops lower deterministically for vm execution` (including
+  descending, stepped, edge, and invalid-step execution), plus
   [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
   test `k2_int_loops_execute_across_quota_slices_without_host_io`.
 
 - [ ] **Other ranges, progressions, and iterable `for` loops — Unsupported** —
-  `downTo`, `step`, arrays, strings, collections, custom iterators, ordinary
+  stored or materialized progressions, chained `step` calls, arrays, strings, collections,
+  custom iterators, ordinary
   source `do-while`, and labeled jumps to an outer loop publish no artifact.
-  Non-loop `IntRange`, `until`, and `rangeUntil` calls are declaration-only and
+  Non-loop `IntRange`, `IntProgression`, `downTo`, `step`, `until`, and `rangeUntil` calls are declaration-only and
   are not a general executable range API. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `unsupported loop forms publish no artifact`.

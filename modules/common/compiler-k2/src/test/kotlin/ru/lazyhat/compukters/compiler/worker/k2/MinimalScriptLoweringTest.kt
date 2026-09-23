@@ -2505,7 +2505,7 @@ class MinimalScriptLoweringTest {
                     }
                 }
 
-                fun main() {
+                fun main(args: Array<String>) {
                     var inclusive = 0
                     for (value in -2..2) {
                         inclusive = inclusive + value
@@ -2561,6 +2561,57 @@ class MinimalScriptLoweringTest {
                         quota = quota + 1
                     }
                     verify(quota, 1024)
+
+                    var descending = 0
+                    for (value in 5 downTo -5 step 3) {
+                        descending = descending + value
+                    }
+                    verify(descending, 2)
+
+                    var ascendingStep = 0
+                    for (value in 1..8 step 3) {
+                        ascendingStep = ascendingStep + value
+                    }
+                    verify(ascendingStep, 12)
+
+                    var exclusiveStep = 0
+                    for (value in 1 until 8 step 3) {
+                        exclusiveStep = exclusiveStep + value
+                    }
+                    verify(exclusiveStep, 12)
+
+                    var stride = 2
+                    var snapshotStep = 0
+                    for (value in 1..5 step stride) {
+                        stride = 5
+                        snapshotStep = snapshotStep + value
+                    }
+                    verify(snapshotStep, 9)
+
+                    var descendingJumps = 0
+                    for (value in 5 downTo 1) {
+                        if (value == 4) continue
+                        if (value == 2) break
+                        descendingJumps = descendingJumps + value
+                    }
+                    verify(descendingJumps, 8)
+
+                    var descendingEmpty = 0
+                    for (value in 1 downTo 3) descendingEmpty = descendingEmpty + 1
+                    verify(descendingEmpty, 0)
+
+                    var descendingMinimum = 0
+                    for (value in Int.MIN_VALUE downTo Int.MIN_VALUE step 2) descendingMinimum = descendingMinimum + 1
+                    verify(descendingMinimum, 1)
+
+                    var ascendingMaximum = 0
+                    for (value in (Int.MAX_VALUE - 1)..Int.MAX_VALUE step 2) ascendingMaximum = ascendingMaximum + 1
+                    verify(ascendingMaximum, 1)
+
+                    if (args.size > 0) {
+                        val invalidStep = args.size - args.size
+                        for (value in 1..3 step invalidStep) verify(value, 0)
+                    }
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))
@@ -2578,8 +2629,8 @@ class MinimalScriptLoweringTest {
     fun `unsupported loop forms publish no artifact`() =
         withAdapter { adapter ->
             listOf(
-                "fun main() { for (value in 3 downTo 1) { value + 1 } }",
-                "fun main() { for (value in (1..5).step(2)) { value + 1 } }",
+                "fun main() { val values = 3 downTo 1; for (value in values) { value + 1 } }",
+                "fun main() { for (value in (1..5 step 2) step 3) { value + 1 } }",
                 "fun main() { for (value in arrayOf(1)) { value + 1 } }",
                 "fun main() { var value = 0; do { value = value + 1 } while (value < 2) }",
             ).forEach { source ->

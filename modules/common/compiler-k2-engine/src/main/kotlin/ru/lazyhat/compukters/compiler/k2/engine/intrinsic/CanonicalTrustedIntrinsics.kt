@@ -211,8 +211,10 @@ object CanonicalTrustedIntrinsics {
                 0u,
                 true,
             )
-            primitive("stdlib", "ranges", "kotlin.ranges", "IntRange.iterator", "fun():IntIterator")
+            primitive("stdlib", "ranges", "kotlin.ranges", "IntProgression.iterator", "fun():IntIterator")
+            primitive("stdlib", "ranges", "kotlin.ranges", "downTo", "fun(Int.Int):IntProgression")
             primitive("stdlib", "ranges", "kotlin.ranges", "rangeUntil", "fun(Int.Int):IntRange")
+            primitive("stdlib", "ranges", "kotlin.ranges", "step", "fun(IntProgression.Int):IntProgression")
             primitive("stdlib", "ranges", "kotlin.ranges", "until", "fun(Int.Int):IntRange")
 
             capability("compukter", "compiler", "compukter.compiler", "Compiler.compile", "fun(String,String):Int", compiler, 0u, true)

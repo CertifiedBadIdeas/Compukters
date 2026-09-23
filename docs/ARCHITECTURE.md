@@ -31,6 +31,10 @@ contract, and packages the resulting `.cagb` in the independent addon JAR.
 metadata to K2 without making the K2 implementation part of the platform format.
 Constant `Int` and qualified enum-entry defaults cross this bundle explicitly; compiler lowering materializes an
 omitted platform argument without a JVM-style mask dispatcher. Other platform default expressions remain unsupported.
+Canonical `IntRange` and `IntProgression` declarations let K2 resolve ascending, descending, and stepped `Int` loops.
+The compiler recognizes only their canonical `for` shape and evaluates start, end, and step once into scalar registers;
+no range or iterator object enters the VM. It validates a positive step before iteration, calculates the next index in
+`Long` to avoid `Int` overflow, and retains a loop-header quota safepoint. Stored progressions are outside this subset.
 
 Compiler and analysis workers are pinned, isolated JVM processes. Their payloads are assembled into one bounded
 `k2-tooling-workers.zip.xz`: nested runtime JARs and the carrier ZIP use canonical stored entries, then the complete

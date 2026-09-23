@@ -38,6 +38,7 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   `super<Interface>`, including methods inherited by that interface.
 - Guest programs can use sealed interfaces, data class values, and stateless enums for type branches, property reads,
   and enum identity comparisons.
+- `Int` `for` loops support `downTo` and positive `step`, including dynamic steps and integer boundary values.
 - Non-null function values with Guest-supported parameter and result types can be passed, returned, stored locally,
   and invoked without a fixed two-argument or JVM 22/23 cut-off. Lambdas use ordinary
   managed closure objects, preserve reference aliasing for immutable captures, and share mutations through unboxed

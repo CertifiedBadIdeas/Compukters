@@ -4412,16 +4412,18 @@ private class FunctionCompiler(
         val startValue = compileExpression(plan.start)
         val index = allocate(ValueType.I32)
         emit(Instruction.Move(index, startValue))
-        val endValue = compileExpression(plan.endInclusive)
-        val endInclusive = allocate(ValueType.I32)
-        emit(Instruction.Move(endInclusive, endValue))
+        val endValue = compileExpression(plan.end)
+        val end = allocate(ValueType.I32)
+        emit(Instruction.Move(end, endValue))
+        val step = plan.step?.let(::compileExpression) ?: emitI32Constant(1, block)
+        if (plan.step != null) emitPositiveStepPrecondition(step)
+        val step64 = allocate(ValueType.I64)
+        emit(Instruction.Convert(step64, step))
+        val end64 = allocate(ValueType.I64)
+        emit(Instruction.Convert(end64, end))
 
         val initialCondition = allocate(ValueType.Bool)
-        if (plan.inclusive) {
-            emit(Instruction.LessOrEqual(OrderedScalarValueType.I32, initialCondition, index, endInclusive))
-        } else {
-            emit(Instruction.Less(OrderedScalarValueType.I32, initialCondition, index, endInclusive))
-        }
+        emit(plan.condition(initialCondition, index, end, OrderedScalarValueType.I32))
         val initialBranchBlock = currentBlock
         val initialBranchIndex = blocks[initialBranchBlock].instructions.size
         val body = createBlock(loopHeader = true)
@@ -4440,51 +4442,47 @@ private class FunctionCompiler(
         if (!isTerminated()) jumpTo(condition)
         context.continueBlocks.forEach { patchJumpTarget(it, condition) }
         currentBlock = condition
-        val exitBranchBlock: Int
-        val exitBranchIndex: Int
-        val exitBranchCondition: RegisterId
-        val repeatTarget: Int
-        val exitOnTrue: Boolean
-        if (plan.inclusive) {
-            val atEnd = allocate(ValueType.Bool)
-            emit(Instruction.Equal(ScalarValueType.I32, atEnd, index, endInclusive))
-            exitBranchBlock = currentBlock
-            exitBranchIndex = blocks[exitBranchBlock].instructions.size
-            val increment = createBlock()
-            emit(Instruction.Branch(atEnd, blockId(increment), blockId(increment)))
-            currentBlock = increment
-            val next = allocate(ValueType.I32)
-            emit(Instruction.Add(next, index, emitI32Constant(1, block)))
-            emit(Instruction.Move(index, next))
-            jumpTo(body)
-            exitBranchCondition = atEnd
-            repeatTarget = increment
-            exitOnTrue = true
+        val wideIndex = allocate(ValueType.I64)
+        emit(Instruction.Convert(wideIndex, index))
+        val next = allocate(ValueType.I64)
+        if (plan.descending) {
+            emit(Instruction.Subtract(ScalarValueType.I64, next, wideIndex, step64))
         } else {
-            val next = allocate(ValueType.I32)
-            emit(Instruction.Add(next, index, emitI32Constant(1, block)))
-            emit(Instruction.Move(index, next))
-            val hasNext = allocate(ValueType.Bool)
-            emit(Instruction.Less(OrderedScalarValueType.I32, hasNext, index, endInclusive))
-            exitBranchBlock = currentBlock
-            exitBranchIndex = blocks[exitBranchBlock].instructions.size
-            emit(Instruction.Branch(hasNext, blockId(body), blockId(body)))
-            exitBranchCondition = hasNext
-            repeatTarget = body
-            exitOnTrue = false
+            emit(Instruction.Add(ScalarValueType.I64, next, wideIndex, step64))
         }
-
+        val hasNext = allocate(ValueType.Bool)
+        emit(plan.condition(hasNext, next, end64, OrderedScalarValueType.I64))
+        val conditionBlock = currentBlock
+        val conditionBranchIndex = blocks[conditionBlock].instructions.size
+        val repeat = createBlock()
+        emit(Instruction.Branch(hasNext, blockId(repeat), blockId(repeat)))
+        currentBlock = repeat
+        val narrowNext = allocate(ValueType.I32)
+        emit(Instruction.Convert(narrowNext, next))
+        emit(Instruction.Move(index, narrowNext))
+        jumpTo(body)
         val exit = createBlock()
         blocks[initialBranchBlock].instructions[initialBranchIndex] =
             Instruction.Branch(initialCondition, blockId(body), blockId(exit))
-        blocks[exitBranchBlock].instructions[exitBranchIndex] =
-            if (exitOnTrue) {
-                Instruction.Branch(exitBranchCondition, blockId(exit), blockId(repeatTarget))
-            } else {
-                Instruction.Branch(exitBranchCondition, blockId(repeatTarget), blockId(exit))
-            }
+        blocks[conditionBlock].instructions[conditionBranchIndex] =
+            Instruction.Branch(hasNext, blockId(repeat), blockId(exit))
         context.breakBlocks.forEach { patchJumpTarget(it, exit) }
         currentBlock = exit
+    }
+
+    private fun emitPositiveStepPrecondition(step: RegisterId) {
+        val positive = allocate(ValueType.Bool)
+        emit(Instruction.Greater(OrderedScalarValueType.I32, positive, step, emitI32Constant(0, function)))
+        val failure = createBlock()
+        val success = createBlock()
+        emit(Instruction.Branch(positive, blockId(success), blockId(failure)))
+        currentBlock = failure
+        prepareAllocationBlock()
+        val exceptionType = TypeRef.Imported(ImportId.of(3u))
+        val exception = allocate(ValueType.Ref(nullable = false, type = exceptionType))
+        emit(Instruction.NewObject(exception, exceptionType))
+        emit(Instruction.Throw(exception))
+        currentBlock = success
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -4493,13 +4491,24 @@ private class FunctionCompiler(
         val iterator = block.statements[0] as? IrVariable ?: return null
         if (iterator.origin.toString() != "FOR_LOOP_ITERATOR") return null
         val iteratorCall = iterator.initializer as? IrCall ?: return null
-        if (iteratorCall.targetFqName() != "kotlin.ranges.IntRange.iterator") return null
-        val rangeCall = iteratorCall.arguments.filterNotNull().singleOrNull() as? IrCall ?: return null
+        if (iteratorCall.targetFqName() !in setOf("kotlin.ranges.IntRange.iterator", "kotlin.ranges.IntProgression.iterator")) return null
+        val progression = iteratorCall.arguments.filterNotNull().singleOrNull() as? IrCall ?: return null
+        val stepArguments =
+            if (progression.targetFqName() == "kotlin.ranges.step") progression.arguments.filterNotNull() else emptyList()
+        val step =
+            if (stepArguments.isNotEmpty()) {
+                if (stepArguments.size != 2 || stepArguments[1].type != intType) return null
+                stepArguments[1]
+            } else {
+                null
+            }
+        val rangeCall = (stepArguments.firstOrNull() ?: progression) as? IrCall ?: return null
         val rangeFunction = rangeCall.targetFqName()
-        val inclusive =
+        val (inclusive, descending) =
             when (rangeFunction) {
-                "kotlin.ranges.rangeTo" -> true
-                "kotlin.ranges.rangeUntil", "kotlin.ranges.until" -> false
+                "kotlin.ranges.rangeTo" -> true to false
+                "kotlin.ranges.rangeUntil", "kotlin.ranges.until" -> false to false
+                "kotlin.ranges.downTo" -> true to true
                 else -> return null
             }
         val bounds = rangeCall.arguments.filterNotNull()
@@ -4521,7 +4530,7 @@ private class FunctionCompiler(
         val nextReceiver = nextCall.arguments.filterNotNull().singleOrNull() as? IrGetValue ?: return null
         if (nextReceiver.symbol !== iterator.symbol) return null
         val body = loopBody.statements[1] as? IrExpression ?: return null
-        return IntForLoopPlan(loop, loopVariable, bounds[0], bounds[1], inclusive, body)
+        return IntForLoopPlan(loop, loopVariable, bounds[0], bounds[1], inclusive, descending, step, body)
     }
 
     private fun compileLoopJump(
@@ -4847,10 +4856,24 @@ private class FunctionCompiler(
         val loop: IrWhileLoop,
         val loopVariable: IrVariable,
         val start: IrExpression,
-        val endInclusive: IrExpression,
+        val end: IrExpression,
         val inclusive: Boolean,
+        val descending: Boolean,
+        val step: IrExpression?,
         val body: IrExpression,
-    )
+    ) {
+        fun condition(
+            destination: RegisterId,
+            value: RegisterId,
+            bound: RegisterId,
+            type: OrderedScalarValueType,
+        ): Instruction =
+            when {
+                descending -> Instruction.GreaterOrEqual(type, destination, value, bound)
+                inclusive -> Instruction.LessOrEqual(type, destination, value, bound)
+                else -> Instruction.Less(type, destination, value, bound)
+            }
+    }
 }
 
 private fun IrType.isExactClass(symbol: IrClassSymbol): Boolean = (this as? IrSimpleType)?.classifier == symbol
