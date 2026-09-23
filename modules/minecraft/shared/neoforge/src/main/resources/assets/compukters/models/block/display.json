@@ -1,0 +1,29 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "frame": "compukters:block/compukter/side",
+    "screen": "minecraft:block/black_concrete",
+    "particle": "compukters:block/compukter/side"
+  },
+  "elements": [
+    {
+      "from": [0, 0, 0],
+      "to": [16, 16, 16],
+      "faces": {
+        "down": { "texture": "#frame", "cullface": "down" },
+        "up": { "texture": "#frame", "cullface": "up" },
+        "north": { "texture": "#frame", "cullface": "north" },
+        "south": { "texture": "#frame", "cullface": "south" },
+        "west": { "texture": "#frame", "cullface": "west" },
+        "east": { "texture": "#frame", "cullface": "east" }
+      }
+    },
+    {
+      "from": [1, 1, -0.01],
+      "to": [15, 15, 0],
+      "faces": {
+        "north": { "texture": "#screen", "uv": [1, 1, 15, 15] }
+      }
+    }
+  ]
+}

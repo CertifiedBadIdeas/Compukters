@@ -306,6 +306,7 @@ val argvConformanceArtifact = layout.buildDirectory.file("generated/conformance/
 val platformScalarConformanceArtifact = layout.buildDirectory.file("generated/conformance/platform-scalar.cpkt")
 val redstoneConformanceArtifact = layout.buildDirectory.file("generated/conformance/redstone.cpkt")
 val soundConformanceArtifact = layout.buildDirectory.file("generated/conformance/sound.cpkt")
+val displayConformanceArtifact = layout.buildDirectory.file("generated/conformance/display.cpkt")
 val intLoopsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-loops.cpkt")
 val intArrayConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-array.cpkt")
 val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-long.cpkt")
@@ -675,6 +676,22 @@ val generateSoundConformanceArtifact = tasks.register<Test>("generateSoundConfor
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.soundArtifact", soundConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateDisplayConformanceArtifact = tasks.register<Test>("generateDisplayConformanceArtifact") {
+    description = "Compiles the deterministic text display program for GameTest conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*text display program lowers deterministically for GameTest*")
+    inputs.file(workerJar)
+    outputs.file(displayConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.displayArtifact", displayConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

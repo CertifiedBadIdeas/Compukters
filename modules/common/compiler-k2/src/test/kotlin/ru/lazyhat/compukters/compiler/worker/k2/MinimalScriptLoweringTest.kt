@@ -864,6 +864,33 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `text display program lowers deterministically for GameTest`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.concurrent.Tasks
+                import compukter.display.Display
+
+                fun main() {
+                    val screen = Display.open("panel")
+                    screen.writeAt(0, 0, "Ready")
+                    while (true) {
+                        Tasks.sleepTicks(20)
+                    }
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            val second = adapter.compile(request(source))
+
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukter.vm.displayArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `redstone program lowers deterministically for vm conformance`() =
         withAdapter { adapter ->
             val source =

@@ -58,6 +58,15 @@ object CompuktersGameTests {
 
     @JvmStatic
     @GameTest(
+        batch = "text_display",
+        template = EMPTY_TEMPLATE,
+        templateNamespace = "minecraft",
+        timeoutTicks = TIMEOUT_TICKS,
+    )
+    fun textDisplay(helper: GameTestHelper) = TextDisplayGameTestScenario.run(helper)
+
+    @JvmStatic
+    @GameTest(
         batch = "peripheral_cable",
         template = EMPTY_TEMPLATE,
         templateNamespace = "minecraft",

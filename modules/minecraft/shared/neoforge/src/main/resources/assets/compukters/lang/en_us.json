@@ -1,5 +1,6 @@
 {
   "block.compukters.compukter": "Compukter",
+  "block.compukters.display": "Text Display",
   "block.compukters.peripheral_cable": "Peripheral Cable",
   "item.compukters.peripheral_configurator": "Peripheral Configurator",
   "item.compukters.peripheral_configurator.ambiguous": "More than one addon recognizes this device",

@@ -65,6 +65,10 @@ object ComputerBlockGameTest {
             ComputerSoundGameTest(testData("computer_sound")),
         )
         event.registerTest(
+            Identifier.fromNamespaceAndPath(MOD_ID, "text_display"),
+            TextDisplayGameTest(testData("text_display")),
+        )
+        event.registerTest(
             Identifier.fromNamespaceAndPath(MOD_ID, "peripheral_cable"),
             PeripheralCableGameTest(testData("peripheral_cable")),
         )
