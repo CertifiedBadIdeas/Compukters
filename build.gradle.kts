@@ -338,6 +338,15 @@ registerKotlinVmConformance(
     conformanceScenario = "object-model",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinPropertyAccessorsVmConformance",
+    taskDescription = "Executes K2-lowered Guest class property accessors with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generatePropertyAccessorsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-property-accessors.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-property-accessors-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_PROPERTY_ACCESSORS_ARTIFACT",
+    conformanceScenario = "property-accessors",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinMutableFieldsVmConformance",
     taskDescription = "Executes K2-lowered mutable Guest class fields with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateMutableFieldsConformanceArtifact",

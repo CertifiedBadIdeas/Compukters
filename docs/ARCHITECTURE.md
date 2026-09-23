@@ -330,6 +330,10 @@ VM type or instruction. Direct construction follows the same path. The construct
 on the same receiver before evaluating backed properties and `init` blocks in declaration order.
 Constructor-backed Guest `var` properties use the same managed instance fields as `val` properties. Default setter
 calls lower to verified `field_set` instructions after evaluating the receiver and assigned value in source order.
+Source-defined class getters and setters lower as ordinary non-suspending instance methods, so overridden accessors
+use the existing virtual dispatch table. A computed property has no managed field; `field` inside a backed accessor
+lowers to verified `field_get` or `field_set` on its receiver. Non-overriding final default accessors retain direct
+field access.
 A bound Guest instance-method reference evaluates its receiver once and stores that object in the closure. Its `invoke`
 method loads the stored receiver and uses the target method's static, virtual, or interface dispatch mode.
 An unbound instance-method reference has no receiver field; its first function parameter supplies the receiver for

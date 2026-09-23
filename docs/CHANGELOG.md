@@ -28,7 +28,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - Guest classes and interfaces support ordinary non-suspending instance methods, overrides, and runtime class or
   interface dispatch. Primary-constructor `var` properties can be assigned through object references and instance
   methods; aliases observe the updated field. Class-body properties and `init` blocks run in source order after the
-  superclass initializer on the same object, including construction through a constructor reference.
+  superclass initializer on the same object, including construction through a constructor reference. Computed class
+  properties and custom getters/setters can read or update backing fields and dispatch through base-class references.
 - Guest programs can use sealed interfaces, data class values, and stateless enums for type branches, property reads,
   and enum identity comparisons.
 - Non-null function values with Guest-supported parameter and result types can be passed, returned, stored locally,

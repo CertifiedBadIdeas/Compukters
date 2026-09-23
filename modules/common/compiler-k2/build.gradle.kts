@@ -312,6 +312,7 @@ val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/
 val floatConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-float.cpkt")
 val dispatchConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-dispatch.cpkt")
 val objectModelConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-object-model.cpkt")
+val propertyAccessorsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-property-accessors.cpkt")
 val classInitializationConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-class-initialization.cpkt")
 val mutableFieldsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-mutable-fields.cpkt")
 val functionValuesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-function-values.cpkt")
@@ -365,6 +366,22 @@ val generateObjectModelConformanceArtifact = tasks.register<Test>("generateObjec
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.objectArtifact", objectModelConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generatePropertyAccessorsConformanceArtifact = tasks.register<Test>("generatePropertyAccessorsConformanceArtifact") {
+    description = "Compiles Guest class property accessors for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*computed and custom class accessors lower with backing fields and override dispatch*")
+    inputs.file(workerJar)
+    outputs.file(propertyAccessorsConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.propertyAccessorsArtifact", propertyAccessorsConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
