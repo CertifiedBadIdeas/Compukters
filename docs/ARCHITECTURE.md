@@ -35,6 +35,10 @@ Canonical `IntRange` and `IntProgression` declarations let K2 resolve ascending,
 The compiler recognizes only their canonical `for` shape and evaluates start, end, and step once into scalar registers;
 no range or iterator object enters the VM. It validates a positive step before iteration, calculates the next index in
 `Long` to avoid `Int` overflow, and retains a loop-header quota safepoint. Stored progressions are outside this subset.
+Direct `IntArray` `for` loops follow the same canonical-shape rule: the compiler snapshots the array reference, loads
+its length, and reads each element with existing array instructions at the current index. The loop header retains its
+quota safepoint; no iterator object is created. A source variable may be reassigned without changing the traversed
+array, while writes to that array's elements remain visible to later iterations.
 
 Compiler and analysis workers are pinned, isolated JVM processes. Their payloads are assembled into one bounded
 `k2-tooling-workers.zip.xz`: nested runtime JARs and the carrier ZIP use canonical stored entries, then the complete

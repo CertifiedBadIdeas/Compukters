@@ -6,6 +6,8 @@
 
 package kotlin
 
+import kotlin.collections.IntIterator
+
 public class Array<T> private constructor() {
     public external val size: Int
 
@@ -34,6 +36,8 @@ public class IntArray external constructor(size: Int) {
     public external operator fun get(index: Int): Int
 
     public external operator fun set(index: Int, value: Int): Unit
+
+    public external operator fun iterator(): IntIterator
 }
 
 internal class LongArray private constructor()

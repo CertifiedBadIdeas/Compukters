@@ -514,17 +514,21 @@ supported.
   Tracking: not scheduled
 
 - [x] **Specialized `IntArray` storage** — `IntArray(size)`, `intArrayOf(...)`,
-  empty arrays, `size`, indexed get/set, and mutation lower to dense unboxed
+  empty arrays, `size`, indexed get/set, mutation, and direct `for` iteration lower to dense unboxed
   i32 storage. Factory arguments evaluate left-to-right exactly once; negative
   sizes, oversized allocations, and invalid indexes preserve VM trap or
-  allocation-exhaustion behavior across quota slices. Initializer lambdas,
-  `Array<Int>`, direct iteration, `indices`, spread arguments, covariance,
+  allocation-exhaustion behavior across quota slices. A direct `for` snapshots
+  the source array once and reads its current elements by index, without an
+  iterator allocation; empty arrays, reassignment, mutation, nested loops,
+  `break`, and `continue` retain Kotlin behavior. Initializer lambdas,
+  `Array<Int>`, stored iterators, `indices`, spread arguments, covariance,
   reflection, and collection helpers remain outside the admitted subset.
   Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `specialized IntArray lowers to unboxed primitive array instructions`,
   `unsupported IntArray forms publish no artifact`, and
-  `specialized IntArray lowers deterministically for vm conformance`, plus
+  `specialized IntArray lowers deterministically for vm conformance` (including
+  direct iteration), plus
   [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
   test `k2_int_array_executes_specialized_storage_and_traps`.
 

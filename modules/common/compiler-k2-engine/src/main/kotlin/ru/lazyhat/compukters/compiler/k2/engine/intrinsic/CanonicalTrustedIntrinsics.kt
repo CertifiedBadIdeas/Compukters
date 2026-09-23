@@ -56,6 +56,7 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "CharArray.size", "val():Int")
             primitive("kotlin", "builtins", "kotlin", "IntArray.<init>", "constructor(Int)")
             primitive("kotlin", "builtins", "kotlin", "IntArray.get", "fun(Int):Int")
+            primitive("kotlin", "builtins", "kotlin", "IntArray.iterator", "fun():IntIterator")
             primitive("kotlin", "builtins", "kotlin", "IntArray.set", "fun(Int,Int):Unit")
             primitive("kotlin", "builtins", "kotlin", "IntArray.size", "val():Int")
             primitive("kotlin", "builtins", "kotlin", "CharSequence.get", "fun(Int):Char")
