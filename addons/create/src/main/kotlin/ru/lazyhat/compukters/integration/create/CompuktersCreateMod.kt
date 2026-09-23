@@ -23,7 +23,7 @@ import net.neoforged.fml.common.Mod
 @Mod(CompuktersCreateMod.MOD_ID)
 class CompuktersCreateMod {
     init {
-        CreateKineticsIntegration.register()
+        CreatePeripheralIntegration.register()
     }
 
     companion object {

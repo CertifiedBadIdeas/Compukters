@@ -175,7 +175,7 @@ val verifyProductionJar =
             listOf(
                 "META-INF/neoforge.mods.toml",
                 "ru/lazyhat/compukters/integration/create/CompuktersCreateMod.class",
-                "ru/lazyhat/compukters/integration/create/CreateKineticsIntegration.class",
+                "ru/lazyhat/compukters/integration/create/CreatePeripheralIntegration.class",
                 "META-INF/compukters/addons/create.cagb",
             ).forEach { required ->
                 check(entries.count { it == required } == 1) { "$required is missing or duplicated in ${archive.name}" }
