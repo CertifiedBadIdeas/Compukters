@@ -82,8 +82,9 @@ whole fleet, and executes the same CPU workload as `start`. The idle window ther
 without benchmark-generated VM execution; normal actor-service bookkeeping and unrelated server work continue.
 
 `status` reports admitted, active, completed, failed, and closing actors; elapsed ticks and current smoothed Minecraft
-MSPT; worker, mailbox, and result occupancy; average command-queue, execution, and completed-result latency; the last
-server pump size and duration; and mailbox rejection deltas. Capacity reports additionally include the current phase
+MSPT; worker, mailbox, and result occupancy; average and approximate p50/p95 command-queue, execution, and
+completed-result latency; the last server pump size and duration; and mailbox rejection deltas. Capacity reports
+additionally include the current phase
 and waiting count; nearest-rank median, p95, and maximum settle, wake, and completion tick counts; and aggregate heap
 used/capacity plus mutable execution-resident bytes. Missing resource replies are counted separately. While a fleet is
 running or stopping, the command source that started it receives this report on every phase transition, automatically
@@ -99,7 +100,10 @@ Calibration runs off-thread when the actor service first opens. It measures the 
 integer control and managed allocations through the configured worker count and uses the slower measured rate.
 The `vm.host_share_percent` server config sets the fraction of one tick's measured host throughput available to Guest
 execution; the built-in safety factor reduces that further. A cooperative host-time deadline prevents another native
-advance after its window ends, and sustained late frames reduce the next frames' capacity.
+advance after its window ends, and sustained late frames reduce the next frames' capacity. The governor never drops
+below the smaller of the measured capacity and its conservative 8192-instruction fallback. Latency percentiles use
+fixed-size lifetime histograms and round up to the end of a power-of-two nanosecond bucket; they do not require a VM
+scan or native snapshot.
 
 For #617 capacity evidence, record matching profiles with 1, 2, 4, 8, and 14 physical computers, then run the
 1000-computer headless `capacity`, CPU, and physical redstone workloads. For each profile retain the server config,
@@ -107,6 +111,55 @@ calibrated and current capacity, runnable/throttled counts, retired and missed d
 result latency, p50/p95/max completion ticks, and the equal-duration baseline and loaded MSPT. Repeat the settled
 idle window and wakeup phase before the CPU phase. Compare progress and server latency together; a high instruction
 throughput alone does not establish a sustainable setting.
+
+### #617 development-host profile (2026-09-23)
+
+One NeoForge 26.1.2 dev server on Linux used an Intel Core i7-12700H (14 physical cores, 20 logical CPUs),
+15 GiB RAM, and OpenJDK 25.0.4.1. The server was bound to loopback with no clients, view and simulation distance 4,
+and the empty-server tick pause disabled. Compukters used eight VM workers, 4096 actor slots, a 5% host share, and the
+50% calibration safety factor. Each row is one `/debug start`/`/debug stop` interval; TPS comes from the interval tick
+count, while MSPT is the smoothed value at its end. A separate 14-computer idle baseline preceded the physical CPU
+series. Each CPU run submitted 1000 rounds to the indicated subset of 14 loaded computers; active computers were
+replaced between runs to avoid carrying a foreground workload into the next interval.
+
+| Physical CPU computers | Interval | Ticks | TPS | End MSPT | Current/calibrated instructions per tick |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0, with 14 idle | 26.90 s | 539 | 20.04 | 0.409 | 57,007 / 57,007 |
+| 1 | 29.00 s | 581 | 20.03 | 0.320 | 23,351 / 57,007 |
+| 2 | 29.85 s | 598 | 20.03 | 0.363 | 32,854 / 57,007 |
+| 4 | 29.70 s | 595 | 20.03 | 0.291 | 44,024 / 57,007 |
+| 8 | 29.00 s | 581 | 20.03 | 0.271 | 56,185 / 57,007 |
+| 14 | 27.95 s | 560 | 20.04 | 0.260 | 57,007 / 57,007 |
+
+The 1–14-computer intervals preceded the governor's minimum-capacity correction. Every observed capacity in that
+series exceeded the later 8192-instruction floor, so that correction does not change these allocations. End MSPT
+values are smoothed snapshots and should not be interpreted as a speedup when a loaded row is lower than the idle row.
+All five physical runs admitted every requested command and recorded no mailbox or permit rejections during their
+profile intervals.
+
+A subsequent `vmbench capacity 1000 1000000` run settled all 1000 actors within 8 ticks (median 5), held them idle
+for 100 ticks at 0.553 smoothed MSPT, sampled resources from all 1000, then woke all 1000 in the same tick. The
+sampled fleet used 262,144,000 bytes of Guest heap capacity and 271,166,000 bytes of mutable execution-resident
+memory. The 69.10-second profile recorded 1383 ticks (20.01 TPS). During sustained CPU work, current capacity
+stabilized at the 8192-instruction floor below the 56,923-instruction calibration, with approximately 1.5–1.7
+smoothed MSPT, continued retired-instruction progress, and no mailbox or permit rejections. The fleet was stopped
+after the fixed observation interval; `1000000` rounds were intentionally not run to completion.
+
+For world requests, 1000 loaded physical computers were placed in ten 10×10 layers with one empty block above each.
+The idle baseline recorded 514 ticks in 25.65 seconds (20.04 TPS) and 0.760 end MSPT. The command
+`vmbench area 0 64 0 9 82 9 redstone 10` was accepted by all 1000 computers and completed 20,000 acknowledged
+transitions in 500 ticks. `worldDeferred` returned to zero. The 40.00-second observation recorded 801 ticks
+(20.02 TPS); active-phase smoothed MSPT samples were about 5–6, returning to 0.666 after completion. The workload
+had no command, mailbox, or permit rejection. Startup admission had earlier produced permit retries, so this last
+statement applies to the workload interval.
+
+These numbers validate the default settings on this development host. They are one-host measurements, not a portable
+throughput promise. The latency-histogram diagnostics were added after these `/debug` runs, so their p50/p95 fields
+were not captured there. A final-code repeat of the physical redstone workload again completed 20,000 transitions in
+500 ticks with 1000/1000 computers completed, no workload rejections, and zero deferred world requests at completion.
+Its lifetime actor-latency histograms reported queue p50/p95 of 4,194/8,388 microseconds, execution p50/p95 of
+16/65 microseconds, and result p50/p95 of 67,108/67,108 microseconds. The server was restarted between runs;
+histograms include startup work in that server session.
 
 For an initial saturation profile, record an idle baseline and compare equal intervals at 1, 10, 100, 500, 1000, and
 4096 actors. Use enough rounds that the fleet remains active for the complete observation interval. Scheduler
