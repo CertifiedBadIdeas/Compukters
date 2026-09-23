@@ -337,6 +337,10 @@ field access.
 Abstract class and interface properties contribute getter and setter method signatures without managed fields.
 Implementing classes provide backed or computed accessors, selected through the existing virtual or interface call
 instruction when the property is used through a base reference.
+Interface method and computed property bodies use the same function records and bytecode as class methods. During
+artifact admission the VM first searches the class inheritance chain, then chooses the most specific matching
+interface declaration. An abstract redeclaration suppresses an inherited default; missing or ambiguous concrete
+targets reject admission. Dispatch entries are shared by all VMs using the admitted execution image.
 A bound Guest instance-method reference evaluates its receiver once and stores that object in the closure. Its `invoke`
 method loads the stored receiver and uses the target method's static, virtual, or interface dispatch mode.
 An unbound instance-method reference has no receiver field; its first function parameter supplies the receiver for

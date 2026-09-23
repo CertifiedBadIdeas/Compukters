@@ -2212,9 +2212,6 @@ internal object KotlinProjectLowering {
             if (function.parameters.any { it.kind == IrParameterKind.ExtensionReceiver }) {
                 throw UnsupportedKotlinIr(function, "member extension functions are not supported")
             }
-            if (owner.kind == ClassKind.INTERFACE && function.body != null) {
-                throw UnsupportedKotlinIr(function, "default interface method bodies are not supported")
-            }
         }
         val supported =
             setOf(
@@ -3367,6 +3364,9 @@ private class FunctionCompiler(
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun compileCall(call: IrCall): RegisterId? {
+        if (call.superQualifierSymbol?.owner?.kind == ClassKind.INTERFACE) {
+            throw UnsupportedKotlinIr(call, "explicit super interface calls are not supported")
+        }
         val target = call.symbol.owner
         val targetName = target.fqNameWhenAvailable?.asString()
         if ((

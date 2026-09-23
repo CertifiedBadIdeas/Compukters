@@ -1327,7 +1327,61 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `guest object subset rejects generic secondary defaulted uninitialized interface body stateful and explicit cast shapes`() =
+    fun `interface defaults lower to methods and computed accessors`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                interface Root {
+                    fun seed(): Int = 1
+                    val amount: Int get() = seed() * 10
+                }
+                interface Branch : Root {
+                    override fun seed(): Int = 2
+                }
+                class Box : Branch
+                class Custom : Branch {
+                    override fun seed(): Int = 3
+                    override val amount: Int get() = seed() * 100
+                }
+                interface Sink {
+                    var signal: Int
+                        get() = 1
+                        set(value) { println(value) }
+                }
+                class Device : Sink
+                fun main() {
+                    val box: Root = Box()
+                    println(box.seed())
+                    println(box.amount)
+                    val custom: Root = Custom()
+                    println(custom.seed())
+                    println(custom.amount)
+                    val device: Sink = Device()
+                    println(device.signal)
+                    device.signal = 7
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val application = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+            val root =
+                application.types.filterIsInstance<NominalType.Interface>().single { type ->
+                    application.strings[type.name.value.toInt()].toString() == "Root"
+                }
+            val sink =
+                application.types.filterIsInstance<NominalType.Interface>().single { type ->
+                    application.strings[type.name.value.toInt()].toString() == "Sink"
+                }
+            assertEquals(2u, root.methodCount)
+            assertEquals(2u, sink.methodCount)
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.interfaceDefaultsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `guest object subset rejects generic secondary defaulted uninitialized stateful and explicit cast shapes`() =
         withAdapter { adapter ->
             val unsupported =
                 listOf(
@@ -1335,7 +1389,6 @@ class MinimalScriptLoweringTest {
                     "class Secondary(val value: Int) { constructor() : this(0) }\nfun main() { Secondary() }",
                     "class Defaulted(val value: Int = 1)\nfun main() { Defaulted() }",
                     "class Uninitialized { lateinit var value: String }\nfun main() { Uninitialized() }",
-                    "interface DefaultProperty { val value: Int get() = 1 }\nclass Concrete : DefaultProperty\nfun main() { Concrete().value }",
                     "enum class Stateful(val code: Int) { ONE(1) }\nfun main() { Stateful.ONE }",
                     "sealed interface Value\ndata class NumberValue(val value: Int) : Value\nfun read(value: Value): Int = (value as NumberValue).value\nfun main() { read(NumberValue(1)) }",
                 )
@@ -1435,8 +1488,12 @@ class MinimalScriptLoweringTest {
                     "class Worker { suspend fun run() {} }\nfun main() {}" to "suspend functions are unsupported",
                     "class Box { fun <T> keep(value: T): T = value }\nfun main() { Box() }" to "generic instance methods",
                     "class Scope { fun String.sizeAgain(): Int = length }\nfun main() { Scope() }" to "member extension functions",
-                    "interface Reader { fun read(): Int = 1 }\nclass Box : Reader\nfun main() { Box() }" to
-                        "default interface method bodies",
+                    """
+                    interface Base { fun value(): Int = 1 }
+                    class Child : Base { override fun value(): Int = super<Base>.value() + 1 }
+                    fun main() { println(Child().value()) }
+                    """.trimIndent() to
+                        "explicit super interface calls",
                 )
 
             unsupported.forEach { (source, message) ->
