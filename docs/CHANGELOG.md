@@ -75,6 +75,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - The `create` addon reads exact `Float` speed, stress, and capacity values from adjacent or named cable-connected
   speedometers and stressometers, waits for value changes without Guest-side polling, and controls rotation speed
   controllers.
+- The `create` addon also exposes adjacent or named Stock Tickers. Computer programs can inspect bounded snapshots of
+  exact item variants and request packaging to an address; acceptance is reported without implying delivery.
 - Device handles remain bound to the exact acquired block, and named handles expire when their cable path disconnects.
   Missing, disconnected, unloaded, removed, or replaced devices fail deterministically and produce a descriptive
   terminal diagnostic.
@@ -86,7 +88,7 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 - Member completion includes the supported operations of built-in Guest Kotlin numeric types.
 - Completion, automatic imports, parameter information, and source navigation include compatible APIs supplied by
-  installed addons. Selecting `Kinetics` also enables the `create` addon for the project.
+  installed addons. Selecting `Kinetics` or `Logistics` also enables the `create` addon for the project.
 
 ### Computer runtime
 
