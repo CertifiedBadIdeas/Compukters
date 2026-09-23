@@ -841,6 +841,29 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `text display API lowers named and adjacent writes to blocking capability operations`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.display.Display
+
+                fun main() {
+                    val named = Display.open("warehouse")
+                    named.writeAt(0, 0, "Iron: 128")
+                    named.clear()
+                    Display.left.open().writeAt(1, 2, "Ready")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            val second = adapter.compile(request(source))
+
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            assertTrue(allOpcodes(artifact).contains(0xe9), "display writes must suspend for the world host")
+        }
+
+    @Test
     fun `redstone program lowers deterministically for vm conformance`() =
         withAdapter { adapter ->
             val source =

@@ -85,6 +85,7 @@ class CanonicalPlatformSourceTest {
                 "compukter:process",
                 "compukter:redstone",
                 "compukter:sound",
+                "compukter:display",
             ),
             modulesById.keys,
         )
@@ -92,6 +93,7 @@ class CanonicalPlatformSourceTest {
         assertEquals("1.1.0", modulesById.getValue("stdlib:core").version)
         assertEquals("2.0.0", modulesById.getValue("compukter:redstone").version)
         assertEquals("1.0.0", modulesById.getValue("compukter:sound").version)
+        assertEquals("1.0.0", modulesById.getValue("compukter:display").version)
         catalog.modules.forEach { module ->
             assertTrue(MODULE_ID.matches(module.id), "invalid module id ${module.id}")
             assertTrue(VERSION.matches(module.version), "invalid module version ${module.version}")
