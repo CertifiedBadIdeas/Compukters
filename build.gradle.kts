@@ -401,6 +401,15 @@ registerKotlinVmConformance(
     conformanceScenario = "constructor-defaults",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinAdaptedConstructorsVmConformance",
+    taskDescription = "Executes adapted Guest constructor references with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateAdaptedConstructorsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-adapted-constructors.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-adapted-constructors-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_ADAPTED_CONSTRUCTORS_ARTIFACT",
+    conformanceScenario = "adapted-constructors",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinFunctionValuesVmConformance",
     taskDescription = "Executes K2-lowered zero-argument function values with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateFunctionValuesConformanceArtifact",

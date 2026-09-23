@@ -318,6 +318,7 @@ val interfaceDefaultsConformanceArtifact = layout.buildDirectory.file("generated
 val interfaceSuperConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-interface-super.cpkt")
 val classInitializationConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-class-initialization.cpkt")
 val constructorDefaultsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-constructor-defaults.cpkt")
+val adaptedConstructorsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-adapted-constructors.cpkt")
 val mutableFieldsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-mutable-fields.cpkt")
 val functionValuesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-function-values.cpkt")
 val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
@@ -466,6 +467,22 @@ val generateConstructorDefaultsConformanceArtifact = tasks.register<Test>("gener
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.constructorDefaultsArtifact", constructorDefaultsConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateAdaptedConstructorsConformanceArtifact = tasks.register<Test>("generateAdaptedConstructorsConformanceArtifact") {
+    description = "Compiles adapted Guest constructor references for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*default adapted constructor references lower to managed function values*")
+    inputs.file(workerJar)
+    outputs.file(adaptedConstructorsConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.adaptedConstructorsArtifact", adaptedConstructorsConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

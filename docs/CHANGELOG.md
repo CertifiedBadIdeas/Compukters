@@ -46,7 +46,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   returned, stored, and invoked as typed function values. Bound Guest instance-method references retain their receiver
   and preserve virtual and interface dispatch. Unbound `Type::method` references accept the receiver as their first
   argument and use the same dispatch. References to supported Guest class constructors can also be passed, returned,
-  stored, and invoked as typed function values.
+  stored, and invoked as typed function values, including references adapted to omit supported trailing constructor
+  defaults.
 
 ### Addons and Create
 

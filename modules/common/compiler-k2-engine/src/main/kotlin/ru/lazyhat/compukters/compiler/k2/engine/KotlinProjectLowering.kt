@@ -2825,7 +2825,7 @@ private class FunctionCompiler(
             is IrVariable -> {
                 val initializer = statement.initializer ?: throw UnsupportedKotlinIr(statement, "local without initializer")
                 rejectFunctionVariance(initializer.type, statement.type, statement)
-                val source = coerceLocalValue(compileExpression(initializer), initializer.type, statement.type, statement)
+                val source = coerceLocalValue(compileExpression(initializer), statement.type, statement)
                 val cell = captureCells[statement.symbol]
                 if (cell == null) {
                     if (initializer is IrFunctionExpression ||
@@ -2853,7 +2853,6 @@ private class FunctionCompiler(
                 val source =
                     coerceLocalValue(
                         compileExpression(statement.value),
-                        statement.value.type,
                         statement.symbol.owner.type,
                         statement,
                     )
@@ -2952,6 +2951,12 @@ private class FunctionCompiler(
             }
 
             is IrSimpleFunction -> {
+                if (closureLayouts.values.any { layout ->
+                        layout.function === statement && layout.expression.constructorReferenceTarget() != null
+                    }
+                ) {
+                    return
+                }
                 throw UnsupportedKotlinIr(
                     statement,
                     "local functions are unsupported; Tasks.launch requires a direct reference to a top-level, " +
@@ -3308,11 +3313,11 @@ private class FunctionCompiler(
 
     private fun coerceLocalValue(
         source: RegisterId,
-        sourceType: IrType,
         targetType: IrType,
         element: IrElement,
     ): RegisterId {
-        val from = valueType(sourceType, element)
+        val registerTypes = leadingParameterTypes + sourceParameters.map { valueType(it.type, it) } + localTypes
+        val from = registerTypes[source.value.toInt()]
         val to = valueType(targetType, element)
         if (from == to) return source
         if (from is ValueType.Ref && to is ValueType.Ref) {
@@ -4978,7 +4983,7 @@ private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureS
             val shape = expression.type.guestFunctionShape()
             val parameters = constructor.parameters.filter { it.kind == IrParameterKind.Regular }.map { it.type }
             if (shape == null || !constructor.isPrimary ||
-                constructor.returnType != shape.result || parameters != shape.parameters ||
+                constructor.returnType != shape.result ||
                 constructor.parameters.any { it.kind != IrParameterKind.Regular } ||
                 (
                     expression is IrRichFunctionReference &&
@@ -4987,7 +4992,30 @@ private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureS
             ) {
                 throw UnsupportedKotlinIr(expression, "constructor reference signature is not supported")
             }
-            return@mapIndexed GuestClosureSource(expression, null, null, constructorSymbol, null, ordinal, emptyList())
+            if (parameters == shape.parameters) {
+                return@mapIndexed GuestClosureSource(expression, null, null, constructorSymbol, null, ordinal, emptyList())
+            }
+            val adapter = (expression as? IrFunctionReference)?.symbol?.owner as? IrSimpleFunction
+            val adapterCall =
+                ((adapter?.body as? IrBlockBody)?.statements?.singleOrNull() as? IrReturn)?.value as? IrConstructorCall
+            val adaptedParameters = adapter?.parameters.orEmpty()
+            val supplied = adapterCall?.arguments?.filterNotNull().orEmpty()
+            if (adapter == null || adapter.isSuspend || adapter.typeParameters.isNotEmpty() ||
+                adapter.returnType != shape.result ||
+                adaptedParameters.any { it.kind != IrParameterKind.Regular } ||
+                adaptedParameters.map { it.type } != shape.parameters ||
+                adapterCall?.symbol != constructorSymbol ||
+                adapterCall.arguments.size != constructor.parameters.size ||
+                supplied.map { (it as? IrGetValue)?.symbol } != adaptedParameters.map { it.symbol } ||
+                adapterCall.arguments.count { it == null } == 0 ||
+                adapterCall.arguments.drop(supplied.size).any { it != null } ||
+                constructor.parameters.indices.any { index ->
+                    adapterCall.arguments[index] == null && constructor.parameters[index].defaultValue == null
+                }
+            ) {
+                throw UnsupportedKotlinIr(expression, "constructor reference adaptation is not supported")
+            }
+            return@mapIndexed GuestClosureSource(expression, adapter, null, null, null, ordinal, emptyList())
         }
         val function =
             (expression as? IrFunctionExpression)?.function

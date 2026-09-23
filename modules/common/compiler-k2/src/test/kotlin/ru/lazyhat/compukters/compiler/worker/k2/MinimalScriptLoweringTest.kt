@@ -682,6 +682,38 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `default adapted constructor references lower to managed function values`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                fun mark(value: Int): Int { println(value); return value }
+                class Box(val first: Int = mark(4), var second: Int = first + mark(5)) {
+                    init { println(first * 10 + second) }
+                }
+                fun provide(): () -> Box = ::Box
+                fun call(factory: () -> Box): Box = factory()
+                fun main() {
+                    val zero = provide()
+                    val a = call(zero)
+                    val b = call(zero)
+                    a.second = 99
+                    println(a.second)
+                    println(b.second)
+                    val one: (Int) -> Box = ::Box
+                    println(one(7).second)
+                    val full: (Int, Int) -> Box = ::Box
+                    println(full(1, 2).second)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.adaptedConstructorsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `unsupported constructor reference is rejected before artifact publication`() =
         withAdapter { adapter ->
             val result =
