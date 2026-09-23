@@ -81,6 +81,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - The `create` addon also exposes adjacent or named Stock Tickers. Computer programs can search bounded stock snapshots
   by item ID, distinguish exact item variants, and request packaging to an address; acceptance is reported without
   implying delivery.
+- The `create` addon monitors active steam boilers through any Fluid Tank segment, reporting sampled water supply in
+  mB/t, the water gauge level, active heat, effective boiler level, and passive heating.
 - Device handles remain bound to the exact acquired block, and named handles expire when their cable path disconnects.
   Missing, disconnected, unloaded, removed, or replaced devices fail deterministically and produce a descriptive
   terminal diagnostic.
