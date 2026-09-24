@@ -2124,6 +2124,10 @@ class MinimalScriptLoweringTest {
                         """
                         import compukter.redstone.Redstone
                         import compukter.terminal.Terminal
+                        import kotlin.text.contains
+                        import kotlin.text.endsWith
+                        import kotlin.text.indexOf
+                        import kotlin.text.startsWith
 
                         fun main() {
                             val value = CharArray(5)
@@ -2138,6 +2142,25 @@ class MinimalScriptLoweringTest {
                             val enabled = true
                             val marker = 'x'
                             Terminal.write("${'$'}number/${'$'}enabled/${'$'}marker/${'$'}{Redstone.left}")
+                            require("banana".startsWith("ban"))
+                            require(!"banana".startsWith("ana"))
+                            require(!"ban".startsWith("banana"))
+                            require("banana".endsWith("ana"))
+                            require(!"banana".endsWith("ban"))
+                            require(!"ana".endsWith("banana"))
+                            require("banana".startsWith("") && "banana".endsWith(""))
+                            require("banana".contains("nan"))
+                            require(!"banana".contains("none"))
+                            require("banana".indexOf("ana") == 1)
+                            require("banana".indexOf("ana", 2) == 3)
+                            require("banana".indexOf("ana", -8) == 1)
+                            require("banana".indexOf("ana", 99) == -1)
+                            require("banana".indexOf("") == 0)
+                            require("banana".indexOf("", -8) == 0)
+                            require("banana".indexOf("", 99) == 6)
+                            require("".indexOf("") == 0)
+                            require("".indexOf("x") == -1)
+                            require("\uD83D\uDE00".indexOf("\uDE00") == 1)
                         }
                         """.trimIndent(),
                 )

@@ -17,6 +17,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- Programs can search strings by UTF-16 code unit with `startsWith`, `endsWith`, `contains`, and `indexOf`, including
+  an optional starting index for `indexOf`.
 - Programs can use nullable strings and supported class references, compare them with `null`, and use `?:` or
   reference-result `?.` without evaluating the unused branch. Nullable primitive values remain unsupported.
 - Programs can use direct generic functions and final generic classes with typed constructor fields and direct methods.
