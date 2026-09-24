@@ -518,6 +518,15 @@ registerKotlinVmConformance(
     conformanceScenario = "generic-functions",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinGenericCellVmConformance",
+    taskDescription = "Executes a specialized Guest generic class with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateGenericCellConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-generic-cell.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-generic-cell-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_GENERIC_CELL_ARTIFACT",
+    conformanceScenario = "generic-cell",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinFloatVmConformance",
     taskDescription = "Executes Guest Kotlin Float arithmetic, conversions, comparisons, and text with the pinned VM.",
     artifactTask = ":compiler-k2:generateFloatConformanceArtifact",

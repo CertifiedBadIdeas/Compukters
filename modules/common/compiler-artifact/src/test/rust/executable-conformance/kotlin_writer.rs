@@ -22,6 +22,7 @@ fn main() {
         "int-loops" => k2_int_loops_execute_across_quota_slices_without_host_io(),
         "long" => k2_long_executes_arithmetic_conversions_comparisons_and_text(),
         "generic-functions" => k2_generic_functions_preserve_primitive_and_reference_values(),
+        "generic-cell" => k2_generic_cell_preserves_typed_fields_and_aliases(),
         "float" => k2_float_executes_arithmetic_conversions_comparisons_and_text(),
         "platform-scalar" => k2_platform_scalar_precondition_traps_before_publishing_a_value(),
         "argv" => k2_string_array_entry_executes_exact_utf16_arguments(),
@@ -929,11 +930,18 @@ fn k2_long_executes_arithmetic_conversions_comparisons_and_text() {
 }
 
 fn k2_generic_functions_preserve_primitive_and_reference_values() {
-    let path = std::env::var("COMPUKTER_KOTLIN_GENERIC_FUNCTIONS_ARTIFACT")
-        .expect("COMPUKTER_KOTLIN_GENERIC_FUNCTIONS_ARTIFACT must be set");
-    let bytes = fs::read(path).expect("K2 generic-functions output must exist");
+    k2_two_generic_prints("COMPUKTER_KOTLIN_GENERIC_FUNCTIONS_ARTIFACT", ["42\n", "hello\n"]);
+}
+
+fn k2_generic_cell_preserves_typed_fields_and_aliases() {
+    k2_two_generic_prints("COMPUKTER_KOTLIN_GENERIC_CELL_ARTIFACT", ["42\n", "second\n"]);
+}
+
+fn k2_two_generic_prints(artifact_variable: &str, expected_output: [&str; 2]) {
+    let path = std::env::var(artifact_variable).expect("generic artifact path must be set");
+    let bytes = fs::read(path).expect("K2 generic output must exist");
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
-        .expect("pinned VM must verify generic-functions output");
+        .expect("pinned VM must verify generic output");
     let string_argument = [HostValueType::String];
     let operations = [
         OperationSchema::asynchronous(&[], HostValueType::String),
@@ -961,7 +969,7 @@ fn k2_generic_functions_preserve_primitive_and_reference_values() {
     };
     let mut session = Session::admit(verified, profile, &[stdio]).expect("generic functions must admit");
     session.start(&[]).expect("generic functions must start");
-    for expected in ["42\n", "hello\n"] {
+    for expected in expected_output {
         let value = utf16(expected);
         let write = next_host_request(&mut session, "generic println", 1, Some(&value));
         session

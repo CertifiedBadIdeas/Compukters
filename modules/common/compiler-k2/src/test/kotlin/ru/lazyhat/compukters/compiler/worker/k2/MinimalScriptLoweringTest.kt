@@ -1587,6 +1587,37 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `generic cell specializes field layout and preserves aliases`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class Cell<T>(var value: T) {
+                    fun replace(next: T) { value = next }
+                }
+                fun main() {
+                    val number = Cell(7)
+                    val alias = number
+                    alias.replace(42)
+                    println(number.value)
+                    val text = Cell<String>("first")
+                    text.value = "before"
+                    text.replace("second")
+                    println(text.value)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            val artifact = ArtifactReader.read(bytes)
+            val fields = artifact.modules.first().fields
+            assertTrue(fields.any { it.type == ValueType.I32 })
+            assertTrue(fields.any { it.type is ValueType.Ref })
+            System.getProperty("compukter.vm.genericCellArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `guest object subset rejects generic secondary uninitialized stateful and explicit cast shapes`() =
         withAdapter { adapter ->
             val unsupported =
