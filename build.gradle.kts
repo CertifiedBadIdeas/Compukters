@@ -500,6 +500,15 @@ registerKotlinVmConformance(
     conformanceScenario = "int-array",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinNullableReferencesVmConformance",
+    taskDescription = "Executes nullable Guest Kotlin references, safe calls, and Elvis with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateNullableReferencesConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-nullable-references.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-nullable-references-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_NULLABLE_REFERENCE_ARTIFACT",
+    conformanceScenario = "nullable-references",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinLongVmConformance",
     taskDescription = "Executes Guest Kotlin Long arithmetic, conversions, comparisons, and text with the pinned VM.",
     artifactTask = ":compiler-k2:generateLongConformanceArtifact",

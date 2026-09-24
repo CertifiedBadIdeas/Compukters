@@ -75,6 +75,102 @@ import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
     @Test
+    fun `unsupported nullable forms do not publish artifacts`() =
+        withAdapter { adapter ->
+            listOf(
+                "fun main() { val value: Int? = null }",
+                "fun main() { val text: String? = null; val length = text?.length }",
+                "fun main() { val array: CharArray? = null }",
+                "fun main() { val operation: (() -> Unit)? = null }",
+                "fun main() { val text: String? = null; val value = text!! }",
+            ).forEach { source ->
+                val result = adapter.compile(request(source))
+                val errors = result.diagnostics.filter { it.severity.name == "ERROR" }
+
+                assertNull(result.artifact, source)
+                assertEquals(1, errors.size, source)
+                assertEquals(DiagnosticCategory.TARGET, errors.single().category, source)
+                assertTrue(result.hasErrors, source)
+            }
+        }
+
+    @Test
+    fun `nullable references lower null comparisons Elvis and reference safe calls`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class Node(val name: String?) {
+                    fun read(): String? {
+                        println("read")
+                        return name
+                    }
+                }
+                class Box<T>(val value: T)
+
+                val global: String? = null
+                val globalPresent: String? = "global-present"
+
+                fun choose(node: Node?): String? = node?.read()
+                fun empty(): String? = null
+                fun prefix(text: String?): String? = text?.substring(0, 2)
+                fun unbox(box: Box<String>?): String? = box?.value
+                fun fresh(): Node? {
+                    println("fresh")
+                    return Node("fresh-value")
+                }
+                fun missingNode(): Node? {
+                    println("missing-node")
+                    return null
+                }
+
+                fun fallback(): String {
+                    println("fallback")
+                    return "missing"
+                }
+
+                fun main() {
+                    val absent: Node? = null
+                    val present: Node? = Node("ready")
+                    println(absent == null)
+                    println(present != null)
+                    println(choose(absent) ?: fallback())
+                    println(choose(present) ?: fallback())
+                    println(choose(Node(null)) ?: fallback())
+                    val first: String? = "same"
+                    val second: String? = "sa" + "me"
+                    println(first == second)
+                    println(global ?: "global")
+                    println(globalPresent ?: "global")
+                    println(global == null)
+                    println(global != globalPresent)
+                    println(empty() ?: "empty")
+                    var changing: String? = null
+                    changing = "later"
+                    println(changing ?: "absent")
+                    changing = null
+                    println(changing ?: "again")
+                    println(prefix(null) ?: "none")
+                    println(prefix("ready") ?: "none")
+                    println(unbox(null) ?: "none")
+                    println(unbox(Box("boxed")) ?: "none")
+                    println(fresh()?.read() ?: fallback())
+                    println(missingNode()?.read() ?: fallback())
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val artifact = ArtifactReader.read(bytes)
+            val instructions = artifact.modules.flatMap { module -> module.blocks.flatMap(Block::instructions) }
+
+            assertTrue(instructions.any { it is Instruction.Null })
+            assertTrue(instructions.any { it is Instruction.RefEqual || it is Instruction.RefNotEqual })
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+            System.getProperty("compukter.vm.nullableReferenceArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `task tick sleep lowers to one asynchronous timer request`() =
         withAdapter { adapter ->
             val source =

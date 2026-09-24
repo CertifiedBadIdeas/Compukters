@@ -309,6 +309,7 @@ val soundConformanceArtifact = layout.buildDirectory.file("generated/conformance
 val displayConformanceArtifact = layout.buildDirectory.file("generated/conformance/display.cpkt")
 val intLoopsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-loops.cpkt")
 val intArrayConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-array.cpkt")
+val nullableReferencesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-nullable-references.cpkt")
 val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-long.cpkt")
 val genericFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-functions.cpkt")
 val genericCellConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-cell.cpkt")
@@ -727,6 +728,22 @@ val generateIntArrayConformanceArtifact = tasks.register<Test>("generateIntArray
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.intArrayArtifact", intArrayConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateNullableReferencesConformanceArtifact = tasks.register<Test>("generateNullableReferencesConformanceArtifact") {
+    description = "Compiles nullable Guest Kotlin references for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*nullable references lower null comparisons Elvis and reference safe calls*")
+    inputs.file(workerJar)
+    outputs.file(nullableReferencesConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.nullableReferenceArtifact", nullableReferencesConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
