@@ -1527,7 +1527,7 @@ fn k2_string_materialization_executes_char_arrays_and_scalar_templates() {
     session.start(&[]).expect("K2 subset must start");
 
     let request_id = loop {
-        match session.advance(64, 64).expect("K2 subset must advance") {
+        match session.advance(512, 64).expect("K2 subset must advance") {
             AdvanceOutcome::SliceExhausted => {}
             AdvanceOutcome::HostRequestBatch(batch) => {
                 let request = batch.get(0).expect("K2 subset must publish one request");
@@ -1546,12 +1546,13 @@ fn k2_string_materialization_executes_char_arrays_and_scalar_templates() {
     session
         .resume(request_id, HostResponse::Success(HostValueInput::Unit))
         .expect("terminal write must resume");
-    let template_request = next_host_request(
+    let template_request = next_host_request_identity_with_budget(
         &mut session,
         "scalar template write",
         0,
         Some(&utf16("2/true/x/2")),
-    );
+        512,
+    ).1;
     session
         .resume(
             template_request,
@@ -1559,7 +1560,7 @@ fn k2_string_materialization_executes_char_arrays_and_scalar_templates() {
         )
         .expect("scalar template write must resume");
     loop {
-        match session.advance(64, 64).expect("K2 subset must finish") {
+        match session.advance(512, 64).expect("K2 subset must finish") {
             AdvanceOutcome::SliceExhausted => {}
             AdvanceOutcome::Halted(None) => break,
             outcome => panic!("unexpected K2 subset outcome after terminal write: {outcome:?}"),

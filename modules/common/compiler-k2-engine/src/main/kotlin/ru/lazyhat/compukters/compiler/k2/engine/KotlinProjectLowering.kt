@@ -5777,11 +5777,18 @@ private fun loweredParameters(
 }
 
 private fun IrSimpleFunction.canonicalPlatformSignature(): String {
-    val parameters =
+    val receiver =
         parameters
-            .filter { it.kind == IrParameterKind.ExtensionReceiver || it.kind == IrParameterKind.Regular }
+            .singleOrNull { it.kind == IrParameterKind.ExtensionReceiver }
+            ?.type
+            ?.canonicalPlatformType()
+            ?.plus(".")
+            .orEmpty()
+    val regularParameters =
+        parameters
+            .filter { it.kind == IrParameterKind.Regular }
             .joinToString(",") { it.type.canonicalPlatformType() }
-    return "fun($parameters):${returnType.canonicalPlatformType()}"
+    return "fun($receiver$regularParameters):${returnType.canonicalPlatformType()}"
 }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
