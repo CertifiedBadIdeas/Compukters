@@ -110,6 +110,30 @@ class CompletionQueryTest {
     }
 
     @Test
+    fun `completion resolves local variables after dollar in string template`() {
+        val source = "fun main() { val localValue = 1; val text = \"\$loc\" }"
+        val prefixStart = source.indexOf("loc\"")
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val result = fixture.complete("main.kt", prefixStart + 3)
+
+            assertEquals(EditorRange(prefixStart, prefixStart + 3), result.replacement)
+            assertTrue(result.items.any { it.insertText == "localValue" }, result.items.toString())
+        }
+    }
+
+    @Test
+    fun `completion immediately after dollar offers local variables`() {
+        val source = "fun main() { val localValue = 1; val text = \"\$\" }"
+        val caret = source.indexOf("\$\"") + 1
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val result = fixture.complete("main.kt", caret)
+
+            assertEquals(EditorRange(caret, caret), result.replacement)
+            assertTrue(result.items.any { it.insertText == "localValue" }, result.items.toString())
+        }
+    }
+
+    @Test
     fun `unqualified completion sees lexical and package declarations`() {
         val declarations = "package sample\nfun localPackageFunction() = Unit"
         val source = "package sample\nfun main(parameter: String) { val localValue = 1; loc }"

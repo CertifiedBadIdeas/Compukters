@@ -56,7 +56,7 @@ internal data class CompletionContext(
             var start = offsetUtf16
             while (start > 0) {
                 val codePoint = source.codePointBefore(start)
-                if (!Character.isJavaIdentifierPart(codePoint)) break
+                if (codePoint == '$'.code || !Character.isJavaIdentifierPart(codePoint)) break
                 start -= Character.charCount(codePoint)
             }
             val prefix = source.substring(start, offsetUtf16)
