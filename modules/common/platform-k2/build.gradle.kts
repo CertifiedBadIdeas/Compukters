@@ -39,3 +39,16 @@ dependencies {
     testImplementation(libs.kotlin.analysis.low.level.fir) { isTransitive = false }
     testImplementation(kotlin("test"))
 }
+
+val guestApiSourceRoot = project(":guest-platform").layout.projectDirectory.dir("src/platform")
+val guestApiIndex = layout.buildDirectory.file("generated/guest-api/declarations.json")
+
+tasks.register<JavaExec>("exportGuestApiDocumentation") {
+    group = "documentation"
+    description = "Exports public Guest Kotlin declarations for the website API reference."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass = "ru.lazyhat.compukters.platform.k2.build.GuestApiDocumentationMain"
+    inputs.dir(guestApiSourceRoot)
+    outputs.file(guestApiIndex)
+    args(guestApiSourceRoot.asFile.absolutePath, guestApiIndex.get().asFile.absolutePath)
+}
