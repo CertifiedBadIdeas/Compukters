@@ -1591,8 +1591,9 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val source =
                 """
+                fun <T> identity(value: T): T = value
                 class Cell<T>(var value: T) {
-                    fun replace(next: T) { value = next }
+                    fun replace(next: T) { value = identity(next) }
                 }
                 fun main() {
                     val number = Cell(7)
@@ -1615,6 +1616,48 @@ class MinimalScriptLoweringTest {
             System.getProperty("compukter.vm.genericCellArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }
+        }
+
+    @Test
+    fun `unsupported generic forms report source diagnostics without artifacts`() =
+        withAdapter { adapter ->
+            val unsupported =
+                listOf(
+                    "inline fun <reified T> keep(value: T): T = value\nfun main() { keep(1) }",
+                    "interface Reader<T> { fun read(): T }\nfun main() {}",
+                    "class Box<out T>(val value: T)\nfun main() { Box(1) }",
+                    "class Box<T>(val value: T)\nfun main() { Box<Int?>(null) }",
+                    "fun <T> erase(value: T): Any = value\nfun main() { erase(1) }",
+                )
+            unsupported.forEach { source ->
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact, source)
+                assertTrue(
+                    result.diagnostics.any { diagnostic ->
+                        diagnostic.severity.name == "ERROR" && diagnostic.path != null
+                    },
+                    result.diagnostics.toString(),
+                )
+            }
+        }
+
+    @Test
+    fun `polymorphic recursion stops at specialization limit`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class Wrap<T>(val value: T)
+                fun <T> grow(value: T) { grow(Wrap(value)) }
+                fun main() { grow(1) }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            assertNull(result.artifact)
+            assertTrue(
+                result.diagnostics.any { diagnostic ->
+                    diagnostic.code == "UNSUPPORTED_IR" && "exceeds 256" in diagnostic.message && diagnostic.path != null
+                },
+                result.diagnostics.toString(),
+            )
         }
 
     @Test

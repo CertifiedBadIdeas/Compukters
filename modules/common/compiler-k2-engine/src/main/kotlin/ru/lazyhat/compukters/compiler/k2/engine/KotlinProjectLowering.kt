@@ -295,6 +295,7 @@ private data class GuestFunctionInstance(
 private fun collectGuestFunctionInstances(
     functions: List<IrSimpleFunction>,
     constructors: List<IrClass>,
+    memberInstances: List<GuestFunctionInstance> = emptyList(),
 ): List<GuestFunctionInstance> {
     functions.firstOrNull { it.parent is IrClass && it.typeParameters.isNotEmpty() }?.let { function ->
         throw UnsupportedKotlinIr(function, "generic instance methods are not supported")
@@ -320,6 +321,7 @@ private fun collectGuestFunctionInstances(
         .filter { function ->
             function.typeParameters.isEmpty() && (function.parent as? IrClass)?.typeParameters?.isEmpty() != false
         }.forEach { add(GuestFunctionInstance(it, emptyList())) }
+    memberInstances.forEach(::add)
     val constructorBodies =
         constructors.flatMap { declaration -> declaration.constructors.filter { it.isPrimary } }
 
@@ -744,6 +746,18 @@ internal object KotlinProjectLowering {
                     !includeTrustedPlatformBodies &&
                         session.trustedPlatformModule(it.file.fileEntry.name) != null
                 }.sortedBy { it.fqNameWhenAvailable?.asString().orEmpty() }
+        sourceClasses
+            .firstOrNull { declaration ->
+                declaration.typeParameters.isNotEmpty() && declaration.kind != ClassKind.CLASS
+            }?.let { declaration ->
+                throw UnsupportedKotlinIr(declaration, "generic interfaces and non-class declarations are not supported")
+            }
+        sourceClasses
+            .firstOrNull { declaration ->
+                declaration.typeParameters.any { parameter -> parameter.variance != Variance.INVARIANT }
+            }?.let { declaration ->
+                throw UnsupportedKotlinIr(declaration, "generic declaration-site variance is not supported")
+            }
         val topLevelProperties =
             properties
                 .filterNot {
@@ -838,7 +852,9 @@ internal object KotlinProjectLowering {
         val baseFunctionInstances = collectGuestFunctionInstances(userFunctions, constructorClasses)
         val classInstances = collectGuestClassInstances(userClasses, baseFunctionInstances, topLevelProperties)
         val functionInstances =
-            baseFunctionInstances +
+            collectGuestFunctionInstances(
+                userFunctions,
+                constructorClasses,
                 classInstances.flatMap { classInstance ->
                     if (classInstance.arguments.isEmpty()) {
                         emptyList()
@@ -847,7 +863,8 @@ internal object KotlinProjectLowering {
                             GuestFunctionInstance(function, emptyList(), classInstance)
                         }
                     }
-                }
+                },
+            )
         val constructorInstances =
             classInstances.filter { instance ->
                 instance.declaration.kind == ClassKind.CLASS && instance.declaration.constructors.any { it.isPrimary }
@@ -1409,60 +1426,67 @@ internal object KotlinProjectLowering {
                 if (function.body == null) {
                     CompiledFunction(emptyList(), emptyList())
                 } else {
-                    FunctionCompiler(
-                        function = function,
-                        functionId = functionId,
-                        blockBase = firstBlock,
-                        stringType = stringType,
-                        charArrayType = charArrayType,
-                        intArrayType = intArrayType,
-                        stringArrayType = stringArrayType,
-                        guestTypes = guestTypes,
-                        unitType = pluginContext.irBuiltIns.unitType,
-                        kotlinStringType = pluginContext.irBuiltIns.stringType,
-                        kotlinCharArrayClass = pluginContext.irBuiltIns.charArray,
-                        kotlinIntArrayClass = pluginContext.irBuiltIns.intArray,
-                        intType = pluginContext.irBuiltIns.intType,
-                        longType = pluginContext.irBuiltIns.longType,
-                        floatType = pluginContext.irBuiltIns.floatType,
-                        booleanType = pluginContext.irBuiltIns.booleanType,
-                        charType = pluginContext.irBuiltIns.charType,
-                        functionIds = functionIds,
-                        genericFunctionIds = instanceFunctionIds,
-                        genericMemberFunctionIds = genericMemberFunctionIds,
-                        currentInstance = instance,
-                        currentClassInstance = instance.ownerClass,
-                        constantIds = constantIds,
-                        literalIds = literalIds,
-                        session = session,
-                        capabilityIds = capabilityIds,
-                        classTypeIds = classTypeIds,
-                        classInstanceTypeIds = classInstanceTypeIds,
-                        externalClassTypes = externalClassTypes,
-                        inlineValueClasses = inlineValueClasses,
-                        platformScalars = platformScalars,
-                        constructorLayouts = constructorTargets,
-                        genericConstructorLayouts = genericConstructorTargets,
-                        fieldsBySetter = fieldsBySetter,
-                        fieldsByGetter = fieldsByGetter,
-                        fieldsByBacking = fieldsByBacking,
-                        genericFieldsBySetter = genericFieldsBySetter,
-                        genericFieldsByGetter = genericFieldsByGetter,
-                        genericFieldsByBacking = genericFieldsByBacking,
-                        topLevelFieldsByBacking = topLevelFieldsByBacking,
-                        topLevelFieldsByGetter = topLevelFieldsByGetter,
-                        enumEntries =
-                            classLayouts.flatMap { layout -> layout.enumEntries }.associateBy { it.declaration.symbol },
-                        externalFieldsByGetter = externalGetterFieldImports,
-                        externalEnumEntries = externalEnumFieldImports,
-                        externalDefaultEnumEntries = externalDefaultEnumFieldImports,
-                        externalFunctions = externalFunctionImports,
-                        functionTypes = shapeInterfaceTypes,
-                        invokeFunctionIds = shapeInvokeFunctionIds,
-                        taskLaunchTrampolineFunctionId = taskLaunchTrampolineFunctionId,
-                        closureLayouts = closureLayoutsByExpression,
-                        captureCells = captureCellLayoutsBySymbol,
-                    ).compile()
+                    try {
+                        FunctionCompiler(
+                            function = function,
+                            functionId = functionId,
+                            blockBase = firstBlock,
+                            stringType = stringType,
+                            charArrayType = charArrayType,
+                            intArrayType = intArrayType,
+                            stringArrayType = stringArrayType,
+                            guestTypes = guestTypes,
+                            unitType = pluginContext.irBuiltIns.unitType,
+                            kotlinStringType = pluginContext.irBuiltIns.stringType,
+                            kotlinCharArrayClass = pluginContext.irBuiltIns.charArray,
+                            kotlinIntArrayClass = pluginContext.irBuiltIns.intArray,
+                            intType = pluginContext.irBuiltIns.intType,
+                            longType = pluginContext.irBuiltIns.longType,
+                            floatType = pluginContext.irBuiltIns.floatType,
+                            booleanType = pluginContext.irBuiltIns.booleanType,
+                            charType = pluginContext.irBuiltIns.charType,
+                            functionIds = functionIds,
+                            genericFunctionIds = instanceFunctionIds,
+                            genericMemberFunctionIds = genericMemberFunctionIds,
+                            currentInstance = instance,
+                            currentClassInstance = instance.ownerClass,
+                            constantIds = constantIds,
+                            literalIds = literalIds,
+                            session = session,
+                            capabilityIds = capabilityIds,
+                            classTypeIds = classTypeIds,
+                            classInstanceTypeIds = classInstanceTypeIds,
+                            externalClassTypes = externalClassTypes,
+                            inlineValueClasses = inlineValueClasses,
+                            platformScalars = platformScalars,
+                            constructorLayouts = constructorTargets,
+                            genericConstructorLayouts = genericConstructorTargets,
+                            fieldsBySetter = fieldsBySetter,
+                            fieldsByGetter = fieldsByGetter,
+                            fieldsByBacking = fieldsByBacking,
+                            genericFieldsBySetter = genericFieldsBySetter,
+                            genericFieldsByGetter = genericFieldsByGetter,
+                            genericFieldsByBacking = genericFieldsByBacking,
+                            topLevelFieldsByBacking = topLevelFieldsByBacking,
+                            topLevelFieldsByGetter = topLevelFieldsByGetter,
+                            enumEntries =
+                                classLayouts.flatMap { layout -> layout.enumEntries }.associateBy { it.declaration.symbol },
+                            externalFieldsByGetter = externalGetterFieldImports,
+                            externalEnumEntries = externalEnumFieldImports,
+                            externalDefaultEnumEntries = externalDefaultEnumFieldImports,
+                            externalFunctions = externalFunctionImports,
+                            functionTypes = shapeInterfaceTypes,
+                            invokeFunctionIds = shapeInvokeFunctionIds,
+                            taskLaunchTrampolineFunctionId = taskLaunchTrampolineFunctionId,
+                            closureLayouts = closureLayoutsByExpression,
+                            captureCells = captureCellLayoutsBySymbol,
+                        ).compile()
+                    } catch (unsupported: UnsupportedKotlinIr) {
+                        if (session.virtualSourcePath(function.file.fileEntry.name)?.value?.startsWith("platform/") == true) {
+                            throw UnsupportedKotlinIr(function, unsupported.message.orEmpty())
+                        }
+                        throw unsupported
+                    }
                 }
             blocks += compiled.blocks
             val resultType =

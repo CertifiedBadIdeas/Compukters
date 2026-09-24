@@ -250,11 +250,26 @@ supported.
   subset; direct `arrayOf` varargs are specially lowered, while spread arrays
   are rejected. Tracking: not scheduled
 
-- [ ] **Generic functions and classes — Unsupported** — user type parameters
-  are outside the Guest object and signature subset. Evidence:
+- [ ] **Generic functions and classes — Partial** — top-level `fun <T>` calls
+  with inferred or explicit concrete arguments and final invariant `class Cell<T>`
+  style declarations are specialized at compile time. Primary-constructor
+  fields and direct methods use concrete scalar or reference types; a non-null
+  `Int` remains unboxed in both calls and fields. Source-only platform library
+  modules containing generic functions can be specialized in a consumer.
+  Generic interfaces, declaration-site variance, reified parameters, generic
+  value classes, generic methods declaring their own type parameters, nullable
+  primitive arguments, and `Any` boxing bridges are rejected. Expansion is
+  bounded to 256 function and 256 class variants per compilation. Binary
+  generic library templates and runtime instantiation are absent. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `guest object subset rejects generic secondary uninitialized stateful and explicit cast shapes`.
-  Tracking: not scheduled
+  tests `generic identity specializes primitive and reference calls`,
+  `generic cell specializes field layout and preserves aliases`, and
+  `unsupported generic forms report source diagnostics without artifacts`;
+  [`K2CompilerAdapterTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/K2CompilerAdapterTest.kt),
+  test `source library generic function specializes in consumer`; VM
+  conformance tasks `testKotlinGenericFunctionsVmConformance`,
+  `testKotlinGenericCellVmConformance`, and
+  `testKotlinGenericLibraryVmConformance`. Tracking: #652
 
 - [ ] **Lambdas, local functions, and function references — Partial** —
   Non-null function values using supported Guest parameter and result types

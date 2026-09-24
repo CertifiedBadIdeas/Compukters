@@ -134,27 +134,56 @@ class K2CompilerAdapter(
                 physical.parent.createDirectories()
                 physical.writeBytes(source.content.toByteArray())
             }
+            val sourceLibraries =
+                selected.filter { module ->
+                    module.id != platform.builtins.id &&
+                        platform.modules.any { packaged -> packaged.id == module.id } &&
+                        module.libraryFragment == null &&
+                        module.declarations.any { declaration ->
+                            !declaration.trustedExternal && declaration.signature.startsWith("fun(")
+                        }
+                }
+            val librarySourceNames =
+                sourceLibraries.flatMap { module ->
+                    module.sources.map { source -> source.path.substringAfterLast('/') }
+                }
+            require(librarySourceNames.size == librarySourceNames.toSet().size) {
+                "selected generic library sources have conflicting file names"
+            }
+            require(request.sources.none { source -> source.path.value.substringAfterLast('/') in librarySourceNames }) {
+                "project source file name conflicts with a selected generic library source"
+            }
             val platformSources =
                 request.sources.map { source ->
                     PlatformSource(source.path.value, ImmutableBytes.of(source.content.toByteArray()))
-                }
+                } + sourceLibraries.flatMap(PlatformModule::sources)
             var reachedIr = false
             var artifact: BinaryValue? = null
             val sourcePaths =
-                request.sources
-                    .flatMap { source ->
-                        listOf(
-                            Path.of(source.path.value).fileName.toString(),
-                            source.path.value,
-                            sourceRoot.resolve(source.path.value).normalize().toString(),
-                        ).map { physical -> physical to source.path }
-                    }.toMap()
+                (
+                    request.sources
+                        .flatMap { source ->
+                            listOf(
+                                Path.of(source.path.value).fileName.toString(),
+                                "/${Path.of(source.path.value).fileName}",
+                                source.path.value,
+                                sourceRoot.resolve(source.path.value).normalize().toString(),
+                            ).map { physical -> physical to source.path }
+                        } +
+                        sourceLibraries.flatMap { module ->
+                            module.sources.flatMap { source ->
+                                val virtual = VirtualSourcePath.of("platform/${module.id.namespace}/${module.id.name}/${source.path}")
+                                val name = source.path.substringAfterLast('/')
+                                listOf(name to virtual, "/$name" to virtual)
+                            }
+                        }
+                ).toMap()
             CompuktersFirBuildEnvironment.create().use { environment ->
                 val output =
                     environment.compileGuest(
                         PlatformModuleId("guest", "application"),
                         platformSources,
-                        selected,
+                        selected - sourceLibraries.toSet(),
                     )
                 output.diagnostics.diagnosticsByFile.forEach { (file, fileDiagnostics) ->
                     val path = file?.name?.let(sourcePaths::get)

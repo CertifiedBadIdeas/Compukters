@@ -111,6 +111,12 @@ after restart. Cache keys cover the ordered source snapshot, compiler and payloa
 platform modules, and compilation limits. Cache publication and cache hits both pass the stateless Rust artifact
 verifier over FFM; runtime admission quotas are deliberately not part of cache validity.
 
+Guest generic functions and final generic classes are specialized before artifact writing. The VM receives ordinary
+concrete function and class records, with typed scalar or reference fields and calls. A selected source-only platform
+library module with generic functions is compiled with the consuming Guest source so its bodies can be specialized;
+ordinary library fragments remain linked from their precompiled artifact. Generic binary templates are not part of the
+platform bundle or VM artifact contract.
+
 `ServerCompilerService` performs bounded asynchronous preparation, persistent-cache lookup, and single-flight
 deduplication by compilation identity. Minecraft-facing code submits requests and drains completions; worker and cache
 I/O run outside the server tick thread.

@@ -17,6 +17,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- Programs can use direct generic functions and final generic classes with typed constructor fields and direct methods.
+  The compiler specializes each concrete use, retaining unboxed non-null scalar fields and calls. Source-only generic
+  library modules can be specialized in a consuming program.
 - Computer programs can use unboxed `Long` and `Float` values, including mixed numeric arithmetic and comparisons,
   explicit conversions, `Long` bitwise and shift operations, constants, string interpolation, and console output.
 - `Float` values retain their binary32 representation through arithmetic, equality, host responses, and conversion to

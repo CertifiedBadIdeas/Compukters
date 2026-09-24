@@ -28,6 +28,7 @@ import ru.lazyhat.compukters.addon.api.AddonGuestApiBinding
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
+import ru.lazyhat.compukters.compiler.k2.engine.build.PlatformBundleBuilder
 import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryBudgetException
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
@@ -47,7 +48,10 @@ import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardWatchEventKinds
+import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -57,6 +61,114 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class K2CompilerAdapterTest {
+    @Test
+    fun `source library generic function specializes in consumer`() {
+        val sourceRoot =
+            Path
+                .of(
+                    checkNotNull(System.getProperty("compukters.repository.root")),
+                ).resolve("modules/common/guest-platform/src/platform")
+        val root = createTempDirectory("compukters-generic-library-")
+        try {
+            Files.walk(sourceRoot).use { paths ->
+                paths.filter(Files::isRegularFile).forEach { source ->
+                    root.resolve(sourceRoot.relativize(source)).also { target ->
+                        target.parent.createDirectories()
+                        Files.copy(source, target)
+                    }
+                }
+            }
+            root.resolve("libraries/generic/Identity.kt").apply {
+                parent.createDirectories()
+                writeText(
+                    "package sample\nfun <T> identity(value: T): T = value\nfun <T> bad(value: T): T { val nullable: T? = value; return nullable!! }\n",
+                )
+            }
+            root.resolve("modules.toml").writeText(
+                sourceRoot.resolve("modules.toml").readText() + "\n" +
+                    """
+                    [[module]]
+                    id = "test:generic"
+                    version = "1.0.0"
+                    dependencies = ["kotlin:builtins"]
+                    sources = ["libraries/generic/**/*.kt"]
+                    """.trimIndent(),
+            )
+            val platform = PlatformBundleBuilder().build(root, root.resolve("modules.toml"))
+            val library = platform.modules.single { it.id.toString() == "test:generic" }
+            assertNull(library.libraryFragment)
+            val workerIdentity = identity(platform)
+            val selected =
+                listOf(
+                    platform.modules.single { it.id.toString() == "stdlib:core" },
+                    platform.modules.single { it.id.toString() == "std:terminal" },
+                    library,
+                ).map { module ->
+                    TrustedBundleIdentity.of(
+                        module.id.toString(),
+                        Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()),
+                    )
+                }
+            val adapter =
+                K2CompilerAdapter(
+                    K2CompilerInputs(
+                        temporaryRoot = root.resolve("requests").also { it.createDirectories() },
+                        workerJar = Path.of(checkNotNull(System.getProperty("compukters.worker.jar"))),
+                        expectedIdentity = workerIdentity,
+                    ),
+                    platform,
+                )
+            val source =
+                source("project/Main.kt", "import sample.identity\nfun main() { println(identity(42)); println(identity(\"hello\")) }")
+            val result =
+                adapter.compile(
+                    CompileRequest(
+                        RequestId.of(1u),
+                        listOf(source),
+                        TargetSettings.KOTLIN_2_4_JVM_17,
+                        workerIdentity,
+                        WorkerLimits(),
+                        selected,
+                        emptyList(),
+                    ),
+                )
+            val artifact = ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray())
+            val names =
+                artifact.modules
+                    .first()
+                    .strings
+                    .map { it.toString() }
+            assertTrue("sample.identity<Int>" in names, names.toString())
+            assertTrue("sample.identity<String>" in names, names.toString())
+            System.getProperty("compukter.vm.genericLibraryArtifact")?.let { output ->
+                val path = Path.of(output)
+                path.parent.createDirectories()
+                Files.write(path, assertNotNull(result.artifact).toByteArray())
+            }
+            val unsupported =
+                adapter.compile(
+                    CompileRequest(
+                        RequestId.of(2u),
+                        listOf(source("project/Bad.kt", "import sample.bad\nfun main() { bad(1) }")),
+                        TargetSettings.KOTLIN_2_4_JVM_17,
+                        workerIdentity,
+                        WorkerLimits(),
+                        selected,
+                        emptyList(),
+                    ),
+                )
+            assertNull(unsupported.artifact)
+            assertTrue(
+                unsupported.diagnostics.any { diagnostic ->
+                    diagnostic.code == "UNSUPPORTED_IR" && diagnostic.path?.value?.startsWith("platform/") == true
+                },
+                unsupported.diagnostics.toString(),
+            )
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `worker packages one compiled platform bundle instead of trusted source inputs`() {
         assertTrue(K2CompilerAdapter.loadPackagedPlatform().modules.isNotEmpty())
@@ -328,18 +440,13 @@ class K2CompilerAdapterTest {
         content: String,
     ) = ProjectSource(VirtualSourcePath.kotlin(path), BinaryValue.of(content.encodeToByteArray()))
 
-    private fun identity() =
+    private fun identity(platform: PlatformBundle = K2CompilerAdapter.loadPackagedPlatform()) =
         WorkerIdentity(
             "2.4.10",
             "2.4",
             1u,
             1u,
             Hash256.zero(),
-            Hash256.of(
-                K2CompilerAdapter
-                    .loadPackagedPlatform()
-                    .identity.contentHash
-                    .toByteArray(),
-            ),
+            Hash256.of(platform.identity.contentHash.toByteArray()),
         )
 }

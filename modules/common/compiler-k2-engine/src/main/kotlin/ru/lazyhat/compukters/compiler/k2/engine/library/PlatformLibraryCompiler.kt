@@ -87,7 +87,17 @@ class PlatformLibraryCompiler {
         val collected = LibraryDeclarationCollector(currentFiles).also { ir.accept(it, null) }
         val ordinarySymbols =
             declarations.filter { it.kind == PlatformLibraryDeclarationKind.FUNCTION }.mapTo(mutableSetOf()) { it.symbol }
-        val ordinaryFunctions = collected.functions.filter { it.fqNameWhenAvailable?.asString() in ordinarySymbols }
+        val genericFunctions =
+            collected.functions.filter { function ->
+                function.fqNameWhenAvailable?.asString() in ordinarySymbols && function.typeParameters.isNotEmpty()
+            }
+        val ordinaryFunctions =
+            collected.functions.filter { function ->
+                function.fqNameWhenAvailable?.asString() in ordinarySymbols && function.typeParameters.isEmpty()
+            }
+        require(genericFunctions.isEmpty() || ordinaryFunctions.isEmpty()) {
+            "platform module $module must separate source generic functions from precompiled ordinary functions"
+        }
         val entry =
             ordinaryFunctions
                 .filter { it.body != null }
