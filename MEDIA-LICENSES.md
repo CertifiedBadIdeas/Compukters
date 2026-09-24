@@ -27,6 +27,13 @@ logo. CC BY 4.0 permits reuse of the copyrighted image under its terms, but it
 does not grant trademark rights or permission to imply official origin,
 sponsorship, or endorsement. See [TRADEMARKS.md](TRADEMARKS.md).
 
+## Boiler showcase screenshot
+
+The [boiler showcase screenshot](docs/assets/images/boiler_showcase.png) was captured by lazyhat for the documentation
+and Modrinth description. The screenshot composition is copyright 2026 lazyhat, all rights reserved. Minecraft and
+Create game assets visible in the image retain their own ownership and licensing. See the
+[provenance record](licenses/media/Boiler-showcase-PROVENANCE.md).
+
 ## Terminal fonts
 
 The Cozette, Dina, and ProggyTiny BDF sources and the bitmap atlases generated

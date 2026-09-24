@@ -35,6 +35,11 @@ New players can follow the [getting-started guide](docs/GETTING-STARTED.md), als
 published as the [Compukters documentation site](https://certifiedbadideas.github.io/Compukters/).
 See [Redstone GPIO](docs/REDSTONE.md) for local-side input waits, persistent
 weak/direct outputs, and tick-boundary behavior.
+See [Text display](docs/DISPLAY.md) for the in-world 20x10 output grid and
+peripheral cables. The optional, separately installed Create addon for 1.21.1
+provides [kinetic devices](docs/CREATE-KINETICS.md),
+[Stock Ticker logistics](docs/CREATE-LOGISTICS.md), and
+[steam boiler monitoring](docs/CREATE-BOILERS.md).
 See [Addon development](docs/ADDON-DEVELOPMENT.md) for publishing typed Guest
 Kotlin APIs from independent NeoForge mods.
 See [Verification](docs/VERIFICATION.md) for focused checks, complete local
