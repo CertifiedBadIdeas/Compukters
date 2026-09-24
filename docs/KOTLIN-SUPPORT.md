@@ -255,7 +255,9 @@ supported.
   style declarations are specialized at compile time. Primary-constructor
   fields and direct methods use concrete scalar or reference types; a non-null
   `Int` remains unboxed in both calls and fields. Source-only platform library
-  modules containing generic functions can be specialized in a consumer.
+  modules containing generic functions or final generic classes are specialized
+  in a consumer; generic class methods and constructor fields retain concrete
+  `Int` and reference layouts.
   Generic interfaces, declaration-site variance, reified parameters, generic
   value classes, generic methods declaring their own type parameters, nullable
   primitive arguments, and `Any` boxing bridges are rejected. Expansion is
@@ -266,10 +268,10 @@ supported.
   `generic cell specializes field layout and preserves aliases`, and
   `unsupported generic forms report source diagnostics without artifacts`;
   [`K2CompilerAdapterTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/K2CompilerAdapterTest.kt),
-  test `source library generic function specializes in consumer`; VM
+  test `source library generic functions and classes specialize in consumer`; VM
   conformance tasks `testKotlinGenericFunctionsVmConformance`,
   `testKotlinGenericCellVmConformance`, and
-  `testKotlinGenericLibraryVmConformance`. Tracking: #652
+  `testKotlinGenericLibraryVmConformance`. Tracking: #652, #656
 
 - [ ] **Lambdas, local functions, and function references — Partial** —
   Non-null function values using supported Guest parameter and result types

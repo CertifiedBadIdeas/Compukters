@@ -64,6 +64,7 @@ import ru.lazyhat.compukters.ide.project.ProjectHandle
 import ru.lazyhat.compukters.ide.project.ProjectManifestCodec
 import ru.lazyhat.compukters.ide.project.ResolvedModule
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
@@ -253,7 +254,7 @@ class IdeAnalysisCoordinatorTest {
         val bundle =
             AddonGuestApiBundleCodec.assemble(
                 addon = "fixture",
-                platformAbi = 1,
+                platformAbi = PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
                 module =
                     PlatformModule(
                         moduleId,

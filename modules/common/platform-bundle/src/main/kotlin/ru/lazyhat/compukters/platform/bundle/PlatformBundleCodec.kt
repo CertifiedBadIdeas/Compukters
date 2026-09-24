@@ -29,9 +29,9 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 object PlatformBundleCodec {
-    const val SUPPORTED_PLATFORM_ABI = 1
+    const val SUPPORTED_PLATFORM_ABI = 2
 
-    private const val FORMAT_VERSION = 5
+    private const val FORMAT_VERSION = 6
     private const val MAX_BUNDLE_BYTES = 128 * 1024 * 1024
     private const val MAX_BINARY_BYTES = 64 * 1024 * 1024
     private const val MAX_TEXT_BYTES = 1024 * 1024
@@ -45,7 +45,7 @@ object PlatformBundleCodec {
     private const val MAX_SCALAR_CONSTANTS = 262_144
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'B'.code.toByte(), 'F'.code.toByte())
     private val MODULE_MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'M'.code.toByte(), 'D'.code.toByte())
-    private const val MODULE_FORMAT_VERSION = 1
+    private const val MODULE_FORMAT_VERSION = 2
 
     fun assemble(
         languageVersion: String,
@@ -176,6 +176,7 @@ object PlatformBundleCodec {
             "platform bundle contains duplicate module ids"
         }
         require(bundle.builtins.dependencies.isEmpty()) { "platform builtins must not have dependencies" }
+        require(!bundle.builtins.sourceOnly) { "platform builtins cannot be source-only" }
         val sourceOwners = mutableMapOf<String, PlatformModuleId>()
         allModules.forEach { module ->
             require(module.version.isNotBlank()) { "platform module ${module.id} has a blank version" }
@@ -187,6 +188,12 @@ object PlatformBundleCodec {
             require(module.metadata.size <= MAX_BINARY_BYTES) { "platform module ${module.id} metadata exceeds byte limit" }
             require((module.libraryFragment?.size ?: 0) <= MAX_BINARY_BYTES) {
                 "platform module ${module.id} library fragment exceeds byte limit"
+            }
+            require(!module.sourceOnly || module.libraryFragment == null) {
+                "source-only platform module ${module.id} cannot contain a library fragment"
+            }
+            require(!module.sourceOnly || module.sources.isNotEmpty()) {
+                "source-only platform module ${module.id} has no sources"
             }
             require(module.sources.size <= MAX_SOURCES) { "platform module ${module.id} has too many sources" }
             require(module.declarations.size <= MAX_DECLARATIONS) { "platform module ${module.id} has too many declarations" }
@@ -366,7 +373,13 @@ object PlatformBundleCodec {
             count(value.dependencies.size)
             value.dependencies.forEach(::moduleId)
             immutableBytes(value.metadata)
-            output.write(if (value.libraryFragment == null) 0 else 1)
+            output.write(
+                when {
+                    value.sourceOnly -> 2
+                    value.libraryFragment == null -> 0
+                    else -> 1
+                },
+            )
             value.libraryFragment?.let(::immutableBytes)
             count(value.sources.size)
             value.sources.forEach { source ->
@@ -513,12 +526,15 @@ object PlatformBundleCodec {
             val version = string("module version")
             val dependencies = List(count(MAX_DEPENDENCIES, "module dependency")) { moduleId() }
             val metadata = immutableBytes()
+            val libraryPresence = u8()
             val libraryFragment =
-                when (val presence = u8()) {
+                when (libraryPresence) {
                     0 -> null
                     1 -> immutableBytes()
-                    else -> throw IllegalArgumentException("invalid library fragment presence: $presence")
+                    2 -> null
+                    else -> throw IllegalArgumentException("invalid library fragment presence: $libraryPresence")
                 }
+            val sourceOnly = libraryPresence == 2
             val sources =
                 List(count(MAX_SOURCES, "platform source")) {
                     PlatformSource(string("platform source path"), immutableBytes())
@@ -619,6 +635,7 @@ object PlatformBundleCodec {
                 completionDeclarations,
                 scalarTypes,
                 scalarConstants,
+                sourceOnly,
             )
         }
 

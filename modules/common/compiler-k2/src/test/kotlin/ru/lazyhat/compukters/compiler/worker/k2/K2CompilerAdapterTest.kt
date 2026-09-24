@@ -62,7 +62,7 @@ import kotlin.test.assertTrue
 
 class K2CompilerAdapterTest {
     @Test
-    fun `source library generic function specializes in consumer`() {
+    fun `source library generic functions and classes specialize in consumer`() {
         val sourceRoot =
             Path
                 .of(
@@ -84,6 +84,14 @@ class K2CompilerAdapterTest {
                     "package sample\nfun <T> identity(value: T): T = value\nfun <T> bad(value: T): T { val nullable: T? = value; return nullable!! }\n",
                 )
             }
+            root.resolve("libraries/generic-class/Cell.kt").apply {
+                parent.createDirectories()
+                writeText("package sample\nclass Cell<T>(var value: T) { fun replace(next: T) { value = next } }\n")
+            }
+            root.resolve("libraries/generic-class-only/Holder.kt").apply {
+                parent.createDirectories()
+                writeText("package sample\nclass Holder<T>(val value: T)\n")
+            }
             root.resolve("modules.toml").writeText(
                 sourceRoot.resolve("modules.toml").readText() + "\n" +
                     """
@@ -92,17 +100,39 @@ class K2CompilerAdapterTest {
                     version = "1.0.0"
                     dependencies = ["kotlin:builtins"]
                     sources = ["libraries/generic/**/*.kt"]
+
+                    [[module]]
+                    id = "test:generic-class"
+                    version = "1.0.0"
+                    dependencies = ["kotlin:builtins"]
+                    sources = ["libraries/generic-class/**/*.kt"]
+
+                    [[module]]
+                    id = "test:generic-class-only"
+                    version = "1.0.0"
+                    dependencies = ["kotlin:builtins"]
+                    sources = ["libraries/generic-class-only/**/*.kt"]
                     """.trimIndent(),
             )
             val platform = PlatformBundleBuilder().build(root, root.resolve("modules.toml"))
             val library = platform.modules.single { it.id.toString() == "test:generic" }
+            val classLibrary = platform.modules.single { it.id.toString() == "test:generic-class" }
+            val classOnlyLibrary = platform.modules.single { it.id.toString() == "test:generic-class-only" }
             assertNull(library.libraryFragment)
+            assertNull(classLibrary.libraryFragment)
+            assertNull(classOnlyLibrary.libraryFragment)
+            assertTrue(library.sourceOnly)
+            assertTrue(classLibrary.sourceOnly)
+            assertTrue(classOnlyLibrary.sourceOnly)
+            assertTrue(platform.modules.single { it.id.toString() == "stdlib:core" }.libraryFragment != null)
             val workerIdentity = identity(platform)
             val selected =
                 listOf(
                     platform.modules.single { it.id.toString() == "stdlib:core" },
                     platform.modules.single { it.id.toString() == "std:terminal" },
                     library,
+                    classLibrary,
+                    classOnlyLibrary,
                 ).map { module ->
                     TrustedBundleIdentity.of(
                         module.id.toString(),
@@ -119,7 +149,28 @@ class K2CompilerAdapterTest {
                     platform,
                 )
             val source =
-                source("project/Main.kt", "import sample.identity\nfun main() { println(identity(42)); println(identity(\"hello\")) }")
+                source(
+                    "project/Main.kt",
+                    """
+                    import sample.Cell
+                    import sample.Holder
+                    import sample.identity
+
+                    fun main() {
+                        println(identity(42))
+                        println(identity("hello"))
+                        val number = Cell(7)
+                        val numberAlias = number
+                        numberAlias.replace(12)
+                        require(number.value == 12)
+                        val text = Cell("first")
+                        text.replace("second")
+                        require(text.value == "second")
+                        require(Holder(19).value == 19)
+                        require(Holder("held").value == "held")
+                    }
+                    """.trimIndent(),
+                )
             val result =
                 adapter.compile(
                     CompileRequest(
@@ -140,6 +191,10 @@ class K2CompilerAdapterTest {
                     .map { it.toString() }
             assertTrue("sample.identity<Int>" in names, names.toString())
             assertTrue("sample.identity<String>" in names, names.toString())
+            assertTrue("sample.Cell<Int>" in names, names.toString())
+            assertTrue("sample.Cell<String>" in names, names.toString())
+            assertTrue("sample.Holder<Int>" in names, names.toString())
+            assertTrue("sample.Holder<String>" in names, names.toString())
             System.getProperty("compukter.vm.genericLibraryArtifact")?.let { output ->
                 val path = Path.of(output)
                 path.parent.createDirectories()
