@@ -469,13 +469,28 @@ supported.
 
 ## Nullability and exceptions
 
-- [ ] **Nullable user references — Unsupported** — artifact and VM types can
-  encode nullable references, but nullable Kotlin source values and operations
-  have no admitted lowering and execution contract. Tracking: not scheduled
+- [x] **Nullable user references** — `String?` and supported Guest class references
+  can be local values, top-level immutable properties, class fields, function
+  parameters, and results. `null` can initialize these values or be passed and
+  returned in a typed reference context. Nullable arrays, function values,
+  platform capability values, and primitive values such as `Int?` remain outside
+  this subset. Evidence:
+  [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt), tests
+  `nullable references lower null comparisons Elvis and reference safe calls` and
+  `unsupported nullable forms do not publish artifacts`,
+  paired with [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs), scenario `nullable-references`.
+  Tracking: [#654](https://github.com/CertifiedBadIdeas/Compukters/issues/654)
 
-- [ ] **Safe calls, Elvis, and non-null assertions — Unsupported** — the IR
-  shapes and exception behavior produced by these operators are not part of
-  the admitted source subset. Tracking: not scheduled
+- [ ] **Safe calls and Elvis — Partial** — nullable references can be compared
+  with `null`, selected with `?:`, and accessed with `?.` when the result is a
+  supported reference type. Both operators evaluate the left side once and
+  skip the unused branch. Safe calls producing nullable primitive values such
+  as `text?.length` and non-null assertions (`!!`) remain unsupported. Evidence:
+  [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt), tests
+  `nullable references lower null comparisons Elvis and reference safe calls`
+  and `unsupported nullable forms do not publish artifacts`,
+  paired with [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs), scenario `nullable-references`.
+  Tracking: [#654](https://github.com/CertifiedBadIdeas/Compukters/issues/654)
 
 - [ ] **`throw`, `try`, `catch`, and `finally` — Unsupported** — the artifact
   and VM have verified exception tables, but the K2 backend does not lower

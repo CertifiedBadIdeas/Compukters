@@ -39,6 +39,9 @@ Direct `IntArray` `for` loops follow the same canonical-shape rule: the compiler
 its length, and reads each element with existing array instructions at the current index. The loop header retains its
 quota safepoint; no iterator object is created. A source variable may be reassigned without changing the traversed
 array, while writes to that array's elements remain visible to later iterations.
+Nullable `String` and supported Guest class source references use the artifact's existing nullable reference types and
+`Null` instruction. K2's safe-call and Elvis branches lower through ordinary verified control flow, with reference
+casts when a non-null branch joins a nullable result. Nullable primitive values have no Guest representation.
 
 Compiler and analysis workers are pinned, isolated JVM processes. Their payloads are assembled into one bounded
 `k2-tooling-workers.zip.xz`: nested runtime JARs and the carrier ZIP use canonical stored entries, then the complete

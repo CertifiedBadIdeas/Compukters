@@ -157,6 +157,8 @@ private data class GuestEnumEntryLayout(
 )
 
 private sealed interface TopLevelInitializer {
+    data object Null : TopLevelInitializer
+
     data class Scalar(
         val value: Any,
     ) : TopLevelInitializer
@@ -1021,8 +1023,9 @@ internal object KotlinProjectLowering {
         (
             (
                 literalCollector.values +
-                    topLevelProperties.map { property ->
+                    topLevelProperties.mapNotNull { property ->
                         when (val initializer = property.initializer) {
+                            TopLevelInitializer.Null -> null
                             is TopLevelInitializer.Scalar -> initializer.value
                             is TopLevelInitializer.Channel -> initializer.capacity
                         }
@@ -1928,9 +1931,26 @@ internal object KotlinProjectLowering {
                 val instructions = mutableListOf<Instruction>()
                 val valueRegister =
                     when (val initializer = field.property.initializer) {
+                        TopLevelInitializer.Null -> {
+                            val type = field.type as? ValueType.Ref
+                            if (type == null || !type.nullable) {
+                                throw UnsupportedKotlinIr(field.property.declaration, "null top-level value requires a nullable reference")
+                            }
+                            val register = RegisterId.of(functionValues.size.toUInt())
+                            functionValues += FunctionValue.scalar(type)
+                            instructions += Instruction.Null(register)
+                            register
+                        }
+
                         is TopLevelInitializer.Scalar -> {
                             val register = RegisterId.of(functionValues.size.toUInt())
-                            functionValues += FunctionValue.scalar(field.type)
+                            val literalType =
+                                if (initializer.value is String && field.type is ValueType.Ref) {
+                                    field.type.copy(nullable = false)
+                                } else {
+                                    field.type
+                                }
+                            functionValues += FunctionValue.scalar(literalType)
                             val constant = initializer.value.toArtifactConstant(literalIds)
                             val constantId =
                                 constantIds[constant]
@@ -2464,6 +2484,8 @@ internal object KotlinProjectLowering {
                     throw UnsupportedKotlinIr(expression, "IntChannel capacity must be a positive Int constant")
                 }
                 TopLevelInitializer.Channel(capacity)
+            } else if (expression is IrConst && expression.value == null) {
+                TopLevelInitializer.Null
             } else {
                 val value = (expression as? IrConst)?.value
                 if (value !is Int && value !is Long && value !is Float && value !is Boolean && value !is Char && value !is String) {
@@ -2583,7 +2605,16 @@ internal object KotlinProjectLowering {
 
         fun isSupported(sourceType: IrType): Boolean {
             val type = instance.substitute(sourceType)
-            return type in supported || type.isNothing() ||
+            val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
+            if (type.isNullable()) {
+                return (type as? IrSimpleType)?.classifier == stringClass ||
+                    classTypeIds.containsKey((type as? IrSimpleType)?.classifier) ||
+                    type.classInstance(
+                        classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration },
+                    ) in classInstanceTypeIds
+            }
+            return type in supported ||
+                type.isNothing() ||
                 type.isExactClass(pluginContext.irBuiltIns.charArray) ||
                 type.isExactClass(pluginContext.irBuiltIns.intArray) ||
                 guestTypes.isStringArray(type) ||
@@ -2639,6 +2670,14 @@ internal object KotlinProjectLowering {
                 classInstanceTypeIds = classInstanceTypeIds,
             )
         }
+        if (type.isNullable()) {
+            val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
+            val guestClass = (type as? IrSimpleType)?.classifier as? IrClassSymbol
+            val guestInstance = type.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
+            if (guestClass != stringClass && guestClass !in classTypeIds && guestInstance !in classInstanceTypeIds) {
+                throw UnsupportedKotlinIr(element, "nullable type is outside the supported reference subset")
+            }
+        }
         return when (type) {
             pluginContext.irBuiltIns.unitType -> {
                 ValueType.Unit
@@ -2669,7 +2708,9 @@ internal object KotlinProjectLowering {
             }
 
             else -> {
-                if (type.isNothing()) {
+                if ((type as? IrSimpleType)?.classifier == (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier) {
+                    (stringType as ValueType.Ref).copy(nullable = type.isNullable())
+                } else if (type.isNothing()) {
                     ValueType.Unit
                 } else if (type.isExactClass(pluginContext.irBuiltIns.charArray)) {
                     charArrayType
@@ -3234,7 +3275,7 @@ private class FunctionCompiler(
             is IrVariable -> {
                 val initializer = statement.initializer ?: throw UnsupportedKotlinIr(statement, "local without initializer")
                 rejectFunctionVariance(initializer.type, statement.type, statement)
-                val source = coerceLocalValue(compileExpression(initializer), statement.type, statement)
+                val source = coerceLocalValue(compileExpression(initializer, statement.type), statement.type, statement)
                 val cell = captureCells[statement.symbol]
                 if (cell == null) {
                     if (initializer is IrFunctionExpression ||
@@ -3261,7 +3302,7 @@ private class FunctionCompiler(
                 rejectFunctionVariance(statement.value.type, statement.symbol.owner.type, statement)
                 val source =
                     coerceLocalValue(
-                        compileExpression(statement.value),
+                        compileExpression(statement.value, statement.symbol.owner.type),
                         statement.symbol.owner.type,
                         statement,
                     )
@@ -3290,7 +3331,7 @@ private class FunctionCompiler(
                 val receiver =
                     statement.receiver?.let(::compileExpression)
                         ?: throw UnsupportedKotlinIr(statement, "instance field receiver is missing")
-                val value = compileExpression(statement.value)
+                val value = compileExpression(statement.value, statement.symbol.owner.type)
                 emit(Instruction.FieldSet(receiver, FieldRef.Local(field.id), value))
             }
 
@@ -3318,7 +3359,7 @@ private class FunctionCompiler(
                             }
                             Destination.Unit
                         } else {
-                            Destination.Register(compileExpression(statement.value))
+                            Destination.Register(compileExpression(statement.value, function.returnType))
                         }
                     emit(Instruction.Return(destination))
                 }
@@ -3421,7 +3462,7 @@ private class FunctionCompiler(
                     val initializer =
                         declaration.backingField?.initializer?.expression
                             ?: throw UnsupportedKotlinIr(declaration, "class field initializer is missing")
-                    val value = compileExpression(initializer)
+                    val value = compileExpression(initializer, field.property.backingField?.type)
                     emit(Instruction.FieldSet(RegisterId.of(0u), FieldRef.Local(field.id), value))
                 }
 
@@ -3432,12 +3473,27 @@ private class FunctionCompiler(
         }
     }
 
-    private fun compileExpression(expression: IrExpression): RegisterId =
+    private fun compileExpression(expression: IrExpression): RegisterId = compileExpression(expression, null)
+
+    private fun compileExpression(
+        expression: IrExpression,
+        expectedType: IrType?,
+    ): RegisterId =
         when (expression) {
             is IrConst -> {
-                val constant = expression.toArtifactConstant(literalIds)
-                val constantId = constantIds[constant] ?: throw UnsupportedKotlinIr(expression, "constant is absent from canonical pool")
-                allocate(valueType(expression.type, expression)).also { emit(Instruction.Const(it, constantId)) }
+                if (expression.value == null) {
+                    val type = valueType(expectedType ?: expression.type, expression)
+                    if (type !is ValueType.Ref || !type.nullable) {
+                        throw UnsupportedKotlinIr(expression, "null requires a nullable reference type")
+                    }
+                    allocate(type).also { emit(Instruction.Null(it)) }
+                } else {
+                    val constant = expression.toArtifactConstant(literalIds)
+                    val constantId =
+                        constantIds[constant]
+                            ?: throw UnsupportedKotlinIr(expression, "constant is absent from canonical pool")
+                    allocate(valueType(expression.type, expression)).also { emit(Instruction.Const(it, constantId)) }
+                }
             }
 
             is IrGetValue -> {
@@ -3507,7 +3563,7 @@ private class FunctionCompiler(
             }
 
             is IrBlock -> {
-                compileBlockValue(expression)
+                compileBlockValue(expression, expectedType)
             }
 
             is IrTypeOperatorCall -> {
@@ -3670,7 +3726,7 @@ private class FunctionCompiler(
                         }.sortedWith(compareBy({ it.third.startOffset.takeIf { offset -> offset >= 0 } ?: Int.MAX_VALUE }, { it.first }))
                 explicit.forEach { (_, parameter, expression) ->
                     rejectFunctionVariance(expression.type, parameter.type, expression)
-                    values[parameter.symbol] = compileExpression(expression)
+                    values[parameter.symbol] = compileExpression(expression, parameter.type)
                 }
                 parameters.forEach { (index, parameter) ->
                     if (call.arguments.getOrNull(index) == null) {
@@ -3678,7 +3734,7 @@ private class FunctionCompiler(
                             parameter.defaultValue?.expression
                                 ?: throw UnsupportedKotlinIr(call, "constructor argument ${parameter.name} is missing")
                         rejectFunctionVariance(default.type, parameter.type, default)
-                        values[parameter.symbol] = compileExpression(default)
+                        values[parameter.symbol] = compileExpression(default, parameter.type)
                     }
                 }
                 parameters.map { (_, parameter) ->
@@ -3707,7 +3763,7 @@ private class FunctionCompiler(
         if (expression.operator == IrTypeOperator.IMPLICIT_CAST) {
             rejectFunctionVariance(expression.argument.type, expression.typeOperand, expression)
         }
-        val source = compileExpression(expression.argument)
+        val source = compileExpression(expression.argument, expression.typeOperand)
         val target = valueType(expression.typeOperand, expression)
         return when (expression.operator) {
             IrTypeOperator.INSTANCEOF -> {
@@ -4007,7 +4063,20 @@ private class FunctionCompiler(
                 throw UnsupportedKotlinIr(call, "interface super target is outside the project subset")
             }
             val argumentExpressions = call.arguments.filterNotNull()
-            val arguments = argumentExpressions.map(::compileExpression)
+            val arguments =
+                argumentExpressions.map { argument ->
+                    if (argument is IrConst && argument.value == null) {
+                        val other = argumentExpressions.firstOrNull { it !== argument && it.type != argument.type }
+                        val reference = other?.let { valueType(it.type, it) as? ValueType.Ref }
+                        if (reference == null) {
+                            compileExpression(argument)
+                        } else {
+                            allocate(reference.copy(nullable = true)).also { emit(Instruction.Null(it)) }
+                        }
+                    } else {
+                        compileExpression(argument)
+                    }
+                }
             return compileBuiltinCall(call, target, argumentExpressions, arguments)
         }
         val arguments =
@@ -4201,7 +4270,7 @@ private class FunctionCompiler(
         when (argument) {
             is ResolvedCallArgument.Expression -> {
                 rejectFunctionVariance(argument.expression.type, expectedType, argument.expression)
-                compileExpression(argument.expression)
+                compileExpression(argument.expression, expectedType)
             }
 
             is ResolvedCallArgument.PlatformDefault -> {
@@ -4778,7 +4847,11 @@ private class FunctionCompiler(
             return allocate(ValueType.Bool).also { destination ->
                 if (leftType == kotlinStringType && rightType == kotlinStringType) {
                     emit(Instruction.StringEquals(destination, operands[0], operands[1]))
-                } else if (valueType(leftType, call) is ValueType.Ref && valueType(rightType, call) is ValueType.Ref) {
+                } else if (
+                    ((expressions[0] as? IrConst)?.let { it.value == null } == true && valueType(rightType, call) is ValueType.Ref) ||
+                    ((expressions[1] as? IrConst)?.let { it.value == null } == true && valueType(leftType, call) is ValueType.Ref) ||
+                    (valueType(leftType, call) is ValueType.Ref && valueType(rightType, call) is ValueType.Ref)
+                ) {
                     emit(Instruction.RefEqual(destination, operands[0], operands[1]))
                 } else {
                     val type =
@@ -5173,7 +5246,8 @@ private class FunctionCompiler(
                 } else if (branch.result.type.isNothing()) {
                     compileStatement(branch.result)
                 } else {
-                    emit(Instruction.Move(destination, compileExpression(branch.result)))
+                    val source = coerceLocalValue(compileExpression(branch.result, expression.type), expression.type, branch.result)
+                    emit(Instruction.Move(destination, source))
                 }
             } else {
                 val condition = compileExpression(branch.condition)
@@ -5184,7 +5258,8 @@ private class FunctionCompiler(
                 if (branch.result.type.isNothing()) {
                     compileStatement(branch.result)
                 } else {
-                    emit(Instruction.Move(destination, compileExpression(branch.result)))
+                    val source = coerceLocalValue(compileExpression(branch.result, expression.type), expression.type, branch.result)
+                    emit(Instruction.Move(destination, source))
                     exits += currentBlock
                 }
                 currentBlock = otherwise
@@ -5225,12 +5300,15 @@ private class FunctionCompiler(
         emit(Instruction.Const(destination, requireNotNull(constantIds[constant])))
     }
 
-    private fun compileBlockValue(block: IrBlock): RegisterId {
+    private fun compileBlockValue(
+        block: IrBlock,
+        expectedType: IrType? = null,
+    ): RegisterId {
         val result =
             block.statements.lastOrNull() as? IrExpression
                 ?: throw UnsupportedKotlinIr(block, "value block has no result expression")
         block.statements.dropLast(1).forEach(::compileStatement)
-        return compileExpression(result)
+        return compileExpression(result, expectedType ?: block.type)
     }
 
     private fun trustedIntrinsic(function: IrSimpleFunction): LoweredCapabilityOperation? = resolveTrustedIntrinsic(function, session)
@@ -5249,8 +5327,16 @@ private class FunctionCompiler(
     private fun valueTypeResolved(
         type: IrType,
         element: IrElement,
-    ): ValueType =
-        when (type) {
+    ): ValueType {
+        if (type.isNullable()) {
+            val stringClass = (kotlinStringType as IrSimpleType).classifier
+            val guestClass = (type as? IrSimpleType)?.classifier as? IrClassSymbol
+            val guestInstance = type.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
+            if (guestClass != stringClass && guestClass !in classTypeIds && guestInstance !in classInstanceTypeIds) {
+                throw UnsupportedKotlinIr(element, "nullable type is outside the supported reference subset")
+            }
+        }
+        return when (type) {
             unitType -> {
                 ValueType.Unit
             }
@@ -5280,7 +5366,9 @@ private class FunctionCompiler(
             }
 
             else -> {
-                if (type.isNothing()) {
+                if ((type as? IrSimpleType)?.classifier == (kotlinStringType as IrSimpleType).classifier) {
+                    (stringType as ValueType.Ref).copy(nullable = type.isNullable())
+                } else if (type.isNothing()) {
                     ValueType.Unit
                 } else if (type.isExactClass(kotlinCharArrayClass)) {
                     charArrayType
@@ -5325,6 +5413,7 @@ private class FunctionCompiler(
                 }
             }
         }
+    }
 
     private fun destinationFor(
         type: IrType,

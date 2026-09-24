@@ -39,6 +39,18 @@ import kotlin.test.assertTrue
 
 class CompletionQueryTest {
     @Test
+    fun `completion finds a reference member through a nullable safe call`() {
+        val source = "class Node(val name: String)\nfun main() { val node: Node? = null; node?.na }"
+        val prefixStart = source.lastIndexOf("na")
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val result = fixture.complete("main.kt", prefixStart + 2)
+
+            assertEquals(EditorRange(prefixStart, prefixStart + 2), result.replacement)
+            assertTrue(result.items.any { it.insertText == "name" }, result.items.toString())
+        }
+    }
+
+    @Test
     fun `completion proposes keywords for declarations and executable blocks`() {
         val source =
             """

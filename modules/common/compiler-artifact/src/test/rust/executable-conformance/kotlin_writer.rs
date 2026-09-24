@@ -19,6 +19,7 @@ fn main() {
     match scenario.as_str() {
         "executable" => pinned_vm_verifies_kotlin_executable_instruction_artifact(),
         "int-array" => k2_int_array_executes_specialized_storage_and_traps(),
+        "nullable-references" => k2_nullable_references_preserve_branch_and_call_semantics(),
         "int-loops" => k2_int_loops_execute_across_quota_slices_without_host_io(),
         "long" => k2_long_executes_arithmetic_conversions_comparisons_and_text(),
         "generic-functions" => k2_generic_functions_preserve_primitive_and_reference_values(),
@@ -931,22 +932,34 @@ fn k2_long_executes_arithmetic_conversions_comparisons_and_text() {
 }
 
 fn k2_generic_functions_preserve_primitive_and_reference_values() {
-    k2_two_generic_prints("COMPUKTER_KOTLIN_GENERIC_FUNCTIONS_ARTIFACT", ["42\n", "hello\n"]);
+    k2_expected_prints("COMPUKTER_KOTLIN_GENERIC_FUNCTIONS_ARTIFACT", ["42\n", "hello\n"]);
 }
 
 fn k2_generic_cell_preserves_typed_fields_and_aliases() {
-    k2_two_generic_prints("COMPUKTER_KOTLIN_GENERIC_CELL_ARTIFACT", ["42\n", "second\n"]);
+    k2_expected_prints("COMPUKTER_KOTLIN_GENERIC_CELL_ARTIFACT", ["42\n", "second\n"]);
 }
 
 fn k2_generic_library_specializes_in_consumer() {
-    k2_two_generic_prints("COMPUKTER_KOTLIN_GENERIC_LIBRARY_ARTIFACT", ["42\n", "hello\n"]);
+    k2_expected_prints("COMPUKTER_KOTLIN_GENERIC_LIBRARY_ARTIFACT", ["42\n", "hello\n"]);
 }
 
-fn k2_two_generic_prints(artifact_variable: &str, expected_output: [&str; 2]) {
-    let path = std::env::var(artifact_variable).expect("generic artifact path must be set");
-    let bytes = fs::read(path).expect("K2 generic output must exist");
+fn k2_nullable_references_preserve_branch_and_call_semantics() {
+    k2_expected_prints(
+        "COMPUKTER_KOTLIN_NULLABLE_REFERENCE_ARTIFACT",
+        [
+            "true\n", "true\n", "fallback\n", "missing\n", "read\n", "ready\n", "read\n", "fallback\n",
+            "missing\n", "true\n", "global\n", "global-present\n", "true\n", "true\n", "empty\n",
+            "later\n", "again\n", "none\n", "re\n", "none\n", "boxed\n", "fresh\n", "read\n",
+            "fresh-value\n", "missing-node\n", "fallback\n", "missing\n",
+        ],
+    );
+}
+
+fn k2_expected_prints<const N: usize>(artifact_variable: &str, expected_output: [&str; N]) {
+    let path = std::env::var(artifact_variable).expect("K2 artifact path must be set");
+    let bytes = fs::read(path).expect("K2 artifact must exist");
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
-        .expect("pinned VM must verify generic output");
+        .expect("pinned VM must verify K2 output");
     let string_argument = [HostValueType::String];
     let operations = [
         OperationSchema::asynchronous(&[], HostValueType::String),
@@ -972,20 +985,20 @@ fn k2_two_generic_prints(artifact_variable: &str, expected_output: [&str; 2]) {
         maximum_accepted_responses: 64,
         entry_argument_limits: entry_argument_limits(),
     };
-    let mut session = Session::admit(verified, profile, &[stdio]).expect("generic functions must admit");
-    session.start(&[]).expect("generic functions must start");
+    let mut session = Session::admit(verified, profile, &[stdio]).expect("K2 program must admit");
+    session.start(&[]).expect("K2 program must start");
     for expected in expected_output {
         let value = utf16(expected);
-        let write = next_host_request(&mut session, "generic println", 1, Some(&value));
+        let write = next_host_request(&mut session, "K2 println", 1, Some(&value));
         session
             .resume(write, HostResponse::Success(HostValueInput::Unit))
-            .expect("generic println must resume");
+            .expect("K2 println must resume");
     }
     loop {
-        match session.advance(64, 64).expect("generic functions must finish") {
+        match session.advance(64, 64).expect("K2 program must finish") {
             AdvanceOutcome::SliceExhausted => {}
             AdvanceOutcome::Halted(None) => break,
-            outcome => panic!("unexpected generic-functions outcome: {outcome:?}"),
+            outcome => panic!("unexpected K2 outcome: {outcome:?}"),
         }
     }
 }
