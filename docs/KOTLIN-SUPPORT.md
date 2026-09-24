@@ -681,6 +681,7 @@ and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters
 ## Kotlin standard library
 
 The detailed API inventory is in [Guest standard library support]({{ '/STDLIB-SUPPORT/' | relative_url }}).
+The [Guest Kotlin source browser]({{ '/guest-source/' | relative_url }}) shows every bundled platform file.
 
 - [ ] **Console functions — Partial** — `print` accepts `String`, `Int`, `Long`,
   `Float`, `Boolean`, and `Char`; `println` supports those types plus the no-argument

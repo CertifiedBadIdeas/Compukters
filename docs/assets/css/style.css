@@ -126,6 +126,69 @@ a:hover {
   background: var(--accent-soft);
 }
 
+.source-module-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+.source-module-nav a {
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  padding: 0.25rem 0.6rem;
+  background: var(--surface);
+  text-decoration: none;
+}
+
+.source-module ul {
+  max-width: none;
+  padding-left: 1.3rem;
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", monospace;
+  overflow-wrap: anywhere;
+}
+
+.source-breadcrumb,
+.source-path {
+  color: var(--muted);
+}
+
+.source-code {
+  padding: 1rem 0;
+  line-height: 1.55;
+  tab-size: 4;
+}
+
+.source-code code {
+  display: block;
+  min-width: max-content;
+  font-size: 0.85rem;
+}
+
+.source-line {
+  display: block;
+  padding-right: 1rem;
+}
+
+.source-line:target {
+  background: var(--accent-soft);
+}
+
+.source-line-number {
+  display: inline-block;
+  width: 4.2rem;
+  margin-right: 1rem;
+  padding-right: 0.8rem;
+  color: var(--muted);
+  text-align: right;
+  text-decoration: none;
+  user-select: none;
+}
+
+.source-line-number:hover {
+  color: var(--accent);
+}
+
 .page-shell {
   width: min(calc(100% - 2rem), var(--maximum-width));
   min-height: calc(100vh - 11rem);

@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/pages.yml"
       - "docs/**"
+      - "modules/common/guest-platform/src/platform/**"
   workflow_dispatch:
 
 permissions:
@@ -26,6 +27,8 @@ jobs:
       - name: Configure Pages
         id: pages
         uses: actions/configure-pages@v5
+      - name: Generate Guest Kotlin source browser
+        run: python3 docs/_tools/build_guest_source.py
       - name: Build with Jekyll
         uses: actions/jekyll-build-pages@v1
         with:

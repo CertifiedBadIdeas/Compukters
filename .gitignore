@@ -38,3 +38,4 @@ versions.properties
 /build-scripts/.kotlin/
 .architectury-transformer/
 /.obsidian/
+/docs/guest-source/

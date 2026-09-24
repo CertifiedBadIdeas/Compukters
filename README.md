@@ -31,7 +31,8 @@ during packaging. Neither archive requires Architectury at runtime.
 
 See the [Guest Kotlin support matrix](docs/KOTLIN-SUPPORT.md) for the language subset and the
 [stdlib support matrix](docs/STDLIB-SUPPORT.md) for available Kotlin library APIs. The former also covers Guest APIs
-and IDE compatibility boundaries.
+and IDE compatibility boundaries. The documentation site also has a
+[Guest Kotlin source browser](https://certifiedbadideas.github.io/Compukters/guest-source/).
 New players can follow the [getting-started guide](docs/GETTING-STARTED.md), also
 published as the [Compukters documentation site](https://certifiedbadideas.github.io/Compukters/).
 See [Redstone GPIO](docs/REDSTONE.md) for local-side input waits, persistent
