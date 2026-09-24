@@ -14,8 +14,10 @@ object DisplayTextLayout {
         profile: TerminalFontProfile,
         draw: (x: Int, y: Int, codePoint: Int) -> Unit,
     ) {
-        val left = -DisplayBuffer.WIDTH * profile.cellWidth / 2
-        val top = -DisplayBuffer.HEIGHT * profile.cellHeight / 2
+        val gridWidth = DisplayBuffer.WIDTH * profile.cellWidth
+        val left = -gridWidth / 2
+        // The screen is square. Align its first row with the left column's inset.
+        val top = -gridWidth / 2
         rows.forEachIndexed { y, row ->
             var offset = 0
             var x = 0

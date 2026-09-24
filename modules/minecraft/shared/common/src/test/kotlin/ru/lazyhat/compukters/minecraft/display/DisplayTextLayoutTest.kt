@@ -15,6 +15,7 @@ class DisplayTextLayoutTest {
     fun `horizontal and vertical offsets use character cells`() {
         val buffer = DisplayBuffer()
         val owner = Any()
+        buffer.writeAt(owner, { true }, 0, 0, "H")
         buffer.writeAt(owner, { true }, 5, 2, "A")
         buffer.writeAt(owner, { true }, 8, 3, "😀")
 
@@ -25,8 +26,9 @@ class DisplayTextLayoutTest {
 
         assertEquals(
             listOf(
-                Triple(-60 + 5 * 6, -50 + 2 * 10, 'A'.code),
-                Triple(-60 + 8 * 6, -50 + 3 * 10, '?'.code),
+                Triple(-60, -60, 'H'.code),
+                Triple(-60 + 5 * 6, -60 + 2 * 10, 'A'.code),
+                Triple(-60 + 8 * 6, -60 + 3 * 10, '?'.code),
             ),
             glyphs,
         )
