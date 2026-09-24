@@ -21,6 +21,7 @@ fn main() {
         "int-array" => k2_int_array_executes_specialized_storage_and_traps(),
         "int-loops" => k2_int_loops_execute_across_quota_slices_without_host_io(),
         "long" => k2_long_executes_arithmetic_conversions_comparisons_and_text(),
+        "generic-functions" => k2_generic_functions_preserve_primitive_and_reference_values(),
         "float" => k2_float_executes_arithmetic_conversions_comparisons_and_text(),
         "platform-scalar" => k2_platform_scalar_precondition_traps_before_publishing_a_value(),
         "argv" => k2_string_array_entry_executes_exact_utf16_arguments(),
@@ -923,6 +924,55 @@ fn k2_long_executes_arithmetic_conversions_comparisons_and_text() {
             AdvanceOutcome::SliceExhausted => {}
             AdvanceOutcome::Halted(None) => break,
             outcome => panic!("unexpected K2 Long outcome: {outcome:?}"),
+        }
+    }
+}
+
+fn k2_generic_functions_preserve_primitive_and_reference_values() {
+    let path = std::env::var("COMPUKTER_KOTLIN_GENERIC_FUNCTIONS_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_GENERIC_FUNCTIONS_ARTIFACT must be set");
+    let bytes = fs::read(path).expect("K2 generic-functions output must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("pinned VM must verify generic-functions output");
+    let string_argument = [HostValueType::String];
+    let operations = [
+        OperationSchema::asynchronous(&[], HostValueType::String),
+        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
+        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
+    ];
+    let stdio = CapabilityBinding::new("compukter", "stdio", 1, 0, &operations);
+    let profile = ExecutionProfile {
+        heap_bytes: 1024 * 1024,
+        frame_storage_bytes: 1024 * 1024,
+        maximum_call_depth: 64,
+        maximum_coroutines: 1,
+        maximum_channels: 0,
+        maximum_channel_values: 0,
+        maximum_host_requests: 64,
+        maximum_events: 0,
+        maximum_slice_budget: u32::MAX,
+        compiler_abi: [0; 32],
+        platform_abi: [0; 32],
+        maximum_host_arguments: 16,
+        maximum_outbound_utf16_code_units: 4096,
+        maximum_inbound_utf16_code_units: 4096,
+        maximum_accepted_responses: 64,
+        entry_argument_limits: entry_argument_limits(),
+    };
+    let mut session = Session::admit(verified, profile, &[stdio]).expect("generic functions must admit");
+    session.start(&[]).expect("generic functions must start");
+    for expected in ["42\n", "hello\n"] {
+        let value = utf16(expected);
+        let write = next_host_request(&mut session, "generic println", 1, Some(&value));
+        session
+            .resume(write, HostResponse::Success(HostValueInput::Unit))
+            .expect("generic println must resume");
+    }
+    loop {
+        match session.advance(64, 64).expect("generic functions must finish") {
+            AdvanceOutcome::SliceExhausted => {}
+            AdvanceOutcome::Halted(None) => break,
+            outcome => panic!("unexpected generic-functions outcome: {outcome:?}"),
         }
     }
 }
