@@ -9,7 +9,7 @@ import shutil
 
 
 REPOSITORY = Path(__file__).resolve().parents[2]
-SOURCE = REPOSITORY / "modules/common/guest-platform/build/dokka/html"
+SOURCE = REPOSITORY / "docs/api-build/build/dokka/html"
 OUTPUT = REPOSITORY / "docs/guest-api"
 
 
@@ -26,7 +26,7 @@ def main() -> None:
     if not (SOURCE / "index.html").is_file() or not any(
         path.parts[-2:] == ("kotlin", "index.html") for path in source_files
     ):
-        raise SystemExit("Dokka output is missing the Guest Kotlin API; run :guest-platform:dokkaGeneratePublicationHtml")
+        raise SystemExit("Dokka output is missing the Guest Kotlin API; run ./gradlew -p docs/api-build dokkaGeneratePublicationHtml")
 
     if args.check:
         staged_files = files_under(OUTPUT)

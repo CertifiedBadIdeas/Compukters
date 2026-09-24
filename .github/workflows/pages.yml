@@ -7,7 +7,7 @@ on:
       - ".github/workflows/pages.yml"
       - "docs/**"
       - "modules/common/guest-platform/src/platform/**"
-      - "modules/common/guest-platform/build.gradle.kts"
+      - "docs/api-build/**"
   workflow_dispatch:
 
 permissions:
@@ -36,7 +36,7 @@ jobs:
       - name: Generate Guest Kotlin source browser
         run: python3 docs/_tools/build_guest_source.py
       - name: Generate Guest Kotlin API reference
-        run: ./gradlew :guest-platform:dokkaGeneratePublicationHtml --no-daemon
+        run: ./gradlew -p docs/api-build dokkaGeneratePublicationHtml --no-daemon
       - name: Stage Guest Kotlin API reference
         run: python3 docs/_tools/build_guest_api.py
       - name: Build with Jekyll

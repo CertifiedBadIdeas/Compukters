@@ -9,6 +9,9 @@ highlighter: rouge
 permalink: pretty
 theme: null
 
+exclude:
+  - api-build
+
 plugins:
   - jekyll-relative-links
 
