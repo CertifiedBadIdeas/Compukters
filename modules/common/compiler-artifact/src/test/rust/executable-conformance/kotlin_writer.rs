@@ -25,6 +25,7 @@ fn main() {
         "generic-functions" => k2_generic_functions_preserve_primitive_and_reference_values(),
         "generic-cell" => k2_generic_cell_preserves_typed_fields_and_aliases(),
         "generic-library" => k2_generic_library_specializes_in_consumer(),
+        "reference-array" => k2_reference_arrays_retain_typed_guest_objects(),
         "float" => k2_float_executes_arithmetic_conversions_comparisons_and_text(),
         "platform-scalar" => k2_platform_scalar_precondition_traps_before_publishing_a_value(),
         "argv" => k2_string_array_entry_executes_exact_utf16_arguments(),
@@ -941,6 +942,10 @@ fn k2_generic_cell_preserves_typed_fields_and_aliases() {
 
 fn k2_generic_library_specializes_in_consumer() {
     k2_expected_prints("COMPUKTER_KOTLIN_GENERIC_LIBRARY_ARTIFACT", ["42\n", "hello\n"]);
+}
+
+fn k2_reference_arrays_retain_typed_guest_objects() {
+    k2_expected_prints("COMPUKTER_KOTLIN_REFERENCE_ARRAY_ARTIFACT", []);
 }
 
 fn k2_nullable_references_preserve_branch_and_call_semantics() {

@@ -1997,6 +1997,73 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `reference arrays preserve Guest class elements and aliases`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        class Node(val value: Int)
+                        class Box(val text: String)
+                        class Cell<T>(val value: T)
+
+                        fun <T> single(value: T): Array<T> = arrayOf(value)
+                        fun <T> readFirst(values: Array<T>): T = values[0]
+                        fun <T> replaceFirst(values: Array<T>, value: T) { values[0] = value }
+
+                        fun main() {
+                            val first = Node(1)
+                            val nodes = arrayOf(first, Node(2))
+                            val alias = nodes
+                            require(nodes.size == 2)
+                            require(alias[0].value == 1)
+                            alias[1] = first
+                            require(nodes[1].value == 1)
+                            val boxes = arrayOf(Box("a"), Box("b"))
+                            require(boxes[0].text == "a")
+                            require(boxes[1].text == "b")
+                            require(emptyArray<Node>().size == 0)
+                            val genericNodes = single(Node(5))
+                            require(readFirst(genericNodes).value == 5)
+                            replaceFirst(genericNodes, Node(6))
+                            require(genericNodes[0].value == 6)
+                            val genericBoxes = single(Box("c"))
+                            require(readFirst(genericBoxes).text == "c")
+                            val cells = arrayOf(Cell(7), Cell(8))
+                            require(cells[1].value == 8)
+                            var allocation = 0
+                            while (allocation < 60000) {
+                                Node(allocation)
+                                allocation = allocation + 1
+                            }
+                            require(nodes[0].value == 1)
+                            require(boxes[1].text == "b")
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.referenceArrayArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
+    fun `reference arrays reject unsupported element representations`() =
+        withAdapter { adapter ->
+            listOf(
+                "fun main() { arrayOf(1, 2) }",
+                "class Node(val value: Int)\nfun main() { arrayOf<Any>(Node(1)) }",
+                "class Node(val value: Int)\nfun main() { arrayOf<Node?>(null) }",
+            ).forEach { source ->
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact, result.diagnostics.joinToString())
+                assertTrue(result.diagnostics.any { it.category == DiagnosticCategory.TARGET })
+            }
+        }
+
+    @Test
     fun `native builtins expose only the supported string and array operations`() =
         withAdapter { adapter ->
             val result =

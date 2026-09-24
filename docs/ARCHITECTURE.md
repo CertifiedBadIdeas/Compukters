@@ -120,6 +120,11 @@ containing generic function or class implementations as source-only; the compile
 the consuming Guest program so reachable bodies and class layouts can be specialized. Ordinary platform modules retain
 precompiled library fragments. Generic binary templates are not part of the platform bundle or VM artifact contract.
 
+Concrete `Array<GuestClass>` uses become distinct local nominal array types whose elements are exact Guest class
+references. Existing array instructions allocate, load, and store them; the verifier checks element types and GC
+follows live references in their slots. Execution tracing consults each frame's safepoint map before resolving a
+reference register, so a dead register left after GC cannot invalidate a running program.
+
 `ServerCompilerService` performs bounded asynchronous preparation, persistent-cache lookup, and single-flight
 deduplication by compilation identity. Minecraft-facing code submits requests and drains completions; worker and cache
 I/O run outside the server tick thread.
