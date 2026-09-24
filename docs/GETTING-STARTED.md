@@ -119,6 +119,7 @@ interop, reflection, threads, ordinary coroutines, collections, or exceptions ar
 The [Guest Kotlin support matrix]({{ '/KOTLIN-SUPPORT/' | relative_url }}) describes language features, Guest APIs, and
 IDE behavior. The [stdlib support matrix]({{ '/STDLIB-SUPPORT/' | relative_url }}) lists callable Kotlin APIs.
 You can [browse the Guest Kotlin source]({{ '/guest-source/' | relative_url }}) for the exact declarations.
+The [Guest API reference]({{ '/guest-api/' | relative_url }}) lets you search their signatures by name or package.
 
 Programs execute in a deterministic managed VM rather than a general JVM. CPU work, memory, filesystem access, terminal
 I/O, processes, and redstone are admitted through bounded runtime contracts.

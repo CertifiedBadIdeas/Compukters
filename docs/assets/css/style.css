@@ -189,6 +189,91 @@ a:hover {
   color: var(--accent);
 }
 
+.api-search {
+  display: block;
+  width: min(100%, 38rem);
+  margin: 0.5rem 0 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  padding: 0.7rem 0.85rem;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+}
+
+.api-search:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.api-search-results {
+  max-height: 24rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  background: var(--surface);
+}
+
+.api-search-results[hidden] {
+  display: none;
+}
+
+.api-search-results a {
+  display: block;
+  padding: 0.55rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", monospace;
+  font-size: 0.85rem;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.api-package-grid,
+.api-card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 0.8rem;
+}
+
+.api-card {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+
+.api-card h3 {
+  margin: 0 0 0.4rem;
+}
+
+.api-card p {
+  margin-bottom: 0;
+  color: var(--muted);
+}
+
+.api-card code {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.api-qualified-name,
+.api-source-link {
+  color: var(--muted);
+}
+
+.api-declaration {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.api-member-list {
+  columns: 2 16rem;
+}
+
 .page-shell {
   width: min(calc(100% - 2rem), var(--maximum-width));
   min-height: calc(100vh - 11rem);

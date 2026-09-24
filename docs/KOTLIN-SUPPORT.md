@@ -682,6 +682,7 @@ and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters
 
 The detailed API inventory is in [Guest standard library support]({{ '/STDLIB-SUPPORT/' | relative_url }}).
 The [Guest Kotlin source browser]({{ '/guest-source/' | relative_url }}) shows every bundled platform file.
+The [Guest API reference]({{ '/guest-api/' | relative_url }}) lists public symbols, signatures, and available KDoc.
 
 - [ ] **Console functions — Partial** — `print` accepts `String`, `Int`, `Long`,
   `Float`, `Boolean`, and `Char`; `println` supports those types plus the no-argument
