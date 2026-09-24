@@ -7,14 +7,16 @@ permalink: /CREATE-LOGISTICS/
 
 # Create logistics
 
-The optional `create` addon exposes a Create 6.0.10 Stock Ticker on Minecraft 1.21.1. Compukters and Create must both be
-installed on the server. The addon is selected in a project's `compukter.toml` with `addons = ["create"]`, or by
-accepting an IDE completion for `Logistics` on an attached compatible computer.
+The optional Create addon exposes Stock Tickers on Minecraft 1.21.1. See the
+[Create overview]({{ '/CREATE/' | relative_url }}) for installation, project setup, peripheral cables, and device
+naming. Accepting a `Logistics` completion in the attached IDE can enable the addon for a project.
+
+{% include create-nav.html %}
 
 A computer can acquire a Stock Ticker on an adjacent side or by its persistent Peripheral Configurator name across
-loaded Peripheral Cables. The sides are relative to the computer's front. As with [Create kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/), a handle belongs to the exact block entity that was
-acquired. Removal, replacement, unloading, or observed cable disconnection invalidates it; reconnecting does not
-rebind the old handle.
+loaded Peripheral Cables. The sides are relative to the computer's front. A handle belongs to the exact block entity
+that was acquired. Removal, replacement, unloading, or observed cable disconnection invalidates it; reconnecting does
+not rebind the old handle.
 
 ```kotlin
 import create.logistics.Logistics

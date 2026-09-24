@@ -71,6 +71,7 @@ Choose the download that matches your Minecraft version.
 - [Guest Kotlin support matrix](https://certifiedbadideas.github.io/Compukters/KOTLIN-SUPPORT/)
 - [Redstone API and behavior](https://certifiedbadideas.github.io/Compukters/REDSTONE/)
 - [Text display API](https://certifiedbadideas.github.io/Compukters/DISPLAY/)
+- [Create addon guide](https://certifiedbadideas.github.io/Compukters/CREATE/)
 - [Create kinetics API](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/)
 - [Create logistics API](https://certifiedbadideas.github.io/Compukters/CREATE-LOGISTICS/)
 - [Create boiler monitoring](https://certifiedbadideas.github.io/Compukters/CREATE-BOILERS/)

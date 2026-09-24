@@ -688,7 +688,8 @@ and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters
   rather than rebinding after replacement. Evidence: `KineticsHostStateTest`, including `named acquisition routes
   every kinetic type and shares handles with side acquisition`; `ComputerPeripheralLookupTest`; and neutral addon IDE
   diagnostic/completion/parameter-information tests. See
-  [Create kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/) for the API and manifest entry.
+  [Create addon](https://certifiedbadideas.github.io/Compukters/CREATE/) for setup and
+  [Create kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/) for the API.
 
 - [x] **Create Stock Ticker on Minecraft 1.21.1** — the optional `create` addon exposes adjacent or named Stock
   Tickers through `Logistics`. Programs can capture bounded stock snapshots, find entries by exact item ID, inspect

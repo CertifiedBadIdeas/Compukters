@@ -7,46 +7,15 @@ permalink: /CREATE-KINETICS/
 
 # Create kinetics
 
-Compukters can expose adjacent or cable-connected Create kinetic devices directly to Guest Kotlin. This optional
-integration is available on **Minecraft 1.21.1** with **Create 6.0.10 through 6.0.x**. Compukters still starts normally
-when Create is absent; the `create` addon is then unavailable to projects.
+The optional Create addon exposes speedometers, stressometers, and Rotation Speed Controllers on Minecraft 1.21.1.
+See the [Create overview]({{ '/CREATE/' | relative_url }}) for installation, project setup, peripheral cables, and
+device naming.
 
-The same addon also exposes [Stock Ticker logistics](https://certifiedbadideas.github.io/Compukters/CREATE-LOGISTICS/)
-for stock snapshots and package requests.
+{% include create-nav.html %}
 
-## Enable the addon
+## Named devices
 
-Choose a `Kinetics` completion in the attached IDE to add its import and enable the addon automatically, or add Create
-to the project's `compukter.toml` manually:
-
-```toml
-format = 3
-name = "kinetic-monitor"
-
-addons = ["create"]
-```
-
-The IDE, analysis worker, and compiler all use the attached server's target profile. A project that requests this addon
-therefore resolves only when the target actually has the compatible Create integration loaded. Exact addon versions
-and content hashes are recorded by the IDE in `compukter.lock`; they are not written by hand in this manifest.
-
-## Peripheral cables and names
-
-Place a Peripheral Cable next to any face of the computer, route cables orthogonally, and let the cable touch a
-supported Create device. Cables may branch and loop. Every computer on the same loaded cable component can reach the
-same devices; no controller or adapter block owns the network.
-
-To give a device a name:
-
-1. Use a Peripheral Configurator directly on a speedometer, stressometer, or rotation speed controller. This opens its
-   name editor and inspects the cable network attached to that device.
-2. Enter a name containing 1–32 lowercase letters, digits, underscores, or hyphens and beginning with a letter. The
-   editor immediately highlights a name already used by a reachable device.
-3. Save to assign the name, or Shift-use a configurator on the device to clear it.
-
-The name belongs to the device rather than a computer or cable. It survives rewiring, computer replacement, chunk
-unload, and server restart. Names only need to be unique within the component where a computer performs lookup. If two
-reachable Create devices have the same name, acquisition fails as ambiguous instead of choosing one.
+Give a kinetic device a unique name with the Peripheral Configurator, then acquire it over a connected cable:
 
 ```kotlin
 import create.kinetics.Kinetics

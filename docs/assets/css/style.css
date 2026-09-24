@@ -105,6 +105,27 @@ a:hover {
   color: var(--text);
 }
 
+.section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin: 1.5rem 0 2rem;
+}
+
+.section-nav a {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.7rem;
+  background: var(--surface);
+  text-decoration: none;
+}
+
+.section-nav a[aria-current="page"] {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
 .page-shell {
   width: min(calc(100% - 2rem), var(--maximum-width));
   min-height: calc(100vh - 11rem);
