@@ -542,16 +542,20 @@ supported.
   exercised by `testKotlinSubsetVmConformance` for the four library helpers.
   Tracking: not scheduled
 
-- [ ] **`Array<String>` operations — Partial** — entry arrays,
-  `emptyArray<String>()`, direct `arrayOf` calls, `size`, indexed get/set, and
-  `copyOfRange` are lowered. General `Array<T>`, spread arguments, iterators,
-  and higher-order operations are unavailable. Evidence:
+- [ ] **Reference `Array<T>` operations — Partial** — entry `Array<String>`,
+  `emptyArray<T>()`, direct `arrayOf` calls, `size`, and indexed get/set work for
+  `String` and supported non-null Guest class references, including concrete
+  uses inside specialized generic functions. `copyOfRange` is available only
+  for `Array<String>`. `Array<Int>`, `Array<Any>`, nullable elements, spread
+  arguments, iterators, and higher-order operations are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `string arrays can be constructed read and written` and
-  `string arrays support copyOfRange and supported default arguments`, paired
-  with [`heap_tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/heap_tests.rs), test
-  `heap_instructions_round_trip_reference_arrays`.
-  Tracking: not scheduled
+  `string arrays support copyOfRange and supported default arguments`, plus
+  `reference arrays preserve Guest class elements and aliases` and
+  `reference arrays reject unsupported element representations`, paired with
+  `testKotlinReferenceArrayVmConformance` and
+  [`gc_tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/gc_tests.rs),
+  test `collector_scans_reference_arrays`. Tracking: [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656)
 
 - [x] **Specialized `IntArray` storage** — `IntArray(size)`, `intArrayOf(...)`,
   empty arrays, `size`, indexed get/set, mutation, and direct `for` iteration lower to dense unboxed
@@ -581,7 +585,7 @@ supported.
   are absent; `listOf(1)` is explicitly rejected as unsupported IR. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `unsupported source IR produces one stable target diagnostic and no artifact`.
-  Tracking: not scheduled
+  Tracking: [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656)
 
 ## Tasks and concurrency
 
@@ -676,6 +680,8 @@ and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters
 
 ## Kotlin standard library
 
+The detailed API inventory is in [Guest standard library support]({{ '/STDLIB-SUPPORT/' | relative_url }}).
+
 - [ ] **Console functions — Partial** — `print` accepts `String`, `Int`, `Long`,
   `Float`, `Boolean`, and `Char`; `println` supports those types plus the no-argument
   form; `readln()` reads one canonical line. Other overloads and formatting
@@ -693,9 +699,9 @@ and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters
   formatting, and math packages are absent. Tracking: not scheduled
 
 - [ ] **Text and array helpers — Partial** — the `String`, `CharArray`,
-  `IntArray`, and `Array<String>` operations listed above are published by the
+  `IntArray`, and supported reference `Array<T>` operations listed above are published by the
   native built-ins and core modules. Regex, Unicode categories, encodings,
-  generic array helpers, and collection conversions are absent. Tracking: not scheduled
+  other generic array helpers, and collection conversions are absent. Tracking: not scheduled
 
 - [ ] **Standard collections and functional helpers — Unsupported** — the
   collection hierarchy and higher-order functions such as `map`, `filter`,

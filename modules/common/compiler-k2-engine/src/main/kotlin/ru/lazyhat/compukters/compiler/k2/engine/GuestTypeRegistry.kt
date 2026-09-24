@@ -24,12 +24,26 @@ import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.IrTypeProjection
 import org.jetbrains.kotlin.ir.util.isNullable
+import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 
 internal class GuestTypeRegistry(
     pluginContext: IrPluginContext,
 ) {
     val stringType: IrType = pluginContext.irBuiltIns.stringType
     val stringArrayClass: IrClassSymbol = pluginContext.irBuiltIns.arrayClass
+    private var referenceArrays: Map<String, ValueType.Ref> = emptyMap()
+
+    fun arrayElement(type: IrType): IrType? {
+        val simple = type as? IrSimpleType ?: return null
+        if (simple.isNullable() || simple.classifier != stringArrayClass) return null
+        return (simple.arguments.singleOrNull() as? IrTypeProjection)?.type
+    }
+
+    fun registerReferenceArrays(types: Map<String, ValueType.Ref>) {
+        referenceArrays = types
+    }
+
+    fun referenceArrayType(type: IrType): ValueType.Ref? = referenceArrays[type.canonicalPlatformType()]
 
     fun isStringArray(type: IrType): Boolean {
         val simple = type as? IrSimpleType ?: return false

@@ -500,6 +500,15 @@ registerKotlinVmConformance(
     conformanceScenario = "int-array",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinReferenceArrayVmConformance",
+    taskDescription = "Executes typed Guest class reference arrays with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateReferenceArrayConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-reference-array.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-reference-array-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_REFERENCE_ARRAY_ARTIFACT",
+    conformanceScenario = "reference-array",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinNullableReferencesVmConformance",
     taskDescription = "Executes nullable Guest Kotlin references, safe calls, and Elvis with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateNullableReferencesConformanceArtifact",

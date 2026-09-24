@@ -309,6 +309,7 @@ val soundConformanceArtifact = layout.buildDirectory.file("generated/conformance
 val displayConformanceArtifact = layout.buildDirectory.file("generated/conformance/display.cpkt")
 val intLoopsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-loops.cpkt")
 val intArrayConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-array.cpkt")
+val referenceArrayConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-reference-array.cpkt")
 val nullableReferencesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-nullable-references.cpkt")
 val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-long.cpkt")
 val genericFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-functions.cpkt")
@@ -728,6 +729,22 @@ val generateIntArrayConformanceArtifact = tasks.register<Test>("generateIntArray
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.intArrayArtifact", intArrayConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateReferenceArrayConformanceArtifact = tasks.register<Test>("generateReferenceArrayConformanceArtifact") {
+    description = "Compiles typed Guest class reference arrays for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*reference arrays preserve Guest class elements and aliases*")
+    inputs.file(workerJar)
+    outputs.file(referenceArrayConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.referenceArrayArtifact", referenceArrayConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
