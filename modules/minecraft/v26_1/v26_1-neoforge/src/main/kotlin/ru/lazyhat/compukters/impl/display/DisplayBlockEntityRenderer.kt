@@ -21,6 +21,7 @@ import net.minecraft.world.phys.Vec3
 import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import ru.lazyhat.compukters.impl.terminal.fontDescription
 import ru.lazyhat.compukters.minecraft.display.DisplayBlock
+import ru.lazyhat.compukters.minecraft.display.DisplayTextLayout
 
 class DisplayBlockEntityRenderer(
     context: BlockEntityRendererProvider.Context,
@@ -38,7 +39,7 @@ class DisplayBlockEntityRenderer(
     ) {
         super.extractRenderState(entity, state, partialTick, cameraPosition, crumblingOverlay)
         state.facing = entity.blockState.getValue(DisplayBlock.FACING)
-        state.rows = entity.displayRows().map { profile.mapRow(it) }
+        state.rows = entity.displayRows()
     }
 
     override fun submit(
@@ -53,13 +54,13 @@ class DisplayBlockEntityRenderer(
         pose.mulPose(Axis.YP.rotationDegrees(-state.facing.toYRot()))
         pose.translate(0.0, 0.0, 0.503)
         pose.scale(SCALE, -SCALE, SCALE)
-        state.rows.forEachIndexed { y, row ->
-            if (row.isBlank()) return@forEachIndexed
-            val text = Component.literal(row.trimEnd()).withStyle { style -> style.withFont(profile.fontDescription) }
+        DisplayTextLayout.forEachGlyph(state.rows, profile) { x, y, codePoint ->
+            val text =
+                Component.literal(String(Character.toChars(codePoint))).withStyle { style -> style.withFont(profile.fontDescription) }
             collector.submitText(
                 pose,
-                -60f,
-                -50f + y * 10f,
+                x.toFloat(),
+                y.toFloat(),
                 text.visualOrderText,
                 false,
                 Font.DisplayMode.POLYGON_OFFSET,
@@ -71,11 +72,6 @@ class DisplayBlockEntityRenderer(
         }
         pose.popPose()
     }
-
-    private fun TerminalFontProfile.mapRow(row: String): String =
-        buildString {
-            row.codePoints().forEach { codePoint -> appendCodePoint(renderCodePoint(codePoint)) }
-        }
 
     private companion object {
         const val SCALE = 0.0065f
