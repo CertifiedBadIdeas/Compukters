@@ -7,8 +7,7 @@ on:
       - ".github/workflows/pages.yml"
       - "docs/**"
       - "modules/common/guest-platform/src/platform/**"
-      - "modules/common/platform-k2/build.gradle.kts"
-      - "modules/common/platform-k2/src/main/kotlin/ru/lazyhat/compukters/platform/k2/build/GuestApiDocumentationMain.kt"
+      - "modules/common/guest-platform/build.gradle.kts"
   workflow_dispatch:
 
 permissions:
@@ -36,9 +35,9 @@ jobs:
         uses: actions/configure-pages@v5
       - name: Generate Guest Kotlin source browser
         run: python3 docs/_tools/build_guest_source.py
-      - name: Export Guest API declarations
-        run: ./gradlew :platform-k2:exportGuestApiDocumentation --no-daemon
       - name: Generate Guest Kotlin API reference
+        run: ./gradlew :guest-platform:dokkaGeneratePublicationHtml --no-daemon
+      - name: Stage Guest Kotlin API reference
         run: python3 docs/_tools/build_guest_api.py
       - name: Build with Jekyll
         uses: actions/jekyll-build-pages@v1
