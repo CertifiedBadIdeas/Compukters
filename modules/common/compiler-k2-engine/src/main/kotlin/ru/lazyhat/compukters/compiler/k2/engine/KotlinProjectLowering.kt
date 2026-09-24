@@ -75,6 +75,8 @@ import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.IrTypeProjection
+import org.jetbrains.kotlin.ir.types.IrTypeSubstitutor
+import org.jetbrains.kotlin.ir.types.impl.makeTypeProjection
 import org.jetbrains.kotlin.ir.types.isNothing
 import org.jetbrains.kotlin.ir.util.constructors
 import org.jetbrains.kotlin.ir.util.file
@@ -82,6 +84,7 @@ import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.util.isNullable
 import org.jetbrains.kotlin.ir.util.parentAsClass
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
+import org.jetbrains.kotlin.types.Variance
 import ru.lazyhat.compukters.compiler.artifact.analysis.ExecutionStorage
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
@@ -186,6 +189,88 @@ private data class GuestConstructorTarget(
     val layout: GuestClassLayout,
     val functionId: FunctionId,
 )
+
+private data class GuestFunctionInstance(
+    val declaration: IrSimpleFunction,
+    val arguments: List<IrType>,
+) {
+    val substitution: IrTypeSubstitutor =
+        IrTypeSubstitutor(
+            declaration.typeParameters.map { it.symbol },
+            arguments.map { makeTypeProjection(it, Variance.INVARIANT) },
+            false,
+        )
+
+    fun substitute(type: IrType): IrType = substitution.substitute(type)
+}
+
+private fun collectGuestFunctionInstances(
+    functions: List<IrSimpleFunction>,
+    constructors: List<IrClass>,
+): List<GuestFunctionInstance> {
+    functions.firstOrNull { it.parent is IrClass && it.typeParameters.isNotEmpty() }?.let { function ->
+        throw UnsupportedKotlinIr(function, "generic instance methods are not supported")
+    }
+    functions.firstOrNull { function -> function.typeParameters.any { it.isReified } }?.let { function ->
+        throw UnsupportedKotlinIr(function, "reified generic parameters are not supported")
+    }
+    val projectSymbols = functions.mapTo(mutableSetOf()) { it.symbol }
+    val instances = linkedSetOf<GuestFunctionInstance>()
+    val pending = ArrayDeque<GuestFunctionInstance>()
+    var genericVariantCount = 0
+
+    fun add(instance: GuestFunctionInstance) {
+        if (instances.add(instance)) {
+            if (instance.arguments.isNotEmpty() && ++genericVariantCount > 256) {
+                throw UnsupportedKotlinIr(instance.declaration, "generic specialization exceeds 256 function variants")
+            }
+            pending.addLast(instance)
+        }
+    }
+
+    functions.filter { it.typeParameters.isEmpty() }.forEach { add(GuestFunctionInstance(it, emptyList())) }
+    val constructorBodies =
+        constructors.flatMap { declaration -> declaration.constructors.filter { it.isPrimary } }
+
+    fun scan(
+        element: IrElement,
+        owner: GuestFunctionInstance?,
+    ) {
+        element.accept(
+            object : IrVisitorVoid() {
+                override fun visitElement(element: IrElement) {
+                    element.acceptChildren(this, null)
+                }
+
+                override fun visitCall(expression: IrCall) {
+                    val target = expression.symbol.owner
+                    if (target.symbol in projectSymbols && target.typeParameters.isNotEmpty()) {
+                        val arguments =
+                            expression.typeArguments.map { argument ->
+                                val type = argument ?: throw UnsupportedKotlinIr(expression, "generic call has an inferred type hole")
+                                owner?.substitute(type) ?: type
+                            }
+                        if (arguments.size != target.typeParameters.size ||
+                            arguments.any { (it as? IrSimpleType)?.classifier is IrTypeParameterSymbol }
+                        ) {
+                            throw UnsupportedKotlinIr(expression, "generic call has unresolved type arguments")
+                        }
+                        add(GuestFunctionInstance(target, arguments))
+                    }
+                    super.visitCall(expression)
+                }
+            },
+            null,
+        )
+    }
+
+    constructorBodies.forEach { constructor -> constructor.body?.let { scan(it, null) } }
+    while (pending.isNotEmpty()) {
+        val instance = pending.removeFirst()
+        instance.declaration.body?.let { scan(it, instance) }
+    }
+    return instances.toList()
+}
 
 private data class GuestClosureCapture(
     val symbol: IrValueSymbol?,
@@ -659,6 +744,7 @@ internal object KotlinProjectLowering {
                 declaration.kind == ClassKind.CLASS &&
                     declaration.constructors.any { it.isPrimary }
             }
+        val functionInstances = collectGuestFunctionInstances(userFunctions, constructorClasses)
         val initializerClasses =
             userClasses.filter { declaration ->
                 declaration.kind == ClassKind.ENUM_CLASS && declaration.declarations.any { it is IrEnumEntry }
@@ -702,8 +788,14 @@ internal object KotlinProjectLowering {
                         loweredParameters(function, session).any { parameter -> guestTypes.isStringArray(parameter.type) }
                 }
         val functionArtifactNames =
-            userFunctions.associate { function ->
-                function.symbol to artifactFunctionName(function, pluginContext, inlineValueClasses, session)
+            functionInstances.associateWith { instance ->
+                val function = instance.declaration
+                if (instance.arguments.isEmpty()) {
+                    artifactFunctionName(function, pluginContext, inlineValueClasses, session)
+                } else {
+                    val arguments = instance.arguments.joinToString(",") { it.canonicalPlatformType() }
+                    "${function.fqNameWhenAvailable?.asString() ?: function.name.asString()}<$arguments>"
+                }
             }
         val metadataValues =
             (
@@ -716,7 +808,7 @@ internal object KotlinProjectLowering {
                     linkedSymbols.fieldsByGetter.values.map(ExternalFieldTarget::exportName) +
                     linkedSymbols.enumEntries.values.map(ExternalFieldTarget::exportName) +
                     linkedSymbols.defaultEnumEntries.values.map(ExternalFieldTarget::exportName) +
-                    userFunctions.map { requireNotNull(functionArtifactNames[it.symbol]) } +
+                    functionInstances.map { requireNotNull(functionArtifactNames[it]) } +
                     functionShapes.indices.map { index -> functionShapeName(index, functionShapes[index], unitBlockShape) } +
                     listOfNotNull("invoke".takeIf { functionShapes.isNotEmpty() }) +
                     listOfNotNull("<task-launch>".takeIf { usesFunction0Unit }) +
@@ -825,30 +917,34 @@ internal object KotlinProjectLowering {
         val charArrayType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(CHAR_ARRAY_RUNTIME_TYPE)))
         val stringType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(STRING_RUNTIME_TYPE)))
         val intArrayType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(INT_ARRAY_RUNTIME_TYPE)))
-        val functionIds = userFunctions.withIndex().associate { (index, function) -> function.symbol to FunctionId.of(index.toUInt()) }
-        val functionTypeIds = userFunctions.withIndex().associate { (index, function) -> function.symbol to TypeId.of(index.toUInt()) }
+        val instanceFunctionIds =
+            functionInstances.withIndex().associate { (index, instance) -> instance to FunctionId.of(index.toUInt()) }
+        val instanceTypeIds =
+            functionInstances.withIndex().associate { (index, instance) -> instance to TypeId.of(index.toUInt()) }
+        val functionIds =
+            instanceFunctionIds.entries.filter { it.key.arguments.isEmpty() }.associate { it.key.declaration.symbol to it.value }
         val shapeInvokeFunctionIds =
             functionShapes.withIndex().associate { (index, shape) ->
-                shape to FunctionId.of((userFunctions.size + index).toUInt())
+                shape to FunctionId.of((functionInstances.size + index).toUInt())
             }
         val shapeInvokeSignatureTypeIds =
             functionShapes.withIndex().associate { (index, shape) ->
-                shape to TypeId.of((userFunctions.size + index).toUInt())
+                shape to TypeId.of((functionInstances.size + index).toUInt())
             }
         val closureInvokeFunctionIds =
             closureSources.withIndex().associate { (index, source) ->
-                source.expression to FunctionId.of((userFunctions.size + functionShapes.size + index).toUInt())
+                source.expression to FunctionId.of((functionInstances.size + functionShapes.size + index).toUInt())
             }
         val closureInvokeSignatureTypeIds =
             closureSources.withIndex().associate { (index, source) ->
-                source.expression to TypeId.of((userFunctions.size + functionShapes.size + index).toUInt())
+                source.expression to TypeId.of((functionInstances.size + functionShapes.size + index).toUInt())
             }
         val taskLaunchTrampolineFunctionId =
-            FunctionId.of((userFunctions.size + functionShapes.size + closureSources.size).toUInt()).takeIf { usesFunction0Unit }
+            FunctionId.of((functionInstances.size + functionShapes.size + closureSources.size).toUInt()).takeIf { usesFunction0Unit }
         val taskLaunchTrampolineSignatureTypeId =
-            TypeId.of((userFunctions.size + functionShapes.size + closureSources.size).toUInt()).takeIf { usesFunction0Unit }
+            TypeId.of((functionInstances.size + functionShapes.size + closureSources.size).toUInt()).takeIf { usesFunction0Unit }
         val syntheticFunctionCount = closureSources.size + functionShapes.size + if (usesFunction0Unit) 1 else 0
-        val constructorFunctionBase = userFunctions.size + syntheticFunctionCount
+        val constructorFunctionBase = functionInstances.size + syntheticFunctionCount
         val constructorFunctionIds =
             constructorClasses.withIndex().associate { (index, declaration) ->
                 requireNotNull(declaration.constructors.singleOrNull { it.isPrimary }).symbol to
@@ -953,9 +1049,9 @@ internal object KotlinProjectLowering {
                         ),
                     ),
             )
-        userFunctions.forEach {
+        functionInstances.forEach { instance ->
             validateFunction(
-                it,
+                instance.declaration,
                 pluginContext,
                 guestTypes,
                 classTypeIds,
@@ -964,6 +1060,7 @@ internal object KotlinProjectLowering {
                 platformScalars,
                 session,
                 shapeInterfaceTypes,
+                instance,
             )
         }
         val classLayouts =
@@ -1142,8 +1239,9 @@ internal object KotlinProjectLowering {
         val blocks = mutableListOf<Block>()
         val loweredFunctions = mutableListOf<Function>()
 
-        userFunctions.forEach { function ->
-            val functionId = requireNotNull(functionIds[function.symbol])
+        functionInstances.forEach { instance ->
+            val function = instance.declaration
+            val functionId = requireNotNull(instanceFunctionIds[instance])
             val firstBlock = blocks.size
             val compiled =
                 if (function.body == null) {
@@ -1168,6 +1266,8 @@ internal object KotlinProjectLowering {
                         booleanType = pluginContext.irBuiltIns.booleanType,
                         charType = pluginContext.irBuiltIns.charType,
                         functionIds = functionIds,
+                        genericFunctionIds = instanceFunctionIds,
+                        currentInstance = instance,
                         constantIds = constantIds,
                         literalIds = literalIds,
                         session = session,
@@ -1210,6 +1310,7 @@ internal object KotlinProjectLowering {
                     platformScalars,
                     function,
                     shapeInterfaceTypes,
+                    instance,
                 )
             val parameterTypes =
                 loweredParameters(function, session).map {
@@ -1226,6 +1327,7 @@ internal object KotlinProjectLowering {
                         platformScalars,
                         it,
                         shapeInterfaceTypes,
+                        instance,
                     )
                 }
             val ownerClass = function.parent as? IrClass
@@ -1246,8 +1348,8 @@ internal object KotlinProjectLowering {
             loweredFunctions +=
                 Function(
                     owner = memberOwner,
-                    name = requireNotNull(metadataIds[functionArtifactNames[function.symbol]]),
-                    signature = TypeRef.Local(requireNotNull(functionTypeIds[function.symbol])),
+                    name = requireNotNull(metadataIds[functionArtifactNames[instance]]),
+                    signature = TypeRef.Local(requireNotNull(instanceTypeIds[instance])),
                     flags = flags,
                     values = (parameterTypes + compiled.localTypes).map(FunctionValue::scalar),
                     parameterCount = parameterTypes.size.toUInt(),
@@ -1403,6 +1505,7 @@ internal object KotlinProjectLowering {
                         booleanType = pluginContext.irBuiltIns.booleanType,
                         charType = pluginContext.irBuiltIns.charType,
                         functionIds = functionIds,
+                        genericFunctionIds = instanceFunctionIds,
                         constantIds = constantIds,
                         literalIds = literalIds,
                         session = session,
@@ -1509,6 +1612,7 @@ internal object KotlinProjectLowering {
                     booleanType = pluginContext.irBuiltIns.booleanType,
                     charType = pluginContext.irBuiltIns.charType,
                     functionIds = functionIds,
+                    genericFunctionIds = instanceFunctionIds,
                     constantIds = constantIds,
                     literalIds = literalIds,
                     session = session,
@@ -1655,9 +1759,10 @@ internal object KotlinProjectLowering {
         }
 
         val functionTypes =
-            userFunctions.map { function ->
+            functionInstances.map { instance ->
+                val function = instance.declaration
                 NominalType.Function(
-                    name = requireNotNull(metadataIds[functionArtifactNames[function.symbol]]),
+                    name = requireNotNull(metadataIds[functionArtifactNames[instance]]),
                     suspending = function.isSuspend,
                     result =
                         valueType(
@@ -1673,6 +1778,7 @@ internal object KotlinProjectLowering {
                             platformScalars,
                             function,
                             shapeInterfaceTypes,
+                            instance,
                         ),
                     parameters =
                         loweredParameters(function, session).map {
@@ -1689,6 +1795,7 @@ internal object KotlinProjectLowering {
                                 platformScalars,
                                 it,
                                 shapeInterfaceTypes,
+                                instance,
                             )
                         },
                 )
@@ -2200,6 +2307,7 @@ internal object KotlinProjectLowering {
         platformScalars: PlatformScalarRegistry,
         session: CompilationSession,
         functionTypes: Map<GuestFunctionShape, TypeRef.Local>,
+        instance: GuestFunctionInstance,
     ) {
         val owner = function.parent as? IrClass
         if (owner != null && !inlineValueClasses.contains(owner.symbol)) {
@@ -2224,8 +2332,9 @@ internal object KotlinProjectLowering {
                 pluginContext.irBuiltIns.charType,
             )
 
-        fun isSupported(type: IrType): Boolean =
-            type in supported || type.isNothing() ||
+        fun isSupported(sourceType: IrType): Boolean {
+            val type = instance.substitute(sourceType)
+            return type in supported || type.isNothing() ||
                 type.isExactClass(pluginContext.irBuiltIns.charArray) ||
                 type.isExactClass(pluginContext.irBuiltIns.intArray) ||
                 guestTypes.isStringArray(type) ||
@@ -2237,6 +2346,7 @@ internal object KotlinProjectLowering {
                 (functionTypes.forType(type) != null) ||
                 classTypeIds.containsKey((type as? IrSimpleType)?.classifier) ||
                 externalClassTypes.containsKey((type as? IrSimpleType)?.classifier)
+        }
         if (loweredParameters(function, session).any { !isSupported(it.type) } ||
             !isSupported(function.returnType)
         ) {
@@ -2257,8 +2367,25 @@ internal object KotlinProjectLowering {
         platformScalars: PlatformScalarRegistry,
         element: IrElement,
         functionTypes: Map<GuestFunctionShape, TypeRef.Local> = emptyMap(),
-    ): ValueType =
-        when (type) {
+        instance: GuestFunctionInstance? = null,
+    ): ValueType {
+        if (instance != null) {
+            return valueType(
+                instance.substitute(type),
+                pluginContext,
+                guestTypes,
+                stringType,
+                charArrayType,
+                stringArrayType,
+                classTypeIds,
+                externalClassTypes,
+                inlineValueClasses,
+                platformScalars,
+                element,
+                functionTypes,
+            )
+        }
+        return when (type) {
             pluginContext.irBuiltIns.unitType -> {
                 ValueType.Unit
             }
@@ -2339,6 +2466,7 @@ internal object KotlinProjectLowering {
                 }
             }
         }
+    }
 
     private fun buildClassLayouts(
         classes: List<IrClass>,
@@ -2763,6 +2891,8 @@ private class FunctionCompiler(
     private val booleanType: IrType,
     private val charType: IrType,
     private val functionIds: Map<org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol, FunctionId>,
+    private val genericFunctionIds: Map<GuestFunctionInstance, FunctionId> = emptyMap(),
+    private val currentInstance: GuestFunctionInstance? = null,
     private val constantIds: Map<Constant, ConstantId>,
     private val literalIds: Map<Utf16Literal, Utf16LiteralId>,
     private val session: CompilationSession,
@@ -3573,7 +3703,7 @@ private class FunctionCompiler(
             return (destination as? Destination.Register)?.id
         }
         compileCompareToPredicate(call, target.name.asString())?.let { return it }
-        val targetId = projectFunctionId(target.symbol)
+        val targetId = projectFunctionId(call, target)
         if (targetId == null) {
             if (interfaceSuper) {
                 throw UnsupportedKotlinIr(call, "interface super target is outside the project subset")
@@ -3586,7 +3716,7 @@ private class FunctionCompiler(
             resolveProjectCallArguments(call, target).zip(loweredParameters(target, session)).map { (argument, parameter) ->
                 compileCallArgument(argument, parameter.type)
             }
-        val destination = destinationFor(target.returnType, call)
+        val destination = destinationFor(call.type, call)
         if (target.isSuspend) {
             val resume = createBlock()
             emit(Instruction.CallSuspend(destination, FunctionRef.Local(targetId), arguments, blockId(resume)))
@@ -4654,12 +4784,26 @@ private class FunctionCompiler(
         fields: Map<IrSimpleFunctionSymbol, GuestFieldLayout>,
     ): GuestFieldLayout? = fields[symbol] ?: symbol.owner.overriddenSymbols.firstNotNullOfOrNull { resolveFieldAccessor(it, fields) }
 
-    private fun projectFunctionId(symbol: IrSimpleFunctionSymbol): FunctionId? =
-        functionIds[symbol]
-            ?: symbol.owner
-                .takeIf { it.origin == IrDeclarationOrigin.FAKE_OVERRIDE && it.correspondingPropertySymbol != null }
-                ?.overriddenSymbols
-                ?.firstNotNullOfOrNull(::projectFunctionId)
+    private fun projectFunctionId(
+        call: IrCall,
+        target: IrSimpleFunction,
+    ): FunctionId? =
+        if (target.typeParameters.isNotEmpty()) {
+            if (genericFunctionIds.keys.none { it.declaration.symbol == target.symbol }) return null
+            val arguments =
+                call.typeArguments.map { argument ->
+                    val type = argument ?: throw UnsupportedKotlinIr(call, "generic call has an inferred type hole")
+                    currentInstance?.substitute(type) ?: type
+                }
+            genericFunctionIds[GuestFunctionInstance(target, arguments)]
+                ?: throw UnsupportedKotlinIr(call, "generic function specialization is missing")
+        } else {
+            functionIds[target.symbol]
+                ?: target
+                    .takeIf { it.origin == IrDeclarationOrigin.FAKE_OVERRIDE && it.correspondingPropertySymbol != null }
+                    ?.overriddenSymbols
+                    ?.firstNotNullOfOrNull { functionIds[it] }
+        }
 
     private inline fun withLoopContext(
         context: LoopContext,
@@ -4778,6 +4922,14 @@ private class FunctionCompiler(
     private fun trustedIntrinsic(function: IrSimpleFunction): LoweredCapabilityOperation? = resolveTrustedIntrinsic(function, session)
 
     private fun valueType(
+        type: IrType,
+        element: IrElement,
+    ): ValueType {
+        val resolvedType = currentInstance?.substitute(type) ?: type
+        return valueTypeResolved(resolvedType, element)
+    }
+
+    private fun valueTypeResolved(
         type: IrType,
         element: IrElement,
     ): ValueType =

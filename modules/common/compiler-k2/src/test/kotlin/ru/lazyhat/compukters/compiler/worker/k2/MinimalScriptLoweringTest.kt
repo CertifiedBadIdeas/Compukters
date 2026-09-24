@@ -1563,6 +1563,30 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `generic identity specializes primitive and reference calls`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                fun <T> identity(value: T): T = value
+                fun <T> forward(value: T): T = identity(value)
+                fun main() {
+                    println(forward(42))
+                    println(forward<String>("hello"))
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val artifact = ArtifactReader.read(bytes)
+            val module = artifact.modules.first()
+            val signatures = module.types.filterIsInstance<NominalType.Function>()
+            assertTrue(signatures.any { it.parameters == listOf(ValueType.I32) && it.result == ValueType.I32 })
+            assertTrue(signatures.any { it.parameters.singleOrNull() is ValueType.Ref && it.result is ValueType.Ref })
+            System.getProperty("compukter.vm.genericFunctionsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `guest object subset rejects generic secondary uninitialized stateful and explicit cast shapes`() =
         withAdapter { adapter ->
             val unsupported =

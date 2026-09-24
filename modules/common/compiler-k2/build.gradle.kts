@@ -310,6 +310,7 @@ val displayConformanceArtifact = layout.buildDirectory.file("generated/conforman
 val intLoopsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-loops.cpkt")
 val intArrayConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-int-array.cpkt")
 val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-long.cpkt")
+val genericFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-functions.cpkt")
 val floatConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-float.cpkt")
 val dispatchConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-dispatch.cpkt")
 val objectModelConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-object-model.cpkt")
@@ -740,6 +741,22 @@ val generateLongConformanceArtifact = tasks.register<Test>("generateLongConforma
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.longArtifact", longConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateGenericFunctionsConformanceArtifact = tasks.register<Test>("generateGenericFunctionsConformanceArtifact") {
+    description = "Compiles specialized Guest generic functions for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*generic identity specializes primitive and reference calls*")
+    inputs.file(workerJar)
+    outputs.file(genericFunctionsConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.genericFunctionsArtifact", genericFunctionsConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
