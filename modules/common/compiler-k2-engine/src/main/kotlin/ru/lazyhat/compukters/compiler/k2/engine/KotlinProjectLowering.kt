@@ -178,20 +178,17 @@ private data class TopLevelFieldLayout(
 )
 
 private data class GuestClassLayout(
-    val declaration: IrClass,
+    val instance: GuestClassInstance,
     val typeId: TypeId,
     val firstField: UInt,
     val fields: List<GuestFieldLayout>,
     val enumEntries: List<GuestEnumEntryLayout>,
-)
+) {
+    val declaration: IrClass get() = instance.declaration
+}
 
-private data class GuestConstructorTarget(
-    val layout: GuestClassLayout,
-    val functionId: FunctionId,
-)
-
-private data class GuestFunctionInstance(
-    val declaration: IrSimpleFunction,
+private data class GuestClassInstance(
+    val declaration: IrClass,
     val arguments: List<IrType>,
 ) {
     val substitution: IrTypeSubstitutor =
@@ -202,6 +199,97 @@ private data class GuestFunctionInstance(
         )
 
     fun substitute(type: IrType): IrType = substitution.substitute(type)
+
+    val name: String
+        get() {
+            val base = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
+            return if (arguments.isEmpty()) base else "$base<${arguments.joinToString(",") { it.canonicalPlatformType() }}>"
+        }
+}
+
+private fun IrType.classInstance(classes: Map<IrClassSymbol, IrClass>): GuestClassInstance? {
+    val simple = this as? IrSimpleType ?: return null
+    val declaration = classes[simple.classifier as? IrClassSymbol] ?: return null
+    val arguments = simple.arguments.map { (it as? IrTypeProjection)?.type ?: return null }
+    if (arguments.size != declaration.typeParameters.size) return null
+    return GuestClassInstance(declaration, arguments)
+}
+
+private fun collectGuestClassInstances(
+    classes: List<IrClass>,
+    functions: List<GuestFunctionInstance>,
+    properties: List<TopLevelProperty>,
+): List<GuestClassInstance> {
+    val bySymbol = classes.associateBy { it.symbol }
+    val instances = linkedSetOf<GuestClassInstance>()
+    val pending = ArrayDeque<GuestClassInstance>()
+
+    fun add(instance: GuestClassInstance) {
+        if (instances.add(instance)) {
+            if (instances.count { it.arguments.isNotEmpty() } > 256) {
+                throw UnsupportedKotlinIr(instance.declaration, "generic specialization exceeds 256 class variants")
+            }
+            pending.addLast(instance)
+        }
+    }
+
+    fun consider(
+        type: IrType,
+        substitution: (IrType) -> IrType = { it },
+    ) {
+        val resolved = substitution(type)
+        resolved.classInstance(bySymbol)?.let(::add)
+    }
+
+    classes.filter { it.typeParameters.isEmpty() }.forEach { add(GuestClassInstance(it, emptyList())) }
+
+    fun scan(
+        element: IrElement,
+        substitution: (IrType) -> IrType,
+    ) {
+        element.accept(
+            object : IrVisitorVoid() {
+                override fun visitElement(element: IrElement) {
+                    when (element) {
+                        is IrExpression -> consider(element.type, substitution)
+                        is IrValueDeclaration -> consider(element.type, substitution)
+                    }
+                    element.acceptChildren(this, null)
+                }
+            },
+            null,
+        )
+    }
+    functions.forEach { instance -> scan(instance.declaration, instance::substitute) }
+    properties.forEach { property -> scan(property.declaration, { it }) }
+    while (pending.isNotEmpty()) {
+        val instance = pending.removeFirst()
+        instance.declaration.declarations.forEach { declaration -> scan(declaration, instance::substitute) }
+    }
+    return instances.toList()
+}
+
+private data class GuestConstructorTarget(
+    val layout: GuestClassLayout,
+    val functionId: FunctionId,
+)
+
+private data class GuestFunctionInstance(
+    val declaration: IrSimpleFunction,
+    val arguments: List<IrType>,
+    val ownerClass: GuestClassInstance? = null,
+) {
+    val substitution: IrTypeSubstitutor =
+        IrTypeSubstitutor(
+            declaration.typeParameters.map { it.symbol },
+            arguments.map { makeTypeProjection(it, Variance.INVARIANT) },
+            false,
+        )
+
+    fun substitute(type: IrType): IrType {
+        val functionType = substitution.substitute(type)
+        return ownerClass?.substitute(functionType) ?: functionType
+    }
 }
 
 private fun collectGuestFunctionInstances(
@@ -228,7 +316,10 @@ private fun collectGuestFunctionInstances(
         }
     }
 
-    functions.filter { it.typeParameters.isEmpty() }.forEach { add(GuestFunctionInstance(it, emptyList())) }
+    functions
+        .filter { function ->
+            function.typeParameters.isEmpty() && (function.parent as? IrClass)?.typeParameters?.isEmpty() != false
+        }.forEach { add(GuestFunctionInstance(it, emptyList())) }
     val constructorBodies =
         constructors.flatMap { declaration -> declaration.constructors.filter { it.isPrimary } }
 
@@ -744,7 +835,23 @@ internal object KotlinProjectLowering {
                 declaration.kind == ClassKind.CLASS &&
                     declaration.constructors.any { it.isPrimary }
             }
-        val functionInstances = collectGuestFunctionInstances(userFunctions, constructorClasses)
+        val baseFunctionInstances = collectGuestFunctionInstances(userFunctions, constructorClasses)
+        val classInstances = collectGuestClassInstances(userClasses, baseFunctionInstances, topLevelProperties)
+        val functionInstances =
+            baseFunctionInstances +
+                classInstances.flatMap { classInstance ->
+                    if (classInstance.arguments.isEmpty()) {
+                        emptyList()
+                    } else {
+                        userFunctions.filter { it.parent == classInstance.declaration }.map { function ->
+                            GuestFunctionInstance(function, emptyList(), classInstance)
+                        }
+                    }
+                }
+        val constructorInstances =
+            classInstances.filter { instance ->
+                instance.declaration.kind == ClassKind.CLASS && instance.declaration.constructors.any { it.isPrimary }
+            }
         val initializerClasses =
             userClasses.filter { declaration ->
                 declaration.kind == ClassKind.ENUM_CLASS && declaration.declarations.any { it is IrEnumEntry }
@@ -790,7 +897,13 @@ internal object KotlinProjectLowering {
         val functionArtifactNames =
             functionInstances.associateWith { instance ->
                 val function = instance.declaration
-                if (instance.arguments.isEmpty()) {
+                if (instance.ownerClass != null) {
+                    val parameters =
+                        loweredParameters(function, session).joinToString(",") { parameter ->
+                            instance.substitute(parameter.type).canonicalPlatformType()
+                        }
+                    "${instance.ownerClass.name}.${function.name.asString()}#($parameters)"
+                } else if (instance.arguments.isEmpty()) {
                     artifactFunctionName(function, pluginContext, inlineValueClasses, session)
                 } else {
                     val arguments = instance.arguments.joinToString(",") { it.canonicalPlatformType() }
@@ -819,7 +932,7 @@ internal object KotlinProjectLowering {
                     } +
                     captureCellDeclarations.indices.map { cell -> captureCellName(cell) } +
                     listOfNotNull("<value>".takeIf { captureCellDeclarations.isNotEmpty() }) +
-                    userClasses.map { it.fqNameWhenAvailable?.asString() ?: it.name.asString() } +
+                    classInstances.map(GuestClassInstance::name) +
                     userClasses.flatMap { declaration ->
                         val owner = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
                         val fieldNames =
@@ -834,7 +947,7 @@ internal object KotlinProjectLowering {
                     } +
                     topLevelProperties.map { it.declaration.name.asString() } +
                     listOfNotNull(APPLICATION_STATE.takeIf { topLevelProperties.isNotEmpty() }) +
-                    constructorClasses.map(::constructorName) +
+                    constructorInstances.map(::constructorName) +
                     listOfNotNull("<clinit>".takeIf { initializerClasses.isNotEmpty() || topLevelProperties.isNotEmpty() })
             ).distinct()
                 .map(MetadataText::of)
@@ -922,7 +1035,9 @@ internal object KotlinProjectLowering {
         val instanceTypeIds =
             functionInstances.withIndex().associate { (index, instance) -> instance to TypeId.of(index.toUInt()) }
         val functionIds =
-            instanceFunctionIds.entries.filter { it.key.arguments.isEmpty() }.associate { it.key.declaration.symbol to it.value }
+            instanceFunctionIds.entries
+                .filter { it.key.arguments.isEmpty() && it.key.ownerClass == null }
+                .associate { it.key.declaration.symbol to it.value }
         val shapeInvokeFunctionIds =
             functionShapes.withIndex().associate { (index, shape) ->
                 shape to FunctionId.of((functionInstances.size + index).toUInt())
@@ -946,49 +1061,50 @@ internal object KotlinProjectLowering {
         val syntheticFunctionCount = closureSources.size + functionShapes.size + if (usesFunction0Unit) 1 else 0
         val constructorFunctionBase = functionInstances.size + syntheticFunctionCount
         val constructorFunctionIds =
-            constructorClasses.withIndex().associate { (index, declaration) ->
-                requireNotNull(declaration.constructors.singleOrNull { it.isPrimary }).symbol to
-                    FunctionId.of((constructorFunctionBase + index).toUInt())
+            constructorInstances.withIndex().associate { (index, instance) ->
+                instance to FunctionId.of((constructorFunctionBase + index).toUInt())
             }
         val constructorTypeIds =
-            constructorClasses.withIndex().associate { (index, declaration) ->
-                declaration.symbol to TypeId.of((constructorFunctionBase + index).toUInt())
+            constructorInstances.withIndex().associate { (index, instance) ->
+                instance to TypeId.of((constructorFunctionBase + index).toUInt())
             }
         val initializerFunctionIds =
             initializerClasses.withIndex().associate { (index, declaration) ->
-                declaration.symbol to FunctionId.of((constructorFunctionBase + constructorClasses.size + index).toUInt())
+                declaration.symbol to FunctionId.of((constructorFunctionBase + constructorInstances.size + index).toUInt())
             }
-        val classTypeBase = constructorFunctionBase + constructorClasses.size
+        val classTypeBase = constructorFunctionBase + constructorInstances.size
+        val classInstanceTypeIds =
+            classInstances.withIndex().associate { (index, instance) ->
+                instance to TypeId.of((classTypeBase + index).toUInt())
+            }
         val classTypeIds =
-            userClasses.withIndex().associate { (index, declaration) ->
-                declaration.symbol to TypeId.of((classTypeBase + index).toUInt())
-            }
+            classInstanceTypeIds.entries.filter { it.key.arguments.isEmpty() }.associate { it.key.declaration.symbol to it.value }
         val shapeInterfaceTypeIds =
             functionShapes.withIndex().associate { (index, shape) ->
-                shape to TypeId.of((classTypeBase + userClasses.size + index).toUInt())
+                shape to TypeId.of((classTypeBase + classInstances.size + index).toUInt())
             }
         val shapeInterfaceTypes = shapeInterfaceTypeIds.mapValues { (_, id) -> TypeRef.Local(id) }
         val closureTypeIds =
             closureSources.withIndex().associate { (index, source) ->
-                source.expression to TypeId.of((classTypeBase + userClasses.size + functionShapes.size + index).toUInt())
+                source.expression to TypeId.of((classTypeBase + classInstances.size + functionShapes.size + index).toUInt())
             }
         val captureCellTypeIds =
             captureCellDeclarations.withIndex().associate { (index, declaration) ->
                 declaration.symbol to
                     TypeId.of(
-                        (classTypeBase + userClasses.size + functionShapes.size + closureSources.size + index).toUInt(),
+                        (classTypeBase + classInstances.size + functionShapes.size + closureSources.size + index).toUInt(),
                     )
             }
         val syntheticClassCount =
             closureSources.size + captureCellDeclarations.size + functionShapes.size
         val topLevelStateTypeId =
             TypeId
-                .of((classTypeBase + userClasses.size + syntheticClassCount).toUInt())
+                .of((classTypeBase + classInstances.size + syntheticClassCount).toUInt())
                 .takeIf { topLevelProperties.isNotEmpty() }
         val stateTypeCount = if (topLevelStateTypeId == null) 0 else 1
         val initializerTypeBase =
             classTypeBase +
-                userClasses.size +
+                classInstances.size +
                 syntheticClassCount +
                 stateTypeCount +
                 if (usesStringArray) 1 else 0
@@ -998,7 +1114,7 @@ internal object KotlinProjectLowering {
             }
         val topLevelInitializerFunctionId =
             FunctionId
-                .of((constructorFunctionBase + constructorClasses.size + initializerClasses.size).toUInt())
+                .of((constructorFunctionBase + constructorInstances.size + initializerClasses.size).toUInt())
                 .takeIf { topLevelProperties.isNotEmpty() }
         val topLevelInitializerTypeId =
             TypeId
@@ -1045,7 +1161,7 @@ internal object KotlinProjectLowering {
                 type =
                     TypeRef.Local(
                         TypeId.of(
-                            (classTypeBase + userClasses.size + syntheticClassCount + stateTypeCount).toUInt(),
+                            (classTypeBase + classInstances.size + syntheticClassCount + stateTypeCount).toUInt(),
                         ),
                     ),
             )
@@ -1055,6 +1171,7 @@ internal object KotlinProjectLowering {
                 pluginContext,
                 guestTypes,
                 classTypeIds,
+                classInstanceTypeIds,
                 externalClassTypes,
                 inlineValueClasses,
                 platformScalars,
@@ -1065,8 +1182,9 @@ internal object KotlinProjectLowering {
         }
         val classLayouts =
             buildClassLayouts(
-                userClasses,
+                classInstances,
                 classTypeIds,
+                classInstanceTypeIds,
                 pluginContext,
                 guestTypes,
                 stringType,
@@ -1076,14 +1194,18 @@ internal object KotlinProjectLowering {
                 platformScalars,
                 externalClassTypes,
             )
-        val classLayoutsBySymbol = classLayouts.associateBy { it.declaration.symbol }
+        val classLayoutsByInstance = classLayouts.associateBy(GuestClassLayout::instance)
+        val classLayoutsBySymbol =
+            classLayouts.filter { it.instance.arguments.isEmpty() }.associateBy { it.declaration.symbol }
         val fieldsByBacking =
             classLayouts
+                .filter { it.instance.arguments.isEmpty() }
                 .flatMap { layout ->
                     layout.fields.map { field -> requireNotNull(field.property.backingField).symbol to field }
                 }.toMap()
         val fieldsByGetter =
             classLayouts
+                .filter { it.instance.arguments.isEmpty() }
                 .flatMap { layout ->
                     layout.fields.mapNotNull { field ->
                         field.property.getter
@@ -1094,6 +1216,7 @@ internal object KotlinProjectLowering {
                 }.toMap()
         val fieldsBySetter =
             classLayouts
+                .filter { it.instance.arguments.isEmpty() }
                 .flatMap { layout ->
                     layout.fields.mapNotNull { field ->
                         field.property.setter
@@ -1104,9 +1227,42 @@ internal object KotlinProjectLowering {
                 }.toMap()
         val constructorTargets =
             classLayouts
+                .filter { it.instance.arguments.isEmpty() }
                 .mapNotNull { layout ->
                     layout.declaration.constructors.singleOrNull { it.isPrimary }?.symbol?.let { symbol ->
-                        constructorFunctionIds[symbol]?.let { symbol to GuestConstructorTarget(layout, it) }
+                        constructorFunctionIds[layout.instance]?.let { symbol to GuestConstructorTarget(layout, it) }
+                    }
+                }.toMap()
+        val genericConstructorTargets =
+            classLayouts.filter { it.instance.arguments.isNotEmpty() }.associate { layout ->
+                layout.instance to GuestConstructorTarget(layout, requireNotNull(constructorFunctionIds[layout.instance]))
+            }
+        val genericFieldsByBacking =
+            classLayouts
+                .filter { it.instance.arguments.isNotEmpty() }
+                .flatMap { layout ->
+                    layout.fields.map { field ->
+                        (requireNotNull(field.property.backingField).symbol to layout.instance) to field
+                    }
+                }.toMap()
+        val genericFieldsByGetter =
+            classLayouts
+                .filter { it.instance.arguments.isNotEmpty() }
+                .flatMap { layout ->
+                    layout.fields.mapNotNull { field ->
+                        field.property.getter?.takeIf(IrSimpleFunction::isDirectFieldAccessor)?.symbol?.let { symbol ->
+                            (symbol to layout.instance) to field
+                        }
+                    }
+                }.toMap()
+        val genericFieldsBySetter =
+            classLayouts
+                .filter { it.instance.arguments.isNotEmpty() }
+                .flatMap { layout ->
+                    layout.fields.mapNotNull { field ->
+                        field.property.setter?.takeIf(IrSimpleFunction::isDirectFieldAccessor)?.symbol?.let { symbol ->
+                            (symbol to layout.instance) to field
+                        }
                     }
                 }.toMap()
         var nextClosureField = classLayouts.sumOf { layout -> layout.fields.size + layout.enumEntries.size }
@@ -1209,6 +1365,12 @@ internal object KotlinProjectLowering {
                     val owner = function.parent as? IrClass
                     owner?.symbol in classLayoutsBySymbol && !inlineValueClasses.contains(owner?.symbol)
                 }.groupBy { function -> (function.parent as IrClass).symbol }
+        val genericMemberFunctionsByOwner =
+            functionInstances.filter { it.ownerClass != null }.groupBy { requireNotNull(it.ownerClass) }
+        val genericMemberFunctionIds =
+            functionInstances.filter { it.ownerClass != null }.associate { instance ->
+                (instance.declaration.symbol to requireNotNull(instance.ownerClass)) to requireNotNull(instanceFunctionIds[instance])
+            }
         val firstTopLevelField = nextClosureField
         val topLevelFields =
             topLevelProperties.mapIndexed { index, property ->
@@ -1267,19 +1429,26 @@ internal object KotlinProjectLowering {
                         charType = pluginContext.irBuiltIns.charType,
                         functionIds = functionIds,
                         genericFunctionIds = instanceFunctionIds,
+                        genericMemberFunctionIds = genericMemberFunctionIds,
                         currentInstance = instance,
+                        currentClassInstance = instance.ownerClass,
                         constantIds = constantIds,
                         literalIds = literalIds,
                         session = session,
                         capabilityIds = capabilityIds,
                         classTypeIds = classTypeIds,
+                        classInstanceTypeIds = classInstanceTypeIds,
                         externalClassTypes = externalClassTypes,
                         inlineValueClasses = inlineValueClasses,
                         platformScalars = platformScalars,
                         constructorLayouts = constructorTargets,
+                        genericConstructorLayouts = genericConstructorTargets,
                         fieldsBySetter = fieldsBySetter,
                         fieldsByGetter = fieldsByGetter,
                         fieldsByBacking = fieldsByBacking,
+                        genericFieldsBySetter = genericFieldsBySetter,
+                        genericFieldsByGetter = genericFieldsByGetter,
+                        genericFieldsByBacking = genericFieldsByBacking,
                         topLevelFieldsByBacking = topLevelFieldsByBacking,
                         topLevelFieldsByGetter = topLevelFieldsByGetter,
                         enumEntries =
@@ -1311,6 +1480,7 @@ internal object KotlinProjectLowering {
                     function,
                     shapeInterfaceTypes,
                     instance,
+                    classInstanceTypeIds,
                 )
             val parameterTypes =
                 loweredParameters(function, session).map {
@@ -1328,13 +1498,15 @@ internal object KotlinProjectLowering {
                         it,
                         shapeInterfaceTypes,
                         instance,
+                        classInstanceTypeIds,
                     )
                 }
             val ownerClass = function.parent as? IrClass
             val memberOwner =
-                ownerClass
-                    ?.takeIf { it.symbol in classLayoutsBySymbol && !inlineValueClasses.contains(it.symbol) }
-                    ?.let { TypeRef.Local(requireNotNull(classTypeIds[it.symbol])) }
+                instance.ownerClass?.let { owner -> TypeRef.Local(requireNotNull(classInstanceTypeIds[owner])) }
+                    ?: ownerClass
+                        ?.takeIf { it.symbol in classLayoutsBySymbol && !inlineValueClasses.contains(it.symbol) }
+                        ?.let { TypeRef.Local(requireNotNull(classTypeIds[it.symbol])) }
             val flags =
                 setOfNotNull(
                     FunctionFlag.STATIC.takeIf { memberOwner == null },
@@ -1404,7 +1576,7 @@ internal object KotlinProjectLowering {
                     val targetId =
                         layout.referenceTarget?.let { functionIds[it.symbol] }
                             ?: layout.constructorTarget?.let { constructor ->
-                                constructorFunctionIds[constructor]
+                                constructorFunctionIds[GuestClassInstance(constructor.owner.parentAsClass, emptyList())]
                                     ?: throw UnsupportedKotlinIr(
                                         layout.expression,
                                         "constructor reference target is outside the supported Guest project subset",
@@ -1506,18 +1678,24 @@ internal object KotlinProjectLowering {
                         charType = pluginContext.irBuiltIns.charType,
                         functionIds = functionIds,
                         genericFunctionIds = instanceFunctionIds,
+                        genericMemberFunctionIds = genericMemberFunctionIds,
                         constantIds = constantIds,
                         literalIds = literalIds,
                         session = session,
                         capabilityIds = capabilityIds,
                         classTypeIds = classTypeIds,
+                        classInstanceTypeIds = classInstanceTypeIds,
                         externalClassTypes = externalClassTypes,
                         inlineValueClasses = inlineValueClasses,
                         platformScalars = platformScalars,
                         constructorLayouts = constructorTargets,
+                        genericConstructorLayouts = genericConstructorTargets,
                         fieldsBySetter = fieldsBySetter,
                         fieldsByGetter = fieldsByGetter,
                         fieldsByBacking = fieldsByBacking,
+                        genericFieldsBySetter = genericFieldsBySetter,
+                        genericFieldsByGetter = genericFieldsByGetter,
+                        genericFieldsByBacking = genericFieldsByBacking,
                         topLevelFieldsByBacking = topLevelFieldsByBacking,
                         topLevelFieldsByGetter = topLevelFieldsByGetter,
                         enumEntries = classLayouts.flatMap { it.enumEntries }.associateBy { it.declaration.symbol },
@@ -1585,12 +1763,29 @@ internal object KotlinProjectLowering {
                 )
         }
 
-        constructorClasses.forEach { declaration ->
-            val layout = requireNotNull(classLayoutsBySymbol[declaration.symbol])
+        constructorInstances.forEach { classInstance ->
+            val declaration = classInstance.declaration
+            val layout = requireNotNull(classLayoutsByInstance[classInstance])
             val constructor = requireNotNull(declaration.constructors.singleOrNull { it.isPrimary })
-            val functionId = requireNotNull(constructorFunctionIds[constructor.symbol])
+            val functionId = requireNotNull(constructorFunctionIds[classInstance])
             val receiverType = ValueType.Ref(nullable = false, type = TypeRef.Local(layout.typeId))
-            val parameterTypes = constructor.parameters.filter { it.kind == IrParameterKind.Regular }.map { shapeValueType(it.type) }
+            val parameterTypes =
+                constructor.parameters.filter { it.kind == IrParameterKind.Regular }.map { parameter ->
+                    valueType(
+                        classInstance.substitute(parameter.type),
+                        pluginContext,
+                        guestTypes,
+                        stringType,
+                        charArrayType,
+                        stringArrayType,
+                        classTypeIds,
+                        externalClassTypes,
+                        inlineValueClasses,
+                        platformScalars,
+                        parameter,
+                        classInstanceTypeIds = classInstanceTypeIds,
+                    )
+                }
             val firstBlock = blocks.size
             val compiled =
                 FunctionCompiler(
@@ -1613,18 +1808,25 @@ internal object KotlinProjectLowering {
                     charType = pluginContext.irBuiltIns.charType,
                     functionIds = functionIds,
                     genericFunctionIds = instanceFunctionIds,
+                    genericMemberFunctionIds = genericMemberFunctionIds,
+                    currentClassInstance = classInstance,
                     constantIds = constantIds,
                     literalIds = literalIds,
                     session = session,
                     capabilityIds = capabilityIds,
                     classTypeIds = classTypeIds,
+                    classInstanceTypeIds = classInstanceTypeIds,
                     externalClassTypes = externalClassTypes,
                     inlineValueClasses = inlineValueClasses,
                     platformScalars = platformScalars,
                     constructorLayouts = constructorTargets,
+                    genericConstructorLayouts = genericConstructorTargets,
                     fieldsBySetter = fieldsBySetter,
                     fieldsByGetter = fieldsByGetter,
                     fieldsByBacking = fieldsByBacking,
+                    genericFieldsBySetter = genericFieldsBySetter,
+                    genericFieldsByGetter = genericFieldsByGetter,
+                    genericFieldsByBacking = genericFieldsByBacking,
                     topLevelFieldsByBacking = topLevelFieldsByBacking,
                     topLevelFieldsByGetter = topLevelFieldsByGetter,
                     enumEntries = classLayouts.flatMap { it.enumEntries }.associateBy { it.declaration.symbol },
@@ -1644,8 +1846,8 @@ internal object KotlinProjectLowering {
             loweredFunctions +=
                 Function(
                     owner = null,
-                    name = requireNotNull(metadataIds[constructorName(declaration)]),
-                    signature = TypeRef.Local(requireNotNull(constructorTypeIds[declaration.symbol])),
+                    name = requireNotNull(metadataIds[constructorName(classInstance)]),
+                    signature = TypeRef.Local(requireNotNull(constructorTypeIds[classInstance])),
                     flags = setOf(FunctionFlag.STATIC),
                     values = (listOf(receiverType) + parameterTypes + compiled.localTypes).map(FunctionValue::scalar),
                     parameterCount = (parameterTypes.size + 1).toUInt(),
@@ -1779,6 +1981,7 @@ internal object KotlinProjectLowering {
                             function,
                             shapeInterfaceTypes,
                             instance,
+                            classInstanceTypeIds,
                         ),
                     parameters =
                         loweredParameters(function, session).map {
@@ -1796,6 +1999,7 @@ internal object KotlinProjectLowering {
                                 it,
                                 shapeInterfaceTypes,
                                 instance,
+                                classInstanceTypeIds,
                             )
                         },
                 )
@@ -1833,16 +2037,32 @@ internal object KotlinProjectLowering {
                     },
                 )
         val constructorTypes =
-            constructorClasses.map { declaration ->
-                val layout = requireNotNull(classLayoutsBySymbol[declaration.symbol])
+            constructorInstances.map { classInstance ->
+                val declaration = classInstance.declaration
+                val layout = requireNotNull(classLayoutsByInstance[classInstance])
                 val constructor = requireNotNull(declaration.constructors.singleOrNull { it.isPrimary })
                 NominalType.Function(
-                    name = requireNotNull(metadataIds[constructorName(declaration)]),
+                    name = requireNotNull(metadataIds[constructorName(classInstance)]),
                     suspending = false,
                     result = ValueType.Unit,
                     parameters =
                         listOf(ValueType.Ref(nullable = false, type = TypeRef.Local(layout.typeId))) +
-                            constructor.parameters.filter { it.kind == IrParameterKind.Regular }.map { shapeValueType(it.type) },
+                            constructor.parameters.filter { it.kind == IrParameterKind.Regular }.map { parameter ->
+                                valueType(
+                                    classInstance.substitute(parameter.type),
+                                    pluginContext,
+                                    guestTypes,
+                                    stringType,
+                                    charArrayType,
+                                    stringArrayType,
+                                    classTypeIds,
+                                    externalClassTypes,
+                                    inlineValueClasses,
+                                    platformScalars,
+                                    parameter,
+                                    classInstanceTypeIds = classInstanceTypeIds,
+                                )
+                            },
                 )
             }
         val initializerTypes =
@@ -1875,7 +2095,7 @@ internal object KotlinProjectLowering {
                     }
                 val interfaces = sourceParents.filter { (symbol, _) -> symbol.owner.kind == ClassKind.INTERFACE }.map { it.second }
                 val superType = sourceParents.firstOrNull { (symbol, _) -> symbol.owner.kind != ClassKind.INTERFACE }?.second
-                val name = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
+                val name = layout.instance.name
                 if (declaration.kind == ClassKind.INTERFACE) {
                     val methods = memberFunctionsByOwner[declaration.symbol].orEmpty()
                     NominalType.Interface(
@@ -1888,6 +2108,7 @@ internal object KotlinProjectLowering {
                     )
                 } else {
                     val methods = memberFunctionsByOwner[declaration.symbol].orEmpty()
+                    val genericMethods = genericMemberFunctionsByOwner[layout.instance].orEmpty()
                     NominalType.Class(
                         name = requireNotNull(metadataIds[name]),
                         abstract = declaration.modality == Modality.ABSTRACT || declaration.modality == Modality.SEALED,
@@ -1896,8 +2117,11 @@ internal object KotlinProjectLowering {
                         interfaces = interfaces,
                         fieldStart = layout.firstField,
                         fieldCount = (layout.fields.size + layout.enumEntries.size).toUInt(),
-                        methodStart = methods.firstOrNull()?.let { requireNotNull(functionIds[it.symbol]).value } ?: 0u,
-                        methodCount = methods.size.toUInt(),
+                        methodStart =
+                            genericMethods.firstOrNull()?.let { requireNotNull(instanceFunctionIds[it]).value }
+                                ?: methods.firstOrNull()?.let { requireNotNull(functionIds[it.symbol]).value }
+                                ?: 0u,
+                        methodCount = (methods.size + genericMethods.size).toUInt(),
                         initializer = initializerFunctionIds[declaration.symbol],
                     )
                 }
@@ -2302,6 +2526,7 @@ internal object KotlinProjectLowering {
         pluginContext: IrPluginContext,
         guestTypes: GuestTypeRegistry,
         classTypeIds: Map<IrClassSymbol, TypeId>,
+        classInstanceTypeIds: Map<GuestClassInstance, TypeId>,
         externalClassTypes: Map<IrClassSymbol, TypeRef.Imported>,
         inlineValueClasses: InlineValueClassRegistry,
         platformScalars: PlatformScalarRegistry,
@@ -2345,6 +2570,9 @@ internal object KotlinProjectLowering {
                 (!type.isNullable() && platformScalars.representation(type) != null) ||
                 (functionTypes.forType(type) != null) ||
                 classTypeIds.containsKey((type as? IrSimpleType)?.classifier) ||
+                type.classInstance(
+                    classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration },
+                ) in classInstanceTypeIds ||
                 externalClassTypes.containsKey((type as? IrSimpleType)?.classifier)
         }
         if (loweredParameters(function, session).any { !isSupported(it.type) } ||
@@ -2368,6 +2596,7 @@ internal object KotlinProjectLowering {
         element: IrElement,
         functionTypes: Map<GuestFunctionShape, TypeRef.Local> = emptyMap(),
         instance: GuestFunctionInstance? = null,
+        classInstanceTypeIds: Map<GuestClassInstance, TypeId> = emptyMap(),
     ): ValueType {
         if (instance != null) {
             return valueType(
@@ -2383,6 +2612,7 @@ internal object KotlinProjectLowering {
                 platformScalars,
                 element,
                 functionTypes,
+                classInstanceTypeIds = classInstanceTypeIds,
             )
         }
         return when (type) {
@@ -2428,7 +2658,14 @@ internal object KotlinProjectLowering {
                 } else if (type is IrSimpleType && type.classifier is IrClassSymbol) {
                     val classifier = type.classifier as IrClassSymbol
                     val inline = inlineValueClasses[classifier]
-                    val id = classTypeIds[classifier]
+                    val id =
+                        if (classifier.owner.typeParameters.isEmpty()) {
+                            classTypeIds[classifier]
+                        } else {
+                            type
+                                .classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
+                                ?.let(classInstanceTypeIds::get)
+                        }
                     val external = externalClassTypes[classifier]
                     val platformScalar = platformScalars.representation(type)
                     if (platformScalar != null) {
@@ -2453,6 +2690,7 @@ internal object KotlinProjectLowering {
                             platformScalars,
                             element,
                             functionTypes,
+                            classInstanceTypeIds = classInstanceTypeIds,
                         )
                     } else if (id != null) {
                         ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Local(id))
@@ -2469,8 +2707,9 @@ internal object KotlinProjectLowering {
     }
 
     private fun buildClassLayouts(
-        classes: List<IrClass>,
+        classes: List<GuestClassInstance>,
         classTypeIds: Map<IrClassSymbol, TypeId>,
+        classInstanceTypeIds: Map<GuestClassInstance, TypeId>,
         pluginContext: IrPluginContext,
         guestTypes: GuestTypeRegistry,
         stringType: ValueType,
@@ -2481,16 +2720,25 @@ internal object KotlinProjectLowering {
         externalClassTypes: Map<IrClassSymbol, TypeRef.Imported>,
     ): List<GuestClassLayout> {
         var nextField = 0u
-        return classes.map { declaration ->
-            if (declaration.typeParameters.isNotEmpty() ||
-                declaration.kind !in setOf(ClassKind.CLASS, ClassKind.INTERFACE, ClassKind.ENUM_CLASS)
+        return classes.map { instance ->
+            val declaration = instance.declaration
+            if (declaration.kind !in setOf(ClassKind.CLASS, ClassKind.INTERFACE, ClassKind.ENUM_CLASS) ||
+                (
+                    declaration.typeParameters.isNotEmpty() &&
+                        (
+                            declaration.kind != ClassKind.CLASS || declaration.isData || declaration.modality != Modality.FINAL ||
+                                declaration.superTypes.any { superType ->
+                                    (superType as? IrSimpleType)?.classifier != pluginContext.irBuiltIns.anyClass
+                                }
+                        )
+                )
             ) {
                 throw UnsupportedKotlinIr(
                     declaration,
                     "class ${declaration.fqNameWhenAvailable?.asString() ?: declaration.name} (${declaration.kind}) is outside the project subset",
                 )
             }
-            val typeId = requireNotNull(classTypeIds[declaration.symbol])
+            val typeId = requireNotNull(classInstanceTypeIds[instance])
             val firstField = nextField
             val constructor = declaration.constructors.singleOrNull { it.isPrimary }
             if (declaration.constructors.any { !it.isPrimary }) {
@@ -2524,7 +2772,7 @@ internal object KotlinProjectLowering {
                     }
                     val fieldType =
                         valueType(
-                            requireNotNull(property.backingField).type,
+                            instance.substitute(requireNotNull(property.backingField).type),
                             pluginContext,
                             guestTypes,
                             stringType,
@@ -2535,6 +2783,7 @@ internal object KotlinProjectLowering {
                             inlineValueClasses,
                             platformScalars,
                             property,
+                            classInstanceTypeIds = classInstanceTypeIds,
                         )
                     GuestFieldLayout(property, FieldId.of(nextField++), fieldType)
                 }
@@ -2543,7 +2792,7 @@ internal object KotlinProjectLowering {
                 declaration.declarations.filterIsInstance<IrEnumEntry>().map { enumEntry ->
                     GuestEnumEntryLayout(enumEntry, FieldId.of(nextField++), owner)
                 }
-            GuestClassLayout(declaration, typeId, firstField, fields, entries)
+            GuestClassLayout(instance, typeId, firstField, fields, entries)
         }
     }
 
@@ -2671,8 +2920,7 @@ private fun collectGuestClasses(
 }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
-private fun constructorName(declaration: IrClass): String =
-    "<init:${declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()}>"
+private fun constructorName(instance: GuestClassInstance): String = "<init:${instance.name}>"
 
 private fun closureName(ordinal: Int): String = "app.<lambda-$ordinal>"
 
@@ -2892,19 +3140,26 @@ private class FunctionCompiler(
     private val charType: IrType,
     private val functionIds: Map<org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol, FunctionId>,
     private val genericFunctionIds: Map<GuestFunctionInstance, FunctionId> = emptyMap(),
+    private val genericMemberFunctionIds: Map<Pair<IrSimpleFunctionSymbol, GuestClassInstance>, FunctionId> = emptyMap(),
     private val currentInstance: GuestFunctionInstance? = null,
+    private val currentClassInstance: GuestClassInstance? = null,
     private val constantIds: Map<Constant, ConstantId>,
     private val literalIds: Map<Utf16Literal, Utf16LiteralId>,
     private val session: CompilationSession,
     private val capabilityIds: Map<LoweredCapabilityIdentity, CapabilityId>,
     private val classTypeIds: Map<IrClassSymbol, TypeId>,
+    private val classInstanceTypeIds: Map<GuestClassInstance, TypeId> = emptyMap(),
     private val externalClassTypes: Map<IrClassSymbol, TypeRef.Imported>,
     private val inlineValueClasses: InlineValueClassRegistry,
     private val platformScalars: PlatformScalarRegistry,
     private val constructorLayouts: Map<IrConstructorSymbol, GuestConstructorTarget>,
+    private val genericConstructorLayouts: Map<GuestClassInstance, GuestConstructorTarget> = emptyMap(),
     private val fieldsBySetter: Map<IrSimpleFunctionSymbol, GuestFieldLayout>,
     private val fieldsByGetter: Map<IrSimpleFunctionSymbol, GuestFieldLayout>,
     private val fieldsByBacking: Map<IrFieldSymbol, GuestFieldLayout>,
+    private val genericFieldsBySetter: Map<Pair<IrSimpleFunctionSymbol, GuestClassInstance>, GuestFieldLayout> = emptyMap(),
+    private val genericFieldsByGetter: Map<Pair<IrSimpleFunctionSymbol, GuestClassInstance>, GuestFieldLayout> = emptyMap(),
+    private val genericFieldsByBacking: Map<Pair<IrFieldSymbol, GuestClassInstance>, GuestFieldLayout> = emptyMap(),
     private val topLevelFieldsByBacking: Map<IrFieldSymbol, TopLevelFieldLayout>,
     private val topLevelFieldsByGetter: Map<IrSimpleFunctionSymbol, TopLevelFieldLayout>,
     private val enumEntries: Map<IrEnumEntrySymbol, GuestEnumEntryLayout>,
@@ -3002,7 +3257,12 @@ private class FunctionCompiler(
             }
 
             is IrSetField -> {
-                val field = fieldsByBacking[statement.symbol] ?: throw UnsupportedKotlinIr(statement, "unknown instance field")
+                val field =
+                    fieldsByBacking[statement.symbol]
+                        ?: resolveClassInstance(statement.receiver?.type)?.let { instance ->
+                            genericFieldsByBacking[statement.symbol to instance]
+                        }
+                        ?: throw UnsupportedKotlinIr(statement, "unknown instance field")
                 val receiver =
                     statement.receiver?.let(::compileExpression)
                         ?: throw UnsupportedKotlinIr(statement, "instance field receiver is missing")
@@ -3161,7 +3421,11 @@ private class FunctionCompiler(
             }
 
             is IrGetField -> {
-                val instanceField = fieldsByBacking[expression.symbol]
+                val instanceField =
+                    fieldsByBacking[expression.symbol]
+                        ?: resolveClassInstance(expression.receiver?.type)?.let { instance ->
+                            genericFieldsByBacking[expression.symbol to instance]
+                        }
                 if (instanceField != null) {
                     val receiver =
                         expression.receiver?.let(::compileExpression)
@@ -3367,7 +3631,9 @@ private class FunctionCompiler(
             }
         }
         val targetConstructor =
-            constructorLayouts[call.symbol] ?: throw UnsupportedKotlinIr(call, "constructor is outside the project subset")
+            constructorLayouts[call.symbol]
+                ?: resolveClassInstance(call.type)?.let(genericConstructorLayouts::get)
+                ?: throw UnsupportedKotlinIr(call, "constructor is outside the project subset")
         val layout = targetConstructor.layout
         val parameters = target.parameters.withIndex().filter { it.value.kind == IrParameterKind.Regular }
         val previousBindings = parameters.associate { it.value.symbol to values[it.value.symbol] }
@@ -3615,7 +3881,12 @@ private class FunctionCompiler(
                     ?: throw UnsupportedKotlinIr(call, "value class property getter receiver is missing")
             return compileExpression(receiver)
         }
-        resolveFieldAccessor(target.symbol, fieldsBySetter)?.let { field ->
+        val propertyReceiver = call.dispatchReceiver
+        val receiverClassInstance = resolveClassInstance(propertyReceiver?.type)
+        (
+            resolveFieldAccessor(target.symbol, fieldsBySetter)
+                ?: receiverClassInstance?.let { genericFieldsBySetter[target.symbol to it] }
+        )?.let { field ->
             val receiverExpression =
                 target.parameters
                     .mapIndexedNotNull { index, parameter ->
@@ -3633,7 +3904,10 @@ private class FunctionCompiler(
             emit(Instruction.FieldSet(receiver, FieldRef.Local(field.id), value))
             return null
         }
-        resolveFieldAccessor(target.symbol, fieldsByGetter)?.let { field ->
+        (
+            resolveFieldAccessor(target.symbol, fieldsByGetter)
+                ?: receiverClassInstance?.let { genericFieldsByGetter[target.symbol to it] }
+        )?.let { field ->
             val receiverExpression =
                 target.parameters
                     .mapIndexedNotNull { index, parameter ->
@@ -4784,6 +5058,15 @@ private class FunctionCompiler(
         fields: Map<IrSimpleFunctionSymbol, GuestFieldLayout>,
     ): GuestFieldLayout? = fields[symbol] ?: symbol.owner.overriddenSymbols.firstNotNullOfOrNull { resolveFieldAccessor(it, fields) }
 
+    private fun resolveClassInstance(type: IrType?): GuestClassInstance? {
+        if (type == null) return null
+        val resolved =
+            currentClassInstance?.substitute(currentInstance?.substitute(type) ?: type)
+                ?: currentInstance?.substitute(type)
+                ?: type
+        return resolved.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
+    }
+
     private fun projectFunctionId(
         call: IrCall,
         target: IrSimpleFunction,
@@ -4797,6 +5080,13 @@ private class FunctionCompiler(
                 }
             genericFunctionIds[GuestFunctionInstance(target, arguments)]
                 ?: throw UnsupportedKotlinIr(call, "generic function specialization is missing")
+        } else if ((target.parent as? IrClass)?.typeParameters?.isNotEmpty() == true) {
+            if (genericMemberFunctionIds.keys.none { it.first == target.symbol }) return null
+            val owner =
+                resolveClassInstance(call.dispatchReceiver?.type)
+                    ?: throw UnsupportedKotlinIr(call, "generic method receiver has no concrete class instance")
+            genericMemberFunctionIds[target.symbol to owner]
+                ?: throw UnsupportedKotlinIr(call, "generic method specialization is missing")
         } else {
             functionIds[target.symbol]
                 ?: target
@@ -4925,7 +5215,10 @@ private class FunctionCompiler(
         type: IrType,
         element: IrElement,
     ): ValueType {
-        val resolvedType = currentInstance?.substitute(type) ?: type
+        val resolvedType =
+            currentClassInstance?.substitute(currentInstance?.substitute(type) ?: type)
+                ?: currentInstance?.substitute(type)
+                ?: type
         return valueTypeResolved(resolvedType, element)
     }
 
@@ -4976,7 +5269,14 @@ private class FunctionCompiler(
                 } else if (type is IrSimpleType && type.classifier is IrClassSymbol) {
                     val classifier = type.classifier as IrClassSymbol
                     val inline = inlineValueClasses[classifier]
-                    val id = classTypeIds[classifier]
+                    val id =
+                        if (classifier.owner.typeParameters.isEmpty()) {
+                            classTypeIds[classifier]
+                        } else {
+                            type
+                                .classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
+                                ?.let(classInstanceTypeIds::get)
+                        }
                     val external = externalClassTypes[classifier]
                     val platformScalar = platformScalars.representation(type)
                     if (platformScalar != null) {
