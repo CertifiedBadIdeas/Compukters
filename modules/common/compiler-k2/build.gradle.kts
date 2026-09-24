@@ -312,6 +312,7 @@ val intArrayConformanceArtifact = layout.buildDirectory.file("generated/conforma
 val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-long.cpkt")
 val genericFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-functions.cpkt")
 val genericCellConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-cell.cpkt")
+val genericLibraryConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-library.cpkt")
 val floatConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-float.cpkt")
 val dispatchConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-dispatch.cpkt")
 val objectModelConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-object-model.cpkt")
@@ -774,6 +775,22 @@ val generateGenericCellConformanceArtifact = tasks.register<Test>("generateGener
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.genericCellArtifact", genericCellConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateGenericLibraryConformanceArtifact = tasks.register<Test>("generateGenericLibraryConformanceArtifact") {
+    description = "Compiles a source-distributed generic library consumer for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*source library generic function specializes in consumer*")
+    inputs.file(workerJar)
+    outputs.file(genericLibraryConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.genericLibraryArtifact", genericLibraryConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

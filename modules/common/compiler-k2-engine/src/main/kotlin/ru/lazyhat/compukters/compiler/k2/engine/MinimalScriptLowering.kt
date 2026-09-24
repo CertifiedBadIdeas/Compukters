@@ -92,7 +92,9 @@ internal object MinimalScriptLowering {
                 session.diagnosticSink(unsupported(session, entry))
                 return null
             }
-            if (body.statements.isEmpty() && entry.parameters.isEmpty()) {
+            if (body.statements.isEmpty() && entry.parameters.isEmpty() &&
+                functions.size == 1 && declarations.classes.isEmpty() && declarations.properties.isEmpty()
+            ) {
                 return mainArtifact(entry.isSuspend)
             }
             try {
