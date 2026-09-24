@@ -18,7 +18,33 @@
 
 plugins {
     alias(libs.plugins.kotlinConvention)
+    id("org.jetbrains.dokka") version "2.2.0"
     `maven-publish`
+}
+
+dokka {
+    dokkaGeneratorIsolation.set(
+        ProcessIsolation {
+            systemProperties.put("org.jetbrains.dokka.analysis.allowKotlinPackage", "true")
+        },
+    )
+    dokkaPublications.html {
+        moduleName.set("Compukters Guest Kotlin")
+    }
+    dokkaSourceSets.main {
+        suppress.set(true)
+    }
+    dokkaSourceSets.create("guest") {
+        sourceRoots.from(file("src/platform"))
+        classpath.setFrom(files())
+        enableKotlinStdLibDocumentationLink.set(false)
+        enableJdkDocumentationLink.set(false)
+        sourceLink {
+            localDirectory.set(file("src/platform"))
+            remoteUrl("https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform")
+            remoteLineSuffix.set("#L")
+        }
+    }
 }
 
 val addonSdkVersion = libs.versions.addon.sdk.get()
