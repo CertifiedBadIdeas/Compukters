@@ -96,6 +96,7 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 ### In-game IDE
 
 - Member completion includes the supported operations of built-in Guest Kotlin numeric types.
+- Completion suggests visible variables in string interpolation immediately after `$` and while typing the name.
 - Completion, automatic imports, parameter information, and source navigation include compatible APIs supplied by
   installed addons. Selecting `Kinetics` or `Logistics` also enables the `create` addon for the project.
 
