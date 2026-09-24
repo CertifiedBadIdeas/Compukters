@@ -73,6 +73,7 @@ data class CompiledPlatformMetadata(
     val libraryDeclarations: List<PlatformLibraryDeclaration>,
     val scalarTypes: List<PlatformScalarType> = emptyList(),
     val scalarConstants: List<PlatformScalarConstant> = emptyList(),
+    val sourceOnly: Boolean = false,
 )
 
 data class PlatformLibraryDeclaration(
@@ -177,6 +178,7 @@ class PlatformMetadataCompiler {
                     },
             scalarTypes = parsedPlatform.scalarTypes.sortedBy(PlatformScalarType::symbol),
             scalarConstants = parsedPlatform.scalarConstants.sortedBy(PlatformScalarConstant::symbol),
+            sourceOnly = parsedPlatform.sourceOnly,
         )
     }
 
@@ -237,6 +239,7 @@ class PlatformMetadataCompiler {
             val completionDeclarations = mutableListOf<PlatformCompletionDeclaration>()
             val scalarTypes = mutableListOf<PlatformScalarType>()
             val scalarConstants = mutableListOf<PlatformScalarConstant>()
+            var sourceOnly = false
             sources
                 .sortedBy(PlatformSource::path)
                 .forEach { source ->
@@ -247,6 +250,14 @@ class PlatformMetadataCompiler {
                         "invalid Kotlin platform source ${source.path}: ${errors.joinToString { it.errorDescription }}"
                     }
                     val packageName = file.packageFqName.asString()
+                    if (
+                        file.collectDescendantsOfType<KtClass>().any { it.typeParameters.isNotEmpty() } ||
+                        file.collectDescendantsOfType<KtNamedFunction>().any {
+                            it.typeParameters.isNotEmpty() && it.hasBody() && !it.hasModifier(KtTokens.EXTERNAL_KEYWORD)
+                        }
+                    ) {
+                        sourceOnly = true
+                    }
                     file.declarations.forEach { declaration ->
                         declarations += collect(module, source.path, packageName, emptyList(), declaration = declaration)
                         completionDeclaration(module, source.path, packageName, declaration)?.let(completionDeclarations::add)
@@ -256,7 +267,7 @@ class PlatformMetadataCompiler {
                         }
                     }
                 }
-            ParsedPlatform(declarations, completionDeclarations, scalarTypes, scalarConstants)
+            ParsedPlatform(declarations, completionDeclarations, scalarTypes, scalarConstants, sourceOnly)
         } finally {
             Disposer.dispose(disposable)
         }
@@ -608,6 +619,7 @@ class PlatformMetadataCompiler {
         val completionDeclarations: List<PlatformCompletionDeclaration>,
         val scalarTypes: List<PlatformScalarType>,
         val scalarConstants: List<PlatformScalarConstant>,
+        val sourceOnly: Boolean,
     )
 
     private data class ScalarExtraction(

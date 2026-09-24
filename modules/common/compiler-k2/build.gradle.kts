@@ -802,7 +802,7 @@ val generateGenericLibraryConformanceArtifact = tasks.register<Test>("generateGe
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
-    filter.includeTestsMatching("*source library generic function specializes in consumer*")
+    filter.includeTestsMatching("*source library generic functions and classes specialize in consumer*")
     inputs.file(workerJar)
     outputs.file(genericLibraryConformanceArtifact)
     doFirst {

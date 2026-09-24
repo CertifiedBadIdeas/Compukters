@@ -171,6 +171,34 @@ class PlatformBundleCodecTest {
     }
 
     @Test
+    fun `source-only module identity round trips and rejects a fragment`() {
+        val base = fixture()
+        val sourceOnly = base.modules.first().copy(sourceOnly = true)
+        val bundle =
+            PlatformBundleCodec.assemble(
+                "2.4",
+                PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
+                base.builtins,
+                listOf(sourceOnly) + base.modules.drop(1),
+            )
+
+        val decoded = PlatformBundleCodec.decode(PlatformBundleCodec.encode(bundle))
+        assertTrue(decoded.modules.first().sourceOnly)
+        assertNotEquals(
+            PlatformBundleCodec.moduleContentHash(base.modules.first()),
+            PlatformBundleCodec.moduleContentHash(sourceOnly),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            PlatformBundleCodec.assemble(
+                "2.4",
+                PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
+                base.builtins,
+                listOf(sourceOnly.copy(libraryFragment = ImmutableBytes.of(byteArrayOf(1)))) + base.modules.drop(1),
+            )
+        }
+    }
+
+    @Test
     fun `stored content hash covers every semantic byte`() {
         val encoded = PlatformBundleCodec.encode(fixture())
         val changed = encoded.copyOf()
@@ -194,7 +222,7 @@ class PlatformBundleCodecTest {
         val unsupportedAbi =
             encoded.copyOf().also { bytes ->
                 val abiOffset = languageOffset + "2.4".encodeToByteArray().size
-                bytes[abiOffset] = 2
+                bytes[abiOffset] = 3
             }
         assertFailsWith<IllegalArgumentException> { PlatformBundleCodec.decode(unsupportedAbi) }
 

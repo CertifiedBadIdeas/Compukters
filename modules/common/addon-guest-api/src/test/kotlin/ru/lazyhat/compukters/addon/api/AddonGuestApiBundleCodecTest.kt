@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.addon.api
 
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformCompletionDeclaration
 import ru.lazyhat.compukters.platform.bundle.PlatformCompletionKind
 import ru.lazyhat.compukters.platform.bundle.PlatformDeclaration
@@ -168,7 +169,7 @@ class AddonGuestApiBundleCodecTest {
         if (extraOperation) operations += AddonCapabilityOperation(listOf(AddonCapabilityValueType.I32), result, asynchronous = false)
         return AddonGuestApiBundleCodec.assemble(
             "fixture",
-            platformAbi = 1,
+            platformAbi = PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
             module,
             listOf(AddonCapabilitySchema(capability, operations)),
             listOf(AddonGuestApiBinding("fixture.meters", "MeterBindings", callableName, signature, capability, operation)),

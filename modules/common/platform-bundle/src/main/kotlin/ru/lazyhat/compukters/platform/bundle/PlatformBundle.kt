@@ -140,6 +140,7 @@ data class PlatformModule(
     val completionDeclarations: List<PlatformCompletionDeclaration>,
     val scalarTypes: List<PlatformScalarType> = emptyList(),
     val scalarConstants: List<PlatformScalarConstant> = emptyList(),
+    val sourceOnly: Boolean = false,
 )
 
 data class PlatformBundle(

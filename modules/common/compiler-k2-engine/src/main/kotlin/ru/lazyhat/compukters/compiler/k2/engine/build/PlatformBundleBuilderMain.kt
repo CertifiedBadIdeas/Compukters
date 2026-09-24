@@ -120,7 +120,7 @@ class PlatformBundleBuilder(
                 val sources = sourceByModule.getValue(descriptorModule.id)
                 val metadata = metadataByModule.getValue(descriptorModule.id)
                 val libraryFragment =
-                    if (metadata.libraryDeclarations.isEmpty()) {
+                    if (metadata.sourceOnly || metadata.libraryDeclarations.isEmpty()) {
                         null
                     } else {
                         val converted = requireNotNull(ir)
@@ -147,6 +147,7 @@ class PlatformBundleBuilder(
                         completionDeclarations = metadata.completionDeclarations,
                         scalarTypes = metadata.scalarTypes,
                         scalarConstants = metadata.scalarConstants,
+                        sourceOnly = descriptorModule.id != builtinsId && metadata.sourceOnly,
                     )
             }
         }

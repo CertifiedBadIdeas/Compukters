@@ -138,10 +138,7 @@ class K2CompilerAdapter(
                 selected.filter { module ->
                     module.id != platform.builtins.id &&
                         platform.modules.any { packaged -> packaged.id == module.id } &&
-                        module.libraryFragment == null &&
-                        module.declarations.any { declaration ->
-                            !declaration.trustedExternal && declaration.signature.startsWith("fun(")
-                        }
+                        module.sourceOnly
                 }
             val librarySourceNames =
                 sourceLibraries.flatMap { module ->
