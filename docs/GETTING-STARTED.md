@@ -19,10 +19,9 @@ terminal workflow. Both produce the same verified Compukter executable format.
 | Java | **JDK 25** for 26.1.2; **Java 21** for 1.21.1 |
 | Packaged native runtime | **Linux x86_64** or **Windows x86_64** |
 
-The independently distributed Create addon is optional on Minecraft 1.21.1. To use it, install both the addon and
-Create 6.0.10 through 6.0.x on client and server. It provides [kinetic devices](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/),
-[Stock Ticker logistics](https://certifiedbadideas.github.io/Compukters/CREATE-LOGISTICS/), and
-[steam boiler monitoring](https://certifiedbadideas.github.io/Compukters/CREATE-BOILERS/).
+The independently distributed [Create addon]({{ '/CREATE/' | relative_url }}) is optional on Minecraft 1.21.1. To use
+it, install both the addon and Create 6.0.10 through 6.0.x on client and server. It supports kinetic devices, Stock
+Ticker logistics, and steam boiler monitoring.
 
 The mod is required on both the client and server. macOS and ARM builds are not part of the current published
 artifacts.
@@ -127,7 +126,7 @@ I/O, processes, and redstone are admitted through bounded runtime contracts.
 
 - Connect a program to the world with [Redstone GPIO](https://certifiedbadideas.github.io/Compukters/REDSTONE/).
 - Put program output on an in-world [Text display](https://certifiedbadideas.github.io/Compukters/DISPLAY/).
-- Read and control adjacent Create devices with [Create kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/).
+- Explore kinetics, Stock Tickers, and boilers in the [Create addon guide]({{ '/CREATE/' | relative_url }}).
 - Check exact language support in the [Guest Kotlin support matrix](https://certifiedbadideas.github.io/Compukters/KOTLIN-SUPPORT/).
 - Contributors can continue with [Architecture](https://certifiedbadideas.github.io/Compukters/ARCHITECTURE/) and [Verification](https://certifiedbadideas.github.io/Compukters/VERIFICATION/).
 - Report a reproducible problem through [GitHub Issues](https://github.com/CertifiedBadIdeas/Compukters/issues).
