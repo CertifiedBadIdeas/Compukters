@@ -17,6 +17,7 @@ import net.minecraft.network.chat.Component
 import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import ru.lazyhat.compukters.impl.terminal.fontDescription
 import ru.lazyhat.compukters.minecraft.display.DisplayBlock
+import ru.lazyhat.compukters.minecraft.display.DisplayTextLayout
 
 class DisplayBlockEntityRenderer(
     context: BlockEntityRendererProvider.Context,
@@ -39,14 +40,13 @@ class DisplayBlockEntityRenderer(
         pose.mulPose(Axis.YP.rotationDegrees(-entity.blockState.getValue(DisplayBlock.FACING).toYRot()))
         pose.translate(0.0, 0.0, 0.503)
         pose.scale(SCALE, -SCALE, SCALE)
-        rows.forEachIndexed { y, row ->
-            if (row.isBlank()) return@forEachIndexed
+        DisplayTextLayout.forEachGlyph(rows, profile) { x, y, codePoint ->
             val text =
-                Component.literal(profile.mapRow(row).trimEnd()).withStyle { style -> style.withFont(profile.fontDescription) }
+                Component.literal(String(Character.toChars(codePoint))).withStyle { style -> style.withFont(profile.fontDescription) }
             font.drawInBatch(
                 text,
-                -60f,
-                -50f + y * 10f,
+                x.toFloat(),
+                y.toFloat(),
                 TEXT_COLOR,
                 false,
                 pose.last().pose(),
@@ -58,11 +58,6 @@ class DisplayBlockEntityRenderer(
         }
         pose.popPose()
     }
-
-    private fun TerminalFontProfile.mapRow(row: String): String =
-        buildString {
-            row.codePoints().forEach { codePoint -> appendCodePoint(renderCodePoint(codePoint)) }
-        }
 
     private companion object {
         const val SCALE = 0.0065f
