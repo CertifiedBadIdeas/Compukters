@@ -19,6 +19,11 @@ use semantic editing and analysis, then deploy verified programs into a determin
 <span class="version-chip">NeoForge</span>
 <span class="version-chip">Java 21 / 25</span>
 
+<figure class="showcase">
+  <img src="{{ '/assets/images/boiler_showcase.png' | relative_url }}" alt="A Compukters text display showing live water, heat, and level readings beside a Create steam boiler">
+  <figcaption>A computer monitors a Create steam boiler and writes its readings to a text display.</figcaption>
+</figure>
+
 <div class="feature-grid">
   <section class="feature-card">
     <h3>Integrated Kotlin IDE</h3>
@@ -30,7 +35,7 @@ use semantic editing and analysis, then deploy verified programs into a determin
   </section>
   <section class="feature-card">
     <h3>Real automation</h3>
-    <p>Deploy from the IDE, automate redstone, and connect named Create kinetic devices through passive cables on Minecraft 1.21.1.</p>
+    <p>Automate redstone, write to in-world displays, and connect named Create devices through passive cables on Minecraft 1.21.1.</p>
   </section>
 </div>
 

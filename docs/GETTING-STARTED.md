@@ -19,8 +19,10 @@ terminal workflow. Both produce the same verified Compukter executable format.
 | Java | **JDK 25** for 26.1.2; **Java 21** for 1.21.1 |
 | Packaged native runtime | **Linux x86_64** or **Windows x86_64** |
 
-Create 6.0.10 through 6.0.x is an optional dependency on Minecraft 1.21.1. Install it on both client and server only
-when using the [Create kinetics Guest API](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/).
+The independently distributed Create addon is optional on Minecraft 1.21.1. To use it, install both the addon and
+Create 6.0.10 through 6.0.x on client and server. It provides [kinetic devices](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/),
+[Stock Ticker logistics](https://certifiedbadideas.github.io/Compukters/CREATE-LOGISTICS/), and
+[steam boiler monitoring](https://certifiedbadideas.github.io/Compukters/CREATE-BOILERS/).
 
 The mod is required on both the client and server. macOS and ARM builds are not part of the current published
 artifacts.
