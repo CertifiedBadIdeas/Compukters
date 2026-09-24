@@ -11,6 +11,7 @@ theme: null
 
 exclude:
   - api-build
+  - guest-source
 
 plugins:
   - jekyll-relative-links
