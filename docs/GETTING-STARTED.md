@@ -115,9 +115,9 @@ block as a portable disk.
 ## Current boundaries
 
 Compukters intentionally supports a focused Kotlin subset. Do not assume that arbitrary Kotlin/JVM libraries, Java
-interop, reflection, threads, ordinary coroutines, collections, or exceptions are available. The
-[Guest Kotlin support matrix](https://certifiedbadideas.github.io/Compukters/KOTLIN-SUPPORT/) is the compatibility contract for language features, standard-library
-operations, Guest APIs, and IDE behavior.
+interop, reflection, threads, ordinary coroutines, collections, or exceptions are available.
+The [Guest Kotlin support matrix]({{ '/KOTLIN-SUPPORT/' | relative_url }}) describes language features, Guest APIs, and
+IDE behavior. The [stdlib support matrix]({{ '/STDLIB-SUPPORT/' | relative_url }}) lists callable Kotlin APIs.
 
 Programs execute in a deterministic managed VM rather than a general JVM. CPU work, memory, filesystem access, terminal
 I/O, processes, and redstone are admitted through bounded runtime contracts.

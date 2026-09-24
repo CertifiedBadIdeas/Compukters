@@ -42,7 +42,8 @@ use semantic editing and analysis, then deploy verified programs into a determin
 ## Choose a path
 
 - **New player:** follow [Getting started](https://certifiedbadideas.github.io/Compukters/GETTING-STARTED/) from installation to your first running program.
-- **Guest Kotlin author:** check the exact [Kotlin support matrix](https://certifiedbadideas.github.io/Compukters/KOTLIN-SUPPORT/) before relying on a language or library feature.
+- **Guest Kotlin author:** check the [Kotlin support matrix]({{ '/KOTLIN-SUPPORT/' | relative_url }}) for language features and
+  the [stdlib support matrix]({{ '/STDLIB-SUPPORT/' | relative_url }}) for callable APIs.
 - **Automation builder:** learn the local-side model in [Redstone GPIO](https://certifiedbadideas.github.io/Compukters/REDSTONE/).
 - **Dashboard builder:** write to an independent in-world [Text display](https://certifiedbadideas.github.io/Compukters/DISPLAY/) beside the computer or over peripheral cables.
 - **Create engineer:** start with the [Create addon guide]({{ '/CREATE/' | relative_url }}) for kinetic devices, Stock Tickers, steam boilers, and peripheral cables.

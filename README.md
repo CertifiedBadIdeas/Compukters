@@ -29,8 +29,9 @@ The primary game baseline is **Minecraft 26.1.2**, **NeoForge 26.1.2.97**, and
 archive uses Minecraft's official names directly; the 1.21.1 archive is remapped
 during packaging. Neither archive requires Architectury at runtime.
 
-See the [Guest Kotlin support matrix](docs/KOTLIN-SUPPORT.md) for the current
-language, standard-library, Guest API, and IDE compatibility boundaries.
+See the [Guest Kotlin support matrix](docs/KOTLIN-SUPPORT.md) for the language subset and the
+[stdlib support matrix](docs/STDLIB-SUPPORT.md) for available Kotlin library APIs. The former also covers Guest APIs
+and IDE compatibility boundaries.
 New players can follow the [getting-started guide](docs/GETTING-STARTED.md), also
 published as the [Compukters documentation site](https://certifiedbadideas.github.io/Compukters/).
 See [Redstone GPIO](docs/REDSTONE.md) for local-side input waits, persistent
