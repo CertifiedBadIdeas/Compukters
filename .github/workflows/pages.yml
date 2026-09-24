@@ -33,8 +33,6 @@ jobs:
       - name: Configure Pages
         id: pages
         uses: actions/configure-pages@v5
-      - name: Generate Guest Kotlin source browser
-        run: python3 docs/_tools/build_guest_source.py
       - name: Generate Guest Kotlin API reference
         run: ./gradlew -p docs/api-build dokkaGeneratePublicationHtml --no-daemon
       - name: Stage Guest Kotlin API reference

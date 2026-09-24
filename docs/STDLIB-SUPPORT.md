@@ -19,8 +19,8 @@ describes language syntax and lowering. The matrix describes this repository rev
 
 The canonical declarations live in [`guest-platform`](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/modules/common/guest-platform/src/platform).
 Only selected Compukters platform modules participate in Guest name resolution; host Kotlin/JVM dependencies do not.
-You can also [browse every bundled Guest Kotlin source file]({{ '/guest-source/' | relative_url }}) on this site.
-The [Guest API reference]({{ '/guest-api/' | relative_url }}) indexes public declarations by package and symbol.
+The [Guest API reference]({{ '/guest-api/' | relative_url }}) indexes public declarations by package and symbol and
+links to their source files.
 
 ## Core and text
 
