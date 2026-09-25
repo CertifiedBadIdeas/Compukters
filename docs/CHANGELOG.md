@@ -36,7 +36,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   Values held as `Any` can be compared with `==` or `equals`: boxed `Int` compares by value, strings by content,
   supported data classes compare their constructor properties, and Guest classes honor explicit `equals` overrides.
   Other classes use default identity equality. Lists support `isEmpty`, `isNotEmpty`, `contains` / `in`, `indexOf`,
-  and `lastIndexOf`; searches use the supported equality semantics.
+  and `lastIndexOf`; searches use the supported equality semantics. `Iterable<T>` supports `any`, `all`, and `none`
+  with predicates and early termination, including for user-defined iterables and lists.
 - Computer programs can use unboxed `Long` and `Float` values, including mixed numeric arithmetic and comparisons,
   direct `compareTo` calls between `Int` and `Long`, explicit conversions, `Long` bitwise and shift operations,
   constants, string interpolation, and console output.

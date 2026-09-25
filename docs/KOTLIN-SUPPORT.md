@@ -279,7 +279,9 @@ supported.
   `Int` remains unboxed in both calls and fields. Source-only platform library
   modules containing generic functions or final generic classes are specialized
   in a consumer; generic class methods and constructor fields retain concrete
-  `Int` and reference layouts.
+  `Int` and reference layouts. Function-valued parameters of source-only
+  generic functions use the specialized element type, as exercised by the
+  `Iterable<T>` predicate helpers.
   Concrete generic interfaces and covariant result interfaces support the read-only `List<T>` contract.
   Contravariance, reified parameters, generic
   value classes, generic methods declaring their own type parameters, nullable
@@ -290,7 +292,8 @@ supported.
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `generic identity specializes primitive and reference calls`,
   `generic cell specializes field layout and preserves aliases`,
-  `generic interface dispatch retains concrete Int and reference types`, and
+  `generic interface dispatch retains concrete Int and reference types`,
+  `list Int covariance to Any preserves the list and boxes reads`, and
   `unsupported generic forms report source diagnostics without artifacts`;
   [`K2CompilerAdapterTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/K2CompilerAdapterTest.kt),
   test `source library generic functions and classes specialize in consumer`; VM
@@ -613,6 +616,12 @@ supported.
   `CharArray` and `IntArray` have no source-level Guest representation even
   though the VM can store every primitive array width. Tracking: not scheduled
 
+- [x] **`Iterable<T>` predicate operations** — `any`, `all`, and `none` use `iterator()` and stop when the result is
+  known. Empty iterables return `false`, `true`, and `true`, respectively. They work through `Iterable<Int>` and
+  `Iterable<Any>` references and on a user-defined `Iterable<Int>`. Evidence:
+  [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `list Int covariance to Any preserves the list and boxes reads`, executed by `testKotlinListAnyVmConformance`.
+
 - [ ] **Read-only `List<T>` — Partial** — direct `listOf(...)`, `listOf<T>()`, and `emptyList<T>()` support non-null
   `Int`, `String`, and supported Guest class references. `size`, indexed `get`, and ordinary `for` iteration execute
   through concrete specialized implementations. `List<Int>` stores and returns unboxed i32 values; list aliases refer
@@ -623,6 +632,7 @@ supported.
   `listOf<Any>(...)` stores boxed `Int` and supported references in one array; indexed reads reuse those references.
   `isEmpty` and `isNotEmpty` inspect `size`. `contains` / `in`, `indexOf`, and `lastIndexOf` use the supported `==`
   semantics; the searches return the first or last match respectively, or `-1` when no element matches.
+  The `Iterable<T>` predicate extensions above also work on these lists.
   These functions are Guest `kotlin.collections` extensions and require imports. Nullable elements, unsupported
   primitive element types, spread arguments, mutable collections, `Set`, `Map`, sequences, and other collection
   algorithms are unavailable. Evidence:

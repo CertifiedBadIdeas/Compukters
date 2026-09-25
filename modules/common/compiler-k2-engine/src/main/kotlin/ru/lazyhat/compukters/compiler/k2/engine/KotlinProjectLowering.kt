@@ -1063,21 +1063,6 @@ internal object KotlinProjectLowering {
                 .associateByTo(linkedMapOf()) { it.symbol }
                 .values
                 .toList()
-        val functionShapes =
-            buildList {
-                fun include(shape: GuestFunctionShape) {
-                    if (shape in this) return
-                    add(shape)
-                    (shape.parameters + shape.result).mapNotNull(IrType::guestFunctionShape).forEach(::include)
-                }
-                closureSources.mapNotNull { it.expression.type.guestFunctionShape() }.forEach(::include)
-                userFunctions.forEach { function ->
-                    function.returnType.guestFunctionShape()?.let(::include)
-                    loweredParameters(function, session).mapNotNull { it.type.guestFunctionShape() }.forEach(::include)
-                }
-            }
-        val unitBlockShape = GuestFunctionShape(emptyList(), pluginContext.irBuiltIns.unitType)
-        val usesFunction0Unit = unitBlockShape in functionShapes
         require(userFunctions.firstOrNull() === entry)
         val userClasses =
             collectGuestClasses(
@@ -1109,6 +1094,23 @@ internal object KotlinProjectLowering {
                     }
                 },
             )
+        val functionShapes =
+            buildList {
+                fun include(shape: GuestFunctionShape) {
+                    if (shape in this) return
+                    add(shape)
+                    (shape.parameters + shape.result).mapNotNull(IrType::guestFunctionShape).forEach(::include)
+                }
+                closureSources.mapNotNull { it.expression.type.guestFunctionShape() }.forEach(::include)
+                functionInstances.forEach { instance ->
+                    instance.substitute(instance.declaration.returnType).guestFunctionShape()?.let(::include)
+                    loweredParameters(instance.declaration, session)
+                        .mapNotNull { parameter -> instance.substitute(parameter.type).guestFunctionShape() }
+                        .forEach(::include)
+                }
+            }
+        val unitBlockShape = GuestFunctionShape(emptyList(), pluginContext.irBuiltIns.unitType)
+        val usesFunction0Unit = unitBlockShape in functionShapes
         val constructorInstances =
             classInstances.filter { instance ->
                 instance.declaration.kind == ClassKind.CLASS && instance.declaration.constructors.any { it.isPrimary }
@@ -4246,7 +4248,7 @@ private class FunctionCompiler(
         ) {
             val receiverExpression = dispatchReceiver(call, target, targetName)
             val shape =
-                receiverExpression.type.guestFunctionShape()
+                resolvedType(receiverExpression.type).guestFunctionShape()
                     ?: throw UnsupportedKotlinIr(call, "unsupported function-value receiver type")
             val invokeId =
                 invokeFunctionIds[shape]
