@@ -1199,6 +1199,22 @@ fn k2_float_executes_arithmetic_conversions_comparisons_and_text() {
             "println Float constants",
             "1.4E-45:3.4028235E38:Infinity:-Infinity:NaN:-0.0\n",
         ),
+        ("println NaN versus NaN", "0\n"),
+        ("println NaN versus infinity", "1\n"),
+        ("println infinity versus NaN", "-1\n"),
+        ("println negative zero versus zero", "-1\n"),
+        ("println zero versus negative zero", "1\n"),
+        ("println equal zeroes", "0\n"),
+        ("println Float versus Int", "-1\n"),
+        ("println Int versus Float", "1\n"),
+        ("println Long versus Float", "0\n"),
+        ("println NaN versus Long", "1\n"),
+        ("println Long versus NaN", "-1\n"),
+        ("println Int zero versus Float negative zero", "1\n"),
+        ("println Float negative zero versus Long zero", "-1\n"),
+        ("println Float left operand", "float-left\n"),
+        ("println Int right operand", "int-right\n"),
+        ("println evaluated operands compareTo", "-1\n"),
     ] {
         let value = utf16(expected);
         let write = next_host_request(&mut session, label, 1, Some(&value));

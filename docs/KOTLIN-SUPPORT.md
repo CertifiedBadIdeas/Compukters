@@ -133,11 +133,14 @@ supported.
 
 - [x] **Floating-point arithmetic** — unboxed `Float` supports `+`, `-`, `*`, `/`,
   `%`, unary minus, equality, and ordered comparisons. Operations can mix `Float`
-  with `Int` or `Long`; integral operands widen to F32. `MIN_VALUE`, `MAX_VALUE`,
+  with `Int` or `Long`; integral operands widen to F32. Direct `compareTo`
+  calls use total ordering: `NaN` equals itself and sorts above all numbers,
+  while `-0.0F` sorts below `0.0F`. `MIN_VALUE`, `MAX_VALUE`,
   `POSITIVE_INFINITY`, `NEGATIVE_INFINITY`, and `NaN` are available, and text
   conversion preserves JVM spellings including signed zero. Evidence:
   `Float arithmetic conversions comparisons and text lower for vm conformance` and
-  `Float variable equality lowers from the K2 IEEE intrinsic`.
+  `Float variable equality lowers from the K2 IEEE intrinsic`, paired with
+  `testKotlinFloatVmConformance`.
   Tracking: [#620](https://github.com/CertifiedBadIdeas/Compukters/issues/620)
 
 - [ ] **Conversions — Partial** — `Int.toChar()`, `Int.toLong()`, `Long.toInt()`,
