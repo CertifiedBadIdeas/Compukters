@@ -71,8 +71,9 @@ links to their source files.
   supported Guest class references. `size`, indexed `get`, and direct `for` iteration work; an out-of-range index
   traps. `Int` storage and typed reads remain unboxed. A `List<Int>` can widen to `List<Any>` without changing list
   identity; universal reads box each `Int`, and `is Int` / `as Int` recover its type and value. Supported reference lists
-  also widen to `List<Any>` without copying their elements. Universal value equality,
-  hashing, and text dispatch remain unavailable. Direct `listOf<Any>` construction, nullable elements, and spread
+  also widen to `List<Any>` without copying their elements. Direct `listOf<Any>` construction stores mixed boxed `Int`
+  and supported references in one array; indexed reads and iteration preserve element identity. Universal value equality,
+  hashing, and text dispatch remain unavailable. Direct `Array<Any>` factories, nullable elements, and spread
   arguments are unsupported. Evidence:
   `testKotlinListVmConformance`, `testKotlinListAnyVmConformance`, `testKotlinListAnyQuotaVmConformance`,
   `testKotlinListBoundsVmConformance`, `testKotlinListQuotaVmConformance`, and

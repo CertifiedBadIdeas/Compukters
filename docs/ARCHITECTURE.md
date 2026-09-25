@@ -126,7 +126,9 @@ and iterator methods are specialized in the consuming artifact. Covariant wideni
 list and backing array. The compiler publishes `get`, `iterator`, and `next` bridges with reference result signatures
 alongside the typed methods. An `Int` read through `Any` allocates an ordinary managed `kotlin.Int` box; a reference
 read preserves the element reference. The box's runtime type and i32 payload support checked `is Int` and `as Int`,
-while typed paths remain unboxed. Universal value equality, hash, and string dispatch are outside the admitted subset
+while typed paths remain unboxed. Direct `List<Any>` factories use a local nominal `Array<Any>` whose reference slots
+hold boxed `Int` and supported objects; each value is converted once before storage. Direct source `Array<Any>`
+factories remain unsupported. Universal value equality, hash, and string dispatch are outside the admitted subset
 until the wider #581 runtime semantics are implemented.
 
 Concrete `Array<GuestClass>` uses become distinct local nominal array types whose elements are exact Guest class

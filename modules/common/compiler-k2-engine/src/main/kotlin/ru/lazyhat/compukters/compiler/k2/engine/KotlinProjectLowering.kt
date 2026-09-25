@@ -2502,13 +2502,22 @@ internal object KotlinProjectLowering {
                         } else {
                             emptyList()
                         } +
-                        referenceArrays.map { (name, instance) ->
+                        referenceArrays.map { (name, element) ->
                             NominalType.Array(
                                 name = requireNotNull(metadataIds[name]),
                                 element =
                                     ValueType.Ref(
                                         nullable = false,
-                                        type = TypeRef.Local(requireNotNull(classInstanceTypeIds[instance])),
+                                        type =
+                                            when (element) {
+                                                ReferenceArrayElement.Universal -> {
+                                                    TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))
+                                                }
+
+                                                is ReferenceArrayElement.GuestClass -> {
+                                                    TypeRef.Local(requireNotNull(classInstanceTypeIds[element.instance]))
+                                                }
+                                            },
                                     ),
                             )
                         } + initializerTypes + topLevelInitializerTypes + externalFunctionTypes,
@@ -4688,6 +4697,9 @@ private class FunctionCompiler(
         target: IrSimpleFunction,
     ): RegisterId? {
         val resolvedCallType = resolvedType(call.type)
+        if (guestTypes.arrayElement(resolvedCallType)?.isKotlinAny() == true) {
+            throw UnsupportedKotlinIr(call, "direct Array<Any> factories are outside the project subset")
+        }
         val arrayType =
             if (guestTypes.isStringArray(resolvedCallType)) {
                 stringArrayType
@@ -6276,12 +6288,20 @@ private class StringArrayUsageCollector(
     }
 }
 
+private sealed interface ReferenceArrayElement {
+    data object Universal : ReferenceArrayElement
+
+    data class GuestClass(
+        val instance: GuestClassInstance,
+    ) : ReferenceArrayElement
+}
+
 private class ReferenceArrayUsageCollector(
     private val guestTypes: GuestTypeRegistry,
     private val classes: Map<IrClassSymbol, IrClass>,
     private val instances: Set<GuestClassInstance>,
 ) {
-    val arrays = linkedMapOf<String, GuestClassInstance>()
+    val arrays = linkedMapOf<String, ReferenceArrayElement>()
 
     fun consider(
         type: IrType,
@@ -6290,8 +6310,12 @@ private class ReferenceArrayUsageCollector(
         val resolved = substitute(type)
         val element = guestTypes.arrayElement(resolved) ?: return
         if (element.isNullable()) return
+        if (element.isKotlinAny()) {
+            arrays[resolved.canonicalPlatformType()] = ReferenceArrayElement.Universal
+            return
+        }
         val instance = element.classInstance(classes) ?: return
-        if (instance in instances) arrays[resolved.canonicalPlatformType()] = instance
+        if (instance in instances) arrays[resolved.canonicalPlatformType()] = ReferenceArrayElement.GuestClass(instance)
     }
 
     fun scan(

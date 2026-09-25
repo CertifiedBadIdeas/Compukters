@@ -30,7 +30,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   iterate with `for`. The first supported elements are non-null `Int`, `String`, and Guest class references; `List<Int>`
   keeps unboxed storage and typed reads. A `List<Int>` can also be used as `List<Any>` without copying the list; reads
   through that view produce boxed `Int` values that can be checked with `is Int` and cast back with `as Int`. Supported
-  reference lists also widen to `List<Any>` while retaining their element references.
+  reference lists also widen to `List<Any>` while retaining their element references. Programs can construct a mixed
+  `List<Any>` directly from `Int`, strings, and supported objects; its `Int` elements are boxed when the list is built.
 - Computer programs can use unboxed `Long` and `Float` values, including mixed numeric arithmetic and comparisons,
   explicit conversions, `Long` bitwise and shift operations, constants, string interpolation, and console output.
 - `Float` values retain their binary32 representation through arithmetic, equality, host responses, and conversion to
