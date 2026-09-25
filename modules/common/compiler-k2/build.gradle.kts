@@ -296,6 +296,7 @@ tasks.test {
 }
 
 val kotlinSubsetConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")
+val namedCallsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-named-calls.cpkt")
 val blockingCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/blocking-call.cpkt")
 val transparentCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/transparent-call.cpkt")
 val tasksConformanceArtifact = layout.buildDirectory.file("generated/conformance/tasks.cpkt")
@@ -351,6 +352,22 @@ val generateKotlinSubsetConformanceArtifact = tasks.register<Test>("generateKotl
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.kotlinSubsetArtifact", kotlinSubsetConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateNamedCallsConformanceArtifact = tasks.register<Test>("generateNamedCallsConformanceArtifact") {
+    description = "Compiles same-named Guest and intrinsic calls for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*same-named guest calls preserve their resolved targets for vm conformance*")
+    inputs.file(workerJar)
+    outputs.file(namedCallsConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.namedCallsArtifact", namedCallsConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

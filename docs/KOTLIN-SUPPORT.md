@@ -217,7 +217,9 @@ supported.
   Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `multi-file terminal program lowers through trusted symbols` and
-  `same-named guest function remains an ordinary project call`.
+  `same-named guest function remains an ordinary project call`, plus
+  `same-named guest calls preserve their resolved targets for vm conformance`
+  paired with `testKotlinNamedCallsVmConformance`.
   Tracking: not scheduled
 
 - [x] **Transparent blocking across project calls** — an ordinary Guest
@@ -251,7 +253,9 @@ supported.
   Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `same-named char array helper remains an ordinary project call` and
-  `same-named guest function remains an ordinary project call`.
+  `same-named guest function remains an ordinary project call`, plus
+  `same-named guest calls preserve their resolved targets for vm conformance`
+  paired with `testKotlinNamedCallsVmConformance`.
   Tracking: not scheduled
 
 - [ ] **Named and vararg arguments — Partial** — ordinary K2 argument binding
