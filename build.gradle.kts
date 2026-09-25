@@ -625,6 +625,15 @@ registerKotlinVmConformance(
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_FLOAT_ARTIFACT",
     conformanceScenario = "float",
 )
+registerKotlinVmConformance(
+    taskName = "testKotlinStringCompareVmConformance",
+    taskDescription = "Executes Guest Kotlin String.compareTo with UTF-16 ordering on the pinned VM.",
+    artifactTask = ":compiler-k2:generateStringCompareConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-string-compare.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-string-compare-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_STRING_COMPARE_ARTIFACT",
+    conformanceScenario = "string-compare",
+)
 
 val buildScriptsTest = gradle.includedBuild("build-scripts").task(":test")
 

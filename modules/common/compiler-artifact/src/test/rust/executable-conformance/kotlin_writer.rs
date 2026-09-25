@@ -33,6 +33,7 @@ fn main() {
         "generic-library" => k2_generic_library_specializes_in_consumer(),
         "reference-array" => k2_reference_arrays_retain_typed_guest_objects(),
         "float" => k2_float_executes_arithmetic_conversions_comparisons_and_text(),
+        "string-compare" => k2_string_compare_uses_utf16_code_units(),
         "platform-scalar" => k2_platform_scalar_precondition_traps_before_publishing_a_value(),
         "argv" => k2_string_array_entry_executes_exact_utf16_arguments(),
         "subset" => k2_string_materialization_executes_char_arrays_and_scalar_templates(),
@@ -959,6 +960,16 @@ fn k2_same_named_guest_calls_preserve_resolved_targets() {
         [
             "23\n", "Z\n", "false\n", "false\n", "24\n", "35\n", "5\n", "a\n", "true\n",
             "true\n",
+        ],
+        128,
+    );
+}
+
+fn k2_string_compare_uses_utf16_code_units() {
+    k2_expected_prints_with_budget(
+        "COMPUKTER_KOTLIN_STRING_COMPARE_ARTIFACT",
+        [
+            "0\n", "-1\n", "-2\n", "2\n", "2\n", "0\n", "-1\n", "1\n", "left\n", "right\n", "-1\n",
         ],
         128,
     );

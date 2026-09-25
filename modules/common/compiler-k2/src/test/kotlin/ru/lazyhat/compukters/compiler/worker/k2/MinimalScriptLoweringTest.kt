@@ -420,6 +420,49 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `String compareTo lowers UTF-16 ordering for vm conformance`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                fun leftOperand(): String {
+                    println("left")
+                    return "abc"
+                }
+
+                fun rightOperand(): String {
+                    println("right")
+                    return "abd"
+                }
+
+                fun main() {
+                    println("".compareTo(""))
+                    println("".compareTo("a"))
+                    println("ab".compareTo("abcd"))
+                    println("abcd".compareTo("ab"))
+                    println("c".compareTo("a"))
+                    println("abc".compareTo("abc"))
+                    println("😀".compareTo("😁"))
+                    println("😀".compareTo("🀄"))
+                    println(leftOperand().compareTo(rightOperand()))
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val bytes = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            val artifact = ArtifactReader.read(bytes)
+            val instructions = artifact.modules.flatMap { module -> module.blocks.flatMap(Block::instructions) }
+
+            assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            assertTrue(instructions.any { it is Instruction.StringLength })
+            assertTrue(instructions.any { it is Instruction.StringGet })
+            assertTrue(instructions.any { it is Instruction.Convert })
+            System.getProperty("compukter.vm.stringCompareArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `top level IntChannel lowers to VM owned bounded handoff`() =
         withAdapter { adapter ->
             val source =
