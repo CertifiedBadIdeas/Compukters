@@ -24,6 +24,7 @@ fn main() {
         "long" => k2_long_executes_arithmetic_conversions_comparisons_and_text(),
         "generic-functions" => k2_generic_functions_preserve_primitive_and_reference_values(),
         "generic-cell" => k2_generic_cell_preserves_typed_fields_and_aliases(),
+        "generic-interface" => k2_generic_interface_dispatches_concrete_types(),
         "generic-library" => k2_generic_library_specializes_in_consumer(),
         "reference-array" => k2_reference_arrays_retain_typed_guest_objects(),
         "float" => k2_float_executes_arithmetic_conversions_comparisons_and_text(),
@@ -938,6 +939,10 @@ fn k2_generic_functions_preserve_primitive_and_reference_values() {
 
 fn k2_generic_cell_preserves_typed_fields_and_aliases() {
     k2_expected_prints("COMPUKTER_KOTLIN_GENERIC_CELL_ARTIFACT", ["42\n", "second\n"]);
+}
+
+fn k2_generic_interface_dispatches_concrete_types() {
+    k2_expected_prints("COMPUKTER_KOTLIN_GENERIC_INTERFACE_ARTIFACT", ["7\n", "hello\n"]);
 }
 
 fn k2_generic_library_specializes_in_consumer() {
