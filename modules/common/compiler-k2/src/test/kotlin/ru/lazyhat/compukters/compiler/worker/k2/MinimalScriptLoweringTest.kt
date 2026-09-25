@@ -2022,6 +2022,7 @@ class MinimalScriptLoweringTest {
             val source =
                 """
                 import kotlin.collections.List
+                import kotlin.collections.Collection
                 import kotlin.collections.Iterable
                 import kotlin.collections.Iterator
                 import kotlin.collections.all
@@ -2029,7 +2030,6 @@ class MinimalScriptLoweringTest {
                 import kotlin.collections.contains
                 import kotlin.collections.emptyList
                 import kotlin.collections.indexOf
-                import kotlin.collections.isEmpty
                 import kotlin.collections.isNotEmpty
                 import kotlin.collections.lastIndexOf
                 import kotlin.collections.listOf
@@ -2059,6 +2059,12 @@ class MinimalScriptLoweringTest {
                         nextValue += 1
                         return value
                     }
+                }
+                class TwoNumbersCollection : Collection<Int> {
+                    override val size: Int get() = 2
+                    override fun isEmpty(): Boolean = false
+                    override fun contains(element: Int): Boolean = element == 1 || element == 2
+                    override fun iterator(): Iterator<Int> = TwoNumbersIterator()
                 }
                 fun main() {
                     val numbers: List<Int> = listOf(7, 9)
@@ -2180,10 +2186,37 @@ class MinimalScriptLoweringTest {
                     require(iterableNumbers.all { value -> value > 0 })
                     val iterableAll: Iterable<Any> = all
                     require(iterableAll.none { value -> value is String })
+                    require(7 in iterableAll)
+                    require(iterableAll.indexOf(9) == 1)
                     val customIterable: Iterable<Int> = TwoNumbers()
                     require(customIterable.any { value -> value == 2 })
                     require(customIterable.all { value -> value > 0 })
                     require(customIterable.none { value -> value > 2 })
+                    require(2 in customIterable)
+                    require(3 !in customIterable)
+                    require(customIterable.indexOf(2) == 1)
+                    require(customIterable.lastIndexOf(1) == 0)
+                    val repeatedIterable: Iterable<Int> = listOf(7, 9, 7)
+                    require(repeatedIterable.indexOf(7) == 0)
+                    require(repeatedIterable.lastIndexOf(7) == 2)
+                    val collectionNumbers: Collection<Int> = numbers
+                    require(collectionNumbers.size == 2)
+                    require(!collectionNumbers.isEmpty())
+                    require(collectionNumbers.isNotEmpty())
+                    require(9 in collectionNumbers)
+                    val collectionAll: Collection<Any> = collectionNumbers
+                    require(7 in collectionAll)
+                    require("missing" !in collectionAll)
+                    val collectionWords: Collection<Any> = words
+                    require("word" in collectionWords)
+                    require(7 !in collectionWords)
+                    require(emptyList<Int>().isEmpty())
+                    val customCollection: Collection<Int> = TwoNumbersCollection()
+                    require(customCollection.size == 2)
+                    require(!customCollection.isEmpty())
+                    require(customCollection.isNotEmpty())
+                    require(2 in customCollection)
+                    require(customCollection.indexOf(2) == 1)
                 }
                 """.trimIndent()
             val result = adapter.compile(request(source))

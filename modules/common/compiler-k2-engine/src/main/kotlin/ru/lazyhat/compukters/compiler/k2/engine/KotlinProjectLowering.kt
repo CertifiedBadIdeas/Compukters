@@ -1177,9 +1177,11 @@ internal object KotlinProjectLowering {
                 val bridgeName =
                     when (function.fqNameWhenAvailable?.asString()) {
                         "kotlin.collections.IntArrayBackedList.getAny" -> "get"
+                        "kotlin.collections.IntArrayBackedList.containsAny" -> "contains"
                         "kotlin.collections.IntArrayBackedList.iteratorAny" -> "iterator"
                         "kotlin.collections.IntArrayBackedListIterator.nextAny" -> "next"
                         "kotlin.collections.ArrayBackedList.getAny" -> "get"
+                        "kotlin.collections.ArrayBackedList.containsAny" -> "contains"
                         "kotlin.collections.ArrayBackedList.iteratorAny" -> "iterator"
                         "kotlin.collections.ArrayBackedListIterator.nextAny" -> "next"
                         else -> null
@@ -4468,9 +4470,11 @@ private class FunctionCompiler(
             return compileBuiltinCall(call, target, argumentExpressions, arguments)
         }
         val specialization = projectFunctionInstance(call, target)
+        val receiverSpecialization = resolveClassInstance(call.dispatchReceiver?.type)
         val arguments =
             resolveProjectCallArguments(call, target).zip(loweredParameters(target, session)).map { (argument, parameter) ->
-                compileCallArgument(argument, specialization?.substitute(parameter.type) ?: parameter.type)
+                val parameterType = specialization?.substitute(parameter.type) ?: receiverSpecialization?.substitute(parameter.type)
+                compileCallArgument(argument, parameterType ?: parameter.type)
             }
         val destination = destinationFor(call.type, call)
         if (target.isSuspend) {

@@ -616,24 +616,26 @@ supported.
   `CharArray` and `IntArray` have no source-level Guest representation even
   though the VM can store every primitive array width. Tracking: not scheduled
 
-- [x] **`Iterable<T>` predicate operations** — `any`, `all`, and `none` use `iterator()` and stop when the result is
-  known. Empty iterables return `false`, `true`, and `true`, respectively. They work through `Iterable<Int>` and
-  `Iterable<Any>` references and on a user-defined `Iterable<Int>`. Evidence:
+- [x] **`Iterable<T>` search and predicate operations** — `contains` / `in`, `indexOf`, and `lastIndexOf` traverse
+  any iterable, including a user-defined one. `any`, `all`, and `none` use `iterator()` and stop when the result is
+  known. Empty iterables return `false`, `true`, and `true`, respectively. These operations work through
+  `Iterable<Int>` and `Iterable<Any>` references. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `list Int covariance to Any preserves the list and boxes reads`, executed by `testKotlinListAnyVmConformance`.
 
-- [ ] **Read-only `List<T>` — Partial** — direct `listOf(...)`, `listOf<T>()`, and `emptyList<T>()` support non-null
-  `Int`, `String`, and supported Guest class references. `size`, indexed `get`, and ordinary `for` iteration execute
+- [ ] **Read-only `Collection<T>` and `List<T>` — Partial** — direct `listOf(...)`, `listOf<T>()`, and `emptyList<T>()`
+  support non-null `Int`, `String`, and supported Guest class references. `size`, indexed `get`, and ordinary `for` iteration execute
   through concrete specialized implementations. `List<Int>` stores and returns unboxed i32 values; list aliases refer
   to the same object. Factory arguments run once in source order. Invalid indexes trap through the VM array bounds
   check, and iteration resumes across quota slices. `List<Int>` can widen to `List<Any>` without copying the list;
   reads and iteration through the universal view allocate `Int` boxes with checked `is Int` and `as Int` access. A
   supported reference list can also widen to `List<Any>` while preserving its element references. Direct
   `listOf<Any>(...)` stores boxed `Int` and supported references in one array; indexed reads reuse those references.
-  `isEmpty` and `isNotEmpty` inspect `size`. `contains` / `in`, `indexOf`, and `lastIndexOf` use the supported `==`
-  semantics; the searches return the first or last match respectively, or `-1` when no element matches.
-  The `Iterable<T>` predicate extensions above also work on these lists.
-  These functions are Guest `kotlin.collections` extensions and require imports. Nullable elements, unsupported
+  `Collection<T>` owns `size`, `isEmpty`, and `contains`; custom collections can implement this contract.
+  `isNotEmpty` is a `Collection<T>` extension. `List<T>` retains indexed access and its index-based `indexOf` and
+  `lastIndexOf` extensions. Searches use the supported `==` semantics and return the first or last match, or `-1`.
+  The `Iterable<T>` search and predicate extensions above also work on these lists.
+  Extension functions are Guest `kotlin.collections` declarations and require imports. Nullable elements, unsupported
   primitive element types, spread arguments, mutable collections, `Set`, `Map`, sequences, and other collection
   algorithms are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),

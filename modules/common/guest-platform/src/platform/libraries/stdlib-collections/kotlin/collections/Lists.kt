@@ -16,11 +16,8 @@ public external fun <T> listOf(vararg elements: T): List<T>
 /** Creates an empty read-only list with the requested element type. */
 public external fun <T> emptyList(): List<T>
 
-/** Checks whether this list has no elements. */
-public fun <T> List<T>.isEmpty(): Boolean = size == 0
-
-/** Checks whether this list has at least one element. */
-public fun <T> List<T>.isNotEmpty(): Boolean = !isEmpty()
+/** Checks whether this collection has at least one element. */
+public fun <T> Collection<T>.isNotEmpty(): Boolean = !isEmpty()
 
 /** Returns the index of the first equal element, or -1 when no element matches. */
 public fun <T> List<T>.indexOf(element: T): Int {
@@ -42,11 +39,21 @@ public fun <T> List<T>.lastIndexOf(element: T): Int {
     return -1
 }
 
-/** Checks whether this list has an element equal to [element]. */
-public operator fun <T> List<T>.contains(element: T): Boolean = indexOf(element) >= 0
-
 internal class IntArrayBackedList(private val values: IntArray) : List<Int> {
     override val size: Int get() = values.size
+
+    override fun isEmpty(): Boolean = size == 0
+
+    override fun contains(element: Int): Boolean = indexOf(element) >= 0
+
+    internal fun containsAny(element: Any): Boolean {
+        var index = 0
+        while (index < size) {
+            if (element == values[index]) return true
+            index += 1
+        }
+        return false
+    }
 
     override fun get(index: Int): Int = values[index]
 
@@ -73,6 +80,19 @@ internal class IntArrayBackedListIterator(private val list: IntArrayBackedList) 
 
 internal class ArrayBackedList<T : Any>(private val values: Array<T>) : List<T> {
     override val size: Int get() = values.size
+
+    override fun isEmpty(): Boolean = size == 0
+
+    override fun contains(element: T): Boolean = indexOf(element) >= 0
+
+    internal fun containsAny(element: Any): Boolean {
+        var index = 0
+        while (index < size) {
+            if (element == values[index]) return true
+            index += 1
+        }
+        return false
+    }
 
     override fun get(index: Int): T = values[index]
 

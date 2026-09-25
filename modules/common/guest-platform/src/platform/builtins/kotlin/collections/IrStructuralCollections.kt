@@ -18,11 +18,15 @@ public interface Iterator<out T> {
     public operator fun next(): T
 }
 
-public interface Collection<out T> : Iterable<T>
-
-public interface List<out T> : Collection<T> {
+public interface Collection<out T> : Iterable<T> {
     public val size: Int
 
+    public fun isEmpty(): Boolean
+
+    public operator fun contains(element: @UnsafeVariance T): Boolean
+}
+
+public interface List<out T> : Collection<T> {
     public operator fun get(index: Int): T
 }
 
