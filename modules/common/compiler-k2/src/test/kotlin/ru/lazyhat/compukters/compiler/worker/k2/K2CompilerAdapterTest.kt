@@ -125,6 +125,9 @@ class K2CompilerAdapterTest {
             assertTrue(classLibrary.sourceOnly)
             assertTrue(classOnlyLibrary.sourceOnly)
             assertTrue(platform.modules.single { it.id.toString() == "stdlib:core" }.libraryFragment != null)
+            val collections = platform.modules.single { it.id.toString() == "stdlib:collections" }
+            assertTrue(collections.sourceOnly)
+            assertNull(collections.libraryFragment)
             val workerIdentity = identity(platform)
             val selected =
                 listOf(
@@ -195,6 +198,26 @@ class K2CompilerAdapterTest {
             assertTrue("sample.Cell<String>" in names, names.toString())
             assertTrue("sample.Holder<Int>" in names, names.toString())
             assertTrue("sample.Holder<String>" in names, names.toString())
+            val wrongCollectionsVersion =
+                TrustedBundleIdentity.of(
+                    collections.id.toString(),
+                    Hash256.of(PlatformBundleCodec.moduleContentHash(collections.copy(version = "9.9.9")).toByteArray()),
+                )
+            val mismatch =
+                assertFailsWith<IllegalArgumentException> {
+                    adapter.compile(
+                        CompileRequest(
+                            RequestId.of(3u),
+                            listOf(source("project/WrongVersion.kt", "fun main() {}")),
+                            TargetSettings.KOTLIN_2_4_JVM_17,
+                            workerIdentity,
+                            WorkerLimits(),
+                            selected + wrongCollectionsVersion,
+                            emptyList(),
+                        ),
+                    )
+                }
+            assertTrue(mismatch.message.orEmpty().contains("content hash mismatch"), mismatch.message)
             System.getProperty("compukter.vm.genericLibraryArtifact")?.let { output ->
                 val path = Path.of(output)
                 path.parent.createDirectories()

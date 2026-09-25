@@ -186,9 +186,9 @@ supported.
   [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
   test `k2_int_loops_execute_across_quota_slices_without_host_io`.
 
-- [ ] **Other ranges, progressions, and iterable `for` loops — Unsupported** —
-  stored or materialized progressions, chained `step` calls, arrays, strings, collections,
-  custom iterators, ordinary
+- [ ] **Other ranges, progressions, and iterable `for` loops — Partial** —
+  read-only `List<T>` iteration is supported for the element types below. Stored or materialized progressions,
+  chained `step` calls, general arrays, strings, other collections, custom iterators, ordinary
   source `do-while`, and labeled jumps to an outer loop publish no artifact.
   Non-loop `IntRange`, `IntProgression`, `downTo`, `step`, `until`, and `rangeUntil` calls are declaration-only and
   are not a general executable range API. Evidence:
@@ -247,10 +247,10 @@ supported.
 
 - [ ] **Named and vararg arguments — Partial** — ordinary K2 argument binding
   works only when the resulting direct call stays in the admitted signature
-  subset; direct `arrayOf` varargs are specially lowered, while spread arrays
+  subset; direct `arrayOf` and `listOf` varargs are specially lowered, while spread arrays
   are rejected. Tracking: not scheduled
 
-- [ ] **Generic functions and classes — Partial** — top-level `fun <T>` calls
+- [ ] **Generic functions, classes, and interfaces — Partial** — top-level `fun <T>` calls
   with inferred or explicit concrete arguments and final invariant `class Cell<T>`
   style declarations are specialized at compile time. Primary-constructor
   fields and direct methods use concrete scalar or reference types; a non-null
@@ -258,14 +258,16 @@ supported.
   modules containing generic functions or final generic classes are specialized
   in a consumer; generic class methods and constructor fields retain concrete
   `Int` and reference layouts.
-  Generic interfaces, declaration-site variance, reified parameters, generic
+  Concrete generic interfaces and covariant result interfaces support the read-only `List<T>` contract.
+  Contravariance, reified parameters, generic
   value classes, generic methods declaring their own type parameters, nullable
   primitive arguments, and `Any` boxing bridges are rejected. Expansion is
   bounded to 256 function and 256 class variants per compilation. Binary
   generic library templates and runtime instantiation are absent. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `generic identity specializes primitive and reference calls`,
-  `generic cell specializes field layout and preserves aliases`, and
+  `generic cell specializes field layout and preserves aliases`,
+  `generic interface dispatch retains concrete Int and reference types`, and
   `unsupported generic forms report source diagnostics without artifacts`;
   [`K2CompilerAdapterTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/K2CompilerAdapterTest.kt),
   test `source library generic functions and classes specialize in consumer`; VM
@@ -580,12 +582,20 @@ supported.
   `CharArray` and `IntArray` have no source-level Guest representation even
   though the VM can store every primitive array width. Tracking: not scheduled
 
-- [ ] **Collections, sequences, and iterators — Unsupported** — `List`,
-  `Set`, `Map`, collection builders, iteration protocols, and sequence APIs
-  are absent; `listOf(1)` is explicitly rejected as unsupported IR. Evidence:
+- [ ] **Read-only `List<T>` — Partial** — direct `listOf(...)`, `listOf<T>()`, and `emptyList<T>()` support non-null
+  `Int`, `String`, and supported Guest class references. `size`, indexed `get`, and ordinary `for` iteration execute
+  through concrete specialized implementations. `List<Int>` stores and returns unboxed i32 values; list aliases refer
+  to the same object. Factory arguments run once in source order. Invalid indexes trap through the VM array bounds
+  check, and iteration resumes across quota slices. `List<Int>` to `List<Any>` remains rejected with a source diagnostic
+  until the #581 universal boxing bridge exists. Nullable elements, unsupported primitive element types, spread
+  arguments, mutable collections, `Set`, `Map`, sequences, and collection algorithms are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `unsupported source IR produces one stable target diagnostic and no artifact`.
-  Tracking: [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656)
+  tests `read only lists retain typed Int String and guest references`,
+  `list index outside bounds compiles to trapped array access`,
+  `list iterator resumes across quota slices`, and
+  `unsupported list element and spread forms report diagnostics`; VM tasks
+  `testKotlinListVmConformance`, `testKotlinListBoundsVmConformance`, and
+  `testKotlinListQuotaVmConformance`. Tracking: [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656)
 
 ## Tasks and concurrency
 

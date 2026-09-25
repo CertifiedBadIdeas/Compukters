@@ -316,6 +316,8 @@ val genericFunctionsConformanceArtifact = layout.buildDirectory.file("generated/
 val genericCellConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-cell.cpkt")
 val genericInterfaceConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-interface.cpkt")
 val listConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list.cpkt")
+val listBoundsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-bounds.cpkt")
+val listQuotaConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-quota.cpkt")
 val genericLibraryConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-library.cpkt")
 val floatConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-float.cpkt")
 val dispatchConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-dispatch.cpkt")
@@ -843,6 +845,38 @@ val generateListConformanceArtifact = tasks.register<Test>("generateListConforma
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.listArtifact", listConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateListBoundsConformanceArtifact = tasks.register<Test>("generateListBoundsConformanceArtifact") {
+    description = "Compiles out-of-range Guest list indexing for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*list index outside bounds compiles to trapped array access*")
+    inputs.file(workerJar)
+    outputs.file(listBoundsConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.listBoundsArtifact", listBoundsConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateListQuotaConformanceArtifact = tasks.register<Test>("generateListQuotaConformanceArtifact") {
+    description = "Compiles repeated Guest list iteration for pinned VM quota conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*list iterator resumes across quota slices*")
+    inputs.file(workerJar)
+    outputs.file(listQuotaConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.listQuotaArtifact", listQuotaConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
