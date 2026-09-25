@@ -1256,6 +1256,7 @@ internal object KotlinProjectLowering {
         var needsAllBitsI32 = false
         var needsIntegerCompareToResult = false
         var needsFloatCompareToResult = false
+        var needsStringCompareToStep = false
         var needsZeroI64 = false
         var needsAllBitsI64 = false
         (userFunctions + constructorClasses).forEach { function ->
@@ -1272,6 +1273,7 @@ internal object KotlinProjectLowering {
                         if (callee == "kotlin.Int.inv") needsAllBitsI32 = true
                         if (callee == "kotlin.Long.unaryMinus") needsZeroI64 = true
                         if (callee == "kotlin.Long.inv") needsAllBitsI64 = true
+                        if (callee == "kotlin.String.compareTo") needsStringCompareToStep = true
                         if (
                             callee == "kotlin.Int.compareTo" ||
                             callee == "kotlin.Long.compareTo" ||
@@ -1324,7 +1326,11 @@ internal object KotlinProjectLowering {
             ).map { value -> value.toArtifactConstant(literalIds) } +
                 Constant.I32(0) +
                 listOfNotNull(Constant.I32(-1).takeIf { needsAllBitsI32 || needsIntegerCompareToResult || needsFloatCompareToResult }) +
-                listOfNotNull(Constant.I32(1).takeIf { needsIntegerCompareToResult || needsFloatCompareToResult }) +
+                listOfNotNull(
+                    Constant.I32(1).takeIf {
+                        needsIntegerCompareToResult || needsFloatCompareToResult || needsStringCompareToStep
+                    },
+                ) +
                 listOfNotNull(Constant.I64(0).takeIf { literalCollector.usesLong || needsZeroI64 }) +
                 listOfNotNull(Constant.I64(-1).takeIf { needsAllBitsI64 }) +
                 listOfNotNull(Constant.F32(0u).takeIf { literalCollector.usesFloat }) +
@@ -5013,6 +5019,14 @@ private class FunctionCompiler(
         ) {
             return compileFloatCompareTo(call, argumentExpressions, arguments)
         }
+        if (
+            fqName == "kotlin.String.compareTo" &&
+            arguments.size == 2 &&
+            argumentExpressions.all { it.type == kotlinStringType } &&
+            call.type == intType
+        ) {
+            return compileStringCompareTo(call, arguments)
+        }
         if (arguments.size == 2 && call.type == kotlinStringType && fqName == "kotlin.String.plus") {
             val right =
                 if (argumentExpressions[1].type == kotlinStringType) {
@@ -5270,6 +5284,80 @@ private class FunctionCompiler(
             currentBlock = exit
             jumpTo(join)
         }
+        currentBlock = join
+        return destination
+    }
+
+    private fun compileStringCompareTo(
+        call: IrCall,
+        arguments: List<RegisterId>,
+    ): RegisterId {
+        val leftLength = allocate(ValueType.I32)
+        emit(Instruction.StringLength(leftLength, arguments[0]))
+        val rightLength = allocate(ValueType.I32)
+        emit(Instruction.StringLength(rightLength, arguments[1]))
+        val bound = allocate(ValueType.I32)
+        val zero = emitI32Constant(0, call)
+        val one = emitI32Constant(1, call)
+        val index = allocate(ValueType.I32)
+        val leftShorter = allocate(ValueType.Bool)
+        emit(Instruction.Less(OrderedScalarValueType.I32, leftShorter, leftLength, rightLength))
+        val useLeft = createBlock()
+        val useRight = createBlock()
+        emit(Instruction.Branch(leftShorter, blockId(useLeft), blockId(useRight)))
+        currentBlock = useLeft
+        emit(Instruction.Move(bound, leftLength))
+        currentBlock = useRight
+        emit(Instruction.Move(bound, rightLength))
+
+        currentBlock = useLeft
+        emit(Instruction.Move(index, zero))
+        val header = createBlock(loopHeader = true)
+        jumpTo(header)
+        currentBlock = useRight
+        emit(Instruction.Move(index, zero))
+        jumpTo(header)
+
+        val destination = allocate(ValueType.I32)
+        currentBlock = header
+        val withinBound = allocate(ValueType.Bool)
+        emit(Instruction.Less(OrderedScalarValueType.I32, withinBound, index, bound))
+        val body = createBlock()
+        val exhausted = createBlock()
+        emit(Instruction.Branch(withinBound, blockId(body), blockId(exhausted)))
+
+        currentBlock = body
+        val leftChar = allocate(ValueType.Char)
+        emit(Instruction.StringGet(leftChar, arguments[0], index))
+        val rightChar = allocate(ValueType.Char)
+        emit(Instruction.StringGet(rightChar, arguments[1], index))
+        val equal = allocate(ValueType.Bool)
+        emit(Instruction.Equal(ScalarValueType.CHAR, equal, leftChar, rightChar))
+        val advance = createBlock()
+        val different = createBlock()
+        emit(Instruction.Branch(equal, blockId(advance), blockId(different)))
+
+        currentBlock = advance
+        val next = allocate(ValueType.I32)
+        emit(Instruction.Add(next, index, one))
+        emit(Instruction.Move(index, next))
+        jumpTo(header)
+
+        currentBlock = different
+        val leftCodeUnit = allocate(ValueType.I32)
+        emit(Instruction.Convert(leftCodeUnit, leftChar))
+        val rightCodeUnit = allocate(ValueType.I32)
+        emit(Instruction.Convert(rightCodeUnit, rightChar))
+        emit(Instruction.Subtract(destination, leftCodeUnit, rightCodeUnit))
+
+        currentBlock = exhausted
+        emit(Instruction.Subtract(destination, leftLength, rightLength))
+
+        val join = createBlock()
+        currentBlock = different
+        jumpTo(join)
+        currentBlock = exhausted
+        jumpTo(join)
         currentBlock = join
         return destination
     }

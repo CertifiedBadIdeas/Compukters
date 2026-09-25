@@ -323,6 +323,7 @@ val listBoundsConformanceArtifact = layout.buildDirectory.file("generated/confor
 val listQuotaConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-quota.cpkt")
 val genericLibraryConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-library.cpkt")
 val floatConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-float.cpkt")
+val stringCompareConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-string-compare.cpkt")
 val dispatchConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-dispatch.cpkt")
 val objectModelConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-object-model.cpkt")
 val propertyAccessorsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-property-accessors.cpkt")
@@ -960,6 +961,22 @@ val generateFloatConformanceArtifact = tasks.register<Test>("generateFloatConfor
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.floatArtifact", floatConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateStringCompareConformanceArtifact = tasks.register<Test>("generateStringCompareConformanceArtifact") {
+    description = "Compiles Guest Kotlin String.compareTo for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*String compareTo lowers UTF-16 ordering for vm conformance*")
+    inputs.file(workerJar)
+    outputs.file(stringCompareConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.stringCompareArtifact", stringCompareConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
