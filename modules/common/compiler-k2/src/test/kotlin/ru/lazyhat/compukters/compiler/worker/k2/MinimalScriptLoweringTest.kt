@@ -1779,7 +1779,11 @@ class MinimalScriptLoweringTest {
             val intGet =
                 application.functions
                     .subList(intList.methodStart.toInt(), (intList.methodStart + intList.methodCount).toInt())
-                    .single { function -> application.strings[function.name.value.toInt()].toString() == "get" }
+                    .single { function ->
+                        application.strings[function.name.value.toInt()].toString() == "get" &&
+                            (application.types[(function.signature as TypeRef.Local).id.value.toInt()] as NominalType.Function).result ==
+                            ValueType.I32
+                    }
             val intGetSignature = application.types[(intGet.signature as TypeRef.Local).id.value.toInt()] as NominalType.Function
             assertEquals(ValueType.I32, intGetSignature.result)
             System.getProperty("compukter.vm.listArtifact")?.let { output ->
@@ -1788,22 +1792,70 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `list Int covariance to Any reports a bounded diagnostic until boxed bridge exists`() =
+    fun `list Int covariance to Any preserves the list and boxes reads`() =
         withAdapter { adapter ->
             val source =
                 """
                 import kotlin.collections.List
                 import kotlin.collections.listOf
 
+                class Token(val name: String)
                 fun main() {
-                    val numbers: List<Int> = listOf(7)
+                    val numbers: List<Int> = listOf(7, 9)
                     val all: List<Any> = numbers
-                    println(all[0])
+                    println(all === numbers)
+                    println(numbers[0])
+                    val first: Any = all[0]
+                    println(first is Int)
+                    println(first as Int)
+                    println(all.size)
+                    for (element in all) { println(element as Int) }
+                    val words: List<String> = listOf("word")
+                    val broad: List<Any> = words
+                    println(broad === words)
+                    println(broad[0] === words[0])
+                    for (element in broad) { println(element === words[0]) }
+                    val tokens: List<Token> = listOf(Token("owned"))
+                    val objects: List<Any> = tokens
+                    println(objects[0] === tokens[0])
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.listAnyArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `Any value equality remains rejected until boxed dispatch exists`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.List
+                import kotlin.collections.listOf
+                fun main() {
+                    val all: List<Any> = listOf(1)
+                    println(all[0] == all[0])
                 }
                 """.trimIndent()
             val result = adapter.compile(request(source))
             assertNull(result.artifact)
             assertTrue(result.diagnostics.any { it.severity.name == "ERROR" && it.path != null }, result.diagnostics.toString())
+        }
+
+    @Test
+    fun `other primitive to Any conversions report diagnostics without artifacts`() =
+        withAdapter { adapter ->
+            listOf(
+                "fun main() { val value: Any = true }",
+                "fun main() { val value: Any = 1L }",
+                "fun main() { val value: Any = 1.0f }",
+            ).forEach { source ->
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact, source)
+                assertTrue(result.diagnostics.any { it.severity.name == "ERROR" && it.path != null }, result.diagnostics.toString())
+            }
         }
 
     @Test
@@ -1842,12 +1894,38 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `list Any boxes survive quota slices and garbage collection`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.List
+                import kotlin.collections.listOf
+                fun main() {
+                    val numbers: List<Int> = listOf(1, 2, 3)
+                    val all: List<Any> = numbers
+                    var total = 0
+                    for (round in 0 until 1000) {
+                        for (element in all) { total += element as Int }
+                    }
+                    require(total == 6000)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.listAnyQuotaArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `unsupported list element and spread forms report diagnostics`() =
         withAdapter { adapter ->
             val unsupported =
                 listOf(
                     "import kotlin.collections.listOf\nfun main() { listOf<Int?>(null) }",
                     "import kotlin.collections.listOf\nfun main() { listOf(true) }",
+                    "import kotlin.collections.listOf\nfun main() { listOf<Any>(1) }",
+                    "import kotlin.collections.List\nimport kotlin.collections.listOf\nfun main() { val values: List<Int> = listOf(1); val nullable: List<Any?> = values; println(nullable.size) }",
                     "import kotlin.collections.listOf\nfun main() { val array = arrayOf(\"a\"); listOf(*array) }",
                 )
             unsupported.forEach { source ->
@@ -2614,7 +2692,6 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             listOf(
                 "fun main() { when (2) { in 1..3 -> Unit; else -> Unit } }",
-                "fun classify(value: Any): Int = when (value) { is String -> 1; else -> 0 }; fun main() { classify(\"x\") }",
                 "fun main() { when (2) { 1, 2 -> Unit; else -> Unit } }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))

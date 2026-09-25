@@ -46,8 +46,9 @@ import kotlin.test.assertTrue
 
 class IdeScreenAnalysisIntegrationTest {
     @Test
-    fun `read only List members complete from the canonical platform`() {
-        val source = "import kotlin.collections.listOf\nfun main() { val numbers = listOf(1, 2); numbers.si }"
+    fun `covariant List Any members complete from the canonical platform`() {
+        val source =
+            "import kotlin.collections.List\nimport kotlin.collections.listOf\nfun main() { val numbers = listOf(1, 2); val all: List<Any> = numbers; all.si }"
         val path = VirtualSourcePath.kotlin("src/main.kt")
         val sources = ProjectSnapshot.of(listOf(ProjectSource(path, BinaryValue.of(source.encodeToByteArray()))), WorkerLimits())
         val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 18 }))
@@ -75,7 +76,7 @@ class IdeScreenAnalysisIntegrationTest {
                                 AnalysisQuery.Completion(
                                     identity,
                                     path,
-                                    source.lastIndexOf("numbers.si") + "numbers.si".length,
+                                    source.lastIndexOf("all.si") + "all.si".length,
                                     CompletionTrigger.Automatic,
                                 ),
                             ).get(90, TimeUnit.SECONDS),
