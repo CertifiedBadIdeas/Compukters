@@ -2264,6 +2264,20 @@ class MinimalScriptLoweringTest {
                             require(readFirst(genericBoxes).text == "c")
                             val cells = arrayOf(Cell(7), Cell(8))
                             require(cells[1].value == 8)
+                            val mixedNode = Node(9)
+                            val mixed = arrayOf<Any>(7, mixedNode, "word")
+                            val mixedAlias = mixed
+                            require(mixed.size == 3)
+                            require(mixed[0] is Int)
+                            require((mixed[0] as Int) == 7)
+                            require(mixed[0] === mixedAlias[0])
+                            require(mixed[1] === mixedNode)
+                            mixedAlias[0] = 11
+                            mixedAlias[1] = Box("changed")
+                            mixedAlias[2] = mixedNode
+                            require((mixed[0] as Int) == 11)
+                            require(mixed[2] === mixedNode)
+                            require(emptyArray<Any>().size == 0)
                             var allocation = 0
                             while (allocation < 60000) {
                                 Node(allocation)
@@ -2271,6 +2285,8 @@ class MinimalScriptLoweringTest {
                             }
                             require(nodes[0].value == 1)
                             require(boxes[1].text == "b")
+                            require((mixed[0] as Int) == 11)
+                            require(mixed[2] === mixedNode)
                         }
                         """.trimIndent(),
                     ),
@@ -2287,7 +2303,10 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             listOf(
                 "fun main() { arrayOf(1, 2) }",
-                "class Node(val value: Int)\nfun main() { arrayOf<Any>(Node(1)) }",
+                "fun main() { arrayOf<Any>(true) }",
+                "fun main() { arrayOf<Any>(1L) }",
+                "fun main() { val values = arrayOf<Any>(1); values[0] = true }",
+                "fun main() { val values = arrayOf<Any>(1); values[0] = 1L }",
                 "class Node(val value: Int)\nfun main() { arrayOf<Node?>(null) }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))
