@@ -627,7 +627,7 @@ registerKotlinVmConformance(
 )
 registerKotlinVmConformance(
     taskName = "testKotlinStringCompareVmConformance",
-    taskDescription = "Executes Guest Kotlin String.compareTo with UTF-16 ordering on the pinned VM.",
+    taskDescription = "Executes Guest Kotlin string ordering on the pinned VM.",
     artifactTask = ":compiler-k2:generateStringCompareConformanceArtifact",
     artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-string-compare.cpkt"),
     cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-string-compare-conformance",

@@ -965,13 +965,13 @@ val generateFloatConformanceArtifact = tasks.register<Test>("generateFloatConfor
 }
 
 val generateStringCompareConformanceArtifact = tasks.register<Test>("generateStringCompareConformanceArtifact") {
-    description = "Compiles Guest Kotlin String.compareTo for pinned VM conformance."
+    description = "Compiles Guest Kotlin string ordering for pinned VM conformance."
     group = "verification"
     dependsOn(tasks.jar)
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
-    filter.includeTestsMatching("*String compareTo lowers UTF-16 ordering for vm conformance*")
+    filter.includeTestsMatching("*String compareTo and ordering operators lower UTF-16 order for vm conformance*")
     inputs.file(workerJar)
     outputs.file(stringCompareConformanceArtifact)
     doFirst {

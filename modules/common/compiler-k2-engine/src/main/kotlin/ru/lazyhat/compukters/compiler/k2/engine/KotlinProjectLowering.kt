@@ -4958,6 +4958,24 @@ private class FunctionCompiler(
         if (operands.size != 2) return null
         var left = compileExpression(operands[0])
         var right = compileExpression(operands[1])
+        if (
+            compareCall.symbol.owner.fqNameWhenAvailable
+                ?.asString() == "kotlin.String.compareTo" &&
+            operands.all { it.type == kotlinStringType }
+        ) {
+            val compared = compileStringCompareTo(compareCall, listOf(left, right))
+            val zeroRegister = emitI32Constant(0, call)
+            return allocate(ValueType.Bool).also { destination ->
+                emit(
+                    when (predicateName) {
+                        "less" -> Instruction.Less(OrderedScalarValueType.I32, destination, compared, zeroRegister)
+                        "lessOrEqual" -> Instruction.LessOrEqual(OrderedScalarValueType.I32, destination, compared, zeroRegister)
+                        "greater" -> Instruction.Greater(OrderedScalarValueType.I32, destination, compared, zeroRegister)
+                        else -> Instruction.GreaterOrEqual(OrderedScalarValueType.I32, destination, compared, zeroRegister)
+                    },
+                )
+            }
+        }
         val numeric = operands.all { it.type == intType || it.type == longType || it.type == floatType }
         val mixedFloat = numeric && operands.any { it.type == floatType }
         val mixedLong =

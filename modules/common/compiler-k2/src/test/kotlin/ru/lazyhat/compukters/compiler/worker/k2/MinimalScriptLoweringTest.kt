@@ -420,7 +420,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `String compareTo lowers UTF-16 ordering for vm conformance`() =
+    fun `String compareTo and ordering operators lower UTF-16 order for vm conformance`() =
         withAdapter { adapter ->
             val source =
                 """
@@ -444,6 +444,17 @@ class MinimalScriptLoweringTest {
                     println("😀".compareTo("😁"))
                     println("😀".compareTo("🀄"))
                     println(leftOperand().compareTo(rightOperand()))
+                    println("a" < "b")
+                    println("a" <= "a")
+                    println("b" <= "a")
+                    println("a" > "b")
+                    println("b" >= "b")
+                    println("a" >= "b")
+                    println("ab" < "abc")
+                    println("abc" > "ab")
+                    println("😀" < "😁")
+                    println("😀" > "🀄")
+                    println(leftOperand() < rightOperand())
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))
@@ -457,6 +468,8 @@ class MinimalScriptLoweringTest {
             assertTrue(instructions.any { it is Instruction.StringLength })
             assertTrue(instructions.any { it is Instruction.StringGet })
             assertTrue(instructions.any { it is Instruction.Convert })
+            val operatorsOnly = adapter.compile(request("fun main() { println(\"a\" < \"b\") }"))
+            assertNotNull(operatorsOnly.artifact, operatorsOnly.diagnostics.joinToString())
             System.getProperty("compukter.vm.stringCompareArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }
