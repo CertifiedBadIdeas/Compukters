@@ -100,7 +100,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `user less function does not hide unsupported compareTo call`() =
+    fun `user less function with compareTo argument lowers to a local call`() =
         withAdapter { adapter ->
             val result =
                 adapter.compile(
@@ -110,25 +110,6 @@ class MinimalScriptLoweringTest {
 
                         fun main() {
                             println(less(1.compareTo(2), 0))
-                        }
-                        """.trimIndent(),
-                    ),
-                )
-            assertNull(result.artifact)
-            assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" && "compareTo" in it.message })
-        }
-
-    @Test
-    fun `user less function lowers to a local call`() =
-        withAdapter { adapter ->
-            val result =
-                adapter.compile(
-                    request(
-                        """
-                        fun less(value: Int, limit: Int): Boolean = false
-
-                        fun main() {
-                            println(less(1, 0))
                         }
                         """.trimIndent(),
                     ),
@@ -288,12 +269,32 @@ class MinimalScriptLoweringTest {
                     return ((bits shr 1) ushr 1).inv().inv()
                 }
 
+                fun leftOperand(): Int {
+                    println("left")
+                    return Int.MAX_VALUE
+                }
+
+                fun rightOperand(): Long {
+                    println("right")
+                    return Long.MAX_VALUE
+                }
+
                 fun main() {
                     val result = calculate(5)
                     val ordered = 5 < base && base > 5 && result >= 8L
                     println(result)
                     println("value=" + result)
                     println("${'$'}{-result}:${'$'}ordered:${'$'}{Long.MIN_VALUE}:${'$'}{Long.MAX_VALUE}:${'$'}{result.toInt()}:${'$'}{7.toLong()}")
+                    println(Int.MIN_VALUE.compareTo(Int.MAX_VALUE))
+                    println(Int.MAX_VALUE.compareTo(Int.MIN_VALUE))
+                    println(7.compareTo(7))
+                    println(Long.MIN_VALUE.compareTo(Long.MAX_VALUE))
+                    println(Long.MAX_VALUE.compareTo(Long.MIN_VALUE))
+                    println(7L.compareTo(7L))
+                    println(Int.MAX_VALUE.compareTo(Long.MAX_VALUE))
+                    println(Long.MIN_VALUE.compareTo(Int.MIN_VALUE))
+                    println(7L.compareTo(7))
+                    println(leftOperand().compareTo(rightOperand()))
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))

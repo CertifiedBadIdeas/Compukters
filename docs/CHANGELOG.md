@@ -37,7 +37,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   supported data classes compare their constructor properties, and Guest classes honor explicit `equals` overrides.
   Other classes use default identity equality. Lists support `contains` / `in` and `indexOf` using that equality.
 - Computer programs can use unboxed `Long` and `Float` values, including mixed numeric arithmetic and comparisons,
-  explicit conversions, `Long` bitwise and shift operations, constants, string interpolation, and console output.
+  direct `compareTo` calls between `Int` and `Long`, explicit conversions, `Long` bitwise and shift operations,
+  constants, string interpolation, and console output.
 - `Float` values retain their binary32 representation through arithmetic, equality, host responses, and conversion to
   text, including signed zero, infinities, NaN, and subnormal values.
 - Operations that wait for the world, another task, or a channel now block transparently inside ordinary functions;

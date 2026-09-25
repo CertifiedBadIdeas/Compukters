@@ -930,6 +930,20 @@ fn k2_long_executes_arithmetic_conversions_comparisons_and_text() {
     session
         .resume(write, HostResponse::Success(HostValueInput::Unit))
         .expect("summary println must resume the Long program");
+    for expected in ["-1\n", "1\n", "0\n", "-1\n", "1\n", "0\n", "-1\n", "-1\n", "0\n"] {
+        let value = utf16(expected);
+        let write = next_host_request(&mut session, "println compareTo result", 1, Some(&value));
+        session
+            .resume(write, HostResponse::Success(HostValueInput::Unit))
+            .expect("compareTo println must resume the Long program");
+    }
+    for expected in ["left\n", "right\n", "-1\n"] {
+        let value = utf16(expected);
+        let write = next_host_request(&mut session, "println compareTo operand", 1, Some(&value));
+        session
+            .resume(write, HostResponse::Success(HostValueInput::Unit))
+            .expect("compareTo operand println must resume the Long program");
+    }
     loop {
         match session.advance(64, 64).expect("K2 Long must finish") {
             AdvanceOutcome::SliceExhausted => {}
