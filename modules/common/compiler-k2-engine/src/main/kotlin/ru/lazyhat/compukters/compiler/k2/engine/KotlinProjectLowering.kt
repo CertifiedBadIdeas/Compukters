@@ -4385,7 +4385,7 @@ private class FunctionCompiler(
             if (target.returnType.isNothing()) emit(Instruction.Unreachable)
             return (destination as? Destination.Register)?.id
         }
-        compileCompareToPredicate(call, target.name.asString())?.let { return it }
+        compileCompareToPredicate(call, target)?.let { return it }
         val targetId = projectFunctionId(call, target)
         if (targetId == null) {
             if (interfaceSuper) {
@@ -4910,9 +4910,11 @@ private class FunctionCompiler(
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun compileCompareToPredicate(
         call: IrCall,
-        predicateName: String,
+        target: IrSimpleFunction,
     ): RegisterId? {
+        val predicateName = target.name.asString()
         if (predicateName !in setOf("less", "lessOrEqual", "greater", "greaterOrEqual")) return null
+        if (target.fqNameWhenAvailable?.asString() != "kotlin.internal.ir.$predicateName") return null
         val outerArguments = call.arguments.filterNotNull()
         val compareCall = outerArguments.firstOrNull() as? IrCall ?: return null
         if (compareCall.symbol.owner.name

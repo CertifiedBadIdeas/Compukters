@@ -25,6 +25,8 @@ import ru.lazyhat.compukters.compiler.artifact.model.Constant
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.Function
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
@@ -63,6 +65,56 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
+    @Test
+    fun `user less function does not hide unsupported compareTo call`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        fun less(value: Int, limit: Int): Boolean = false
+
+                        fun main() {
+                            println(less(1.compareTo(2), 0))
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+            assertNull(result.artifact)
+            assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" && "compareTo" in it.message })
+        }
+
+    @Test
+    fun `user less function lowers to a local call`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        fun less(value: Int, limit: Int): Boolean = false
+
+                        fun main() {
+                            println(less(1, 0))
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+            val artifact = ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray())
+            val application = artifact.modules.single { it.kind == ModuleKind.APPLICATION }
+            val lessId =
+                application.functions
+                    .withIndex()
+                    .single { (_, function) ->
+                        application.strings[function.name.value.toInt()].toString() == "less"
+                    }.index
+
+            assertTrue(
+                application.blocks.flatMap(Block::instructions).any { instruction ->
+                    instruction is Instruction.Call && instruction.function == FunctionRef.Local(FunctionId.of(lessId.toUInt()))
+                },
+            )
+        }
+
     @Test
     fun `unsupported nullable forms do not publish artifacts`() =
         withAdapter { adapter ->
