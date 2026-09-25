@@ -23,4 +23,6 @@ pluginManagement {
     }
 }
 
-rootProject.name = "Compukters-Guest-Kotlin-API"
+rootProject.name = "Compukters-Guest-API"
+
+include(":guest", ":create")

@@ -7,7 +7,9 @@ on:
       - ".github/workflows/pages.yml"
       - "docs/**"
       - "modules/common/guest-platform/src/platform/**"
-      - "docs/api-build/**"
+      - "addons/create/src/compuktersAddon/kotlin/**"
+      - "addons/create/gradle.properties"
+      - "gradle.properties"
   workflow_dispatch:
 
 permissions:
@@ -33,9 +35,9 @@ jobs:
       - name: Configure Pages
         id: pages
         uses: actions/configure-pages@v5
-      - name: Generate Guest Kotlin API reference
+      - name: Generate Guest API reference
         run: ./gradlew -p docs/api-build dokkaGeneratePublicationHtml --no-daemon
-      - name: Stage Guest Kotlin API reference
+      - name: Stage Guest API reference
         run: python3 docs/_tools/build_guest_api.py
       - name: Build with Jekyll
         uses: actions/jekyll-build-pages@v1

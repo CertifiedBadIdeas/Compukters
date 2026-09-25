@@ -24,7 +24,6 @@ repositories {
     mavenCentral()
 }
 
-val guestSources = layout.projectDirectory.dir("../../modules/common/guest-platform/src/platform")
 val modVersion = providers.fileContents(layout.projectDirectory.file("../../gradle.properties")).asText.map { properties ->
     Regex("(?m)^version\\s*=\\s*(\\S+)").find(properties)?.groupValues?.get(1)
         ?: error("Missing version in gradle.properties")
@@ -37,18 +36,12 @@ dokka {
         },
     )
     dokkaPublications.html {
-        moduleName.set("Compukters Guest Kotlin")
+        moduleName.set("Compukters Guest API")
         moduleVersion.set(modVersion)
     }
-    dokkaSourceSets.create("guest") {
-        sourceRoots.from(guestSources)
-        classpath.setFrom(files())
-        enableKotlinStdLibDocumentationLink.set(false)
-        enableJdkDocumentationLink.set(false)
-        sourceLink {
-            localDirectory.set(guestSources.asFile)
-            remoteUrl("https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform")
-            remoteLineSuffix.set("#L")
-        }
-    }
+}
+
+dependencies {
+    dokka(project(":guest"))
+    dokka(project(":create"))
 }
