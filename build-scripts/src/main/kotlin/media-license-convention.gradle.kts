@@ -31,6 +31,7 @@ val excludedDirectoryNames =
         "target",
         "run",
     )
+val excludedGeneratedDirectories = setOf("docs/guest-api")
 
 fun discoverRepositoryMedia(): List<File> =
     repositoryRoot
@@ -38,6 +39,7 @@ fun discoverRepositoryMedia(): List<File> =
         .onEnter { directory ->
             directory == repositoryRoot ||
                 (directory.name !in excludedDirectoryNames &&
+                    directory.relativeTo(repositoryRoot).invariantSeparatorsPath !in excludedGeneratedDirectories &&
                     !directory.name.startsWith(".gradle-") &&
                     !directory.resolve(".git").exists())
         }.filter(File::isFile)
