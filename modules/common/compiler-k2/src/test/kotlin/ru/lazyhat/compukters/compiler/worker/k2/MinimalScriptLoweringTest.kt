@@ -2022,6 +2022,10 @@ class MinimalScriptLoweringTest {
             val source =
                 """
                 import kotlin.collections.List
+                import kotlin.collections.Iterable
+                import kotlin.collections.Iterator
+                import kotlin.collections.all
+                import kotlin.collections.any
                 import kotlin.collections.contains
                 import kotlin.collections.emptyList
                 import kotlin.collections.indexOf
@@ -2029,6 +2033,7 @@ class MinimalScriptLoweringTest {
                 import kotlin.collections.isNotEmpty
                 import kotlin.collections.lastIndexOf
                 import kotlin.collections.listOf
+                import kotlin.collections.none
 
                 data class Token(val name: String)
                 class Custom(val code: Int) {
@@ -2042,6 +2047,18 @@ class MinimalScriptLoweringTest {
                         return other is SearchProbe && code == other.code
                     }
                     override fun hashCode(): Int = code
+                }
+                class TwoNumbers : Iterable<Int> {
+                    override fun iterator(): Iterator<Int> = TwoNumbersIterator()
+                }
+                class TwoNumbersIterator : Iterator<Int> {
+                    var nextValue: Int = 1
+                    override fun hasNext(): Boolean = nextValue <= 2
+                    override fun next(): Int {
+                        val value = nextValue
+                        nextValue += 1
+                        return value
+                    }
                 }
                 fun main() {
                     val numbers: List<Int> = listOf(7, 9)
@@ -2134,6 +2151,39 @@ class MinimalScriptLoweringTest {
                     require(listOf(storedProbe, lastStoredProbe).lastIndexOf(lastSearchedProbe) == 1)
                     require(lastSearchedProbe.calls == 1)
                     require(lastStoredProbe.calls == 0)
+                    var visits = 0
+                    require(numbers.any { value -> visits += 1; value == 7 })
+                    require(visits == 1)
+                    visits = 0
+                    require(!numbers.any { value -> visits += 1; value == 8 })
+                    require(visits == 2)
+                    visits = 0
+                    require(!numbers.all { value -> visits += 1; value == 7 })
+                    require(visits == 2)
+                    visits = 0
+                    require(!numbers.none { value -> visits += 1; value == 7 })
+                    require(visits == 1)
+                    require(numbers.all { value -> value > 0 })
+                    require(numbers.none { value -> value < 0 })
+                    visits = 0
+                    val empty = emptyList<Int>()
+                    require(!empty.any { visits += 1; true })
+                    require(empty.all { visits += 1; false })
+                    require(empty.none { visits += 1; true })
+                    require(visits == 0)
+                    require(all.all { value -> value is Int })
+                    require(mixed.any { value -> value is String })
+                    require(!mixed.all { value -> value is Int })
+                    require(!mixed.none { value -> value is String })
+                    val iterableNumbers: Iterable<Int> = numbers
+                    require(iterableNumbers.any { value -> value == 9 })
+                    require(iterableNumbers.all { value -> value > 0 })
+                    val iterableAll: Iterable<Any> = all
+                    require(iterableAll.none { value -> value is String })
+                    val customIterable: Iterable<Int> = TwoNumbers()
+                    require(customIterable.any { value -> value == 2 })
+                    require(customIterable.all { value -> value > 0 })
+                    require(customIterable.none { value -> value > 2 })
                 }
                 """.trimIndent()
             val result = adapter.compile(request(source))

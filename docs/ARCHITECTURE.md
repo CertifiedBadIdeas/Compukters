@@ -129,7 +129,9 @@ read preserves the element reference. The box's runtime type and i32 payload sup
 while typed paths remain unboxed. Direct `List<Any>` factories use a local nominal `Array<Any>` whose reference slots
 hold boxed `Int` and supported objects; each value is converted once before storage. Direct source `Array<Any>`
 factories and indexed writes use the same boxing boundary; array reads return the stored reference. List search uses
-source-only generic `contains` and `indexOf` extensions, specialized at each concrete element type.
+source-only generic `contains`, `indexOf`, and `lastIndexOf` extensions, specialized at each concrete element type.
+The `Iterable<T>` predicate extensions `any`, `all`, and `none` specialize both the element and function value
+signature before lowering calls to the predicate.
 Generic call arguments are converted against the specialized parameter types, so searching a widened `List<Any>`
 boxes an `Int` argument before comparison. Universal value
 equality over non-null `Any` lowers through existing reference, type-test, field-read, scalar, and string instructions:
