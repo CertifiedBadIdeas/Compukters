@@ -314,6 +314,7 @@ val nullableReferencesConformanceArtifact = layout.buildDirectory.file("generate
 val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-long.cpkt")
 val genericFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-functions.cpkt")
 val genericCellConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-cell.cpkt")
+val genericInterfaceConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-interface.cpkt")
 val genericLibraryConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-library.cpkt")
 val floatConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-float.cpkt")
 val dispatchConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-dispatch.cpkt")
@@ -809,6 +810,22 @@ val generateGenericCellConformanceArtifact = tasks.register<Test>("generateGener
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.genericCellArtifact", genericCellConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateGenericInterfaceConformanceArtifact = tasks.register<Test>("generateGenericInterfaceConformanceArtifact") {
+    description = "Compiles concrete Guest generic interface dispatch for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*generic interface dispatch retains concrete Int and reference types*")
+    inputs.file(workerJar)
+    outputs.file(genericInterfaceConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.genericInterfaceArtifact", genericInterfaceConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

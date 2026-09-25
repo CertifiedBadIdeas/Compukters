@@ -545,6 +545,15 @@ registerKotlinVmConformance(
     conformanceScenario = "generic-cell",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinGenericInterfaceVmConformance",
+    taskDescription = "Executes concrete Guest generic interface dispatch with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateGenericInterfaceConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-generic-interface.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-generic-interface-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_GENERIC_INTERFACE_ARTIFACT",
+    conformanceScenario = "generic-interface",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinGenericLibraryVmConformance",
     taskDescription = "Executes a source-distributed generic Guest library consumer with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateGenericLibraryConformanceArtifact",

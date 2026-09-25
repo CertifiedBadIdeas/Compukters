@@ -266,6 +266,7 @@ private fun collectGuestClassInstances(
     properties.forEach { property -> scan(property.declaration, { it }) }
     while (pending.isNotEmpty()) {
         val instance = pending.removeFirst()
+        instance.declaration.superTypes.forEach { consider(it, instance::substitute) }
         instance.declaration.declarations.forEach { declaration -> scan(declaration, instance::substitute) }
     }
     return instances.toList()
@@ -750,13 +751,16 @@ internal object KotlinProjectLowering {
                 }.sortedBy { it.fqNameWhenAvailable?.asString().orEmpty() }
         sourceClasses
             .firstOrNull { declaration ->
-                declaration.typeParameters.isNotEmpty() && declaration.kind != ClassKind.CLASS
+                declaration.typeParameters.isNotEmpty() && declaration.kind !in setOf(ClassKind.CLASS, ClassKind.INTERFACE)
             }?.let { declaration ->
                 throw UnsupportedKotlinIr(declaration, "generic interfaces and non-class declarations are not supported")
             }
         sourceClasses
             .firstOrNull { declaration ->
-                declaration.typeParameters.any { parameter -> parameter.variance != Variance.INVARIANT }
+                declaration.typeParameters.any { parameter ->
+                    parameter.variance != Variance.INVARIANT &&
+                        !(declaration.kind == ClassKind.INTERFACE && parameter.variance == Variance.OUT_VARIANCE)
+                }
             }?.let { declaration ->
                 throw UnsupportedKotlinIr(declaration, "generic declaration-site variance is not supported")
             }
@@ -931,11 +935,7 @@ internal object KotlinProjectLowering {
             functionInstances.associateWith { instance ->
                 val function = instance.declaration
                 if (instance.ownerClass != null) {
-                    val parameters =
-                        loweredParameters(function, session).joinToString(",") { parameter ->
-                            instance.substitute(parameter.type).canonicalPlatformType()
-                        }
-                    "${instance.ownerClass.name}.${function.name.asString()}#($parameters)"
+                    function.name.asString()
                 } else if (instance.arguments.isEmpty()) {
                     artifactFunctionName(function, pluginContext, inlineValueClasses, session)
                 } else {
@@ -1281,7 +1281,7 @@ internal object KotlinProjectLowering {
                     }
                 }.toMap()
         val genericConstructorTargets =
-            classLayouts.filter { it.instance.arguments.isNotEmpty() }.associate { layout ->
+            classLayouts.filter { it.instance.arguments.isNotEmpty() && it.declaration.kind == ClassKind.CLASS }.associate { layout ->
                 layout.instance to GuestConstructorTarget(layout, requireNotNull(constructorFunctionIds[layout.instance]))
             }
         val genericFieldsByBacking =
@@ -2161,21 +2161,28 @@ internal object KotlinProjectLowering {
                 val declaration = layout.declaration
                 val sourceParents =
                     declaration.superTypes.mapNotNull { superType ->
-                        val symbol = (superType as? IrSimpleType)?.classifier as? IrClassSymbol
-                        symbol?.let { source -> classTypeIds[source]?.let { source to TypeRef.Local(it) } }
+                        val resolved = layout.instance.substitute(superType)
+                        val parentInstance = resolved.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
+                        parentInstance?.let { parent ->
+                            classInstanceTypeIds[parent]?.let { parent.declaration.symbol to TypeRef.Local(it) }
+                        }
                     }
                 val interfaces = sourceParents.filter { (symbol, _) -> symbol.owner.kind == ClassKind.INTERFACE }.map { it.second }
                 val superType = sourceParents.firstOrNull { (symbol, _) -> symbol.owner.kind != ClassKind.INTERFACE }?.second
                 val name = layout.instance.name
                 if (declaration.kind == ClassKind.INTERFACE) {
                     val methods = memberFunctionsByOwner[declaration.symbol].orEmpty()
+                    val genericMethods = genericMemberFunctionsByOwner[layout.instance].orEmpty()
                     NominalType.Interface(
                         name = requireNotNull(metadataIds[name]),
                         sealed = declaration.modality == Modality.SEALED,
                         superType = superType,
                         interfaces = interfaces,
-                        methodStart = methods.firstOrNull()?.let { requireNotNull(functionIds[it.symbol]).value } ?: 0u,
-                        methodCount = methods.size.toUInt(),
+                        methodStart =
+                            genericMethods.firstOrNull()?.let { requireNotNull(instanceFunctionIds[it]).value }
+                                ?: methods.firstOrNull()?.let { requireNotNull(functionIds[it.symbol]).value }
+                                ?: 0u,
+                        methodCount = (methods.size + genericMethods.size).toUInt(),
                     )
                 } else {
                     val methods = memberFunctionsByOwner[declaration.symbol].orEmpty()
@@ -2831,10 +2838,13 @@ internal object KotlinProjectLowering {
                 (
                     declaration.typeParameters.isNotEmpty() &&
                         (
-                            declaration.kind != ClassKind.CLASS || declaration.isData || declaration.modality != Modality.FINAL ||
-                                declaration.superTypes.any { superType ->
-                                    (superType as? IrSimpleType)?.classifier != pluginContext.irBuiltIns.anyClass
-                                }
+                            declaration.kind !in setOf(ClassKind.CLASS, ClassKind.INTERFACE) ||
+                                declaration.isData ||
+                                (declaration.kind == ClassKind.CLASS && declaration.modality != Modality.FINAL) ||
+                                (declaration.kind == ClassKind.CLASS && declaration.superTypes.any { superType ->
+                                    val parent = (superType as? IrSimpleType)?.classifier as? IrClassSymbol
+                                    parent != pluginContext.irBuiltIns.anyClass && parent?.owner?.kind != ClassKind.INTERFACE
+                                })
                         )
                 )
             ) {

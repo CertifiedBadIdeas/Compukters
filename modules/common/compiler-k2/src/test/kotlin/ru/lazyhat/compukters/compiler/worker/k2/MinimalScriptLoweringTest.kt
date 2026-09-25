@@ -1715,12 +1715,39 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `generic interface dispatch retains concrete Int and reference types`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                interface Reader<out T> { fun read(): T }
+                class Cell<T>(val value: T) : Reader<T> {
+                    override fun read(): T = value
+                }
+                fun main() {
+                    val number: Reader<Int> = Cell(7)
+                    require(number.read() == 7)
+                    val text: Reader<String> = Cell("hello")
+                    require(text.read() == "hello")
+                    println(number.read())
+                    println(text.read())
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val application = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+            assertTrue(application.blocks.flatMap(Block::instructions).any { it is Instruction.CallInterface })
+            System.getProperty("compukter.vm.genericInterfaceArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `unsupported generic forms report source diagnostics without artifacts`() =
         withAdapter { adapter ->
             val unsupported =
                 listOf(
                     "inline fun <reified T> keep(value: T): T = value\nfun main() { keep(1) }",
-                    "interface Reader<T> { fun read(): T }\nfun main() {}",
+                    "interface Writer<in T> { fun write(value: T) }\nfun main() {}",
                     "class Box<out T>(val value: T)\nfun main() { Box(1) }",
                     "class Box<T>(val value: T)\nfun main() { Box<Int?>(null) }",
                     "fun <T> erase(value: T): Any = value\nfun main() { erase(1) }",
