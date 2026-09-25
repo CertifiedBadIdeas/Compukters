@@ -18,9 +18,13 @@ public interface Iterator<out T> {
     public operator fun next(): T
 }
 
-internal interface Collection<out T> : Iterable<T>
+public interface Collection<out T> : Iterable<T>
 
-internal interface List<out T> : Collection<T>
+public interface List<out T> : Collection<T> {
+    public val size: Int
+
+    public operator fun get(index: Int): T
+}
 
 internal interface Set<out T> : Collection<T>
 

@@ -554,6 +554,15 @@ registerKotlinVmConformance(
     conformanceScenario = "generic-interface",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinListVmConformance",
+    taskDescription = "Executes typed read-only Guest lists with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateListConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-list.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-list-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_LIST_ARTIFACT",
+    conformanceScenario = "list",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinGenericLibraryVmConformance",
     taskDescription = "Executes a source-distributed generic Guest library consumer with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateGenericLibraryConformanceArtifact",

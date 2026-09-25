@@ -1,6 +1,6 @@
 [[module]]
 id = "kotlin:builtins"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = []
 sources = ["builtins/kotlin/**/*.kt"]
 
@@ -15,6 +15,12 @@ id = "stdlib:ranges"
 version = "1.1.0"
 dependencies = ["stdlib:core"]
 sources = ["libraries/stdlib-ranges/**/*.kt"]
+
+[[module]]
+id = "stdlib:collections"
+version = "1.0.0"
+dependencies = ["stdlib:core"]
+sources = ["libraries/stdlib-collections/**/*.kt"]
 
 [[module]]
 id = "std:terminal"

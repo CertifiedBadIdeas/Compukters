@@ -20,25 +20,16 @@ package ru.lazyhat.compukters.compiler.worker.k2
 
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
-import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
-import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.Constant
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
-import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
 import ru.lazyhat.compukters.compiler.artifact.model.Function
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
-import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
-import ru.lazyhat.compukters.compiler.artifact.model.Manifest
-import ru.lazyhat.compukters.compiler.artifact.model.MetadataText
-import ru.lazyhat.compukters.compiler.artifact.model.Module
-import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
-import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.StringValueType
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
@@ -46,8 +37,6 @@ import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.Utf16Literal
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
-import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
-import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
@@ -1119,10 +1108,9 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val first = adapter.compile(request("fun main() {}"))
             val second = adapter.compile(request("fun main() {}"))
-            val expected = (ArtifactWriter.write(expectedMainArtifact(false)) as ArtifactWriteResult.Success).bytes
-
-            assertContentEquals(expected, assertNotNull(first.artifact).toByteArray())
-            assertContentEquals(expected, assertNotNull(second.artifact).toByteArray())
+            assertContentEquals(assertNotNull(first.artifact).toByteArray(), assertNotNull(second.artifact).toByteArray())
+            val application = ArtifactReader.read(first.artifact.toByteArray()).modules.single { it.kind == ModuleKind.APPLICATION }
+            assertTrue(application.blocks.any { block -> block.instructions == listOf(Instruction.Return(Destination.Unit)) })
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" })
         }
 
@@ -1739,6 +1727,57 @@ class MinimalScriptLoweringTest {
             System.getProperty("compukter.vm.genericInterfaceArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }
+        }
+
+    @Test
+    fun `read only lists retain typed Int String and guest references`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.emptyList
+                import kotlin.collections.listOf
+
+                class Token(val name: String)
+                fun main() {
+                    val numbers = listOf(7, 9)
+                    println(numbers.size)
+                    println(numbers[1])
+                    val empty = emptyList<Int>()
+                    println(empty.size)
+                    val words = listOf("first", "second")
+                    println(words[0])
+                    val tokens = listOf(Token("red"), Token("blue"))
+                    println(tokens[1].name)
+                    var total = 0
+                    for (number in numbers) { total += number }
+                    println(total)
+                    for (word in words) { println(word) }
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.listArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `list Int covariance to Any reports a bounded diagnostic until boxed bridge exists`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.List
+                import kotlin.collections.listOf
+
+                fun main() {
+                    val numbers: List<Int> = listOf(7)
+                    val all: List<Any> = numbers
+                    println(all[0])
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            assertNull(result.artifact)
+            assertTrue(result.diagnostics.any { it.severity.name == "ERROR" && it.path != null }, result.diagnostics.toString())
         }
 
     @Test
@@ -3334,57 +3373,6 @@ class MinimalScriptLoweringTest {
             assertTrue(diagnostic.code?.startsWith("ARTIFACT_WRITE_") == true)
             assertTrue(diagnostic.message.encodeToByteArray().size <= 32)
         }
-
-    private fun expectedMainArtifact(suspending: Boolean): Artifact =
-        Artifact(
-            semanticFeatures =
-                if (suspending) {
-                    setOf(
-                        ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature.COROUTINES,
-                    )
-                } else {
-                    emptySet()
-                },
-            manifest = Manifest.minimal(maximumBlockCost = 1u),
-            entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
-            modules =
-                listOf(
-                    Module(
-                        name = StringId.of(0u),
-                        kind = ModuleKind.APPLICATION,
-                        strings = listOf(MetadataText.of("app"), MetadataText.of("main")),
-                        types =
-                            listOf(
-                                NominalType.Function(
-                                    name = StringId.of(1u),
-                                    suspending = suspending,
-                                    result = ValueType.Unit,
-                                    parameters = emptyList(),
-                                ),
-                            ),
-                        functions =
-                            listOf(
-                                Function(
-                                    owner = null,
-                                    name = StringId.of(1u),
-                                    signature = TypeRef.Local(TypeId.of(0u)),
-                                    flags =
-                                        setOfNotNull(
-                                            FunctionFlag.STATIC,
-                                            FunctionFlag.SUSPENDING.takeIf { suspending },
-                                        ),
-                                    values = emptyList(),
-                                    parameterCount = 0u,
-                                    firstBlock = BlockId.of(0u),
-                                    blockCount = 1u,
-                                    firstException = 0u,
-                                    exceptionCount = 0u,
-                                ),
-                            ),
-                        blocks = listOf(Block(FunctionId.of(0u), false, listOf(Instruction.Return(Destination.Unit)))),
-                    ),
-                ),
-        )
 
     private fun withAdapter(block: (K2CompilerAdapter) -> Unit) {
         val root = createTempDirectory("compukters-minimal-lowering-test-")

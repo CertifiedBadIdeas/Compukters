@@ -44,7 +44,7 @@ class CanonicalPlatformSourceTest {
         assertTrue("public const val MIN_VALUE: Long" in primitives)
         assertTrue("public class Float private constructor()" in primitives)
         assertTrue("public external val NaN: Float" in primitives)
-        assertEquals("1.4.0", catalog.modules.single { it.id == "kotlin:builtins" }.version)
+        assertEquals("1.5.0", catalog.modules.single { it.id == "kotlin:builtins" }.version)
     }
 
     @Test
@@ -79,6 +79,7 @@ class CanonicalPlatformSourceTest {
                 "kotlin:builtins",
                 "stdlib:core",
                 "stdlib:ranges",
+                "stdlib:collections",
                 "std:terminal",
                 "std:filesystem",
                 "compukter:compiler",
@@ -91,6 +92,7 @@ class CanonicalPlatformSourceTest {
         )
         assertTrue(modulesById.getValue("kotlin:builtins").dependencies.isEmpty())
         assertEquals("1.2.0", modulesById.getValue("stdlib:core").version)
+        assertEquals("1.0.0", modulesById.getValue("stdlib:collections").version)
         assertEquals("2.0.0", modulesById.getValue("compukter:redstone").version)
         assertEquals("1.0.0", modulesById.getValue("compukter:sound").version)
         assertEquals("1.0.0", modulesById.getValue("compukter:display").version)
