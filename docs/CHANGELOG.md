@@ -25,7 +25,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   The compiler specializes each concrete use, retaining unboxed non-null scalar fields and calls. Source-only generic
   library modules, including classes with methods, can be specialized in a consuming program.
 - Programs can create `Array<T>` values for supported non-null Guest classes with `arrayOf` and `emptyArray`, then read
-  or replace elements by index. Concrete uses inside specialized generic functions retain their element types.
+  or replace elements by index. Concrete uses inside specialized generic functions retain their element types. Mixed
+  `Array<Any>` values can hold `Int`, strings, and supported objects; `Int` values are boxed when stored.
 - Programs can create read-only `List<T>` values with `listOf` and `emptyList`, read `size` and indexed elements, and
   iterate with `for`. The first supported elements are non-null `Int`, `String`, and Guest class references; `List<Int>`
   keeps unboxed storage and typed reads. A `List<Int>` can also be used as `List<Any>` without copying the list; reads

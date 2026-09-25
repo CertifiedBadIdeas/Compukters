@@ -4351,8 +4351,18 @@ private class FunctionCompiler(
                 throw UnsupportedKotlinIr(call, "interface super target is outside the project subset")
             }
             val argumentExpressions = call.arguments.filterNotNull()
+            val arrayStoreElementType =
+                if (
+                    target.name.asString() == "set" &&
+                    argumentExpressions.size == 3 &&
+                    isSupportedReferenceArray(argumentExpressions[0].type)
+                ) {
+                    guestTypes.arrayElement(resolvedType(argumentExpressions[0].type))
+                } else {
+                    null
+                }
             val arguments =
-                argumentExpressions.map { argument ->
+                argumentExpressions.mapIndexed { index, argument ->
                     if (argument is IrConst && argument.value == null) {
                         val other = argumentExpressions.firstOrNull { it !== argument && it.type != argument.type }
                         val reference = other?.let { valueType(it.type, it) as? ValueType.Ref }
@@ -4361,6 +4371,8 @@ private class FunctionCompiler(
                         } else {
                             allocate(reference.copy(nullable = true)).also { emit(Instruction.Null(it)) }
                         }
+                    } else if (index == 2 && arrayStoreElementType != null) {
+                        compileExpression(argument, arrayStoreElementType)
                     } else {
                         compileExpression(argument)
                     }
@@ -4697,9 +4709,6 @@ private class FunctionCompiler(
         target: IrSimpleFunction,
     ): RegisterId? {
         val resolvedCallType = resolvedType(call.type)
-        if (guestTypes.arrayElement(resolvedCallType)?.isKotlinAny() == true) {
-            throw UnsupportedKotlinIr(call, "direct Array<Any> factories are outside the project subset")
-        }
         val arrayType =
             if (guestTypes.isStringArray(resolvedCallType)) {
                 stringArrayType
@@ -4735,7 +4744,8 @@ private class FunctionCompiler(
                     return null
                 }
             }
-        val values = elements.map(::compileExpression)
+        val elementType = guestTypes.arrayElement(resolvedCallType)
+        val values = elements.map { element -> compileExpression(element, elementType) }
         val length = emitI32Constant(elements.size, call)
         prepareAllocationBlock()
         val array = allocate(arrayType)

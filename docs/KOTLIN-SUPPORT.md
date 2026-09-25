@@ -549,9 +549,10 @@ supported.
 
 - [ ] **Reference `Array<T>` operations — Partial** — entry `Array<String>`,
   `emptyArray<T>()`, direct `arrayOf` calls, `size`, and indexed get/set work for
-  `String` and supported non-null Guest class references, including concrete
-  uses inside specialized generic functions. `copyOfRange` is available only
-  for `Array<String>`. `Array<Int>`, `Array<Any>`, nullable elements, spread
+  `String`, supported non-null Guest class references, and `Any`, including concrete
+  uses inside specialized generic functions. `Array<Any>` boxes `Int` when constructed or written, preserves object
+  identity, and returns the stored reference on reads. `copyOfRange` is available only
+  for `Array<String>`. `Array<Int>`, nullable elements, other primitive-to-`Any` boxing, spread
   arguments, iterators, and higher-order operations are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `string arrays can be constructed read and written` and
@@ -594,7 +595,7 @@ supported.
   supported reference list can also widen to `List<Any>` while preserving its element references. Direct
   `listOf<Any>(...)` stores boxed `Int` and supported references in one array; indexed reads reuse those references.
   Value equality on `Any` remains a bounded source diagnostic until runtime value dispatch is available. Nullable
-  elements, direct `Array<Any>` factories, unsupported primitive element types, spread
+  elements, unsupported primitive element types, spread
   arguments, mutable collections, `Set`, `Map`, sequences, and collection algorithms are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `read only lists retain typed Int String and guest references`,

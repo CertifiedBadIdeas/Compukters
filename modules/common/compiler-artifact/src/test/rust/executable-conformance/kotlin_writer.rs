@@ -1053,7 +1053,7 @@ fn k2_generic_library_specializes_in_consumer() {
 }
 
 fn k2_reference_arrays_retain_typed_guest_objects() {
-    k2_expected_prints("COMPUKTER_KOTLIN_REFERENCE_ARRAY_ARTIFACT", []);
+    k2_expected_prints_with_budget("COMPUKTER_KOTLIN_REFERENCE_ARRAY_ARTIFACT", [], 128);
 }
 
 fn k2_nullable_references_preserve_branch_and_call_semantics() {

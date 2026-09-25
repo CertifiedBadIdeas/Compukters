@@ -40,11 +40,13 @@ links to their source files.
 
 ## Arrays and ranges
 
-- [ ] **`Array<T>` — Partial** — `emptyArray<T>()` and direct `arrayOf(...)` work for `String` and supported non-null
-  Guest class references, including specializations inside generic Guest functions. `size`, indexed `get`, and indexed
-  `set` use the array's concrete element type. Factory arguments are evaluated once in source order; reading an
-  uninitialized non-null reference traps. `copyOfRange` is available only for `Array<String>`. `Array<Int>`, `Array<Any>`,
-  nullable elements, spread arguments, and general array iterators are unavailable. Evidence:
+- [ ] **`Array<T>` — Partial** — `emptyArray<T>()` and direct `arrayOf(...)` work for `String`, supported non-null
+  Guest class references, and `Any`, including specializations inside generic Guest functions. `size`, indexed `get`,
+  and indexed `set` use the array's concrete element type. `Array<Any>` boxes `Int` on construction or indexed writes,
+  preserves reference identity, and returns the stored box on repeated reads. Factory arguments are evaluated once in
+  source order; reading an uninitialized non-null reference traps. `copyOfRange` is available only for `Array<String>`.
+  `Array<Int>`, nullable elements, other primitive-to-`Any` boxing, spread arguments, and general array iterators are
+  unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `string arrays can be constructed read and written`, `reference arrays preserve Guest class elements and aliases`,
   and `reference arrays reject unsupported element representations`; VM tasks `testKotlinReferenceArrayVmConformance`
@@ -73,7 +75,7 @@ links to their source files.
   identity; universal reads box each `Int`, and `is Int` / `as Int` recover its type and value. Supported reference lists
   also widen to `List<Any>` without copying their elements. Direct `listOf<Any>` construction stores mixed boxed `Int`
   and supported references in one array; indexed reads and iteration preserve element identity. Universal value equality,
-  hashing, and text dispatch remain unavailable. Direct `Array<Any>` factories, nullable elements, and spread
+  hashing, and text dispatch remain unavailable. Nullable elements and spread
   arguments are unsupported. Evidence:
   `testKotlinListVmConformance`, `testKotlinListAnyVmConformance`, `testKotlinListAnyQuotaVmConformance`,
   `testKotlinListBoundsVmConformance`, `testKotlinListQuotaVmConformance`, and
