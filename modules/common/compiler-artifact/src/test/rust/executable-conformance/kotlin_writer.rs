@@ -34,6 +34,7 @@ fn main() {
         "reference-array" => k2_reference_arrays_retain_typed_guest_objects(),
         "float" => k2_float_executes_arithmetic_conversions_comparisons_and_text(),
         "string-compare" => k2_string_compare_uses_utf16_code_units(),
+        "scalar-compare" => k2_char_and_boolean_compare_preserve_ordering(),
         "platform-scalar" => k2_platform_scalar_precondition_traps_before_publishing_a_value(),
         "argv" => k2_string_array_entry_executes_exact_utf16_arguments(),
         "subset" => k2_string_materialization_executes_char_arrays_and_scalar_templates(),
@@ -972,6 +973,18 @@ fn k2_string_compare_uses_utf16_code_units() {
             "0\n", "-1\n", "-2\n", "2\n", "2\n", "0\n", "-1\n", "1\n", "left\n", "right\n", "-1\n",
             "true\n", "true\n", "false\n", "false\n", "true\n", "false\n", "true\n", "true\n",
             "true\n", "true\n", "left\n", "right\n", "true\n",
+        ],
+        128,
+    );
+}
+
+fn k2_char_and_boolean_compare_preserve_ordering() {
+    k2_expected_prints_with_budget(
+        "COMPUKTER_KOTLIN_SCALAR_COMPARE_ARTIFACT",
+        [
+            "-2\n", "2\n", "0\n", "65535\n", "-65535\n", "char-left\n", "char-right\n", "-2\n", "true\n",
+            "0\n", "-1\n", "1\n", "0\n", "boolean-left\n", "boolean-right\n", "-1\n", "true\n", "true\n",
+            "true\n", "true\n", "false\n", "boolean-left\n", "boolean-right\n", "true\n",
         ],
         128,
     );

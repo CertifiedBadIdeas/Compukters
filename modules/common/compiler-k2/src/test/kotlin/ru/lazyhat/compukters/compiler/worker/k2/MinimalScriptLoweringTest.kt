@@ -476,6 +476,64 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `Char and Boolean compareTo preserve scalar ordering for vm conformance`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                fun charLeft(): Char {
+                    println("char-left")
+                    return 'A'
+                }
+
+                fun charRight(): Char {
+                    println("char-right")
+                    return 'C'
+                }
+
+                fun booleanLeft(): Boolean {
+                    println("boolean-left")
+                    return false
+                }
+
+                fun booleanRight(): Boolean {
+                    println("boolean-right")
+                    return true
+                }
+
+                fun main() {
+                    println('A'.compareTo('C'))
+                    println('C'.compareTo('A'))
+                    println('A'.compareTo('A'))
+                    println(65535.toChar().compareTo(0.toChar()))
+                    println(0.toChar().compareTo(65535.toChar()))
+                    println(charLeft().compareTo(charRight()))
+                    println('A' < 'C')
+                    println(false.compareTo(false))
+                    println(false.compareTo(true))
+                    println(true.compareTo(false))
+                    println(true.compareTo(true))
+                    println(booleanLeft().compareTo(booleanRight()))
+                    println(false < true)
+                    println(false <= false)
+                    println(true > false)
+                    println(true >= true)
+                    println(true < false)
+                    println(booleanLeft() < booleanRight())
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val bytes = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            val operatorsOnly = adapter.compile(request("fun main() { println(false < true) }"))
+            assertNotNull(operatorsOnly.artifact, operatorsOnly.diagnostics.joinToString())
+            System.getProperty("compukter.vm.scalarCompareArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `top level IntChannel lowers to VM owned bounded handoff`() =
         withAdapter { adapter ->
             val source =

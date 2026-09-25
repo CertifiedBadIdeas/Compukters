@@ -1256,6 +1256,7 @@ internal object KotlinProjectLowering {
         var needsAllBitsI32 = false
         var needsIntegerCompareToResult = false
         var needsFloatCompareToResult = false
+        var needsBooleanCompareToResult = false
         var needsStringCompareToStep = false
         var needsZeroI64 = false
         var needsAllBitsI64 = false
@@ -1274,6 +1275,7 @@ internal object KotlinProjectLowering {
                         if (callee == "kotlin.Long.unaryMinus") needsZeroI64 = true
                         if (callee == "kotlin.Long.inv") needsAllBitsI64 = true
                         if (callee == "kotlin.String.compareTo") needsStringCompareToStep = true
+                        if (callee == "kotlin.Boolean.compareTo") needsBooleanCompareToResult = true
                         if (
                             callee == "kotlin.Int.compareTo" ||
                             callee == "kotlin.Long.compareTo" ||
@@ -1325,10 +1327,14 @@ internal object KotlinProjectLowering {
                     linkedSymbols.defaultIntValues
             ).map { value -> value.toArtifactConstant(literalIds) } +
                 Constant.I32(0) +
-                listOfNotNull(Constant.I32(-1).takeIf { needsAllBitsI32 || needsIntegerCompareToResult || needsFloatCompareToResult }) +
+                listOfNotNull(
+                    Constant.I32(-1).takeIf {
+                        needsAllBitsI32 || needsIntegerCompareToResult || needsFloatCompareToResult || needsBooleanCompareToResult
+                    },
+                ) +
                 listOfNotNull(
                     Constant.I32(1).takeIf {
-                        needsIntegerCompareToResult || needsFloatCompareToResult || needsStringCompareToStep
+                        needsIntegerCompareToResult || needsFloatCompareToResult || needsBooleanCompareToResult || needsStringCompareToStep
                     },
                 ) +
                 listOfNotNull(Constant.I64(0).takeIf { literalCollector.usesLong || needsZeroI64 }) +
@@ -4958,12 +4964,18 @@ private class FunctionCompiler(
         if (operands.size != 2) return null
         var left = compileExpression(operands[0])
         var right = compileExpression(operands[1])
-        if (
+        val compareFqName =
             compareCall.symbol.owner.fqNameWhenAvailable
-                ?.asString() == "kotlin.String.compareTo" &&
-            operands.all { it.type == kotlinStringType }
-        ) {
-            val compared = compileStringCompareTo(compareCall, listOf(left, right))
+                ?.asString()
+        val compared =
+            if (compareFqName == "kotlin.String.compareTo" && operands.all { it.type == kotlinStringType }) {
+                compileStringCompareTo(compareCall, listOf(left, right))
+            } else if (compareFqName == "kotlin.Boolean.compareTo" && operands.all { it.type == booleanType }) {
+                compileBooleanCompareTo(compareCall, listOf(left, right))
+            } else {
+                null
+            }
+        if (compared != null) {
             val zeroRegister = emitI32Constant(0, call)
             return allocate(ValueType.Bool).also { destination ->
                 emit(
@@ -5044,6 +5056,26 @@ private class FunctionCompiler(
             call.type == intType
         ) {
             return compileStringCompareTo(call, arguments)
+        }
+        if (
+            fqName == "kotlin.Char.compareTo" &&
+            arguments.size == 2 &&
+            argumentExpressions.all { it.type == charType } &&
+            call.type == intType
+        ) {
+            val left = allocate(ValueType.I32)
+            emit(Instruction.Convert(left, arguments[0]))
+            val right = allocate(ValueType.I32)
+            emit(Instruction.Convert(right, arguments[1]))
+            return result(ValueType.I32) { Instruction.Subtract(it, left, right) }
+        }
+        if (
+            fqName == "kotlin.Boolean.compareTo" &&
+            arguments.size == 2 &&
+            argumentExpressions.all { it.type == booleanType } &&
+            call.type == intType
+        ) {
+            return compileBooleanCompareTo(call, arguments)
         }
         if (arguments.size == 2 && call.type == kotlinStringType && fqName == "kotlin.String.plus") {
             val right =
@@ -5376,6 +5408,41 @@ private class FunctionCompiler(
         jumpTo(join)
         currentBlock = exhausted
         jumpTo(join)
+        currentBlock = join
+        return destination
+    }
+
+    private fun compileBooleanCompareTo(
+        call: IrCall,
+        arguments: List<RegisterId>,
+    ): RegisterId {
+        val negative = emitI32Constant(-1, call)
+        val zero = emitI32Constant(0, call)
+        val positive = emitI32Constant(1, call)
+        val destination = allocate(ValueType.I32)
+        val equal = allocate(ValueType.Bool)
+        emit(Instruction.Equal(ScalarValueType.BOOL, equal, arguments[0], arguments[1]))
+        val equalBlock = createBlock()
+        val differentBlock = createBlock()
+        emit(Instruction.Branch(equal, blockId(equalBlock), blockId(differentBlock)))
+
+        currentBlock = equalBlock
+        emit(Instruction.Move(destination, zero))
+
+        currentBlock = differentBlock
+        val trueBlock = createBlock()
+        val falseBlock = createBlock()
+        emit(Instruction.Branch(arguments[0], blockId(trueBlock), blockId(falseBlock)))
+        currentBlock = trueBlock
+        emit(Instruction.Move(destination, positive))
+        currentBlock = falseBlock
+        emit(Instruction.Move(destination, negative))
+
+        val join = createBlock()
+        listOf(equalBlock, trueBlock, falseBlock).forEach { exit ->
+            currentBlock = exit
+            jumpTo(join)
+        }
         currentBlock = join
         return destination
     }
