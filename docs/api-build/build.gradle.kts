@@ -35,6 +35,10 @@ dokka {
             systemProperties.put("org.jetbrains.dokka.analysis.allowKotlinPackage", "true")
         },
     )
+    pluginsConfiguration.html {
+        customAssets.from(layout.projectDirectory.file("../assets/images/compukters-icon.svg"))
+        customStyleSheets.from(layout.projectDirectory.file("logo-styles.css"))
+    }
     dokkaPublications.html {
         moduleName.set("Compukters Guest API")
         moduleVersion.set(modVersion)
