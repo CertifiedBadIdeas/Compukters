@@ -4388,9 +4388,10 @@ private class FunctionCompiler(
                 }
             return compileBuiltinCall(call, target, argumentExpressions, arguments)
         }
+        val specialization = projectFunctionInstance(call, target)
         val arguments =
             resolveProjectCallArguments(call, target).zip(loweredParameters(target, session)).map { (argument, parameter) ->
-                compileCallArgument(argument, parameter.type)
+                compileCallArgument(argument, specialization?.substitute(parameter.type) ?: parameter.type)
             }
         val destination = destinationFor(call.type, call)
         if (target.isSuspend) {
@@ -5781,13 +5782,8 @@ private class FunctionCompiler(
             overridden(target)?.let { return it }
         }
         return if (target.typeParameters.isNotEmpty()) {
-            if (genericFunctionIds.keys.none { it.declaration.symbol == target.symbol }) return null
-            val arguments =
-                call.typeArguments.map { argument ->
-                    val type = argument ?: throw UnsupportedKotlinIr(call, "generic call has an inferred type hole")
-                    currentInstance?.substitute(type) ?: type
-                }
-            genericFunctionIds[GuestFunctionInstance(target, arguments)]
+            val instance = projectFunctionInstance(call, target) ?: return null
+            genericFunctionIds[instance]
                 ?: throw UnsupportedKotlinIr(call, "generic function specialization is missing")
         } else if ((target.parent as? IrClass)?.typeParameters?.isNotEmpty() == true) {
             if (genericMemberFunctionIds.keys.none { it.first == target.symbol }) return null
@@ -5803,6 +5799,19 @@ private class FunctionCompiler(
                     ?.overriddenSymbols
                     ?.firstNotNullOfOrNull { functionIds[it] }
         }
+    }
+
+    private fun projectFunctionInstance(
+        call: IrCall,
+        target: IrSimpleFunction,
+    ): GuestFunctionInstance? {
+        if (target.typeParameters.isEmpty() || genericFunctionIds.keys.none { it.declaration.symbol == target.symbol }) return null
+        val arguments =
+            call.typeArguments.map { argument ->
+                val type = argument ?: throw UnsupportedKotlinIr(call, "generic call has an inferred type hole")
+                currentInstance?.substitute(type) ?: type
+            }
+        return GuestFunctionInstance(target, arguments)
     }
 
     private inline fun withLoopContext(

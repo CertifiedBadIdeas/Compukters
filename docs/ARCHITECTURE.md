@@ -128,7 +128,10 @@ alongside the typed methods. An `Int` read through `Any` allocates an ordinary m
 read preserves the element reference. The box's runtime type and i32 payload support checked `is Int` and `as Int`,
 while typed paths remain unboxed. Direct `List<Any>` factories use a local nominal `Array<Any>` whose reference slots
 hold boxed `Int` and supported objects; each value is converted once before storage. Direct source `Array<Any>`
-factories and indexed writes use the same boxing boundary; array reads return the stored reference. Universal value
+factories and indexed writes use the same boxing boundary; array reads return the stored reference. List search uses
+source-only generic `contains` and `indexOf` extensions, specialized at each concrete element type.
+Generic call arguments are converted against the specialized parameter types, so searching a widened `List<Any>`
+boxes an `Int` argument before comparison. Universal value
 equality over non-null `Any` lowers through existing reference, type-test, field-read, scalar, and string instructions:
 boxed `Int` compares by value, strings by content, Guest classes with an explicit `equals` override call that method,
 and data classes compare supported primary-constructor properties. Other classes retain the default identity equality.

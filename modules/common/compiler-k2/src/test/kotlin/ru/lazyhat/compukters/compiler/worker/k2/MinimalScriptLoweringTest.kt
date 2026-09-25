@@ -1797,7 +1797,9 @@ class MinimalScriptLoweringTest {
             val source =
                 """
                 import kotlin.collections.List
+                import kotlin.collections.contains
                 import kotlin.collections.emptyList
+                import kotlin.collections.indexOf
                 import kotlin.collections.listOf
 
                 data class Token(val name: String)
@@ -1857,6 +1859,20 @@ class MinimalScriptLoweringTest {
                     require(Token("same") == Token("same"))
                     require(Token("same") != Token("different"))
                     require(Custom(4) == Custom(4))
+                    require(7 in numbers)
+                    require(8 !in numbers)
+                    require(numbers.indexOf(9) == 1)
+                    require(listOf(7, 9, 7).indexOf(7) == 0)
+                    require(numbers.indexOf(8) == -1)
+                    require(7 in all)
+                    require(all.indexOf(9) == 1)
+                    require("word" in words)
+                    require(words.indexOf("missing") == -1)
+                    require(Token("owned") in tokens)
+                    require(objects.indexOf(Token("owned")) == 0)
+                    require(mixed.indexOf(Token("same")) == 2)
+                    require(Custom(4) in listOf(Custom(4)))
+                    require(emptyList<Int>().indexOf(1) == -1)
                 }
                 """.trimIndent()
             val result = adapter.compile(request(source))

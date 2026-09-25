@@ -16,6 +16,19 @@ public external fun <T> listOf(vararg elements: T): List<T>
 /** Creates an empty read-only list with the requested element type. */
 public external fun <T> emptyList(): List<T>
 
+/** Returns the index of the first equal element, or -1 when no element matches. */
+public fun <T> List<T>.indexOf(element: T): Int {
+    var index = 0
+    while (index < size) {
+        if (this[index] == element) return index
+        index += 1
+    }
+    return -1
+}
+
+/** Checks whether this list has an element equal to [element]. */
+public operator fun <T> List<T>.contains(element: T): Boolean = indexOf(element) >= 0
+
 internal class IntArrayBackedList(private val values: IntArray) : List<Int> {
     override val size: Int get() = values.size
 
