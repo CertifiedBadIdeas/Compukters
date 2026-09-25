@@ -40,7 +40,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   direct `compareTo` calls between `Int` and `Long`, explicit conversions, `Long` bitwise and shift operations,
   constants, string interpolation, and console output.
 - `Float` values retain their binary32 representation through arithmetic, equality, host responses, and conversion to
-  text, including signed zero, infinities, NaN, and subnormal values.
+  text, including signed zero, infinities, NaN, and subnormal values. Direct `compareTo` calls with `Float`, `Int`, or
+  `Long` use Kotlin's total order for NaN and signed zero.
 - Operations that wait for the world, another task, or a channel now block transparently inside ordinary functions;
   source-level `suspend` declarations are not part of the supported Guest Kotlin subset.
 - `Tasks.sleepTicks(n)` lets a program pace world interactions by server ticks while other Guest tasks continue and

@@ -1255,6 +1255,7 @@ internal object KotlinProjectLowering {
             }
         var needsAllBitsI32 = false
         var needsIntegerCompareToResult = false
+        var needsFloatCompareToResult = false
         var needsZeroI64 = false
         var needsAllBitsI64 = false
         (userFunctions + constructorClasses).forEach { function ->
@@ -1271,16 +1272,26 @@ internal object KotlinProjectLowering {
                         if (callee == "kotlin.Int.inv") needsAllBitsI32 = true
                         if (callee == "kotlin.Long.unaryMinus") needsZeroI64 = true
                         if (callee == "kotlin.Long.inv") needsAllBitsI64 = true
-                        if (callee == "kotlin.Int.compareTo" || callee == "kotlin.Long.compareTo") {
+                        if (
+                            callee == "kotlin.Int.compareTo" ||
+                            callee == "kotlin.Long.compareTo" ||
+                            callee == "kotlin.Float.compareTo"
+                        ) {
                             val operands = expression.arguments.filterNotNull()
-                            if (
-                                operands.size == 2 &&
-                                operands.all { operand ->
-                                    operand.type == pluginContext.irBuiltIns.intType ||
-                                        operand.type == pluginContext.irBuiltIns.longType
+                            if (operands.size == 2) {
+                                val types = operands.map { it.type }
+                                if (types.all { it == pluginContext.irBuiltIns.intType || it == pluginContext.irBuiltIns.longType }) {
+                                    needsIntegerCompareToResult = true
+                                } else if (
+                                    types.any { it == pluginContext.irBuiltIns.floatType } &&
+                                    types.all {
+                                        it == pluginContext.irBuiltIns.intType ||
+                                            it == pluginContext.irBuiltIns.longType ||
+                                            it == pluginContext.irBuiltIns.floatType
+                                    }
+                                ) {
+                                    needsFloatCompareToResult = true
                                 }
-                            ) {
-                                needsIntegerCompareToResult = true
                             }
                         }
                         super.visitCall(expression)
@@ -1312,12 +1323,13 @@ internal object KotlinProjectLowering {
                     linkedSymbols.defaultIntValues
             ).map { value -> value.toArtifactConstant(literalIds) } +
                 Constant.I32(0) +
-                listOfNotNull(Constant.I32(-1).takeIf { needsAllBitsI32 || needsIntegerCompareToResult }) +
-                listOfNotNull(Constant.I32(1).takeIf { needsIntegerCompareToResult }) +
+                listOfNotNull(Constant.I32(-1).takeIf { needsAllBitsI32 || needsIntegerCompareToResult || needsFloatCompareToResult }) +
+                listOfNotNull(Constant.I32(1).takeIf { needsIntegerCompareToResult || needsFloatCompareToResult }) +
                 listOfNotNull(Constant.I64(0).takeIf { literalCollector.usesLong || needsZeroI64 }) +
                 listOfNotNull(Constant.I64(-1).takeIf { needsAllBitsI64 }) +
                 listOfNotNull(Constant.F32(0u).takeIf { literalCollector.usesFloat }) +
                 listOfNotNull(Constant.F32((-1.0f).toBits().toUInt()).takeIf { literalCollector.usesFloat }) +
+                listOfNotNull(Constant.F32(1.0f.toBits().toUInt()).takeIf { needsFloatCompareToResult }) +
                 Constant.Bool(false)
         ).forEach(constantPool::intern)
         val constants = constantPool.freeze().records
@@ -4992,6 +5004,15 @@ private class FunctionCompiler(
         ) {
             return compileIntegerCompareTo(call, argumentExpressions, arguments)
         }
+        if (
+            fqName in setOf("kotlin.Int.compareTo", "kotlin.Long.compareTo", "kotlin.Float.compareTo") &&
+            arguments.size == 2 &&
+            argumentExpressions.any { it.type == floatType } &&
+            argumentExpressions.all { it.type == intType || it.type == longType || it.type == floatType } &&
+            call.type == intType
+        ) {
+            return compileFloatCompareTo(call, argumentExpressions, arguments)
+        }
         if (arguments.size == 2 && call.type == kotlinStringType && fqName == "kotlin.String.plus") {
             val right =
                 if (argumentExpressions[1].type == kotlinStringType) {
@@ -5246,6 +5267,87 @@ private class FunctionCompiler(
 
         val join = createBlock()
         listOf(lessBlock, greaterBlock, equalBlock).forEach { exit ->
+            currentBlock = exit
+            jumpTo(join)
+        }
+        currentBlock = join
+        return destination
+    }
+
+    private fun compileFloatCompareTo(
+        call: IrCall,
+        expressions: List<IrExpression>,
+        arguments: List<RegisterId>,
+    ): RegisterId {
+        val left = widenToF32(arguments[0], expressions[0].type, call)
+        val right = widenToF32(arguments[1], expressions[1].type, call)
+        val negative = emitI32Constant(-1, call)
+        val zero = emitI32Constant(0, call)
+        val positive = emitI32Constant(1, call)
+        val oneFloat = emitF32Constant(1.0f, call)
+        val destination = allocate(ValueType.I32)
+        val exits = mutableListOf<Int>()
+
+        fun complete(value: RegisterId) {
+            emit(Instruction.Move(destination, value))
+            exits += currentBlock
+        }
+
+        fun select(
+            condition: RegisterId,
+            value: RegisterId,
+        ) {
+            val matched = createBlock()
+            val next = createBlock()
+            emit(Instruction.Branch(condition, blockId(matched), blockId(next)))
+            currentBlock = matched
+            complete(value)
+            currentBlock = next
+        }
+
+        // A Float is ordered with itself exactly when it is not NaN.
+        val leftNumeric = allocate(ValueType.Bool)
+        emit(Instruction.GreaterOrEqual(OrderedScalarValueType.F32, leftNumeric, left, left))
+        val rightNumeric = allocate(ValueType.Bool)
+        emit(Instruction.GreaterOrEqual(OrderedScalarValueType.F32, rightNumeric, right, right))
+        val numericLeft = createBlock()
+        val nanLeft = createBlock()
+        emit(Instruction.Branch(leftNumeric, blockId(numericLeft), blockId(nanLeft)))
+
+        currentBlock = nanLeft
+        select(rightNumeric, positive)
+        complete(zero)
+
+        currentBlock = numericLeft
+        val bothNumeric = createBlock()
+        val nanRight = createBlock()
+        emit(Instruction.Branch(rightNumeric, blockId(bothNumeric), blockId(nanRight)))
+        currentBlock = nanRight
+        complete(negative)
+
+        currentBlock = bothNumeric
+        val less = allocate(ValueType.Bool)
+        emit(Instruction.Less(OrderedScalarValueType.F32, less, left, right))
+        select(less, negative)
+        val greater = allocate(ValueType.Bool)
+        emit(Instruction.Greater(OrderedScalarValueType.F32, greater, left, right))
+        select(greater, positive)
+
+        // IEEE comparisons equate both zero signs; their reciprocals retain the sign as infinity.
+        val leftReciprocal = allocate(ValueType.F32)
+        emit(Instruction.Divide(ScalarValueType.F32, leftReciprocal, oneFloat, left))
+        val rightReciprocal = allocate(ValueType.F32)
+        emit(Instruction.Divide(ScalarValueType.F32, rightReciprocal, oneFloat, right))
+        val negativeZero = allocate(ValueType.Bool)
+        emit(Instruction.Less(OrderedScalarValueType.F32, negativeZero, leftReciprocal, rightReciprocal))
+        select(negativeZero, negative)
+        val positiveZero = allocate(ValueType.Bool)
+        emit(Instruction.Greater(OrderedScalarValueType.F32, positiveZero, leftReciprocal, rightReciprocal))
+        select(positiveZero, positive)
+        complete(zero)
+
+        val join = createBlock()
+        exits.forEach { exit ->
             currentBlock = exit
             jumpTo(join)
         }

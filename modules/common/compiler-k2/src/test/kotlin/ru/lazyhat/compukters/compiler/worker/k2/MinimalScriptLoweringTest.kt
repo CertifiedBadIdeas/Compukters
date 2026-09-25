@@ -350,6 +350,16 @@ class MinimalScriptLoweringTest {
                     return -arithmetic
                 }
 
+                fun floatOperand(): Float {
+                    println("float-left")
+                    return -0.0F
+                }
+
+                fun integerOperand(): Int {
+                    println("int-right")
+                    return 0
+                }
+
                 fun main() {
                     val result = calculate(5)
                     val ordered = 1 < base && base < 2L && result <= -4.0F
@@ -357,6 +367,20 @@ class MinimalScriptLoweringTest {
                     println("value=" + result)
                     println("${'$'}ordered:${'$'}{3.toFloat()}:${'$'}{4L.toFloat()}:${'$'}{3.9F.toInt()}:${'$'}{(-3.9F).toLong()}")
                     println("${'$'}{Float.MIN_VALUE}:${'$'}{Float.MAX_VALUE}:${'$'}{Float.POSITIVE_INFINITY}:${'$'}{Float.NEGATIVE_INFINITY}:${'$'}{Float.NaN}:${'$'}{-0.0F}")
+                    println(Float.NaN.compareTo(Float.NaN))
+                    println(Float.NaN.compareTo(Float.POSITIVE_INFINITY))
+                    println(Float.NEGATIVE_INFINITY.compareTo(Float.NaN))
+                    println((-0.0F).compareTo(0.0F))
+                    println(0.0F.compareTo(-0.0F))
+                    println(0.0F.compareTo(0.0F))
+                    println(1.5F.compareTo(2))
+                    println(2.compareTo(1.5F))
+                    println(2L.compareTo(2.0F))
+                    println(Float.NaN.compareTo(1L))
+                    println(1L.compareTo(Float.NaN))
+                    println(0.compareTo(-0.0F))
+                    println((-0.0F).compareTo(0L))
+                    println(floatOperand().compareTo(integerOperand()))
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))
