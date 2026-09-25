@@ -129,8 +129,11 @@ read preserves the element reference. The box's runtime type and i32 payload sup
 while typed paths remain unboxed. Direct `List<Any>` factories use a local nominal `Array<Any>` whose reference slots
 hold boxed `Int` and supported objects; each value is converted once before storage. Direct source `Array<Any>`
 factories and indexed writes use the same boxing boundary; array reads return the stored reference. Universal value
-equality, hash, and string dispatch are outside the admitted subset
-until the wider #581 runtime semantics are implemented.
+equality over non-null `Any` lowers through existing reference, type-test, field-read, scalar, and string instructions:
+boxed `Int` compares by value, strings by content, Guest classes with an explicit `equals` override call that method,
+and data classes compare supported primary-constructor properties. Other classes retain the default identity equality.
+Unsupported data-class property shapes receive a compiler diagnostic. Nullable `Any?`, hash, and string conversion
+remain outside this subset.
 
 Concrete `Array<GuestClass>` uses become distinct local nominal array types whose elements are exact Guest class
 references. Existing array instructions allocate, load, and store them; the verifier checks element types and GC

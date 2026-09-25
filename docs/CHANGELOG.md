@@ -33,6 +33,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   through that view produce boxed `Int` values that can be checked with `is Int` and cast back with `as Int`. Supported
   reference lists also widen to `List<Any>` while retaining their element references. Programs can construct a mixed
   `List<Any>` directly from `Int`, strings, and supported objects; its `Int` elements are boxed when the list is built.
+  Values held as `Any` can be compared with `==` or `equals`: boxed `Int` compares by value, strings by content,
+  supported data classes compare their constructor properties, and Guest classes honor explicit `equals` overrides.
+  Other classes use default identity equality.
 - Computer programs can use unboxed `Long` and `Float` values, including mixed numeric arithmetic and comparisons,
   explicit conversions, `Long` bitwise and shift operations, constants, string interpolation, and console output.
 - `Float` values retain their binary32 representation through arithmetic, equality, host responses, and conversion to
