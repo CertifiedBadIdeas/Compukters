@@ -4351,6 +4351,10 @@ private class FunctionCompiler(
                 throw UnsupportedKotlinIr(call, "interface super target is outside the project subset")
             }
             val argumentExpressions = call.arguments.filterNotNull()
+            val universalEquality =
+                target.name.asString() in setOf("EQEQ", "equals", "eqeq") &&
+                    argumentExpressions.size == 2 &&
+                    argumentExpressions.any { it.type.isKotlinAny() }
             val arrayStoreElementType =
                 if (
                     target.name.asString() == "set" &&
@@ -4374,7 +4378,12 @@ private class FunctionCompiler(
                     } else if (index == 2 && arrayStoreElementType != null) {
                         compileExpression(argument, arrayStoreElementType)
                     } else {
-                        compileExpression(argument)
+                        val compiled = compileExpression(argument)
+                        if (universalEquality && valueType(argument.type, argument) == ValueType.I32) {
+                            boxInt(compiled, ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))))
+                        } else {
+                            compiled
+                        }
                     }
                 }
             return compileBuiltinCall(call, target, argumentExpressions, arguments)
@@ -5224,8 +5233,25 @@ private class FunctionCompiler(
         val floatIeeeEquality =
             name.equals("ieee754Equals", ignoreCase = true) && leftType == floatType && rightType == floatType
         if (name in setOf("EQEQ", "equals", "eqeq") || floatIeeeEquality) {
-            if (leftType.isKotlinAny() || rightType.isKotlinAny()) {
-                throw UnsupportedKotlinIr(call, "Any value equality requires runtime dispatch")
+            val equalityLayouts = equalityLayoutsFor(leftType)
+            val hasGuestEqualityOverride =
+                equalityLayouts.any { layout ->
+                    val declaration = layout.declaration
+                    declaration.isData ||
+                        declaration.declarations.any { member ->
+                            member is IrSimpleFunction && member.name.asString() == "equals" && member.body != null
+                        }
+                }
+            if (
+                leftType.isKotlinAny() || rightType.isKotlinAny() ||
+                (
+                    hasGuestEqualityOverride &&
+                        expressions.none { it is IrConst && it.value == null } &&
+                        valueType(leftType, call) is ValueType.Ref &&
+                        valueType(rightType, call) is ValueType.Ref
+                )
+            ) {
+                return compileUniversalEquality(call, operands, equalityLayouts)
             }
             return allocate(ValueType.Bool).also { destination ->
                 if (leftType == kotlinStringType && rightType == kotlinStringType) {
@@ -5265,6 +5291,188 @@ private class FunctionCompiler(
             val instruction = instructionFactory(orderedType, destination)
             emit(instruction)
         }
+    }
+
+    private fun equalityLayoutsFor(type: IrType): List<GuestClassLayout> {
+        val layouts = (constructorLayouts.values + genericConstructorLayouts.values).map { it.layout }.distinctBy { it.typeId }
+        if (type.isKotlinAny()) return layouts
+        val sourceClass = (type as? IrSimpleType)?.classifier as? IrClassSymbol ?: return layouts
+
+        fun inheritsFrom(declaration: IrClass): Boolean =
+            declaration.symbol == sourceClass ||
+                declaration.superTypes.any { superType ->
+                    val parent = (superType as? IrSimpleType)?.classifier as? IrClassSymbol
+                    parent != null && inheritsFrom(parent.owner)
+                }
+        return layouts.filter { inheritsFrom(it.declaration) }
+    }
+
+    private fun compileUniversalEquality(
+        call: IrCall,
+        operands: List<RegisterId>,
+        equalityLayouts: List<GuestClassLayout>,
+    ): RegisterId {
+        val anyType = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))
+        val nullableAny = ValueType.Ref(nullable = true, type = anyType)
+        val registerTypes = leadingParameterTypes + sourceParameters.map { valueType(it.type, it) } + localTypes
+        val references =
+            operands.map { operand ->
+                val type = registerTypes[operand.value.toInt()]
+                if (type !is ValueType.Ref) {
+                    throw UnsupportedKotlinIr(call, "universal equality supports only boxed Int and references")
+                }
+                allocate(nullableAny).also { destination -> emit(Instruction.CheckedCast(destination, operand, anyType)) }
+            }
+        val same = allocate(ValueType.Bool)
+        emit(Instruction.RefEqual(same, references[0], references[1]))
+        val destination = allocate(ValueType.Bool)
+        val exits = mutableListOf<Int>()
+        val checkInt = createBlock()
+        jumpTo(checkInt)
+
+        currentBlock = checkInt
+        val boxType = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE))
+        val leftInt = allocate(ValueType.Bool)
+        emit(Instruction.IsType(leftInt, references[0], boxType))
+        val checkRightInt = createBlock()
+        val checkString = createBlock()
+        emit(Instruction.Branch(leftInt, blockId(checkRightInt), blockId(checkString)))
+
+        currentBlock = checkRightInt
+        val rightInt = allocate(ValueType.Bool)
+        emit(Instruction.IsType(rightInt, references[1], boxType))
+        val compareInts = createBlock()
+        val differentIntKinds = createBlock()
+        emit(Instruction.Branch(rightInt, blockId(compareInts), blockId(differentIntKinds)))
+
+        currentBlock = compareInts
+        val intValues =
+            references.map { reference ->
+                val box = allocate(ValueType.Ref(nullable = false, type = boxType))
+                emit(Instruction.CheckedCast(box, reference, boxType))
+                allocate(ValueType.I32).also { value ->
+                    emit(Instruction.FieldGet(value, box, FieldRef.Imported(ImportId.of(INT_BOX_VALUE_IMPORT))))
+                }
+            }
+        emit(Instruction.Equal(ScalarValueType.I32, destination, intValues[0], intValues[1]))
+        exits += currentBlock
+
+        currentBlock = differentIntKinds
+        emit(Instruction.Move(destination, same))
+        exits += currentBlock
+
+        currentBlock = checkString
+        val stringRef = (stringType as ValueType.Ref).type
+        val leftString = allocate(ValueType.Bool)
+        emit(Instruction.IsType(leftString, references[0], stringRef))
+        val checkRightString = createBlock()
+        val nonString = createBlock()
+        emit(Instruction.Branch(leftString, blockId(checkRightString), blockId(nonString)))
+
+        currentBlock = checkRightString
+        val rightString = allocate(ValueType.Bool)
+        emit(Instruction.IsType(rightString, references[1], stringRef))
+        val compareStrings = createBlock()
+        val differentStringKinds = createBlock()
+        emit(Instruction.Branch(rightString, blockId(compareStrings), blockId(differentStringKinds)))
+
+        currentBlock = compareStrings
+        val strings =
+            references.map { reference ->
+                allocate(stringType).also { value -> emit(Instruction.CheckedCast(value, reference, stringRef)) }
+            }
+        emit(Instruction.StringEquals(destination, strings[0], strings[1]))
+        exits += currentBlock
+
+        currentBlock = differentStringKinds
+        emit(Instruction.Move(destination, same))
+        exits += currentBlock
+
+        currentBlock = nonString
+        equalityLayouts.forEach { layout ->
+            val override =
+                layout.declaration.declarations
+                    .filterIsInstance<IrSimpleFunction>()
+                    .firstOrNull { it.name.asString() == "equals" && it.body != null }
+            val overrideId = override?.let { functionIds[it.symbol] }
+            if (override != null && overrideId == null && !layout.declaration.isData) {
+                throw UnsupportedKotlinIr(call, "equality override is unavailable for ${layout.declaration.name}")
+            }
+            if (!layout.declaration.isData && overrideId == null) return@forEach
+            val classRef = TypeRef.Local(layout.typeId)
+            val leftMatches = allocate(ValueType.Bool)
+            emit(Instruction.IsType(leftMatches, references[0], classRef))
+            val matched = createBlock()
+            val next = createBlock()
+            emit(Instruction.Branch(leftMatches, blockId(matched), blockId(next)))
+
+            currentBlock = matched
+            val left = allocate(ValueType.Ref(nullable = false, type = classRef))
+            emit(Instruction.CheckedCast(left, references[0], classRef))
+            if (overrideId != null) {
+                emit(Instruction.CallVirtual(Destination.Register(destination), FunctionRef.Local(overrideId), listOf(left, references[1])))
+                exits += currentBlock
+            } else {
+                val rightMatches = allocate(ValueType.Bool)
+                emit(Instruction.IsType(rightMatches, references[1], classRef))
+                val compareFields = createBlock()
+                val differentClass = createBlock()
+                emit(Instruction.Branch(rightMatches, blockId(compareFields), blockId(differentClass)))
+
+                currentBlock = compareFields
+                val right = allocate(ValueType.Ref(nullable = false, type = classRef))
+                emit(Instruction.CheckedCast(right, references[1], classRef))
+                val constructorProperties =
+                    layout.declaration.constructors
+                        .singleOrNull { it.isPrimary }
+                        ?.parameters
+                        ?.filter { it.kind == IrParameterKind.Regular }
+                        ?.map { it.name.asString() }
+                        ?: throw UnsupportedKotlinIr(call, "data class primary constructor is unavailable for equality")
+                constructorProperties.forEach { name ->
+                    val field =
+                        layout.fields.singleOrNull { it.property.name.asString() == name }
+                            ?: throw UnsupportedKotlinIr(call, "data class equality field $name is unavailable")
+                    val leftValue = allocate(field.type)
+                    emit(Instruction.FieldGet(leftValue, left, FieldRef.Local(field.id)))
+                    val rightValue = allocate(field.type)
+                    emit(Instruction.FieldGet(rightValue, right, FieldRef.Local(field.id)))
+                    val equal = allocate(ValueType.Bool)
+                    when (field.type) {
+                        ValueType.I32 -> emit(Instruction.Equal(ScalarValueType.I32, equal, leftValue, rightValue))
+                        ValueType.I64 -> emit(Instruction.Equal(ScalarValueType.I64, equal, leftValue, rightValue))
+                        ValueType.Bool -> emit(Instruction.Equal(ScalarValueType.BOOL, equal, leftValue, rightValue))
+                        ValueType.Char -> emit(Instruction.Equal(ScalarValueType.CHAR, equal, leftValue, rightValue))
+                        stringType -> emit(Instruction.StringEquals(equal, leftValue, rightValue))
+                        else -> throw UnsupportedKotlinIr(call, "data class equality field $name needs virtual equals dispatch")
+                    }
+                    val nextField = createBlock()
+                    val differentField = createBlock()
+                    emit(Instruction.Branch(equal, blockId(nextField), blockId(differentField)))
+                    currentBlock = differentField
+                    emit(Instruction.Move(destination, same))
+                    exits += currentBlock
+                    currentBlock = nextField
+                }
+                emit(Instruction.Move(destination, rightMatches))
+                exits += currentBlock
+
+                currentBlock = differentClass
+                emit(Instruction.Move(destination, same))
+                exits += currentBlock
+            }
+            currentBlock = next
+        }
+        emit(Instruction.Move(destination, same))
+        exits += currentBlock
+
+        val join = createBlock()
+        exits.forEach { exit ->
+            currentBlock = exit
+            jumpTo(join)
+        }
+        currentBlock = join
+        return destination
     }
 
     private fun compileWhile(loop: IrWhileLoop) {

@@ -1800,7 +1800,11 @@ class MinimalScriptLoweringTest {
                 import kotlin.collections.emptyList
                 import kotlin.collections.listOf
 
-                class Token(val name: String)
+                data class Token(val name: String)
+                class Custom(val code: Int) {
+                    override fun equals(other: Any?): Boolean = other is Custom && code == other.code
+                    override fun hashCode(): Int = code
+                }
                 fun main() {
                     val numbers: List<Int> = listOf(7, 9)
                     val all: List<Any> = numbers
@@ -1830,6 +1834,29 @@ class MinimalScriptLoweringTest {
                     println(mixed[2] === token)
                     for (element in mixed) { println(element is Int) }
                     println(emptyList<Any>().size)
+                    val anotherBox = listOf<Any>(7)[0]
+                    val otherBox = listOf<Any>(8)[0]
+                    val anotherWord: Any = word.substring(0, 2) + word.substring(2, word.length)
+                    val anotherToken: Any = Token("same")
+                    val differentToken: Any = Token("different")
+                    require(!(mixed[0] === anotherBox))
+                    require(!(mixed[1] === anotherWord))
+                    require(mixed[0] == anotherBox)
+                    require(mixed[0].equals(anotherBox))
+                    require(mixed[0] != otherBox)
+                    require(mixed[0] == 7)
+                    require(7 == mixed[0])
+                    require(mixed[1] == anotherWord)
+                    require(mixed[0] != mixed[1])
+                    require(mixed[2] == token)
+                    require(mixed[2] == anotherToken)
+                    require(mixed[2] != differentToken)
+                    val custom: Any = Custom(4)
+                    val matchingCustom: Any = Custom(4)
+                    require(custom == matchingCustom)
+                    require(Token("same") == Token("same"))
+                    require(Token("same") != Token("different"))
+                    require(Custom(4) == Custom(4))
                 }
                 """.trimIndent()
             val result = adapter.compile(request(source))
@@ -1840,29 +1867,13 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `Any value equality remains rejected until boxed dispatch exists`() =
-        withAdapter { adapter ->
-            val source =
-                """
-                import kotlin.collections.List
-                import kotlin.collections.listOf
-                fun main() {
-                    val all: List<Any> = listOf(1)
-                    println(all[0] == all[0])
-                }
-                """.trimIndent()
-            val result = adapter.compile(request(source))
-            assertNull(result.artifact)
-            assertTrue(result.diagnostics.any { it.severity.name == "ERROR" && it.path != null }, result.diagnostics.toString())
-        }
-
-    @Test
     fun `other primitive to Any conversions report diagnostics without artifacts`() =
         withAdapter { adapter ->
             listOf(
                 "fun main() { val value: Any = true }",
                 "fun main() { val value: Any = 1L }",
                 "fun main() { val value: Any = 1.0f }",
+                "fun main() { val value: Any = 1; println(value == true) }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))
                 assertNull(result.artifact, source)
@@ -1917,7 +1928,10 @@ class MinimalScriptLoweringTest {
                     val all: List<Any> = numbers
                     var total = 0
                     for (round in 0 until 1000) {
-                        for (element in all) { total += element as Int }
+                        for (element in all) {
+                            require(element == 1 || element == 2 || element == 3)
+                            total += element as Int
+                        }
                     }
                     require(total == 6000)
                 }

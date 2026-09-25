@@ -86,6 +86,15 @@ supported.
   paired with [`tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/tests.rs), test
   `scalar_vectors_match_kotlin_jvm_semantics`.
 
+- [ ] **`Any` value equality — Partial** — non-null values held as `Any` support `==`, `!=`, and `equals`.
+  Distinct boxed `Int` values compare by i32 value; strings compare by UTF-16 content. Guest classes honor explicit
+  `equals` overrides; data classes compare supported scalar and non-null `String` primary-constructor properties.
+  Other classes use default identity equality. Unsupported data-class property shapes receive a compiler diagnostic.
+  An `Int` operand boxes at this boundary. Nullable `Any?`, hashing, and string conversion remain unavailable. Evidence:
+  [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+  test `list Int covariance to Any preserves the list and boxes reads`, executed by `testKotlinListAnyVmConformance`.
+  Tracking: [#581](https://github.com/CertifiedBadIdeas/Compukters/issues/581)
+
 - [ ] **`Unit` and `Nothing` — Partial** — `Unit` function results and
   non-returning trusted intrinsics are admitted, but general `Nothing`
   expressions such as arbitrary throws are not lowered. Evidence:
@@ -594,8 +603,7 @@ supported.
   reads and iteration through the universal view allocate `Int` boxes with checked `is Int` and `as Int` access. A
   supported reference list can also widen to `List<Any>` while preserving its element references. Direct
   `listOf<Any>(...)` stores boxed `Int` and supported references in one array; indexed reads reuse those references.
-  Value equality on `Any` remains a bounded source diagnostic until runtime value dispatch is available. Nullable
-  elements, unsupported primitive element types, spread
+  `Any` equality follows the bounded semantics above. Nullable elements, unsupported primitive element types, spread
   arguments, mutable collections, `Set`, `Map`, sequences, and collection algorithms are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `read only lists retain typed Int String and guest references`,
