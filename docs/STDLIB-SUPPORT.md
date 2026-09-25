@@ -74,7 +74,8 @@ links to their source files.
   traps. `Int` storage and typed reads remain unboxed. A `List<Int>` can widen to `List<Any>` without changing list
   identity; universal reads box each `Int`, and `is Int` / `as Int` recover its type and value. Supported reference lists
   also widen to `List<Any>` without copying their elements. Direct `listOf<Any>` construction stores mixed boxed `Int`
-  and supported references in one array; indexed reads and iteration preserve element identity. Non-null `Any` supports
+  and supported references in one array; indexed reads and iteration preserve element identity. `contains` / `in` and
+  `indexOf` search with supported value equality and return the first index or `-1` when absent. Non-null `Any` supports
   boxed `Int` value equality, string content equality, explicit Guest `equals` overrides, and data-class equality for
   supported constructor properties. Other classes use default identity equality. Hashing and text dispatch remain
   unavailable. Nullable elements and spread
