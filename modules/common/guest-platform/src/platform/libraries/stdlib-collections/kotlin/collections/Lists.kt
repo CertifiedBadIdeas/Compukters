@@ -19,26 +19,6 @@ public external fun <T> emptyList(): List<T>
 /** Checks whether this collection has at least one element. */
 public fun <T> Collection<T>.isNotEmpty(): Boolean = !isEmpty()
 
-/** Returns the index of the first equal element, or -1 when no element matches. */
-public fun <T> List<T>.indexOf(element: T): Int {
-    var index = 0
-    while (index < size) {
-        if (element == this[index]) return index
-        index += 1
-    }
-    return -1
-}
-
-/** Returns the index of the last equal element, or -1 when no element matches. */
-public fun <T> List<T>.lastIndexOf(element: T): Int {
-    var index = size - 1
-    while (index >= 0) {
-        if (element == this[index]) return index
-        index -= 1
-    }
-    return -1
-}
-
 internal class IntArrayBackedList(private val values: IntArray) : List<Int> {
     override val size: Int get() = values.size
 
@@ -46,14 +26,43 @@ internal class IntArrayBackedList(private val values: IntArray) : List<Int> {
 
     override fun contains(element: Int): Boolean = indexOf(element) >= 0
 
-    internal fun containsAny(element: Any): Boolean {
+    override fun indexOf(element: Int): Int {
         var index = 0
         while (index < size) {
-            if (element == values[index]) return true
+            if (element == values[index]) return index
             index += 1
         }
-        return false
+        return -1
     }
+
+    override fun lastIndexOf(element: Int): Int {
+        var index = size - 1
+        while (index >= 0) {
+            if (element == values[index]) return index
+            index -= 1
+        }
+        return -1
+    }
+
+    internal fun indexOfAny(element: Any): Int {
+        var index = 0
+        while (index < size) {
+            if (element == values[index]) return index
+            index += 1
+        }
+        return -1
+    }
+
+    internal fun lastIndexOfAny(element: Any): Int {
+        var index = size - 1
+        while (index >= 0) {
+            if (element == values[index]) return index
+            index -= 1
+        }
+        return -1
+    }
+
+    internal fun containsAny(element: Any): Boolean = indexOfAny(element) >= 0
 
     override fun get(index: Int): Int = values[index]
 
@@ -85,14 +94,43 @@ internal class ArrayBackedList<T : Any>(private val values: Array<T>) : List<T> 
 
     override fun contains(element: T): Boolean = indexOf(element) >= 0
 
-    internal fun containsAny(element: Any): Boolean {
+    override fun indexOf(element: T): Int {
         var index = 0
         while (index < size) {
-            if (element == values[index]) return true
+            if (element == values[index]) return index
             index += 1
         }
-        return false
+        return -1
     }
+
+    override fun lastIndexOf(element: T): Int {
+        var index = size - 1
+        while (index >= 0) {
+            if (element == values[index]) return index
+            index -= 1
+        }
+        return -1
+    }
+
+    internal fun indexOfAny(element: Any): Int {
+        var index = 0
+        while (index < size) {
+            if (element == values[index]) return index
+            index += 1
+        }
+        return -1
+    }
+
+    internal fun lastIndexOfAny(element: Any): Int {
+        var index = size - 1
+        while (index >= 0) {
+            if (element == values[index]) return index
+            index -= 1
+        }
+        return -1
+    }
+
+    internal fun containsAny(element: Any): Boolean = indexOfAny(element) >= 0
 
     override fun get(index: Int): T = values[index]
 

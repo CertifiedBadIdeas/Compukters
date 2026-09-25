@@ -28,6 +28,10 @@ public interface Collection<out T> : Iterable<T> {
 
 public interface List<out T> : Collection<T> {
     public operator fun get(index: Int): T
+
+    public fun indexOf(element: @UnsafeVariance T): Int
+
+    public fun lastIndexOf(element: @UnsafeVariance T): Int
 }
 
 internal interface Set<out T> : Collection<T>

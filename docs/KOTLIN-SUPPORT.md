@@ -632,8 +632,9 @@ supported.
   supported reference list can also widen to `List<Any>` while preserving its element references. Direct
   `listOf<Any>(...)` stores boxed `Int` and supported references in one array; indexed reads reuse those references.
   `Collection<T>` owns `size`, `isEmpty`, and `contains`; custom collections can implement this contract.
-  `isNotEmpty` is a `Collection<T>` extension. `List<T>` retains indexed access and its index-based `indexOf` and
-  `lastIndexOf` extensions. Searches use the supported `==` semantics and return the first or last match, or `-1`.
+  `isNotEmpty` is a `Collection<T>` extension. `List<T>` owns indexed access and the index-based `indexOf` and
+  `lastIndexOf` methods; custom lists implement them. Searches use the supported `==` semantics and return the first
+  or last match, or `-1`.
   The `Iterable<T>` search and predicate extensions above also work on these lists.
   Extension functions are Guest `kotlin.collections` declarations and require imports. Nullable elements, unsupported
   primitive element types, spread arguments, mutable collections, `Set`, `Map`, sequences, and other collection
