@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage Dokka's Guest Kotlin API reference for the Jekyll site."""
+"""Stage Dokka's Guest Kotlin and Create addon API reference for Jekyll."""
 
 from __future__ import annotations
 
@@ -23,10 +23,21 @@ def main() -> None:
     args = parser.parse_args()
 
     source_files = files_under(SOURCE)
-    if not (SOURCE / "index.html").is_file() or not any(
-        path.parts[-2:] == ("kotlin", "index.html") for path in source_files
-    ):
-        raise SystemExit("Dokka output is missing the Guest Kotlin API; run ./gradlew -p docs/api-build dokkaGeneratePublicationHtml")
+    required_pages = (
+        "index.html",
+        "guest/index.html",
+        "guest/kotlin/index.html",
+        "create/index.html",
+        "create/create.boiler/index.html",
+        "create/create.kinetics/index.html",
+        "create/create.logistics/index.html",
+    )
+    missing_pages = [page for page in required_pages if Path(page) not in source_files]
+    if missing_pages:
+        raise SystemExit(
+            f"Dokka output is missing API pages {missing_pages}; "
+            "run ./gradlew -p docs/api-build dokkaGeneratePublicationHtml"
+        )
 
     if args.check:
         staged_files = files_under(OUTPUT)

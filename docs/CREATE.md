@@ -13,6 +13,9 @@ Compukters mod works without Create; the addon is unavailable on Minecraft 26.1.
 
 {% include create-nav.html %}
 
+The [Create API reference]({{ '/guest-api/create/' | relative_url }}) lists the addon declarations and their source
+files. Its Kotlin types link to the [Guest Kotlin API reference]({{ '/guest-api/guest/' | relative_url }}).
+
 ## What programs can do
 
 | Area | Supported devices | Program actions |
