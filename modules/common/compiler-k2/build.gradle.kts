@@ -315,6 +315,7 @@ val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/
 val genericFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-functions.cpkt")
 val genericCellConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-cell.cpkt")
 val genericInterfaceConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-interface.cpkt")
+val listConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list.cpkt")
 val genericLibraryConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-library.cpkt")
 val floatConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-float.cpkt")
 val dispatchConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-dispatch.cpkt")
@@ -826,6 +827,22 @@ val generateGenericInterfaceConformanceArtifact = tasks.register<Test>("generate
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.genericInterfaceArtifact", genericInterfaceConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateListConformanceArtifact = tasks.register<Test>("generateListConformanceArtifact") {
+    description = "Compiles typed read-only Guest lists for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*read only lists retain typed Int String and guest references*")
+    inputs.file(workerJar)
+    outputs.file(listConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.listArtifact", listConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
