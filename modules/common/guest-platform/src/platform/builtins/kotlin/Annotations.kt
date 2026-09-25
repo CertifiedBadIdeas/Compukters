@@ -12,6 +12,7 @@ public annotation class Deprecated(val message: String)
 
 public annotation class PublishedApi
 
+@kotlin.annotation.Target(kotlin.annotation.AnnotationTarget.TYPE)
 public annotation class UnsafeVariance
 
 public annotation class ExtensionFunctionType
