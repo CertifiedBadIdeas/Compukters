@@ -26,6 +26,8 @@ fn main() {
         "generic-cell" => k2_generic_cell_preserves_typed_fields_and_aliases(),
         "generic-interface" => k2_generic_interface_dispatches_concrete_types(),
         "list" => k2_lists_retain_typed_elements(),
+        "list-bounds" => k2_list_index_outside_bounds_traps(),
+        "list-quota" => k2_list_iterator_resumes_across_quota_slices(),
         "generic-library" => k2_generic_library_specializes_in_consumer(),
         "reference-array" => k2_reference_arrays_retain_typed_guest_objects(),
         "float" => k2_float_executes_arithmetic_conversions_comparisons_and_text(),
@@ -949,8 +951,67 @@ fn k2_generic_interface_dispatches_concrete_types() {
 fn k2_lists_retain_typed_elements() {
     k2_expected_prints(
         "COMPUKTER_KOTLIN_LIST_ARTIFACT",
-        ["2\n", "9\n", "0\n", "first\n", "blue\n", "16\n", "first\n", "second\n"],
+        [
+            "2\n", "9\n", "true\n", "0\n", "0\n", "first\n", "blue\n", "1\n", "2\n", "2\n", "16\n", "first\n", "second\n",
+        ],
     );
+}
+
+fn k2_list_index_outside_bounds_traps() {
+    let path = std::env::var("COMPUKTER_KOTLIN_LIST_BOUNDS_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_LIST_BOUNDS_ARTIFACT must be set");
+    let bytes = fs::read(path).expect("K2 list bounds artifact must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("pinned VM must verify list bounds artifact");
+    let mut session = Session::admit(verified, list_no_io_profile(), &[]).expect("list bounds program must admit");
+    session.start(&[]).expect("list bounds program must start");
+    loop {
+        match session.advance(64, 64).expect("list bounds program must execute") {
+            AdvanceOutcome::SliceExhausted => {}
+            AdvanceOutcome::Crashed(GuestTrap::IndexOutOfBounds) => break,
+            outcome => panic!("unexpected list bounds outcome: {outcome:?}"),
+        }
+    }
+}
+
+fn k2_list_iterator_resumes_across_quota_slices() {
+    let path = std::env::var("COMPUKTER_KOTLIN_LIST_QUOTA_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_LIST_QUOTA_ARTIFACT must be set");
+    let bytes = fs::read(path).expect("K2 list quota artifact must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("pinned VM must verify list quota artifact");
+    let mut session = Session::admit(verified, list_no_io_profile(), &[]).expect("list quota program must admit");
+    session.start(&[]).expect("list quota program must start");
+    let mut exhausted_slices = 0;
+    loop {
+        match session.advance(64, 64).expect("list quota program must execute") {
+            AdvanceOutcome::SliceExhausted => exhausted_slices += 1,
+            AdvanceOutcome::Halted(None) => break,
+            outcome => panic!("unexpected list quota outcome: {outcome:?}"),
+        }
+    }
+    assert!(exhausted_slices > 0, "list iteration must resume after exhausting a slice");
+}
+
+fn list_no_io_profile() -> ExecutionProfile {
+    ExecutionProfile {
+        heap_bytes: 1024 * 1024,
+        frame_storage_bytes: 1024 * 1024,
+        maximum_call_depth: 64,
+        maximum_coroutines: 1,
+        maximum_channels: 0,
+        maximum_channel_values: 0,
+        maximum_host_requests: 64,
+        maximum_events: 0,
+        maximum_slice_budget: u32::MAX,
+        compiler_abi: [0; 32],
+        platform_abi: [0; 32],
+        maximum_host_arguments: 16,
+        maximum_outbound_utf16_code_units: 4096,
+        maximum_inbound_utf16_code_units: 4096,
+        maximum_accepted_responses: 64,
+        entry_argument_limits: entry_argument_limits(),
+    }
 }
 
 fn k2_generic_library_specializes_in_consumer() {

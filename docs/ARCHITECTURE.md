@@ -120,6 +120,11 @@ containing generic function or class implementations as source-only; the compile
 the consuming Guest program so reachable bodies and class layouts can be specialized. Ordinary platform modules retain
 precompiled library fragments. Generic binary templates are not part of the platform bundle or VM artifact contract.
 
+The `stdlib:collections` module publishes read-only `List<T>` implementations as source-only declarations. Concrete
+`Int` lists own i32 arrays; `String` and supported Guest class lists own typed reference arrays. Collection interfaces
+and iterator methods are specialized in the consuming artifact. `List<Int>` to `List<Any>` remains rejected until the
+universal-value boxing bridge can preserve the original list object's identity.
+
 Concrete `Array<GuestClass>` uses become distinct local nominal array types whose elements are exact Guest class
 references. Existing array instructions allocate, load, and store them; the verifier checks element types and GC
 follows live references in their slots. Execution tracing consults each frame's safepoint map before resolving a

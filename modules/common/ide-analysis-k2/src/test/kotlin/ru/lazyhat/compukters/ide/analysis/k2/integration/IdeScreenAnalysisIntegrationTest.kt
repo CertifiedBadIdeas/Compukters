@@ -46,6 +46,46 @@ import kotlin.test.assertTrue
 
 class IdeScreenAnalysisIntegrationTest {
     @Test
+    fun `read only List members complete from the canonical platform`() {
+        val source = "import kotlin.collections.listOf\nfun main() { val numbers = listOf(1, 2); numbers.si }"
+        val path = VirtualSourcePath.kotlin("src/main.kt")
+        val sources = ProjectSnapshot.of(listOf(ProjectSource(path, BinaryValue.of(source.encodeToByteArray()))), WorkerLimits())
+        val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 18 }))
+        val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
+        val admitted =
+            AdmittedAnalysisSnapshot(
+                identity,
+                sources,
+                AdmittedAnalysisProfile(
+                    profile,
+                    ru.lazyhat.compukters.ide.analysis.k2
+                        .testAdmittedPlatform(selectAllModules = true),
+                ),
+                AnalysisLimits(),
+            )
+
+        withController { controller ->
+            assertEquals(SnapshotOpenResult.Opened(identity), controller.open(admitted).get(90, TimeUnit.SECONDS))
+            val completion =
+                assertIs<AnalysisResult.Completion>(
+                    assertIs<AnalysisClientResult.Success>(
+                        controller
+                            .query(
+                                admitted,
+                                AnalysisQuery.Completion(
+                                    identity,
+                                    path,
+                                    source.lastIndexOf("numbers.si") + "numbers.si".length,
+                                    CompletionTrigger.Automatic,
+                                ),
+                            ).get(90, TimeUnit.SECONDS),
+                    ).result,
+                )
+            assertTrue(completion.items.any { it.insertText == "size" }, completion.items.toString())
+        }
+    }
+
+    @Test
     fun `same admitted snapshot provides presentation and applicable completion`() {
         val source = "fun candidate() = Unit\nfun main() { can }"
         val path = VirtualSourcePath.kotlin("src/main.kt")

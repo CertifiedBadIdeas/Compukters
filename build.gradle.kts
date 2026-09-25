@@ -563,6 +563,24 @@ registerKotlinVmConformance(
     conformanceScenario = "list",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinListBoundsVmConformance",
+    taskDescription = "Verifies Guest list indexing traps on an out-of-range index.",
+    artifactTask = ":compiler-k2:generateListBoundsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-list-bounds.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-list-bounds-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_LIST_BOUNDS_ARTIFACT",
+    conformanceScenario = "list-bounds",
+)
+registerKotlinVmConformance(
+    taskName = "testKotlinListQuotaVmConformance",
+    taskDescription = "Verifies Guest list iteration resumes across VM quota slices.",
+    artifactTask = ":compiler-k2:generateListQuotaConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-list-quota.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-list-quota-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_LIST_QUOTA_ARTIFACT",
+    conformanceScenario = "list-quota",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinGenericLibraryVmConformance",
     taskDescription = "Executes a source-distributed generic Guest library consumer with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateGenericLibraryConformanceArtifact",

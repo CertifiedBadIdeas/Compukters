@@ -1738,24 +1738,50 @@ class MinimalScriptLoweringTest {
                 import kotlin.collections.listOf
 
                 class Token(val name: String)
+                class Counter(var value: Int) {
+                    fun next(): Int { value += 1; return value }
+                }
                 fun main() {
                     val numbers = listOf(7, 9)
+                    val alias = numbers
                     println(numbers.size)
                     println(numbers[1])
+                    println(alias == numbers)
                     val empty = emptyList<Int>()
                     println(empty.size)
+                    println(listOf<Int>().size)
                     val words = listOf("first", "second")
                     println(words[0])
                     val tokens = listOf(Token("red"), Token("blue"))
                     println(tokens[1].name)
+                    val counter = Counter(0)
+                    val ordered = listOf(counter.next(), counter.next())
+                    println(ordered[0])
+                    println(ordered[1])
+                    println(counter.value)
                     var total = 0
                     for (number in numbers) { total += number }
                     println(total)
                     for (word in words) { println(word) }
+                    for (number in empty) { println(number) }
                 }
                 """.trimIndent()
             val result = adapter.compile(request(source))
             val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val application = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+            val intList =
+                application.types.filterIsInstance<NominalType.Class>().single { type ->
+                    application.strings[type.name.value.toInt()].toString() == "kotlin.collections.IntArrayBackedList"
+                }
+            val backingType = application.fields[intList.fieldStart.toInt()].type as ValueType.Ref
+            val backingImport = application.imports[((backingType.type as TypeRef.Imported).id.value).toInt()]
+            assertEquals("kotlin.IntArray", application.strings[backingImport.targetName.value.toInt()].toString())
+            val intGet =
+                application.functions
+                    .subList(intList.methodStart.toInt(), (intList.methodStart + intList.methodCount).toInt())
+                    .single { function -> application.strings[function.name.value.toInt()].toString() == "get" }
+            val intGetSignature = application.types[(intGet.signature as TypeRef.Local).id.value.toInt()] as NominalType.Function
+            assertEquals(ValueType.I32, intGetSignature.result)
             System.getProperty("compukter.vm.listArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }
@@ -1778,6 +1804,57 @@ class MinimalScriptLoweringTest {
             val result = adapter.compile(request(source))
             assertNull(result.artifact)
             assertTrue(result.diagnostics.any { it.severity.name == "ERROR" && it.path != null }, result.diagnostics.toString())
+        }
+
+    @Test
+    fun `list index outside bounds compiles to trapped array access`() =
+        withAdapter { adapter ->
+            val source = "import kotlin.collections.listOf\nfun main() { val values = listOf(7); values[1] }"
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val application = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+            assertTrue(application.blocks.flatMap(Block::instructions).any { it is Instruction.ArrayLoad })
+            System.getProperty("compukter.vm.listBoundsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `list iterator resumes across quota slices`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.listOf
+                fun main() {
+                    val numbers = listOf(1, 2, 3)
+                    var total = 0
+                    for (round in 0 until 100) {
+                        for (number in numbers) { total += number }
+                    }
+                    require(total == 600)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.listQuotaArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `unsupported list element and spread forms report diagnostics`() =
+        withAdapter { adapter ->
+            val unsupported =
+                listOf(
+                    "import kotlin.collections.listOf\nfun main() { listOf<Int?>(null) }",
+                    "import kotlin.collections.listOf\nfun main() { listOf(true) }",
+                    "import kotlin.collections.listOf\nfun main() { val array = arrayOf(\"a\"); listOf(*array) }",
+                )
+            unsupported.forEach { source ->
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact, source)
+                assertTrue(result.diagnostics.any { it.severity.name == "ERROR" && it.path != null }, result.diagnostics.toString())
+            }
         }
 
     @Test
@@ -3338,10 +3415,9 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `unsupported collection unsigned and Double source produces a stable diagnostic and no artifact`() =
+    fun `unsupported unsigned and Double source produces a stable diagnostic and no artifact`() =
         withAdapter { adapter ->
             listOf(
-                "fun main() { listOf(1) }",
                 "fun main() { val answer: UInt = 42u }",
                 "fun main() { val answer: Double = 42.0 }",
             ).forEach { source ->

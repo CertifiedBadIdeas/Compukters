@@ -4505,6 +4505,8 @@ private class FunctionCompiler(
         val elements =
             if (!nonemptyFactory) {
                 emptyList()
+            } else if (call.arguments.all { it == null }) {
+                emptyList()
             } else {
                 val vararg =
                     call.arguments.filterNotNull().singleOrNull() as? IrVararg
@@ -6085,7 +6087,11 @@ private class LiteralCollector(
             values += 0
         } else if (fqName == "kotlin.arrayOf" || fqName == "kotlin.intArrayOf" || fqName == "kotlin.collections.listOf") {
             val size = (expression.arguments.filterNotNull().singleOrNull() as? IrVararg)?.elements?.size
-            if (size != null) values.addAll(0..size)
+            if (size != null) {
+                values.addAll(0..size)
+            } else if (fqName == "kotlin.collections.listOf") {
+                values += 0
+            }
         } else if (fqName == "kotlin.collections.copyOfRange") {
             values.addAll(listOf(0, 1))
         }
