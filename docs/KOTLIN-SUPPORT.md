@@ -547,10 +547,11 @@ supported.
 
 - [ ] **`String` operations — Partial** — literals, concatenation,
   interpolation lowered as concatenation, `length`, indexed `get`,
-  `substring`, equality, direct `compareTo(String)`, and construction from
-  `CharArray` map to verified VM operations. `compareTo` orders UTF-16 code units
-  and returns the first differing code-unit difference, or the length difference
-  for a prefix. The core library also provides `startsWith(prefix: String)`,
+  `substring`, equality, direct `compareTo(String)`, the `<`, `<=`, `>`, and `>=`
+  operators, and construction from `CharArray` map to verified VM operations.
+  `compareTo` orders UTF-16 code units and returns the first differing code-unit
+  difference, or the length difference for a prefix. The core library also
+  provides `startsWith(prefix: String)`,
   `endsWith(suffix: String)`, `contains(other: String)`, and
   `indexOf(other: String, startIndex: Int = 0)`. Search uses UTF-16 code units;
   a negative start index begins at zero, and an empty search string returns the
@@ -558,7 +559,7 @@ supported.
   available. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `shell language subset lowers control flow scalars strings and raw terminal calls`
-  and `String compareTo lowers UTF-16 ordering for vm conformance`, with VM
+  and `String compareTo and ordering operators lower UTF-16 order for vm conformance`, with VM
   scenario `testKotlinStringCompareVmConformance`; also
   [`text_tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/text_tests.rs),
   tests `string_content_operations_use_kotlin_utf16_semantics`,

@@ -970,6 +970,8 @@ fn k2_string_compare_uses_utf16_code_units() {
         "COMPUKTER_KOTLIN_STRING_COMPARE_ARTIFACT",
         [
             "0\n", "-1\n", "-2\n", "2\n", "2\n", "0\n", "-1\n", "1\n", "left\n", "right\n", "-1\n",
+            "true\n", "true\n", "false\n", "false\n", "true\n", "false\n", "true\n", "true\n",
+            "true\n", "true\n", "left\n", "right\n", "true\n",
         ],
         128,
     );
