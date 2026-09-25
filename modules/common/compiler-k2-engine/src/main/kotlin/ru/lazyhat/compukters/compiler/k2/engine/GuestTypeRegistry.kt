@@ -30,12 +30,12 @@ internal class GuestTypeRegistry(
     pluginContext: IrPluginContext,
 ) {
     val stringType: IrType = pluginContext.irBuiltIns.stringType
-    val stringArrayClass: IrClassSymbol = pluginContext.irBuiltIns.arrayClass
+    val arrayClass: IrClassSymbol = pluginContext.irBuiltIns.arrayClass
     private var referenceArrays: Map<String, ValueType.Ref> = emptyMap()
 
     fun arrayElement(type: IrType): IrType? {
         val simple = type as? IrSimpleType ?: return null
-        if (simple.isNullable() || simple.classifier != stringArrayClass) return null
+        if (simple.isNullable() || simple.classifier != arrayClass) return null
         return (simple.arguments.singleOrNull() as? IrTypeProjection)?.type
     }
 
@@ -47,7 +47,7 @@ internal class GuestTypeRegistry(
 
     fun isStringArray(type: IrType): Boolean {
         val simple = type as? IrSimpleType ?: return false
-        if (simple.isNullable() || simple.classifier != stringArrayClass) return false
+        if (simple.isNullable() || simple.classifier != arrayClass) return false
         val argument = simple.arguments.singleOrNull() as? IrTypeProjection ?: return false
         return argument.type == stringType
     }

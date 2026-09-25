@@ -4341,7 +4341,7 @@ private class FunctionCompiler(
             }
         }
         compileIntArrayFactory(call, target)?.let { return it }
-        compileStringArrayFactory(call, target)?.let { return it }
+        compileReferenceArrayFactory(call, target)?.let { return it }
         trustedIntrinsic(target)?.let { intrinsic ->
             val arguments =
                 target.parameters
@@ -4716,16 +4716,12 @@ private class FunctionCompiler(
         val elements =
             if (!nonemptyFactory) {
                 emptyList()
-            } else if (call.arguments.all { it == null }) {
-                emptyList()
             } else {
-                val vararg =
-                    call.arguments.filterNotNull().singleOrNull() as? IrVararg
-                        ?: throw UnsupportedKotlinIr(call, "listOf requires direct vararg elements")
-                vararg.elements.map {
-                    it as? IrExpression
-                        ?: throw UnsupportedKotlinIr(call, "spread listOf arguments are outside the project subset")
-                }
+                directVarargElements(
+                    call,
+                    "listOf requires direct vararg elements",
+                    "spread listOf arguments are outside the project subset",
+                )
             }
         val arrayType =
             if (intElements) {
@@ -4738,14 +4734,7 @@ private class FunctionCompiler(
         val arrayRef =
             arrayType as? ValueType.Ref
                 ?: throw UnsupportedKotlinIr(call, "unsupported list element storage")
-        val values = elements.map { element -> compileExpression(element, elementType) }
-        val length = emitI32Constant(values.size, call)
-        prepareAllocationBlock()
-        val array = allocate(arrayType)
-        emit(Instruction.NewArray(array, arrayRef.type, length))
-        values.forEachIndexed { index, value ->
-            emit(Instruction.ArrayStore(array, emitI32Constant(index, call), value))
-        }
+        val array = compileArrayElements(call, arrayRef, elements) { compileExpression(it, elementType) }
         val ownerType = TypeRef.Local(target.layout.typeId)
         prepareAllocationBlock()
         return allocate(ValueType.Ref(nullable = false, type = ownerType)).also { destination ->
@@ -4755,7 +4744,7 @@ private class FunctionCompiler(
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
-    private fun compileStringArrayFactory(
+    private fun compileReferenceArrayFactory(
         call: IrCall,
         target: IrSimpleFunction,
     ): RegisterId? {
@@ -4777,18 +4766,11 @@ private class FunctionCompiler(
                 }
 
                 "kotlin.arrayOf" -> {
-                    val arguments = call.arguments.filterNotNull()
-                    if (arguments.isEmpty()) {
-                        emptyList()
-                    } else {
-                        val vararg =
-                            arguments.singleOrNull() as? IrVararg
-                                ?: throw UnsupportedKotlinIr(call, "arrayOf requires a direct vararg")
-                        vararg.elements.map { element ->
-                            element as? IrExpression
-                                ?: throw UnsupportedKotlinIr(call, "spread arrayOf arguments are outside the project subset")
-                        }
-                    }
+                    directVarargElements(
+                        call,
+                        "arrayOf requires a direct vararg",
+                        "spread arrayOf arguments are outside the project subset",
+                    )
                 }
 
                 else -> {
@@ -4796,15 +4778,7 @@ private class FunctionCompiler(
                 }
             }
         val elementType = guestTypes.arrayElement(resolvedCallType)
-        val values = elements.map { element -> compileExpression(element, elementType) }
-        val length = emitI32Constant(elements.size, call)
-        prepareAllocationBlock()
-        val array = allocate(arrayType)
-        emit(Instruction.NewArray(array, (arrayType as ValueType.Ref).type, length))
-        values.forEachIndexed { index, value ->
-            emit(Instruction.ArrayStore(array, emitI32Constant(index, call), value))
-        }
-        return array
+        return compileArrayElements(call, arrayType as ValueType.Ref, elements) { compileExpression(it, elementType) }
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -4815,24 +4789,37 @@ private class FunctionCompiler(
         if (!call.type.isExactClass(kotlinIntArrayClass) || target.fqNameWhenAvailable?.asString() != "kotlin.intArrayOf") {
             return null
         }
-        val arguments = call.arguments.filterNotNull()
         val elements =
-            if (arguments.isEmpty()) {
-                emptyList()
-            } else {
-                val vararg =
-                    arguments.singleOrNull() as? IrVararg
-                        ?: throw UnsupportedKotlinIr(call, "intArrayOf requires a direct vararg")
-                vararg.elements.map { element ->
-                    element as? IrExpression
-                        ?: throw UnsupportedKotlinIr(call, "spread intArrayOf arguments are outside the project subset")
-                }
-            }
-        val values = elements.map(::compileExpression)
-        val length = emitI32Constant(elements.size, call)
+            directVarargElements(
+                call,
+                "intArrayOf requires a direct vararg",
+                "spread intArrayOf arguments are outside the project subset",
+            )
+        return compileArrayElements(call, intArrayType as ValueType.Ref, elements, ::compileExpression)
+    }
+
+    private fun directVarargElements(
+        call: IrCall,
+        invalidVararg: String,
+        spreadArgument: String,
+    ): List<IrExpression> {
+        val arguments = call.arguments.filterNotNull()
+        if (arguments.isEmpty()) return emptyList()
+        val vararg = arguments.singleOrNull() as? IrVararg ?: throw UnsupportedKotlinIr(call, invalidVararg)
+        return vararg.elements.map { it as? IrExpression ?: throw UnsupportedKotlinIr(call, spreadArgument) }
+    }
+
+    private fun compileArrayElements(
+        call: IrCall,
+        arrayType: ValueType.Ref,
+        elements: List<IrExpression>,
+        compileElement: (IrExpression) -> RegisterId,
+    ): RegisterId {
+        val values = elements.map(compileElement)
+        val length = emitI32Constant(values.size, call)
         prepareAllocationBlock()
-        val array = allocate(intArrayType)
-        emit(Instruction.NewArray(array, (intArrayType as ValueType.Ref).type, length))
+        val array = allocate(arrayType)
+        emit(Instruction.NewArray(array, arrayType.type, length))
         values.forEachIndexed { index, value ->
             emit(Instruction.ArrayStore(array, emitI32Constant(index, call), value))
         }
