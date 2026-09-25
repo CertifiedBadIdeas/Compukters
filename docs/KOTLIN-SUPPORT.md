@@ -621,7 +621,8 @@ supported.
   reads and iteration through the universal view allocate `Int` boxes with checked `is Int` and `as Int` access. A
   supported reference list can also widen to `List<Any>` while preserving its element references. Direct
   `listOf<Any>(...)` stores boxed `Int` and supported references in one array; indexed reads reuse those references.
-  `contains` / `in` and `indexOf` search by the supported `==` semantics; `indexOf` returns the first match or `-1`.
+  `isEmpty` and `isNotEmpty` inspect `size`. `contains` / `in`, `indexOf`, and `lastIndexOf` use the supported `==`
+  semantics; the searches return the first or last match respectively, or `-1` when no element matches.
   These functions are Guest `kotlin.collections` extensions and require imports. Nullable elements, unsupported
   primitive element types, spread arguments, mutable collections, `Set`, `Map`, sequences, and other collection
   algorithms are unavailable. Evidence:

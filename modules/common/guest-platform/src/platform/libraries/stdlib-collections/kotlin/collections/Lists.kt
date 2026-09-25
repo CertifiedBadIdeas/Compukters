@@ -16,12 +16,28 @@ public external fun <T> listOf(vararg elements: T): List<T>
 /** Creates an empty read-only list with the requested element type. */
 public external fun <T> emptyList(): List<T>
 
+/** Checks whether this list has no elements. */
+public fun <T> List<T>.isEmpty(): Boolean = size == 0
+
+/** Checks whether this list has at least one element. */
+public fun <T> List<T>.isNotEmpty(): Boolean = !isEmpty()
+
 /** Returns the index of the first equal element, or -1 when no element matches. */
 public fun <T> List<T>.indexOf(element: T): Int {
     var index = 0
     while (index < size) {
         if (element == this[index]) return index
         index += 1
+    }
+    return -1
+}
+
+/** Returns the index of the last equal element, or -1 when no element matches. */
+public fun <T> List<T>.lastIndexOf(element: T): Int {
+    var index = size - 1
+    while (index >= 0) {
+        if (element == this[index]) return index
+        index -= 1
     }
     return -1
 }
