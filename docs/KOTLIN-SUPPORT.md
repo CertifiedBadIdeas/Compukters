@@ -120,13 +120,15 @@ supported.
 - [ ] **Integer arithmetic — Partial** — `Int` and `Long` support `+`, `-`, `*`,
   `/`, `%`, unary minus, `and`, `or`, `xor`, `inv`, `shl`, `shr`, and `ushr`
   with VM wrapping and masked-shift semantics. Arithmetic and comparisons mix
-  `Int` and `Long` using Kotlin widening rules. Other integer widths are not
-  lowered from source.
+  `Int` and `Long` using Kotlin widening rules. Direct `compareTo` calls between
+  `Int` and `Long` return `-1`, `0`, or `1` without subtracting the operands.
+  Other integer widths are not lowered from source.
   Evidence:
   [`KotlinProjectLowering`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2-engine/src/main/kotlin/ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLowering.kt)
   and [`numeric.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/numeric.rs), tests
   `integers_wrap_mask_shifts_and_handle_min_division` and
-  `Long arithmetic conversions comparisons and text lower for vm conformance`.
+  `Long arithmetic conversions comparisons and text lower for vm conformance`,
+  paired with `testKotlinLongVmConformance`.
   Tracking: [#619](https://github.com/CertifiedBadIdeas/Compukters/issues/619)
 
 - [x] **Floating-point arithmetic** — unboxed `Float` supports `+`, `-`, `*`, `/`,

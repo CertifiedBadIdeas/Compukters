@@ -1254,6 +1254,7 @@ internal object KotlinProjectLowering {
                 }
             }
         var needsAllBitsI32 = false
+        var needsIntegerCompareToResult = false
         var needsZeroI64 = false
         var needsAllBitsI64 = false
         (userFunctions + constructorClasses).forEach { function ->
@@ -1264,13 +1265,23 @@ internal object KotlinProjectLowering {
                     }
 
                     override fun visitCall(expression: IrCall) {
-                        when (
+                        val callee =
                             expression.symbol.owner.fqNameWhenAvailable
                                 ?.asString()
-                        ) {
-                            "kotlin.Int.inv" -> needsAllBitsI32 = true
-                            "kotlin.Long.unaryMinus" -> needsZeroI64 = true
-                            "kotlin.Long.inv" -> needsAllBitsI64 = true
+                        if (callee == "kotlin.Int.inv") needsAllBitsI32 = true
+                        if (callee == "kotlin.Long.unaryMinus") needsZeroI64 = true
+                        if (callee == "kotlin.Long.inv") needsAllBitsI64 = true
+                        if (callee == "kotlin.Int.compareTo" || callee == "kotlin.Long.compareTo") {
+                            val operands = expression.arguments.filterNotNull()
+                            if (
+                                operands.size == 2 &&
+                                operands.all { operand ->
+                                    operand.type == pluginContext.irBuiltIns.intType ||
+                                        operand.type == pluginContext.irBuiltIns.longType
+                                }
+                            ) {
+                                needsIntegerCompareToResult = true
+                            }
                         }
                         super.visitCall(expression)
                     }
@@ -1301,7 +1312,8 @@ internal object KotlinProjectLowering {
                     linkedSymbols.defaultIntValues
             ).map { value -> value.toArtifactConstant(literalIds) } +
                 Constant.I32(0) +
-                listOfNotNull(Constant.I32(-1).takeIf { needsAllBitsI32 }) +
+                listOfNotNull(Constant.I32(-1).takeIf { needsAllBitsI32 || needsIntegerCompareToResult }) +
+                listOfNotNull(Constant.I32(1).takeIf { needsIntegerCompareToResult }) +
                 listOfNotNull(Constant.I64(0).takeIf { literalCollector.usesLong || needsZeroI64 }) +
                 listOfNotNull(Constant.I64(-1).takeIf { needsAllBitsI64 }) +
                 listOfNotNull(Constant.F32(0u).takeIf { literalCollector.usesFloat }) +
@@ -4972,6 +4984,14 @@ private class FunctionCompiler(
             type: ValueType,
             instruction: (RegisterId) -> Instruction,
         ): RegisterId = allocate(type).also { emit(instruction(it)) }
+        if (
+            fqName in setOf("kotlin.Int.compareTo", "kotlin.Long.compareTo") &&
+            arguments.size == 2 &&
+            argumentExpressions.all { it.type == intType || it.type == longType } &&
+            call.type == intType
+        ) {
+            return compileIntegerCompareTo(call, argumentExpressions, arguments)
+        }
         if (arguments.size == 2 && call.type == kotlinStringType && fqName == "kotlin.String.plus") {
             val right =
                 if (argumentExpressions[1].type == kotlinStringType) {
@@ -5187,6 +5207,50 @@ private class FunctionCompiler(
             return result(stringType) { Instruction.StringFromCharArray(it, arguments[0], arguments[1], end) }
         }
         throw UnsupportedKotlinIr(call, "call target ${fqName.ifEmpty { name }} is outside the project subset")
+    }
+
+    private fun compileIntegerCompareTo(
+        call: IrCall,
+        expressions: List<IrExpression>,
+        arguments: List<RegisterId>,
+    ): RegisterId {
+        val mixedLong = expressions.any { it.type == longType }
+        val type = if (mixedLong) OrderedScalarValueType.I64 else OrderedScalarValueType.I32
+        val left = if (mixedLong) widenToI64(arguments[0], expressions[0].type, call) else arguments[0]
+        val right = if (mixedLong) widenToI64(arguments[1], expressions[1].type, call) else arguments[1]
+        val negative = emitI32Constant(-1, call)
+        val zero = emitI32Constant(0, call)
+        val positive = emitI32Constant(1, call)
+        val destination = allocate(ValueType.I32)
+        val less = allocate(ValueType.Bool)
+        emit(Instruction.Less(type, less, left, right))
+        val lessBlock = createBlock()
+        val notLessBlock = createBlock()
+        emit(Instruction.Branch(less, blockId(lessBlock), blockId(notLessBlock)))
+
+        currentBlock = lessBlock
+        emit(Instruction.Move(destination, negative))
+
+        currentBlock = notLessBlock
+        val greater = allocate(ValueType.Bool)
+        emit(Instruction.Greater(type, greater, left, right))
+        val greaterBlock = createBlock()
+        val equalBlock = createBlock()
+        emit(Instruction.Branch(greater, blockId(greaterBlock), blockId(equalBlock)))
+
+        currentBlock = greaterBlock
+        emit(Instruction.Move(destination, positive))
+
+        currentBlock = equalBlock
+        emit(Instruction.Move(destination, zero))
+
+        val join = createBlock()
+        listOf(lessBlock, greaterBlock, equalBlock).forEach { exit ->
+            currentBlock = exit
+            jumpTo(join)
+        }
+        currentBlock = join
+        return destination
     }
 
     private fun compileStringArrayCopyOfRange(
