@@ -2025,6 +2025,9 @@ class MinimalScriptLoweringTest {
                 import kotlin.collections.contains
                 import kotlin.collections.emptyList
                 import kotlin.collections.indexOf
+                import kotlin.collections.isEmpty
+                import kotlin.collections.isNotEmpty
+                import kotlin.collections.lastIndexOf
                 import kotlin.collections.listOf
 
                 data class Token(val name: String)
@@ -2097,15 +2100,28 @@ class MinimalScriptLoweringTest {
                     require(numbers.indexOf(9) == 1)
                     require(listOf(7, 9, 7).indexOf(7) == 0)
                     require(numbers.indexOf(8) == -1)
+                    require(!numbers.isEmpty())
+                    require(numbers.isNotEmpty())
+                    require(emptyList<Int>().isEmpty())
+                    require(!emptyList<Any>().isNotEmpty())
+                    require(listOf(7, 9, 7).lastIndexOf(7) == 2)
+                    require(numbers.lastIndexOf(8) == -1)
                     require(7 in all)
                     require(all.indexOf(9) == 1)
+                    require(all.lastIndexOf(7) == 0)
+                    require(all.isNotEmpty())
+                    val repeated: List<Any> = listOf<Any>(7, 9, 7)
+                    require(repeated.lastIndexOf(7) == 2)
                     require("word" in words)
                     require(words.indexOf("missing") == -1)
+                    require(listOf("word", "other", "word").lastIndexOf("word") == 2)
                     require(Token("owned") in tokens)
                     require(objects.indexOf(Token("owned")) == 0)
                     require(mixed.indexOf(Token("same")) == 2)
+                    require(mixed.lastIndexOf(Token("same")) == 2)
                     require(Custom(4) in listOf(Custom(4)))
                     require(emptyList<Int>().indexOf(1) == -1)
+                    require(emptyList<Int>().lastIndexOf(1) == -1)
                     val storedProbe = SearchProbe(5)
                     val searchedProbe = SearchProbe(5)
                     val probes = listOf(storedProbe)
@@ -2113,6 +2129,11 @@ class MinimalScriptLoweringTest {
                     require(searchedProbe in probes)
                     require(searchedProbe.calls == 2)
                     require(storedProbe.calls == 0)
+                    val lastStoredProbe = SearchProbe(5)
+                    val lastSearchedProbe = SearchProbe(5)
+                    require(listOf(storedProbe, lastStoredProbe).lastIndexOf(lastSearchedProbe) == 1)
+                    require(lastSearchedProbe.calls == 1)
+                    require(lastStoredProbe.calls == 0)
                 }
                 """.trimIndent()
             val result = adapter.compile(request(source))
