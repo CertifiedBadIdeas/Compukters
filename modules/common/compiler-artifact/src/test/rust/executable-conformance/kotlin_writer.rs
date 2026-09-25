@@ -36,6 +36,7 @@ fn main() {
         "platform-scalar" => k2_platform_scalar_precondition_traps_before_publishing_a_value(),
         "argv" => k2_string_array_entry_executes_exact_utf16_arguments(),
         "subset" => k2_string_materialization_executes_char_arrays_and_scalar_templates(),
+        "named-calls" => k2_same_named_guest_calls_preserve_resolved_targets(),
         "dispatch" => k2_class_and_interface_dispatch_select_runtime_implementations(),
         "object-model" => k2_sealed_data_and_enum_objects_execute(),
         "property-accessors" => k2_property_accessors_preserve_backing_and_dispatch(),
@@ -936,6 +937,17 @@ fn k2_long_executes_arithmetic_conversions_comparisons_and_text() {
             outcome => panic!("unexpected K2 Long outcome: {outcome:?}"),
         }
     }
+}
+
+fn k2_same_named_guest_calls_preserve_resolved_targets() {
+    k2_expected_prints_with_budget(
+        "COMPUKTER_KOTLIN_NAMED_CALLS_ARTIFACT",
+        [
+            "23\n", "Z\n", "false\n", "false\n", "24\n", "35\n", "5\n", "a\n", "true\n",
+            "true\n",
+        ],
+        128,
+    );
 }
 
 fn k2_generic_functions_preserve_primitive_and_reference_values() {

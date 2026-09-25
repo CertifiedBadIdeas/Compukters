@@ -66,6 +66,40 @@ import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
     @Test
+    fun `same-named guest calls preserve their resolved targets for vm conformance`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                fun plus(left: Int, right: Int): Int = left * 10 + right
+                fun get(value: String, index: Int): Char = 'Z'
+                fun equals(left: String, right: String): Boolean = false
+                fun less(left: Int, right: Int): Boolean = false
+                fun iterator(value: Int): Int = value + 20
+                fun next(value: Int): Int = value + 30
+
+                fun main() {
+                    println(plus(2, 3))
+                    println(get("a", 0))
+                    println(equals("a", "a"))
+                    println(less(1, 2))
+                    println(iterator(4))
+                    println(next(5))
+                    println(2 + 3)
+                    println("a"[0])
+                    println("a" == "a")
+                    println(1 < 2)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+            System.getProperty("compukter.vm.namedCallsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `user less function does not hide unsupported compareTo call`() =
         withAdapter { adapter ->
             val result =

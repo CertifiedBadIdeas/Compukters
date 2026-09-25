@@ -320,6 +320,15 @@ registerKotlinVmConformance(
     conformanceScenario = "subset",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinNamedCallsVmConformance",
+    taskDescription = "Verifies that Guest calls with intrinsic names retain their K2-resolved targets.",
+    artifactTask = ":compiler-k2:generateNamedCallsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-named-calls.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-named-calls-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_NAMED_CALLS_ARTIFACT",
+    conformanceScenario = "named-calls",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinDispatchVmConformance",
     taskDescription = "Executes K2-lowered class and interface dispatch with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateDispatchConformanceArtifact",
