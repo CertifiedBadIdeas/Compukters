@@ -261,7 +261,8 @@ supported.
   Concrete generic interfaces and covariant result interfaces support the read-only `List<T>` contract.
   Contravariance, reified parameters, generic
   value classes, generic methods declaring their own type parameters, nullable
-  primitive arguments, and `Any` boxing bridges are rejected. Expansion is
+  primitive arguments, and broad `Any` boxing bridges remain outside the subset; the `List<Int>` read bridge below
+  admits one bounded `Int`-to-`Any` boundary. Expansion is
   bounded to 256 function and 256 class variants per compilation. Binary
   generic library templates and runtime instantiation are absent. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
@@ -450,7 +451,9 @@ supported.
 
 - [ ] **Type tests and casts — Partial** — `is` checks and compiler-generated
   smart casts over admitted references lower to VM type checks and checked
-  casts; explicit `as` source casts are rejected. Evidence:
+  casts. Boxed `Int` values read as `Any` also support `is Int` and an explicit checked `as Int`; other explicit
+  source casts remain rejected. Reference `===` compares identity after a checked common-reference conversion.
+  Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `guest object subset lowers sealed results data values enum identity and type branches`
   and `guest object subset rejects generic secondary uninitialized stateful and explicit cast shapes`,
@@ -586,16 +589,22 @@ supported.
   `Int`, `String`, and supported Guest class references. `size`, indexed `get`, and ordinary `for` iteration execute
   through concrete specialized implementations. `List<Int>` stores and returns unboxed i32 values; list aliases refer
   to the same object. Factory arguments run once in source order. Invalid indexes trap through the VM array bounds
-  check, and iteration resumes across quota slices. `List<Int>` to `List<Any>` remains rejected with a source diagnostic
-  until the #581 universal boxing bridge exists. Nullable elements, unsupported primitive element types, spread
+  check, and iteration resumes across quota slices. `List<Int>` can widen to `List<Any>` without copying the list;
+  reads and iteration through the universal view allocate `Int` boxes with checked `is Int` and `as Int` access. A
+  supported reference list can also widen to `List<Any>` while preserving its element references.
+  Value equality on `Any` remains a bounded source diagnostic until runtime value dispatch is available. Nullable
+  elements, direct `listOf<Any>` construction, unsupported primitive element types, spread
   arguments, mutable collections, `Set`, `Map`, sequences, and collection algorithms are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `read only lists retain typed Int String and guest references`,
   `list index outside bounds compiles to trapped array access`,
-  `list iterator resumes across quota slices`, and
+  `list iterator resumes across quota slices`,
+  `list Int covariance to Any preserves the list and boxes reads`, and
   `unsupported list element and spread forms report diagnostics`; VM tasks
-  `testKotlinListVmConformance`, `testKotlinListBoundsVmConformance`, and
-  `testKotlinListQuotaVmConformance`. Tracking: [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656)
+  `testKotlinListVmConformance`, `testKotlinListAnyVmConformance`, `testKotlinListAnyQuotaVmConformance`,
+  `testKotlinListBoundsVmConformance`, and `testKotlinListQuotaVmConformance`. Tracking:
+  [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656),
+  [#581](https://github.com/CertifiedBadIdeas/Compukters/issues/581)
 
 ## Tasks and concurrency
 

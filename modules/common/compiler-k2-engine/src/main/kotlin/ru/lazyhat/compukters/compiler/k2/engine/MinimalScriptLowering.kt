@@ -141,7 +141,9 @@ internal object MinimalScriptLowering {
         detail?.let { "source IR is outside the minimal script subset: $it" }
             ?: "source IR is outside the minimal script subset",
         session.virtualSourcePath(
-            (element as? org.jetbrains.kotlin.ir.declarations.IrDeclaration)?.file?.fileEntry?.name
+            (element as? org.jetbrains.kotlin.ir.declarations.IrDeclaration)?.let { declaration ->
+                runCatching { declaration.file.fileEntry.name }.getOrNull()
+            }
                 ?: fallback?.file?.fileEntry?.name,
         ),
         element?.startOffset?.takeIf { it >= 0 }?.toUInt(),

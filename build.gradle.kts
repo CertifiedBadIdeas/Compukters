@@ -563,6 +563,24 @@ registerKotlinVmConformance(
     conformanceScenario = "list",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinListAnyVmConformance",
+    taskDescription = "Verifies covariant Int list reads through Any with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateListAnyConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-list-any.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-list-any-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_LIST_ANY_ARTIFACT",
+    conformanceScenario = "list-any",
+)
+registerKotlinVmConformance(
+    taskName = "testKotlinListAnyQuotaVmConformance",
+    taskDescription = "Verifies boxed covariant list reads across VM quota slices and collection.",
+    artifactTask = ":compiler-k2:generateListAnyQuotaConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-list-any-quota.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-list-any-quota-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_LIST_ANY_QUOTA_ARTIFACT",
+    conformanceScenario = "list-any-quota",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinListBoundsVmConformance",
     taskDescription = "Verifies Guest list indexing traps on an out-of-range index.",
     artifactTask = ":compiler-k2:generateListBoundsConformanceArtifact",

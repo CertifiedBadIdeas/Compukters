@@ -22,6 +22,10 @@ internal class IntArrayBackedList(private val values: IntArray) : List<Int> {
     override fun get(index: Int): Int = values[index]
 
     override fun iterator(): Iterator<Int> = IntArrayBackedListIterator(this)
+
+    internal fun getAny(index: Int): Any = values[index]
+
+    internal fun iteratorAny(): Iterator<Any> = IntArrayBackedListIterator(this)
 }
 
 internal class IntArrayBackedListIterator(private val list: IntArrayBackedList) : Iterator<Int> {
@@ -34,17 +38,23 @@ internal class IntArrayBackedListIterator(private val list: IntArrayBackedList) 
         index += 1
         return value
     }
+
+    internal fun nextAny(): Any = next()
 }
 
-internal class ArrayBackedList<T>(private val values: Array<T>) : List<T> {
+internal class ArrayBackedList<T : Any>(private val values: Array<T>) : List<T> {
     override val size: Int get() = values.size
 
     override fun get(index: Int): T = values[index]
 
     override fun iterator(): Iterator<T> = ArrayBackedListIterator(this)
+
+    internal fun getAny(index: Int): Any = values[index]
+
+    internal fun iteratorAny(): Iterator<Any> = ArrayBackedListIterator(this)
 }
 
-internal class ArrayBackedListIterator<T>(private val list: ArrayBackedList<T>) : Iterator<T> {
+internal class ArrayBackedListIterator<T : Any>(private val list: ArrayBackedList<T>) : Iterator<T> {
     private var index: Int = 0
 
     override fun hasNext(): Boolean = index < list.size
@@ -54,4 +64,6 @@ internal class ArrayBackedListIterator<T>(private val list: ArrayBackedList<T>) 
         index += 1
         return value
     }
+
+    internal fun nextAny(): Any = next()
 }

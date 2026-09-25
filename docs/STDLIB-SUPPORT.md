@@ -69,11 +69,16 @@ links to their source files.
 
 - [ ] **Read-only `List<T>` — Partial** — `listOf` and `emptyList` create typed lists of non-null `Int`, `String`, or
   supported Guest class references. `size`, indexed `get`, and direct `for` iteration work; an out-of-range index
-  traps. `Int` storage and typed reads remain unboxed. `List<Int>` to `List<Any>` is rejected until a boxed read bridge
-  is available. Nullable elements and spread arguments are unsupported. Evidence: `testKotlinListVmConformance`,
+  traps. `Int` storage and typed reads remain unboxed. A `List<Int>` can widen to `List<Any>` without changing list
+  identity; universal reads box each `Int`, and `is Int` / `as Int` recover its type and value. Supported reference lists
+  also widen to `List<Any>` without copying their elements. Universal value equality,
+  hashing, and text dispatch remain unavailable. Direct `listOf<Any>` construction, nullable elements, and spread
+  arguments are unsupported. Evidence:
+  `testKotlinListVmConformance`, `testKotlinListAnyVmConformance`, `testKotlinListAnyQuotaVmConformance`,
   `testKotlinListBoundsVmConformance`, `testKotlinListQuotaVmConformance`, and
   [`Lists.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-collections/kotlin/collections/Lists.kt). Tracking:
-  [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656)
+  [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656),
+  [#581](https://github.com/CertifiedBadIdeas/Compukters/issues/581)
 - [ ] **Other collections and functional helpers — Unsupported** — `MutableList`, `Set`, `Map`, sequences, `map`,
   `filter`, `fold`, and general custom iterator loops have no Guest implementation. Tracking: not scheduled
 - [ ] **Console I/O — Partial** — `print`, `println`, and `readln` support the documented scalar and string forms through

@@ -316,6 +316,8 @@ val genericFunctionsConformanceArtifact = layout.buildDirectory.file("generated/
 val genericCellConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-cell.cpkt")
 val genericInterfaceConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-interface.cpkt")
 val listConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list.cpkt")
+val listAnyConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-any.cpkt")
+val listAnyQuotaConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-any-quota.cpkt")
 val listBoundsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-bounds.cpkt")
 val listQuotaConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-quota.cpkt")
 val genericLibraryConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-library.cpkt")
@@ -845,6 +847,38 @@ val generateListConformanceArtifact = tasks.register<Test>("generateListConforma
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.listArtifact", listConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateListAnyConformanceArtifact = tasks.register<Test>("generateListAnyConformanceArtifact") {
+    description = "Compiles covariant Int list reads through Any for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*list Int covariance to Any preserves the list and boxes reads*")
+    inputs.file(workerJar)
+    outputs.file(listAnyConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.listAnyArtifact", listAnyConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateListAnyQuotaConformanceArtifact = tasks.register<Test>("generateListAnyQuotaConformanceArtifact") {
+    description = "Compiles covariant Int list reads under quota and GC pressure."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*list Any boxes survive quota slices and garbage collection*")
+    inputs.file(workerJar)
+    outputs.file(listAnyQuotaConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.listAnyQuotaArtifact", listAnyQuotaConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

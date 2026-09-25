@@ -122,8 +122,12 @@ precompiled library fragments. Generic binary templates are not part of the plat
 
 The `stdlib:collections` module publishes read-only `List<T>` implementations as source-only declarations. Concrete
 `Int` lists own i32 arrays; `String` and supported Guest class lists own typed reference arrays. Collection interfaces
-and iterator methods are specialized in the consuming artifact. `List<Int>` to `List<Any>` remains rejected until the
-universal-value boxing bridge can preserve the original list object's identity.
+and iterator methods are specialized in the consuming artifact. Covariant widening to `List<Any>` retains the same
+list and backing array. The compiler publishes `get`, `iterator`, and `next` bridges with reference result signatures
+alongside the typed methods. An `Int` read through `Any` allocates an ordinary managed `kotlin.Int` box; a reference
+read preserves the element reference. The box's runtime type and i32 payload support checked `is Int` and `as Int`,
+while typed paths remain unboxed. Universal value equality, hash, and string dispatch are outside the admitted subset
+until the wider #581 runtime semantics are implemented.
 
 Concrete `Array<GuestClass>` uses become distinct local nominal array types whose elements are exact Guest class
 references. Existing array instructions allocate, load, and store them; the verifier checks element types and GC

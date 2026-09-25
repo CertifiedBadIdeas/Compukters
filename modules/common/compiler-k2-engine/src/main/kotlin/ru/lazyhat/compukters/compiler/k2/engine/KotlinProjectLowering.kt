@@ -230,6 +230,17 @@ private fun collectGuestClassInstances(
     val pending = ArrayDeque<GuestClassInstance>()
 
     fun add(instance: GuestClassInstance) {
+        if (
+            instance.declaration.fqNameWhenAvailable?.asString() in
+            setOf(
+                "kotlin.collections.Iterable",
+                "kotlin.collections.Iterator",
+                "kotlin.collections.Collection",
+                "kotlin.collections.List",
+            ) && instance.arguments.any { it.isNullable() }
+        ) {
+            throw UnsupportedKotlinIr(instance.declaration, "nullable collection elements are outside the project subset")
+        }
         if (instances.add(instance)) {
             if (instances.count { it.arguments.isNotEmpty() } > 256) {
                 throw UnsupportedKotlinIr(instance.declaration, "generic specialization exceeds 256 class variants")
@@ -733,6 +744,11 @@ private class InlineValueClassRegistry private constructor(
     }
 }
 
+private const val ANY_RUNTIME_TYPE = 5u
+private const val INT_BOX_RUNTIME_TYPE = 6u
+private const val INT_BOX_VALUE_IMPORT = 7u
+private const val INT_BOX_VALUE_NAME = "kotlin.Int.<boxed-value>"
+
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 internal object KotlinProjectLowering {
     private const val MAXIMUM_TASKS = 64u
@@ -748,6 +764,8 @@ internal object KotlinProjectLowering {
             "kotlin.Throwable",
             "runtime.IllegalArgumentException",
             "kotlin.IntArray",
+            "kotlin.Any",
+            "kotlin.Int",
         )
 
     fun lower(
@@ -1012,7 +1030,19 @@ internal object KotlinProjectLowering {
         val functionArtifactNames =
             functionInstances.associateWith { instance ->
                 val function = instance.declaration
-                if (instance.ownerClass != null) {
+                val bridgeName =
+                    when (function.fqNameWhenAvailable?.asString()) {
+                        "kotlin.collections.IntArrayBackedList.getAny" -> "get"
+                        "kotlin.collections.IntArrayBackedList.iteratorAny" -> "iterator"
+                        "kotlin.collections.IntArrayBackedListIterator.nextAny" -> "next"
+                        "kotlin.collections.ArrayBackedList.getAny" -> "get"
+                        "kotlin.collections.ArrayBackedList.iteratorAny" -> "iterator"
+                        "kotlin.collections.ArrayBackedListIterator.nextAny" -> "next"
+                        else -> null
+                    }
+                if (bridgeName != null) {
+                    bridgeName
+                } else if (instance.ownerClass != null) {
                     function.name.asString()
                 } else if (instance.arguments.isEmpty()) {
                     artifactFunctionName(function, pluginContext, inlineValueClasses, session)
@@ -1025,6 +1055,7 @@ internal object KotlinProjectLowering {
             (
                 listOf("app") +
                     runtimeTypeNames +
+                    INT_BOX_VALUE_NAME +
                     listOfNotNull("kotlin.Array".takeIf { usesStringArray }) +
                     referenceArrays.keys +
                     capabilityIdentities.flatMap { listOf(it.namespace, it.name) } +
@@ -1238,7 +1269,7 @@ internal object KotlinProjectLowering {
             linkedSymbols.types.entries
                 .sortedBy { (_, target) -> target.sortKey }
                 .mapIndexed { index, (symbol, target) ->
-                    symbol to target.copy(importId = ImportId.of((runtimeTypeNames.size + index).toUInt()))
+                    symbol to target.copy(importId = ImportId.of((runtimeTypeNames.size + 1 + index).toUInt()))
                 }.toMap()
         val externalClassTypes = externalTypeImports.mapValues { (_, target) -> TypeRef.Imported(target.importId) }
         val externalFieldImports =
@@ -1246,7 +1277,7 @@ internal object KotlinProjectLowering {
                 .distinctBy(ExternalFieldTarget::sortKey)
                 .sortedBy(ExternalFieldTarget::sortKey)
                 .mapIndexed { index, target ->
-                    target.copy(importId = ImportId.of((runtimeTypeNames.size + externalTypeImports.size + index).toUInt()))
+                    target.copy(importId = ImportId.of((runtimeTypeNames.size + 1 + externalTypeImports.size + index).toUInt()))
                 }
         val externalFieldsBySortKey = externalFieldImports.associateBy(ExternalFieldTarget::sortKey)
         val externalGetterFieldImports =
@@ -1265,7 +1296,7 @@ internal object KotlinProjectLowering {
                         target.copy(
                             importId =
                                 ImportId.of(
-                                    (runtimeTypeNames.size + externalTypeImports.size + externalFieldImportCount + index).toUInt(),
+                                    (runtimeTypeNames.size + 1 + externalTypeImports.size + externalFieldImportCount + index).toUInt(),
                                 ),
                         )
                 }.toMap()
@@ -2251,7 +2282,24 @@ internal object KotlinProjectLowering {
                             classInstanceTypeIds[parent]?.let { parent.declaration.symbol to TypeRef.Local(it) }
                         }
                     }
-                val interfaces = sourceParents.filter { (symbol, _) -> symbol.owner.kind == ClassKind.INTERFACE }.map { it.second }
+                val bridgeInterfaceName =
+                    when (declaration.fqNameWhenAvailable?.asString()) {
+                        "kotlin.collections.IntArrayBackedList" -> "kotlin.collections.List<Any>"
+                        "kotlin.collections.IntArrayBackedListIterator" -> "kotlin.collections.Iterator<Any>"
+                        "kotlin.collections.ArrayBackedList" -> "kotlin.collections.List<Any>"
+                        "kotlin.collections.ArrayBackedListIterator" -> "kotlin.collections.Iterator<Any>"
+                        else -> null
+                    }
+                val bridgeInterface =
+                    bridgeInterfaceName
+                        ?.let { name -> classInstanceTypeIds.entries.singleOrNull { it.key.name == name }?.value }
+                        ?.let(TypeRef::Local)
+                val interfaces =
+                    (
+                        sourceParents.filter { (symbol, _) -> symbol.owner.kind == ClassKind.INTERFACE }.map { it.second } +
+                            listOfNotNull(bridgeInterface)
+                    ).distinct()
+                        .sortedBy { (it as TypeRef.Local).id.value }
                 val superType = sourceParents.firstOrNull { (symbol, _) -> symbol.owner.kind != ClassKind.INTERFACE }?.second
                 val name = layout.instance.name
                 if (declaration.kind == ClassKind.INTERFACE) {
@@ -2275,7 +2323,7 @@ internal object KotlinProjectLowering {
                         name = requireNotNull(metadataIds[name]),
                         abstract = declaration.modality == Modality.ABSTRACT || declaration.modality == Modality.SEALED,
                         final = declaration.modality == Modality.FINAL,
-                        superType = superType,
+                        superType = superType ?: TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)),
                         interfaces = interfaces,
                         fieldStart = layout.firstField,
                         fieldCount = (layout.fields.size + layout.enumEntries.size).toUInt(),
@@ -2470,6 +2518,13 @@ internal object KotlinProjectLowering {
                     runtimeTypeNames.indices.map { index ->
                         runtimeTypeImport(index, requireNotNull(metadataIds[runtimeTypeNames[index]]), libraryHash)
                     } +
+                        Import(
+                            kind = SymbolKind.FIELD,
+                            targetModule = ModuleId.of(1u),
+                            targetName = requireNotNull(metadataIds[INT_BOX_VALUE_NAME]),
+                            expectedSignature = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE)),
+                            targetModuleHash = libraryHash,
+                        ) +
                         externalTypeImports.entries
                             .sortedBy { (_, target) -> target.sortKey }
                             .mapIndexed { index, (_, target) ->
@@ -2729,13 +2784,14 @@ internal object KotlinProjectLowering {
                 pluginContext.irBuiltIns.floatType,
                 pluginContext.irBuiltIns.booleanType,
                 pluginContext.irBuiltIns.charType,
+                pluginContext.irBuiltIns.anyType,
             )
 
         fun isSupported(sourceType: IrType): Boolean {
             val type = instance.substitute(sourceType)
             val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
             if (type.isNullable()) {
-                return (type as? IrSimpleType)?.classifier == stringClass ||
+                return type.isKotlinAny() || (type as? IrSimpleType)?.classifier == stringClass ||
                     classTypeIds.containsKey((type as? IrSimpleType)?.classifier) ||
                     type.classInstance(
                         classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration },
@@ -2803,7 +2859,7 @@ internal object KotlinProjectLowering {
             val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
             val guestClass = (type as? IrSimpleType)?.classifier as? IrClassSymbol
             val guestInstance = type.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
-            if (guestClass != stringClass && guestClass !in classTypeIds && guestInstance !in classInstanceTypeIds) {
+            if (!type.isKotlinAny() && guestClass != stringClass && guestClass !in classTypeIds && guestInstance !in classInstanceTypeIds) {
                 throw UnsupportedKotlinIr(element, "nullable type is outside the supported reference subset")
             }
         }
@@ -2837,7 +2893,9 @@ internal object KotlinProjectLowering {
             }
 
             else -> {
-                if ((type as? IrSimpleType)?.classifier == (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier) {
+                if (type.isKotlinAny()) {
+                    ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))
+                } else if ((type as? IrSimpleType)?.classifier == (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier) {
                     (stringType as ValueType.Ref).copy(nullable = type.isNullable())
                 } else if (type.isNothing()) {
                     ValueType.Unit
@@ -2998,59 +3056,63 @@ internal object KotlinProjectLowering {
         }
     }
 
-    private fun kotlinLibrary(): Module =
-        Module(
+    private fun kotlinLibrary(): Module {
+        val names = (runtimeTypeNames + INT_BOX_VALUE_NAME).sorted()
+        val ids = names.withIndex().associate { (index, name) -> name to StringId.of(index.toUInt()) }
+        val anyType = TypeRef.Local(TypeId.of(ANY_RUNTIME_TYPE))
+        return Module(
             name = StringId.of(0u),
             kind = ModuleKind.LIBRARY,
-            strings =
-                runtimeTypeNames.map(MetadataText::of).sorted(),
+            strings = names.map(MetadataText::of),
             types =
                 listOf(
-                    NominalType.Array(name = StringId.of(0u), element = ValueType.Char),
-                    NominalType.Class(name = StringId.of(2u), final = true),
-                    NominalType.Class(name = StringId.of(3u)),
-                    NominalType.Class(name = StringId.of(4u), final = true, superType = TypeRef.Local(TypeId.of(2u))),
-                    NominalType.Array(name = StringId.of(1u), element = ValueType.I32),
+                    NominalType.Array(name = requireNotNull(ids["kotlin.CharArray"]), element = ValueType.Char),
+                    NominalType.Class(name = requireNotNull(ids["kotlin.String"]), final = true, superType = anyType),
+                    NominalType.Class(name = requireNotNull(ids["kotlin.Throwable"]), superType = anyType),
+                    NominalType.Class(
+                        name = requireNotNull(ids["runtime.IllegalArgumentException"]),
+                        final = true,
+                        superType = TypeRef.Local(TypeId.of(2u)),
+                    ),
+                    NominalType.Array(name = requireNotNull(ids["kotlin.IntArray"]), element = ValueType.I32),
+                    NominalType.Class(name = requireNotNull(ids["kotlin.Any"])),
+                    NominalType.Class(
+                        name = requireNotNull(ids["kotlin.Int"]),
+                        final = true,
+                        superType = anyType,
+                        fieldStart = 0u,
+                        fieldCount = 1u,
+                    ),
+                ),
+            fields =
+                listOf(
+                    Field(
+                        owner = TypeRef.Local(TypeId.of(INT_BOX_RUNTIME_TYPE)),
+                        name = requireNotNull(ids[INT_BOX_VALUE_NAME]),
+                        type = ValueType.I32,
+                        mutable = true,
+                        static = false,
+                    ),
                 ),
             exports =
-                listOf(
+                runtimeTypeNames.mapIndexed { index, name ->
                     Export(
                         kind = SymbolKind.TYPE,
                         visibility = ExportVisibility.PUBLIC_LIBRARY,
-                        name = StringId.of(0u),
+                        name = requireNotNull(ids[name]),
+                        localSymbol = index.toUInt(),
+                        signature = TypeRef.Local(TypeId.of(index.toUInt())),
+                    )
+                } +
+                    Export(
+                        kind = SymbolKind.FIELD,
+                        visibility = ExportVisibility.PUBLIC_LIBRARY,
+                        name = requireNotNull(ids[INT_BOX_VALUE_NAME]),
                         localSymbol = 0u,
-                        signature = TypeRef.Local(TypeId.of(0u)),
+                        signature = TypeRef.Local(TypeId.of(INT_BOX_RUNTIME_TYPE)),
                     ),
-                    Export(
-                        kind = SymbolKind.TYPE,
-                        visibility = ExportVisibility.PUBLIC_LIBRARY,
-                        name = StringId.of(2u),
-                        localSymbol = 1u,
-                        signature = TypeRef.Local(TypeId.of(1u)),
-                    ),
-                    Export(
-                        kind = SymbolKind.TYPE,
-                        visibility = ExportVisibility.PUBLIC_LIBRARY,
-                        name = StringId.of(3u),
-                        localSymbol = 2u,
-                        signature = TypeRef.Local(TypeId.of(2u)),
-                    ),
-                    Export(
-                        kind = SymbolKind.TYPE,
-                        visibility = ExportVisibility.PUBLIC_LIBRARY,
-                        name = StringId.of(4u),
-                        localSymbol = 3u,
-                        signature = TypeRef.Local(TypeId.of(3u)),
-                    ),
-                    Export(
-                        kind = SymbolKind.TYPE,
-                        visibility = ExportVisibility.PUBLIC_LIBRARY,
-                        name = StringId.of(1u),
-                        localSymbol = 4u,
-                        signature = TypeRef.Local(TypeId.of(4u)),
-                    ),
-                ),
         )
+    }
 
     private fun runtimeTypeImport(
         index: Int,
@@ -3615,6 +3677,34 @@ private class FunctionCompiler(
     private fun compileExpression(
         expression: IrExpression,
         expectedType: IrType?,
+    ): RegisterId {
+        val source = compileRawExpression(expression, expectedType)
+        if (expectedType?.isKotlinAny() != true) return source
+        val target = valueType(expectedType, expression) as ValueType.Ref
+        return when (val actual = valueType(expression.type, expression)) {
+            ValueType.I32 -> {
+                boxInt(source, target)
+            }
+
+            is ValueType.Ref -> {
+                if (actual == target) {
+                    source
+                } else {
+                    allocate(target).also { destination ->
+                        emit(Instruction.CheckedCast(destination, source, target.type))
+                    }
+                }
+            }
+
+            else -> {
+                throw UnsupportedKotlinIr(expression, "universal boxing is supported only for Int and references")
+            }
+        }
+    }
+
+    private fun compileRawExpression(
+        expression: IrExpression,
+        expectedType: IrType?,
     ): RegisterId =
         when (expression) {
             is IrConst -> {
@@ -3902,11 +3992,32 @@ private class FunctionCompiler(
         }
         val source = compileExpression(expression.argument, expression.typeOperand)
         val target = valueType(expression.typeOperand, expression)
+        val intBoxType = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE))
         return when (expression.operator) {
             IrTypeOperator.INSTANCEOF -> {
-                val reference = target as? ValueType.Ref ?: throw UnsupportedKotlinIr(expression, "type test target is not a reference")
+                val reference =
+                    if (expression.typeOperand == intType) {
+                        intBoxType
+                    } else {
+                        (target as? ValueType.Ref)?.type
+                            ?: throw UnsupportedKotlinIr(expression, "type test target is not a reference")
+                    }
                 allocate(ValueType.Bool).also { destination ->
-                    emit(Instruction.IsType(destination, source, reference.type))
+                    emit(Instruction.IsType(destination, source, reference))
+                }
+            }
+
+            IrTypeOperator.CAST -> {
+                if (expression.typeOperand != intType) {
+                    throw UnsupportedKotlinIr(expression, "cast target is outside the supported boxed Int subset")
+                }
+                if (valueType(expression.argument.type, expression) !is ValueType.Ref) {
+                    throw UnsupportedKotlinIr(expression, "boxed Int cast requires a reference operand")
+                }
+                val box = allocate(ValueType.Ref(nullable = false, type = intBoxType))
+                emit(Instruction.CheckedCast(box, source, intBoxType))
+                allocate(ValueType.I32).also { destination ->
+                    emit(Instruction.FieldGet(destination, box, FieldRef.Imported(ImportId.of(INT_BOX_VALUE_IMPORT))))
                 }
             }
 
@@ -3921,6 +4032,20 @@ private class FunctionCompiler(
             else -> {
                 throw UnsupportedKotlinIr(expression, "cast ${expression.operator} is outside the project subset")
             }
+        }
+    }
+
+    private fun boxInt(
+        source: RegisterId,
+        target: ValueType.Ref,
+    ): RegisterId {
+        val boxType = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE))
+        prepareAllocationBlock()
+        val box = allocate(ValueType.Ref(nullable = false, type = boxType))
+        emit(Instruction.NewObject(box, boxType))
+        emit(Instruction.FieldSet(box, FieldRef.Imported(ImportId.of(INT_BOX_VALUE_IMPORT)), source))
+        return allocate(target).also { destination ->
+            emit(Instruction.CheckedCast(destination, box, target.type))
         }
     }
 
@@ -4010,6 +4135,20 @@ private class FunctionCompiler(
                 call.symbol.owner
             }
         val targetName = target.fqNameWhenAvailable?.asString()
+        if (targetName == "kotlin.internal.ir.EQEQEQ") {
+            val operands = call.arguments.filterNotNull()
+            if (operands.size != 2 || operands.any { valueType(it.type, it) !is ValueType.Ref }) {
+                throw UnsupportedKotlinIr(call, "reference identity requires two reference operands")
+            }
+            val left = compileExpression(operands[0])
+            val right = compileExpression(operands[1])
+            val anyType = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))
+            val leftAny = allocate(ValueType.Ref(nullable = false, type = anyType))
+            emit(Instruction.CheckedCast(leftAny, left, anyType))
+            val rightAny = allocate(ValueType.Ref(nullable = false, type = anyType))
+            emit(Instruction.CheckedCast(rightAny, right, anyType))
+            return allocate(ValueType.Bool).also { destination -> emit(Instruction.RefEqual(destination, leftAny, rightAny)) }
+        }
         if (target.isExternal && targetName in setOf("kotlin.collections.listOf", "kotlin.collections.emptyList")) {
             return compileListFactory(call, targetName == "kotlin.collections.listOf")
         }
@@ -4527,7 +4666,7 @@ private class FunctionCompiler(
         val arrayRef =
             arrayType as? ValueType.Ref
                 ?: throw UnsupportedKotlinIr(call, "unsupported list element storage")
-        val values = elements.map(::compileExpression)
+        val values = elements.map { element -> compileExpression(element, elementType) }
         val length = emitI32Constant(values.size, call)
         prepareAllocationBlock()
         val array = allocate(arrayType)
@@ -5063,6 +5202,9 @@ private class FunctionCompiler(
         val floatIeeeEquality =
             name.equals("ieee754Equals", ignoreCase = true) && leftType == floatType && rightType == floatType
         if (name in setOf("EQEQ", "equals", "eqeq") || floatIeeeEquality) {
+            if (leftType.isKotlinAny() || rightType.isKotlinAny()) {
+                throw UnsupportedKotlinIr(call, "Any value equality requires runtime dispatch")
+            }
             return allocate(ValueType.Bool).also { destination ->
                 if (leftType == kotlinStringType && rightType == kotlinStringType) {
                     emit(Instruction.StringEquals(destination, operands[0], operands[1]))
@@ -5577,7 +5719,7 @@ private class FunctionCompiler(
             val stringClass = (kotlinStringType as IrSimpleType).classifier
             val guestClass = (type as? IrSimpleType)?.classifier as? IrClassSymbol
             val guestInstance = type.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
-            if (guestClass != stringClass && guestClass !in classTypeIds && guestInstance !in classInstanceTypeIds) {
+            if (!type.isKotlinAny() && guestClass != stringClass && guestClass !in classTypeIds && guestInstance !in classInstanceTypeIds) {
                 throw UnsupportedKotlinIr(element, "nullable type is outside the supported reference subset")
             }
         }
@@ -5611,7 +5753,9 @@ private class FunctionCompiler(
             }
 
             else -> {
-                if ((type as? IrSimpleType)?.classifier == (kotlinStringType as IrSimpleType).classifier) {
+                if (type.isKotlinAny()) {
+                    ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))
+                } else if ((type as? IrSimpleType)?.classifier == (kotlinStringType as IrSimpleType).classifier) {
                     (stringType as ValueType.Ref).copy(nullable = type.isNullable())
                 } else if (type.isNothing()) {
                     ValueType.Unit
@@ -5780,6 +5924,10 @@ private class FunctionCompiler(
 }
 
 private fun IrType.isExactClass(symbol: IrClassSymbol): Boolean = (this as? IrSimpleType)?.classifier == symbol
+
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+private fun IrType.isKotlinAny(): Boolean =
+    ((this as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == "kotlin.Any"
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private fun IrType.guestFunctionShape(): GuestFunctionShape? {
