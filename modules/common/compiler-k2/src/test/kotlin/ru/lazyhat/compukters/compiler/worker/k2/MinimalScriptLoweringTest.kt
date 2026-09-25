@@ -1807,6 +1807,14 @@ class MinimalScriptLoweringTest {
                     override fun equals(other: Any?): Boolean = other is Custom && code == other.code
                     override fun hashCode(): Int = code
                 }
+                class SearchProbe(val code: Int) {
+                    var calls: Int = 0
+                    override fun equals(other: Any?): Boolean {
+                        calls = calls + 1
+                        return other is SearchProbe && code == other.code
+                    }
+                    override fun hashCode(): Int = code
+                }
                 fun main() {
                     val numbers: List<Int> = listOf(7, 9)
                     val all: List<Any> = numbers
@@ -1873,6 +1881,13 @@ class MinimalScriptLoweringTest {
                     require(mixed.indexOf(Token("same")) == 2)
                     require(Custom(4) in listOf(Custom(4)))
                     require(emptyList<Int>().indexOf(1) == -1)
+                    val storedProbe = SearchProbe(5)
+                    val searchedProbe = SearchProbe(5)
+                    val probes = listOf(storedProbe)
+                    require(probes.indexOf(searchedProbe) == 0)
+                    require(searchedProbe in probes)
+                    require(searchedProbe.calls == 2)
+                    require(storedProbe.calls == 0)
                 }
                 """.trimIndent()
             val result = adapter.compile(request(source))

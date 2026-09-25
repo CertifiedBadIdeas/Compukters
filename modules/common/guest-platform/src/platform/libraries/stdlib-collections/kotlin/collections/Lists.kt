@@ -20,7 +20,7 @@ public external fun <T> emptyList(): List<T>
 public fun <T> List<T>.indexOf(element: T): Int {
     var index = 0
     while (index < size) {
-        if (this[index] == element) return index
+        if (element == this[index]) return index
         index += 1
     }
     return -1
