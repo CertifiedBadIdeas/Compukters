@@ -747,7 +747,150 @@ private class InlineValueClassRegistry private constructor(
 private const val ANY_RUNTIME_TYPE = 5u
 private const val INT_BOX_RUNTIME_TYPE = 6u
 private const val INT_BOX_VALUE_IMPORT = 7u
+private const val INT_ARRAY_RUNTIME_TYPE = 4u
 private const val INT_BOX_VALUE_NAME = "kotlin.Int.<boxed-value>"
+
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+private fun mapGuestValueType(
+    type: IrType,
+    pluginContext: IrPluginContext,
+    guestTypes: GuestTypeRegistry,
+    stringType: ValueType,
+    charArrayType: ValueType,
+    stringArrayType: ValueType,
+    classTypeIds: Map<IrClassSymbol, TypeId>,
+    externalClassTypes: Map<IrClassSymbol, TypeRef.Imported>,
+    inlineValueClasses: InlineValueClassRegistry,
+    platformScalars: PlatformScalarRegistry,
+    element: IrElement,
+    functionTypes: Map<GuestFunctionShape, TypeRef.Local> = emptyMap(),
+    instance: GuestFunctionInstance? = null,
+    classInstanceTypeIds: Map<GuestClassInstance, TypeId> = emptyMap(),
+    resolveUnderlyingType: (IrType) -> IrType = { it },
+): ValueType {
+    if (instance != null) {
+        return mapGuestValueType(
+            instance.substitute(type),
+            pluginContext,
+            guestTypes,
+            stringType,
+            charArrayType,
+            stringArrayType,
+            classTypeIds,
+            externalClassTypes,
+            inlineValueClasses,
+            platformScalars,
+            element,
+            functionTypes,
+            classInstanceTypeIds = classInstanceTypeIds,
+            resolveUnderlyingType = resolveUnderlyingType,
+        )
+    }
+    if (type.isNullable()) {
+        val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
+        val guestClass = (type as? IrSimpleType)?.classifier as? IrClassSymbol
+        val guestInstance = type.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
+        if (!type.isKotlinAny() && guestClass != stringClass && guestClass !in classTypeIds && guestInstance !in classInstanceTypeIds) {
+            throw UnsupportedKotlinIr(element, "nullable type is outside the supported reference subset")
+        }
+    }
+    return when (type) {
+        pluginContext.irBuiltIns.unitType -> {
+            ValueType.Unit
+        }
+
+        pluginContext.irBuiltIns.stringType -> {
+            stringType
+        }
+
+        pluginContext.irBuiltIns.intType -> {
+            ValueType.I32
+        }
+
+        pluginContext.irBuiltIns.longType -> {
+            ValueType.I64
+        }
+
+        pluginContext.irBuiltIns.floatType -> {
+            ValueType.F32
+        }
+
+        pluginContext.irBuiltIns.booleanType -> {
+            ValueType.Bool
+        }
+
+        pluginContext.irBuiltIns.charType -> {
+            ValueType.Char
+        }
+
+        else -> {
+            if (type.isKotlinAny()) {
+                ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))
+            } else if ((type as? IrSimpleType)?.classifier == (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier) {
+                (stringType as ValueType.Ref).copy(nullable = type.isNullable())
+            } else if (type.isNothing()) {
+                ValueType.Unit
+            } else if (type.isExactClass(pluginContext.irBuiltIns.charArray)) {
+                charArrayType
+            } else if (type.isExactClass(pluginContext.irBuiltIns.intArray)) {
+                ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(INT_ARRAY_RUNTIME_TYPE)))
+            } else if (guestTypes.isStringArray(type)) {
+                stringArrayType
+            } else if (guestTypes.referenceArrayType(type) != null) {
+                requireNotNull(guestTypes.referenceArrayType(type))
+            } else if (functionTypes.forType(type) != null) {
+                ValueType.Ref(nullable = false, type = requireNotNull(functionTypes.forType(type)))
+            } else if (type is IrSimpleType && type.classifier is IrClassSymbol) {
+                val classifier = type.classifier as IrClassSymbol
+                val inline = inlineValueClasses[classifier]
+                val id =
+                    if (classifier.owner.typeParameters.isEmpty()) {
+                        classTypeIds[classifier]
+                    } else {
+                        type
+                            .classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
+                            ?.let(classInstanceTypeIds::get)
+                    }
+                val external = externalClassTypes[classifier]
+                val platformScalar = platformScalars.representation(type)
+                if (platformScalar != null) {
+                    if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable platform scalar types are not supported")
+                    when (platformScalar) {
+                        PlatformScalarRepresentation.INT -> ValueType.I32
+                        PlatformScalarRepresentation.BOOLEAN -> ValueType.Bool
+                        PlatformScalarRepresentation.CHAR -> ValueType.Char
+                    }
+                } else if (inline != null) {
+                    if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable value classes are not supported")
+                    mapGuestValueType(
+                        resolveUnderlyingType(inline.underlyingType),
+                        pluginContext,
+                        guestTypes,
+                        stringType,
+                        charArrayType,
+                        stringArrayType,
+                        classTypeIds,
+                        externalClassTypes,
+                        inlineValueClasses,
+                        platformScalars,
+                        element,
+                        functionTypes,
+                        classInstanceTypeIds = classInstanceTypeIds,
+                        resolveUnderlyingType = resolveUnderlyingType,
+                    )
+                } else if (id != null) {
+                    ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Local(id))
+                } else if (external != null) {
+                    ValueType.Ref(nullable = type.isNullable(), type = external)
+                } else {
+                    throw UnsupportedKotlinIr(element, "unsupported value type")
+                }
+            } else {
+                throw UnsupportedKotlinIr(element, "unsupported value type")
+            }
+        }
+    }
+}
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 internal object KotlinProjectLowering {
@@ -756,7 +899,6 @@ internal object KotlinProjectLowering {
     private const val APPLICATION_STATE = "app.<state>"
     private const val CHAR_ARRAY_RUNTIME_TYPE = 0u
     private const val STRING_RUNTIME_TYPE = 1u
-    private const val INT_ARRAY_RUNTIME_TYPE = 4u
     private val runtimeTypeNames =
         listOf(
             "kotlin.CharArray",
@@ -1567,6 +1709,7 @@ internal object KotlinProjectLowering {
                 } else {
                     try {
                         FunctionCompiler(
+                            pluginContext = pluginContext,
                             function = function,
                             functionId = functionId,
                             blockBase = firstBlock,
@@ -1822,6 +1965,7 @@ internal object KotlinProjectLowering {
                     )
                 } else {
                     FunctionCompiler(
+                        pluginContext = pluginContext,
                         function = requireNotNull(layout.function),
                         functionId = layout.invokeFunctionId,
                         blockBase = firstBlock,
@@ -1952,6 +2096,7 @@ internal object KotlinProjectLowering {
             val firstBlock = blocks.size
             val compiled =
                 FunctionCompiler(
+                    pluginContext = pluginContext,
                     function = constructor,
                     functionId = functionId,
                     blockBase = firstBlock,
@@ -2846,128 +2991,23 @@ internal object KotlinProjectLowering {
         functionTypes: Map<GuestFunctionShape, TypeRef.Local> = emptyMap(),
         instance: GuestFunctionInstance? = null,
         classInstanceTypeIds: Map<GuestClassInstance, TypeId> = emptyMap(),
-    ): ValueType {
-        if (instance != null) {
-            return valueType(
-                instance.substitute(type),
-                pluginContext,
-                guestTypes,
-                stringType,
-                charArrayType,
-                stringArrayType,
-                classTypeIds,
-                externalClassTypes,
-                inlineValueClasses,
-                platformScalars,
-                element,
-                functionTypes,
-                classInstanceTypeIds = classInstanceTypeIds,
-            )
-        }
-        if (type.isNullable()) {
-            val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
-            val guestClass = (type as? IrSimpleType)?.classifier as? IrClassSymbol
-            val guestInstance = type.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
-            if (!type.isKotlinAny() && guestClass != stringClass && guestClass !in classTypeIds && guestInstance !in classInstanceTypeIds) {
-                throw UnsupportedKotlinIr(element, "nullable type is outside the supported reference subset")
-            }
-        }
-        return when (type) {
-            pluginContext.irBuiltIns.unitType -> {
-                ValueType.Unit
-            }
-
-            pluginContext.irBuiltIns.stringType -> {
-                stringType
-            }
-
-            pluginContext.irBuiltIns.intType -> {
-                ValueType.I32
-            }
-
-            pluginContext.irBuiltIns.longType -> {
-                ValueType.I64
-            }
-
-            pluginContext.irBuiltIns.floatType -> {
-                ValueType.F32
-            }
-
-            pluginContext.irBuiltIns.booleanType -> {
-                ValueType.Bool
-            }
-
-            pluginContext.irBuiltIns.charType -> {
-                ValueType.Char
-            }
-
-            else -> {
-                if (type.isKotlinAny()) {
-                    ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))
-                } else if ((type as? IrSimpleType)?.classifier == (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier) {
-                    (stringType as ValueType.Ref).copy(nullable = type.isNullable())
-                } else if (type.isNothing()) {
-                    ValueType.Unit
-                } else if (type.isExactClass(pluginContext.irBuiltIns.charArray)) {
-                    charArrayType
-                } else if (type.isExactClass(pluginContext.irBuiltIns.intArray)) {
-                    ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(INT_ARRAY_RUNTIME_TYPE)))
-                } else if (guestTypes.isStringArray(type)) {
-                    stringArrayType
-                } else if (guestTypes.referenceArrayType(type) != null) {
-                    requireNotNull(guestTypes.referenceArrayType(type))
-                } else if (functionTypes.forType(type) != null) {
-                    ValueType.Ref(nullable = false, type = requireNotNull(functionTypes.forType(type)))
-                } else if (type is IrSimpleType && type.classifier is IrClassSymbol) {
-                    val classifier = type.classifier as IrClassSymbol
-                    val inline = inlineValueClasses[classifier]
-                    val id =
-                        if (classifier.owner.typeParameters.isEmpty()) {
-                            classTypeIds[classifier]
-                        } else {
-                            type
-                                .classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
-                                ?.let(classInstanceTypeIds::get)
-                        }
-                    val external = externalClassTypes[classifier]
-                    val platformScalar = platformScalars.representation(type)
-                    if (platformScalar != null) {
-                        if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable platform scalar types are not supported")
-                        when (platformScalar) {
-                            PlatformScalarRepresentation.INT -> ValueType.I32
-                            PlatformScalarRepresentation.BOOLEAN -> ValueType.Bool
-                            PlatformScalarRepresentation.CHAR -> ValueType.Char
-                        }
-                    } else if (inline != null) {
-                        if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable value classes are not supported")
-                        valueType(
-                            inline.underlyingType,
-                            pluginContext,
-                            guestTypes,
-                            stringType,
-                            charArrayType,
-                            stringArrayType,
-                            classTypeIds,
-                            externalClassTypes,
-                            inlineValueClasses,
-                            platformScalars,
-                            element,
-                            functionTypes,
-                            classInstanceTypeIds = classInstanceTypeIds,
-                        )
-                    } else if (id != null) {
-                        ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Local(id))
-                    } else if (external != null) {
-                        ValueType.Ref(nullable = type.isNullable(), type = external)
-                    } else {
-                        throw UnsupportedKotlinIr(element, "unsupported value type")
-                    }
-                } else {
-                    throw UnsupportedKotlinIr(element, "unsupported value type")
-                }
-            }
-        }
-    }
+    ): ValueType =
+        mapGuestValueType(
+            type,
+            pluginContext,
+            guestTypes,
+            stringType,
+            charArrayType,
+            stringArrayType,
+            classTypeIds,
+            externalClassTypes,
+            inlineValueClasses,
+            platformScalars,
+            element,
+            functionTypes,
+            instance,
+            classInstanceTypeIds,
+        )
 
     private fun buildClassLayouts(
         classes: List<GuestClassInstance>,
@@ -3394,6 +3434,7 @@ private fun linkedPlatformFunctions(
 }
 
 private class FunctionCompiler(
+    private val pluginContext: IrPluginContext,
     private val function: IrFunction,
     private val functionId: FunctionId,
     private val blockBase: Int,
@@ -5953,97 +5994,23 @@ private class FunctionCompiler(
     private fun valueTypeResolved(
         type: IrType,
         element: IrElement,
-    ): ValueType {
-        if (type.isNullable()) {
-            val stringClass = (kotlinStringType as IrSimpleType).classifier
-            val guestClass = (type as? IrSimpleType)?.classifier as? IrClassSymbol
-            val guestInstance = type.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
-            if (!type.isKotlinAny() && guestClass != stringClass && guestClass !in classTypeIds && guestInstance !in classInstanceTypeIds) {
-                throw UnsupportedKotlinIr(element, "nullable type is outside the supported reference subset")
-            }
-        }
-        return when (type) {
-            unitType -> {
-                ValueType.Unit
-            }
-
-            kotlinStringType -> {
-                stringType
-            }
-
-            intType -> {
-                ValueType.I32
-            }
-
-            longType -> {
-                ValueType.I64
-            }
-
-            floatType -> {
-                ValueType.F32
-            }
-
-            booleanType -> {
-                ValueType.Bool
-            }
-
-            charType -> {
-                ValueType.Char
-            }
-
-            else -> {
-                if (type.isKotlinAny()) {
-                    ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))
-                } else if ((type as? IrSimpleType)?.classifier == (kotlinStringType as IrSimpleType).classifier) {
-                    (stringType as ValueType.Ref).copy(nullable = type.isNullable())
-                } else if (type.isNothing()) {
-                    ValueType.Unit
-                } else if (type.isExactClass(kotlinCharArrayClass)) {
-                    charArrayType
-                } else if (type.isExactClass(kotlinIntArrayClass)) {
-                    intArrayType
-                } else if (guestTypes.isStringArray(type)) {
-                    stringArrayType
-                } else if (guestTypes.referenceArrayType(type) != null) {
-                    requireNotNull(guestTypes.referenceArrayType(type))
-                } else if (functionTypes.forType(type) != null) {
-                    ValueType.Ref(nullable = false, type = requireNotNull(functionTypes.forType(type)))
-                } else if (type is IrSimpleType && type.classifier is IrClassSymbol) {
-                    val classifier = type.classifier as IrClassSymbol
-                    val inline = inlineValueClasses[classifier]
-                    val id =
-                        if (classifier.owner.typeParameters.isEmpty()) {
-                            classTypeIds[classifier]
-                        } else {
-                            type
-                                .classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
-                                ?.let(classInstanceTypeIds::get)
-                        }
-                    val external = externalClassTypes[classifier]
-                    val platformScalar = platformScalars.representation(type)
-                    if (platformScalar != null) {
-                        if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable platform scalar types are not supported")
-                        when (platformScalar) {
-                            PlatformScalarRepresentation.INT -> ValueType.I32
-                            PlatformScalarRepresentation.BOOLEAN -> ValueType.Bool
-                            PlatformScalarRepresentation.CHAR -> ValueType.Char
-                        }
-                    } else if (inline != null) {
-                        if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable value classes are not supported")
-                        valueType(inline.underlyingType, element)
-                    } else if (id != null) {
-                        ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Local(id))
-                    } else if (external != null) {
-                        ValueType.Ref(nullable = type.isNullable(), type = external)
-                    } else {
-                        throw UnsupportedKotlinIr(element, "unsupported value type")
-                    }
-                } else {
-                    throw UnsupportedKotlinIr(element, "unsupported value type")
-                }
-            }
-        }
-    }
+    ): ValueType =
+        mapGuestValueType(
+            type,
+            pluginContext,
+            guestTypes,
+            stringType,
+            charArrayType,
+            stringArrayType,
+            classTypeIds,
+            externalClassTypes,
+            inlineValueClasses,
+            platformScalars,
+            element,
+            functionTypes,
+            classInstanceTypeIds = classInstanceTypeIds,
+            resolveUnderlyingType = ::resolvedType,
+        )
 
     private fun destinationFor(
         type: IrType,
