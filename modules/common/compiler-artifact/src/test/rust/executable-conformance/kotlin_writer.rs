@@ -964,8 +964,9 @@ fn k2_int_list_covariance_boxes_universal_reads() {
         "COMPUKTER_KOTLIN_LIST_ANY_ARTIFACT",
         [
             "true\n", "7\n", "true\n", "7\n", "2\n", "7\n", "9\n", "true\n", "true\n", "true\n", "true\n",
+            "3\n", "true\n", "7\n", "true\n", "true\n", "true\n", "true\n", "false\n", "false\n", "0\n",
         ],
-        128,
+        256,
     );
 }
 

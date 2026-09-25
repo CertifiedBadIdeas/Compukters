@@ -591,9 +591,10 @@ supported.
   to the same object. Factory arguments run once in source order. Invalid indexes trap through the VM array bounds
   check, and iteration resumes across quota slices. `List<Int>` can widen to `List<Any>` without copying the list;
   reads and iteration through the universal view allocate `Int` boxes with checked `is Int` and `as Int` access. A
-  supported reference list can also widen to `List<Any>` while preserving its element references.
+  supported reference list can also widen to `List<Any>` while preserving its element references. Direct
+  `listOf<Any>(...)` stores boxed `Int` and supported references in one array; indexed reads reuse those references.
   Value equality on `Any` remains a bounded source diagnostic until runtime value dispatch is available. Nullable
-  elements, direct `listOf<Any>` construction, unsupported primitive element types, spread
+  elements, direct `Array<Any>` factories, unsupported primitive element types, spread
   arguments, mutable collections, `Set`, `Map`, sequences, and collection algorithms are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `read only lists retain typed Int String and guest references`,

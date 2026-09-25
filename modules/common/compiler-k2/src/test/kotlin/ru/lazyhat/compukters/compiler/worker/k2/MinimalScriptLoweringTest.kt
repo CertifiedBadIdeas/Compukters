@@ -1797,6 +1797,7 @@ class MinimalScriptLoweringTest {
             val source =
                 """
                 import kotlin.collections.List
+                import kotlin.collections.emptyList
                 import kotlin.collections.listOf
 
                 class Token(val name: String)
@@ -1818,6 +1819,17 @@ class MinimalScriptLoweringTest {
                     val tokens: List<Token> = listOf(Token("owned"))
                     val objects: List<Any> = tokens
                     println(objects[0] === tokens[0])
+                    val word = "mixed"
+                    val token = Token("same")
+                    val mixed: List<Any> = listOf<Any>(7, word, token)
+                    println(mixed.size)
+                    println(mixed[0] is Int)
+                    println(mixed[0] as Int)
+                    println(mixed[0] === mixed[0])
+                    println(mixed[1] === word)
+                    println(mixed[2] === token)
+                    for (element in mixed) { println(element is Int) }
+                    println(emptyList<Any>().size)
                 }
                 """.trimIndent()
             val result = adapter.compile(request(source))
@@ -1924,7 +1936,7 @@ class MinimalScriptLoweringTest {
                 listOf(
                     "import kotlin.collections.listOf\nfun main() { listOf<Int?>(null) }",
                     "import kotlin.collections.listOf\nfun main() { listOf(true) }",
-                    "import kotlin.collections.listOf\nfun main() { listOf<Any>(1) }",
+                    "import kotlin.collections.listOf\nfun main() { listOf<Any>(true) }",
                     "import kotlin.collections.List\nimport kotlin.collections.listOf\nfun main() { val values: List<Int> = listOf(1); val nullable: List<Any?> = values; println(nullable.size) }",
                     "import kotlin.collections.listOf\nfun main() { val array = arrayOf(\"a\"); listOf(*array) }",
                 )
