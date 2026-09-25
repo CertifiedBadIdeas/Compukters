@@ -324,6 +324,7 @@ val listQuotaConformanceArtifact = layout.buildDirectory.file("generated/conform
 val genericLibraryConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-library.cpkt")
 val floatConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-float.cpkt")
 val stringCompareConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-string-compare.cpkt")
+val scalarCompareConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-scalar-compare.cpkt")
 val dispatchConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-dispatch.cpkt")
 val objectModelConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-object-model.cpkt")
 val propertyAccessorsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-property-accessors.cpkt")
@@ -977,6 +978,22 @@ val generateStringCompareConformanceArtifact = tasks.register<Test>("generateStr
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.stringCompareArtifact", stringCompareConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateScalarCompareConformanceArtifact = tasks.register<Test>("generateScalarCompareConformanceArtifact") {
+    description = "Compiles Guest Kotlin Char and Boolean ordering for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*Char and Boolean compareTo preserve scalar ordering for vm conformance*")
+    inputs.file(workerJar)
+    outputs.file(scalarCompareConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.scalarCompareArtifact", scalarCompareConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

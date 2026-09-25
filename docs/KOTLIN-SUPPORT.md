@@ -77,13 +77,17 @@ supported.
 
 - [x] **`Int`, `Long`, `Float`, `Boolean`, and `Char` scalar values** — these source types lower
   to distinct verified VM scalar types with Kotlin-compatible control and
-  comparison behavior. Evidence:
+  comparison behavior. Direct `Char.compareTo` returns the UTF-16 code-unit
+  difference. Direct `Boolean.compareTo` returns `-1`, `0`, or `1` with
+  `false < true`; Boolean ordering operators follow the same order. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `bounded when forms compile for admitted scalar types` and
   `primitive char array lowers deterministically for exact utf16 materialization`, plus
   `Long arithmetic conversions comparisons and text lower for vm conformance` and
   `Float arithmetic conversions comparisons and text lower for vm conformance`,
-  paired with [`tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/tests.rs), test
+  and `Char and Boolean compareTo preserve scalar ordering for vm conformance`
+  executed by `testKotlinScalarCompareVmConformance`; also
+  [`tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/tests.rs), test
   `scalar_vectors_match_kotlin_jvm_semantics`.
 
 - [ ] **`Any` value equality — Partial** — non-null values held as `Any` support `==`, `!=`, and `equals`.

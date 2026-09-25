@@ -43,6 +43,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   text, including signed zero, infinities, NaN, and subnormal values. Direct `compareTo` calls with `Float`, `Int`, or
   `Long` use Kotlin's total order for NaN and signed zero.
 - Strings support direct `compareTo` calls and `<`, `<=`, `>`, `>=` operators using UTF-16 lexicographic order.
+- `Char.compareTo` returns the UTF-16 code-unit difference; `Boolean.compareTo` and Boolean ordering operators use
+  `false < true`.
 - Operations that wait for the world, another task, or a channel now block transparently inside ordinary functions;
   source-level `suspend` declarations are not part of the supported Guest Kotlin subset.
 - `Tasks.sleepTicks(n)` lets a program pace world interactions by server ticks while other Guest tasks continue and

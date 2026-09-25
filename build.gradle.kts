@@ -634,6 +634,15 @@ registerKotlinVmConformance(
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_STRING_COMPARE_ARTIFACT",
     conformanceScenario = "string-compare",
 )
+registerKotlinVmConformance(
+    taskName = "testKotlinScalarCompareVmConformance",
+    taskDescription = "Executes Guest Kotlin Char and Boolean ordering on the pinned VM.",
+    artifactTask = ":compiler-k2:generateScalarCompareConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-scalar-compare.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-scalar-compare-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_SCALAR_COMPARE_ARTIFACT",
+    conformanceScenario = "scalar-compare",
+)
 
 val buildScriptsTest = gradle.includedBuild("build-scripts").task(":test")
 
