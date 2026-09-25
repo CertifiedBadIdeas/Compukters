@@ -1178,10 +1178,14 @@ internal object KotlinProjectLowering {
                     when (function.fqNameWhenAvailable?.asString()) {
                         "kotlin.collections.IntArrayBackedList.getAny" -> "get"
                         "kotlin.collections.IntArrayBackedList.containsAny" -> "contains"
+                        "kotlin.collections.IntArrayBackedList.indexOfAny" -> "indexOf"
+                        "kotlin.collections.IntArrayBackedList.lastIndexOfAny" -> "lastIndexOf"
                         "kotlin.collections.IntArrayBackedList.iteratorAny" -> "iterator"
                         "kotlin.collections.IntArrayBackedListIterator.nextAny" -> "next"
                         "kotlin.collections.ArrayBackedList.getAny" -> "get"
                         "kotlin.collections.ArrayBackedList.containsAny" -> "contains"
+                        "kotlin.collections.ArrayBackedList.indexOfAny" -> "indexOf"
+                        "kotlin.collections.ArrayBackedList.lastIndexOfAny" -> "lastIndexOf"
                         "kotlin.collections.ArrayBackedList.iteratorAny" -> "iterator"
                         "kotlin.collections.ArrayBackedListIterator.nextAny" -> "next"
                         else -> null

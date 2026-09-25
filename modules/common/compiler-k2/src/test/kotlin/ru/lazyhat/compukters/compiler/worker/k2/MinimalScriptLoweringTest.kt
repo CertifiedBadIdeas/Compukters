@@ -2066,6 +2066,19 @@ class MinimalScriptLoweringTest {
                     override fun contains(element: Int): Boolean = element == 1 || element == 2
                     override fun iterator(): Iterator<Int> = TwoNumbersIterator()
                 }
+                class TwoNumbersList : List<Int> {
+                    override val size: Int get() = 2
+                    override fun isEmpty(): Boolean = false
+                    override fun contains(element: Int): Boolean = indexOf(element) >= 0
+                    override fun get(index: Int): Int {
+                        require(index == 0 || index == 1)
+                        return index + 1
+                    }
+                    override fun indexOf(element: Int): Int =
+                        if (element == 1) 0 else if (element == 2) 1 else -1
+                    override fun lastIndexOf(element: Int): Int = indexOf(element)
+                    override fun iterator(): Iterator<Int> = TwoNumbersIterator()
+                }
                 fun main() {
                     val numbers: List<Int> = listOf(7, 9)
                     val all: List<Any> = numbers
@@ -2217,6 +2230,12 @@ class MinimalScriptLoweringTest {
                     require(customCollection.isNotEmpty())
                     require(2 in customCollection)
                     require(customCollection.indexOf(2) == 1)
+                    val customList: List<Int> = TwoNumbersList()
+                    require(customList.size == 2)
+                    require(customList[1] == 2)
+                    require(customList.indexOf(2) == 1)
+                    require(customList.lastIndexOf(2) == 1)
+                    require(customList.indexOf(3) == -1)
                 }
                 """.trimIndent()
             val result = adapter.compile(request(source))

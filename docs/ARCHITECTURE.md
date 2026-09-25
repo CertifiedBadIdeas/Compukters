@@ -131,8 +131,9 @@ hold boxed `Int` and supported objects; each value is converted once before stor
 factories and indexed writes use the same boxing boundary; array reads return the stored reference. `Collection<T>`
 owns `size`, `isEmpty`, and `contains`; specialized lists publish an `Any` argument bridge for covariant `contains`
 calls. `Iterable<T>` search extensions `contains`, `indexOf`, and `lastIndexOf` scan with the iterator, while the
-`List<T>` index extensions use direct indexed access. The `Iterable<T>` predicate extensions `any`, `all`, and `none`
-specialize both the element and function value signature before lowering calls to the predicate.
+`List<T>` index methods use direct indexed access and publish `Any` argument bridges for covariant calls. The
+`Iterable<T>` predicate extensions `any`, `all`, and `none` specialize both the element and function value signature
+before lowering calls to the predicate.
 Generic call arguments are converted against the specialized parameter types, so searching a widened `List<Any>`
 boxes an `Int` argument before comparison. Universal value
 equality over non-null `Any` lowers through existing reference, type-test, field-read, scalar, and string instructions:
