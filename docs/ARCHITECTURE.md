@@ -139,8 +139,10 @@ boxes an `Int` argument before comparison. Universal value
 equality over non-null `Any` lowers through existing reference, type-test, field-read, scalar, and string instructions:
 boxed `Int` compares by value, strings by content, Guest classes with an explicit `equals` override call that method,
 and data classes compare supported primary-constructor properties. Other classes retain the default identity equality.
-Unsupported data-class property shapes receive a compiler diagnostic. Nullable `Any?`, hash, and string conversion
-remain outside this subset.
+Unsupported data-class property shapes receive a compiler diagnostic. `Int?` uses a nullable reference to the same
+managed Int box. Conversion to a scalar Int checks the box and reads its payload; nullable and Any? boundaries preserve
+existing box references. Null participates in universal equality. Hash and object string conversion remain outside
+this subset.
 
 Concrete `Array<GuestClass>` uses become distinct local nominal array types whose elements are exact Guest class
 references. Existing array instructions allocate, load, and store them; the verifier checks element types and GC

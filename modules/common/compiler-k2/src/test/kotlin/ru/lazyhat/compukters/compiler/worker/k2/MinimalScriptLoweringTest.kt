@@ -134,8 +134,8 @@ class MinimalScriptLoweringTest {
     fun `unsupported nullable forms do not publish artifacts`() =
         withAdapter { adapter ->
             listOf(
-                "fun main() { val value: Int? = null }",
-                "fun main() { val text: String? = null; val length = text?.length }",
+                "fun main() { val value: Long? = null }",
+                "class Node(val value: Boolean)\nfun main() { val node: Node? = null; val value = node?.value }",
                 "fun main() { val array: CharArray? = null }",
                 "fun main() { val operation: (() -> Unit)? = null }",
                 "fun main() { val text: String? = null; val value = text!! }",
@@ -2241,6 +2241,60 @@ class MinimalScriptLoweringTest {
             val result = adapter.compile(request(source))
             val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
             System.getProperty("compukter.vm.listAnyArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `nullable Int and collection elements preserve values and nulls`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                fun echo(value: Int?): Int? = value
+                fun box(value: Int): Int? = value
+                class Slot(var value: Int?)
+                fun main() {
+                    val missing: Int? = null
+                    val first: Int? = 7
+                    require(missing == null)
+                    require(first != null)
+                    require((first ?: 0) == 7)
+                    require((missing ?: 9) == 9)
+                    require(echo(8) == 8)
+                    require(echo(null) == null)
+                    require(box(1000) == box(1000))
+                    require(box(1000) != box(1001))
+                    val text: String? = "seven"
+                    val length: Int? = text?.length
+                    require((length ?: 0) == 5)
+                    val noText: String? = null
+                    require(noText?.length == null)
+                    var changing: Int? = null
+                    changing = 7
+                    require(changing == first)
+                    changing = null
+                    require(changing == null)
+                    val slot = Slot(7)
+                    require(slot.value == first)
+                    slot.value = null
+                    require(slot.value == null)
+                    val broad: Any? = first
+                    require(broad is Int)
+                    require((broad as Int) == 7)
+                    val absent: Any? = missing
+                    require(absent == null)
+                    require(broad == box(7))
+                    require(broad != absent)
+                    val restored: Int? = broad as Int?
+                    require(restored == 7)
+                    val restoredNull: Int? = absent as Int?
+                    require(restoredNull == null)
+                    println("nullable ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.nullableCollectionsArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }
         }

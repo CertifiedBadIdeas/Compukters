@@ -581,6 +581,15 @@ registerKotlinVmConformance(
     conformanceScenario = "list-any",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinNullableCollectionsVmConformance",
+    taskDescription = "Executes nullable Int and collection elements with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateNullableCollectionsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-nullable-collections.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-nullable-collections-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_NULLABLE_COLLECTIONS_ARTIFACT",
+    conformanceScenario = "nullable-collections",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinListAnyQuotaVmConformance",
     taskDescription = "Verifies boxed covariant list reads across VM quota slices and collection.",
     artifactTask = ":compiler-k2:generateListAnyQuotaConformanceArtifact",
