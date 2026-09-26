@@ -85,6 +85,12 @@ links to their source files.
   [`Lists.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-collections/kotlin/collections/Lists.kt). Tracking:
   [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656),
   [#581](https://github.com/CertifiedBadIdeas/Compukters/issues/581)
+- [x] **Nullable element selection** — `Iterable<T>.firstOrNull` / `lastOrNull` support predicate and no-predicate
+  forms, including user-defined iterables. List overloads read first/last elements by index; predicate selection for
+  `List.lastOrNull` searches from the end, whereas `Iterable.lastOrNull` traverses forward. `List.getOrNull` returns
+  null for invalid indexes. Empty or unmatched selections return null. `Int` elements produce `Int?`; nullable
+  references and existing Int boxes retain identity. Evidence: `testKotlinCollectionSelectionVmConformance` and
+  `MinimalScriptLoweringTest`, test `collection nullable selection preserves traversal values and identity`.
 - [ ] **Other collections and functional helpers — Unsupported** — `MutableList`, `Set`, `Map`, sequences, `map`,
   `filter`, `fold`, and general custom iterator loops have no Guest implementation. Tracking: not scheduled
 - [ ] **Console I/O — Partial** — `print`, `println`, and `readln` support the documented scalar and string forms through

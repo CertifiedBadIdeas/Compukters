@@ -220,3 +220,26 @@ internal class ArrayBackedListAnyIterator<T>(private val list: ArrayBackedList<T
 
     internal fun nextAnyNullable(): Any? = next()
 }
+
+/** Returns the element at [index], or null when the index is outside this list. */
+public fun <T> List<T>.getOrNull(index: Int): T? {
+    if (index < 0 || index >= size) return null
+    return this[index]
+}
+
+/** Returns the first element, or null when this list is empty. */
+public fun <T> List<T>.firstOrNull(): T? = getOrNull(0)
+
+/** Returns the last element, or null when this list is empty. */
+public fun <T> List<T>.lastOrNull(): T? = getOrNull(size - 1)
+
+/** Returns the last matching element, searching from the end until a match is found. */
+public fun <T> List<T>.lastOrNull(predicate: (T) -> Boolean): T? {
+    var index = size - 1
+    while (index >= 0) {
+        val element = this[index]
+        if (predicate(element)) return element
+        index -= 1
+    }
+    return null
+}

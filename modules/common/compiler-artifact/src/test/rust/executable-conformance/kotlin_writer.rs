@@ -27,6 +27,7 @@ fn main() {
         "generic-interface" => k2_generic_interface_dispatches_concrete_types(),
         "list" => k2_lists_retain_typed_elements(),
         "list-any" => k2_int_list_covariance_boxes_universal_reads(),
+        "collection-selection" => k2_collection_selection_preserves_values_and_traversal(),
         "nullable-collections" => k2_nullable_collections_preserve_values_and_nulls(),
         "list-any-quota" => k2_int_list_universal_reads_survive_quota_and_gc(),
         "list-bounds" => k2_list_index_outside_bounds_traps(),
@@ -1019,6 +1020,14 @@ fn k2_int_list_covariance_boxes_universal_reads() {
             "true\n", "7\n", "true\n", "7\n", "2\n", "7\n", "9\n", "true\n", "true\n", "true\n", "true\n",
             "3\n", "true\n", "7\n", "true\n", "true\n", "true\n", "true\n", "false\n", "false\n", "0\n",
         ],
+        256,
+    );
+}
+
+fn k2_collection_selection_preserves_values_and_traversal() {
+    k2_expected_prints_with_budget(
+        "COMPUKTER_KOTLIN_COLLECTION_SELECTION_ARTIFACT",
+        ["selection ok\n"],
         256,
     );
 }
