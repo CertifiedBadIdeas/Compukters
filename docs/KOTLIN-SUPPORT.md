@@ -642,6 +642,14 @@ supported.
   Evidence: `MinimalScriptLoweringTest`, test `collection nullable selection preserves traversal values and identity`,
   executed by `testKotlinCollectionSelectionVmConformance` with bounded slices.
 
+- [x] **Iterable accumulation** — `Iterable<T>.fold(initial: R, operation: (R, T) -> R)` accumulates in iteration
+  order, calling the operation once per element. Empty iterables return the initial value unchanged. Element and
+  accumulator types specialize independently, including nullable references, `Int?`, and supported Guest classes.
+  Generic callers can forward the operation with their instantiated types. Like other Guest higher-order helpers,
+  this extension is not inline and does not support non-local returns.
+  Evidence: `MinimalScriptLoweringTest`, test `Iterable fold specializes independent element and accumulator types`,
+  executed by `testKotlinFoldVmConformance` with bounded slices.
+
 - [ ] **Read-only `Collection<T>` and `List<T>` — Partial** — direct `listOf(...)`, `listOf<T>()`, and `emptyList<T>()`
   support `Int`, `String`, and supported Guest class references, including nullable elements. `size`, indexed `get`,
   and ordinary `for` iteration execute
@@ -791,9 +799,8 @@ links to their source files.
   native built-ins and core modules. Regex, Unicode categories, encodings,
   other generic array helpers, and collection conversions are absent. Tracking: not scheduled
 
-- [ ] **Standard collections and functional helpers — Unsupported** — the
-  collection hierarchy and higher-order functions such as `map`, `filter`,
-  and `fold` are not Guest runtime types. Tracking: not scheduled
+- [ ] **Other standard collections and functional helpers — Unsupported** — mutable collections, sets, maps,
+  sequences, and higher-order helpers such as `map` and `filter` have no Guest implementation. Tracking: not scheduled
 
 - [ ] **Standard exceptions, reflection, and coroutine libraries — Unsupported** —
   these packages have no Guest implementation. Tracking: not scheduled

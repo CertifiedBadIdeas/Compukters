@@ -93,3 +93,15 @@ public fun <T> Iterable<T>.lastOrNull(predicate: (T) -> Boolean): T? {
     }
     return last
 }
+
+/**
+ * Accumulates elements in iteration order, passing the current result and each element to [operation].
+ * Returns [initial] unchanged when this iterable is empty.
+ */
+public fun <T, R> Iterable<T>.fold(initial: R, operation: (R, T) -> R): R {
+    var accumulator = initial
+    for (element in this) {
+        accumulator = operation(accumulator, element)
+    }
+    return accumulator
+}

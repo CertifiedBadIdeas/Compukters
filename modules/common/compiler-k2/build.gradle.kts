@@ -318,6 +318,7 @@ val genericCellConformanceArtifact = layout.buildDirectory.file("generated/confo
 val genericInterfaceConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-interface.cpkt")
 val listConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list.cpkt")
 val listAnyConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-any.cpkt")
+val foldConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-fold.cpkt")
 val collectionSelectionConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-collection-selection.cpkt")
 val nullableCollectionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-nullable-collections.cpkt")
 val listAnyQuotaConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-any-quota.cpkt")
@@ -916,6 +917,22 @@ val generateCollectionSelectionConformanceArtifact = tasks.register<Test>("gener
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.collectionSelectionArtifact", collectionSelectionConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateFoldConformanceArtifact = tasks.register<Test>("generateFoldConformanceArtifact") {
+    description = "Compiles Iterable fold for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*Iterable fold specializes independent element and accumulator types*")
+    inputs.file(workerJar)
+    outputs.file(foldConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.foldArtifact", foldConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

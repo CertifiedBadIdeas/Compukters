@@ -91,8 +91,13 @@ links to their source files.
   null for invalid indexes. Empty or unmatched selections return null. `Int` elements produce `Int?`; nullable
   references and existing Int boxes retain identity. Evidence: `testKotlinCollectionSelectionVmConformance` and
   `MinimalScriptLoweringTest`, test `collection nullable selection preserves traversal values and identity`.
+- [x] **Iterable accumulation** — `Iterable<T>.fold(initial: R, operation: (R, T) -> R)` visits elements in order,
+  calling the operation once per element. Empty iterables return the initial value unchanged. Element and accumulator
+  types are independent, including nullable references, `Int?`, and supported Guest classes. Evidence:
+  `testKotlinFoldVmConformance` and `MinimalScriptLoweringTest`, test
+  `Iterable fold specializes independent element and accumulator types`.
 - [ ] **Other collections and functional helpers — Unsupported** — `MutableList`, `Set`, `Map`, sequences, `map`,
-  `filter`, `fold`, and general custom iterator loops have no Guest implementation. Tracking: not scheduled
+  `filter`, and general custom iterator loops have no Guest implementation. Tracking: not scheduled
 - [ ] **Console I/O — Partial** — `print`, `println`, and `readln` support the documented scalar and string forms through
   the terminal capability. Formatting and other overloads are absent. Evidence: `testKotlinSubsetVmConformance` and
   [`computer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/computer.rs),
