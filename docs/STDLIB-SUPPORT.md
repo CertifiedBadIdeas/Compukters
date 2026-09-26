@@ -44,7 +44,9 @@ links to their source files.
   Guest class references, and `Any`, including nullable forms and boxed `Int?`, including specializations inside generic Guest functions. `size`, indexed `get`,
   and indexed `set` use the array's concrete element type. `Array<Any>` boxes `Int` on construction or indexed writes,
   preserves reference identity, and returns the stored box on repeated reads. Factory arguments are evaluated once in
-  source order; reading an uninitialized non-null reference traps. `copyOfRange` is available only for `Array<String>`.
+  source order; reading an uninitialized non-null reference traps. `arrayOfNulls<T>(size)` creates nullable slots for
+  supported references and boxed `Int?`; negative sizes trap. Evidence: `testKotlinMutableListVmConformance`.
+  `copyOfRange` is available only for `Array<String>`.
   `Array<Int>`, other primitive-to-`Any` boxing, spread arguments, and general array iterators are
   unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
@@ -96,7 +98,16 @@ links to their source files.
   types are independent, including nullable references, `Int?`, and supported Guest classes. Evidence:
   `testKotlinFoldVmConformance` and `MinimalScriptLoweringTest`, test
   `Iterable fold specializes independent element and accumulator types`.
-- [ ] **Other collections and functional helpers — Unsupported** — `MutableList`, `Set`, `Map`, sequences, `map`,
+- [ ] **Mutable lists — Partial** — public `MutableCollection<T>`, `MutableList<T>`, `MutableIterable<T>`, and
+  `MutableIterator<T>` provide element addition/removal, indexed insertion/replacement/removal, `clear`, and iterator
+  removal. `ArrayList<T>()` and `ArrayList<T>(initialCapacity)` grow their backing array within VM memory quotas.
+  `Int` uses unboxed storage; references and `Int?` retain their stored values and identity. Read-only `List` views
+  share the object, including supported `Any`/`Any?` views. Mutable element types remain invariant. Structural changes
+  invalidate subsequent iterator `next`/`remove`; `set` does not. Invalid indexes, capacities, and iterator states trap.
+  Bulk mutations, collection constructors, `listIterator`, and `subList` are absent. Evidence:
+  `testKotlinMutableListVmConformance`, tests `mutable ArrayList preserves growth mutation and read only views` and
+  `mutable list element types remain invariant` in `MinimalScriptLoweringTest`.
+- [ ] **Other collections and functional helpers — Unsupported** — `Set`, `Map`, sequences, `map`,
   `filter`, and general custom iterator loops have no Guest implementation. Tracking: not scheduled
 - [ ] **Console I/O — Partial** — `print`, `println`, and `readln` support the documented scalar and string forms through
   the terminal capability. Formatting and other overloads are absent. Evidence: `testKotlinSubsetVmConformance` and

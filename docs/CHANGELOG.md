@@ -43,6 +43,10 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   `firstOrNull` and `lastOrNull` select elements with optional predicates; `List.getOrNull` returns null for invalid
   indexes. These operations support nullable elements and `Int?` results. `Iterable.fold` accumulates in iteration
   order with independent element and accumulator types, including nullable values and Guest class accumulators.
+- Guest programs can create `ArrayList<T>` and use it through `MutableList<T>` to add, insert, replace, remove, and
+  clear elements, including removal through mutable iterators. Lists grow within VM memory quotas, use unboxed `Int`
+  storage, support nullable elements, and share changes with read-only list views. `arrayOfNulls<T>(size)` creates
+  null-filled arrays for supported element types.
 - Computer programs can use unboxed `Long` and `Float` values, including mixed numeric arithmetic and comparisons,
   direct `compareTo` calls between `Int` and `Long`, explicit conversions, `Long` bitwise and shift operations,
   constants, string interpolation, and console output.

@@ -58,4 +58,5 @@ public external fun <T> arrayOf(vararg elements: T): Array<T>
 
 public external fun intArrayOf(vararg elements: Int): IntArray
 
-internal external fun <T> arrayOfNulls(size: Int): Array<T?>
+/** Creates an array of the requested size with every element set to null. */
+public external fun <T> arrayOfNulls(size: Int): Array<T?>

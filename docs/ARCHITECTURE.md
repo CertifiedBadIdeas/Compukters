@@ -120,8 +120,8 @@ containing generic function or class implementations as source-only; the compile
 the consuming Guest program so reachable bodies and class layouts can be specialized. Ordinary platform modules retain
 precompiled library fragments. Generic binary templates are not part of the platform bundle or VM artifact contract.
 
-The `stdlib:collections` module publishes read-only `List<T>` implementations as source-only declarations. Concrete
-`Int` lists own i32 arrays; `String` and supported Guest class lists own typed reference arrays. Collection interfaces
+The `stdlib:collections` module publishes read-only lists and public `ArrayList<T>` as source-only declarations.
+Concrete `Int` lists own i32 arrays; `String` and supported Guest class lists own typed reference arrays. Collection interfaces
 and iterator methods are specialized in the consuming artifact. Covariant widening to `List<Any>` retains the same
 list and backing array. The compiler publishes `get`, `iterator`, and `next` bridges with reference result signatures
 alongside the typed methods. An `Int` read through `Any` allocates an ordinary managed `kotlin.Int` box; a reference
@@ -134,6 +134,11 @@ calls. `Iterable<T>` search extensions `contains`, `indexOf`, and `lastIndexOf` 
 `List<T>` index methods use direct indexed access and publish `Any` and `Any?` argument bridges for covariant calls. The
 `Iterable<T>` predicate extensions `any`, `all`, and `none` specialize both the element and function value signature
 before lowering calls to the predicate.
+`MutableList<T>` is invariant. `ArrayList<T>` uses a typed storage interface, with the compiler selecting i32 or
+reference storage at its trusted factory call. Growth, shifting, searches, slot clearing, and mutable iteration are
+ordinary Guest bodies; all allocations use the VM's existing metered array instructions. Read-only aliases share
+the same list. Iterator bridges expose both read-only and mutable result signatures, and a modification counter
+rejects stale iterator `next`/`remove` calls after structural mutations.
 Generic call arguments are converted against the specialized parameter types, so searching a widened `List<Any>`
 boxes an `Int` argument before comparison. Universal value
 equality over `Any` and `Any?` lowers through existing reference, type-test, field-read, scalar, and string instructions:

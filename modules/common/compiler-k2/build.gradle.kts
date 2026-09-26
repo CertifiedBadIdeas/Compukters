@@ -318,6 +318,7 @@ val genericCellConformanceArtifact = layout.buildDirectory.file("generated/confo
 val genericInterfaceConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-interface.cpkt")
 val listConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list.cpkt")
 val listAnyConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-any.cpkt")
+val mutableListConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-mutable-list.cpkt")
 val foldConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-fold.cpkt")
 val collectionSelectionConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-collection-selection.cpkt")
 val nullableCollectionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-nullable-collections.cpkt")
@@ -933,6 +934,23 @@ val generateFoldConformanceArtifact = tasks.register<Test>("generateFoldConforma
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.foldArtifact", foldConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateMutableListConformanceArtifact = tasks.register<Test>("generateMutableListConformanceArtifact") {
+    description = "Compiles mutable ArrayList for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*mutable ArrayList preserves growth mutation and read only views*")
+    inputs.file(workerJar)
+    outputs.file(mutableListConformanceArtifact)
+    outputs.file(mutableListConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.failure.cpkt") })
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.mutableListArtifact", mutableListConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

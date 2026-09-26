@@ -42,13 +42,29 @@ internal interface Map<K, out V> {
 
 internal interface ListIterator<out T> : Iterator<T>
 
-internal interface MutableIterable<out T> : Iterable<T>
+public interface MutableIterable<out T> : Iterable<T> {
+    public override fun iterator(): MutableIterator<T>
+}
 
-internal interface MutableIterator<out T> : Iterator<T>
+public interface MutableIterator<out T> : Iterator<T> {
+    public fun remove(): Unit
+}
 
-internal interface MutableCollection<T> : Collection<T>, MutableIterable<T>
+public interface MutableCollection<T> : Collection<T>, MutableIterable<T> {
+    public fun add(element: T): Boolean
 
-internal interface MutableList<T> : List<T>, MutableCollection<T>
+    public fun remove(element: T): Boolean
+
+    public fun clear(): Unit
+}
+
+public interface MutableList<T> : List<T>, MutableCollection<T> {
+    public fun add(index: Int, element: T): Unit
+
+    public operator fun set(index: Int, element: T): T
+
+    public fun removeAt(index: Int): T
+}
 
 internal interface MutableSet<T> : Set<T>, MutableCollection<T>
 

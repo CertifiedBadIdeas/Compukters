@@ -590,7 +590,9 @@ supported.
   `emptyArray<T>()`, direct `arrayOf` calls, `size`, and indexed get/set work for
   `String`, supported Guest class references, and `Any`, including their nullable forms and boxed `Int?`, with concrete
   uses inside specialized generic functions. `Array<Any>` boxes `Int` when constructed or written, preserves object
-  identity, and returns the stored reference on reads. `copyOfRange` is available only
+  identity, and returns the stored reference on reads. `arrayOfNulls<T>(size)` creates null-filled arrays for supported
+  reference elements and boxed `Int?`, including generic specializations; negative sizes trap.
+  Evidence: `testKotlinMutableListVmConformance`. `copyOfRange` is available only
   for `Array<String>`. `Array<Int>`, other primitive-to-`Any` boxing, spread
   arguments, iterators, and higher-order operations are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
@@ -668,7 +670,7 @@ supported.
   searches preserve null and use value equality. Non-null lists also widen to `List<Any?>`. Evidence:
   `testKotlinNullableCollectionsVmConformance`, test `nullable Int and collection elements preserve values and nulls`.
   Extension functions are Guest `kotlin.collections` declarations and require imports. Unsupported
-  primitive element types, spread arguments, mutable collections, `Set`, `Map`, sequences, and other collection
+  primitive element types, spread arguments, `Set`, `Map`, sequences, and other collection
   algorithms are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `read only lists retain typed Int String and guest references`,
@@ -799,7 +801,22 @@ links to their source files.
   native built-ins and core modules. Regex, Unicode categories, encodings,
   other generic array helpers, and collection conversions are absent. Tracking: not scheduled
 
-- [ ] **Other standard collections and functional helpers — Unsupported** — mutable collections, sets, maps,
+- [ ] **Mutable lists — Partial** — public `MutableCollection<T>` and `MutableList<T>` expose `add(element)`,
+  `remove(element)`, `clear`, indexed `add`, `set` returning the previous element, and `removeAt`.
+  `MutableIterable<T>.iterator()` returns a `MutableIterator<T>` with `remove`. `ArrayList<T>()` and
+  `ArrayList<T>(initialCapacity)` implement these contracts with growing arrays and existing VM allocation quotas.
+  Statically typed `Int` storage and mutation remain unboxed; nullable `Int` uses managed boxes. Supported reference
+  elements retain identity, and removed slots are cleared. Read-only `List` aliases observe the same mutations;
+  supported `List<Any>` and `List<Any?>` views use universal read bridges. `MutableList` remains invariant.
+  Iterator removal requires one preceding `next` and adjusts the iterator position. Structural changes invalidate
+  later `next`/`remove` calls, while `set` is non-structural. Invalid capacities, indexes, and iterator states produce
+  `InvalidArgument` traps; general collection exception handling remains unavailable. Bulk operations, construction
+  from a collection, `listIterator`, and `subList` are not yet implemented.
+  Evidence: `MinimalScriptLoweringTest`, tests `mutable ArrayList preserves growth mutation and read only views`
+  and `mutable list element types remain invariant`; `testKotlinMutableListVmConformance` executes mutation, failure,
+  and heap quota scenarios with bounded slices.
+
+- [ ] **Other standard collections and functional helpers — Unsupported** — sets, maps,
   sequences, and higher-order helpers such as `map` and `filter` have no Guest implementation. Tracking: not scheduled
 
 - [ ] **Standard exceptions, reflection, and coroutine libraries — Unsupported** —
