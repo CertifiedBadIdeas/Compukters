@@ -599,6 +599,15 @@ registerKotlinVmConformance(
     conformanceScenario = "collection-selection",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinFoldVmConformance",
+    taskDescription = "Executes Iterable fold with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateFoldConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-fold.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-fold-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_FOLD_ARTIFACT",
+    conformanceScenario = "fold",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinListAnyQuotaVmConformance",
     taskDescription = "Verifies boxed covariant list reads across VM quota slices and collection.",
     artifactTask = ":compiler-k2:generateListAnyQuotaConformanceArtifact",

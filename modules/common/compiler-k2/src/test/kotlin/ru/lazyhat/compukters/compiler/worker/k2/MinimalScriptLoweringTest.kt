@@ -2246,6 +2246,71 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `Iterable fold specializes independent element and accumulator types`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+
+                class State(val total: Int)
+                class Values(val values: List<Int>) : Iterable<Int> {
+                    override fun iterator(): Iterator<Int> = values.iterator()
+                }
+                fun <T, R> accumulate(values: Iterable<T>, initial: R, operation: (R, T) -> R): R =
+                    values.fold(initial, operation)
+                fun main() {
+                    var calls = 0
+                    val initial = State(7)
+                    val empty = emptyList<Int>()
+                    val unchanged = empty.fold(initial) { state, value -> calls += 1; State(state.total + value) }
+                    require(unchanged === initial)
+                    require(calls == 0)
+                    require(empty.fold<Int, Int?>(null) { sum, value -> (sum ?: 0) + value } == null)
+                    val values: Iterable<Int> = Values(listOf(1, 2, 3))
+                    calls = 0
+                    var order = 0
+                    val sum = values.fold(10) { total, value ->
+                        calls += 1
+                        order = order * 10 + value
+                        total + value
+                    }
+                    require(sum == 16)
+                    require(calls == 3 && order == 123)
+                    require(values.fold(100) { total, value -> total - value } == 94)
+                    require(values.fold(0L) { total, value -> total + value } == 6L)
+                    require(values.fold(true) { valid, value -> valid && value > 0 })
+                    require(values.fold("") { text, value -> text + value } == "123")
+                    val strings: Iterable<String?> = listOf("ab", null, "c")
+                    require(strings.fold(0) { count, text -> count + (text?.length ?: 0) } == 3)
+                    require(accumulate(strings, 0) { count, text -> count + (text?.length ?: 0) } == 3)
+                    val nullable = listOf<Int?>(1, null, 3)
+                    require(nullable.fold(0) { total, value -> total + (value ?: 0) } == 4)
+                    require(values.fold<Int, Int?>(null) { total, value -> (total ?: 0) + value } == 6)
+                    val nullableResult = values.fold<Int, Int?>(7) { total, value ->
+                        if (value == 3) null else (total ?: 0) + value
+                    }
+                    require(nullableResult == null)
+                    val state = values.fold(State(0)) { acc, value -> State(acc.total + value) }
+                    require(state.total == 6)
+                    val nullableState = values.fold<Int, State?>(null) { acc, value -> State((acc?.total ?: 0) + value) }
+                    require((nullableState?.total ?: 0) == 6)
+                    val mixed: Iterable<Any?> = listOf<Any?>(2, null, 4)
+                    require(mixed.fold(0) { total, value -> if (value is Int) total + value else total } == 6)
+                    val boxed = listOf<Int?>(1000, null, 2000)
+                    val selected: Any? = boxed.fold<Int?, Int?>(null) { _, value -> value }
+                    val stored: Any? = boxed[2]
+                    require(selected === stored)
+                    println("fold ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.foldArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `collection nullable selection preserves traversal values and identity`() =
         withAdapter { adapter ->
             val source =

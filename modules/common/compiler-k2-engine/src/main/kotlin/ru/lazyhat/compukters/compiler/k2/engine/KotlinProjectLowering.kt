@@ -4074,7 +4074,7 @@ private class FunctionCompiler(
                             call.arguments.getOrNull(index)?.let { expression -> Triple(index, parameter, expression) }
                         }.sortedWith(compareBy({ it.third.startOffset.takeIf { offset -> offset >= 0 } ?: Int.MAX_VALUE }, { it.first }))
                 explicit.forEach { (_, parameter, expression) ->
-                    rejectFunctionVariance(expression.type, parameter.type, expression)
+                    rejectFunctionVariance(expression.type, layout.instance.substitute(parameter.type), expression)
                     values[parameter.symbol] = compileExpression(expression, layout.instance.substitute(parameter.type))
                 }
                 parameters.forEach { (index, parameter) ->
@@ -4082,7 +4082,7 @@ private class FunctionCompiler(
                         val default =
                             parameter.defaultValue?.expression
                                 ?: throw UnsupportedKotlinIr(call, "constructor argument ${parameter.name} is missing")
-                        rejectFunctionVariance(default.type, parameter.type, default)
+                        rejectFunctionVariance(default.type, layout.instance.substitute(parameter.type), default)
                         values[parameter.symbol] = compileExpression(default, parameter.type)
                     }
                 }
@@ -4249,8 +4249,8 @@ private class FunctionCompiler(
         expectedType: IrType,
         element: IrElement,
     ) {
-        val actual = actualType.guestFunctionShape()
-        val expected = expectedType.guestFunctionShape()
+        val actual = resolvedType(actualType).guestFunctionShape()
+        val expected = resolvedType(expectedType).guestFunctionShape()
         if (actual != expected && (actual != null || expected != null)) {
             throw UnsupportedKotlinIr(element, "function-value variance conversions are not supported")
         }
