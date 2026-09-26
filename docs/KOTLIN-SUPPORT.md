@@ -477,9 +477,10 @@ supported.
 
 - [ ] **Type tests and casts — Partial** — `is` checks and compiler-generated
   smart casts over admitted references lower to VM type checks and checked
-  casts. Boxed `Int` values read as `Any` also support `is Int` and an explicit checked `as Int`; other explicit
-  source casts remain rejected. Reference `===` compares identity after a checked common-reference conversion.
-  Evidence:
+  casts. Boxed `Int` values support `is Int`, `is Int?`, and explicit checked `as Int` / `as Int?`.
+  Checked casts between admitted reference types are supported; safe casts (`as?`) remain rejected. Nullable type tests
+  admit null. Reference `===` compares identity, including null, after a checked common-reference conversion.
+  Evidence: `testKotlinNullableCollectionsVmConformance` and
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `guest object subset lowers sealed results data values enum identity and type branches`
   and `guest object subset rejects generic secondary uninitialized stateful and explicit cast shapes`,
@@ -524,7 +525,8 @@ supported.
   with `null`, selected with `?:`, and accessed with `?.` when the result is a
   supported reference type. Both operators evaluate the left side once and
   skip the unused branch. Safe calls with an Int result, such as `text?.length`, produce a boxed `Int?`.
-  Other nullable primitive results and non-null assertions (`!!`) remain unsupported. Evidence:
+  Other nullable primitive results and non-null assertions (`!!`) remain unsupported. Int-result safe-call evidence:
+  `testKotlinNullableCollectionsVmConformance`. Reference-result evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt), tests
   `nullable references lower null comparisons Elvis and reference safe calls`
   and `unsupported nullable forms do not publish artifacts`,
@@ -586,14 +588,15 @@ supported.
 
 - [ ] **Reference `Array<T>` operations — Partial** — entry `Array<String>`,
   `emptyArray<T>()`, direct `arrayOf` calls, `size`, and indexed get/set work for
-  `String`, supported non-null Guest class references, and `Any`, including concrete
+  `String`, supported Guest class references, and `Any`, including their nullable forms and boxed `Int?`, with concrete
   uses inside specialized generic functions. `Array<Any>` boxes `Int` when constructed or written, preserves object
   identity, and returns the stored reference on reads. `copyOfRange` is available only
-  for `Array<String>`. `Array<Int>`, nullable elements, other primitive-to-`Any` boxing, spread
+  for `Array<String>`. `Array<Int>`, other primitive-to-`Any` boxing, spread
   arguments, iterators, and higher-order operations are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `string arrays can be constructed read and written` and
   `string arrays support copyOfRange and supported default arguments`, plus
+  `nullable Int and collection elements preserve values and nulls` (`testKotlinNullableCollectionsVmConformance`),
   `reference arrays preserve Guest class elements and aliases` and
   `reference arrays reject unsupported element representations`, paired with
   `testKotlinReferenceArrayVmConformance` and
@@ -631,7 +634,8 @@ supported.
   test `list Int covariance to Any preserves the list and boxes reads`, executed by `testKotlinListAnyVmConformance`.
 
 - [ ] **Read-only `Collection<T>` and `List<T>` — Partial** — direct `listOf(...)`, `listOf<T>()`, and `emptyList<T>()`
-  support non-null `Int`, `String`, and supported Guest class references. `size`, indexed `get`, and ordinary `for` iteration execute
+  support `Int`, `String`, and supported Guest class references, including nullable elements. `size`, indexed `get`,
+  and ordinary `for` iteration execute
   through concrete specialized implementations. `List<Int>` stores and returns unboxed i32 values; list aliases refer
   to the same object. Factory arguments run once in source order. Invalid indexes trap through the VM array bounds
   check, and iteration resumes across quota slices. `List<Int>` can widen to `List<Any>` without copying the list;
@@ -643,7 +647,10 @@ supported.
   `lastIndexOf` methods; custom lists implement them. Searches use the supported `==` semantics and return the first
   or last match, or `-1`.
   The `Iterable<T>` search and predicate extensions above also work on these lists.
-  Extension functions are Guest `kotlin.collections` declarations and require imports. Nullable elements, unsupported
+  `List<Int?>` stores managed Int boxes or null. Nullable lists widen to `List<Any?>` without copying; reads and
+  searches preserve null and use value equality. Non-null lists also widen to `List<Any?>`. Evidence:
+  `testKotlinNullableCollectionsVmConformance`, test `nullable Int and collection elements preserve values and nulls`.
+  Extension functions are Guest `kotlin.collections` declarations and require imports. Unsupported
   primitive element types, spread arguments, mutable collections, `Set`, `Map`, sequences, and other collection
   algorithms are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),

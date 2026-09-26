@@ -1173,7 +1173,7 @@ fn k2_expected_prints_with_budget<const N: usize>(
         let value = utf16(expected);
         let write = next_host_request_identity_with_budget(
             &mut session,
-            "K2 println",
+            expected,
             1,
             Some(&value),
             slice_budget,

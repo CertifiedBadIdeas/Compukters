@@ -53,7 +53,25 @@ internal class IntArrayBackedList(private val values: IntArray) : List<Int> {
         return -1
     }
 
+    internal fun indexOfAnyNullable(element: Any?): Int {
+        var index = 0
+        while (index < size) {
+            if (element == values[index]) return index
+            index += 1
+        }
+        return -1
+    }
+
     internal fun lastIndexOfAny(element: Any): Int {
+        var index = size - 1
+        while (index >= 0) {
+            if (element == values[index]) return index
+            index -= 1
+        }
+        return -1
+    }
+
+    internal fun lastIndexOfAnyNullable(element: Any?): Int {
         var index = size - 1
         while (index >= 0) {
             if (element == values[index]) return index
@@ -64,13 +82,19 @@ internal class IntArrayBackedList(private val values: IntArray) : List<Int> {
 
     internal fun containsAny(element: Any): Boolean = indexOfAny(element) >= 0
 
+    internal fun containsAnyNullable(element: Any?): Boolean = indexOfAnyNullable(element) >= 0
+
     override fun get(index: Int): Int = values[index]
 
     override fun iterator(): Iterator<Int> = IntArrayBackedListIterator(this)
 
     internal fun getAny(index: Int): Any = values[index]
 
+    internal fun getAnyNullable(index: Int): Any? = values[index]
+
     internal fun iteratorAny(): Iterator<Any> = IntArrayBackedListIterator(this)
+
+    internal fun iteratorAnyNullable(): Iterator<Any?> = IntArrayBackedListIterator(this)
 }
 
 internal class IntArrayBackedListIterator(private val list: IntArrayBackedList) : Iterator<Int> {
@@ -85,9 +109,11 @@ internal class IntArrayBackedListIterator(private val list: IntArrayBackedList) 
     }
 
     internal fun nextAny(): Any = next()
+
+    internal fun nextAnyNullable(): Any? = next()
 }
 
-internal class ArrayBackedList<T : Any>(private val values: Array<T>) : List<T> {
+internal class ArrayBackedList<T>(private val values: Array<T>) : List<T> {
     override val size: Int get() = values.size
 
     override fun isEmpty(): Boolean = size == 0
@@ -121,7 +147,25 @@ internal class ArrayBackedList<T : Any>(private val values: Array<T>) : List<T> 
         return -1
     }
 
+    internal fun indexOfAnyNullable(element: Any?): Int {
+        var index = 0
+        while (index < size) {
+            if (element == values[index]) return index
+            index += 1
+        }
+        return -1
+    }
+
     internal fun lastIndexOfAny(element: Any): Int {
+        var index = size - 1
+        while (index >= 0) {
+            if (element == values[index]) return index
+            index -= 1
+        }
+        return -1
+    }
+
+    internal fun lastIndexOfAnyNullable(element: Any?): Int {
         var index = size - 1
         while (index >= 0) {
             if (element == values[index]) return index
@@ -132,16 +176,22 @@ internal class ArrayBackedList<T : Any>(private val values: Array<T>) : List<T> 
 
     internal fun containsAny(element: Any): Boolean = indexOfAny(element) >= 0
 
+    internal fun containsAnyNullable(element: Any?): Boolean = indexOfAnyNullable(element) >= 0
+
     override fun get(index: Int): T = values[index]
 
     override fun iterator(): Iterator<T> = ArrayBackedListIterator(this)
 
-    internal fun getAny(index: Int): Any = values[index]
+    internal fun getAny(index: Int): Any = values[index] as Any
 
-    internal fun iteratorAny(): Iterator<Any> = ArrayBackedListIterator(this)
+    internal fun getAnyNullable(index: Int): Any? = values[index]
+
+    internal fun iteratorAny(): Iterator<Any> = ArrayBackedListAnyIterator(this)
+
+    internal fun iteratorAnyNullable(): Iterator<Any?> = ArrayBackedListIterator(this)
 }
 
-internal class ArrayBackedListIterator<T : Any>(private val list: ArrayBackedList<T>) : Iterator<T> {
+internal class ArrayBackedListIterator<T>(private val list: ArrayBackedList<T>) : Iterator<T> {
     private var index: Int = 0
 
     override fun hasNext(): Boolean = index < list.size
@@ -152,5 +202,21 @@ internal class ArrayBackedListIterator<T : Any>(private val list: ArrayBackedLis
         return value
     }
 
-    internal fun nextAny(): Any = next()
+    internal fun nextAny(): Any = next() as Any
+
+    internal fun nextAnyNullable(): Any? = next()
+}
+
+internal class ArrayBackedListAnyIterator<T>(private val list: ArrayBackedList<T>) : Iterator<Any> {
+    private var index: Int = 0
+
+    override fun hasNext(): Boolean = index < list.size
+
+    override fun next(): Any {
+        val value = list[index] as Any
+        index += 1
+        return value
+    }
+
+    internal fun nextAnyNullable(): Any? = next()
 }

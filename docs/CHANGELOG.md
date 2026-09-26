@@ -29,8 +29,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   or replace elements by index. Concrete uses inside specialized generic functions retain their element types. Mixed
   `Array<Any>` values can hold `Int`, strings, and supported objects; `Int` values are boxed when stored.
 - Programs can create read-only `List<T>` values with `listOf` and `emptyList`, read `size` and indexed elements, and
-  iterate with `for`. The first supported elements are non-null `Int`, `String`, and Guest class references; `List<Int>`
-  keeps unboxed storage and typed reads. A `List<Int>` can also be used as `List<Any>` without copying the list; reads
+  iterate with `for`. Supported elements include `Int`, `String`, Guest class references, and their nullable forms; `List<Int>`
+  keeps unboxed storage and typed reads, while `List<Int?>` stores boxes or null. Lists can widen to `List<Any?>`
+  while preserving null, element references, and value searches. A `List<Int>` can also be used as `List<Any>` without copying the list; reads
   through that view produce boxed `Int` values that can be checked with `is Int` and cast back with `as Int`. Supported
   reference lists also widen to `List<Any>` while retaining their element references. Programs can construct a mixed
   `List<Any>` directly from `Int`, strings, and supported objects; its `Int` elements are boxed when the list is built.

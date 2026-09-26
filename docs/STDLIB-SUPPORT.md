@@ -40,12 +40,12 @@ links to their source files.
 
 ## Arrays and ranges
 
-- [ ] **`Array<T>` — Partial** — `emptyArray<T>()` and direct `arrayOf(...)` work for `String`, supported non-null
-  Guest class references, and `Any`, including specializations inside generic Guest functions. `size`, indexed `get`,
+- [ ] **`Array<T>` — Partial** — `emptyArray<T>()` and direct `arrayOf(...)` work for `String`, supported
+  Guest class references, and `Any`, including nullable forms and boxed `Int?`, including specializations inside generic Guest functions. `size`, indexed `get`,
   and indexed `set` use the array's concrete element type. `Array<Any>` boxes `Int` on construction or indexed writes,
   preserves reference identity, and returns the stored box on repeated reads. Factory arguments are evaluated once in
   source order; reading an uninitialized non-null reference traps. `copyOfRange` is available only for `Array<String>`.
-  `Array<Int>`, nullable elements, other primitive-to-`Any` boxing, spread arguments, and general array iterators are
+  `Array<Int>`, other primitive-to-`Any` boxing, spread arguments, and general array iterators are
   unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `string arrays can be constructed read and written`, `reference arrays preserve Guest class elements and aliases`,
@@ -69,7 +69,7 @@ links to their source files.
 
 ## Collections and I/O
 
-- [ ] **Read-only `List<T>` — Partial** — `listOf` and `emptyList` create typed lists of non-null `Int`, `String`, or
+- [ ] **Read-only `List<T>` — Partial** — `listOf` and `emptyList` create typed lists of `Int`, `String`, or
   supported Guest class references. `size`, indexed `get`, and direct `for` iteration work; an out-of-range index
   traps. `Int` storage and typed reads remain unboxed. A `List<Int>` can widen to `List<Any>` without changing list
   identity; universal reads box each `Int`, and `is Int` / `as Int` recover its type and value. Supported reference lists
@@ -78,9 +78,9 @@ links to their source files.
   `indexOf` search with supported value equality and return the first index or `-1` when absent. Non-null `Any` supports
   boxed `Int` value equality, string content equality, explicit Guest `equals` overrides, and data-class equality for
   supported constructor properties. Other classes use default identity equality. Hashing and text dispatch remain
-  unavailable. Nullable elements and spread
-  arguments are unsupported. Evidence:
-  `testKotlinListVmConformance`, `testKotlinListAnyVmConformance`, `testKotlinListAnyQuotaVmConformance`,
+  unavailable. Nullable elements, including `Int?`, preserve null in storage, iteration, and searches. Nullable and non-null
+  lists widen to `List<Any?>` without copying. Spread arguments are unsupported. Evidence:
+  `testKotlinNullableCollectionsVmConformance`, `testKotlinListVmConformance`, `testKotlinListAnyVmConformance`, `testKotlinListAnyQuotaVmConformance`,
   `testKotlinListBoundsVmConformance`, `testKotlinListQuotaVmConformance`, and
   [`Lists.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-collections/kotlin/collections/Lists.kt). Tracking:
   [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656),
