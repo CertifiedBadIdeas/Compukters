@@ -266,6 +266,16 @@ private fun collectGuestClassInstances(
                             }
                         }
                     }
+                    if (expression.symbol.owner.fqNameWhenAvailable
+                            ?.asString() == "kotlin.collections.mutableListStorage"
+                    ) {
+                        val elementType = expression.typeArguments.singleOrNull()?.let(substitution)
+                        if (elementType != null && elementType.canonicalPlatformType() != "Int") {
+                            byName["kotlin.collections.ReferenceMutableListStorage"]?.let {
+                                add(GuestClassInstance(it, listOf(elementType)))
+                            }
+                        }
+                    }
                     super.visitCall(expression)
                 }
 
@@ -919,10 +929,19 @@ internal object KotlinProjectLowering {
                 object : IrVisitorVoid() {
                     override fun visitElement(element: IrElement) = element.acceptChildren(this, null)
 
+                    override fun visitConstructorCall(expression: IrConstructorCall) {
+                        if (expression.symbol.owner.parentAsClass.fqNameWhenAvailable
+                                ?.asString() == "kotlin.collections.ArrayList"
+                        ) {
+                            usesListFactory = true
+                        }
+                        super.visitConstructorCall(expression)
+                    }
+
                     override fun visitCall(expression: IrCall) {
                         if (expression.symbol.owner.fqNameWhenAvailable
                                 ?.asString() in
-                            setOf("kotlin.collections.listOf", "kotlin.collections.emptyList")
+                            setOf("kotlin.collections.listOf", "kotlin.collections.emptyList", "kotlin.collections.mutableListStorage")
                         ) {
                             usesListFactory = true
                         }
@@ -932,13 +951,6 @@ internal object KotlinProjectLowering {
                 null,
             )
         }
-        val specializedCollectionInterfaces =
-            setOf(
-                "kotlin.collections.Iterable",
-                "kotlin.collections.Iterator",
-                "kotlin.collections.Collection",
-                "kotlin.collections.List",
-            )
         val collectionInterfaceClasses =
             if (includeTrustedPlatformBodies) {
                 emptyList()
@@ -1193,6 +1205,20 @@ internal object KotlinProjectLowering {
                         "kotlin.collections.ArrayBackedListIterator.nextAny" -> "next"
                         "kotlin.collections.ArrayBackedListIterator.nextAnyNullable" -> "next"
                         "kotlin.collections.ArrayBackedListAnyIterator.nextAnyNullable" -> "next"
+                        "kotlin.collections.ArrayList.getAny" -> "get"
+                        "kotlin.collections.ArrayList.getAnyNullable" -> "get"
+                        "kotlin.collections.ArrayList.containsAny" -> "contains"
+                        "kotlin.collections.ArrayList.containsAnyNullable" -> "contains"
+                        "kotlin.collections.ArrayList.indexOfAny" -> "indexOf"
+                        "kotlin.collections.ArrayList.indexOfAnyNullable" -> "indexOf"
+                        "kotlin.collections.ArrayList.lastIndexOfAny" -> "lastIndexOf"
+                        "kotlin.collections.ArrayList.lastIndexOfAnyNullable" -> "lastIndexOf"
+                        "kotlin.collections.ArrayList.iteratorAny" -> "iterator"
+                        "kotlin.collections.ArrayList.iteratorAnyNullable" -> "iterator"
+                        "kotlin.collections.ArrayList.iteratorReadOnly" -> "iterator"
+                        "kotlin.collections.ArrayListIterator.nextAny" -> "next"
+                        "kotlin.collections.ArrayListIterator.nextAnyNullable" -> "next"
+                        "kotlin.collections.ArrayListAnyIterator.nextAnyNullable" -> "next"
                         else -> null
                     }
                 if (bridgeName != null) {
@@ -2478,11 +2504,16 @@ internal object KotlinProjectLowering {
                     }
                 val bridgeInterfaceRoot =
                     when (declaration.fqNameWhenAvailable?.asString()) {
-                        "kotlin.collections.IntArrayBackedList", "kotlin.collections.ArrayBackedList" -> "kotlin.collections.List"
+                        "kotlin.collections.IntArrayBackedList",
+                        "kotlin.collections.ArrayBackedList",
+                        "kotlin.collections.ArrayList",
+                        -> "kotlin.collections.List"
 
                         "kotlin.collections.IntArrayBackedListIterator",
                         "kotlin.collections.ArrayBackedListIterator",
                         "kotlin.collections.ArrayBackedListAnyIterator",
+                        "kotlin.collections.ArrayListIterator",
+                        "kotlin.collections.ArrayListAnyIterator",
                         -> "kotlin.collections.Iterator"
 
                         else -> null
@@ -4337,6 +4368,9 @@ private class FunctionCompiler(
         if (target.isExternal && targetName in setOf("kotlin.collections.listOf", "kotlin.collections.emptyList")) {
             return compileListFactory(call, targetName == "kotlin.collections.listOf")
         }
+        if (target.isExternal && targetName == "kotlin.collections.mutableListStorage") {
+            return compileMutableListStorage(call)
+        }
         if ((
                 targetName?.startsWith("kotlin.Function") == true ||
                     targetName?.startsWith("kotlin.reflect.KFunction") == true
@@ -4823,6 +4857,34 @@ private class FunctionCompiler(
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
+    private fun compileMutableListStorage(call: IrCall): RegisterId {
+        val elementType =
+            call.typeArguments.singleOrNull()?.let(::resolvedType)
+                ?: throw UnsupportedKotlinIr(call, "mutable list storage requires a concrete element type")
+        val name = if (elementType == intType) "IntMutableListStorage" else "ReferenceMutableListStorage"
+        val target =
+            if (elementType == intType) {
+                constructorLayouts.values.singleOrNull {
+                    it.layout.declaration.fqNameWhenAvailable
+                        ?.asString() == "kotlin.collections.$name"
+                }
+            } else {
+                genericConstructorLayouts.entries
+                    .singleOrNull {
+                        it.key.declaration.fqNameWhenAvailable
+                            ?.asString() == "kotlin.collections.$name" && it.key.arguments == listOf(elementType)
+                    }?.value
+            } ?: throw UnsupportedKotlinIr(call, "mutable list storage is unavailable for this element type")
+        val capacity = compileExpression(call.arguments.filterNotNull().single())
+        val ownerType = TypeRef.Local(target.layout.typeId)
+        prepareAllocationBlock()
+        return allocate(ValueType.Ref(nullable = false, type = ownerType)).also { destination ->
+            emit(Instruction.NewObject(destination, ownerType))
+            emit(Instruction.Call(Destination.Unit, FunctionRef.Local(target.functionId), listOf(destination, capacity)))
+        }
+    }
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun compileListFactory(
         call: IrCall,
         nonemptyFactory: Boolean,
@@ -4894,6 +4956,12 @@ private class FunctionCompiler(
                 guestTypes.referenceArrayType(resolvedCallType) ?: return null
             }
         val fqName = target.fqNameWhenAvailable?.asString() ?: return null
+        if (fqName == "kotlin.arrayOfNulls") {
+            val length = compileExpression(call.arguments.filterNotNull().single())
+            prepareAllocationBlock()
+            val reference = arrayType as ValueType.Ref
+            return allocate(reference).also { destination -> emit(Instruction.NewArray(destination, reference.type, length)) }
+        }
         val elements =
             when (fqName) {
                 "kotlin.emptyArray" -> {
@@ -6239,19 +6307,23 @@ private class FunctionCompiler(
         if (target.origin == IrDeclarationOrigin.FAKE_OVERRIDE) {
             val receiver = resolveClassInstance(call.dispatchReceiver?.type)
 
-            fun overridden(function: IrSimpleFunction): FunctionId? =
-                function.overriddenSymbols.firstNotNullOfOrNull { symbol ->
+            fun overridden(function: IrSimpleFunction): List<Pair<FunctionId, IrType>> =
+                function.overriddenSymbols.flatMap { symbol ->
                     val base = symbol.owner
                     val owner = base.parent as? IrClass
-                    val specialized =
+                    val instance =
                         if (owner != null && receiver != null && owner.typeParameters.size == receiver.arguments.size) {
-                            genericMemberFunctionIds[base.symbol to GuestClassInstance(owner, receiver.arguments)]
+                            GuestClassInstance(owner, receiver.arguments)
                         } else {
                             null
                         }
-                    specialized ?: functionIds[base.symbol] ?: overridden(base)
+                    val id = instance?.let { genericMemberFunctionIds[base.symbol to it] } ?: functionIds[base.symbol]
+                    val candidate = id?.let { it to (instance?.substitute(base.returnType) ?: base.returnType) }
+                    listOfNotNull(candidate) + overridden(base)
                 }
-            overridden(target)?.let { return it }
+            val candidates = overridden(target)
+            val resultType = resolvedType(call.type)
+            (candidates.firstOrNull { resolvedType(it.second) == resultType } ?: candidates.firstOrNull())?.let { return it.first }
         }
         return if (target.typeParameters.isNotEmpty()) {
             val instance = projectFunctionInstance(call, target) ?: return null
@@ -6793,12 +6865,24 @@ private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureS
     }
 }
 
+private val specializedCollectionInterfaces =
+    setOf(
+        "kotlin.collections.Iterable",
+        "kotlin.collections.Iterator",
+        "kotlin.collections.Collection",
+        "kotlin.collections.List",
+        "kotlin.collections.MutableIterable",
+        "kotlin.collections.MutableIterator",
+        "kotlin.collections.MutableCollection",
+        "kotlin.collections.MutableList",
+    )
+
 private fun loweredParameters(
     function: IrSimpleFunction,
     session: CompilationSession,
 ) = if (
     (function.parent as? IrClass)?.fqNameWhenAvailable?.asString() in
-    setOf("kotlin.collections.Iterable", "kotlin.collections.Iterator", "kotlin.collections.Collection", "kotlin.collections.List")
+    specializedCollectionInterfaces
 ) {
     function.parameters
 } else if (

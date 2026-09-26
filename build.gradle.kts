@@ -608,6 +608,15 @@ registerKotlinVmConformance(
     conformanceScenario = "fold",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinMutableListVmConformance",
+    taskDescription = "Executes mutable ArrayList with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateMutableListConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-mutable-list.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-mutable-list-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_MUTABLE_LIST_ARTIFACT",
+    conformanceScenario = "mutable-list",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinListAnyQuotaVmConformance",
     taskDescription = "Verifies boxed covariant list reads across VM quota slices and collection.",
     artifactTask = ":compiler-k2:generateListAnyQuotaConformanceArtifact",

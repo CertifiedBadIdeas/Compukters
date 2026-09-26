@@ -74,6 +74,7 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "Function2.invoke", "fun(P1,P2):R")
             primitive("stdlib", "collections", "kotlin.collections", "listOf", "fun(T):List<T>")
             primitive("stdlib", "collections", "kotlin.collections", "emptyList", "fun():List<T>")
+            primitive("stdlib", "collections", "kotlin.collections", "mutableListStorage", "fun(Int):MutableListStorage<T>")
             listOf(
                 "and" to "fun(Int):Int",
                 "compareTo" to "fun(Int):Int",

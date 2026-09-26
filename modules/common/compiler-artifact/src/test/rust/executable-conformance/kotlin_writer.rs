@@ -27,6 +27,7 @@ fn main() {
         "generic-interface" => k2_generic_interface_dispatches_concrete_types(),
         "list" => k2_lists_retain_typed_elements(),
         "list-any" => k2_int_list_covariance_boxes_universal_reads(),
+        "mutable-list" => k2_mutable_list_preserves_growth_mutation_and_views(),
         "fold" => k2_fold_specializes_element_and_accumulator_types(),
         "collection-selection" => k2_collection_selection_preserves_values_and_traversal(),
         "nullable-collections" => k2_nullable_collections_preserve_values_and_nulls(),
@@ -1023,6 +1024,83 @@ fn k2_int_list_covariance_boxes_universal_reads() {
         ],
         256,
     );
+}
+
+fn k2_mutable_list_preserves_growth_mutation_and_views() {
+    k2_expected_prints_with_budget(
+        "COMPUKTER_KOTLIN_MUTABLE_LIST_ARTIFACT",
+        ["mutable list ok\n"],
+        256,
+    );
+    let path = std::env::var("COMPUKTER_KOTLIN_MUTABLE_LIST_ARTIFACT")
+        .expect("mutable list artifact must be set");
+    let bytes =
+        fs::read(format!("{path}.failure.cpkt")).expect("mutable list failure artifact must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("mutable list failures must verify");
+    for mode in [
+        "negative-capacity",
+        "negative-reference-capacity",
+        "read",
+        "insert",
+        "negative-insert",
+        "set",
+        "remove",
+        "remove-before-next",
+        "double-remove",
+        "exhausted",
+        "modified",
+        "negative-array",
+    ] {
+        let mut session = Session::admit(verified.clone(), list_no_io_profile(), &[])
+            .expect("mutable list failure must admit");
+        let arguments = [utf16(mode).into_boxed_slice()];
+        session
+            .start(&[EntryValue::StringArray(&arguments)])
+            .expect("mutable list failure must start");
+        let expected = if mode == "negative-array" {
+            GuestTrap::NegativeArraySize
+        } else {
+            GuestTrap::InvalidArgument
+        };
+        loop {
+            match session
+                .advance(256, 256)
+                .expect("mutable list failure must execute")
+            {
+                AdvanceOutcome::SliceExhausted => {}
+                AdvanceOutcome::Crashed(trap) => {
+                    assert_eq!(expected, trap, "{mode}");
+                    break;
+                }
+                outcome => panic!("unexpected mutable list outcome for {mode}: {outcome:?}"),
+            }
+        }
+    }
+
+    let mut profile = list_no_io_profile();
+    profile.heap_bytes = 64 * 1024;
+    let mut session =
+        Session::admit(verified, profile, &[]).expect("mutable list quota program must admit");
+    let arguments = [utf16("quota").into_boxed_slice()];
+    session
+        .start(&[EntryValue::StringArray(&arguments)])
+        .expect("mutable list quota program must start");
+    let mut slices = 0;
+    loop {
+        match session
+            .advance(256, 256)
+            .expect("mutable list growth must execute")
+        {
+            AdvanceOutcome::SliceExhausted => {
+                slices += 1;
+                assert!(slices < 100000, "growth must exhaust the heap");
+            }
+            AdvanceOutcome::AllocationExhausted(_) => break,
+            outcome => panic!("unexpected mutable list quota outcome: {outcome:?}"),
+        }
+    }
+    assert!(slices > 0, "list growth must resume across quota slices");
 }
 
 fn k2_fold_specializes_element_and_accumulator_types() {

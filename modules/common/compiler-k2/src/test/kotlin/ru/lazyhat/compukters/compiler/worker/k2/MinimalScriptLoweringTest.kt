@@ -2246,6 +2246,143 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `mutable ArrayList preserves growth mutation and read only views`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+
+                class Item(val value: Int)
+                fun <T> append(list: MutableList<T>, value: T) { list.add(value) }
+                fun main() {
+                    val ints = ArrayList<Int>(0)
+                    val mutable: MutableList<Int> = ints
+                    var index = 0
+                    while (index < 40) { append(mutable, index); index += 1 }
+                    require(ints.size == 40 && ints[39] == 39)
+                    val read: List<Int> = mutable
+                    val universal: List<Any?> = read
+                    mutable.add(0, 100)
+                    mutable.add(20, 200)
+                    mutable.add(mutable.size, 300)
+                    require(read.size == 43 && read[0] == 100 && read[20] == 200 && read[42] == 300)
+                    require(mutable.set(0, 101) == 100)
+                    require(universal[0] == 101 && universal.contains(200))
+                    require(mutable.removeAt(20) == 200)
+                    require(mutable.remove(300) && !mutable.remove(999))
+                    val iterator = mutable.iterator()
+                    require(iterator.next() == 101)
+                    iterator.remove()
+                    require(iterator.next() == 0)
+                    mutable[1] = 700
+                    require(iterator.next() == 700)
+                    require(mutable.size == 40)
+                    require(mutable.fold(0) { total, value -> total + value } == 1479)
+                    mutable.clear()
+                    require(read.isEmpty() && universal.size == 0)
+                    append(mutable, 1000)
+                    require(mutable[0] == 1000)
+                    val first = Item(1)
+                    val refs = ArrayList<Item>(1)
+                    refs.add(first)
+                    refs.add(Item(2))
+                    refs.add(0, Item(3))
+                    require(refs.removeAt(1) === first)
+                    require(refs.size == 2 && refs[1].value == 2)
+                    val refsAny: List<Any> = refs
+                    require(refsAny[1] === refs[1])
+                    val nullable = ArrayList<Int?>(0)
+                    nullable.add(1000)
+                    nullable.add(null)
+                    nullable.add(2000)
+                    val nullableAny: List<Any?> = nullable
+                    require(nullableAny[0] === (nullable[0] as Any?))
+                    require(nullable[1] == null && nullable.remove(null))
+                    require(nullable.set(0, null) == 1000)
+                    require(nullable[0] == null && nullable[1] == 2000)
+                    val strings = ArrayList<String?>()
+                    strings.add("a")
+                    strings.add(null)
+                    strings.add("b")
+                    require(strings.indexOf(null) == 1 && strings.lastIndexOf("b") == 2)
+                    val mixed = ArrayList<Any?>()
+                    mixed.add(5)
+                    mixed.add(first)
+                    mixed.add(null)
+                    require(mixed[0] == 5 && mixed[1] === first && mixed[2] == null)
+                    val slots = arrayOfNulls<Item>(3)
+                    require(slots.size == 3 && slots[0] == null && slots[2] == null)
+                    slots[1] = first
+                    require(slots[1] === first)
+                    val intSlots = arrayOfNulls<Int>(2)
+                    intSlots[0] = 1000
+                    require(intSlots[0] == 1000 && intSlots[1] == null)
+                    println("mutable list ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.mutableListArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+            val failures =
+                """
+                import kotlin.collections.*
+                fun main(args: Array<String>) {
+                    val mode = args[0]
+                    if (mode == "negative-capacity") { ArrayList<Int>(-1); return }
+                    if (mode == "negative-reference-capacity") { ArrayList<String>(-1); return }
+                    if (mode == "negative-array") { arrayOfNulls<Int>(-1); return }
+                    if (mode == "quota") {
+                        val growing = ArrayList<Int>(0)
+                        var index = 0
+                        while (index < 100000) { growing.add(index); index += 1 }
+                        return
+                    }
+                    val list = ArrayList<Int>(10)
+                    list.add(1)
+                    if (mode == "read") { list[1]; return }
+                    if (mode == "insert") { list.add(2, 7); return }
+                    if (mode == "negative-insert") { list.add(-1, 7); return }
+                    if (mode == "set") { list[1] = 7; return }
+                    if (mode == "remove") { list.removeAt(1); return }
+                    val iterator = list.iterator()
+                    if (mode == "remove-before-next") { iterator.remove(); return }
+                    iterator.next()
+                    if (mode == "double-remove") { iterator.remove(); iterator.remove(); return }
+                    if (mode == "exhausted") { iterator.next(); return }
+                    list.add(2)
+                    iterator.next()
+                }
+                """.trimIndent()
+            val failureResult = adapter.compile(request(failures))
+            val failureBytes = assertNotNull(failureResult.artifact, failureResult.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.mutableListArtifact")?.let { output ->
+                Path.of("$output.failure.cpkt").writeBytes(failureBytes)
+            }
+        }
+
+    @Test
+    fun `mutable list element types remain invariant`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        import kotlin.collections.*
+                        fun main() {
+                            val ints: MutableList<Int> = ArrayList<Int>()
+                            val widened: MutableList<Any> = ints
+                            widened.add("invalid")
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+            assertNull(result.artifact)
+            assertTrue(result.diagnostics.any { it.severity.name == "ERROR" })
+        }
+
+    @Test
     fun `Iterable fold specializes independent element and accumulator types`() =
         withAdapter { adapter ->
             val source =
