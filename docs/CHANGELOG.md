@@ -20,7 +20,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - Programs can search strings by UTF-16 code unit with `startsWith`, `endsWith`, `contains`, and `indexOf`, including
   an optional starting index for `indexOf`.
 - Programs can use nullable strings and supported class references, compare them with `null`, and use `?:` or
-  reference-result `?.` without evaluating the unused branch. Nullable primitive values remain unsupported.
+  reference-result `?.` without evaluating the unused branch. Nullable `Int` values use managed boxes, support equality
+  and Elvis, and allow Int-result safe calls such as `text?.length`. Other nullable primitives remain unsupported.
 - Programs can use direct generic functions and final generic classes with typed constructor fields and direct methods.
   The compiler specializes each concrete use, retaining unboxed non-null scalar fields and calls. Source-only generic
   library modules, including classes with methods, can be specialized in a consuming program.

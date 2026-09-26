@@ -786,6 +786,9 @@ private fun mapGuestValueType(
             resolveUnderlyingType = resolveUnderlyingType,
         )
     }
+    if (type.isNullableInt()) {
+        return ValueType.Ref(nullable = true, type = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE)))
+    }
     if (type.isNullable()) {
         val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
         val guestClass = (type as? IrSimpleType)?.classifier as? IrClassSymbol
@@ -2989,7 +2992,7 @@ internal object KotlinProjectLowering {
             val type = instance.substitute(sourceType)
             val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
             if (type.isNullable()) {
-                return type.isKotlinAny() || (type as? IrSimpleType)?.classifier == stringClass ||
+                return type.isNullableInt() || type.isKotlinAny() || (type as? IrSimpleType)?.classifier == stringClass ||
                     classTypeIds.containsKey((type as? IrSimpleType)?.classifier) ||
                     type.classInstance(
                         classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration },
@@ -3773,9 +3776,17 @@ private class FunctionCompiler(
         expectedType: IrType?,
     ): RegisterId {
         val source = compileRawExpression(expression, expectedType)
-        if (expectedType?.isKotlinAny() != true) return source
+        val actual = registerValueType(source)
+        val targetType = expectedType ?: expression.type
+        if (resolvedType(targetType) == intType && actual is ValueType.Ref) {
+            return unboxInt(source)
+        }
+        if (expectedType == null || (!resolvedType(expectedType).isKotlinAny() && !resolvedType(expectedType).isNullableInt())) {
+            return source
+        }
         val target = valueType(expectedType, expression) as ValueType.Ref
-        return when (val actual = valueType(expression.type, expression)) {
+        if (expression is IrConst && expression.value == null) return source
+        return when (actual) {
             ValueType.I32 -> {
                 boxInt(source, target)
             }
@@ -4084,7 +4095,14 @@ private class FunctionCompiler(
         if (expression.operator == IrTypeOperator.IMPLICIT_CAST) {
             rejectFunctionVariance(expression.argument.type, expression.typeOperand, expression)
         }
-        val source = compileExpression(expression.argument, expression.typeOperand)
+        val source =
+            if (expression.operator == IrTypeOperator.IMPLICIT_CAST ||
+                (expression.operator == IrTypeOperator.CAST && expression.typeOperand.isNullableInt())
+            ) {
+                compileExpression(expression.argument, expression.typeOperand)
+            } else {
+                compileExpression(expression.argument)
+            }
         val target = valueType(expression.typeOperand, expression)
         val intBoxType = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE))
         return when (expression.operator) {
@@ -4102,17 +4120,18 @@ private class FunctionCompiler(
             }
 
             IrTypeOperator.CAST -> {
+                if (expression.typeOperand.isNullableInt()) {
+                    return allocate(target).also { destination ->
+                        emit(Instruction.CheckedCast(destination, source, intBoxType))
+                    }
+                }
                 if (expression.typeOperand != intType) {
                     throw UnsupportedKotlinIr(expression, "cast target is outside the supported boxed Int subset")
                 }
                 if (valueType(expression.argument.type, expression) !is ValueType.Ref) {
                     throw UnsupportedKotlinIr(expression, "boxed Int cast requires a reference operand")
                 }
-                val box = allocate(ValueType.Ref(nullable = false, type = intBoxType))
-                emit(Instruction.CheckedCast(box, source, intBoxType))
-                allocate(ValueType.I32).also { destination ->
-                    emit(Instruction.FieldGet(destination, box, FieldRef.Imported(ImportId.of(INT_BOX_VALUE_IMPORT))))
-                }
+                unboxInt(source)
             }
 
             IrTypeOperator.IMPLICIT_CAST,
@@ -4142,6 +4161,18 @@ private class FunctionCompiler(
             emit(Instruction.CheckedCast(destination, box, target.type))
         }
     }
+
+    private fun unboxInt(source: RegisterId): RegisterId {
+        val intBoxType = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE))
+        val box = allocate(ValueType.Ref(nullable = false, type = intBoxType))
+        emit(Instruction.CheckedCast(box, source, intBoxType))
+        return allocate(ValueType.I32).also { destination ->
+            emit(Instruction.FieldGet(destination, box, FieldRef.Imported(ImportId.of(INT_BOX_VALUE_IMPORT))))
+        }
+    }
+
+    private fun registerValueType(register: RegisterId): ValueType =
+        (leadingParameterTypes + sourceParameters.map { valueType(it.type, it) } + localTypes)[register.value.toInt()]
 
     private fun coerceLocalValue(
         source: RegisterId,
@@ -4353,7 +4384,8 @@ private class FunctionCompiler(
                     }.singleOrNull()
                     ?: throw UnsupportedKotlinIr(call, "property setter value is missing")
             val receiver = compileExpression(receiverExpression)
-            val value = compileExpression(valueExpression)
+            val parameterType = target.parameters.single { it.kind == IrParameterKind.Regular }.type
+            val value = compileExpression(valueExpression, receiverClassInstance?.substitute(parameterType) ?: parameterType)
             emit(Instruction.FieldSet(receiver, FieldRef.Local(field.id), value))
             return null
         }
@@ -4439,7 +4471,7 @@ private class FunctionCompiler(
             val universalEquality =
                 target.name.asString() in setOf("EQEQ", "equals", "eqeq") &&
                     argumentExpressions.size == 2 &&
-                    argumentExpressions.any { it.type.isKotlinAny() }
+                    argumentExpressions.any { resolvedType(it.type).isKotlinAny() || resolvedType(it.type).isNullableInt() }
             val arrayStoreElementType =
                 if (
                     target.name.asString() == "set" &&
@@ -5623,7 +5655,7 @@ private class FunctionCompiler(
                         }
                 }
             if (
-                leftType.isKotlinAny() || rightType.isKotlinAny() ||
+                leftType.isKotlinAny() || rightType.isKotlinAny() || leftType.isNullableInt() || rightType.isNullableInt() ||
                 (
                     hasGuestEqualityOverride &&
                         expressions.none { it is IrConst && it.value == null } &&
@@ -6468,6 +6500,9 @@ private class FunctionCompiler(
 }
 
 private fun IrType.isExactClass(symbol: IrClassSymbol): Boolean = (this as? IrSimpleType)?.classifier == symbol
+
+private fun IrType.isNullableInt(): Boolean =
+    isNullable() && ((this as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == "kotlin.Int"
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private fun IrType.isKotlinAny(): Boolean =

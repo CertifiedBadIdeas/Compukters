@@ -94,7 +94,8 @@ supported.
   Distinct boxed `Int` values compare by i32 value; strings compare by UTF-16 content. Guest classes honor explicit
   `equals` overrides; data classes compare supported scalar and non-null `String` primary-constructor properties.
   Other classes use default identity equality. Unsupported data-class property shapes receive a compiler diagnostic.
-  An `Int` operand boxes at this boundary. Nullable `Any?`, hashing, and string conversion remain unavailable. Evidence:
+  An `Int` operand boxes at this boundary. `Any?` also preserves null values and supports equality; hashing and
+  object string conversion remain unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `list Int covariance to Any preserves the list and boxes reads`, executed by `testKotlinListAnyVmConformance`.
   Tracking: [#581](https://github.com/CertifiedBadIdeas/Compukters/issues/581)
@@ -505,7 +506,7 @@ supported.
   can be local values, top-level immutable properties, class fields, function
   parameters, and results. `null` can initialize these values or be passed and
   returned in a typed reference context. Nullable arrays, function values,
-  platform capability values, and primitive values such as `Int?` remain outside
+  platform capability values, and primitive values other than `Int?` remain outside
   this subset. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt), tests
   `nullable references lower null comparisons Elvis and reference safe calls` and
@@ -513,11 +514,17 @@ supported.
   paired with [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs), scenario `nullable-references`.
   Tracking: [#654](https://github.com/CertifiedBadIdeas/Compukters/issues/654)
 
+- [x] **Boxed nullable `Int`** — `Int?` stores a managed Int box or null in locals, fields, parameters, and results.
+  Assigning `Int` boxes at the nullable boundary; widening to `Any?` preserves the reference. Checked casts and
+  Elvis recover unboxed Int values. Equality compares boxed payloads and treats null according to Kotlin semantics.
+  Evidence: `MinimalScriptLoweringTest`, test `nullable Int and collection elements preserve values and nulls`,
+  executed by `testKotlinNullableCollectionsVmConformance`. Tracking: [#657](https://github.com/CertifiedBadIdeas/Compukters/issues/657)
+
 - [ ] **Safe calls and Elvis — Partial** — nullable references can be compared
   with `null`, selected with `?:`, and accessed with `?.` when the result is a
   supported reference type. Both operators evaluate the left side once and
-  skip the unused branch. Safe calls producing nullable primitive values such
-  as `text?.length` and non-null assertions (`!!`) remain unsupported. Evidence:
+  skip the unused branch. Safe calls with an Int result, such as `text?.length`, produce a boxed `Int?`.
+  Other nullable primitive results and non-null assertions (`!!`) remain unsupported. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt), tests
   `nullable references lower null comparisons Elvis and reference safe calls`
   and `unsupported nullable forms do not publish artifacts`,
