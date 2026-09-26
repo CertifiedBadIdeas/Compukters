@@ -40,6 +40,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   Other classes use default identity equality. Read-only collections expose `size`, `isEmpty`, `isNotEmpty`, and
   `contains` / `in`; lists provide `indexOf` and `lastIndexOf` as indexed methods. General `Iterable<T>` values
   support `contains`, `indexOf`, `lastIndexOf`, and `any`, `all`, `none` with predicates, including user-defined iterables.
+  `firstOrNull` and `lastOrNull` select elements with optional predicates; `List.getOrNull` returns null for invalid
+  indexes. These operations support nullable elements and `Int?` results.
 - Computer programs can use unboxed `Long` and `Float` values, including mixed numeric arithmetic and comparisons,
   direct `compareTo` calls between `Int` and `Long`, explicit conversions, `Long` bitwise and shift operations,
   constants, string interpolation, and console output.

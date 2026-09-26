@@ -60,3 +60,36 @@ public fun <T> Iterable<T>.none(predicate: (T) -> Boolean): Boolean {
     }
     return true
 }
+
+/** Returns the first element, or null when this iterable is empty. */
+public fun <T> Iterable<T>.firstOrNull(): T? {
+    val iterator = iterator()
+    if (!iterator.hasNext()) return null
+    return iterator.next()
+}
+
+/** Returns the first matching element, or null when no element matches [predicate]. */
+public fun <T> Iterable<T>.firstOrNull(predicate: (T) -> Boolean): T? {
+    for (element in this) {
+        if (predicate(element)) return element
+    }
+    return null
+}
+
+/** Returns the last element, or null when this iterable is empty. */
+public fun <T> Iterable<T>.lastOrNull(): T? {
+    val iterator = iterator()
+    if (!iterator.hasNext()) return null
+    var last = iterator.next()
+    while (iterator.hasNext()) last = iterator.next()
+    return last
+}
+
+/** Returns the last matching element after traversing this iterable in iteration order. */
+public fun <T> Iterable<T>.lastOrNull(predicate: (T) -> Boolean): T? {
+    var last: T? = null
+    for (element in this) {
+        if (predicate(element)) last = element
+    }
+    return last
+}

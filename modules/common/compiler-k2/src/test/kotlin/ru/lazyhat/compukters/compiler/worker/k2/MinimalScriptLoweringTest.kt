@@ -2246,6 +2246,109 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `collection nullable selection preserves traversal values and identity`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+
+                class Node(val value: Int)
+                class Probe(val values: List<Int>) : Iterable<Int> {
+                    var visits: Int = 0
+                    override fun iterator(): Iterator<Int> = ProbeIterator(this)
+                }
+                class ProbeIterator(val probe: Probe) : Iterator<Int> {
+                    var index: Int = 0
+                    override fun hasNext(): Boolean = index < probe.values.size
+                    override fun next(): Int {
+                        probe.visits += 1
+                        val value = probe.values[index]
+                        index += 1
+                        return value
+                    }
+                }
+                fun main() {
+                    val empty = emptyList<Int>()
+                    require(empty.firstOrNull() == null)
+                    require(empty.lastOrNull() == null)
+                    require(empty.getOrNull(0) == null)
+                    require(empty.firstOrNull { true } == null)
+                    require(empty.lastOrNull { true } == null)
+                    val ints = listOf(1, 2, 3)
+                    require(ints.firstOrNull() == 1)
+                    require(ints.lastOrNull() == 3)
+                    require(ints.getOrNull(1) == 2)
+                    require(ints.getOrNull(-1) == null)
+                    require(ints.getOrNull(-2147483647 - 1) == null)
+                    require(ints.getOrNull(3) == null)
+                    require(ints.getOrNull(2147483647) == null)
+                    val probe = Probe(ints)
+                    require(probe.firstOrNull() == 1)
+                    require(probe.visits == 1)
+                    probe.visits = 0
+                    var order = 0
+                    require(probe.firstOrNull { order = order * 10 + it; it == 2 } == 2)
+                    require(probe.visits == 2 && order == 12)
+                    probe.visits = 0
+                    order = 0
+                    require(probe.lastOrNull { order = order * 10 + it; it < 3 } == 2)
+                    require(probe.visits == 3 && order == 123)
+                    probe.visits = 0
+                    require(probe.lastOrNull() == 3)
+                    require(probe.visits == 3)
+                    require(probe.firstOrNull { it == 9 } == null)
+                    require(probe.lastOrNull { it == 9 } == null)
+                    order = 0
+                    require(ints.lastOrNull { order = order * 10 + it; it < 3 } == 2)
+                    require(order == 32)
+                    val noValues = Probe(empty)
+                    require(noValues.firstOrNull() == null)
+                    require(noValues.lastOrNull() == null)
+                    require(noValues.visits == 0)
+                    val nullable = listOf<Int?>(1000, null, 2000, null)
+                    var calls = 0
+                    require(nullable.firstOrNull { calls += 1; it == null } == null)
+                    require(calls == 2)
+                    calls = 0
+                    require(nullable.lastOrNull { calls += 1; it == null } == null)
+                    require(calls == 1)
+                    val nullableIterable: Iterable<Int?> = nullable
+                    calls = 0
+                    require(nullableIterable.lastOrNull { calls += 1; it == null } == null)
+                    require(calls == 4)
+                    val first: Any? = nullable.firstOrNull()
+                    val stored: Any? = nullable[0]
+                    require(first === stored)
+                    val indexed: Any? = nullable.getOrNull(0)
+                    require(indexed === stored)
+                    val matched: Any? = nullable.lastOrNull { it != null }
+                    val lastStored: Any? = nullable[2]
+                    require(matched === lastStored)
+                    require(nullable.lastOrNull() == null)
+                    val node = Node(7)
+                    val nodes = listOf<Node?>(node, null)
+                    require(nodes.firstOrNull() === node)
+                    require(nodes.lastOrNull() == null)
+                    require(nodes.getOrNull(0) === node)
+                    val strings: Iterable<String?> = listOf(null, "a", "b")
+                    require(strings.firstOrNull() == null)
+                    require(strings.firstOrNull { it != null } == "a")
+                    require(strings.lastOrNull() == "b")
+                    val universal: List<Any?> = nullable
+                    require(universal.firstOrNull() === stored)
+                    require(universal.lastOrNull { it != null } === lastStored)
+                    require(universal.getOrNull(0) === stored)
+                    println("selection ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.collectionSelectionArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `nullable Int and collection elements preserve values and nulls`() =
         withAdapter { adapter ->
             val source =

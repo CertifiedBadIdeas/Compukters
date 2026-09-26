@@ -318,6 +318,7 @@ val genericCellConformanceArtifact = layout.buildDirectory.file("generated/confo
 val genericInterfaceConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-interface.cpkt")
 val listConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list.cpkt")
 val listAnyConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-any.cpkt")
+val collectionSelectionConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-collection-selection.cpkt")
 val nullableCollectionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-nullable-collections.cpkt")
 val listAnyQuotaConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-any-quota.cpkt")
 val listBoundsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-bounds.cpkt")
@@ -899,6 +900,22 @@ val generateNullableCollectionsConformanceArtifact = tasks.register<Test>("gener
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.nullableCollectionsArtifact", nullableCollectionsConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateCollectionSelectionConformanceArtifact = tasks.register<Test>("generateCollectionSelectionConformanceArtifact") {
+    description = "Compiles nullable collection selection for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*collection nullable selection preserves traversal values and identity*")
+    inputs.file(workerJar)
+    outputs.file(collectionSelectionConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.collectionSelectionArtifact", collectionSelectionConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

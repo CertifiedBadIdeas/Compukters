@@ -633,6 +633,15 @@ supported.
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `list Int covariance to Any preserves the list and boxes reads`, executed by `testKotlinListAnyVmConformance`.
 
+- [x] **Nullable element selection** — `Iterable<T>.firstOrNull` and `lastOrNull`, with or without a predicate,
+  return the selected element or null when empty or unmatched. `firstOrNull(predicate)` stops at the first match;
+  `Iterable.lastOrNull(predicate)` traverses forward to the end. List overloads read first/last elements by index;
+  `List.lastOrNull(predicate)` searches backwards and stops at the first match from the end.
+  `List<T>.getOrNull(index)` returns null for negative or out-of-range indexes. Results from `Int` elements are `Int?`;
+  nullable elements retain their stored references, including Int boxes. These are imported `kotlin.collections` extensions.
+  Evidence: `MinimalScriptLoweringTest`, test `collection nullable selection preserves traversal values and identity`,
+  executed by `testKotlinCollectionSelectionVmConformance` with bounded slices.
+
 - [ ] **Read-only `Collection<T>` and `List<T>` — Partial** — direct `listOf(...)`, `listOf<T>()`, and `emptyList<T>()`
   support `Int`, `String`, and supported Guest class references, including nullable elements. `size`, indexed `get`,
   and ordinary `for` iteration execute
