@@ -230,17 +230,6 @@ private fun collectGuestClassInstances(
     val pending = ArrayDeque<GuestClassInstance>()
 
     fun add(instance: GuestClassInstance) {
-        if (
-            instance.declaration.fqNameWhenAvailable?.asString() in
-            setOf(
-                "kotlin.collections.Iterable",
-                "kotlin.collections.Iterator",
-                "kotlin.collections.Collection",
-                "kotlin.collections.List",
-            ) && instance.arguments.any { it.isNullable() }
-        ) {
-            throw UnsupportedKotlinIr(instance.declaration, "nullable collection elements are outside the project subset")
-        }
         if (instances.add(instance)) {
             if (instances.count { it.arguments.isNotEmpty() } > 256) {
                 throw UnsupportedKotlinIr(instance.declaration, "generic specialization exceeds 256 class variants")
@@ -1180,17 +1169,30 @@ internal object KotlinProjectLowering {
                 val bridgeName =
                     when (function.fqNameWhenAvailable?.asString()) {
                         "kotlin.collections.IntArrayBackedList.getAny" -> "get"
+                        "kotlin.collections.IntArrayBackedList.getAnyNullable" -> "get"
                         "kotlin.collections.IntArrayBackedList.containsAny" -> "contains"
+                        "kotlin.collections.IntArrayBackedList.containsAnyNullable" -> "contains"
                         "kotlin.collections.IntArrayBackedList.indexOfAny" -> "indexOf"
+                        "kotlin.collections.IntArrayBackedList.indexOfAnyNullable" -> "indexOf"
                         "kotlin.collections.IntArrayBackedList.lastIndexOfAny" -> "lastIndexOf"
+                        "kotlin.collections.IntArrayBackedList.lastIndexOfAnyNullable" -> "lastIndexOf"
                         "kotlin.collections.IntArrayBackedList.iteratorAny" -> "iterator"
+                        "kotlin.collections.IntArrayBackedList.iteratorAnyNullable" -> "iterator"
                         "kotlin.collections.IntArrayBackedListIterator.nextAny" -> "next"
+                        "kotlin.collections.IntArrayBackedListIterator.nextAnyNullable" -> "next"
                         "kotlin.collections.ArrayBackedList.getAny" -> "get"
+                        "kotlin.collections.ArrayBackedList.getAnyNullable" -> "get"
                         "kotlin.collections.ArrayBackedList.containsAny" -> "contains"
+                        "kotlin.collections.ArrayBackedList.containsAnyNullable" -> "contains"
                         "kotlin.collections.ArrayBackedList.indexOfAny" -> "indexOf"
+                        "kotlin.collections.ArrayBackedList.indexOfAnyNullable" -> "indexOf"
                         "kotlin.collections.ArrayBackedList.lastIndexOfAny" -> "lastIndexOf"
+                        "kotlin.collections.ArrayBackedList.lastIndexOfAnyNullable" -> "lastIndexOf"
                         "kotlin.collections.ArrayBackedList.iteratorAny" -> "iterator"
+                        "kotlin.collections.ArrayBackedList.iteratorAnyNullable" -> "iterator"
                         "kotlin.collections.ArrayBackedListIterator.nextAny" -> "next"
+                        "kotlin.collections.ArrayBackedListIterator.nextAnyNullable" -> "next"
+                        "kotlin.collections.ArrayBackedListAnyIterator.nextAnyNullable" -> "next"
                         else -> null
                     }
                 if (bridgeName != null) {
@@ -2474,22 +2476,37 @@ internal object KotlinProjectLowering {
                             classInstanceTypeIds[parent]?.let { parent.declaration.symbol to TypeRef.Local(it) }
                         }
                     }
-                val bridgeInterfaceName =
+                val bridgeInterfaceRoot =
                     when (declaration.fqNameWhenAvailable?.asString()) {
-                        "kotlin.collections.IntArrayBackedList" -> "kotlin.collections.List<Any>"
-                        "kotlin.collections.IntArrayBackedListIterator" -> "kotlin.collections.Iterator<Any>"
-                        "kotlin.collections.ArrayBackedList" -> "kotlin.collections.List<Any>"
-                        "kotlin.collections.ArrayBackedListIterator" -> "kotlin.collections.Iterator<Any>"
+                        "kotlin.collections.IntArrayBackedList", "kotlin.collections.ArrayBackedList" -> "kotlin.collections.List"
+
+                        "kotlin.collections.IntArrayBackedListIterator",
+                        "kotlin.collections.ArrayBackedListIterator",
+                        "kotlin.collections.ArrayBackedListAnyIterator",
+                        -> "kotlin.collections.Iterator"
+
                         else -> null
                     }
-                val bridgeInterface =
-                    bridgeInterfaceName
-                        ?.let { name -> classInstanceTypeIds.entries.singleOrNull { it.key.name == name }?.value }
-                        ?.let(TypeRef::Local)
+                val bridgeInterfaces =
+                    if (bridgeInterfaceRoot == null) {
+                        emptyList()
+                    } else {
+                        val names =
+                            listOfNotNull(
+                                "$bridgeInterfaceRoot<Any?>",
+                                "$bridgeInterfaceRoot<Any>".takeIf { layout.instance.arguments.none { it.isNullable() } },
+                            )
+                        names.mapNotNull { name ->
+                            classInstanceTypeIds.entries
+                                .singleOrNull { it.key.name == name }
+                                ?.value
+                                ?.let(TypeRef::Local)
+                        }
+                    }
                 val interfaces =
                     (
                         sourceParents.filter { (symbol, _) -> symbol.owner.kind == ClassKind.INTERFACE }.map { it.second } +
-                            listOfNotNull(bridgeInterface)
+                            bridgeInterfaces
                     ).distinct()
                         .sortedBy { (it as TypeRef.Local).id.value }
                 val superType = sourceParents.firstOrNull { (symbol, _) -> symbol.owner.kind != ClassKind.INTERFACE }?.second
@@ -2699,11 +2716,11 @@ internal object KotlinProjectLowering {
                                 name = requireNotNull(metadataIds[name]),
                                 element =
                                     ValueType.Ref(
-                                        nullable = false,
+                                        nullable = element.nullable,
                                         type =
                                             when (element) {
-                                                ReferenceArrayElement.Universal -> {
-                                                    TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))
+                                                is ReferenceArrayElement.Runtime -> {
+                                                    TypeRef.Imported(ImportId.of(element.runtimeType))
                                                 }
 
                                                 is ReferenceArrayElement.GuestClass -> {
@@ -4058,7 +4075,7 @@ private class FunctionCompiler(
                         }.sortedWith(compareBy({ it.third.startOffset.takeIf { offset -> offset >= 0 } ?: Int.MAX_VALUE }, { it.first }))
                 explicit.forEach { (_, parameter, expression) ->
                     rejectFunctionVariance(expression.type, parameter.type, expression)
-                    values[parameter.symbol] = compileExpression(expression, parameter.type)
+                    values[parameter.symbol] = compileExpression(expression, layout.instance.substitute(parameter.type))
                 }
                 parameters.forEach { (index, parameter) ->
                     if (call.arguments.getOrNull(index) == null) {
@@ -4096,8 +4113,17 @@ private class FunctionCompiler(
             rejectFunctionVariance(expression.argument.type, expression.typeOperand, expression)
         }
         val source =
-            if (expression.operator == IrTypeOperator.IMPLICIT_CAST ||
-                (expression.operator == IrTypeOperator.CAST && expression.typeOperand.isNullableInt())
+            if (expression.operator == IrTypeOperator.INSTANCEOF &&
+                (expression.argument as? IrConst)?.let { it.value == null } == true
+            ) {
+                allocate(ValueType.Ref(nullable = true, type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))).also {
+                    emit(Instruction.Null(it))
+                }
+            } else if (expression.operator == IrTypeOperator.IMPLICIT_CAST ||
+                (
+                    expression.operator == IrTypeOperator.CAST &&
+                        (expression.typeOperand.isNullableInt() || expression.typeOperand.isKotlinAny())
+                )
             ) {
                 compileExpression(expression.argument, expression.typeOperand)
             } else {
@@ -4114,15 +4140,44 @@ private class FunctionCompiler(
                         (target as? ValueType.Ref)?.type
                             ?: throw UnsupportedKotlinIr(expression, "type test target is not a reference")
                     }
-                allocate(ValueType.Bool).also { destination ->
-                    emit(Instruction.IsType(destination, source, reference))
-                }
+                val referenceSource =
+                    if (registerValueType(source) == ValueType.I32) {
+                        boxInt(source, ValueType.Ref(nullable = false, type = intBoxType))
+                    } else {
+                        source
+                    }
+                val matches = allocate(ValueType.Bool)
+                emit(Instruction.IsType(matches, referenceSource, reference))
+                if (!expression.typeOperand.isNullable()) return matches
+                val sourceType =
+                    registerValueType(referenceSource) as? ValueType.Ref
+                        ?: throw UnsupportedKotlinIr(expression, "nullable type test requires a reference operand")
+                val destination = allocate(ValueType.Bool)
+                val present = createBlock()
+                val absent = createBlock()
+                val join = createBlock()
+                emit(Instruction.Branch(matches, blockId(present), blockId(absent)))
+                currentBlock = present
+                emit(Instruction.Move(destination, matches))
+                jumpTo(join)
+                currentBlock = absent
+                val nullValue = allocate(sourceType.copy(nullable = true))
+                emit(Instruction.Null(nullValue))
+                emit(Instruction.RefEqual(destination, referenceSource, nullValue))
+                jumpTo(join)
+                currentBlock = join
+                destination
             }
 
             IrTypeOperator.CAST -> {
                 if (expression.typeOperand.isNullableInt()) {
                     return allocate(target).also { destination ->
                         emit(Instruction.CheckedCast(destination, source, intBoxType))
+                    }
+                }
+                if (target is ValueType.Ref) {
+                    return allocate(target).also { destination ->
+                        emit(Instruction.CheckedCast(destination, source, target.type))
                     }
                 }
                 if (expression.typeOperand != intType) {
@@ -4262,17 +4317,22 @@ private class FunctionCompiler(
         val targetName = target.fqNameWhenAvailable?.asString()
         if (targetName == "kotlin.internal.ir.EQEQEQ") {
             val operands = call.arguments.filterNotNull()
-            if (operands.size != 2 || operands.any { valueType(it.type, it) !is ValueType.Ref }) {
+            if (operands.size != 2 || operands.any { !(it is IrConst && it.value == null) && valueType(it.type, it) !is ValueType.Ref }) {
                 throw UnsupportedKotlinIr(call, "reference identity requires two reference operands")
             }
-            val left = compileExpression(operands[0])
-            val right = compileExpression(operands[1])
             val anyType = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))
-            val leftAny = allocate(ValueType.Ref(nullable = false, type = anyType))
-            emit(Instruction.CheckedCast(leftAny, left, anyType))
-            val rightAny = allocate(ValueType.Ref(nullable = false, type = anyType))
-            emit(Instruction.CheckedCast(rightAny, right, anyType))
-            return allocate(ValueType.Bool).also { destination -> emit(Instruction.RefEqual(destination, leftAny, rightAny)) }
+            val references =
+                operands.map { operand ->
+                    allocate(ValueType.Ref(nullable = true, type = anyType)).also { destination ->
+                        if (operand is IrConst && operand.value == null) {
+                            emit(Instruction.Null(destination))
+                        } else {
+                            val source = compileExpression(operand)
+                            emit(Instruction.CheckedCast(destination, source, anyType))
+                        }
+                    }
+                }
+            return allocate(ValueType.Bool).also { destination -> emit(Instruction.RefEqual(destination, references[0], references[1])) }
         }
         if (target.isExternal && targetName in setOf("kotlin.collections.listOf", "kotlin.collections.emptyList")) {
             return compileListFactory(call, targetName == "kotlin.collections.listOf")
@@ -4471,7 +4531,10 @@ private class FunctionCompiler(
             val universalEquality =
                 target.name.asString() in setOf("EQEQ", "equals", "eqeq") &&
                     argumentExpressions.size == 2 &&
-                    argumentExpressions.any { resolvedType(it.type).isKotlinAny() || resolvedType(it.type).isNullableInt() }
+                    argumentExpressions.any {
+                        resolvedType(it.type).isKotlinAny() || resolvedType(it.type).isNullableInt() ||
+                            resolvedType(it.type).isNullableString()
+                    }
             val arrayStoreElementType =
                 if (
                     target.name.asString() == "set" &&
@@ -4484,7 +4547,9 @@ private class FunctionCompiler(
                 }
             val arguments =
                 argumentExpressions.mapIndexed { index, argument ->
-                    if (argument is IrConst && argument.value == null) {
+                    if (index == 2 && arrayStoreElementType != null) {
+                        compileExpression(argument, arrayStoreElementType)
+                    } else if (argument is IrConst && argument.value == null) {
                         val other = argumentExpressions.firstOrNull { it !== argument && it.type != argument.type }
                         val reference = other?.let { valueType(it.type, it) as? ValueType.Ref }
                         if (reference == null) {
@@ -4492,11 +4557,9 @@ private class FunctionCompiler(
                         } else {
                             allocate(reference.copy(nullable = true)).also { emit(Instruction.Null(it)) }
                         }
-                    } else if (index == 2 && arrayStoreElementType != null) {
-                        compileExpression(argument, arrayStoreElementType)
                     } else {
                         val compiled = compileExpression(argument)
-                        if (universalEquality && valueType(argument.type, argument) == ValueType.I32) {
+                        if (universalEquality && registerValueType(compiled) == ValueType.I32) {
                             boxInt(compiled, ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))))
                         } else {
                             compiled
@@ -4767,9 +4830,6 @@ private class FunctionCompiler(
         val elementType =
             call.typeArguments.singleOrNull()?.let(::resolvedType)
                 ?: throw UnsupportedKotlinIr(call, "list factory requires a concrete element type")
-        if (elementType.isNullable()) {
-            throw UnsupportedKotlinIr(call, "nullable list elements are outside the project subset")
-        }
         val intElements = elementType == intType
         val target =
             if (intElements) {
@@ -5621,8 +5681,8 @@ private class FunctionCompiler(
         arguments: List<RegisterId>,
     ): RegisterId? {
         if (arguments.size != 2) return null
-        val leftType = expressions[0].type
-        val rightType = expressions[1].type
+        val leftType = resolvedType(expressions[0].type)
+        val rightType = resolvedType(expressions[1].type)
         val numeric = listOf(leftType, rightType).all { it == intType || it == longType || it == floatType }
         val mixedFloat = numeric && (leftType == floatType || rightType == floatType)
         val mixedLong =
@@ -5656,6 +5716,7 @@ private class FunctionCompiler(
                 }
             if (
                 leftType.isKotlinAny() || rightType.isKotlinAny() || leftType.isNullableInt() || rightType.isNullableInt() ||
+                leftType.isNullableString() || rightType.isNullableString() ||
                 (
                     hasGuestEqualityOverride &&
                         expressions.none { it is IrConst && it.value == null } &&
@@ -6501,6 +6562,10 @@ private class FunctionCompiler(
 
 private fun IrType.isExactClass(symbol: IrClassSymbol): Boolean = (this as? IrSimpleType)?.classifier == symbol
 
+private fun IrType.isNullableString(): Boolean =
+    isNullable() &&
+        ((this as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == "kotlin.String"
+
 private fun IrType.isNullableInt(): Boolean =
     isNullable() && ((this as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == "kotlin.Int"
 
@@ -6856,10 +6921,16 @@ private class StringArrayUsageCollector(
 }
 
 private sealed interface ReferenceArrayElement {
-    data object Universal : ReferenceArrayElement
+    val nullable: Boolean
+
+    data class Runtime(
+        val runtimeType: UInt,
+        override val nullable: Boolean,
+    ) : ReferenceArrayElement
 
     data class GuestClass(
         val instance: GuestClassInstance,
+        override val nullable: Boolean,
     ) : ReferenceArrayElement
 }
 
@@ -6876,13 +6947,25 @@ private class ReferenceArrayUsageCollector(
     ) {
         val resolved = substitute(type)
         val element = guestTypes.arrayElement(resolved) ?: return
-        if (element.isNullable()) return
-        if (element.isKotlinAny()) {
-            arrays[resolved.canonicalPlatformType()] = ReferenceArrayElement.Universal
+        val runtimeType =
+            when {
+                element.isKotlinAny() -> ANY_RUNTIME_TYPE
+
+                element.isNullableInt() -> INT_BOX_RUNTIME_TYPE
+
+                element.isNullable() &&
+                    element.isNullableString() -> 1u
+
+                else -> null
+            }
+        if (runtimeType != null) {
+            arrays[resolved.canonicalPlatformType()] = ReferenceArrayElement.Runtime(runtimeType, element.isNullable())
             return
         }
         val instance = element.classInstance(classes) ?: return
-        if (instance in instances) arrays[resolved.canonicalPlatformType()] = ReferenceArrayElement.GuestClass(instance)
+        if (instance in instances) {
+            arrays[resolved.canonicalPlatformType()] = ReferenceArrayElement.GuestClass(instance, element.isNullable())
+        }
     }
 
     fun scan(

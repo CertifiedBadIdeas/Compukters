@@ -41,7 +41,7 @@ quota safepoint; no iterator object is created. A source variable may be reassig
 array, while writes to that array's elements remain visible to later iterations.
 Nullable `String` and supported Guest class source references use the artifact's existing nullable reference types and
 `Null` instruction. K2's safe-call and Elvis branches lower through ordinary verified control flow, with reference
-casts when a non-null branch joins a nullable result. Nullable primitive values have no Guest representation.
+casts when a non-null branch joins a nullable result. `Int?` uses the existing managed Int box or null; other nullable primitives remain unsupported.
 
 Compiler and analysis workers are pinned, isolated JVM processes. Their payloads are assembled into one bounded
 `k2-tooling-workers.zip.xz`: nested runtime JARs and the carrier ZIP use canonical stored entries, then the complete
@@ -131,18 +131,22 @@ hold boxed `Int` and supported objects; each value is converted once before stor
 factories and indexed writes use the same boxing boundary; array reads return the stored reference. `Collection<T>`
 owns `size`, `isEmpty`, and `contains`; specialized lists publish an `Any` argument bridge for covariant `contains`
 calls. `Iterable<T>` search extensions `contains`, `indexOf`, and `lastIndexOf` scan with the iterator, while the
-`List<T>` index methods use direct indexed access and publish `Any` argument bridges for covariant calls. The
+`List<T>` index methods use direct indexed access and publish `Any` and `Any?` argument bridges for covariant calls. The
 `Iterable<T>` predicate extensions `any`, `all`, and `none` specialize both the element and function value signature
 before lowering calls to the predicate.
 Generic call arguments are converted against the specialized parameter types, so searching a widened `List<Any>`
 boxes an `Int` argument before comparison. Universal value
-equality over non-null `Any` lowers through existing reference, type-test, field-read, scalar, and string instructions:
+equality over `Any` and `Any?` lowers through existing reference, type-test, field-read, scalar, and string instructions:
 boxed `Int` compares by value, strings by content, Guest classes with an explicit `equals` override call that method,
 and data classes compare supported primary-constructor properties. Other classes retain the default identity equality.
 Unsupported data-class property shapes receive a compiler diagnostic. `Int?` uses a nullable reference to the same
 managed Int box. Conversion to a scalar Int checks the box and reads its payload; nullable and Any? boundaries preserve
 existing box references. Null participates in universal equality. Hash and object string conversion remain outside
 this subset.
+
+Nullable reference arrays have distinct nominal types with nullable element descriptors. `Array<Int?>` and
+`List<Int?>` store the same managed Int boxes or null, while `List<Int>` retains scalar storage. Nullable and non-null
+lists expose `Any?` bridges for reads, iteration, and searches.
 
 Concrete `Array<GuestClass>` uses become distinct local nominal array types whose elements are exact Guest class
 references. Existing array instructions allocate, load, and store them; the verifier checks element types and GC

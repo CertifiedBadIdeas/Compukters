@@ -2250,9 +2250,14 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val source =
                 """
+                import kotlin.collections.listOf
+                import kotlin.collections.emptyList
+
                 fun echo(value: Int?): Int? = value
                 fun box(value: Int): Int? = value
                 class Slot(var value: Int?)
+                class Box<T>(val value: T)
+                fun <T> single(value: T): kotlin.collections.List<T> = listOf(value)
                 fun main() {
                     val missing: Int? = null
                     val first: Int? = 7
@@ -2283,12 +2288,91 @@ class MinimalScriptLoweringTest {
                     require((broad as Int) == 7)
                     val absent: Any? = missing
                     require(absent == null)
+                    require(absent is Int?)
+                    require(null is Int?)
+                    require((null as Int?) == null)
+                    require(broad is Int?)
                     require(broad == box(7))
                     require(broad != absent)
                     val restored: Int? = broad as Int?
                     require(restored == 7)
                     val restoredNull: Int? = absent as Int?
                     require(restoredNull == null)
+                    require(Box<Int?>(null).value == null)
+                    require((Box<Int?>(4).value ?: 0) == 4)
+                    require(single<Int?>(null)[0] == null)
+                    require((single<Int?>(4)[0] ?: 0) == 4)
+                    val ints = listOf<Int?>(7, null, 9, null)
+                    require(ints.size == 4)
+                    require((ints[0] ?: 0) == 7)
+                    require(ints[1] == null)
+                    require(ints.contains(null))
+                    require(ints.indexOf(null) == 1)
+                    require(ints.lastIndexOf(null) == 3)
+                    require(ints.indexOf(9) == 2)
+                    var total = 0
+                    for (value in ints) total += value ?: 0
+                    require(total == 16)
+                    val universal: kotlin.collections.List<Any?> = ints
+                    require(universal[0] == 7)
+                    require(universal[1] == null)
+                    require(universal.contains(null))
+                    require(universal.indexOf(9) == 2)
+                    val scalars: kotlin.collections.List<Any?> = listOf(7, 9)
+                    require(scalars[0] == 7)
+                    require(!scalars.contains(null))
+                    require(emptyList<Int?>().isEmpty())
+                    val strings = listOf<String?>("seven", null)
+                    require(strings[1] == null)
+                    require(strings.contains(null))
+                    val equalText: String? = "seven!".substring(0, 5)
+                    require(strings.contains(equalText))
+                    require(strings.indexOf(equalText) == 0)
+                    require(strings.lastIndexOf(equalText) == 0)
+                    val broadStrings: kotlin.collections.List<Any?> = strings
+                    var stringCount = 0
+                    for (value in broadStrings) {
+                        if (value == null) stringCount += 1
+                        else require(value == "seven")
+                    }
+                    require(stringCount == 1)
+                    val slots = listOf<Slot?>(slot, null)
+                    require(slots[0] == slot)
+                    require(slots[1] == null)
+                    val array = arrayOf<Int?>(null, 4)
+                    array[0] = 7
+                    require((array[0] ?: 0) == 7)
+                    array[1] = null
+                    require(array[1] == null)
+                    val mixed = listOf<Any?>(1000, null, "seven", slot)
+                    require(mixed[0] == 1000)
+                    require(mixed[1] == null)
+                    require(!(mixed[2] is Int?))
+                    require(mixed.contains(null))
+                    require(mixed.indexOf(slot) == 3)
+                    require((mixed[2] as String) == "seven")
+                    require((mixed[3] as Slot) === slot)
+                    val mixedArray = arrayOf<Any?>(1000, null, slot)
+                    require(mixedArray[0] == 1000)
+                    require(mixedArray[1] == null)
+                    require(mixedArray[0] === mixedArray[0])
+                    require(mixedArray[1] === null)
+                    require((7 as Any?) == 7)
+                    val textArray = arrayOf<String?>(null, "seven")
+                    textArray[1] = null
+                    require(textArray[0] == null && textArray[1] == null)
+                    val slotArray = arrayOf<Slot?>(slot, null)
+                    slotArray[0] = null
+                    require(slotArray[0] == null && slotArray[1] == null)
+                    var allocations = 0
+                    while (allocations < 60000) {
+                        box(allocations)
+                        allocations += 1
+                    }
+                    require(universal[0] == 7)
+                    require(universal[1] == null)
+                    require(mixed[0] == 1000)
+                    require(mixed[3] == slot)
                     println("nullable ok")
                 }
                 """.trimIndent()
@@ -2381,10 +2465,9 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val unsupported =
                 listOf(
-                    "import kotlin.collections.listOf\nfun main() { listOf<Int?>(null) }",
+                    "import kotlin.collections.listOf\nfun main() { listOf<Long?>(null) }",
                     "import kotlin.collections.listOf\nfun main() { listOf(true) }",
                     "import kotlin.collections.listOf\nfun main() { listOf<Any>(true) }",
-                    "import kotlin.collections.List\nimport kotlin.collections.listOf\nfun main() { val values: List<Int> = listOf(1); val nullable: List<Any?> = values; println(nullable.size) }",
                     "import kotlin.collections.listOf\nfun main() { val array = arrayOf(\"a\"); listOf(*array) }",
                 )
             unsupported.forEach { source ->
@@ -2402,7 +2485,7 @@ class MinimalScriptLoweringTest {
                     "inline fun <reified T> keep(value: T): T = value\nfun main() { keep(1) }",
                     "interface Writer<in T> { fun write(value: T) }\nfun main() {}",
                     "class Box<out T>(val value: T)\nfun main() { Box(1) }",
-                    "class Box<T>(val value: T)\nfun main() { Box<Int?>(null) }",
+                    "class Box<T>(val value: T)\nfun main() { Box<Long?>(null) }",
                     "fun <T> erase(value: T): Any = value\nfun main() { erase(1) }",
                 )
             unsupported.forEach { source ->
@@ -2445,7 +2528,7 @@ class MinimalScriptLoweringTest {
                     "class Secondary(val value: Int) { constructor() : this(0) }\nfun main() { Secondary() }",
                     "class Uninitialized { lateinit var value: String }\nfun main() { Uninitialized() }",
                     "enum class Stateful(val code: Int) { ONE(1) }\nfun main() { Stateful.ONE }",
-                    "sealed interface Value\ndata class NumberValue(val value: Int) : Value\nfun read(value: Value): Int = (value as NumberValue).value\nfun main() { read(NumberValue(1)) }",
+                    "sealed interface Value\ndata class NumberValue(val value: Int) : Value\nfun read(value: Value): Int = (value as? NumberValue)?.value ?: 0\nfun main() { read(NumberValue(1)) }",
                 )
 
             unsupported.forEach { source ->
@@ -2754,7 +2837,7 @@ class MinimalScriptLoweringTest {
                 "fun main() { arrayOf<Any>(1L) }",
                 "fun main() { val values = arrayOf<Any>(1); values[0] = true }",
                 "fun main() { val values = arrayOf<Any>(1); values[0] = 1L }",
-                "class Node(val value: Int)\nfun main() { arrayOf<Node?>(null) }",
+                "fun main() { arrayOf<Long?>(null) }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))
                 assertNull(result.artifact, result.diagnostics.joinToString())
