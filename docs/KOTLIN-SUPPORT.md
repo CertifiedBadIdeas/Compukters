@@ -345,12 +345,13 @@ supported.
   escaping crossinline wrappers, nested captures and shared mutable cells retain ordinary managed ownership.
   Runtime-referenced inline definitions remain usable; unused templates are discarded. Canonical platform/intrinsic
   calls remain atomic, including transparent suspension through an expanded callback.
-  Member/local, suspend and reified inline declarations, unavailable/unadmitted bodies and unresolved generic type
-  arguments are rejected with TARGET diagnostics. Preflight rejects recursive inline dependencies, depth above 64
-  and cumulative projected work above 1,000,000 units; specialization allows at most 256 variants and 64 active levels.
+  Member/local, suspend and reified inline declarations, unavailable/unadmitted bodies and unresolved type arguments
+  outside a supported enclosing generic owner are rejected with TARGET diagnostics. Preflight rejects recursive
+  inline dependencies, depth above 64 and cumulative projected work above 1,000,000 units; specialization allows at most 256 variants and 64 active levels.
   These are conservative compiler safety bounds, not calibrated VM capacity budgets. Production worker and JVM-plugin
   entry tests exercise the shared pass; function-values, generic-library and transparent-call VM scenarios cover its
-  integration. Imported collection extensions remain non-inline and do not admit non-local returns.
+  integration. Callback-taking collection extensions are inline and admit non-local returns from direct lambdas.
+  Ordinary generic wrappers retain their concrete emitter specialization; stored callbacks retain managed ownership.
   `Tasks.launch` accepts direct, stored, and returned `() -> Unit` values. A
   direct top-level `Tasks.launch(::worker)` remains a static spawn without a
   closure allocation. Types unsupported elsewhere in Guest Kotlin, local,
@@ -653,7 +654,8 @@ supported.
 
 - [x] **`Iterable<T>` search and predicate operations** — `contains` / `in`, `indexOf`, and `lastIndexOf` traverse
   any iterable, including a user-defined one. `any`, `all`, and `none` use `iterator()` and stop when the result is
-  known. Empty iterables return `false`, `true`, and `true`, respectively. These operations work through
+  known. Callback overloads are inline and admit non-local returns. Empty iterables return `false`, `true`, and `true`,
+  respectively. These operations work through
   `Iterable<Int>` and `Iterable<Any>` references. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `list Int covariance to Any preserves the list and boxes reads`, executed by `testKotlinListAnyVmConformance`.
@@ -661,7 +663,8 @@ supported.
 - [x] **Nullable element selection** — `Iterable<T>.firstOrNull` and `lastOrNull`, with or without a predicate,
   return the selected element or null when empty or unmatched. `firstOrNull(predicate)` stops at the first match;
   `Iterable.lastOrNull(predicate)` traverses forward to the end. List overloads read first/last elements by index;
-  `List.lastOrNull(predicate)` searches backwards and stops at the first match from the end.
+  `List.lastOrNull(predicate)` searches backwards and stops at the first match from the end. Predicate overloads are
+  inline and admit non-local returns from direct lambdas.
   `List<T>.getOrNull(index)` returns null for negative or out-of-range indexes. Results from `Int` elements are `Int?`;
   nullable elements retain their stored references, including Int boxes. These are imported `kotlin.collections` extensions.
   Evidence: `MinimalScriptLoweringTest`, test `collection nullable selection preserves traversal values and identity`,
@@ -671,7 +674,7 @@ supported.
   order, calling the operation once per element. Empty iterables return the initial value unchanged. Element and
   accumulator types specialize independently, including nullable references, `Int?`, and supported Guest classes.
   Generic callers can forward the operation with their instantiated types. Like other Guest higher-order helpers,
-  this extension is not inline and does not support non-local returns.
+  callback overloads are inline and support non-local returns from direct lambdas.
   Evidence: `MinimalScriptLoweringTest`, test `Iterable fold specializes independent element and accumulator types`,
   executed by `testKotlinFoldVmConformance` with bounded slices.
 
@@ -848,8 +851,8 @@ links to their source files.
   avoiding backing-array growth for ordinary lists and statically typed collections; an `Iterable<T>` receiver keeps
   the general growing path. Both traverse once and preserve element order and transform side effects.
   The implementation uses public `ArrayList<R>` and existing VM memory quotas;
-  input lists remain unchanged unless modified by the transform. This imported extension is not inline and does not
-  support non-local returns. Evidence: `MinimalScriptLoweringTest`, test
+  input lists remain unchanged unless modified by the transform. Both overloads are inline and support non-local
+  returns from direct lambdas. Evidence: `MinimalScriptLoweringTest`, test
   `Iterable map preserves order independent types and nullable identity`, executed by `testKotlinMapVmConformance`.
 
 - [x] **Non-null transformation** — `fun <T, R : Any> Iterable<T>.mapNotNull(transform: (T) -> R?): List<R>`
@@ -858,8 +861,8 @@ links to their source files.
   Input and result types specialize independently; nullable Int results are unboxed into ordinary Int storage,
   while supported references and values returned as `Any` retain identity. Generic forwarding is supported.
   There is no intermediate mapped list. Transform and selection occur together for each element, so this explicit
-  operation has different side-effect ordering from a separate `map` followed by `filter`. It is not inline and
-  does not support non-local returns. Evidence: `MinimalScriptLoweringTest`, test
+  operation has different side-effect ordering from a separate `map` followed by `filter`. It is inline and
+  supports non-local returns from direct lambdas. Evidence: `MinimalScriptLoweringTest`, test
   `Iterable mapNotNull preserves traversal narrowing and identity`, executed by `testKotlinMapNotNullVmConformance`.
 
 - [x] **Iterable filtering** — `Iterable<T>.filter(predicate: (T) -> Boolean): List<T>` creates a new list of matching
@@ -867,7 +870,7 @@ links to their source files.
   invoke it. Duplicate matches remain duplicated. Filtering retains the original element type, including nullability;
   `filter { it != null }` does not narrow `List<T?>` to `List<T>`. Stored reference and nullable Int box identity is
   preserved. Generic callers can forward predicates, and the result uses public `ArrayList<T>` with VM allocation quotas.
-  The imported extension is not inline and does not support non-local returns. Evidence: `MinimalScriptLoweringTest`,
+  The imported extension is inline and supports non-local returns from direct lambdas. Evidence: `MinimalScriptLoweringTest`,
   test `Iterable filter preserves traversal nullable elements and identity`, executed by `testKotlinFilterVmConformance`.
 
 - [x] **Destination collection operations** — `mapTo`, `filterTo` and `mapNotNullTo` append results to a caller-supplied
@@ -875,7 +878,7 @@ links to their source files.
   Existing contents are retained; empty or unmatched inputs leave the destination unchanged. Transforms and predicates
   run once per input element, including nulls. `mapTo` preserves nullable results; `mapNotNullTo` excludes null results
   and narrows their type. Supported generic wrappers and destinations with a wider element type retain reference and
-  box identity where appropriate. These extensions are not inline and do not support non-local returns. They allocate
+  box identity where appropriate. These extensions are inline and support non-local returns from direct lambdas. They allocate
   no intermediate result list; destination growth, transforms and iteration can still allocate. Programs explicitly
   call `clear()` before refilling a reusable buffer; clearing removes references while retaining backing capacity.
   Use a separate destination when traversing a mutable source. Evidence: `MinimalScriptLoweringTest`, test
@@ -887,9 +890,15 @@ links to their source files.
   and retains stored boxes and objects. Empty and all-null inputs produce empty lists. Generic wrappers, custom nullable
   iterables, and non-null library list inputs are supported. Library lists and `ArrayList` can widen to read-only
   nullable element views without copying; scalar Int reads through these views box, while reference reads preserve
-  identity. Mutable list element types remain invariant. Like other Guest collection extensions, this function is
-  not inline. Evidence: `MinimalScriptLoweringTest`, test `Iterable filterNotNull narrows boxed Int and reference elements`,
+  identity. Mutable list element types remain invariant. This callback-free function remains non-inline.
+  Evidence: `MinimalScriptLoweringTest`, test `Iterable filterNotNull narrows boxed Int and reference elements`,
   executed by `testKotlinFilterNotNullVmConformance`.
+
+  Callback inlining evidence: `inline collection literals avoid closures while stored callbacks retain ownership`
+  in `MinimalScriptLoweringTest`; non-local returns across selection, fold, transformation and destination operations,
+  enclosing generic class parameters and receiver evaluation execute in `testKotlinMapVmConformance`. Native IDE
+  diagnostics admit collection non-local returns in `DiagnosticQueryTest`; transparent host waits through collection
+  callbacks execute in `testKotlinTransparentCallVmConformance`.
 
 - [ ] **Other standard collections and functional helpers — Unsupported** — sets, maps,
   sequences and collection conversion helpers have no Guest implementation. Tracking: not scheduled

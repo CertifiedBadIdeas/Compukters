@@ -7,6 +7,7 @@
 package ru.lazyhat.compukters.compiler.k2.engine
 
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.IrTypeParametersContainer
@@ -26,7 +27,7 @@ import org.jetbrains.kotlin.ir.util.patchDeclarationParents
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import org.jetbrains.kotlin.types.Variance
 
-/** Internal preparation for common inlining; production compilation does not invoke this pass yet. */
+/** Typed body copies for common inlining; enclosing generic owners keep their emitter specialization. */
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 internal class GuestInlineSpecialization(
     private val maximumVariants: Int = 256,
@@ -42,6 +43,7 @@ internal class GuestInlineSpecialization(
 
     private val copies = mutableMapOf<Key, IrSimpleFunction>()
     private val active = mutableSetOf<Key>()
+    private val enclosingParameters = mutableSetOf<IrTypeParameterSymbol>()
 
     fun lower(file: IrFile) {
         // Snapshot: copies are appended while visiting concrete roots. Generic templates remain untouched.
@@ -54,8 +56,23 @@ internal class GuestInlineSpecialization(
                 element.acceptChildren(this, null)
             }
 
+            override fun visitClass(declaration: IrClass) {
+                val added = declaration.typeParameters.map { it.symbol }.filter { enclosingParameters.add(it) }
+                try {
+                    super.visitClass(declaration)
+                } finally {
+                    enclosingParameters.removeAll(added.toSet())
+                }
+            }
+
             override fun visitSimpleFunction(declaration: IrSimpleFunction) {
-                if (!declaration.isInline || declaration.typeParameters.isEmpty()) super.visitSimpleFunction(declaration)
+                if (declaration.isInline && declaration.typeParameters.isNotEmpty()) return
+                val added = declaration.typeParameters.map { it.symbol }.filter { enclosingParameters.add(it) }
+                try {
+                    super.visitSimpleFunction(declaration)
+                } finally {
+                    enclosingParameters.removeAll(added.toSet())
+                }
             }
 
             override fun visitCall(expression: IrCall) {
@@ -70,8 +87,10 @@ internal class GuestInlineSpecialization(
                     )
                 }
                 val arguments = expression.typeArguments.map { it ?: throw UnsupportedKotlinIr(expression, "missing inline type argument") }
-                if (arguments.size != declaration.typeParameters.size || arguments.any { it.containsTypeParameter() }) {
-                    throw UnsupportedKotlinIr(expression, "inline specialization requires concrete type arguments")
+                if (arguments.size != declaration.typeParameters.size ||
+                    arguments.any { it.containsUnownedTypeParameter(enclosingParameters) }
+                ) {
+                    throw UnsupportedKotlinIr(expression, "inline specialization requires concrete or enclosing generic type arguments")
                 }
                 val copy = specialize(Key(declaration, arguments))
                 expression.symbol = copy.symbol
@@ -122,6 +141,9 @@ internal class GuestInlineSpecialization(
     }
 }
 
-private fun IrType.containsTypeParameter(): Boolean =
+private fun IrType.containsUnownedTypeParameter(owners: Set<IrTypeParameterSymbol>): Boolean =
     this is IrSimpleType &&
-        (classifier is IrTypeParameterSymbol || arguments.any { it is IrTypeProjection && it.type.containsTypeParameter() })
+        (
+            (classifier is IrTypeParameterSymbol && classifier !in owners) ||
+                arguments.any { it is IrTypeProjection && it.type.containsUnownedTypeParameter(owners) }
+        )

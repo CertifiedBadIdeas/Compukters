@@ -28,7 +28,7 @@ public fun <T> List<T>.firstOrNull(): T? = getOrNull(0)
 public fun <T> List<T>.lastOrNull(): T? = getOrNull(size - 1)
 
 /** Returns the last matching element, searching from the end until a match is found. */
-public fun <T> List<T>.lastOrNull(predicate: (T) -> Boolean): T? {
+public inline fun <T> List<T>.lastOrNull(predicate: (T) -> Boolean): T? {
     var index = size - 1
     while (index >= 0) {
         val element = this[index]
