@@ -170,6 +170,14 @@ references. Existing array instructions allocate, load, and store them; the veri
 follows live references in their slots. Execution tracing consults each frame's safepoint map before resolving a
 reference register, so a dead register left after GC cannot invalidate a running program.
 
+After reachability pruning and relocation, the linker reuses temporary registers whose lifetimes do not overlap.
+Allocation uses the same control-flow analysis as GC roots, including loop back edges, exceptional edges and resume
+blocks. Only identical semantic types and physical shapes share a register; parameters, caught-exception destinations
+and operands in unreachable code retain dedicated slots. Inputs and destinations remain distinct through an instruction,
+including allocation and suspended calls. Instruction order, debug boundaries and metered costs are unchanged. Root maps,
+linked module hashes and frame storage requirements are rebuilt after allocation. The artifact encoding and runtime
+layout/verifier contract are unchanged; already compiled artifacts retain their original frame storage.
+
 `ServerCompilerService` performs bounded asynchronous preparation, persistent-cache lookup, and single-flight
 deduplication by compilation identity. Minecraft-facing code submits requests and drains completions; worker and cache
 I/O run outside the server tick thread.
