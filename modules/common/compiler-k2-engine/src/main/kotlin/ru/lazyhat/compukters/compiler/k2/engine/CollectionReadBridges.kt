@@ -27,15 +27,9 @@ import org.jetbrains.kotlin.ir.util.isNullable
 
 /** Read-only views of the trusted list implementations; mutable element types stay invariant. */
 internal object CollectionReadBridges {
-    private enum class Element {
-        INT,
-        TYPE_ARGUMENT,
-        ANY,
-    }
-
     private data class View(
         val root: String,
-        val element: Element,
+        val nullableElementView: Boolean,
         val methods: Map<String, String>,
     )
 
@@ -49,12 +43,9 @@ internal object CollectionReadBridges {
     private val iteratorMethods = aliases("next")
     private val views =
         mapOf(
-            "IntArrayBackedList" to View("List", Element.INT, listMethods),
-            "ArrayBackedList" to View("List", Element.TYPE_ARGUMENT, listMethods),
-            "ArrayList" to View("List", Element.TYPE_ARGUMENT, listMethods + ("iteratorReadOnly" to "iterator")),
-            "IndexedListIterator" to View("Iterator", Element.TYPE_ARGUMENT, iteratorMethods),
-            "ArrayListIterator" to View("Iterator", Element.TYPE_ARGUMENT, iteratorMethods),
-            "ArrayListAnyIterator" to View("Iterator", Element.ANY, iteratorMethods),
+            "ArrayList" to View("List", true, listMethods + ("iteratorReadOnly" to "iterator")),
+            "ArrayListIterator" to View("Iterator", true, iteratorMethods),
+            "ArrayListAnyIterator" to View("Iterator", false, iteratorMethods),
         ).mapKeys { (name, _) -> "kotlin.collections.$name" }
 
     fun methodName(function: IrSimpleFunction): String? {
@@ -65,16 +56,11 @@ internal object CollectionReadBridges {
     fun interfaceNames(
         declaration: IrClass,
         arguments: List<IrType>,
-        intType: IrType,
     ): List<String> {
         val view = views[declaration.fqNameWhenAvailable?.asString()] ?: return emptyList()
         val root = "kotlin.collections.${view.root}"
         val nullableElement =
-            when (view.element) {
-                Element.INT -> intType.makeNullable()
-                Element.TYPE_ARGUMENT -> arguments.singleOrNull()?.takeUnless { it.isNullable() }?.makeNullable()
-                Element.ANY -> null
-            }
+            arguments.singleOrNull()?.takeUnless { !view.nullableElementView || it.isNullable() }?.makeNullable()
         val nullableRoots =
             if (view.root == "List") {
                 listOf(root, "kotlin.collections.Collection", "kotlin.collections.Iterable")

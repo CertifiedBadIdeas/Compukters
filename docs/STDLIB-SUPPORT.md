@@ -71,8 +71,9 @@ links to their source files.
 
 ## Collections and I/O
 
-- [ ] **Read-only `List<T>` — Partial** — `listOf` and `emptyList` create typed lists of `Int`, `String`, or
-  supported Guest class references. `size`, indexed `get`, and direct `for` iteration work; an out-of-range index
+- [ ] **Read-only `List<T>` — Partial** — `listOf` and `emptyList` create fresh `ArrayList<T>` instances exposed as
+  `List<T>`, with capacity equal to their element count. Read-only views can be cast to `MutableList<T>` or `ArrayList<T>`
+  to mutate the same object. Supported elements include `Int`, `String`, and Guest class references. `size`, indexed `get`, and direct `for` iteration work; an out-of-range index
   traps. `Int` storage and typed reads remain unboxed. A `List<Int>` can widen to `List<Any>` without changing list
   identity; universal reads box each `Int`, and `is Int` / `as Int` recover its type and value. Supported reference lists
   also widen to `List<Any>` without copying their elements. Direct `listOf<Any>` construction stores mixed boxed `Int`

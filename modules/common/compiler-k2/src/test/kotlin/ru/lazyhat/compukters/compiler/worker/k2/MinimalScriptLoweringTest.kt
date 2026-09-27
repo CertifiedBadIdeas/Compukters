@@ -1994,6 +1994,24 @@ class MinimalScriptLoweringTest {
                     println(total)
                     for (word in words) { println(word) }
                     for (number in empty) { println(number) }
+                    val mutableNumbers = numbers as kotlin.collections.MutableList<Int>
+                    mutableNumbers.add(4)
+                    require(numbers.size == 3 && numbers[2] == 4)
+                    val arrayList = numbers as kotlin.collections.ArrayList<Int>
+                    arrayList[0] = 10
+                    require(numbers[0] == 10)
+                    val mutableWords = words as kotlin.collections.MutableList<String>
+                    mutableWords.add("third")
+                    require(words.size == 3 && words[2] == "third")
+                    val mutableTokens = tokens as kotlin.collections.MutableList<Token>
+                    val token = Token("green")
+                    mutableTokens.add(token)
+                    require(tokens[2] === token)
+                    val otherEmpty = emptyList<Int>()
+                    val mutableEmpty = empty as kotlin.collections.MutableList<Int>
+                    mutableEmpty.add(5)
+                    require(empty[0] == 5 && otherEmpty.isEmpty())
+                    require((listOf<Int>() as kotlin.collections.ArrayList<Int>).isEmpty())
                 }
                 """.trimIndent()
             val result = adapter.compile(request(source))
@@ -2001,9 +2019,13 @@ class MinimalScriptLoweringTest {
             val application = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
             val intList =
                 application.types.filterIsInstance<NominalType.Class>().single { type ->
-                    application.strings[type.name.value.toInt()].toString() == "kotlin.collections.IntArrayBackedList"
+                    application.strings[type.name.value.toInt()].toString() == "kotlin.collections.ArrayList<Int>"
                 }
-            val backingType = application.fields[intList.fieldStart.toInt()].type as ValueType.Ref
+            val storage =
+                application.types.filterIsInstance<NominalType.Class>().single { type ->
+                    application.strings[type.name.value.toInt()].toString() == "kotlin.collections.IntMutableListStorage"
+                }
+            val backingType = application.fields[storage.fieldStart.toInt()].type as ValueType.Ref
             val backingImport = application.imports[((backingType.type as TypeRef.Imported).id.value).toInt()]
             assertEquals("kotlin.IntArray", application.strings[backingImport.targetName.value.toInt()].toString())
             val intGet =

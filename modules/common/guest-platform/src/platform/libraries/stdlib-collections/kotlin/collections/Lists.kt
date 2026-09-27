@@ -6,129 +6,14 @@
 
 package kotlin.collections
 
-import kotlin.Array
-import kotlin.Int
-import kotlin.IntArray
-
-/** Creates a read-only list from the given elements. */
+/** Creates an [ArrayList] from the given elements and exposes it through the read-only [List] interface. */
 public external fun <T> listOf(vararg elements: T): List<T>
 
-/** Creates an empty read-only list with the requested element type. */
+/** Creates a new empty [ArrayList] exposed through the read-only [List] interface. */
 public external fun <T> emptyList(): List<T>
 
 /** Checks whether this collection has at least one element. */
 public fun <T> Collection<T>.isNotEmpty(): Boolean = !isEmpty()
-
-internal class IntArrayBackedList(private val values: IntArray) : List<Int> {
-    override val size: Int get() = values.size
-
-    override fun isEmpty(): Boolean = size == 0
-
-    override fun contains(element: Int): Boolean = indexOf(element) >= 0
-
-    override fun indexOf(element: Int): Int = listIndexOf<Int>(element)
-
-    override fun lastIndexOf(element: Int): Int = listLastIndexOf<Int>(element)
-
-    internal fun indexOfAny(element: Any): Int = listIndexOf<Any?>(element)
-
-    internal fun indexOfAnyNullable(element: Any?): Int = listIndexOf<Any?>(element)
-
-    internal fun lastIndexOfAny(element: Any): Int = listLastIndexOf<Any?>(element)
-
-    internal fun lastIndexOfAnyNullable(element: Any?): Int = listLastIndexOf<Any?>(element)
-
-    internal fun containsAny(element: Any): Boolean = indexOfAny(element) >= 0
-
-    internal fun containsAnyNullable(element: Any?): Boolean = indexOfAnyNullable(element) >= 0
-
-    override fun get(index: Int): Int = values[index]
-
-    override fun iterator(): Iterator<Int> = IndexedListIterator(this)
-
-    internal fun getNullableElement(index: Int): Int? = get(index)
-
-    internal fun indexOfNullableElement(element: Int?): Int = listIndexOf<Int?>(element)
-
-    internal fun lastIndexOfNullableElement(element: Int?): Int = listLastIndexOf<Int?>(element)
-
-    internal fun containsNullableElement(element: Int?): Boolean = indexOfNullableElement(element) >= 0
-
-    internal fun iteratorNullableElement(): Iterator<Int?> = IndexedListIterator(this)
-
-    internal fun getAny(index: Int): Any = values[index]
-
-    internal fun getAnyNullable(index: Int): Any? = values[index]
-
-    internal fun iteratorAny(): Iterator<Any> = IndexedListIterator(this)
-
-    internal fun iteratorAnyNullable(): Iterator<Any?> = IndexedListIterator(this)
-}
-
-internal class ArrayBackedList<T>(private val values: Array<T>) : List<T> {
-    override val size: Int get() = values.size
-
-    override fun isEmpty(): Boolean = size == 0
-
-    override fun contains(element: T): Boolean = indexOf(element) >= 0
-
-    override fun indexOf(element: T): Int = listIndexOf<T>(element)
-
-    override fun lastIndexOf(element: T): Int = listLastIndexOf<T>(element)
-
-    internal fun indexOfAny(element: Any): Int = listIndexOf<Any?>(element)
-
-    internal fun indexOfAnyNullable(element: Any?): Int = listIndexOf<Any?>(element)
-
-    internal fun lastIndexOfAny(element: Any): Int = listLastIndexOf<Any?>(element)
-
-    internal fun lastIndexOfAnyNullable(element: Any?): Int = listLastIndexOf<Any?>(element)
-
-    internal fun containsAny(element: Any): Boolean = indexOfAny(element) >= 0
-
-    internal fun containsAnyNullable(element: Any?): Boolean = indexOfAnyNullable(element) >= 0
-
-    override fun get(index: Int): T = values[index]
-
-    override fun iterator(): Iterator<T> = IndexedListIterator(this)
-
-    internal fun getNullableElement(index: Int): T? = get(index)
-
-    internal fun indexOfNullableElement(element: T?): Int = listIndexOf<T?>(element)
-
-    internal fun lastIndexOfNullableElement(element: T?): Int = listLastIndexOf<T?>(element)
-
-    internal fun containsNullableElement(element: T?): Boolean = indexOfNullableElement(element) >= 0
-
-    internal fun iteratorNullableElement(): Iterator<T?> = IndexedListIterator(this)
-
-    internal fun getAny(index: Int): Any = values[index] as Any
-
-    internal fun getAnyNullable(index: Int): Any? = values[index]
-
-    @Suppress("UNCHECKED_CAST")
-    internal fun iteratorAny(): Iterator<Any> = IndexedListIterator(this as List<Any>)
-
-    internal fun iteratorAnyNullable(): Iterator<Any?> = IndexedListIterator(this)
-}
-
-internal class IndexedListIterator<T>(private val list: List<T>) : Iterator<T> {
-    private var index: Int = 0
-
-    override fun hasNext(): Boolean = index < list.size
-
-    override fun next(): T {
-        val value = list[index]
-        index += 1
-        return value
-    }
-
-    internal fun nextNullableElement(): T? = next()
-
-    internal fun nextAny(): Any = next() as Any
-
-    internal fun nextAnyNullable(): Any? = next()
-}
 
 /** Returns the element at [index], or null when the index is outside this list. */
 public fun <T> List<T>.getOrNull(index: Int): T? {

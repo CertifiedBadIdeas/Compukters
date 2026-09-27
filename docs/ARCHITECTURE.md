@@ -123,7 +123,10 @@ the consuming Guest program so reachable bodies and class layouts can be special
 precompiled library fragments. Generic binary templates are not part of the platform bundle or VM artifact contract.
 
 The `stdlib:collections` module publishes read-only lists and public `ArrayList<T>` as source-only declarations.
-Concrete `Int` lists own i32 arrays; `String` and supported Guest class lists own typed reference arrays. Collection interfaces
+`listOf` and `emptyList` create fresh `ArrayList<T>` instances exposed as `List<T>`, with capacity equal to the
+number of elements. Factories fill them through the specialized `add` method in source order. A read-only view can be
+cast to `MutableList<T>` or `ArrayList<T>` and changed; it is not an immutable object. `Int` storage uses i32 arrays;
+reference and nullable storage uses typed reference arrays. Collection interfaces
 and iterator methods are specialized in the consuming artifact. Covariant widening to `List<Any>` retains the same
 list and backing array. The compiler publishes `get`, `iterator`, and `next` bridges with reference result signatures
 alongside the typed methods. An `Int` read through `Any` allocates an ordinary managed `kotlin.Int` box; a reference
@@ -141,8 +144,8 @@ reference storage at its trusted factory call. Growth, shifting, searches, slot 
 ordinary Guest bodies; all allocations use the VM's existing metered array instructions. Read-only aliases share
 the same list. Iterator bridges expose both read-only and mutable result signatures, and a modification counter
 rejects stale iterator `next`/`remove` calls after structural mutations.
-Fixed-size array lists and growable `ArrayList` share typed indexed search functions over `List<T>`. Fixed-size lists
-also share a generic indexed iterator; mutable iterators retain their mutation checks and removal state. The compiler
+`ArrayList` is the sole library list implementation. Typed indexed search functions operate over `List<T>`;
+read-only and mutable views share the same iterator implementation with mutation checks and removal state. The compiler
 uses one trusted collection read-view registry for bridge method names and additional interface types.
 Library lists also publish nullable element read bridges for read-only views such as `List<Int?>` over `List<Int>`.
 These views share storage: scalar reads allocate boxes, and reference reads retain identity. `filterNotNull` narrows
