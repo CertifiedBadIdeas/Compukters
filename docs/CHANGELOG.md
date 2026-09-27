@@ -17,6 +17,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- `map` on supported lists and statically typed collections reserves the input size for its result, reducing
+  temporary backing arrays and peak heap use while preserving iteration order and element identity.
 - Programs can search strings by UTF-16 code unit with `startsWith`, `endsWith`, `contains`, and `indexOf`, including
   an optional starting index for `indexOf`.
 - Programs can use nullable strings and supported class references, compare them with `null`, and use `?:` or

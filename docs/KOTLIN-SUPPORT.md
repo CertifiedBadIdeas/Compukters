@@ -823,7 +823,10 @@ links to their source files.
   the transform exactly once per element in iteration order. Empty inputs return an empty list without invoking it.
   Element and result types specialize independently across supported list element representations, including `Int`,
   nullable `Int`, nullable references, and Guest classes. Identity transforms preserve references and existing Int boxes.
-  Generic callers can forward transforms. The implementation uses public `ArrayList<R>` and existing VM memory quotas;
+  Generic callers can forward transforms. A `Collection<T>.map` overload reserves the receiver's initial `size`,
+  avoiding backing-array growth for ordinary lists and statically typed collections; an `Iterable<T>` receiver keeps
+  the general growing path. Both traverse once and preserve element order and transform side effects.
+  The implementation uses public `ArrayList<R>` and existing VM memory quotas;
   input lists remain unchanged unless modified by the transform. This imported extension is not inline and does not
   support non-local returns. Evidence: `MinimalScriptLoweringTest`, test
   `Iterable map preserves order independent types and nullable identity`, executed by `testKotlinMapVmConformance`.
