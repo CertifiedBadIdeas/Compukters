@@ -1377,6 +1377,24 @@ tasks.register<Test>("generateCollectionBenchmarkArtifacts") {
 
 val objectArrayBenchmarkArtifacts = layout.buildDirectory.dir("generated/benchmarks/object-arrays")
 
+val transientBenchmarkArtifacts = layout.buildDirectory.dir("generated/benchmarks/transient-allocations")
+
+tasks.register<Test>("generateTransientAllocationBenchmarkArtifacts") {
+    description = "Compiles opt-in loop, fold, and closure allocation workloads."
+    group = "benchmark"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*transient allocation benchmark artifacts compile*")
+    inputs.file(workerJar)
+    outputs.dir(transientBenchmarkArtifacts)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.bench.transientOutput", transientBenchmarkArtifacts.get().asFile.absolutePath)
+    }
+}
+
 tasks.register<Test>("generateObjectArrayBenchmarkArtifacts") {
     description = "Compiles opt-in object-array peak Guest heap workloads."
     group = "benchmark"
