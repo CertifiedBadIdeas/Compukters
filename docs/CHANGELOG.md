@@ -141,6 +141,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Computer runtime
 
+- Small Guest Kotlin objects use less heap through compact allocator headers and eight-byte block alignment.
+  Ordinary references, shared mutations, and identity are preserved. In measured 4096-record workloads with two
+  `Int` fields, deep copies and transformations retaining their input now fit the existing 256 KiB heap.
 - Active computers now share a calibrated server-wide Guest instruction capacity each tick. Reservations rotate
   fairly between computers under overload, while waiting computers leave the runnable pool until input or a world
   completion wakes them. Server operators can inspect the capacity and throttling counters with `vmbench status`.
