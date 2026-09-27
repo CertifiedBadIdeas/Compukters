@@ -1,0 +1,15 @@
+id	main_compact_frame_bytes	maximum_compact_frame_bytes
+filter-all-4096-list-growing	288	288
+filter-all-4096-list-sized	288	288
+filter-none-4096-list-growing	272	272
+filter-none-4096-list-sized	272	272
+indexed-4096-list-growing	168	168
+indexed-4096-list-sized	168	168
+map-4096-list-growing	312	312
+map-4096-list-sized	312	312
+map-not-null-4096-list-growing	376	376
+map-not-null-4096-list-sized	376	376
+map-not-null-selective-4096-list-growing	368	368
+map-not-null-selective-4096-list-sized	368	368
+pipeline-4096-list-growing	424	424
+pipeline-4096-list-sized	424	424

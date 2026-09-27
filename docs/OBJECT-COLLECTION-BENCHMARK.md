@@ -37,6 +37,54 @@ Timing uses a 16 MiB heap, one warmup and three fresh-session samples, alternati
 verification and teardown are outside the timer; final checksum scans and output are included. Three samples
 provide limited local timing evidence. Fixed, dynamic and maintenance work must agree across samples.
 
+## Collection callback inlining
+
+The 2026-09-28 comparison uses parent baseline `1022800de` and implementation `c723c96a8`
+([#666](https://github.com/CertifiedBadIdeas/Compukters/issues/666)), both with VM
+`21f85a45598191e58c016d3da6ebcb6493ae5ebe`. All fourteen generated Guest sources are byte-for-byte identical.
+Callback-taking extensions now inline their direct lambdas; source-only generic wrappers keep their concrete emitter
+specialization. Stored callbacks retain managed ownership. The VM and collection storage layout are unchanged.
+
+| Operation | Sized completion heap (B), before → after | Growing completion heap (B), before → after | Main compact frame (B), before → after | Hot VM work change, sized / growing |
+| --- | ---: | ---: | ---: | ---: |
+| `indexed` | 114,784 → 114,784 | 146,672 → 146,672 | 168 → 168 | +0.00% / +0.00% |
+| `map` | 229,568 → 229,552 | 233,984 → 233,968 | 216 → 312 | -0.90% / -0.90% |
+| `filter-none` | 114,912 → 114,896 | 146,672 → 146,672 | 192 → 272 | -1.98% / -1.98% |
+| `filter-all` | 151,264 → 151,248 | 197,008 → 196,992 | 208 → 288 | -0.87% / -0.87% |
+| `pipeline` | 245,088 → 245,056 | 275,280 → 275,248 | 232 → 424 | -1.38% / -1.38% |
+| `map-not-null` | 215,984 → 215,968 | 199,584 → 199,568 | 216 → 376 | -1.10% / -1.10% |
+| `map-not-null-selective` | 179,296 → 179,280 | 179,824 → 179,808 | 216 → 368 | -1.13% / -1.13% |
+
+Hot work is the sum of fixed, dynamic and maintenance units between the construction marker and final checksum output;
+it includes result/input scans. Callback workloads use 0.87–1.98% fewer metered units, while executing 8,193 more
+instructions per single-stage program and 16,386 more in the pipeline: inline block moves/jumps replace more expensive
+dispatch. This is not a measured CPU speedup. Construction thresholds, checksums and 256 KiB pressure outcomes are unchanged.
+Both indexed-control artifacts are byte-for-byte identical before/after. Capture-free callbacks save at most 16 bytes
+per callback in these completion thresholds (32 bytes for the two-stage pipeline); growing filter-none remains bounded
+by its construction peak. The grown pipeline still exceeds 256 KiB. Object and backing-array storage are unchanged.
+
+Callback artifacts shrink by 64–408 bytes. Single-stage cases drop five types and three functions; the pipeline drops
+ten types and six functions. Main compact frames grow by 80–192 bytes, so heap savings are not a net memory claim.
+
+The compact frame figures are static artifact measurements using the canonical `ExecutionStorage` physical component
+sizes and alignments: align each component, add its byte size, then round the frame to eight bytes. The archived
+maximum includes all artifact functions; in these cases it equals the main frame. It excludes frame metadata,
+simultaneously active callees, allocation capacity and host object overhead, and is not a peak resident/RSS measurement.
+Caller frame growth can offset the small callback heap savings; no net resident-memory reduction is established.
+
+Timing samples are archived, but the baseline overlaps focused verification, so these runs do not establish a CPU
+speedup. Metered VM work and empirical heap thresholds are the deterministic comparison. The 16 MiB timing heap and
+256 KiB pressure heap are recorded explicitly in each measurement row.
+
+Raw evidence:
+
+- [Before measurements](benchmarks/object-collections-2026-09-28-inline-before.tsv) and
+  [samples](benchmarks/object-collections-2026-09-28-inline-before-samples.tsv).
+- [After measurements](benchmarks/object-collections-2026-09-28-inline-after.tsv) and
+  [samples](benchmarks/object-collections-2026-09-28-inline-after-samples.tsv).
+- [Before compact frames](benchmarks/object-collections-2026-09-28-inline-before-frames.tsv) and
+  [after compact frames](benchmarks/object-collections-2026-09-28-inline-after-frames.tsv).
+
 ## Collection map capacity
 
 The optimized `Collection<T>.map` reserves the collection's known size for its result. Calls whose receiver has
@@ -128,3 +176,9 @@ The non-null transformation run additionally passed `testKotlinMapNotNullVmConfo
 conformance, compiler lint, build-script tests and license policy. Its dedicated conformance scenario covers
 exactly-once transforms, iteration order, nullable input, empty and all-null results, independent result types,
 generic forwarding, Int unboxing and preserved reference/box identity under bounded VM slices.
+
+The collection callback inlining stage passed 37 engine tests, 123 worker lowering tests (five existing benchmark skips),
+12 compiler adapter tests, 16 metadata tests and 14 native IDE diagnostic tests. Engine/compiler/IDE lint and the engine
+boundary check passed. Executed VM scenarios: map, collection-selection, fold, filter, map-not-null, destination,
+filter-not-null, transparent-call, function-values, list-any and inline-blocks. Both 14-case before/after release-VM
+benchmark runs completed. This is focused development evidence, not full-checkout or release verification.
