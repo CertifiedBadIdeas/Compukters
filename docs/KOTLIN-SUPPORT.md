@@ -340,7 +340,10 @@ supported.
   Production compilation does not expand function calls marked `inline`; general Guest inline/non-local-return
   support is not enabled. The emitter's normalized inline-block control flow is covered internally by
   `GuestInlineIntegrationTest` and `testKotlinInlineBlocksVmConformance`, including local/non-local and nested
-  returns, Unit/Nothing, reference identity, nullable and wide results. This internal conformance evidence does
+  returns, Unit/Nothing, reference identity, nullable and wide results. The test adapter first specializes concrete
+  generic inline bodies, including nested and source-library calls; scalar-only callbacks emit no object allocations
+  in the focused artifact test. Independent templates and explicit recursion/variant/depth limits are covered by
+  `GuestInlineIntegrationTest`. This internal conformance evidence does
   not change the non-inline contract of imported collection extensions.
   `Tasks.launch` accepts direct, stored, and returned `() -> Unit` values. A
   direct top-level `Tasks.launch(::worker)` remains a static spawn without a

@@ -417,8 +417,13 @@ and jumps to its continuation; a return targeting the enclosing function remains
 Unit/Nothing paths and terminated branches use the existing artifact control-flow instructions. Unknown return
 targets produce located diagnostics. `testKotlinInlineBlocksVmConformance` exercises this through a test-only common
 Kotlin inliner adapter and the ordinary linker, writer and Rust verifier. Production function inlining and collection
-inline modifiers remain disabled; generic specialization and retained callable-reference compatibility are separate
-integration work.
+inline modifiers remain disabled. The internal `GuestInlineSpecialization` pass makes independent symbol-remapped
+copies of top-level generic inline bodies at concrete call-site types before common inlining. This preserves scalar
+inputs instead of erasing them to Any?, including nested forwarding and source-library bodies. Templates remain
+unchanged; copies are cached by declaration and concrete type arguments. The pass rejects reified or non-top-level
+specialization, recursive specialization dependencies, unresolved type arguments, and expansion beyond 256 variants or 64 active specialization
+levels. These are internal safety bounds, not calibrated production inline budgets. Retained callable-reference
+compatibility and production integration remain separate work.
 Nested closures capture free values through their enclosing closure objects. The compiler scans assignments across
 functions, class initialization and nested closures. Captured locals with no assignments after initialization are
 stored directly in the closure; reference captures preserve referent identity. Reassigned captured locals retain a

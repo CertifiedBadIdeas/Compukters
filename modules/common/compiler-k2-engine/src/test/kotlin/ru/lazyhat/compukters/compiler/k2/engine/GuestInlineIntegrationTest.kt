@@ -29,9 +29,11 @@ import org.jetbrains.kotlin.ir.inline.InlineFunctionResolver
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.util.dump
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import ru.lazyhat.compukters.compiler.artifact.link.LibraryModuleLinker
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
+import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
@@ -45,6 +47,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -60,6 +63,8 @@ class GuestInlineIntegrationTest {
             fun main() {
                 val first = apply(3) { it + 2 }
                 val second = transform(first) { it * 2 }
+                val third = transform(5000000000L) { it + 2L }
+                val fourth = transform(true) { !it }
             }
             """.trimIndent(),
         ) { _, facts, diagnostics, artifact ->
@@ -67,7 +72,16 @@ class GuestInlineIntegrationTest {
             assertEquals(0, facts.richReferences)
             assertEquals(0, facts.inlineCalls)
             assertTrue(facts.blocks.isNotEmpty())
-            assertTrue(facts.erasedGenericValue, "common inliner erases a non-reified T input to Any?")
+            assertTrue(!facts.erasedGenericValue, "specialized inline inputs must retain concrete types")
+            assertEquals(
+                0,
+                assertNotNull(artifact)
+                    .modules
+                    .flatMap { it.blocks }
+                    .flatMap { it.instructions }
+                    .count { it is Instruction.NewObject },
+                "scalar generic callbacks must not allocate boxes or closures",
+            )
             assertTrue(facts.returns.any { it.returnTargetSymbol.owner is IrReturnableBlock })
             assertTrue(diagnostics.isEmpty(), diagnostics.toString())
             assertNotNull(artifact)
@@ -114,8 +128,9 @@ class GuestInlineIntegrationTest {
             librarySource =
                 """
                 package probe
-                inline fun foldAll(values: IntArray, initial: Int, operation: (Int, Int) -> Int): Int {
-                    var result = initial
+                inline fun <T> identity(value: T, block: (T) -> T): T = block(value)
+                inline fun <T> foldAll(values: IntArray, initial: T, operation: (T, Int) -> T): T {
+                    var result = identity(initial) { it }
                     for (value in values) result = operation(result, value)
                     return result
                 }
@@ -142,6 +157,7 @@ class GuestInlineIntegrationTest {
             }
             inline fun apply(value: Int, block: (Int) -> Int): Int = block(value)
             inline fun <T, R> transform(value: T, block: (T) -> R): R = block(value)
+            inline fun <T, R> forward(value: T, block: (T) -> R): R = transform(value, block)
             inline fun effect(block: () -> Unit) { block() }
             inline fun terminal(block: () -> Nothing): Nothing = block()
             inline fun wide(value: Long, block: (Long) -> Long): Long = block(value)
@@ -153,11 +169,12 @@ class GuestInlineIntegrationTest {
                 return result
             }
             fun early(): Int {
-                val value = apply(2) { if (it > 0) return 9; 3 }
+                val value = forward(2) { if (it > 0) return 9; 3 }
                 return value + 100
             }
             fun both(flag: Boolean): Int = apply(2) { if (flag) return 11 else return 12 }
             fun fromNothing(): Int { terminal { return 17 } }
+            fun genericNothing(): Int { forward(2) { return 23 } }
             fun nestedBoth(flag: Boolean): Int =
                 if (flag) apply(2) { return 21 } else apply(3) { return 22 }
             fun nested(): Int = apply(1) outer@{ first ->
@@ -169,6 +186,12 @@ class GuestInlineIntegrationTest {
                 verify(apply(next(counter)) { it + it } == 2)
                 verify(counter.value == 1)
                 verify(transform(3) { it + 2 } == 5)
+                verify(forward(5000000000L) { it + 2L } == 5000000002L)
+                verify(forward(true) { !it } == false)
+                verify(forward<Int?, Int?>(null) { it } == null)
+                verify(forward<Int?, Int?>(4) { it } == 4)
+                verify(forward(counter) { it } === counter)
+                verify(forward(3) label@{ if (it > 0) return@label 8; 0 } == 8)
                 var bias = 1
                 verify(apply(3) { bias += it; bias } == 4)
                 verify(bias == 4)
@@ -180,11 +203,14 @@ class GuestInlineIntegrationTest {
                 verify(nestedBoth(true) == 21)
                 verify(nestedBoth(false) == 22)
                 verify(fromNothing() == 17)
+                verify(genericNothing() == 23)
                 effect { bias += 1; return@effect }
                 verify(bias == 5)
                 effect { bias += 1 }
                 effect { if (bias > 0) return@effect; bias = 99 }
                 verify(bias == 6)
+                forward(2) { bias += it }
+                verify(bias == 8)
                 verify(wide(5000000000L) { it + 2L } == 5000000002L)
                 val box = Box(1)
                 val returned = reference(box) { it.value = 8; it }
@@ -226,10 +252,93 @@ class GuestInlineIntegrationTest {
         }
     }
 
+    @Test
+    fun `generic specialization reuses a concrete variant within the limit`() {
+        probe(
+            """
+            inline fun <T> identity(value: T): T { var result = value; result = value; return result }
+            fun main() { val a = identity(1); val b = identity(2) }
+            """.trimIndent(),
+            maximumVariants = 1,
+        ) { _, facts, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            assertTrue(!facts.erasedGenericValue)
+            assertEquals(0, facts.inlineCalls)
+            assertNotNull(artifact)
+        }
+    }
+
+    @Test
+    fun `generic specialization rejects variant and nesting limits explicitly`() {
+        val variants =
+            assertFailsWith<IllegalArgumentException> {
+                probe(
+                    """
+                    inline fun <T> identity(value: T): T = value
+                    fun main() { val a = identity(1); val b = identity(2L) }
+                    """.trimIndent(),
+                    maximumVariants = 1,
+                ) { _, _, _, _ -> error("limit must fail before emission") }
+            }
+        assertTrue(variants.message.orEmpty().contains("variant limit"))
+        val depth =
+            assertFailsWith<IllegalArgumentException> {
+                probe(
+                    """
+                    inline fun <T> identity(value: T): T = value
+                    inline fun <T> forward(value: T): T = identity(value)
+                    fun main() { val a = forward(1) }
+                    """.trimIndent(),
+                    maximumDepth = 1,
+                ) { _, _, _, _ -> error("limit must fail before emission") }
+            }
+        assertTrue(depth.message.orEmpty().contains("depth limit"))
+    }
+
+    @Test
+    fun `generic specialization rejects recursive expansion explicitly`() {
+        val recursion =
+            assertFailsWith<IllegalArgumentException> {
+                probe(
+                    """
+                    inline fun <T> recursive(value: T): T = recursive(value)
+                    fun main() { val a = recursive(1) }
+                    """.trimIndent(),
+                ) { _, _, _, _ -> error("recursion must fail before emission") }
+            }
+        assertTrue(recursion.message.orEmpty().contains("recursive generic inline"))
+    }
+
+    @Test
+    fun `generic specialization rejects reified and member templates explicitly`() {
+        val reified =
+            assertFailsWith<IllegalArgumentException> {
+                probe(
+                    """
+                    inline fun <reified T> identity(value: T): T = value
+                    fun main() { val a = identity(1) }
+                    """.trimIndent(),
+                ) { _, _, _, _ -> error("unsupported shape must fail before emission") }
+            }
+        assertTrue(reified.message.orEmpty().contains("reified inline"))
+        val member =
+            assertFailsWith<IllegalArgumentException> {
+                probe(
+                    """
+                    class Owner { inline fun <T> identity(value: T): T = value }
+                    fun main() { val a = Owner().identity(1) }
+                    """.trimIndent(),
+                ) { _, _, _, _ -> error("unsupported shape must fail before emission") }
+            }
+        assertTrue(member.message.orEmpty().contains("top-level declaration"))
+    }
+
     private fun probe(
         source: String,
         librarySource: String? = null,
         invalidReturnTarget: Boolean = false,
+        maximumVariants: Int = 256,
+        maximumDepth: Int = 64,
         check: (IrSimpleFunction, InlineFacts, List<WorkerDiagnostic>, Artifact?) -> Unit,
     ) {
         val builtinsRoot = Path.of(checkNotNull(System.getProperty("compukters.guest.builtins")))
@@ -281,16 +390,29 @@ class GuestInlineIntegrationTest {
             val inliner = object : FunctionInlining(context, resolver) {}
             val file = converted.irModuleFragment.files.single { it.fileEntry.name.endsWith("Main.kt") }
             val before = InlineFacts(context.irBuiltIns.anyNType).also { file.accept(it, null) }
-            UpgradeCallableReferences(
-                context,
-                upgradeFunctionReferencesAndLambdas = true,
-                upgradePropertyReferences = false,
-                upgradeLocalDelegatedPropertyReferences = false,
-                upgradeSamConversions = false,
-                upgradeExtractedAdaptedBlocks = false,
-                castDispatchReceiver = false,
-                generateFakeAccessorsForReflectionProperty = false,
-            ).lower(file)
+            val specialization = GuestInlineSpecialization(maximumVariants, maximumDepth)
+            val templates =
+                converted.irModuleFragment.files
+                    .flatMap { it.declarations }
+                    .filterIsInstance<IrSimpleFunction>()
+                    .filter { it.typeParameters.isNotEmpty() }
+                    .associateWith { it.dump() }
+            converted.irModuleFragment.files
+                .toList()
+                .forEach { specialization.lower(it) }
+            templates.forEach { (template, original) -> assertEquals(original, template.dump(), "generic template mutated") }
+            converted.irModuleFragment.files.forEach { sourceFile ->
+                UpgradeCallableReferences(
+                    context,
+                    upgradeFunctionReferencesAndLambdas = true,
+                    upgradePropertyReferences = false,
+                    upgradeLocalDelegatedPropertyReferences = false,
+                    upgradeSamConversions = false,
+                    upgradeExtractedAdaptedBlocks = false,
+                    castDispatchReceiver = false,
+                    generateFakeAccessorsForReflectionProperty = false,
+                ).lower(sourceFile)
+            }
             file.declarations.filterIsInstance<IrFunction>().forEach { declaration ->
                 declaration.body?.let { inliner.lower(it, declaration) }
             }
