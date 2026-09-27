@@ -421,9 +421,23 @@ inline modifiers remain disabled. The internal `GuestInlineSpecialization` pass 
 copies of top-level generic inline bodies at concrete call-site types before common inlining. This preserves scalar
 inputs instead of erasing them to Any?, including nested forwarding and source-library bodies. Templates remain
 unchanged; copies are cached by declaration and concrete type arguments. The pass rejects reified or non-top-level
-specialization, recursive specialization dependencies, unresolved type arguments, and expansion beyond 256 variants or 64 active specialization
-levels. These are internal safety bounds, not calibrated production inline budgets. Retained callable-reference
-compatibility and production integration remain separate work.
+specialization, recursive specialization dependencies, unresolved type arguments, and expansion beyond 256 variants
+or 64 active specialization levels. The test adapter discards unused generic inline templates after expansion while
+keeping definitions referenced by remaining runtime calls or function references.
+`GuestInlineExpansionGuard` checks executable roots before specialization or common inlining. It rejects inline
+dependency cycles and depth beyond 64, and caps cumulative projected expansion work at 1,000,000 units. Each source
+node costs one unit; each call additionally charges expanded callee work multiplied by one plus expanded argument
+work. A callee's body and default-expression work are first charged together with a multiplier of one plus default
+work, covering callback defaults substituted at multiple body nodes. Defaults are included even for supplied arguments.
+Memoization avoids repeated analysis, but each call site still pays its full charge. Arithmetic checks reject overflow
+instead of wrapping.
+This deliberately overcharges callback substitution and retained arguments; it is not an exact final-node estimate
+or a calibrated production budget. Failure leaves source IR unchanged and never falls back to an ordinary call.
+Production integration, source provenance and calibrated capacity remain separate work.
+Normalized rich lambdas without reflection targets use their invoke bodies with the existing closure layout and
+capture-cell analysis. Stored/noinline callbacks and escaping crossinline wrappers retain managed ownership;
+source-reference adaptation restrictions still apply. Closure classes inherit runtime Any and implement the concrete
+function-shape interface, preserving referential identity comparisons across aliases.
 Nested closures capture free values through their enclosing closure objects. The compiler scans assignments across
 functions, class initialization and nested closures. Captured locals with no assignments after initialization are
 stored directly in the closure; reference captures preserve referent identity. Reassigned captured locals retain a

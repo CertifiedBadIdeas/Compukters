@@ -93,8 +93,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - `Int` `for` loops support `downTo` and positive `step`, including dynamic steps and integer boundary values.
 - `IntArray` values can be traversed directly with `for`, including empty arrays and in-loop element updates.
 - Non-null function values with Guest-supported parameter and result types can be passed, returned, stored locally,
-  and invoked without a fixed two-argument or JVM 22/23 cut-off. Lambdas use ordinary
-  managed closure objects, preserve reference aliasing for immutable captures, and share mutations through unboxed
+  and invoked without a fixed two-argument or JVM 22/23 cut-off. Function-value aliases preserve referential identity
+  comparisons. Lambdas use ordinary managed closure objects, preserve reference aliasing for immutable captures, and share mutations through unboxed
   typed cells when local `var` values are captured, including across nested lambdas. `Tasks.launch` accepts
   `() -> Unit` values as bounded cooperative tasks. Unbound references to Guest top-level functions can be passed,
   returned, stored, and invoked as typed function values. Bound Guest instance-method references retain their receiver

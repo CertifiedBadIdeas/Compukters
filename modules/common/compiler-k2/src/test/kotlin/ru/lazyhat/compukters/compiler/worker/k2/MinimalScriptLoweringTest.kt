@@ -861,6 +861,8 @@ class MinimalScriptLoweringTest {
                     Tasks.launch { println(7) }.join()
 
                     val twice: (Int) -> Int = { it * 2 }
+                    val aliased = twice
+                    if (aliased !== twice) { val zero = 0; val failure = 1 / zero }
                     println(twice(6))
                     println(transform(5, multiplier(3)))
                     val accumulate = accumulator()
