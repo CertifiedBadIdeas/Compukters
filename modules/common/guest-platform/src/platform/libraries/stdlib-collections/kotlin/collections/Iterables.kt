@@ -105,3 +105,12 @@ public fun <T, R> Iterable<T>.fold(initial: R, operation: (R, T) -> R): R {
     }
     return accumulator
 }
+
+/** Returns a list containing [transform] applied once to each element in iteration order. */
+public fun <T, R> Iterable<T>.map(transform: (T) -> R): List<R> {
+    val result = ArrayList<R>()
+    for (element in this) {
+        result.add(transform(element))
+    }
+    return result
+}

@@ -816,8 +816,17 @@ links to their source files.
   and `mutable list element types remain invariant`; `testKotlinMutableListVmConformance` executes mutation, failure,
   and heap quota scenarios with bounded slices.
 
+- [x] **Iterable transformation** — `Iterable<T>.map(transform: (T) -> R): List<R>` creates a new list, invoking
+  the transform exactly once per element in iteration order. Empty inputs return an empty list without invoking it.
+  Element and result types specialize independently across supported list element representations, including `Int`,
+  nullable `Int`, nullable references, and Guest classes. Identity transforms preserve references and existing Int boxes.
+  Generic callers can forward transforms. The implementation uses public `ArrayList<R>` and existing VM memory quotas;
+  input lists remain unchanged unless modified by the transform. This imported extension is not inline and does not
+  support non-local returns. Evidence: `MinimalScriptLoweringTest`, test
+  `Iterable map preserves order independent types and nullable identity`, executed by `testKotlinMapVmConformance`.
+
 - [ ] **Other standard collections and functional helpers — Unsupported** — sets, maps,
-  sequences, and higher-order helpers such as `map` and `filter` have no Guest implementation. Tracking: not scheduled
+  sequences, `filter`, `mapNotNull`, and collection conversion helpers have no Guest implementation. Tracking: not scheduled
 
 - [ ] **Standard exceptions, reflection, and coroutine libraries — Unsupported** —
   these packages have no Guest implementation. Tracking: not scheduled
