@@ -831,6 +831,16 @@ links to their source files.
   support non-local returns. Evidence: `MinimalScriptLoweringTest`, test
   `Iterable map preserves order independent types and nullable identity`, executed by `testKotlinMapVmConformance`.
 
+- [x] **Non-null transformation** — `fun <T, R : Any> Iterable<T>.mapNotNull(transform: (T) -> R?): List<R>`
+  invokes the transform once per element in iteration order, including nullable inputs, and appends only non-null
+  results to a new growing `ArrayList<R>`. Empty inputs invoke no transforms; all-null results produce an empty list.
+  Input and result types specialize independently; nullable Int results are unboxed into ordinary Int storage,
+  while supported references and values returned as `Any` retain identity. Generic forwarding is supported.
+  There is no intermediate mapped list. Transform and selection occur together for each element, so this explicit
+  operation has different side-effect ordering from a separate `map` followed by `filter`. It is not inline and
+  does not support non-local returns. Evidence: `MinimalScriptLoweringTest`, test
+  `Iterable mapNotNull preserves traversal narrowing and identity`, executed by `testKotlinMapNotNullVmConformance`.
+
 - [x] **Iterable filtering** — `Iterable<T>.filter(predicate: (T) -> Boolean): List<T>` creates a new list of matching
   elements in iteration order. Each element reaches the predicate once, including null values; empty inputs do not
   invoke it. Duplicate matches remain duplicated. Filtering retains the original element type, including nullability;
@@ -850,7 +860,7 @@ links to their source files.
   executed by `testKotlinFilterNotNullVmConformance`.
 
 - [ ] **Other standard collections and functional helpers — Unsupported** — sets, maps,
-  sequences, `mapNotNull`, and collection conversion helpers have no Guest implementation. Tracking: not scheduled
+  sequences and collection conversion helpers have no Guest implementation. Tracking: not scheduled
 
 - [ ] **Standard exceptions, reflection, and coroutine libraries — Unsupported** —
   these packages have no Guest implementation. Tracking: not scheduled

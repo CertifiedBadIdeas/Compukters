@@ -321,6 +321,7 @@ val listAnyConformanceArtifact = layout.buildDirectory.file("generated/conforman
 val mutableListConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-mutable-list.cpkt")
 val filterNotNullConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-filter-not-null.cpkt")
 val filterConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-filter.cpkt")
+val mapNotNullConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-map-not-null.cpkt")
 val mapConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-map.cpkt")
 val foldConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-fold.cpkt")
 val collectionSelectionConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-collection-selection.cpkt")
@@ -953,6 +954,22 @@ val generateMapConformanceArtifact = tasks.register<Test>("generateMapConformanc
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.mapArtifact", mapConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateMapNotNullConformanceArtifact = tasks.register<Test>("generateMapNotNullConformanceArtifact") {
+    description = "Compiles Iterable mapNotNull for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*Iterable mapNotNull preserves traversal narrowing and identity*")
+    inputs.file(workerJar)
+    outputs.file(mapNotNullConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.mapNotNullArtifact", mapNotNullConformanceArtifact.get().asFile.absolutePath)
     }
 }
 
