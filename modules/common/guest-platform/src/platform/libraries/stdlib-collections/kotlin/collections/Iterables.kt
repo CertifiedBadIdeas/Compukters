@@ -125,6 +125,16 @@ public fun <T, R> Collection<T>.map(transform: (T) -> R): List<R> {
     return result
 }
 
+/** Applies [transform] once per element in iteration order and retains only non-null results. */
+public fun <T, R : Any> Iterable<T>.mapNotNull(transform: (T) -> R?): List<R> {
+    val result = ArrayList<R>()
+    for (element in this) {
+        val value = transform(element)
+        if (value != null) result.add(value)
+    }
+    return result
+}
+
 /** Returns a list containing elements matching [predicate], in their original iteration order. */
 public fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T> {
     val result = ArrayList<T>()

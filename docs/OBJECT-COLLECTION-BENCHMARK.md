@@ -11,11 +11,14 @@ not an exact live-payload or host RSS measurement.
 
 ## Workloads and method
 
-Ten ordinary Guest Kotlin programs construct 4096 records with two mutable Int fields. Five workloads run against
+Fourteen ordinary Guest Kotlin programs construct 4096 records with two mutable Int fields. Seven workloads run against
 an `ArrayList<Cell>(4096)` and an `ArrayList<Cell>(10)` populated through `add`: indexed reads, `map` creating new
 records, `filter` retaining none or all, and `map` followed by a filter retaining half. Original fields are read
 after the operation. Identity checks distinguish new records from retained references; an independently computed
-checksum checks all input and output values.
+checksum checks all input and output values. Two explicit `mapNotNull` workloads retain the same half of the records:
+one constructs every transformed record before checking the predicate, while the selective variant constructs
+only records that will be retained. Both fuse traversal and omit the intermediate mapped list. The original
+capacity-optimization archives below contain the first ten workloads.
 
 Run `./gradlew-sandbox-dev-parallel-summary benchmarkObjectCollectionHeap`. Generated programs and artifacts live
 under `modules/common/compiler-k2/build/generated/benchmarks/object-collections`; TSV reports are written under
@@ -68,6 +71,47 @@ The archived TSVs retain thresholds, pressure-run outcomes, checksums, timings a
 
 For array storage and packed primitive controls, see [object-array measurements](OBJECT-ARRAY-BENCHMARK.md).
 
+## Explicit non-null transformation
+
+`mapNotNull` lets the programmer combine transformation and selection without materializing the mapped list.
+It invokes the transform once per element and appends only non-null results. It does not reserve the entire input
+size because the selection can be empty. For example, a transform can create a record and then decide to retain it:
+
+```kotlin
+val result = data.mapNotNull { cell ->
+    val mapped = Cell(cell.x + 1, cell.y)
+    if ((mapped.x - 1001) % 2 == 0) mapped else null
+}
+```
+
+This performs transformation and selection together for each element. A separate `map` then `filter` transforms
+all elements before selecting any, so replacement requires considering side effects. The selective benchmark
+instead checks the original field first and constructs only the retained half. Both produce the same records and
+checksum in this pure workload; the selective variant also avoids allocating discarded records.
+
+Measured on 2026-09-27 against parent baseline `f40faf328` plus the new library function and workloads, using the
+same compact-header VM, host and harness. All three variants below come from one 14-case run, with identical
+checksums and the original input retained until the final scan.
+
+| Input list | `map` → `filter` | `mapNotNull`, constructs all | `mapNotNull`, constructs selected |
+| --- | ---: | ---: | ---: |
+| Reserved 4096 | 245,168 B | 216,080 B | 179,376 B |
+| Grown from 10 | 275,392 B | 199,712 B | 179,936 B |
+
+Both `mapNotNull` variants complete at 256 KiB for both input layouts. For growing input, combining traversal
+and removing the intermediate list reduces the completion budget by 27.5%; avoiding discarded records increases
+the reduction to 34.7%. These are measured completion budgets, whose sensitivity to allocation history and GC
+means they are not exact sums of live object sizes. In particular, the constructs-all variant has a lower threshold
+on growing input than on reserved input.
+
+Fixed operation work falls from 2,970,166 units for the pipeline to 1,857,952 for constructs-all and 1,806,752 for
+selective construction; dynamic work falls from 6,859 to 5,831 and 3,783. Timings remain local observations rather
+than portable CPU claims. The ten original control cases retain identical heap thresholds, checksums, pressure
+outcomes and fixed/dynamic work compared with the capacity-optimization after archive.
+
+- [Non-null transformation measurements](benchmarks/object-collections-2026-09-27-map-not-null.tsv)
+- [Non-null transformation samples](benchmarks/object-collections-2026-09-27-map-not-null-samples.tsv)
+
 ## Verification
 
 The after run passed `benchmarkObjectCollectionHeap`, `testKotlinMapVmConformance`, `testKotlinFilterVmConformance`
@@ -75,3 +119,9 @@ and `:compiler-k2:lintKotlin`. Map conformance covers order, exactly-once transf
 collections, nullable boxes and reference identity on the general Iterable and collection paths. Build-script tests,
 license policy and Rust harness formatting also passed. This is focused development evidence, not full-checkout
 or release verification.
+
+The non-null transformation run additionally passed `testKotlinMapNotNullVmConformance`,
+`testKotlinFilterNotNullVmConformance` and `:guest-platform:test`, alongside the 14-case benchmark, existing map
+conformance, compiler lint, build-script tests and license policy. Its dedicated conformance scenario covers
+exactly-once transforms, iteration order, nullable input, empty and all-null results, independent result types,
+generic forwarding, Int unboxing and preserved reference/box identity under bounded VM slices.

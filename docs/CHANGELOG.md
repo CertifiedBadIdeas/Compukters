@@ -17,6 +17,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- Programs can use `mapNotNull` to transform and retain non-null results in one pass without an intermediate list.
+
 - `map` on supported lists and statically typed collections reserves the input size for its result, reducing
   temporary backing arrays and peak heap use while preserving iteration order and element identity.
 - Programs can search strings by UTF-16 code unit with `startsWith`, `endsWith`, `contains`, and `indexOf`, including

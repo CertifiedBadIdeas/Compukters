@@ -617,6 +617,15 @@ registerKotlinVmConformance(
     conformanceScenario = "map",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinMapNotNullVmConformance",
+    taskDescription = "Executes Iterable mapNotNull with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateMapNotNullConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-map-not-null.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-map-not-null-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_MAP_NOT_NULL_ARTIFACT",
+    conformanceScenario = "map-not-null",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinFilterVmConformance",
     taskDescription = "Executes Iterable filter with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateFilterConformanceArtifact",
@@ -1091,7 +1100,7 @@ tasks.register<Exec>("benchmarkObjectCollectionHeap") {
         "cargo", "test", "--release", "--locked", "--offline", "--manifest-path",
         compilerArtifactVmConformanceHarness.absolutePath, "--test", "object_arrays_bench", "--",
         objectCollectionBenchmarkArtifacts.get().asFile.absolutePath,
-        objectCollectionBenchmarkReports.get().asFile.absolutePath, "3", "10",
+        objectCollectionBenchmarkReports.get().asFile.absolutePath, "3", "14",
     )
     environment("CARGO_TARGET_DIR", rootProject.file(".toolchain/build/cargo/collection-benchmark").absolutePath)
 }

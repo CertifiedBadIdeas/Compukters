@@ -8,7 +8,7 @@ package ru.lazyhat.compukters.compiler.worker.k2
 
 internal fun objectCollectionBenchmarkCases(): List<ObjectCollectionBenchmarkCase> =
     listOf("sized", "growing").flatMap { storage ->
-        listOf("indexed", "map", "filter-none", "filter-all", "pipeline").map { workload ->
+        listOf("indexed", "map", "filter-none", "filter-all", "pipeline", "map-not-null", "map-not-null-selective").map { workload ->
             ObjectCollectionBenchmarkCase(storage, workload)
         }
     }
@@ -29,7 +29,7 @@ internal data class ObjectCollectionBenchmarkCase(
                 when (workload) {
                     "filter-none" -> 0
                     "map" -> value + 1
-                    "pipeline" -> if (index % 2 == 0) value + 1 else 0
+                    "pipeline", "map-not-null", "map-not-null-selective" -> if (index % 2 == 0) value + 1 else 0
                     else -> value
                 }
         }
@@ -59,6 +59,25 @@ internal data class ObjectCollectionBenchmarkCase(
                     """
                     val result = data.map { cell -> Cell(cell.x + 1, cell.y) }
                         .filter { cell -> (cell.x - 1001) % 2 == 0 }
+                    require(result[0] !== data[0])
+                    """.trimIndent()
+                }
+
+                "map-not-null" -> {
+                    """
+                    val result = data.mapNotNull { cell ->
+                        val mapped = Cell(cell.x + 1, cell.y)
+                        if ((mapped.x - 1001) % 2 == 0) mapped else null
+                    }
+                    require(result[0] !== data[0])
+                    """.trimIndent()
+                }
+
+                "map-not-null-selective" -> {
+                    """
+                    val result = data.mapNotNull { cell ->
+                        if ((cell.x - 1000) % 2 == 0) Cell(cell.x + 1, cell.y) else null
+                    }
                     require(result[0] !== data[0])
                     """.trimIndent()
                 }

@@ -2552,6 +2552,71 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `Iterable mapNotNull preserves traversal narrowing and identity`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+                class Item(val value: Int)
+                class Values(val values: List<Int?>) : Iterable<Int?> {
+                    override fun iterator(): Iterator<Int?> = values.iterator()
+                }
+                fun <T, R : Any> present(values: Iterable<T>, transform: (T) -> R?): List<R> =
+                    values.mapNotNull(transform)
+                fun main() {
+                    var calls = 0
+                    require(emptyList<Int>().mapNotNull { value -> calls += 1; value }.isEmpty())
+                    require(calls == 0)
+                    val input: Iterable<Int?> = Values(listOf(1000, null, 2000, 3000))
+                    var order = 0
+                    val ints: List<Int> = present(input) { value ->
+                        calls += 1
+                        order = order * 10 + (value ?: 0) / 1000
+                        if (value == 2000) null else value
+                    }
+                    require(calls == 4 && order == 1023)
+                    require(ints.size == 2 && ints[0] == 1000 && ints[1] == 3000)
+                    calls = 0
+                    require(input.mapNotNull<Int?, Item> { value -> calls += 1; null }.isEmpty())
+                    require(calls == 4)
+                    val first = Item(1000)
+                    val second = Item(2000)
+                    val refs = listOf<Item?>(first, null, second, first)
+                    val objects: List<Item> = refs.mapNotNull { item -> item }
+                    require(objects.size == 3 && objects[0] === first && objects[1] === second)
+                    require(objects[2] === first && refs[1] == null)
+                    val texts: List<String> = listOf<String?>("ab", null, "", "c").mapNotNull { text -> text }
+                    require(texts.size == 3 && texts[0] == "ab" && texts[1] == "" && texts[2] == "c")
+                    val changed: List<String> = listOf(1, 2, 3).mapNotNull { value ->
+                        if (value == 2) null else "v" + value
+                    }
+                    require(changed.size == 2 && changed[0] == "v1" && changed[1] == "v3")
+                    val nullable = listOf<Int?>(1000, null, 2000)
+                    val widened: Iterable<Any?> = nullable
+                    val universal: List<Any> = widened.mapNotNull { value -> value }
+                    require(universal.size == 2 && universal[0] == 1000 && universal[1] == 2000)
+                    require((universal[0] as Any?) === (nullable[0] as Any?))
+                    val growing = ArrayList<Int>(0)
+                    var index = 0
+                    while (index < 100) { growing.add(index); index += 1 }
+                    calls = 0
+                    val transformed: List<Item> = growing.mapNotNull { value ->
+                        calls += 1
+                        if (value % 2 == 0) Item(value + 1) else null
+                    }
+                    require(calls == 100 && transformed.size == 50 && transformed[49].value == 99)
+                    require(growing.size == 100 && growing[99] == 99)
+                    println("mapNotNull ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.mapNotNullArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `Iterable map preserves order independent types and nullable identity`() =
         withAdapter { adapter ->
             val source =

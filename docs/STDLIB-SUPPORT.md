@@ -115,6 +115,12 @@ links to their source files.
   and `MinimalScriptLoweringTest`, test `Iterable map preserves order independent types and nullable identity`.
   Statically typed `Collection<T>` receivers also expose `map`, reserving their known size for the result;
   plain `Iterable<T>` receivers retain the growing path.
+- [x] **Non-null transformation** — `Iterable<T>.mapNotNull(transform: (T) -> R?): List<R>` with `R : Any`
+  invokes the transform once per element and retains non-null results in iteration order without an intermediate list.
+  Nullable Int results become ordinary Int elements; reference results retain identity. Empty and all-null results,
+  nullable inputs, independent input/output types and generic forwarding are supported. The result grows with matches.
+  Evidence: `testKotlinMapNotNullVmConformance` and `MinimalScriptLoweringTest`, test
+  `Iterable mapNotNull preserves traversal narrowing and identity`.
 - [x] **Iterable filtering** — `Iterable<T>.filter(predicate: (T) -> Boolean): List<T>` creates a new list of matching
   elements in iteration order, evaluating the predicate once per element. Nullable types remain nullable; matching
   references and Int boxes retain identity. Empty or unmatched inputs return an empty list. Evidence:
@@ -125,8 +131,8 @@ links to their source files.
   Int boxes already stored as `Any` retain identity. Ordinary library lists also expose read-only nullable element
   views without copying. Evidence: `testKotlinFilterNotNullVmConformance` and `MinimalScriptLoweringTest`, test
   `Iterable filterNotNull narrows boxed Int and reference elements`.
-- [ ] **Other collections and functional helpers — Unsupported** — `Set`, `Map`, sequences,
-  `mapNotNull` and general custom iterator loops have no Guest implementation. Tracking: not scheduled
+- [ ] **Other collections and functional helpers — Unsupported** — `Set`, `Map`, sequences and
+  general custom iterator loops have no Guest implementation. Tracking: not scheduled
 - [ ] **Console I/O — Partial** — `print`, `println`, and `readln` support the documented scalar and string forms through
   the terminal capability. Formatting and other overloads are absent. Evidence: `testKotlinSubsetVmConformance` and
   [`computer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/computer.rs),
