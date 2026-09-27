@@ -1064,11 +1064,12 @@ internal object KotlinProjectLowering {
                     }
                 }
         val closureSources = collectGuestClosures(closureRoots)
+        val writtenValues = collectWrittenGuestValues(closureRoots)
         val captureCellDeclarations =
             closureSources
                 .flatMap { it.captures }
                 .filterIsInstance<IrVariable>()
-                .filter { it.isVar }
+                .filter { it.isVar && it.symbol in writtenValues }
                 .associateByTo(linkedMapOf()) { it.symbol }
                 .values
                 .toList()
@@ -6664,6 +6665,24 @@ private fun IrExpression.constructorReferenceTarget(): IrConstructorSymbol? =
 
 private fun IrSimpleFunction.isDirectFieldAccessor(): Boolean =
     origin == IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR && modality == Modality.FINAL && overriddenSymbols.isEmpty()
+
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+private fun collectWrittenGuestValues(roots: List<IrElement>): Set<IrValueSymbol> {
+    val written = mutableSetOf<IrValueSymbol>()
+    val collector =
+        object : IrVisitorVoid() {
+            override fun visitElement(element: IrElement) {
+                element.acceptChildren(this, null)
+            }
+
+            override fun visitSetValue(expression: IrSetValue) {
+                written += expression.symbol
+                super.visitSetValue(expression)
+            }
+        }
+    roots.forEach { it.accept(collector, null) }
+    return written
+}
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureSource> {

@@ -327,9 +327,13 @@ supported.
   fresh instance through the existing class layout.
   Each lambda evaluation creates an ordinary managed closure object; lambdas
   may capture immutable scalar and reference values, and reference captures
-  preserve the original referent and aliasing. A captured local `var` uses one
+  preserve the original referent and aliasing. A captured local `var` with no assignments after its
+  initialization is stored directly in the closure, like a `val`. A reassigned captured local uses one
   ordinary managed typed cell per dynamic variable instance, shared by the
   enclosing code and every sibling closure; primitive payloads remain unboxed.
+  Evidence: `read-only captured vars avoid cells while reassigned vars retain them` in
+  `MinimalScriptLoweringTest`, and read-only scalar, wide, nullable, reference and mutable capture
+  execution in `testKotlinFunctionValuesVmConformance`.
   Concrete supported generic collection instances such as `ArrayList<Item>` may be captured through `val` or `var`;
   shared cells follow later reassignment. Evidence: `Iterable destination operations append preserve types and return identity`
   in `MinimalScriptLoweringTest`, executed by `testKotlinDestinationVmConformance`.

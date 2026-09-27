@@ -650,6 +650,28 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `read-only captured vars avoid cells while reassigned vars retain them`() =
+        withAdapter { adapter ->
+            fun captureCellCount(body: String): Int {
+                val result = adapter.compile(request("fun main() { $body }"))
+                val application =
+                    ArtifactReader
+                        .read(assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray())
+                        .modules
+                        .single { it.kind == ModuleKind.APPLICATION }
+                return application.types.filterIsInstance<NominalType.Class>().count { type ->
+                    application.strings[type.name.value.toInt()].toString().startsWith("app.<capture-cell-")
+                }
+            }
+            assertEquals(0, captureCellCount("var value = 1; val read: () -> Int = { value }; println(read())"))
+            assertEquals(1, captureCellCount("var value = 1; val read: () -> Int = { value }; value = 2; println(read())"))
+            assertEquals(
+                1,
+                captureCellCount("var value = 1; val outer: () -> () -> Int = { { value += 1; value } }; println(outer()())"),
+            )
+        }
+
+    @Test
     fun `supported function values lower to managed closures and shared capture cells`() =
         withAdapter { adapter ->
             val source =
@@ -675,6 +697,28 @@ class MinimalScriptLoweringTest {
                         value = value + 1
                         println(value)
                     }
+                }
+
+                class MutableBox(var value: Int)
+
+                fun readOnly(seed: Int): () -> Int {
+                    var value = seed
+                    return { value }
+                }
+
+                fun readOnlyWide(seed: Long): () -> () -> Long {
+                    var value = seed
+                    return { { value } }
+                }
+
+                fun readOnlyNullable(seed: Int?): () -> Int? {
+                    var value = seed
+                    return { value }
+                }
+
+                fun readOnlyReference(box: MutableBox): () -> Int {
+                    var reference = box
+                    return { reference.value }
                 }
 
                 fun spawnAfterReturn(value: Int): Task {
@@ -770,6 +814,21 @@ class MinimalScriptLoweringTest {
                 fun applyBox(make: (Int) -> Box): Int = make(31).value
 
                 fun main() {
+                    val readFirst = readOnly(3)
+                    val readSecond = readOnly(4)
+                    require(readFirst() == 3 && readSecond() == 4 && readFirst() == 3)
+                    val wideRead = readOnlyWide(5000000000L)()
+                    require(wideRead() == 5000000000L)
+                    require(readOnlyNullable(null)() == null)
+                    require(readOnlyNullable(7)() == 7)
+                    val mutableBox = MutableBox(1)
+                    val readBox = readOnlyReference(mutableBox)
+                    mutableBox.value = 2
+                    require(readBox() == 2)
+                    var reassigned = 1
+                    val readReassigned: () -> Int = { reassigned }
+                    reassigned = 2
+                    require(readReassigned() == 2)
                     val first = make(3)
                     val second = make(4)
                     first()
