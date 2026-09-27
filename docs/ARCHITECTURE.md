@@ -412,8 +412,10 @@ Ordinary higher-order Guest calls admit non-null function values whose parameter
 Guest Kotlin. The compiler creates one managed interface per concrete signature and lowers calls through the same
 interface-call instruction, preserving unboxed primitive values and ordinary reference ownership. There is no special
 arity transition at 22 or 23 arguments in the Guest artifact.
-Nested closures capture free values through their enclosing closure objects. Mutable captured locals retain a single
-VM-owned typed cell shared across nesting levels and sibling closures, including after the enclosing call returns.
+Nested closures capture free values through their enclosing closure objects. The compiler scans assignments across
+functions, class initialization and nested closures. Captured locals with no assignments after initialization are
+stored directly in the closure; reference captures preserve referent identity. Reassigned captured locals retain a
+single VM-owned typed cell shared across nesting levels and sibling closures, including after the enclosing call returns.
 An unbound top-level Guest function reference uses the same managed function-value interface and a capture-free
 closure whose `invoke` method calls the referenced project function. An inferred `KFunction` value has the same Guest
 call behavior; reflection is not part of the Guest function-value contract.

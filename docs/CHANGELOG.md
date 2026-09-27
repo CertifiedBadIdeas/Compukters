@@ -17,6 +17,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- Captured local `var` values that are never reassigned use direct closure fields, avoiding an extra heap cell
+  while preserving shared state for mutable captures.
+
 - Programs can reuse mutable collection buffers through `mapTo`, `filterTo` and `mapNotNullTo`, which append
   to the supplied destination and return it.
 

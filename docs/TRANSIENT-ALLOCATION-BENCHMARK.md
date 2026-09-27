@@ -25,3 +25,35 @@ Instruction and resource units are deterministic VM work counters, not allocatio
 Three timing samples are exploratory and insufficient to establish a small CPU speedup. The cases compare ordinary
 indexed loops, iterator loops, uncaptured `fold`, scalar captures, shared mutable captures, reference captures, and
 reuse of a prebuilt function value. They do not establish that all loops or all collection operations have the same cost.
+
+## Read-only captured variables
+
+The compiler now retains a shared cell only when it finds an assignment to that captured variable anywhere in the
+relevant IR roots, including nested closures. This is conservative: even a dead or pre-capture assignment retains
+its cell. No escape analysis, closure lifetime assumption, or change to Guest APIs is required.
+
+After the change:
+[measurements](benchmarks/transient-allocations-2026-09-27-after.tsv),
+[raw samples](benchmarks/transient-allocations-2026-09-27-after-samples.tsv).
+All eight programs and all 24 timed samples passed at the requested 16 KiB heap with no fallback.
+
+| `fold-read-var`, 300 rounds | Before | After |
+| --- | ---: | ---: |
+| Extra captured-variable cells | 300 | 0 |
+| Cumulative bytes allocated for those cells | 4,800 | 0 |
+| Hot instructions | 4,707,575 | 4,630,175 |
+| Hot fixed units | 10,030,866 | 9,875,466 |
+| Hot dynamic units | 911 | 611 |
+| Hot GC maintenance units | 737 | 0 |
+| Artifact bytes | 57,944 | 57,688 |
+
+The byte saving follows from one 16-byte Int capture cell per round and the emitted allocation path; it is
+cumulative allocation traffic, not a 4,800-byte reduction in live memory. The closure and iterator still allocate.
+The optimized case now matches the `fold-val` control in artifact size and deterministic hot work counters.
+All seven other cases retained their artifact size and deterministic hot counters, including the mutable control.
+Fixed work decreased by approximately 1.55% in this program. This is not a wall-clock CPU speedup claim: the after
+run overlapped focused compiler/conformance checks, and wall-clock times also changed for unchanged controls.
+
+Verification: compiler allocation-contract test, `testKotlinFunctionValuesVmConformance`,
+`testKotlinDestinationVmConformance`, `testKotlinGenericFunctionsVmConformance`, compiler/engine Kotlin lint,
+build-script tests, and the benchmark. These are focused checks, not complete checkout or release verification.
