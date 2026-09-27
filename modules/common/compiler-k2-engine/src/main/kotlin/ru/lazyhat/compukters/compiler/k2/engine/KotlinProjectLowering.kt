@@ -2541,6 +2541,7 @@ internal object KotlinProjectLowering {
                     NominalType.Class(
                         name = requireNotNull(metadataIds[layout.name]),
                         final = true,
+                        superType = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)),
                         interfaces = listOf(requireNotNull(shapeInterfaceTypes[layout.shape])),
                         fieldStart =
                             layout.captures
@@ -6778,7 +6779,8 @@ private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureS
 
             override fun visitRichFunctionReference(expression: IrRichFunctionReference) {
                 val target = expression.reflectionTargetSymbol?.owner as? IrSimpleFunction
-                if ((target?.parent is IrFile && expression.boundValues.isEmpty()) ||
+                if (expression.reflectionTargetSymbol == null ||
+                    (target?.parent is IrFile && expression.boundValues.isEmpty()) ||
                     target?.parent is IrClass ||
                     (expression.constructorReferenceTarget() != null && expression.boundValues.isEmpty())
                 ) {
@@ -6874,8 +6876,24 @@ private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureS
             return@mapIndexed GuestClosureSource(expression, adapter, null, null, null, ordinal, emptyList())
         }
         val function =
-            (expression as? IrFunctionExpression)?.function
-                ?: throw UnsupportedKotlinIr(expression, "unsupported function reference")
+            when (expression) {
+                is IrFunctionExpression -> {
+                    expression.function
+                }
+
+                is IrRichFunctionReference -> {
+                    if (expression.boundValues.isNotEmpty() || expression.hasUnitConversion ||
+                        expression.hasSuspendConversion || expression.hasVarargConversion
+                    ) {
+                        throw UnsupportedKotlinIr(expression, "adapted lambda references are not supported")
+                    }
+                    expression.invokeFunction
+                }
+
+                else -> {
+                    throw UnsupportedKotlinIr(expression, "unsupported function reference")
+                }
+            }
         val shape = expression.type.guestFunctionShape()
         if (shape == null ||
             function.isSuspend ||
@@ -6899,6 +6917,11 @@ private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureS
                 override fun visitFunctionExpression(expression: IrFunctionExpression) {
                     owned += expression.function.parameters.map { it.symbol }
                     super.visitFunctionExpression(expression)
+                }
+
+                override fun visitRichFunctionReference(expression: IrRichFunctionReference) {
+                    owned += expression.invokeFunction.parameters.map { it.symbol }
+                    super.visitRichFunctionReference(expression)
                 }
             },
             null,

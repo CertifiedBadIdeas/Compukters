@@ -20,6 +20,7 @@ import org.jetbrains.kotlin.ir.expressions.IrBlock
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.expressions.IrFunctionExpression
+import org.jetbrains.kotlin.ir.expressions.IrFunctionReference
 import org.jetbrains.kotlin.ir.expressions.IrReturn
 import org.jetbrains.kotlin.ir.expressions.IrReturnableBlock
 import org.jetbrains.kotlin.ir.expressions.IrRichFunctionReference
@@ -158,6 +159,11 @@ class GuestInlineIntegrationTest {
             inline fun apply(value: Int, block: (Int) -> Int): Int = block(value)
             inline fun <T, R> transform(value: T, block: (T) -> R): R = block(value)
             inline fun <T, R> forward(value: T, block: (T) -> R): R = transform(value, block)
+            inline fun keep(noinline block: () -> Int): () -> Int = block
+            inline fun <T> genericWrap(crossinline block: () -> T): () -> T = { block() }
+            inline fun wrap(crossinline block: () -> Int): () -> Int = { block() + 1 }
+            fun independent(initial: Int): () -> Int { var count = initial; return { count += 1; count } }
+            fun addOne(value: Int): Int = value + 1
             inline fun effect(block: () -> Unit) { block() }
             inline fun terminal(block: () -> Nothing): Nothing = block()
             inline fun wide(value: Long, block: (Long) -> Long): Long = block(value)
@@ -219,13 +225,40 @@ class GuestInlineIntegrationTest {
                 verify(nullable { 4 } == 4)
                 verify(fold(intArrayOf(1, 2, 3), 0) { sum, value -> sum + value } == 6)
                 verify(fold(intArrayOf(), 17) { sum, value -> sum + value } == 17)
+                var state = 1
+                val stored = { state += 1; state }
+                val alias = stored
+                verify(alias === stored)
+                verify(apply(0) { stored() } == 2)
+                val retained = keep { state += 2; state }
+                val escaped = wrap { state += 3; state }
+                verify(retained() == 4)
+                verify(escaped() == 8)
+                verify(state == 7)
+                val genericEscaped = genericWrap { state += 1; state }
+                verify(genericEscaped() == 8)
+                verify(stored() == 9)
+                val firstCounter = independent(10)
+                val secondCounter = independent(20)
+                verify(firstCounter() == 11)
+                verify(secondCounter() == 21)
+                verify(firstCounter() == 12)
+                val nested = keep {
+                    val local = 2
+                    val inner = { argument: Int -> local + argument + state }
+                    inner(3)
+                }
+                verify(nested() == 14)
+                val function = ::addOne
+                verify(transform(4, function) == 5)
                 // Rust expects this distinct trap only after every preceding assertion has executed.
                 val completion = IntArray(-1)
             }
             """.trimIndent(),
         ) { _, facts, diagnostics, artifact ->
             assertTrue(diagnostics.isEmpty(), diagnostics.toString())
-            assertEquals(0, facts.richReferences)
+            assertTrue(facts.richReferences >= 7, "stored and escaping callbacks must remain managed")
+            assertEquals(0, facts.inlineCalls)
             val linked = LibraryModuleLinker.link(assertNotNull(artifact), emptyMap<String, Module>())
             val encoded = ArtifactWriter.write(linked)
             assertTrue(encoded is ArtifactWriteResult.Success, encoded.toString())
@@ -296,7 +329,7 @@ class GuestInlineIntegrationTest {
     }
 
     @Test
-    fun `generic specialization rejects recursive expansion explicitly`() {
+    fun `inline preflight rejects generic recursive expansion explicitly`() {
         val recursion =
             assertFailsWith<IllegalArgumentException> {
                 probe(
@@ -306,7 +339,7 @@ class GuestInlineIntegrationTest {
                     """.trimIndent(),
                 ) { _, _, _, _ -> error("recursion must fail before emission") }
             }
-        assertTrue(recursion.message.orEmpty().contains("recursive generic inline"))
+        assertTrue(recursion.message.orEmpty().contains("recursive inline expansion"))
     }
 
     @Test
@@ -333,12 +366,126 @@ class GuestInlineIntegrationTest {
         assertTrue(member.message.orEmpty().contains("top-level declaration"))
     }
 
+    @Test
+    fun `common inliner preserves stored noinline and escaping crossinline callbacks`() {
+        probe(
+            """
+            inline fun apply(block: () -> Int): Int = block()
+            inline fun keep(noinline block: () -> Int): () -> Int = block
+            inline fun wrap(crossinline block: () -> Int): () -> Int = { block() + 1 }
+            fun main() {
+                var state = 1
+                val stored = { state += 1; state }
+                val first = apply(stored)
+                val retained = keep { state += 2; state }
+                val escaped = wrap { state += 3; state }
+                val second = retained()
+                val third = escaped()
+            }
+            """.trimIndent(),
+        ) { _, facts, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            val instructions = assertNotNull(artifact).modules.flatMap { it.blocks }.flatMap { it.instructions }
+            assertTrue(instructions.count { it is Instruction.NewObject } >= 3)
+            assertTrue(facts.richReferences >= 3, "retained callbacks must remain managed function values")
+        }
+    }
+
+    @Test
+    fun `inline preflight rejects cycles exponential copies and cumulative call sites`() {
+        val cycle =
+            assertFailsWith<IllegalArgumentException> {
+                probe(
+                    """
+                    inline fun first(): Int = second()
+                    inline fun second(): Int = first()
+                    fun main() { val value = first() }
+                    """.trimIndent(),
+                ) { _, _, _, _ -> error("cycle must fail before emission") }
+            }
+        assertTrue(cycle.message.orEmpty().contains("recursive inline expansion"))
+        val expanding =
+            buildString {
+                append("inline fun f0(): Int = 1\n")
+                for (i in 1..20) append("inline fun f$i(): Int = f${i - 1}() + f${i - 1}()\n")
+                append("fun main() { val value = f20() }")
+            }
+        val work =
+            assertFailsWith<IllegalArgumentException> {
+                probe(expanding, maximumExpansionWork = 10_000) { _, _, _, _ -> error("work limit must fail before emission") }
+            }
+        assertTrue(work.message.orEmpty().contains("work limit"))
+        val depth =
+            assertFailsWith<IllegalArgumentException> {
+                probe(
+                    """
+                    inline fun first(): Int = 1
+                    inline fun second(): Int = first()
+                    fun main() { val value = second() }
+                    """.trimIndent(),
+                    maximumExpansionDepth = 1,
+                ) { _, _, _, _ -> error("depth must fail before emission") }
+            }
+        assertTrue(depth.message.orEmpty().contains("depth limit"))
+        val repeated =
+            "inline fun leaf(): Int = 1\nfun main() { " +
+                (1..20).joinToString("; ") { "val a$it = leaf()" } + " }"
+        val cumulative =
+            assertFailsWith<IllegalArgumentException> {
+                probe(repeated, maximumExpansionWork = 100) { _, _, _, _ -> error("cumulative limit must fail before emission") }
+            }
+        assertTrue(cumulative.message.orEmpty().contains("work limit"))
+    }
+
+    @Test
+    fun `common inliner preserves generic escaping callbacks`() {
+        probe(
+            """
+            inline fun <T> wrap(crossinline block: () -> T): () -> T = { block() }
+            fun main() { var value = 1; val escaped = wrap { value += 1; value }; val result = escaped() }
+            """.trimIndent(),
+        ) { _, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            assertNotNull(artifact)
+        }
+    }
+
+    @Test
+    fun `inline preflight checks default expression dependencies before copying`() {
+        val failure =
+            assertFailsWith<IllegalArgumentException> {
+                probe(
+                    """
+                    inline fun first(): Int = second()
+                    inline fun second(value: Int = first()): Int = value
+                    fun main() { val value = first() }
+                    """.trimIndent(),
+                ) { _, _, _, _ -> error("default cycle must fail before emission") }
+            }
+        assertTrue(failure.message.orEmpty().contains("recursive inline expansion"))
+    }
+
+    @Test
+    fun `runtime references to generic inline templates retain signature rejection`() {
+        probe(
+            """
+            inline fun <T> identity(value: T): T = value
+            fun main() { val reference: (Int) -> Int = ::identity; val value = reference(3) }
+            """.trimIndent(),
+        ) { _, _, diagnostics, artifact ->
+            assertEquals(null, artifact)
+            assertTrue(diagnostics.any { it.message.contains("function reference signature") }, diagnostics.toString())
+        }
+    }
+
     private fun probe(
         source: String,
         librarySource: String? = null,
         invalidReturnTarget: Boolean = false,
         maximumVariants: Int = 256,
         maximumDepth: Int = 64,
+        maximumExpansionWork: Long = 1_000_000,
+        maximumExpansionDepth: Int = 64,
         check: (IrSimpleFunction, InlineFacts, List<WorkerDiagnostic>, Artifact?) -> Unit,
     ) {
         val builtinsRoot = Path.of(checkNotNull(System.getProperty("compukters.guest.builtins")))
@@ -390,6 +537,17 @@ class GuestInlineIntegrationTest {
             val inliner = object : FunctionInlining(context, resolver) {}
             val file = converted.irModuleFragment.files.single { it.fileEntry.name.endsWith("Main.kt") }
             val before = InlineFacts(context.irBuiltIns.anyNType).also { file.accept(it, null) }
+            val beforePreflight = file.dump()
+            try {
+                GuestInlineExpansionGuard(maximumExpansionWork, maximumExpansionDepth).verify(
+                    file.declarations
+                        .filterIsInstance<IrSimpleFunction>()
+                        .filterNot { it.isInline }
+                        .mapNotNull { it.body },
+                )
+            } finally {
+                assertEquals(beforePreflight, file.dump(), "preflight must not mutate source IR, including on failure")
+            }
             val specialization = GuestInlineSpecialization(maximumVariants, maximumDepth)
             val templates =
                 converted.irModuleFragment.files
@@ -413,9 +571,42 @@ class GuestInlineIntegrationTest {
                     generateFakeAccessorsForReflectionProperty = false,
                 ).lower(sourceFile)
             }
-            file.declarations.filterIsInstance<IrFunction>().forEach { declaration ->
+            file.declarations.filterIsInstance<IrSimpleFunction>().filterNot { it.isInline }.forEach { declaration ->
                 declaration.body?.let { inliner.lower(it, declaration) }
             }
+            // Specialized copies are concrete, but unused source templates still contain open T types in
+            // escaping closure bodies. Keep templates required by runtime calls/references; discard only
+            // unreachable generic inline definitions in this test-only normalization adapter.
+            val used = mutableSetOf<IrFunctionSymbol>()
+            file.accept(
+                object : IrVisitorVoid() {
+                    override fun visitElement(element: IrElement) {
+                        element.acceptChildren(this, null)
+                    }
+
+                    override fun visitSimpleFunction(declaration: IrSimpleFunction) {
+                        if (declaration.typeParameters.isEmpty()) super.visitSimpleFunction(declaration)
+                    }
+
+                    override fun visitCall(expression: IrCall) {
+                        used += expression.symbol
+                        super.visitCall(expression)
+                    }
+
+                    override fun visitFunctionReference(expression: IrFunctionReference) {
+                        used += expression.symbol
+                        expression.reflectionTarget?.let { used += it }
+                        super.visitFunctionReference(expression)
+                    }
+
+                    override fun visitRichFunctionReference(expression: IrRichFunctionReference) {
+                        expression.reflectionTargetSymbol?.let { used += it }
+                        super.visitRichFunctionReference(expression)
+                    }
+                },
+                null,
+            )
+            file.declarations.removeAll { it is IrSimpleFunction && it.isInline && it.typeParameters.isNotEmpty() && it.symbol !in used }
             converted.irModuleFragment.files.retainAll(listOf(file))
             val main = file.declarations.filterIsInstance<IrSimpleFunction>().single { it.name.asString() == "main" }
             val facts =

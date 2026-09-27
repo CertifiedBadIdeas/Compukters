@@ -342,9 +342,14 @@ supported.
   `GuestInlineIntegrationTest` and `testKotlinInlineBlocksVmConformance`, including local/non-local and nested
   returns, Unit/Nothing, reference identity, nullable and wide results. The test adapter first specializes concrete
   generic inline bodies, including nested and source-library calls; scalar-only callbacks emit no object allocations
-  in the focused artifact test. Independent templates and explicit recursion/variant/depth limits are covered by
-  `GuestInlineIntegrationTest`. This internal conformance evidence does
-  not change the non-inline contract of imported collection extensions.
+  in the focused artifact test. Stored/noinline callbacks, escaping crossinline wrappers (including generic wrappers),
+  nested captures, shared mutable cells, independent returned closures and function-reference controls execute in
+  `testKotlinInlineBlocksVmConformance`. The test adapter keeps runtime-referenced definitions while discarding unused
+  generic inline templates. `GuestInlineIntegrationTest` covers non-mutating preflight rejection for recursive inline
+  dependencies, depth and cumulative expansion work, plus generic specialization limits. These are internal safety
+  bounds, not calibrated production budgets. This evidence does not change the non-inline contract of imported
+  collection extensions. Function-value aliases also preserve referential identity in the ordinary
+  `testKotlinFunctionValuesVmConformance` scenario.
   `Tasks.launch` accepts direct, stored, and returned `() -> Unit` values. A
   direct top-level `Tasks.launch(::worker)` remains a static spawn without a
   closure allocation. Types unsupported elsewhere in Guest Kotlin, local,
