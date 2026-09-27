@@ -78,23 +78,9 @@ public class ArrayList<T>(initialCapacity: Int = 10) : MutableList<T> {
 
     public override fun contains(element: T): Boolean = indexOf(element) >= 0
 
-    public override fun indexOf(element: T): Int {
-        var index = 0
-        while (index < size) {
-            if (element == storage[index]) return index
-            index += 1
-        }
-        return -1
-    }
+    public override fun indexOf(element: T): Int = listIndexOf<T>(element)
 
-    public override fun lastIndexOf(element: T): Int {
-        var index = size - 1
-        while (index >= 0) {
-            if (element == storage[index]) return index
-            index -= 1
-        }
-        return -1
-    }
+    public override fun lastIndexOf(element: T): Int = listLastIndexOf<T>(element)
 
     public override fun iterator(): MutableIterator<T> = ArrayListIterator(this)
 
@@ -102,23 +88,9 @@ public class ArrayList<T>(initialCapacity: Int = 10) : MutableList<T> {
 
     internal fun getNullableElement(index: Int): T? = get(index)
 
-    internal fun indexOfNullableElement(element: T?): Int {
-        var index = 0
-        while (index < size) {
-            if (element == get(index)) return index
-            index += 1
-        }
-        return -1
-    }
+    internal fun indexOfNullableElement(element: T?): Int = listIndexOf<T?>(element)
 
-    internal fun lastIndexOfNullableElement(element: T?): Int {
-        var index = size - 1
-        while (index >= 0) {
-            if (element == get(index)) return index
-            index -= 1
-        }
-        return -1
-    }
+    internal fun lastIndexOfNullableElement(element: T?): Int = listLastIndexOf<T?>(element)
 
     internal fun containsNullableElement(element: T?): Boolean = indexOfNullableElement(element) >= 0
 
@@ -131,23 +103,9 @@ public class ArrayList<T>(initialCapacity: Int = 10) : MutableList<T> {
     internal fun indexOfAny(element: Any): Int = indexOfAnyNullable(element)
     internal fun lastIndexOfAny(element: Any): Int = lastIndexOfAnyNullable(element)
 
-    internal fun indexOfAnyNullable(element: Any?): Int {
-        var index = 0
-        while (index < size) {
-            if (element == getAnyNullable(index)) return index
-            index += 1
-        }
-        return -1
-    }
+    internal fun indexOfAnyNullable(element: Any?): Int = listIndexOf<Any?>(element)
 
-    internal fun lastIndexOfAnyNullable(element: Any?): Int {
-        var index = size - 1
-        while (index >= 0) {
-            if (element == getAnyNullable(index)) return index
-            index -= 1
-        }
-        return -1
-    }
+    internal fun lastIndexOfAnyNullable(element: Any?): Int = listLastIndexOf<Any?>(element)
 
     internal fun iteratorAny(): Iterator<Any> = ArrayListAnyIterator(this)
     internal fun iteratorAnyNullable(): Iterator<Any?> = ArrayListIterator(this)

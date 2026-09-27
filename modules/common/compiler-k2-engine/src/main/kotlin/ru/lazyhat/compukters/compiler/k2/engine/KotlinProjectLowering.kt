@@ -78,7 +78,6 @@ import org.jetbrains.kotlin.ir.types.IrTypeProjection
 import org.jetbrains.kotlin.ir.types.IrTypeSubstitutor
 import org.jetbrains.kotlin.ir.types.impl.makeTypeProjection
 import org.jetbrains.kotlin.ir.types.isNothing
-import org.jetbrains.kotlin.ir.types.makeNullable
 import org.jetbrains.kotlin.ir.util.constructors
 import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
@@ -262,8 +261,8 @@ private fun collectGuestClassInstances(
                     ) {
                         val elementType = expression.typeArguments.singleOrNull()?.let(substitution)
                         if (elementType != null && elementType.canonicalPlatformType() != "Int") {
-                            listOf("ArrayBackedList", "ArrayBackedListIterator").forEach { name ->
-                                byName["kotlin.collections.$name"]?.let { add(GuestClassInstance(it, listOf(elementType))) }
+                            byName["kotlin.collections.ArrayBackedList"]?.let {
+                                add(GuestClassInstance(it, listOf(elementType)))
                             }
                         }
                     }
@@ -1088,22 +1087,29 @@ internal object KotlinProjectLowering {
                 declaration.kind == ClassKind.CLASS &&
                     declaration.constructors.any { it.isPrimary }
             }
-        val baseFunctionInstances = collectGuestFunctionInstances(userFunctions, constructorClasses)
-        val classInstances = collectGuestClassInstances(userClasses, baseFunctionInstances, topLevelProperties)
-        val functionInstances =
-            collectGuestFunctionInstances(
-                userFunctions,
-                constructorClasses,
-                classInstances.flatMap { classInstance ->
-                    if (classInstance.arguments.isEmpty()) {
-                        emptyList()
-                    } else {
-                        userFunctions.filter { it.parent == classInstance.declaration }.map { function ->
-                            GuestFunctionInstance(function, emptyList(), classInstance)
+        var functionInstances = collectGuestFunctionInstances(userFunctions, constructorClasses)
+        var classInstances = collectGuestClassInstances(userClasses, functionInstances, topLevelProperties)
+        // Generic member bodies can call helpers whose signatures/body introduce further class instances.
+        // Discover functions and classes together until their dependencies stop adding specializations.
+        while (true) {
+            functionInstances =
+                collectGuestFunctionInstances(
+                    userFunctions,
+                    constructorClasses,
+                    classInstances.flatMap { classInstance ->
+                        if (classInstance.arguments.isEmpty()) {
+                            emptyList()
+                        } else {
+                            userFunctions.filter { it.parent == classInstance.declaration }.map { function ->
+                                GuestFunctionInstance(function, emptyList(), classInstance)
+                            }
                         }
-                    }
-                },
-            )
+                    },
+                )
+            val discoveredClasses = collectGuestClassInstances(userClasses, functionInstances, topLevelProperties)
+            if (discoveredClasses.toSet() == classInstances.toSet()) break
+            classInstances = discoveredClasses
+        }
         val functionShapes =
             buildList {
                 fun include(shape: GuestFunctionShape) {
@@ -1184,67 +1190,7 @@ internal object KotlinProjectLowering {
         val functionArtifactNames =
             functionInstances.associateWith { instance ->
                 val function = instance.declaration
-                val bridgeName =
-                    when (function.fqNameWhenAvailable?.asString()) {
-                        "kotlin.collections.IntArrayBackedList.getAny" -> "get"
-                        "kotlin.collections.IntArrayBackedList.getAnyNullable" -> "get"
-                        "kotlin.collections.IntArrayBackedList.containsAny" -> "contains"
-                        "kotlin.collections.IntArrayBackedList.containsAnyNullable" -> "contains"
-                        "kotlin.collections.IntArrayBackedList.indexOfAny" -> "indexOf"
-                        "kotlin.collections.IntArrayBackedList.indexOfAnyNullable" -> "indexOf"
-                        "kotlin.collections.IntArrayBackedList.lastIndexOfAny" -> "lastIndexOf"
-                        "kotlin.collections.IntArrayBackedList.lastIndexOfAnyNullable" -> "lastIndexOf"
-                        "kotlin.collections.IntArrayBackedList.iteratorAny" -> "iterator"
-                        "kotlin.collections.IntArrayBackedList.iteratorAnyNullable" -> "iterator"
-                        "kotlin.collections.IntArrayBackedListIterator.nextAny" -> "next"
-                        "kotlin.collections.IntArrayBackedListIterator.nextAnyNullable" -> "next"
-                        "kotlin.collections.ArrayBackedList.getAny" -> "get"
-                        "kotlin.collections.ArrayBackedList.getAnyNullable" -> "get"
-                        "kotlin.collections.ArrayBackedList.containsAny" -> "contains"
-                        "kotlin.collections.ArrayBackedList.containsAnyNullable" -> "contains"
-                        "kotlin.collections.ArrayBackedList.indexOfAny" -> "indexOf"
-                        "kotlin.collections.ArrayBackedList.indexOfAnyNullable" -> "indexOf"
-                        "kotlin.collections.ArrayBackedList.lastIndexOfAny" -> "lastIndexOf"
-                        "kotlin.collections.ArrayBackedList.lastIndexOfAnyNullable" -> "lastIndexOf"
-                        "kotlin.collections.ArrayBackedList.iteratorAny" -> "iterator"
-                        "kotlin.collections.ArrayBackedList.iteratorAnyNullable" -> "iterator"
-                        "kotlin.collections.ArrayBackedListIterator.nextAny" -> "next"
-                        "kotlin.collections.ArrayBackedListIterator.nextAnyNullable" -> "next"
-                        "kotlin.collections.ArrayBackedListAnyIterator.nextAnyNullable" -> "next"
-                        "kotlin.collections.ArrayList.getAny" -> "get"
-                        "kotlin.collections.ArrayList.getAnyNullable" -> "get"
-                        "kotlin.collections.ArrayList.containsAny" -> "contains"
-                        "kotlin.collections.ArrayList.containsAnyNullable" -> "contains"
-                        "kotlin.collections.ArrayList.indexOfAny" -> "indexOf"
-                        "kotlin.collections.ArrayList.indexOfAnyNullable" -> "indexOf"
-                        "kotlin.collections.ArrayList.lastIndexOfAny" -> "lastIndexOf"
-                        "kotlin.collections.ArrayList.lastIndexOfAnyNullable" -> "lastIndexOf"
-                        "kotlin.collections.ArrayList.iteratorAny" -> "iterator"
-                        "kotlin.collections.ArrayList.iteratorAnyNullable" -> "iterator"
-                        "kotlin.collections.ArrayList.iteratorReadOnly" -> "iterator"
-                        "kotlin.collections.ArrayListIterator.nextAny" -> "next"
-                        "kotlin.collections.ArrayListIterator.nextAnyNullable" -> "next"
-                        "kotlin.collections.ArrayListAnyIterator.nextAnyNullable" -> "next"
-                        "kotlin.collections.IntArrayBackedList.getNullableElement" -> "get"
-                        "kotlin.collections.IntArrayBackedList.indexOfNullableElement" -> "indexOf"
-                        "kotlin.collections.IntArrayBackedList.lastIndexOfNullableElement" -> "lastIndexOf"
-                        "kotlin.collections.IntArrayBackedList.containsNullableElement" -> "contains"
-                        "kotlin.collections.IntArrayBackedList.iteratorNullableElement" -> "iterator"
-                        "kotlin.collections.ArrayBackedList.getNullableElement" -> "get"
-                        "kotlin.collections.ArrayBackedList.indexOfNullableElement" -> "indexOf"
-                        "kotlin.collections.ArrayBackedList.lastIndexOfNullableElement" -> "lastIndexOf"
-                        "kotlin.collections.ArrayBackedList.containsNullableElement" -> "contains"
-                        "kotlin.collections.ArrayBackedList.iteratorNullableElement" -> "iterator"
-                        "kotlin.collections.ArrayList.getNullableElement" -> "get"
-                        "kotlin.collections.ArrayList.indexOfNullableElement" -> "indexOf"
-                        "kotlin.collections.ArrayList.lastIndexOfNullableElement" -> "lastIndexOf"
-                        "kotlin.collections.ArrayList.containsNullableElement" -> "contains"
-                        "kotlin.collections.ArrayList.iteratorNullableElement" -> "iterator"
-                        "kotlin.collections.IntArrayBackedListIterator.nextNullableElement" -> "next"
-                        "kotlin.collections.ArrayBackedListIterator.nextNullableElement" -> "next"
-                        "kotlin.collections.ArrayListIterator.nextNullableElement" -> "next"
-                        else -> null
-                    }
+                val bridgeName = CollectionReadBridges.methodName(function)
                 if (bridgeName != null) {
                     bridgeName
                 } else if (instance.ownerClass != null) {
@@ -2526,61 +2472,15 @@ internal object KotlinProjectLowering {
                             classInstanceTypeIds[parent]?.let { parent.declaration.symbol to TypeRef.Local(it) }
                         }
                     }
-                val bridgeInterfaceRoot =
-                    when (declaration.fqNameWhenAvailable?.asString()) {
-                        "kotlin.collections.IntArrayBackedList",
-                        "kotlin.collections.ArrayBackedList",
-                        "kotlin.collections.ArrayList",
-                        -> "kotlin.collections.List"
-
-                        "kotlin.collections.IntArrayBackedListIterator",
-                        "kotlin.collections.ArrayBackedListIterator",
-                        "kotlin.collections.ArrayBackedListAnyIterator",
-                        "kotlin.collections.ArrayListIterator",
-                        "kotlin.collections.ArrayListAnyIterator",
-                        -> "kotlin.collections.Iterator"
-
-                        else -> null
-                    }
                 val bridgeInterfaces =
-                    if (bridgeInterfaceRoot == null) {
-                        emptyList()
-                    } else {
-                        val nullableElement =
-                            when (declaration.fqNameWhenAvailable?.asString()) {
-                                "kotlin.collections.ArrayBackedListAnyIterator", "kotlin.collections.ArrayListAnyIterator" -> {
-                                    null
-                                }
-
-                                "kotlin.collections.IntArrayBackedList", "kotlin.collections.IntArrayBackedListIterator" -> {
-                                    pluginContext.irBuiltIns.intType.makeNullable()
-                                }
-
-                                else -> {
-                                    layout.instance.arguments
-                                        .singleOrNull()
-                                        ?.takeUnless { it.isNullable() }
-                                        ?.makeNullable()
-                                }
-                            }
-                        val nullableRoots =
-                            if (bridgeInterfaceRoot == "kotlin.collections.List") {
-                                listOf("kotlin.collections.List", "kotlin.collections.Collection", "kotlin.collections.Iterable")
-                            } else {
-                                listOf(bridgeInterfaceRoot)
-                            }
-                        val names =
-                            listOfNotNull(
-                                "$bridgeInterfaceRoot<Any?>",
-                                "$bridgeInterfaceRoot<Any>".takeIf { layout.instance.arguments.none { it.isNullable() } },
-                            ) + nullableRoots.mapNotNull { root -> nullableElement?.let { "$root<${it.canonicalPlatformType()}>" } }
-                        names.mapNotNull { name ->
+                    CollectionReadBridges
+                        .interfaceNames(declaration, layout.instance.arguments, pluginContext.irBuiltIns.intType)
+                        .mapNotNull { name ->
                             classInstanceTypeIds.entries
                                 .singleOrNull { it.key.name == name }
                                 ?.value
                                 ?.let(TypeRef::Local)
                         }
-                    }
                 val interfaces =
                     (
                         sourceParents.filter { (symbol, _) -> symbol.owner.kind == ClassKind.INTERFACE }.map { it.second } +

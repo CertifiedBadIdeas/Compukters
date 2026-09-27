@@ -280,7 +280,9 @@ supported.
   `Int` remains unboxed in both calls and fields. Source-only platform library
   modules containing generic functions or final generic classes are specialized
   in a consumer; generic class methods and constructor fields retain concrete
-  `Int` and reference layouts. Function-valued parameters of source-only
+  `Int` and reference layouts. Generic member bodies can call top-level generic helpers that introduce further
+  generic class instances; class and function dependencies are collected until specialization is complete.
+  Function-valued parameters of source-only
   generic functions use the specialized element type, as exercised by the
   `Iterable<T>` predicate helpers.
   Concrete generic interfaces and covariant result interfaces support the read-only `List<T>` contract.

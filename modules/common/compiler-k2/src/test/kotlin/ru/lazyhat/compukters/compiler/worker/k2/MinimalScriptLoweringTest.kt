@@ -1900,7 +1900,12 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val source =
                 """
-                fun <T> identity(value: T): T = value
+                fun <T> identity(value: T): T = Wrapper(value).read()
+                class Wrapper<T>(val value: T) {
+                    fun read(): T = unwrap(value)
+                }
+                fun <T> unwrap(value: T): T = Payload(value).value
+                class Payload<T>(val value: T)
                 class Cell<T>(var value: T) {
                     fun replace(next: T) { value = identity(next) }
                 }
