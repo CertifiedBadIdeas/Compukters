@@ -264,3 +264,9 @@ Include the following when attaching measurements to
 - computer count, command, warmup, and measured duration;
 - baseline and loaded milliseconds per tick or TPS;
 - the vanilla profiler archive and any visible overload messages.
+
+## Native collection representation measurements
+
+For the opt-in native comparison of scalar Int lists, boxed storage, and universal read bridges, see
+[Collection representation measurements](COLLECTION-BENCHMARK.md). It measures collection execution and heap pressure
+without Minecraft or actor-scheduler overhead.

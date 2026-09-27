@@ -1322,3 +1322,21 @@ val assertCompilerWorkerIsolation = tasks.register("assertCompilerWorkerIsolatio
 tasks.check {
     dependsOn(assertCompilerWorkerIsolation)
 }
+
+val collectionBenchmarkArtifacts = layout.buildDirectory.dir("generated/benchmarks/collections")
+
+tasks.register<Test>("generateCollectionBenchmarkArtifacts") {
+    description = "Compiles opt-in collection representation measurement workloads."
+    group = "benchmark"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*collection representation benchmark artifacts compile*")
+    inputs.file(workerJar)
+    outputs.dir(collectionBenchmarkArtifacts)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.bench.collectionsOutput", collectionBenchmarkArtifacts.get().asFile.absolutePath)
+    }
+}
