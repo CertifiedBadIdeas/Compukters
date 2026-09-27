@@ -1114,8 +1114,12 @@ tasks.register<Exec>("benchmarkObjectCollectionHeap") {
     environment("CARGO_TARGET_DIR", rootProject.file(".toolchain/build/cargo/collection-benchmark").absolutePath)
 }
 
-val collectionReuseBenchmarkArtifacts = project(":compiler-k2").layout.buildDirectory.dir("generated/benchmarks/collection-reuse")
-val collectionReuseBenchmarkReports = layout.buildDirectory.dir("reports/benchmarks/collection-reuse")
+val collectionReuseCount = providers.gradleProperty("compukterCollectionReuseCount").orElse("1024").get().toInt().also {
+    require(it > 0 && it % 2 == 0) { "compukterCollectionReuseCount must be a positive even number" }
+}
+val collectionReuseDirectory = if (collectionReuseCount == 1024) "collection-reuse" else "collection-reuse-$collectionReuseCount"
+val collectionReuseBenchmarkArtifacts = project(":compiler-k2").layout.buildDirectory.dir("generated/benchmarks/$collectionReuseDirectory")
+val collectionReuseBenchmarkReports = layout.buildDirectory.dir("reports/benchmarks/$collectionReuseDirectory")
 
 tasks.register<Exec>("benchmarkCollectionReuse") {
     description = "Measures repeated Guest collection reuse and GC work at a fixed heap budget."
