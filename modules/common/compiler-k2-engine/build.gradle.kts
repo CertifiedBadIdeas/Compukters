@@ -74,8 +74,11 @@ tasks.check {
 }
 
 tasks.test {
+    val guestBuiltins = rootProject.file("modules/common/guest-platform/src/platform/builtins")
+    inputs.dir(guestBuiltins)
     dependsOn(tasks.jar)
     doFirst {
+        systemProperty("compukters.guest.builtins", guestBuiltins.absolutePath)
         systemProperty("compukters.engine.jar", tasks.jar.get().archiveFile.get().asFile.absolutePath)
     }
 }
