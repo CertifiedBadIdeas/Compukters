@@ -117,8 +117,13 @@ links to their source files.
   references and Int boxes retain identity. Empty or unmatched inputs return an empty list. Evidence:
   `testKotlinFilterVmConformance` and `MinimalScriptLoweringTest`, test
   `Iterable filter preserves traversal nullable elements and identity`.
+- [x] **Non-null element selection** — `Iterable<T?>.filterNotNull(): List<T>` removes nulls and narrows the result
+  element type, preserving order and duplicates. `Int?` is unboxed into ordinary Int list storage; references and
+  Int boxes already stored as `Any` retain identity. Ordinary library lists also expose read-only nullable element
+  views without copying. Evidence: `testKotlinFilterNotNullVmConformance` and `MinimalScriptLoweringTest`, test
+  `Iterable filterNotNull narrows boxed Int and reference elements`.
 - [ ] **Other collections and functional helpers — Unsupported** — `Set`, `Map`, sequences,
-  `filterNotNull`, `mapNotNull`, and general custom iterator loops have no Guest implementation. Tracking: not scheduled
+  `mapNotNull` and general custom iterator loops have no Guest implementation. Tracking: not scheduled
 - [ ] **Console I/O — Partial** — `print`, `println`, and `readln` support the documented scalar and string forms through
   the terminal capability. Formatting and other overloads are absent. Evidence: `testKotlinSubsetVmConformance` and
   [`computer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/computer.rs),

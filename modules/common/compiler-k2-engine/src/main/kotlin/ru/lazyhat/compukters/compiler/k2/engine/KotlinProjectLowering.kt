@@ -78,6 +78,7 @@ import org.jetbrains.kotlin.ir.types.IrTypeProjection
 import org.jetbrains.kotlin.ir.types.IrTypeSubstitutor
 import org.jetbrains.kotlin.ir.types.impl.makeTypeProjection
 import org.jetbrains.kotlin.ir.types.isNothing
+import org.jetbrains.kotlin.ir.types.makeNullable
 import org.jetbrains.kotlin.ir.util.constructors
 import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
@@ -924,33 +925,38 @@ internal object KotlinProjectLowering {
         val guestTypes = GuestTypeRegistry(pluginContext)
         val platformScalars = PlatformScalarRegistry(session.platformScalarTypes, session.platformScalarConstants)
         var usesListFactory = false
-        (functions + properties).forEach { root ->
-            root.accept(
-                object : IrVisitorVoid() {
-                    override fun visitElement(element: IrElement) = element.acceptChildren(this, null)
 
-                    override fun visitConstructorCall(expression: IrConstructorCall) {
-                        if (expression.symbol.owner.parentAsClass.fqNameWhenAvailable
-                                ?.asString() == "kotlin.collections.ArrayList"
-                        ) {
-                            usesListFactory = true
-                        }
-                        super.visitConstructorCall(expression)
-                    }
+        fun isCollectionSource(declaration: IrDeclaration): Boolean =
+            session.virtualSourcePath(declaration.file.fileEntry.name)?.value?.startsWith("platform/stdlib/collections/") == true
+        val scannedCollectionHelpers = mutableSetOf<IrSimpleFunctionSymbol>()
+        val collectionUsage =
+            object : IrVisitorVoid() {
+                override fun visitElement(element: IrElement) {
+                    if (!usesListFactory) element.acceptChildren(this, null)
+                }
 
-                    override fun visitCall(expression: IrCall) {
-                        if (expression.symbol.owner.fqNameWhenAvailable
-                                ?.asString() in
-                            setOf("kotlin.collections.listOf", "kotlin.collections.emptyList", "kotlin.collections.mutableListStorage")
-                        ) {
-                            usesListFactory = true
-                        }
-                        super.visitCall(expression)
+                override fun visitConstructorCall(expression: IrConstructorCall) {
+                    if (expression.symbol.owner.parentAsClass.fqNameWhenAvailable
+                            ?.asString() == "kotlin.collections.ArrayList"
+                    ) {
+                        usesListFactory = true
                     }
-                },
-                null,
-            )
-        }
+                    super.visitConstructorCall(expression)
+                }
+
+                override fun visitCall(expression: IrCall) {
+                    val target = expression.symbol.owner
+                    if (target.fqNameWhenAvailable?.asString() in
+                        setOf("kotlin.collections.listOf", "kotlin.collections.emptyList", "kotlin.collections.mutableListStorage")
+                    ) {
+                        usesListFactory = true
+                    } else if (target.body != null && isCollectionSource(target) && scannedCollectionHelpers.add(target.symbol)) {
+                        target.body?.accept(this, null)
+                    }
+                    super.visitCall(expression)
+                }
+            }
+        (functions + properties).filterNot(::isCollectionSource).forEach { it.accept(collectionUsage, null) }
         val collectionInterfaceClasses =
             if (includeTrustedPlatformBodies) {
                 emptyList()
@@ -1219,6 +1225,24 @@ internal object KotlinProjectLowering {
                         "kotlin.collections.ArrayListIterator.nextAny" -> "next"
                         "kotlin.collections.ArrayListIterator.nextAnyNullable" -> "next"
                         "kotlin.collections.ArrayListAnyIterator.nextAnyNullable" -> "next"
+                        "kotlin.collections.IntArrayBackedList.getNullableElement" -> "get"
+                        "kotlin.collections.IntArrayBackedList.indexOfNullableElement" -> "indexOf"
+                        "kotlin.collections.IntArrayBackedList.lastIndexOfNullableElement" -> "lastIndexOf"
+                        "kotlin.collections.IntArrayBackedList.containsNullableElement" -> "contains"
+                        "kotlin.collections.IntArrayBackedList.iteratorNullableElement" -> "iterator"
+                        "kotlin.collections.ArrayBackedList.getNullableElement" -> "get"
+                        "kotlin.collections.ArrayBackedList.indexOfNullableElement" -> "indexOf"
+                        "kotlin.collections.ArrayBackedList.lastIndexOfNullableElement" -> "lastIndexOf"
+                        "kotlin.collections.ArrayBackedList.containsNullableElement" -> "contains"
+                        "kotlin.collections.ArrayBackedList.iteratorNullableElement" -> "iterator"
+                        "kotlin.collections.ArrayList.getNullableElement" -> "get"
+                        "kotlin.collections.ArrayList.indexOfNullableElement" -> "indexOf"
+                        "kotlin.collections.ArrayList.lastIndexOfNullableElement" -> "lastIndexOf"
+                        "kotlin.collections.ArrayList.containsNullableElement" -> "contains"
+                        "kotlin.collections.ArrayList.iteratorNullableElement" -> "iterator"
+                        "kotlin.collections.IntArrayBackedListIterator.nextNullableElement" -> "next"
+                        "kotlin.collections.ArrayBackedListIterator.nextNullableElement" -> "next"
+                        "kotlin.collections.ArrayListIterator.nextNullableElement" -> "next"
                         else -> null
                     }
                 if (bridgeName != null) {
@@ -2522,11 +2546,34 @@ internal object KotlinProjectLowering {
                     if (bridgeInterfaceRoot == null) {
                         emptyList()
                     } else {
+                        val nullableElement =
+                            when (declaration.fqNameWhenAvailable?.asString()) {
+                                "kotlin.collections.ArrayBackedListAnyIterator", "kotlin.collections.ArrayListAnyIterator" -> {
+                                    null
+                                }
+
+                                "kotlin.collections.IntArrayBackedList", "kotlin.collections.IntArrayBackedListIterator" -> {
+                                    pluginContext.irBuiltIns.intType.makeNullable()
+                                }
+
+                                else -> {
+                                    layout.instance.arguments
+                                        .singleOrNull()
+                                        ?.takeUnless { it.isNullable() }
+                                        ?.makeNullable()
+                                }
+                            }
+                        val nullableRoots =
+                            if (bridgeInterfaceRoot == "kotlin.collections.List") {
+                                listOf("kotlin.collections.List", "kotlin.collections.Collection", "kotlin.collections.Iterable")
+                            } else {
+                                listOf(bridgeInterfaceRoot)
+                            }
                         val names =
                             listOfNotNull(
                                 "$bridgeInterfaceRoot<Any?>",
                                 "$bridgeInterfaceRoot<Any>".takeIf { layout.instance.arguments.none { it.isNullable() } },
-                            )
+                            ) + nullableRoots.mapNotNull { root -> nullableElement?.let { "$root<${it.canonicalPlatformType()}>" } }
                         names.mapNotNull { name ->
                             classInstanceTypeIds.entries
                                 .singleOrNull { it.key.name == name }
@@ -3828,6 +3875,12 @@ private class FunctionCompiler(
         val targetType = expectedType ?: expression.type
         if (resolvedType(targetType) == intType && actual is ValueType.Ref) {
             return unboxInt(source)
+        }
+        if (expectedType != null && actual is ValueType.Ref) {
+            val target = valueType(expectedType, expression)
+            if (target is ValueType.Ref && actual != target) {
+                return allocate(target).also { destination -> emit(Instruction.CheckedCast(destination, source, target.type)) }
+            }
         }
         if (expectedType == null || (!resolvedType(expectedType).isKotlinAny() && !resolvedType(expectedType).isNullableInt())) {
             return source

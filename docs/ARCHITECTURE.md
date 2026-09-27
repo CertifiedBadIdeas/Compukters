@@ -139,6 +139,10 @@ reference storage at its trusted factory call. Growth, shifting, searches, slot 
 ordinary Guest bodies; all allocations use the VM's existing metered array instructions. Read-only aliases share
 the same list. Iterator bridges expose both read-only and mutable result signatures, and a modification counter
 rejects stale iterator `next`/`remove` calls after structural mutations.
+Library lists also publish nullable element read bridges for read-only views such as `List<Int?>` over `List<Int>`.
+These views share storage: scalar reads allocate boxes, and reference reads retain identity. `filterNotNull` narrows
+elements into a new typed list, unboxing nullable Int values and retaining non-null references. Generic smart-cast
+arguments use checked reference conversions against their instantiated non-null parameter types.
 Generic call arguments are converted against the specialized parameter types, so searching a widened `List<Any>`
 boxes an `Int` argument before comparison. Universal value
 equality over `Any` and `Any?` lowers through existing reference, type-test, field-read, scalar, and string instructions:

@@ -626,6 +626,15 @@ registerKotlinVmConformance(
     conformanceScenario = "filter",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinFilterNotNullVmConformance",
+    taskDescription = "Executes Iterable filterNotNull with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateFilterNotNullConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-filter-not-null.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-filter-not-null-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_FILTER_NOT_NULL_ARTIFACT",
+    conformanceScenario = "filter-not-null",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinMutableListVmConformance",
     taskDescription = "Executes mutable ArrayList with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateMutableListConformanceArtifact",

@@ -2383,6 +2383,83 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `Iterable filterNotNull narrows boxed Int and reference elements`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+                class Item(val value: Int)
+                class Values(val values: List<Int?>) : Iterable<Int?> {
+                    override fun iterator(): Iterator<Int?> = values.iterator()
+                }
+                fun <T : Any> present(values: Iterable<T?>): List<T> = values.filterNotNull()
+                fun main() {
+                    require(emptyList<Int?>().filterNotNull().isEmpty())
+                    require(listOf<Int?>(null, null).filterNotNull().isEmpty())
+                    val original = listOf<Int?>(null, 1000, null, 2000, 1000, null)
+                    val input: Iterable<Int?> = Values(original)
+                    val ints: List<Int> = present(input)
+                    require(ints.size == 3 && ints[0] == 1000 && ints[1] == 2000 && ints[2] == 1000)
+                    require(ints.fold(0) { total, value -> total + value } == 4000)
+                    val first = Item(1)
+                    val second = Item(2)
+                    val objects: List<Item> = listOf<Item?>(null, first, null, second, first).filterNotNull()
+                    require(objects.size == 3 && objects[0] === first && objects[1] === second && objects[2] === first)
+                    require(objects.map { item -> item.value }.fold(0) { total, value -> total + value } == 4)
+                    val strings: List<String> = listOf<String?>(null, "ab", "", null, "c").filterNotNull()
+                    require(strings.size == 3 && strings[0] == "ab" && strings[1] == "" && strings[2] == "c")
+                    require(strings.map { text -> text.length }.fold(0) { total, value -> total + value } == 3)
+                    val mixedSource = listOf<Any?>(null, 1000, first, null, "x")
+                    val mixed: List<Any> = present(mixedSource)
+                    require(mixed.size == 3 && mixed[0] == 1000 && mixed[1] === first && mixed[2] == "x")
+                    require(mixed[0] === mixedSource[1])
+                    val universal: List<Any> = ints
+                    require(universal[0] == 1000 && universal[1] == 2000)
+                    val nonNullable: List<Int> = listOf(1, 2, 3).filterNotNull()
+                    require(nonNullable.size == 3 && nonNullable[2] == 3)
+                    val widenedInts: List<Int?> = listOf(1, 2, 1)
+                    require(widenedInts[0] == 1 && !widenedInts.contains(null))
+                    require(widenedInts.indexOf(1) == 0 && widenedInts.lastIndexOf(1) == 2)
+                    require(widenedInts.indexOf(null) == -1 && widenedInts.lastIndexOf(null) == -1)
+                    require(widenedInts.filterNotNull().fold(0) { total, value -> total + value } == 4)
+                    val refs: List<Item> = listOf(first, second)
+                    val widenedRefs: List<Item?> = refs
+                    require(widenedRefs[0] === first && !widenedRefs.contains(null))
+                    require(widenedRefs.indexOf(second) == 1 && widenedRefs.lastIndexOf(first) == 0)
+                    require(refs.filterNotNull()[1] === second)
+                    val ordinaryTexts: List<String> = listOf("ab", "c")
+                    require(ordinaryTexts.filterNotNull().size == 2)
+                    val mutableInts = ArrayList<Int>(0)
+                    mutableInts.add(1000)
+                    mutableInts.add(2000)
+                    val nullableView: List<Int?> = mutableInts
+                    require(nullableView[0] == 1000 && nullableView.indexOf(null) == -1)
+                    require(nullableView.lastIndexOf(2000) == 1 && nullableView.contains(1000))
+                    require(mutableInts.filterNotNull()[1] == 2000)
+                    val mutableRefs = ArrayList<Item>()
+                    mutableRefs.add(first)
+                    val nullableRefs: List<Item?> = mutableRefs
+                    require(nullableRefs[0] === first && nullableRefs.filterNotNull()[0] === first)
+                    val growing = ArrayList<Int?>(0)
+                    var index = 0
+                    while (index < 100) {
+                        growing.add(if (index % 2 == 0) index else null)
+                        index += 1
+                    }
+                    val compact: List<Int> = growing.filterNotNull()
+                    require(compact.size == 50 && compact[0] == 0 && compact[49] == 98)
+                    require(growing.size == 100 && growing[1] == null)
+                    println("filterNotNull ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.filterNotNullArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `Iterable filter preserves traversal nullable elements and identity`() =
         withAdapter { adapter ->
             val source =
