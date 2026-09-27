@@ -1026,3 +1026,26 @@ tasks.register("verifyLocalFull") {
     dependsOn(":v1_21_1-neoforge:runGameTestServer")
     dependsOn(":v26_1-neoforge:runGameTestServer")
 }
+
+val collectionBenchmarkArtifacts = project(":compiler-k2").layout.buildDirectory.dir("generated/benchmarks/collections")
+val collectionBenchmarkReports = layout.buildDirectory.dir("reports/benchmarks/collections")
+
+tasks.register<Exec>("benchmarkCollectionRepresentations") {
+    description = "Measures scalar lists, boxed storage and universal read bridges in the release VM."
+    group = "benchmark"
+    dependsOn(":compiler-k2:generateCollectionBenchmarkArtifacts")
+    inputs.dir(collectionBenchmarkArtifacts)
+    inputs.file(compilerArtifactVmConformanceHarness)
+    inputs.file(compilerArtifactVmConformanceLock)
+    inputs.file(compilerArtifactVmConformanceHarness.resolveSibling("collections_bench.rs"))
+    inputs.dir(compukterVmRoot.resolve("src"))
+    outputs.dir(collectionBenchmarkReports)
+    outputs.upToDateWhen { false }
+    commandLine(
+        "cargo", "test", "--release", "--locked", "--offline", "--manifest-path",
+        compilerArtifactVmConformanceHarness.absolutePath, "--test", "collections_bench", "--",
+        collectionBenchmarkArtifacts.get().asFile.absolutePath,
+        collectionBenchmarkReports.get().asFile.absolutePath, "7",
+    )
+    environment("CARGO_TARGET_DIR", rootProject.file(".toolchain/build/cargo/collection-benchmark").absolutePath)
+}
