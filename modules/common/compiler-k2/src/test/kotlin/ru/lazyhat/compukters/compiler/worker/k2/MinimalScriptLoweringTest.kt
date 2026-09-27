@@ -4523,6 +4523,36 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "compukter.bench.objectArraysOutput", matches = ".+")
+    fun `object array heap benchmark artifacts compile`() =
+        withAdapter { adapter ->
+            val output = Path.of(checkNotNull(System.getProperty("compukter.bench.objectArraysOutput"))).createDirectories()
+            val manifest = mutableListOf("id\trepresentation\tworkload\tcount\tfields\trounds\tchecksum\tartifact_bytes\ttypes\tfunctions")
+            objectArrayBenchmarkCases().forEach { case ->
+                val source = case.source()
+                val result = adapter.compile(request(source))
+                val bytes = collectionBenchmarkArtifact(assertNotNull(result.artifact, "${case.id}: ${result.diagnostics}").toByteArray())
+                val module = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+                output.resolve("${case.id}.cpkt").writeBytes(bytes)
+                output.resolve("${case.id}.kt").writeText(source)
+                manifest +=
+                    listOf(
+                        case.id,
+                        case.representation,
+                        case.workload,
+                        case.count,
+                        case.fields,
+                        case.rounds,
+                        case.checksum(),
+                        bytes.size,
+                        module.types.size,
+                        module.functions.size,
+                    ).joinToString("\t")
+            }
+            output.resolve("manifest.tsv").writeText(manifest.joinToString("\n", postfix = "\n"))
+        }
+
+    @Test
     fun `checked in vm benchmark compiles deterministically`() =
         withAdapter { adapter ->
             val source = repositoryFile("system/programs/vmbench.kt").readText()
