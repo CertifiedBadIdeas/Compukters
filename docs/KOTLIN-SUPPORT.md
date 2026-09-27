@@ -337,6 +337,11 @@ supported.
   Concrete supported generic collection instances such as `ArrayList<Item>` may be captured through `val` or `var`;
   shared cells follow later reassignment. Evidence: `Iterable destination operations append preserve types and return identity`
   in `MinimalScriptLoweringTest`, executed by `testKotlinDestinationVmConformance`.
+  Production compilation does not expand function calls marked `inline`; general Guest inline/non-local-return
+  support is not enabled. The emitter's normalized inline-block control flow is covered internally by
+  `GuestInlineIntegrationTest` and `testKotlinInlineBlocksVmConformance`, including local/non-local and nested
+  returns, Unit/Nothing, reference identity, nullable and wide results. This internal conformance evidence does
+  not change the non-inline contract of imported collection extensions.
   `Tasks.launch` accepts direct, stored, and returned `() -> Unit` values. A
   direct top-level `Tasks.launch(::worker)` remains a static spawn without a
   closure allocation. Types unsupported elsewhere in Guest Kotlin, local,

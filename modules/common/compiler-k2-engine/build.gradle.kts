@@ -82,3 +82,22 @@ tasks.test {
         systemProperty("compukters.engine.jar", tasks.jar.get().archiveFile.get().asFile.absolutePath)
     }
 }
+
+val inlineBlocksArtifact = layout.buildDirectory.file("generated/conformance/kotlin-inline-blocks.cpkt")
+tasks.register<Test>("generateInlineBlocksConformanceArtifact") {
+    description = "Compiles test-normalized inline blocks for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*inline blocks emit executable nested local non-local Unit and wide results*")
+    val guestBuiltins = rootProject.file("modules/common/guest-platform/src/platform/builtins")
+    inputs.dir(guestBuiltins)
+    inputs.file(tasks.jar.flatMap { it.archiveFile })
+    outputs.file(inlineBlocksArtifact)
+    doFirst {
+        systemProperty("compukters.guest.builtins", guestBuiltins.absolutePath)
+        systemProperty("compukter.vm.inlineBlocksArtifact", inlineBlocksArtifact.get().asFile.absolutePath)
+    }
+}

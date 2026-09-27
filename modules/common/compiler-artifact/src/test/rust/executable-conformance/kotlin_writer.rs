@@ -58,6 +58,7 @@ fn main() {
         "class-initialization" => k2_class_initialization_preserves_source_and_super_order(),
         "constructor-defaults" => k2_constructor_defaults_preserve_kotlin_argument_order(),
         "adapted-constructors" => k2_adapted_constructor_references_preserve_defaults_and_identity(),
+        "inline-blocks" => k2_inline_blocks_preserve_returns_results_and_effects(),
         "function-values" => k2_function_values_preserve_distinct_captures_and_dispatch(),
         "transparent-call" => k2_ordinary_project_call_resumes_across_async_capability(),
         "tasks" => k2_tasks_keep_independent_host_requests_in_flight(),
@@ -2177,4 +2178,49 @@ fn next_host_request_identity_with_budget(
             outcome => panic!("unexpected K2 program outcome before {operation_name}: {outcome:?}"),
         }
     }
+}
+
+fn k2_inline_blocks_preserve_returns_results_and_effects() {
+    let path = std::env::var("COMPUKTER_KOTLIN_INLINE_BLOCKS_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_INLINE_BLOCKS_ARTIFACT must be set");
+    let bytes = fs::read(path).expect("inline-blocks artifact must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("VM must verify inline block results and continuations");
+    let profile = ExecutionProfile {
+        heap_bytes: 1024 * 1024,
+        frame_storage_bytes: 1024 * 1024,
+        maximum_call_depth: 64,
+        maximum_coroutines: 64,
+        maximum_channels: 64,
+        maximum_channel_values: 4096,
+        maximum_host_requests: 64,
+        maximum_events: 0,
+        maximum_slice_budget: 128,
+        compiler_abi: [0; 32],
+        platform_abi: [0; 32],
+        maximum_host_arguments: 16,
+        maximum_outbound_utf16_code_units: 4096,
+        maximum_inbound_utf16_code_units: 4096,
+        maximum_accepted_responses: 64,
+        entry_argument_limits: entry_argument_limits(),
+    };
+    let mut session = Session::admit(verified, profile, &[]).expect("inline-blocks must admit");
+    session.start(&[]).expect("inline-blocks must start");
+    let mut exhausted = 0;
+    for _ in 0..10_000 {
+        match session
+            .advance(128, 16)
+            .expect("inline-blocks must advance")
+        {
+            AdvanceOutcome::SliceExhausted => exhausted += 1,
+            AdvanceOutcome::Crashed(GuestTrap::NegativeArraySize) => {
+                assert!(exhausted > 0, "inline control flow must cross quota slices");
+                return;
+            }
+            outcome => {
+                panic!("inline assertion failed or completion marker was not reached: {outcome:?}")
+            }
+        }
+    }
+    panic!("inline-blocks failed to finish within bounded slices");
 }

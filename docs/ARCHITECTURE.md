@@ -412,6 +412,13 @@ Ordinary higher-order Guest calls admit non-null function values whose parameter
 Guest Kotlin. The compiler creates one managed interface per concrete signature and lowers calls through the same
 interface-call instruction, preserving unboxed primitive values and ordinary reference ownership. There is no special
 arity transition at 22 or 23 arguments in the Guest artifact.
+The emitter also understands normalized Kotlin IR returnable blocks: a local return writes the typed block result
+and jumps to its continuation; a return targeting the enclosing function remains a function return. Nested targets,
+Unit/Nothing paths and terminated branches use the existing artifact control-flow instructions. Unknown return
+targets produce located diagnostics. `testKotlinInlineBlocksVmConformance` exercises this through a test-only common
+Kotlin inliner adapter and the ordinary linker, writer and Rust verifier. Production function inlining and collection
+inline modifiers remain disabled; generic specialization and retained callable-reference compatibility are separate
+integration work.
 Nested closures capture free values through their enclosing closure objects. The compiler scans assignments across
 functions, class initialization and nested closures. Captured locals with no assignments after initialization are
 stored directly in the closure; reference captures preserve referent identity. Reassigned captured locals retain a
