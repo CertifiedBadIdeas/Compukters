@@ -174,6 +174,15 @@ class GuestInlineIntegrationTest {
             inline fun wrap(crossinline block: () -> Int): () -> Int = { block() + 1 }
             fun independent(initial: Int): () -> Int { var count = initial; return { count += 1; count } }
             fun addOne(value: Int): Int = value + 1
+            inline fun decide(block: () -> Boolean): Boolean = block()
+            fun statementCondition(): Int { if (decide { return 7 }) return 1; return 0 }
+            fun valueCondition(): Int { val value = if (decide { return 8 }) 1 else 0; return value }
+            fun laterCondition(first: Boolean): Int = when {
+                first -> 3
+                decide { return 7 } -> 2
+                else -> 0
+            }
+            fun loopCondition(): Int { while (decide { return 9 }) {} ; return 0 }
             inline fun Int.scale(block: (Int) -> Int): Int = block(this)
             inline fun defaultCall(value: Int = 3, block: (Int) -> Int = { it + 1 }): Int = block(value)
             inline fun callable(value: Int): Int = apply(value) { if (it > 0) return 7; 0 }
@@ -267,6 +276,8 @@ class GuestInlineIntegrationTest {
                 verify(transform(4, function) == 5)
                 verify(next(counter).scale { it + it } == 4)
                 verify(counter.value == 2)
+                verify(statementCondition() == 7 && valueCondition() == 8 && loopCondition() == 9)
+                verify(laterCondition(true) == 3 && laterCondition(false) == 7)
                 verify(defaultCall() == 4)
                 verify(defaultCall(block = { it + 2 }) == 5)
                 verify(Initialized(3).value == 4)

@@ -31,6 +31,24 @@ import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
     @Test
+    fun `collection inline callbacks admit non local returns in native analysis`() {
+        val source =
+            """
+            import kotlin.collections.*
+            fun search(values: List<Int>): Int {
+                values.map { if (it > 0) return it; it }
+                values.any { return it }
+                return -1
+            }
+            """.trimIndent()
+        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+            val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+            assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+        }
+    }
+
+    @Test
     fun `suspend declaration is outside the transparent Guest task model`() {
         val source = "suspend fun main() {}"
         K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->

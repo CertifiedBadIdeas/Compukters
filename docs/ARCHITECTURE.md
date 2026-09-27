@@ -414,7 +414,8 @@ interface-call instruction, preserving unboxed primitive values and ordinary ref
 arity transition at 22 or 23 arguments in the Guest artifact.
 The emitter also understands normalized Kotlin IR returnable blocks: a local return writes the typed block result
 and jumps to its continuation; a return targeting the enclosing function remains a function return. Nested targets,
-Unit/Nothing paths and terminated branches use the existing artifact control-flow instructions. Unknown return
+Unit/Nothing paths and terminated branches use the existing artifact control-flow instructions. A terminating inline
+condition creates no successor branches; earlier alternatives retain their continuation. Unknown return
 targets produce located diagnostics. Both compiler entry paths invoke `GuestInlineNormalization` from
 `MinimalScriptLowering`, before capture and layout discovery. Only session-admitted project and source-library IR
 is expanded; canonical platform/intrinsic calls preserve their symbols and remain atomic. Unsupported shapes and
@@ -423,9 +424,11 @@ before copying so diagnostics can retain source-library paths.
 The internal `GuestInlineSpecialization` pass makes independent symbol-remapped copies of top-level generic inline
 bodies at concrete call-site types before common inlining. This preserves scalar inputs instead of erasing them to
 Any?, including nested forwarding and source-library bodies. Copies are cached by declaration and concrete type
-arguments. Reified, suspend and non-top-level inline declarations, unresolved type arguments, and expansion beyond
+arguments. Reified, suspend and non-top-level inline declarations, unowned type parameters, and expansion beyond
 256 variants or 64 active specialization levels are rejected. Normalization covers bodies, parameter defaults and
-initializers, retaining runtime-referenced definitions while discarding unused templates.
+initializers, retaining runtime-referenced definitions while discarding unused templates. Enclosing supported generic
+function/class parameters remain scoped through body copying and are resolved by the existing emitter specialization;
+normalization does not erase them to Any or replace the emitter's generic ownership.
 `GuestInlineExpansionGuard` checks executable roots before specialization or common inlining. It rejects inline
 dependency cycles and depth beyond 64, and caps cumulative projected expansion work at 1,000,000 units. Each source
 node costs one unit; each call additionally charges expanded callee work multiplied by one plus expanded argument
@@ -434,7 +437,8 @@ work, covering callback defaults substituted at multiple body nodes. Defaults ar
 Memoization avoids repeated analysis, but each call site still pays its full charge. Arithmetic checks reject overflow
 instead of wrapping. Preflight failure leaves source IR unchanged and never falls back to an ordinary call.
 This deliberately overcharges callback substitution and retained arguments; it is not an exact final-node estimate
-or a calibrated capacity budget. Collection extensions remain non-inline. `testKotlinInlineBlocksVmConformance`,
+or a calibrated capacity budget. Callback-taking collection extensions use this same source-only normalization,
+including non-local returns; stored callbacks keep managed dispatch. `testKotlinInlineBlocksVmConformance`,
 function-values, generic-library and transparent-call conformance cover the production path, including host-call
 suspension through expanded callbacks.
 Normalized rich lambdas without reflection targets use their invoke bodies with the existing closure layout and

@@ -38,7 +38,7 @@ public fun <T> Iterable<T>.lastIndexOf(element: T): Int {
 }
 
 /** Returns true when at least one element matches [predicate]. */
-public fun <T> Iterable<T>.any(predicate: (T) -> Boolean): Boolean {
+public inline fun <T> Iterable<T>.any(predicate: (T) -> Boolean): Boolean {
     for (element in this) {
         if (predicate(element)) return true
     }
@@ -46,7 +46,7 @@ public fun <T> Iterable<T>.any(predicate: (T) -> Boolean): Boolean {
 }
 
 /** Returns true when every element matches [predicate]. */
-public fun <T> Iterable<T>.all(predicate: (T) -> Boolean): Boolean {
+public inline fun <T> Iterable<T>.all(predicate: (T) -> Boolean): Boolean {
     for (element in this) {
         if (!predicate(element)) return false
     }
@@ -54,7 +54,7 @@ public fun <T> Iterable<T>.all(predicate: (T) -> Boolean): Boolean {
 }
 
 /** Returns true when no element matches [predicate]. */
-public fun <T> Iterable<T>.none(predicate: (T) -> Boolean): Boolean {
+public inline fun <T> Iterable<T>.none(predicate: (T) -> Boolean): Boolean {
     for (element in this) {
         if (predicate(element)) return false
     }
@@ -69,7 +69,7 @@ public fun <T> Iterable<T>.firstOrNull(): T? {
 }
 
 /** Returns the first matching element, or null when no element matches [predicate]. */
-public fun <T> Iterable<T>.firstOrNull(predicate: (T) -> Boolean): T? {
+public inline fun <T> Iterable<T>.firstOrNull(predicate: (T) -> Boolean): T? {
     for (element in this) {
         if (predicate(element)) return element
     }
@@ -86,7 +86,7 @@ public fun <T> Iterable<T>.lastOrNull(): T? {
 }
 
 /** Returns the last matching element after traversing this iterable in iteration order. */
-public fun <T> Iterable<T>.lastOrNull(predicate: (T) -> Boolean): T? {
+public inline fun <T> Iterable<T>.lastOrNull(predicate: (T) -> Boolean): T? {
     var last: T? = null
     for (element in this) {
         if (predicate(element)) last = element
@@ -98,7 +98,7 @@ public fun <T> Iterable<T>.lastOrNull(predicate: (T) -> Boolean): T? {
  * Accumulates elements in iteration order, passing the current result and each element to [operation].
  * Returns [initial] unchanged when this iterable is empty.
  */
-public fun <T, R> Iterable<T>.fold(initial: R, operation: (R, T) -> R): R {
+public inline fun <T, R> Iterable<T>.fold(initial: R, operation: (R, T) -> R): R {
     var accumulator = initial
     for (element in this) {
         accumulator = operation(accumulator, element)
@@ -107,7 +107,7 @@ public fun <T, R> Iterable<T>.fold(initial: R, operation: (R, T) -> R): R {
 }
 
 /** Returns a list containing [transform] applied once to each element in iteration order. */
-public fun <T, R> Iterable<T>.map(transform: (T) -> R): List<R> {
+public inline fun <T, R> Iterable<T>.map(transform: (T) -> R): List<R> {
     val result = ArrayList<R>()
     for (element in this) {
         result.add(transform(element))
@@ -116,7 +116,7 @@ public fun <T, R> Iterable<T>.map(transform: (T) -> R): List<R> {
 }
 
 /** Maps a collection in iteration order, reserving its known size for the result. */
-public fun <T, R> Collection<T>.map(transform: (T) -> R): List<R> {
+public inline fun <T, R> Collection<T>.map(transform: (T) -> R): List<R> {
     val result = ArrayList<R>(size)
     val elements: Iterable<T> = this
     for (element in elements) {
@@ -126,7 +126,7 @@ public fun <T, R> Collection<T>.map(transform: (T) -> R): List<R> {
 }
 
 /** Applies [transform] once per element in iteration order and retains only non-null results. */
-public fun <T, R : Any> Iterable<T>.mapNotNull(transform: (T) -> R?): List<R> {
+public inline fun <T, R : Any> Iterable<T>.mapNotNull(transform: (T) -> R?): List<R> {
     val result = ArrayList<R>()
     for (element in this) {
         val value = transform(element)
@@ -136,7 +136,7 @@ public fun <T, R : Any> Iterable<T>.mapNotNull(transform: (T) -> R?): List<R> {
 }
 
 /** Returns a list containing elements matching [predicate], in their original iteration order. */
-public fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T> {
+public inline fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T> {
     val result = ArrayList<T>()
     for (element in this) {
         if (predicate(element)) result.add(element)
@@ -145,7 +145,7 @@ public fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T> {
 }
 
 /** Appends transformed elements to [destination] in iteration order and returns that destination. */
-public fun <T, R, C : MutableCollection<in R>> Iterable<T>.mapTo(destination: C, transform: (T) -> R): C {
+public inline fun <T, R, C : MutableCollection<in R>> Iterable<T>.mapTo(destination: C, transform: (T) -> R): C {
     for (element in this) {
         destination.add(transform(element))
     }
@@ -153,7 +153,7 @@ public fun <T, R, C : MutableCollection<in R>> Iterable<T>.mapTo(destination: C,
 }
 
 /** Appends matching elements to [destination] in iteration order and returns that destination. */
-public fun <T, C : MutableCollection<in T>> Iterable<T>.filterTo(destination: C, predicate: (T) -> Boolean): C {
+public inline fun <T, C : MutableCollection<in T>> Iterable<T>.filterTo(destination: C, predicate: (T) -> Boolean): C {
     for (element in this) {
         if (predicate(element)) destination.add(element)
     }
@@ -161,7 +161,7 @@ public fun <T, C : MutableCollection<in T>> Iterable<T>.filterTo(destination: C,
 }
 
 /** Appends non-null transformed elements to [destination] and returns that destination. */
-public fun <T, R : Any, C : MutableCollection<in R>> Iterable<T>.mapNotNullTo(destination: C, transform: (T) -> R?): C {
+public inline fun <T, R : Any, C : MutableCollection<in R>> Iterable<T>.mapNotNullTo(destination: C, transform: (T) -> R?): C {
     for (element in this) {
         val value = transform(element)
         if (value != null) destination.add(value)

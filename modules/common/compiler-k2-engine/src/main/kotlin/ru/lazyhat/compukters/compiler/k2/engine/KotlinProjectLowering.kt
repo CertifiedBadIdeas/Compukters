@@ -5972,6 +5972,7 @@ private class FunctionCompiler(
         jumpTo(header)
         currentBlock = header
         val condition = compileExpression(loop.condition)
+        if (isTerminated()) return
         val body = createBlock()
         val branchBlock = currentBlock
         val branchIndex = blocks[branchBlock].instructions.size
@@ -6343,7 +6344,7 @@ private class FunctionCompiler(
 
     private fun compileWhenStatement(expression: IrWhen) {
         val exits = mutableListOf<Int>()
-        expression.branches.forEachIndexed { index, branch ->
+        for ((index, branch) in expression.branches.withIndex()) {
             val isElse = index == expression.branches.lastIndex && branch.condition.isTrueConstant()
             if (isElse) {
                 if (branch.result.isNoWhenBranchMatchedCall() && function.returnType == unitType) {
@@ -6353,6 +6354,7 @@ private class FunctionCompiler(
                 }
             } else {
                 val condition = compileExpression(branch.condition)
+                if (isTerminated()) break
                 val body = createBlock()
                 val otherwise = createBlock()
                 emit(Instruction.Branch(condition, blockId(body), blockId(otherwise)))
@@ -6376,7 +6378,7 @@ private class FunctionCompiler(
         val resultType = valueType(expression.type, expression)
         val destination = allocate(resultType)
         val exits = mutableListOf<Int>()
-        expression.branches.forEachIndexed { index, branch ->
+        for ((index, branch) in expression.branches.withIndex()) {
             val isElse = index == expression.branches.lastIndex && branch.condition.isTrueConstant()
             if (isElse) {
                 if (branch.result.isNoWhenBranchMatchedCall()) {
@@ -6389,6 +6391,7 @@ private class FunctionCompiler(
                 }
             } else {
                 val condition = compileExpression(branch.condition)
+                if (isTerminated()) break
                 val body = createBlock()
                 val otherwise = createBlock()
                 emit(Instruction.Branch(condition, blockId(body), blockId(otherwise)))

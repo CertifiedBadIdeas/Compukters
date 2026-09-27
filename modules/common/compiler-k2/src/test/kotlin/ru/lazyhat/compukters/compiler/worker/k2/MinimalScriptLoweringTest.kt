@@ -2514,6 +2514,24 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `inline collection literals avoid closures while stored callbacks retain ownership`() =
+        withAdapter { adapter ->
+            fun closureCount(callback: String): Int {
+                val result = adapter.compile(request("import kotlin.collections.*\nfun main() { $callback }"))
+                val module =
+                    ArtifactReader
+                        .read(assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray())
+                        .modules
+                        .single { it.kind == ModuleKind.APPLICATION }
+                return module.types.filterIsInstance<NominalType.Class>().count {
+                    module.strings[it.name.value.toInt()].toString().startsWith("app.<lambda-")
+                }
+            }
+            assertEquals(0, closureCount("val result = listOf(1, 2).map { it + 1 }"))
+            assertEquals(1, closureCount("val transform: (Int) -> Int = { it + 1 }; val result = listOf(1, 2).map(transform)"))
+        }
+
+    @Test
     fun `Iterable filterNotNull narrows boxed Int and reference elements`() =
         withAdapter { adapter ->
             val source =
@@ -2825,6 +2843,28 @@ class MinimalScriptLoweringTest {
                     override fun iterator(): Iterator<Int> = values.iterator()
                 }
                 fun <T, R> convert(values: Iterable<T>, transform: (T) -> R): List<R> = values.map(transform)
+                fun earlyMap(values: List<Int>): Int { values.map { if (it == 2) return it; it }; return -1 }
+                fun earlyFilter(values: List<Int>): Int { values.filter { if (it == 2) return it; false }; return -1 }
+                fun earlyMapNotNull(values: List<Int>): Int { values.mapNotNull<Int, Int> { if (it == 2) return it; null }; return -1 }
+                fun earlyFold(values: List<Int>): Int { values.fold(0) { total, it -> if (it == 2) return total; total + it }; return -1 }
+                fun earlyAny(values: List<Int>): Int { values.any { return it }; return -1 }
+                fun earlyAll(values: List<Int>): Int { values.all { return it }; return -1 }
+                fun earlyNone(values: List<Int>): Int { values.none { return it }; return -1 }
+                fun earlyFirst(values: List<Int>): Int { values.firstOrNull { return it }; return -1 }
+                fun earlyLast(values: List<Int>): Int { values.lastOrNull { return it }; return -1 }
+                fun earlyMapTo(values: List<Int>, destination: ArrayList<Int>): Int {
+                    values.mapTo(destination) { if (it == 2) return it; it }; return -1
+                }
+                fun earlyFilterTo(values: List<Int>, destination: ArrayList<Int>): Int {
+                    values.filterTo(destination) { if (it == 2) return it; true }; return -1
+                }
+                fun earlyMapNotNullTo(values: List<Int>, destination: ArrayList<Int>): Int {
+                    values.mapNotNullTo(destination) { if (it == 2) return it; it }; return -1
+                }
+                fun receiver(values: List<Int>, calls: IntArray): List<Int> { calls[0] += 1; return values }
+                class GenericMap<T>(val value: T) {
+                    fun repeat(): List<T> = listOf(value).map { it }
+                }
                 fun main() {
                     var calls = 0
                     val empty = emptyList<Int>().map { value -> calls += 1; value }
@@ -2881,6 +2921,20 @@ class MinimalScriptLoweringTest {
                     require(genericCollection.map { value -> value + 2 }[99] == 101)
                     require((emptyList<Item>() as Collection<Item>).map { item -> calls += 1; item }.isEmpty())
                     require(calls == 2)
+                    val earlyInput = listOf(1, 2, 3)
+                    require(earlyMap(earlyInput) == 2 && earlyFilter(earlyInput) == 2 && earlyMapNotNull(earlyInput) == 2)
+                    require(earlyFold(earlyInput) == 1 && earlyAny(earlyInput) == 1 && earlyAll(earlyInput) == 1)
+                    require(earlyNone(earlyInput) == 1 && earlyFirst(earlyInput) == 1 && earlyLast(earlyInput) == 3)
+                    val destination = ArrayList<Int>()
+                    require(earlyMapTo(earlyInput, destination) == 2 && destination.size == 1 && destination[0] == 1)
+                    destination.clear()
+                    require(earlyFilterTo(earlyInput, destination) == 2 && destination.size == 1 && destination[0] == 1)
+                    destination.clear()
+                    require(earlyMapNotNullTo(earlyInput, destination) == 2 && destination.size == 1 && destination[0] == 1)
+                    require(GenericMap(3).repeat()[0] == 3 && GenericMap(first).repeat()[0] === first)
+                    val evaluations = IntArray(1)
+                    receiver(earlyInput, evaluations).map { it + 1 }
+                    require(evaluations[0] == 1)
                     println("map ok")
                 }
                 """.trimIndent()
@@ -3988,6 +4042,8 @@ class MinimalScriptLoweringTest {
                         """
                         import compukter.terminal.Terminal
 
+                        import kotlin.collections.*
+
                         inline fun invoke(block: () -> Int): Int = block()
                         fun readKey(): Int {
                             Terminal.awaitEvent()
@@ -3995,7 +4051,7 @@ class MinimalScriptLoweringTest {
                         }
 
                         fun main() {
-                            Terminal.write(if (invoke { readKey() } == 13) "enter" else "other")
+                            Terminal.write(if (invoke { kotlin.collections.listOf(1).map { readKey() }[0] } == 13) "enter" else "other")
                         }
                         """.trimIndent(),
                 )
