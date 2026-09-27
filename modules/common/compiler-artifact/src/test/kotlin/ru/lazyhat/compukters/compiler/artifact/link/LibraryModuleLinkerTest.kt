@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.compiler.artifact.link
 
+import ru.lazyhat.compukters.compiler.artifact.analysis.ExecutionStorage
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
@@ -114,9 +115,10 @@ class LibraryModuleLinkerTest {
                     },
             )
 
+        assertEquals(40u, ExecutionStorage.requiredStackBytes(listOf(library), 1u))
         val linked = LibraryModuleLinker.link(application(library), mapOf("sample:library" to library))
 
-        assertEquals(40u, linked.manifest.requiredStackBytes)
+        assertEquals(16u, linked.manifest.requiredStackBytes)
     }
 
     @Test

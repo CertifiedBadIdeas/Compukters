@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.compiler.artifact.link
 
 import ru.lazyhat.compukters.compiler.artifact.analysis.ExecutionStorage
 import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
+import ru.lazyhat.compukters.compiler.artifact.analysis.TemporaryRegisters
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
@@ -169,12 +170,14 @@ object LibraryModuleLinker {
             }
         val baseModules =
             ordered.associateWith { old ->
-                relocateModule(
-                    combined.modules[old],
-                    old,
-                    requireNotNull(relocations[old]),
-                    moduleIds,
-                    reachability.importTargets,
+                TemporaryRegisters.compact(
+                    relocateModule(
+                        combined.modules[old],
+                        old,
+                        requireNotNull(relocations[old]),
+                        moduleIds,
+                        reachability.importTargets,
+                    ),
                 )
             }
         val completed = mutableMapOf<Int, Module>()

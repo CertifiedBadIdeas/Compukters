@@ -17,6 +17,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- Newly compiled programs reuse memory for temporary values with nonoverlapping lifetimes, reducing execution frame
+  requirements while preserving types, GC roots and suspended calls.
+
 - Programs can declare supported top-level and extension `inline` functions, including concrete generic callbacks
   and non-local returns. Direct callbacks can avoid closure allocation; stored or escaping callbacks retain managed
   ownership. Callback-taking collection extensions also inline direct lambdas and support non-local returns.
