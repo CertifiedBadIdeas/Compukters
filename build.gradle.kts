@@ -1069,6 +1069,29 @@ tasks.register<Exec>("benchmarkCollectionRepresentations") {
 }
 
 val objectArrayBenchmarkArtifacts = project(":compiler-k2").layout.buildDirectory.dir("generated/benchmarks/object-arrays")
+
+val transientBenchmarkArtifacts = project(":compiler-k2").layout.buildDirectory.dir("generated/benchmarks/transient-allocations")
+val transientBenchmarkReports = layout.buildDirectory.dir("reports/benchmarks/transient-allocations")
+
+tasks.register<Exec>("benchmarkTransientAllocations") {
+    description = "Measures loop, fold, and captured-variable costs at a 16 KiB Guest heap."
+    group = "benchmark"
+    dependsOn(":compiler-k2:generateTransientAllocationBenchmarkArtifacts")
+    inputs.dir(transientBenchmarkArtifacts)
+    inputs.file(compilerArtifactVmConformanceHarness)
+    inputs.file(compilerArtifactVmConformanceLock)
+    inputs.file(compilerArtifactVmConformanceHarness.resolveSibling("object_arrays_bench.rs"))
+    inputs.dir(compukterVmRoot.resolve("src"))
+    outputs.dir(transientBenchmarkReports)
+    outputs.upToDateWhen { false }
+    commandLine(
+        "cargo", "test", "--release", "--locked", "--offline", "--manifest-path",
+        compilerArtifactVmConformanceHarness.absolutePath, "--test", "object_arrays_bench", "--",
+        transientBenchmarkArtifacts.get().asFile.absolutePath,
+        transientBenchmarkReports.get().asFile.absolutePath, "3", "8", "fixed-heap=16384",
+    )
+    environment("CARGO_TARGET_DIR", rootProject.file(".toolchain/build/cargo/collection-benchmark").absolutePath)
+}
 val objectArrayBenchmarkReports = layout.buildDirectory.dir("reports/benchmarks/object-arrays")
 
 tasks.register<Exec>("benchmarkObjectArrayHeap") {

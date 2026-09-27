@@ -180,15 +180,27 @@ fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
     assert!(
         (3..=5).contains(&args.len()),
-        "usage: object_arrays_bench ARTIFACT_DIR REPORT_DIR SAMPLES [EXPECTED_CASES] [fixed-heap]"
+        "usage: object_arrays_bench ARTIFACT_DIR REPORT_DIR SAMPLES [EXPECTED_CASES] [fixed-heap[=BYTES]]"
     );
     let inputs = Path::new(&args[0]);
     let outputs = Path::new(&args[1]);
     let repetitions: usize = args[2].parse().unwrap();
     assert!(repetitions >= 3);
-    let fixed_heap = args.get(4).is_some_and(|mode| {
-        assert_eq!(mode, "fixed-heap");
-        true
+    let fixed_heap = args.get(4).is_some();
+    let pressure_heap = args.get(4).map_or(PRESSURE_HEAP, |mode| {
+        if mode == "fixed-heap" {
+            return PRESSURE_HEAP;
+        }
+        let bytes: u32 = mode
+            .strip_prefix("fixed-heap=")
+            .expect("expected fixed-heap or fixed-heap=BYTES")
+            .parse()
+            .unwrap();
+        assert!(
+            bytes >= 32 && bytes.is_multiple_of(16),
+            "heap must be at least 32 bytes and 16-byte aligned"
+        );
+        bytes
     });
     fs::create_dir_all(outputs).unwrap();
     let manifest = fs::read_to_string(inputs.join("manifest.tsv")).unwrap();
@@ -220,9 +232,9 @@ fn main() {
         if fixed_heap {
             // Fixed-budget stress runs measure repeated operations and GC rather than searching thresholds.
             // If the pressure budget exhausts, large-heap samples still validate the program's checksum.
-            let pressure_warmup = run(case, PRESSURE_HEAP, false);
+            let pressure_warmup = run(case, pressure_heap, false);
             case.sample_heap = if pressure_warmup.is_ok() {
-                PRESSURE_HEAP
+                pressure_heap
             } else {
                 LARGE_HEAP
             };
@@ -291,16 +303,16 @@ fn main() {
         }
         eprintln!("measurement round {}/{} complete", sample + 1, repetitions);
     }
-    let mut summary = String::from("id\trepresentation\tworkload\tcount\tfields\trounds\tchecksum\tartifact_bytes\ttypes\tfunctions\tminimum_ready_heap_bytes\tminimum_operation_heap_bytes\tcreate_median_ns\thot_p10_ns\thot_median_ns\thot_p90_ns\tcreate_instructions\tcreate_fixed_units\tcreate_dynamic_units\tcreate_maintenance_units\thot_instructions\thot_fixed_units\thot_dynamic_units\thot_maintenance_units\tpressure_status\tpressure_hot_ns\tpressure_hot_maintenance_units\ttiming_heap_bytes\n");
+    let mut summary = String::from("id\trepresentation\tworkload\tcount\tfields\trounds\tchecksum\tartifact_bytes\ttypes\tfunctions\tminimum_ready_heap_bytes\tminimum_operation_heap_bytes\tcreate_median_ns\thot_p10_ns\thot_median_ns\thot_p90_ns\tcreate_instructions\tcreate_fixed_units\tcreate_dynamic_units\tcreate_maintenance_units\thot_instructions\thot_fixed_units\thot_dynamic_units\thot_maintenance_units\tpressure_status\tpressure_hot_ns\tpressure_hot_maintenance_units\ttiming_heap_bytes\tpressure_heap_bytes\n");
     for case in &cases {
         let measurement = case.samples[0];
-        let pressured = run(case, PRESSURE_HEAP, false);
+        let pressured = run(case, pressure_heap, false);
         let (status, elapsed, maintenance) = match pressured {
             Ok(sample) => ("ok", sample.hot_ns, sample.hot.maintenance_units),
             Err(stage) => (stage, 0, 0),
         };
         summary.push_str(&format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             case.fields.join("\t"),
             if fixed_heap {
                 String::new()
@@ -327,7 +339,8 @@ fn main() {
             status,
             elapsed,
             maintenance,
-            case.sample_heap
+            case.sample_heap,
+            pressure_heap
         ));
     }
     fs::write(outputs.join("samples.tsv"), raw).unwrap();
