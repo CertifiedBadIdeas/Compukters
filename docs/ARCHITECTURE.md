@@ -321,6 +321,14 @@ The Rust VM owns verification, the Tier 0 interpreter, managed memory and collec
 capability suspension, and host-neutral sessions. Future JIT or AOT tiers must remain behind the same verified artifact
 and session contract.
 
+Managed blocks use an eight-byte allocator header followed by the eight-byte type/identity header, with eight-byte
+block alignment and a 24-byte minimum. Free-list links overlap type/identity storage only while a block is free.
+During collection's roots/mark phases, the predecessor-size word temporarily holds the intrusive gray link; Guest
+execution and allocation remain paused. The bounded forward sweep restores predecessor sizes before coalescing,
+carrying the effective preceding block size across steps. No per-object side table or extra heap scan is required.
+Arena backing and admitted heap budgets retain their existing 16-byte granularity. See the
+[object-array heap measurements](OBJECT-ARRAY-BENCHMARK.md) for construction and transformation budgets.
+
 ## Filesystem and machine lifetime
 
 The Rust runtime owns the guest filesystem and its persistence. Minecraft stores only a stable 128-bit `ComputerId`;
