@@ -9,6 +9,9 @@ This benchmark measures the Guest heap budget needed to construct an object list
 while its original input remains live. The budget includes temporary allocations, fragmentation and GC; it is
 not an exact live-payload or host RSS measurement.
 
+For 100 repeated transformations with reusable lists and objects at 256 KiB, see
+[collection reuse measurements](COLLECTION-REUSE-BENCHMARK.md).
+
 ## Workloads and method
 
 Fourteen ordinary Guest Kotlin programs construct 4096 records with two mutable Int fields. Seven workloads run against

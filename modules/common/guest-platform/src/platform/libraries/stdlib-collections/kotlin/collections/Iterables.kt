@@ -144,6 +144,31 @@ public fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T> {
     return result
 }
 
+/** Appends transformed elements to [destination] in iteration order and returns that destination. */
+public fun <T, R, C : MutableCollection<in R>> Iterable<T>.mapTo(destination: C, transform: (T) -> R): C {
+    for (element in this) {
+        destination.add(transform(element))
+    }
+    return destination
+}
+
+/** Appends matching elements to [destination] in iteration order and returns that destination. */
+public fun <T, C : MutableCollection<in T>> Iterable<T>.filterTo(destination: C, predicate: (T) -> Boolean): C {
+    for (element in this) {
+        if (predicate(element)) destination.add(element)
+    }
+    return destination
+}
+
+/** Appends non-null transformed elements to [destination] and returns that destination. */
+public fun <T, R : Any, C : MutableCollection<in R>> Iterable<T>.mapNotNullTo(destination: C, transform: (T) -> R?): C {
+    for (element in this) {
+        val value = transform(element)
+        if (value != null) destination.add(value)
+    }
+    return destination
+}
+
 /** Returns a list of non-null elements in their original iteration order. */
 public fun <T : Any> Iterable<T?>.filterNotNull(): List<T> {
     val result = ArrayList<T>()

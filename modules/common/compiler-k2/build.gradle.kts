@@ -321,6 +321,7 @@ val listAnyConformanceArtifact = layout.buildDirectory.file("generated/conforman
 val mutableListConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-mutable-list.cpkt")
 val filterNotNullConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-filter-not-null.cpkt")
 val filterConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-filter.cpkt")
+val destinationConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-destination.cpkt")
 val mapNotNullConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-map-not-null.cpkt")
 val mapConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-map.cpkt")
 val foldConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-fold.cpkt")
@@ -973,6 +974,22 @@ val generateMapNotNullConformanceArtifact = tasks.register<Test>("generateMapNot
     }
 }
 
+val generateDestinationConformanceArtifact = tasks.register<Test>("generateDestinationConformanceArtifact") {
+    description = "Compiles Iterable destination operations for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*Iterable destination operations append preserve types and return identity*")
+    inputs.file(workerJar)
+    outputs.file(destinationConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.destinationArtifact", destinationConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
 val generateFilterConformanceArtifact = tasks.register<Test>("generateFilterConformanceArtifact") {
     description = "Compiles Iterable filter for pinned VM conformance."
     group = "verification"
@@ -1391,5 +1408,23 @@ tasks.register<Test>("generateObjectCollectionBenchmarkArtifacts") {
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.bench.objectCollectionsOutput", objectCollectionBenchmarkArtifacts.get().asFile.absolutePath)
+    }
+}
+
+val collectionReuseBenchmarkArtifacts = layout.buildDirectory.dir("generated/benchmarks/collection-reuse")
+
+tasks.register<Test>("generateCollectionReuseBenchmarkArtifacts") {
+    description = "Compiles opt-in repeated collection reuse Guest workloads."
+    group = "benchmark"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*collection reuse heap benchmark artifacts compile*")
+    inputs.file(workerJar)
+    outputs.dir(collectionReuseBenchmarkArtifacts)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.bench.collectionReuseOutput", collectionReuseBenchmarkArtifacts.get().asFile.absolutePath)
     }
 }

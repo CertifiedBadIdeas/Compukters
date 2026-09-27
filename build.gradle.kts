@@ -626,6 +626,15 @@ registerKotlinVmConformance(
     conformanceScenario = "map-not-null",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinDestinationVmConformance",
+    taskDescription = "Executes Iterable destination operations with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateDestinationConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-destination.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-destination-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_DESTINATION_ARTIFACT",
+    conformanceScenario = "destination",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinFilterVmConformance",
     taskDescription = "Executes Iterable filter with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateFilterConformanceArtifact",
@@ -1101,6 +1110,29 @@ tasks.register<Exec>("benchmarkObjectCollectionHeap") {
         compilerArtifactVmConformanceHarness.absolutePath, "--test", "object_arrays_bench", "--",
         objectCollectionBenchmarkArtifacts.get().asFile.absolutePath,
         objectCollectionBenchmarkReports.get().asFile.absolutePath, "3", "14",
+    )
+    environment("CARGO_TARGET_DIR", rootProject.file(".toolchain/build/cargo/collection-benchmark").absolutePath)
+}
+
+val collectionReuseBenchmarkArtifacts = project(":compiler-k2").layout.buildDirectory.dir("generated/benchmarks/collection-reuse")
+val collectionReuseBenchmarkReports = layout.buildDirectory.dir("reports/benchmarks/collection-reuse")
+
+tasks.register<Exec>("benchmarkCollectionReuse") {
+    description = "Measures repeated Guest collection reuse and GC work at a fixed heap budget."
+    group = "benchmark"
+    dependsOn(":compiler-k2:generateCollectionReuseBenchmarkArtifacts")
+    inputs.dir(collectionReuseBenchmarkArtifacts)
+    inputs.file(compilerArtifactVmConformanceHarness)
+    inputs.file(compilerArtifactVmConformanceLock)
+    inputs.file(compilerArtifactVmConformanceHarness.resolveSibling("object_arrays_bench.rs"))
+    inputs.dir(compukterVmRoot.resolve("src"))
+    outputs.dir(collectionReuseBenchmarkReports)
+    outputs.upToDateWhen { false }
+    commandLine(
+        "cargo", "test", "--release", "--locked", "--offline", "--manifest-path",
+        compilerArtifactVmConformanceHarness.absolutePath, "--test", "object_arrays_bench", "--",
+        collectionReuseBenchmarkArtifacts.get().asFile.absolutePath,
+        collectionReuseBenchmarkReports.get().asFile.absolutePath, "3", "3", "fixed-heap",
     )
     environment("CARGO_TARGET_DIR", rootProject.file(".toolchain/build/cargo/collection-benchmark").absolutePath)
 }

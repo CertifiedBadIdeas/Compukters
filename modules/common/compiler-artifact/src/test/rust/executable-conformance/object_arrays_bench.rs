@@ -22,6 +22,7 @@ struct Case {
     minimum_heap: u32,
     minimum_operation_heap: u32,
     samples: Vec<Measurement>,
+    sample_heap: u32,
 }
 
 #[derive(Clone, Copy)]
@@ -178,13 +179,17 @@ fn percentile(mut samples: Vec<u128>, percent: usize) -> u128 {
 fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
     assert!(
-        args.len() == 3 || args.len() == 4,
-        "usage: object_arrays_bench ARTIFACT_DIR REPORT_DIR SAMPLES [EXPECTED_CASES]"
+        (3..=5).contains(&args.len()),
+        "usage: object_arrays_bench ARTIFACT_DIR REPORT_DIR SAMPLES [EXPECTED_CASES] [fixed-heap]"
     );
     let inputs = Path::new(&args[0]);
     let outputs = Path::new(&args[1]);
     let repetitions: usize = args[2].parse().unwrap();
     assert!(repetitions >= 3);
+    let fixed_heap = args.get(4).is_some_and(|mode| {
+        assert_eq!(mode, "fixed-heap");
+        true
+    });
     fs::create_dir_all(outputs).unwrap();
     let manifest = fs::read_to_string(inputs.join("manifest.tsv")).unwrap();
     let mut cases: Vec<Case> = manifest
@@ -204,6 +209,7 @@ fn main() {
                 minimum_heap: 0,
                 minimum_operation_heap: 0,
                 samples: vec![],
+                sample_heap: LARGE_HEAP,
             }
         })
         .collect();
@@ -211,6 +217,28 @@ fn main() {
     assert_eq!(cases.len(), expected_cases);
     // Pre-verify every image. Verification, admission, start and teardown are outside elapsed execution times.
     for case in &mut cases {
+        if fixed_heap {
+            // Fixed-budget stress runs measure repeated operations and GC rather than searching thresholds.
+            // If the pressure budget exhausts, large-heap samples still validate the program's checksum.
+            let pressure_warmup = run(case, PRESSURE_HEAP, false);
+            case.sample_heap = if pressure_warmup.is_ok() {
+                PRESSURE_HEAP
+            } else {
+                LARGE_HEAP
+            };
+            if pressure_warmup.is_err() {
+                assert!(
+                    run(case, LARGE_HEAP, false).is_ok(),
+                    "warmup {}",
+                    case.fields[0]
+                );
+            }
+            eprintln!(
+                "prepared {}: sample heap {} bytes",
+                case.fields[0], case.sample_heap
+            );
+            continue;
+        }
         assert!(
             run(case, LARGE_HEAP, false).is_ok(),
             "warmup {}",
@@ -223,7 +251,7 @@ fn main() {
             case.fields[0], case.minimum_heap, case.minimum_operation_heap
         );
     }
-    let mut raw = String::from("id\tsample\tcreate_ns\thot_ns\n");
+    let mut raw = String::from("id\tsample\tcreate_ns\thot_ns\ttiming_heap_bytes\n");
     for sample in 0..repetitions {
         let order: Vec<usize> = if sample % 2 == 0 {
             (0..cases.len()).collect()
@@ -231,7 +259,8 @@ fn main() {
             (0..cases.len()).rev().collect()
         };
         for index in order {
-            let measurement = run(&cases[index], LARGE_HEAP, false).expect("large-heap execution");
+            let measurement =
+                run(&cases[index], cases[index].sample_heap, false).expect("sample execution");
             if let Some(previous) = cases[index].samples.first() {
                 assert_eq!(
                     previous.create.fixed_guest_units,
@@ -251,14 +280,18 @@ fn main() {
                 );
             }
             raw.push_str(&format!(
-                "{}\t{}\t{}\t{}\n",
-                cases[index].fields[0], sample, measurement.create_ns, measurement.hot_ns
+                "{}\t{}\t{}\t{}\t{}\n",
+                cases[index].fields[0],
+                sample,
+                measurement.create_ns,
+                measurement.hot_ns,
+                cases[index].sample_heap
             ));
             cases[index].samples.push(measurement);
         }
         eprintln!("measurement round {}/{} complete", sample + 1, repetitions);
     }
-    let mut summary = String::from("id\trepresentation\tworkload\tcount\tfields\trounds\tchecksum\tartifact_bytes\ttypes\tfunctions\tminimum_ready_heap_bytes\tminimum_operation_heap_bytes\tcreate_median_ns\thot_p10_ns\thot_median_ns\thot_p90_ns\tcreate_instructions\tcreate_fixed_units\tcreate_dynamic_units\tcreate_maintenance_units\thot_instructions\thot_fixed_units\thot_dynamic_units\thot_maintenance_units\tpressure_status\tpressure_hot_ns\tpressure_hot_maintenance_units\n");
+    let mut summary = String::from("id\trepresentation\tworkload\tcount\tfields\trounds\tchecksum\tartifact_bytes\ttypes\tfunctions\tminimum_ready_heap_bytes\tminimum_operation_heap_bytes\tcreate_median_ns\thot_p10_ns\thot_median_ns\thot_p90_ns\tcreate_instructions\tcreate_fixed_units\tcreate_dynamic_units\tcreate_maintenance_units\thot_instructions\thot_fixed_units\thot_dynamic_units\thot_maintenance_units\tpressure_status\tpressure_hot_ns\tpressure_hot_maintenance_units\ttiming_heap_bytes\n");
     for case in &cases {
         let measurement = case.samples[0];
         let pressured = run(case, PRESSURE_HEAP, false);
@@ -267,10 +300,18 @@ fn main() {
             Err(stage) => (stage, 0, 0),
         };
         summary.push_str(&format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             case.fields.join("\t"),
-            case.minimum_heap,
-            case.minimum_operation_heap,
+            if fixed_heap {
+                String::new()
+            } else {
+                case.minimum_heap.to_string()
+            },
+            if fixed_heap {
+                String::new()
+            } else {
+                case.minimum_operation_heap.to_string()
+            },
             percentile(case.samples.iter().map(|s| s.create_ns).collect(), 50),
             percentile(case.samples.iter().map(|s| s.hot_ns).collect(), 10),
             percentile(case.samples.iter().map(|s| s.hot_ns).collect(), 50),
@@ -285,7 +326,8 @@ fn main() {
             measurement.hot.maintenance_units,
             status,
             elapsed,
-            maintenance
+            maintenance,
+            case.sample_heap
         ));
     }
     fs::write(outputs.join("samples.tsv"), raw).unwrap();

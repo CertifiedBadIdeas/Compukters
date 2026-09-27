@@ -2552,6 +2552,101 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `Iterable destination operations append preserve types and return identity`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+                class Item(var value: Int)
+                fun absent(item: Item?): Item? = null
+                class Values(val values: List<Int?>) : Iterable<Int?> {
+                    override fun iterator(): Iterator<Int?> = values.iterator()
+                }
+                fun <T, R, C : MutableCollection<in R>> append(
+                    source: Iterable<T>, destination: C, transform: (T) -> R
+                ): C = source.mapTo(destination, transform)
+                fun main() {
+                    val source: Iterable<Int?> = Values(listOf(1000, null, 2000))
+                    val ints = ArrayList<Int>(0)
+                    ints.add(7)
+                    var calls = 0
+                    var order = 0
+                    val mapped: ArrayList<Int> = append(source, ints) { value ->
+                        calls += 1
+                        order = order * 10 + (value ?: 0) / 1000
+                        value ?: 9
+                    }
+                    require(mapped === ints && calls == 3 && order == 102)
+                    require(ints.size == 4 && ints[0] == 7 && ints[1] == 1000 && ints[2] == 9 && ints[3] == 2000)
+                    val nullable = ArrayList<Int?>()
+                    require(source.mapTo(nullable) { value -> value } === nullable)
+                    require(nullable.size == 3 && nullable[1] == null)
+                    val first = Item(1)
+                    val second = Item(2)
+                    val refs = listOf<Item?>(first, null, second, first)
+                    val selected = ArrayList<Item?>()
+                    selected.add(second)
+                    calls = 0
+                    require(refs.filterTo(selected) { item -> calls += 1; item !== second } === selected)
+                    require(calls == 4 && selected.size == 4 && selected[0] === second)
+                    require(selected[1] === first && selected[2] == null && selected[3] === first)
+                    val objects = ArrayList<Item>()
+                    objects.add(second)
+                    calls = 0
+                    require(refs.mapNotNullTo(objects) { item -> calls += 1; item } === objects)
+                    require(calls == 4 && objects.size == 4 && objects[0] === second && objects[3] === first)
+                    val texts = ArrayList<String>()
+                    require(source.mapNotNullTo(texts) { value -> if (value == null) null else "v" + value } === texts)
+                    require(texts.size == 2 && texts[0] == "v1000" && texts[1] == "v2000")
+                    calls = 0
+                    require(emptyList<Int>().mapTo(ints) { value -> calls += 1; value } === ints)
+                    require(emptyList<Item>().filterTo(objects) { item -> calls += 1; true } === objects)
+                    require(emptyList<Item>().mapNotNullTo(objects) { item -> calls += 1; item } === objects)
+                    require(refs.mapNotNullTo(objects) { item -> calls += 1; absent(item) } === objects)
+                    require(calls == 4 && objects.size == 4 && ints.size == 4)
+                    val universal = ArrayList<Any?>()
+                    require(source.mapTo(universal) { value -> value } === universal)
+                    require(universal[0] == 1000 && universal[1] == null)
+                    val destination: MutableCollection<Any?> = universal
+                    refs.filterTo(destination) { item -> item != null }
+                    require(universal.size == 6 && universal[3] === first && universal[5] === first)
+                    val boxes: Iterable<Any?> = nullable
+                    val nonNull = ArrayList<Any>()
+                    val nonNullDestination: MutableCollection<Any> = nonNull
+                    boxes.mapNotNullTo(nonNullDestination) { value -> value }
+                    require(nonNull.size == 2)
+                    require((nonNull[0] as Any?) === (nullable[0] as Any?))
+                    var round = 0
+                    while (round < 100) {
+                        ints.clear()
+                        source.mapNotNullTo(ints) { value -> value }
+                        require(ints.size == 2 && ints[0] == 1000 && ints[1] == 2000)
+                        round += 1
+                    }
+                    require(refs[0] === first && refs[1] == null)
+                    val pool = ArrayList<Item>()
+                    pool.add(first)
+                    objects.clear()
+                    refs.mapNotNullTo(objects) { item -> if (item === first) pool[0] else null }
+                    require(objects.size == 2 && objects[0] === first && objects[1] === first)
+                    var active = pool
+                    val readActive = { active[0] }
+                    require(readActive() === first)
+                    val otherPool = ArrayList<Item>()
+                    otherPool.add(second)
+                    active = otherPool
+                    require(readActive() === second)
+                    println("destination ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.destinationArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `Iterable mapNotNull preserves traversal narrowing and identity`() =
         withAdapter { adapter ->
             val source =
@@ -4652,6 +4747,36 @@ class MinimalScriptLoweringTest {
                         case.count,
                         2,
                         1,
+                        case.checksum(),
+                        bytes.size,
+                        module.types.size,
+                        module.functions.size,
+                    ).joinToString("\t")
+            }
+            output.resolve("manifest.tsv").writeText(manifest.joinToString("\n", postfix = "\n"))
+        }
+
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "compukter.bench.collectionReuseOutput", matches = ".+")
+    fun `collection reuse heap benchmark artifacts compile`() =
+        withAdapter { adapter ->
+            val output = Path.of(checkNotNull(System.getProperty("compukter.bench.collectionReuseOutput"))).createDirectories()
+            val manifest = mutableListOf("id\trepresentation\tworkload\tcount\tfields\trounds\tchecksum\tartifact_bytes\ttypes\tfunctions")
+            collectionReuseBenchmarkCases().forEach { case ->
+                val source = case.source()
+                val result = adapter.compile(request(source))
+                val bytes = collectionBenchmarkArtifact(assertNotNull(result.artifact, "${case.id}: ${result.diagnostics}").toByteArray())
+                val module = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+                output.resolve("${case.id}.cpkt").writeBytes(bytes)
+                output.resolve("${case.id}.kt").writeText(source)
+                manifest +=
+                    listOf(
+                        case.id,
+                        case.storage,
+                        case.workload,
+                        case.count,
+                        2,
+                        case.rounds,
                         case.checksum(),
                         bytes.size,
                         module.types.size,

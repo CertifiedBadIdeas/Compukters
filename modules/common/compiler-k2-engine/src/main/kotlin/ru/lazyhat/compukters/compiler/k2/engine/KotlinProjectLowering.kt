@@ -1630,6 +1630,7 @@ internal object KotlinProjectLowering {
                             platformScalars,
                             declaration,
                             shapeInterfaceTypes,
+                            classInstanceTypeIds = classInstanceTypeIds,
                         ),
                 )
             }
@@ -1670,6 +1671,7 @@ internal object KotlinProjectLowering {
                                         platformScalars,
                                         declaration,
                                         shapeInterfaceTypes,
+                                        classInstanceTypeIds = classInstanceTypeIds,
                                     ),
                                 cell = cell,
                             )
@@ -4556,7 +4558,10 @@ private class FunctionCompiler(
             return compileBuiltinCall(call, target, argumentExpressions, arguments)
         }
         val specialization = projectFunctionInstance(call, target)
-        val receiverSpecialization = resolveClassInstance(call.dispatchReceiver?.type)
+        val receiverSpecialization =
+            resolveClassInstance(call.dispatchReceiver?.type)?.let { receiver ->
+                (target.parent as? IrClass)?.let { resolveMemberOwner(receiver, it) } ?: receiver
+            }
         val arguments =
             resolveProjectCallArguments(call, target).zip(loweredParameters(target, session)).map { (argument, parameter) ->
                 val parameterType = specialization?.substitute(parameter.type) ?: receiverSpecialization?.substitute(parameter.type)
@@ -6244,6 +6249,23 @@ private class FunctionCompiler(
         return resolved.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
     }
 
+    private fun resolveMemberOwner(
+        receiver: GuestClassInstance,
+        owner: IrClass,
+    ): GuestClassInstance? {
+        val classes = classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration }
+        val visited = mutableSetOf<GuestClassInstance>()
+
+        fun find(instance: GuestClassInstance): GuestClassInstance? {
+            if (!visited.add(instance)) return null
+            if (instance.declaration == owner) return instance
+            return instance.declaration.superTypes.firstNotNullOfOrNull { superType ->
+                instance.substitute(superType).classInstance(classes)?.let(::find)
+            }
+        }
+        return find(receiver)
+    }
+
     private fun projectFunctionId(
         call: IrCall,
         target: IrSimpleFunction,
@@ -6275,9 +6297,12 @@ private class FunctionCompiler(
                 ?: throw UnsupportedKotlinIr(call, "generic function specialization is missing")
         } else if ((target.parent as? IrClass)?.typeParameters?.isNotEmpty() == true) {
             if (genericMemberFunctionIds.keys.none { it.first == target.symbol }) return null
-            val owner =
+            val receiver =
                 resolveClassInstance(call.dispatchReceiver?.type)
                     ?: throw UnsupportedKotlinIr(call, "generic method receiver has no concrete class instance")
+            val owner =
+                resolveMemberOwner(receiver, target.parent as IrClass)
+                    ?: throw UnsupportedKotlinIr(call, "generic method owner has no concrete class instance")
             genericMemberFunctionIds[target.symbol to owner]
                 ?: throw UnsupportedKotlinIr(call, "generic method specialization is missing")
         } else {
