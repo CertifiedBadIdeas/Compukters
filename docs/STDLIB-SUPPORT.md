@@ -107,7 +107,12 @@ links to their source files.
   Bulk mutations, collection constructors, `listIterator`, and `subList` are absent. Evidence:
   `testKotlinMutableListVmConformance`, tests `mutable ArrayList preserves growth mutation and read only views` and
   `mutable list element types remain invariant` in `MinimalScriptLoweringTest`.
-- [ ] **Other collections and functional helpers — Unsupported** — `Set`, `Map`, sequences, `map`,
+- [x] **Iterable transformation** — `Iterable<T>.map(transform: (T) -> R): List<R>` builds a new list in iteration
+  order, calling the transform once per element. Empty inputs do not call it. Independent input/output types include
+  `Int`, nullable elements, and supported Guest references; identity transforms retain stored references and Int boxes.
+  The result uses public `ArrayList` storage and existing VM allocation quotas. Evidence: `testKotlinMapVmConformance`
+  and `MinimalScriptLoweringTest`, test `Iterable map preserves order independent types and nullable identity`.
+- [ ] **Other collections and functional helpers — Unsupported** — `Set`, `Map`, sequences,
   `filter`, and general custom iterator loops have no Guest implementation. Tracking: not scheduled
 - [ ] **Console I/O — Partial** — `print`, `println`, and `readln` support the documented scalar and string forms through
   the terminal capability. Formatting and other overloads are absent. Evidence: `testKotlinSubsetVmConformance` and

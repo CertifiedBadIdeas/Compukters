@@ -28,6 +28,7 @@ fn main() {
         "list" => k2_lists_retain_typed_elements(),
         "list-any" => k2_int_list_covariance_boxes_universal_reads(),
         "mutable-list" => k2_mutable_list_preserves_growth_mutation_and_views(),
+        "map" => k2_map_preserves_order_types_and_identity(),
         "fold" => k2_fold_specializes_element_and_accumulator_types(),
         "collection-selection" => k2_collection_selection_preserves_values_and_traversal(),
         "nullable-collections" => k2_nullable_collections_preserve_values_and_nulls(),
@@ -1101,6 +1102,10 @@ fn k2_mutable_list_preserves_growth_mutation_and_views() {
         }
     }
     assert!(slices > 0, "list growth must resume across quota slices");
+}
+
+fn k2_map_preserves_order_types_and_identity() {
+    k2_expected_prints_with_budget("COMPUKTER_KOTLIN_MAP_ARTIFACT", ["map ok\n"], 256);
 }
 
 fn k2_fold_specializes_element_and_accumulator_types() {

@@ -2383,6 +2383,69 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `Iterable map preserves order independent types and nullable identity`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+                class Item(val value: Int)
+                class Values(val values: List<Int>) : Iterable<Int> {
+                    override fun iterator(): Iterator<Int> = values.iterator()
+                }
+                fun <T, R> convert(values: Iterable<T>, transform: (T) -> R): List<R> = values.map(transform)
+                fun main() {
+                    var calls = 0
+                    val empty = emptyList<Int>().map { value -> calls += 1; value }
+                    require(empty.isEmpty() && calls == 0)
+                    val input: Iterable<Int> = Values(listOf(1, 2, 3))
+                    var order = 0
+                    val strings = convert(input) { value ->
+                        calls += 1
+                        order = order * 10 + value
+                        "v" + value
+                    }
+                    require(calls == 3 && order == 123)
+                    require(strings.size == 3 && strings[0] == "v1" && strings[2] == "v3")
+                    require(strings.map { text -> text.length }.fold(0) { total, value -> total + value } == 6)
+                    val first = Item(1000)
+                    val refs = listOf(first, Item(2000))
+                    val identities = refs.map { item -> item }
+                    require(identities[0] === first && identities[1] === refs[1])
+                    val nullable = listOf<Int?>(1000, null, 2000)
+                    val boxes = nullable.map { value -> value }
+                    require(boxes[1] == null && boxes[2] == 2000)
+                    require((boxes[0] as Any?) === (nullable[0] as Any?))
+                    require(nullable.map { value -> value ?: 7 }.fold(0) { total, value -> total + value } == 3007)
+                    val optional = input.map { value -> if (value == 2) null else value }
+                    require(optional[0] == 1 && optional[1] == null && optional[2] == 3)
+                    val objects = input.map { value -> Item(value) }
+                    require(objects[2].value == 3)
+                    val nullableObjects = input.map { value -> if (value == 2) null else first }
+                    require(nullableObjects[0] === first && nullableObjects[1] == null)
+                    val texts = listOf<String?>("ab", null, "c")
+                    require(texts.map { text -> text?.length ?: 0 }.fold(0) { total, value -> total + value } == 3)
+                    val universal: List<Any?> = boxes
+                    require(universal[0] == 1000 && universal[1] == null)
+                    val mixed = input.map<Int, Any?> { value -> if (value == 2) null else value }
+                    require(mixed[0] == 1 && mixed[1] == null)
+                    val growing = ArrayList<Int>(0)
+                    var index = 0
+                    while (index < 100) { growing.add(index); index += 1 }
+                    calls = 0
+                    val mapped = growing.map { value -> calls += 1; value + 1 }
+                    require(calls == 100 && mapped.size == 100 && mapped[99] == 100)
+                    require(growing[99] == 99 && growing.size == 100)
+                    println("map ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.mapArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `Iterable fold specializes independent element and accumulator types`() =
         withAdapter { adapter ->
             val source =

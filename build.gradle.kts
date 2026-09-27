@@ -608,6 +608,15 @@ registerKotlinVmConformance(
     conformanceScenario = "fold",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinMapVmConformance",
+    taskDescription = "Executes Iterable map with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateMapConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-map.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-map-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_MAP_ARTIFACT",
+    conformanceScenario = "map",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinMutableListVmConformance",
     taskDescription = "Executes mutable ArrayList with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateMutableListConformanceArtifact",
