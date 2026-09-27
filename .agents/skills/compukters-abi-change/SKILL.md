@@ -52,8 +52,8 @@ in a separate parent-repository commit without absorbing unrelated submodule wor
 Cover valid round trips and malformed rejection at the changed boundary. Check byte order, widths, signedness,
 alignment, tags, counts, limits, ownership, and error mapping where applicable. Run focused producer-consumer and
 wrong-version tests for platform bundles or worker protocols. Run focused JVM and Rust tests plus the relevant
-cross-language conformance task when the boundary reaches the VM. Use full local verification when the completed
-change spans both repositories or multiple runtime layers. Update active ABI or architecture documentation in the
-same stage.
+cross-language conformance task when the boundary reaches the VM. Crossing repositories or runtime layers does not
+automatically require `verifyLocalFull`; reserve it for release preparation or an explicit user request, following
+`AGENTS.md`. Update active ABI or architecture documentation in the same stage.
 Use the matching versioned-boundary row in `docs/VERIFICATION.md` so every claim has focused producer-consumer evidence
-and the correct final gate.
+and the appropriate release gate.
