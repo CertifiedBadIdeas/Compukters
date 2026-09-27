@@ -123,3 +123,12 @@ public fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T> {
     }
     return result
 }
+
+/** Returns a list of non-null elements in their original iteration order. */
+public fun <T : Any> Iterable<T?>.filterNotNull(): List<T> {
+    val result = ArrayList<T>()
+    for (element in this) {
+        if (element != null) result.add(element)
+    }
+    return result
+}

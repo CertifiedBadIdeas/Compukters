@@ -833,8 +833,18 @@ links to their source files.
   The imported extension is not inline and does not support non-local returns. Evidence: `MinimalScriptLoweringTest`,
   test `Iterable filter preserves traversal nullable elements and identity`, executed by `testKotlinFilterVmConformance`.
 
+- [x] **Non-null element selection** — `fun <T : Any> Iterable<T?>.filterNotNull(): List<T>` excludes nulls and
+  narrows the element type while preserving order and duplicate matches. `Int?` elements are checked and unboxed into
+  the result's ordinary Int storage; supported reference values retain identity. An `Any?` input produces `List<Any>`
+  and retains stored boxes and objects. Empty and all-null inputs produce empty lists. Generic wrappers, custom nullable
+  iterables, and non-null library list inputs are supported. Library lists and `ArrayList` can widen to read-only
+  nullable element views without copying; scalar Int reads through these views box, while reference reads preserve
+  identity. Mutable list element types remain invariant. Like other Guest collection extensions, this function is
+  not inline. Evidence: `MinimalScriptLoweringTest`, test `Iterable filterNotNull narrows boxed Int and reference elements`,
+  executed by `testKotlinFilterNotNullVmConformance`.
+
 - [ ] **Other standard collections and functional helpers — Unsupported** — sets, maps,
-  sequences, `filterNotNull`, `mapNotNull`, and collection conversion helpers have no Guest implementation. Tracking: not scheduled
+  sequences, `mapNotNull`, and collection conversion helpers have no Guest implementation. Tracking: not scheduled
 
 - [ ] **Standard exceptions, reflection, and coroutine libraries — Unsupported** —
   these packages have no Guest implementation. Tracking: not scheduled

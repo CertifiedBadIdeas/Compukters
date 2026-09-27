@@ -88,6 +88,30 @@ internal class IntArrayBackedList(private val values: IntArray) : List<Int> {
 
     override fun iterator(): Iterator<Int> = IntArrayBackedListIterator(this)
 
+    internal fun getNullableElement(index: Int): Int? = get(index)
+
+    internal fun indexOfNullableElement(element: Int?): Int {
+        var index = 0
+        while (index < size) {
+            if (element == values[index]) return index
+            index += 1
+        }
+        return -1
+    }
+
+    internal fun lastIndexOfNullableElement(element: Int?): Int {
+        var index = size - 1
+        while (index >= 0) {
+            if (element == values[index]) return index
+            index -= 1
+        }
+        return -1
+    }
+
+    internal fun containsNullableElement(element: Int?): Boolean = indexOfNullableElement(element) >= 0
+
+    internal fun iteratorNullableElement(): Iterator<Int?> = IntArrayBackedListIterator(this)
+
     internal fun getAny(index: Int): Any = values[index]
 
     internal fun getAnyNullable(index: Int): Any? = values[index]
@@ -107,6 +131,8 @@ internal class IntArrayBackedListIterator(private val list: IntArrayBackedList) 
         index += 1
         return value
     }
+
+    internal fun nextNullableElement(): Int? = next()
 
     internal fun nextAny(): Any = next()
 
@@ -182,6 +208,30 @@ internal class ArrayBackedList<T>(private val values: Array<T>) : List<T> {
 
     override fun iterator(): Iterator<T> = ArrayBackedListIterator(this)
 
+    internal fun getNullableElement(index: Int): T? = get(index)
+
+    internal fun indexOfNullableElement(element: T?): Int {
+        var index = 0
+        while (index < size) {
+            if (element == values[index]) return index
+            index += 1
+        }
+        return -1
+    }
+
+    internal fun lastIndexOfNullableElement(element: T?): Int {
+        var index = size - 1
+        while (index >= 0) {
+            if (element == values[index]) return index
+            index -= 1
+        }
+        return -1
+    }
+
+    internal fun containsNullableElement(element: T?): Boolean = indexOfNullableElement(element) >= 0
+
+    internal fun iteratorNullableElement(): Iterator<T?> = ArrayBackedListIterator(this)
+
     internal fun getAny(index: Int): Any = values[index] as Any
 
     internal fun getAnyNullable(index: Int): Any? = values[index]
@@ -201,6 +251,8 @@ internal class ArrayBackedListIterator<T>(private val list: ArrayBackedList<T>) 
         index += 1
         return value
     }
+
+    internal fun nextNullableElement(): T? = next()
 
     internal fun nextAny(): Any = next() as Any
 

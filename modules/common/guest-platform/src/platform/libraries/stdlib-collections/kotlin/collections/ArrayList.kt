@@ -100,6 +100,30 @@ public class ArrayList<T>(initialCapacity: Int = 10) : MutableList<T> {
 
     internal fun iteratorReadOnly(): Iterator<T> = ArrayListIterator(this)
 
+    internal fun getNullableElement(index: Int): T? = get(index)
+
+    internal fun indexOfNullableElement(element: T?): Int {
+        var index = 0
+        while (index < size) {
+            if (element == get(index)) return index
+            index += 1
+        }
+        return -1
+    }
+
+    internal fun lastIndexOfNullableElement(element: T?): Int {
+        var index = size - 1
+        while (index >= 0) {
+            if (element == get(index)) return index
+            index -= 1
+        }
+        return -1
+    }
+
+    internal fun containsNullableElement(element: T?): Boolean = indexOfNullableElement(element) >= 0
+
+    internal fun iteratorNullableElement(): Iterator<T?> = ArrayListIterator(this)
+
     internal fun getAny(index: Int): Any = get(index) as Any
     internal fun getAnyNullable(index: Int): Any? = get(index)
     internal fun containsAny(element: Any): Boolean = indexOfAny(element) >= 0
@@ -152,6 +176,8 @@ internal class ArrayListIterator<T>(private val list: ArrayList<T>) : MutableIte
         lastReturned = -1
         expectedModificationCount = list.modificationCount
     }
+
+    internal fun nextNullableElement(): T? = next()
 
     internal fun nextAny(): Any = next() as Any
     internal fun nextAnyNullable(): Any? = next()

@@ -45,7 +45,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   order with independent element and accumulator types, including nullable values and Guest class accumulators.
   `Iterable.map` transforms elements into a new list in iteration order, supporting independent input/output types,
   nullable values, and Guest classes. `Iterable.filter` selects matching elements into a new list while preserving
-  order, duplicates, nullable types, and stored references.
+  order, duplicates, nullable types, and stored references. `Iterable.filterNotNull` removes nulls and returns a list
+  with non-null elements, including unboxed `Int` results from `Int?` inputs. Library lists also support read-only
+  nullable element views without copying their storage.
 - Guest programs can create `ArrayList<T>` and use it through `MutableList<T>` to add, insert, replace, remove, and
   clear elements, including removal through mutable iterators. Lists grow within VM memory quotas, use unboxed `Int`
   storage, support nullable elements, and share changes with read-only list views. `arrayOfNulls<T>(size)` creates
