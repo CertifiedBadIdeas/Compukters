@@ -1010,11 +1010,12 @@ fn k2_generic_interface_dispatches_concrete_types() {
 }
 
 fn k2_lists_retain_typed_elements() {
-    k2_expected_prints(
+    k2_expected_prints_with_budget(
         "COMPUKTER_KOTLIN_LIST_ARTIFACT",
         [
             "2\n", "9\n", "true\n", "0\n", "0\n", "first\n", "blue\n", "1\n", "2\n", "2\n", "16\n", "first\n", "second\n",
         ],
+        256,
     );
 }
 
@@ -1170,7 +1171,7 @@ fn k2_list_index_outside_bounds_traps() {
     loop {
         match session.advance(64, 64).expect("list bounds program must execute") {
             AdvanceOutcome::SliceExhausted => {}
-            AdvanceOutcome::Crashed(GuestTrap::IndexOutOfBounds) => break,
+            AdvanceOutcome::Crashed(GuestTrap::InvalidArgument) => break,
             outcome => panic!("unexpected list bounds outcome: {outcome:?}"),
         }
     }

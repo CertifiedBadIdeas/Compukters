@@ -657,9 +657,10 @@ supported.
 - [ ] **Read-only `Collection<T>` and `List<T>` — Partial** — direct `listOf(...)`, `listOf<T>()`, and `emptyList<T>()`
   support `Int`, `String`, and supported Guest class references, including nullable elements. `size`, indexed `get`,
   and ordinary `for` iteration execute
-  through concrete specialized implementations. `List<Int>` stores and returns unboxed i32 values; list aliases refer
-  to the same object. Factory arguments run once in source order. Invalid indexes trap through the VM array bounds
-  check, and iteration resumes across quota slices. `List<Int>` can widen to `List<Any>` without copying the list;
+  through specialized `ArrayList<T>` instances. Factories create fresh lists with capacity equal to their element count;
+  the `List<T>` view can be cast to `MutableList<T>` or `ArrayList<T>` to change the same object. `List<Int>` stores and
+  returns unboxed i32 values; list aliases refer to the same object. Factory arguments run once in source order.
+  Invalid indexes fail the shared `ArrayList` argument check, and iteration resumes across quota slices. `List<Int>` can widen to `List<Any>` without copying the list;
   reads and iteration through the universal view allocate `Int` boxes with checked `is Int` and `as Int` access. A
   supported reference list can also widen to `List<Any>` while preserving its element references. Direct
   `listOf<Any>(...)` stores boxed `Int` and supported references in one array; indexed reads reuse those references.

@@ -260,8 +260,8 @@ private fun collectGuestClassInstances(
                         setOf("kotlin.collections.listOf", "kotlin.collections.emptyList")
                     ) {
                         val elementType = expression.typeArguments.singleOrNull()?.let(substitution)
-                        if (elementType != null && elementType.canonicalPlatformType() != "Int") {
-                            byName["kotlin.collections.ArrayBackedList"]?.let {
+                        if (elementType != null) {
+                            byName["kotlin.collections.ArrayList"]?.let {
                                 add(GuestClassInstance(it, listOf(elementType)))
                             }
                         }
@@ -2474,7 +2474,7 @@ internal object KotlinProjectLowering {
                     }
                 val bridgeInterfaces =
                     CollectionReadBridges
-                        .interfaceNames(declaration, layout.instance.arguments, pluginContext.irBuiltIns.intType)
+                        .interfaceNames(declaration, layout.instance.arguments)
                         .mapNotNull { name ->
                             classInstanceTypeIds.entries
                                 .singleOrNull { it.key.name == name }
@@ -4845,27 +4845,13 @@ private class FunctionCompiler(
         val elementType =
             call.typeArguments.singleOrNull()?.let(::resolvedType)
                 ?: throw UnsupportedKotlinIr(call, "list factory requires a concrete element type")
-        val intElements = elementType == intType
         val target =
-            if (intElements) {
-                constructorLayouts.values.singleOrNull {
-                    it.layout.declaration.fqNameWhenAvailable
-                        ?.asString() ==
-                        "kotlin.collections.IntArrayBackedList"
-                }
-            } else {
-                genericConstructorLayouts[
-                    GuestClassInstance(
-                        classInstanceTypeIds.keys
-                            .firstOrNull {
-                                it.declaration.fqNameWhenAvailable?.asString() ==
-                                    "kotlin.collections.ArrayBackedList"
-                            }?.declaration
-                            ?: throw UnsupportedKotlinIr(call, "reference list implementation is unavailable"),
-                        listOf(elementType),
-                    ),
-                ]
-            } ?: throw UnsupportedKotlinIr(call, "list implementation is unavailable for this element type")
+            genericConstructorLayouts.entries
+                .singleOrNull {
+                    it.key.declaration.fqNameWhenAvailable
+                        ?.asString() == "kotlin.collections.ArrayList" &&
+                        it.key.arguments == listOf(elementType)
+                }?.value ?: throw UnsupportedKotlinIr(call, "ArrayList implementation is unavailable for this element type")
         val elements =
             if (!nonemptyFactory) {
                 emptyList()
@@ -4876,24 +4862,29 @@ private class FunctionCompiler(
                     "spread listOf arguments are outside the project subset",
                 )
             }
-        val arrayType =
-            if (intElements) {
-                intArrayType
-            } else {
-                target.layout.fields
-                    .single()
-                    .type
-            }
-        val arrayRef =
-            arrayType as? ValueType.Ref
-                ?: throw UnsupportedKotlinIr(call, "unsupported list element storage")
-        val array = compileArrayElements(call, arrayRef, elements) { compileExpression(it, elementType) }
+        val capacity = allocate(ValueType.I32)
+        emit(Instruction.Const(capacity, requireNotNull(constantIds[Constant.I32(elements.size)])))
         val ownerType = TypeRef.Local(target.layout.typeId)
         prepareAllocationBlock()
-        return allocate(ValueType.Ref(nullable = false, type = ownerType)).also { destination ->
-            emit(Instruction.NewObject(destination, ownerType))
-            emit(Instruction.Call(Destination.Unit, FunctionRef.Local(target.functionId), listOf(destination, array)))
+        val list = allocate(ValueType.Ref(nullable = false, type = ownerType))
+        emit(Instruction.NewObject(list, ownerType))
+        emit(Instruction.Call(Destination.Unit, FunctionRef.Local(target.functionId), listOf(list, capacity)))
+        if (elements.isNotEmpty()) {
+            val add =
+                genericMemberFunctionIds.entries
+                    .singleOrNull { (method, _) ->
+                        method.second == target.layout.instance && method.first.owner.name
+                            .asString() == "add" &&
+                            method.first.owner.parameters
+                                .count { it.kind == IrParameterKind.Regular } == 1
+                    }?.value ?: throw UnsupportedKotlinIr(call, "ArrayList.add implementation is unavailable")
+            val added = allocate(ValueType.Bool)
+            elements.forEach { element ->
+                val value = compileExpression(element, elementType)
+                emit(Instruction.Call(Destination.Register(added), FunctionRef.Local(add), listOf(list, value)))
+            }
         }
+        return list
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
