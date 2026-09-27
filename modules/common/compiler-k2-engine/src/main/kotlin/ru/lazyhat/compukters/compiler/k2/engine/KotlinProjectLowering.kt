@@ -50,10 +50,12 @@ import org.jetbrains.kotlin.ir.expressions.IrFunctionExpression
 import org.jetbrains.kotlin.ir.expressions.IrFunctionReference
 import org.jetbrains.kotlin.ir.expressions.IrGetEnumValue
 import org.jetbrains.kotlin.ir.expressions.IrGetField
+import org.jetbrains.kotlin.ir.expressions.IrGetObjectValue
 import org.jetbrains.kotlin.ir.expressions.IrGetValue
 import org.jetbrains.kotlin.ir.expressions.IrInstanceInitializerCall
 import org.jetbrains.kotlin.ir.expressions.IrLoop
 import org.jetbrains.kotlin.ir.expressions.IrReturn
+import org.jetbrains.kotlin.ir.expressions.IrReturnableBlock
 import org.jetbrains.kotlin.ir.expressions.IrRichFunctionReference
 import org.jetbrains.kotlin.ir.expressions.IrSetField
 import org.jetbrains.kotlin.ir.expressions.IrSetValue
@@ -68,6 +70,7 @@ import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
 import org.jetbrains.kotlin.ir.symbols.IrEnumEntrySymbol
 import org.jetbrains.kotlin.ir.symbols.IrFieldSymbol
+import org.jetbrains.kotlin.ir.symbols.IrReturnTargetSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
@@ -3540,6 +3543,7 @@ private class FunctionCompiler(
     private val values = mutableMapOf<IrValueSymbol, RegisterId>()
     private val blocks = mutableListOf(MutableBlock())
     private val loopContexts = ArrayDeque<LoopContext>()
+    private val returnableContexts = mutableMapOf<IrReturnTargetSymbol, ReturnableContext>()
     private var currentBlock = 0
     private val sourceParameters =
         when (function) {
@@ -3565,6 +3569,7 @@ private class FunctionCompiler(
     }
 
     private fun compileStatement(statement: IrElement) {
+        if (isTerminated()) return
         when (statement) {
             is IrVariable -> {
                 val initializer = statement.initializer ?: throw UnsupportedKotlinIr(statement, "local without initializer")
@@ -3642,21 +3647,11 @@ private class FunctionCompiler(
             }
 
             is IrReturn -> {
-                rejectFunctionVariance(statement.value.type, function.returnType, statement)
-                if (function.returnType.isNothing()) {
-                    compileStatement(statement.value)
-                } else {
-                    val destination =
-                        if (function.returnType == unitType) {
-                            when (val value = statement.value) {
-                                is IrCall, is IrBlock -> compileStatement(value)
-                            }
-                            Destination.Unit
-                        } else {
-                            Destination.Register(compileExpression(statement.value, function.returnType))
-                        }
-                    emit(Instruction.Return(destination))
-                }
+                compileReturn(statement)
+            }
+
+            is IrReturnableBlock -> {
+                compileReturnableBlock(statement)
             }
 
             is IrWhen -> {
@@ -3896,6 +3891,11 @@ private class FunctionCompiler(
 
             is IrWhen -> {
                 compileWhenValue(expression)
+            }
+
+            is IrReturnableBlock -> {
+                compileReturnableBlock(expression)
+                    ?: throw UnsupportedKotlinIr(expression, "Unit or Nothing inline block used as a value")
             }
 
             is IrBlock -> {
@@ -6362,6 +6362,7 @@ private class FunctionCompiler(
             }
         }
         if (!isTerminated()) exits += currentBlock
+        if (exits.isEmpty()) return
         val join = createBlock()
         exits.forEach { exit ->
             currentBlock = exit
@@ -6396,12 +6397,13 @@ private class FunctionCompiler(
                 } else {
                     val source = coerceLocalValue(compileExpression(branch.result, expression.type), expression.type, branch.result)
                     emit(Instruction.Move(destination, source))
-                    exits += currentBlock
+                    if (!isTerminated()) exits += currentBlock
                 }
                 currentBlock = otherwise
             }
         }
         if (!isTerminated()) exits += currentBlock
+        if (exits.isEmpty()) return destination
         val join = createBlock()
         exits.forEach { exit ->
             currentBlock = exit
@@ -6436,6 +6438,72 @@ private class FunctionCompiler(
         emit(Instruction.Const(destination, requireNotNull(constantIds[constant])))
     }
 
+    private fun compileReturn(statement: IrReturn) {
+        val context = returnableContexts[statement.returnTargetSymbol]
+        if (context == null && statement.returnTargetSymbol != function.symbol) {
+            throw UnsupportedKotlinIr(statement, "return target is outside the current function or inline block")
+        }
+        val type = context?.type ?: function.returnType
+        if (statement.value.type.isNothing()) {
+            compileStatement(statement.value)
+            return
+        }
+        rejectFunctionVariance(statement.value.type, type, statement)
+        val value =
+            if (type == unitType) {
+                if (statement.value !is IrGetObjectValue || statement.value.type != unitType) {
+                    compileStatement(statement.value)
+                }
+                null
+            } else {
+                coerceLocalValue(compileExpression(statement.value, type), type, statement.value)
+            }
+        if (isTerminated()) return
+        if (context != null) {
+            context.destination?.let { emit(Instruction.Move(it, requireNotNull(value))) }
+            context.exits += currentBlock
+            jumpTo(0) // Patched when the block's continuation is known.
+        } else {
+            emit(Instruction.Return(value?.let { Destination.Register(it) } ?: Destination.Unit))
+        }
+    }
+
+    private fun compileReturnableBlock(block: IrReturnableBlock): RegisterId? {
+        val destination = if (block.type == unitType || block.type.isNothing()) null else allocate(valueType(block.type, block))
+        val context = ReturnableContext(block.type, destination)
+        check(returnableContexts.put(block.symbol, context) == null)
+        try {
+            if (destination == null) {
+                block.statements.forEach(::compileStatement)
+            } else {
+                val tail =
+                    block.statements.lastOrNull() as? IrExpression
+                        ?: throw UnsupportedKotlinIr(block, "value inline block has no result expression")
+                block.statements.dropLast(1).forEach(::compileStatement)
+                if (!isTerminated()) {
+                    if (tail.type.isNothing()) {
+                        compileStatement(tail)
+                    } else {
+                        val value = coerceLocalValue(compileExpression(tail, block.type), block.type, tail)
+                        emit(Instruction.Move(destination, value))
+                    }
+                }
+            }
+            if (!isTerminated()) {
+                context.exits += currentBlock
+                jumpTo(0)
+            }
+        } finally {
+            check(returnableContexts.remove(block.symbol) === context)
+        }
+        if (context.exits.isNotEmpty()) {
+            val continuation = createBlock()
+            context.exits.forEach { patchJumpTarget(it, continuation) }
+            currentBlock = continuation
+        }
+        return destination
+    }
+
     private fun compileBlockValue(
         block: IrBlock,
         expectedType: IrType? = null,
@@ -6444,6 +6512,8 @@ private class FunctionCompiler(
             block.statements.lastOrNull() as? IrExpression
                 ?: throw UnsupportedKotlinIr(block, "value block has no result expression")
         block.statements.dropLast(1).forEach(::compileStatement)
+        if (!isTerminated() && result.type.isNothing()) compileStatement(result)
+        if (isTerminated()) return allocate(valueType(expectedType ?: block.type, block))
         return compileExpression(result, expectedType ?: block.type)
     }
 
@@ -6522,6 +6592,8 @@ private class FunctionCompiler(
             .also { localTypes += type }
 
     private fun emit(instruction: Instruction) {
+        // A nested Nothing expression can transfer control before its caller writes a result.
+        if (isTerminated()) return
         blocks[currentBlock].instructions += instruction
     }
 
@@ -6557,6 +6629,12 @@ private class FunctionCompiler(
     private data class MutableBlock(
         var loopHeaderSafepoint: Boolean = false,
         val instructions: MutableList<Instruction> = mutableListOf(),
+    )
+
+    private data class ReturnableContext(
+        val type: IrType,
+        val destination: RegisterId?,
+        val exits: MutableList<Int> = mutableListOf(),
     )
 
     private data class LoopContext(

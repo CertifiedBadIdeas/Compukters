@@ -419,6 +419,15 @@ registerKotlinVmConformance(
     conformanceScenario = "adapted-constructors",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinInlineBlocksVmConformance",
+    taskDescription = "Executes test-normalized Guest inline blocks and target-aware returns in the pinned VM.",
+    artifactTask = ":compiler-k2-engine:generateInlineBlocksConformanceArtifact",
+    artifact = project(":compiler-k2-engine").layout.buildDirectory.file("generated/conformance/kotlin-inline-blocks.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-inline-blocks-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_INLINE_BLOCKS_ARTIFACT",
+    conformanceScenario = "inline-blocks",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinFunctionValuesVmConformance",
     taskDescription = "Executes K2-lowered zero-argument function values with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateFunctionValuesConformanceArtifact",
