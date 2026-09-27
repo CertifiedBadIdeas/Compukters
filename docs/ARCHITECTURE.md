@@ -114,7 +114,9 @@ after restart. Cache keys cover the ordered source snapshot, compiler and payloa
 platform modules, and compilation limits. Cache publication and cache hits both pass the stateless Rust artifact
 verifier over FFM; runtime admission quotas are deliberately not part of cache validity.
 
-Guest generic functions and final generic classes are specialized before artifact writing. The VM receives ordinary
+Guest generic functions and final generic classes are specialized before artifact writing. Function and class
+specializations are discovered together until no further dependencies appear, including helpers called from generic
+members whose bodies introduce other generic classes. The VM receives ordinary
 concrete function and class records, with typed scalar or reference fields and calls. Platform ABI 2 marks modules
 containing generic function or class implementations as source-only; the compiler includes their canonical source with
 the consuming Guest program so reachable bodies and class layouts can be specialized. Ordinary platform modules retain
@@ -139,6 +141,9 @@ reference storage at its trusted factory call. Growth, shifting, searches, slot 
 ordinary Guest bodies; all allocations use the VM's existing metered array instructions. Read-only aliases share
 the same list. Iterator bridges expose both read-only and mutable result signatures, and a modification counter
 rejects stale iterator `next`/`remove` calls after structural mutations.
+Fixed-size array lists and growable `ArrayList` share typed indexed search functions over `List<T>`. Fixed-size lists
+also share a generic indexed iterator; mutable iterators retain their mutation checks and removal state. The compiler
+uses one trusted collection read-view registry for bridge method names and additional interface types.
 Library lists also publish nullable element read bridges for read-only views such as `List<Int?>` over `List<Int>`.
 These views share storage: scalar reads allocate boxes, and reference reads retain identity. `filterNotNull` narrows
 elements into a new typed list, unboxing nullable Int values and retaining non-null references. Generic smart-cast
