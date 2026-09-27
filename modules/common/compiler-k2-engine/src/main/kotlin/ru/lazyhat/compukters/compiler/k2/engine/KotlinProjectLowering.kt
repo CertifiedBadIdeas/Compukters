@@ -4652,7 +4652,7 @@ private class FunctionCompiler(
                         ?: throw UnsupportedKotlinIr(block, "Tasks.launch target must be declared in the Guest project")
                 emit(Instruction.TaskSpawn(destination, functionRef, emptyList()))
             } else {
-                if (block is IrRichFunctionReference || block is IrFunctionReference) {
+                if (block is IrFunctionReference || (block is IrRichFunctionReference && block.reflectionTargetSymbol != null)) {
                     throw UnsupportedKotlinIr(block, "Tasks.launch does not support bound function references")
                 }
                 val callable = compileExpression(block)
@@ -6853,7 +6853,12 @@ private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureS
             if (parameters == shape.parameters) {
                 return@mapIndexed GuestClosureSource(expression, null, null, constructorSymbol, null, ordinal, emptyList())
             }
-            val adapter = (expression as? IrFunctionReference)?.symbol?.owner as? IrSimpleFunction
+            val adapter =
+                when (expression) {
+                    is IrFunctionReference -> expression.symbol.owner as? IrSimpleFunction
+                    is IrRichFunctionReference -> expression.invokeFunction
+                    else -> null
+                }
             val adapterCall =
                 ((adapter?.body as? IrBlockBody)?.statements?.singleOrNull() as? IrReturn)?.value as? IrConstructorCall
             val adaptedParameters = adapter?.parameters.orEmpty()
@@ -6993,7 +6998,7 @@ private fun loweredParameters(
     function.parameters
 }
 
-private fun IrSimpleFunction.canonicalPlatformSignature(): String {
+internal fun IrSimpleFunction.canonicalPlatformSignature(): String {
     val receiver =
         parameters
             .singleOrNull { it.kind == IrParameterKind.ExtensionReceiver }

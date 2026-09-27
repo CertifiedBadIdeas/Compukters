@@ -17,12 +17,23 @@ import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 internal class GuestInlineExpansionGuard(
     private val maximumWork: Long = 1_000_000,
     private val maximumDepth: Int = 64,
+    private val inlineTarget: (IrCall) -> IrSimpleFunction? = { call ->
+        call.symbol.owner.takeIf { it.isInline && it.body != null }
+    },
 ) {
     init {
         require(maximumWork > 0 && maximumDepth > 0)
     }
 
     fun verify(roots: List<IrElement>) {
+        var root: IrElement? = null
+
+        fun check(
+            condition: Boolean,
+            message: String,
+        ) {
+            if (!condition) throw UnsupportedKotlinIr(requireNotNull(root), message)
+        }
         val active = mutableSetOf<IrSimpleFunction>()
         val costs = mutableMapOf<IrSimpleFunction, Long>()
         val depths = mutableMapOf<IrSimpleFunction, Int>()
@@ -31,7 +42,7 @@ internal class GuestInlineExpansionGuard(
             left: Long,
             right: Long,
         ): Long {
-            require(left <= maximumWork && right <= maximumWork - left) { "inline expansion work limit exceeded" }
+            check(left <= maximumWork && right <= maximumWork - left, "inline expansion work limit exceeded")
             return left + right
         }
 
@@ -39,7 +50,7 @@ internal class GuestInlineExpansionGuard(
             left: Long,
             right: Long,
         ): Long {
-            require(right == 0L || left <= maximumWork / right) { "inline expansion work limit exceeded" }
+            check(right == 0L || left <= maximumWork / right, "inline expansion work limit exceeded")
             return left * right
         }
 
@@ -57,10 +68,9 @@ internal class GuestInlineExpansionGuard(
                     val before = work
                     super.visitCall(expression)
                     val argumentWork = work - before
-                    val target = expression.symbol.owner
-                    if (!target.isInline || target.body == null) return
-                    require(target !in active) { "recursive inline expansion is unsupported" }
-                    require(active.size < maximumDepth) { "inline expansion depth limit exceeded" }
+                    val target = inlineTarget(expression) ?: return
+                    check(target !in active, "recursive inline expansion is unsupported")
+                    check(active.size < maximumDepth, "inline expansion depth limit exceeded")
                     val bodyWork =
                         costs[target] ?: run {
                             val savedWork = work
@@ -85,13 +95,16 @@ internal class GuestInlineExpansionGuard(
                             }
                         }
                     val depth = requireNotNull(depths[target])
-                    require(active.size + depth <= maximumDepth) { "inline expansion depth limit exceeded" }
+                    check(active.size + depth <= maximumDepth, "inline expansion depth limit exceeded")
                     dependencyDepth = maxOf(dependencyDepth, depth)
                     // Every callee node may substitute the entire argument tree. This deliberately overcharges
                     // noinline/stored arguments too; it is a safety score, not a prediction of final IR size.
                     work = add(work, multiply(bodyWork, add(1, argumentWork)))
                 }
             }
-        roots.forEach { it.accept(visitor, null) }
+        roots.forEach {
+            root = it
+            it.accept(visitor, null)
+        }
     }
 }

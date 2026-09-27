@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.compiler.k2.engine
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
+import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
@@ -30,6 +31,7 @@ import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformScalarConstant
 import ru.lazyhat.compukters.platform.bundle.PlatformScalarType
 import java.nio.file.Path
+import java.util.IdentityHashMap
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicRegistry as CanonicalIntrinsicRegistry
 
 fun interface CompilationIrSink {
@@ -55,6 +57,18 @@ class CompilationSession(
     val platformScalarConstants: List<PlatformScalarConstant> = emptyList(),
     val limits: WorkerLimits = WorkerLimits(),
 ) {
+    internal val normalizedGuestModules = java.util.Collections.newSetFromMap(IdentityHashMap<IrModuleFragment, Boolean>())
+    private val originalSourcePaths = IdentityHashMap<IrElement, VirtualSourcePath>()
+
+    internal fun recordSource(
+        element: IrElement,
+        path: VirtualSourcePath,
+    ) {
+        originalSourcePaths[element.attributeOwnerId] = path
+    }
+
+    internal fun originalSourcePath(element: IrElement?): VirtualSourcePath? = element?.let { originalSourcePaths[it.attributeOwnerId] }
+
     private val sourcePaths = sourcePaths.mapKeys { (path, _) -> normalize(path) }
     private val trustedPlatformSourceModules = trustedPlatformSourceModules.mapKeys { (path, _) -> normalize(path) }
 

@@ -67,6 +67,46 @@ import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
     @Test
+    fun `source generic inline callbacks eliminate closures through production worker`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                inline fun <T, R> transform(value: T, block: (T) -> R): R = block(value)
+                fun early(): Int = transform(3) { return 7 }
+                fun main() { val result = transform(3) { it + 2 }; val returned = early() }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val bytes = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            assertTrue(
+                ArtifactReader
+                    .read(bytes)
+                    .modules
+                    .flatMap { it.blocks }
+                    .flatMap { it.instructions }
+                    .none { it is Instruction.NewObject },
+            )
+        }
+
+    @Test
+    fun `source inline expansion work limit is a located target diagnostic`() =
+        withAdapter { adapter ->
+            val source =
+                buildString {
+                    append("inline fun f0(): Int = 1\n")
+                    for (i in 1..20) append("inline fun f$i(): Int = f${i - 1}() + f${i - 1}()\n")
+                    append("fun main() { val value = f20() }")
+                }
+            val result = adapter.compile(request(source))
+            assertNull(result.artifact)
+            val diagnostic = result.diagnostics.single { it.code == "UNSUPPORTED_IR" }
+            assertEquals(DiagnosticCategory.TARGET, diagnostic.category)
+            assertNotNull(diagnostic.path)
+            assertNotNull(diagnostic.startUtf16)
+            assertTrue(diagnostic.message.contains("work limit"), diagnostic.toString())
+        }
+
+    @Test
     fun `same-named guest calls preserve their resolved targets for vm conformance`() =
         withAdapter { adapter ->
             val source =
@@ -813,6 +853,7 @@ class MinimalScriptLoweringTest {
 
                 fun applyBox(make: (Int) -> Box): Int = make(31).value
 
+                inline fun inlineMarker() {}
                 fun main() {
                     val readFirst = readOnly(3)
                     val readSecond = readOnly(4)
@@ -860,6 +901,7 @@ class MinimalScriptLoweringTest {
                     println(shared)
                     Tasks.launch { println(7) }.join()
 
+                    inlineMarker()
                     val twice: (Int) -> Int = { it * 2 }
                     val aliased = twice
                     if (aliased !== twice) { val zero = 0; val failure = 1 / zero }
@@ -3946,13 +3988,14 @@ class MinimalScriptLoweringTest {
                         """
                         import compukter.terminal.Terminal
 
+                        inline fun invoke(block: () -> Int): Int = block()
                         fun readKey(): Int {
                             Terminal.awaitEvent()
                             return Terminal.eventKey()
                         }
 
                         fun main() {
-                            Terminal.write(if (readKey() == 13) "enter" else "other")
+                            Terminal.write(if (invoke { readKey() } == 13) "enter" else "other")
                         }
                         """.trimIndent(),
                 )
