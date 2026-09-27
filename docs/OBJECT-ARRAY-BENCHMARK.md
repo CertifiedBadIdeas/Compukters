@@ -10,10 +10,13 @@ remains live. It does not measure fleet RSS, arena admission cost, or exact peak
 
 ## Workloads and method
 
-- 36 ordinary Guest Kotlin programs: 1024 or 4096 records, two or three mutable Int fields, object arrays or packed
-  primitive-array controls. Object storage uses `arrayOfNulls<Cell>` filled with fresh instances; packed storage uses
+- 62 ordinary Guest Kotlin programs: 54 cases with 1024 or 4096 records, one, two, or three mutable Int fields, and
+  object-array or packed primitive-array storage. Object storage uses `arrayOfNulls<Cell>` filled with fresh instances; packed storage uses
   one `IntArray` per field. Packed controls compare numeric work and storage, not Kotlin reference semantics.
-- Indexed reads, in-place updates, shallow reference copies (objects only), deep copies with the first field incremented,
+  Eight additional cases hold boxed Int values in `Array<Any?>`, with indexed reads, shallow/deep copies, and pipelines.
+  Their values start at 1000; deep copies and pipelines create fresh boxes, while shallow copies retain references.
+  Boxes are not tested as mutable records, so they have no in-place-update workload.
+- Indexed reads, in-place updates, shallow reference copies (reference storage only), deep copies with the first field incremented,
   and a pipeline that creates transformed records then selects even-index records into another array.
 - Two operation rounds. Reading every original field after the operations keeps all input records live. Update also
   checks mutation through a retained alias; shallow copies check shared identity; deep copies and pipelines check new
@@ -160,6 +163,86 @@ Checked-in type-only-header measurements: [before](benchmarks/object-arrays-2026
 [before samples](benchmarks/object-arrays-2026-09-27-type-header-before-samples.tsv),
 [after](benchmarks/object-arrays-2026-09-27-type-header-after.tsv), and
 [after samples](benchmarks/object-arrays-2026-09-27-type-header-after-samples.tsv).
+
+## Sixteen-byte minimum block
+
+Reducing the minimum block from 24 to 16 bytes removes eight bytes of minimum-size padding from empty objects and
+one-Int objects, including managed Int boxes. The allocated header remains 12 bytes and block alignment remains
+eight bytes. Free-list metadata fits in 16 bytes; a 16-byte remainder is now split and reused, while an eight-byte
+remainder is absorbed. Two-Int and three-Int objects remain 24 bytes. Heap admission still uses the same 16-byte
+granularity and 32-byte lower bound; no reference, artifact, native ABI, or filesystem format changes.
+
+The benchmark now includes one-field records and boxed Int arrays in addition to the previous two/three-field
+controls. Fresh measurements use the same 62 compiled artifacts on both VM versions, with three timing samples per
+case at 16 MiB and separate 256 KiB pressure runs. The parent starting revision is
+`8d70a33919fafefd583706bf32670461913848a1`; the archived baseline VM is
+`a75a9b056faa2118c20f8e8a906070f160c9259d`; the 16-byte-minimum VM is
+`21f85a45598191e58c016d3da6ebcb6493ae5ebe`. Baseline and changed-VM timing samples ran sequentially after other
+builds/tests finished. The machine and harness method match the local setup above.
+
+At 4096 elements, one-Int mutable records and boxed Int arrays have the same measured heap thresholds:
+
+| Operation | Before budget | 16-byte minimum budget | Reduction |
+| --- | ---: | ---: | ---: |
+| Construction / indexed reads | 114,752 B | 81,984 B | 28.6% |
+| In-place update, mutable records | 114,752 B | 81,984 B | 28.6% |
+| Shallow reference copy | 133,152 B | 100,384 B | 24.6% |
+| Deep copy retaining input | 229,440 B | 163,888 B | 28.6% |
+| Pipeline retaining input | 238,672 B | 173,136 B | 27.5% |
+
+Two independent 4096-record one-Int states remove 65,536 bytes of block padding. Their records and reference arrays
+occupy approximately 160 instead of 224 KiB, plus the array headers. The deep-copy completion threshold now equals
+that combined layout size; other thresholds still include allocation history, temporaries, fragmentation, and GC.
+Two/three-field and packed controls retain their previous heap thresholds. All 62 pressure runs complete and match
+the host-computed checksums. Fixed Guest work, dynamic Guest work, and instruction counts match for every case.
+
+At 16 MiB, one-field mutable-record indexed timing changes from 18.92 to 18.87 ms, deep copy from 63.13 to 62.10 ms,
+and pipeline from 79.97 to 76.55 ms. The packed deep-copy control changes from 35.28 to 34.36 ms. Boxed deep copy changes
+from 56.33 to 50.37 ms, but several unchanged controls also become faster; these samples do not establish a speedup.
+No material large-heap timing regression is apparent in this local run.
+
+GC-pressure work is not monotonic in object size. At 256 KiB, the two-round one-field deep copy drops from 21,847
+maintenance units to zero, while the pipeline increases from 21,164 to 28,685 units (35.5%). Both mutable-record and
+boxed cases show this change. These are measured maintenance units, not collection counts. Smaller blocks change
+allocation history and when collection runs; reduced heap requirements do not establish lower GC cost in every
+workload. The separate pressure timing experiment below measures this boundary explicitly.
+
+Verification includes 386 Rust unit tests, Rust integration/doc tests, fmt, clippy, release vertical heap conformance,
+the 62 benchmark programs, seven focused Kotlin-to-VM scenarios, four JVM/native runtime-host tests, compiler lint,
+and build-script tests. Coverage includes split/reused 16-byte tails, absorbed eight-byte tails, independent one-Int
+records and aliases, repeated mixed-size gray queue/sweep/coalescing, initialization, rollback, and allocation retries.
+The retry/failure fixtures use one Long field to keep a 32-byte heap under pressure now that two empty objects fit;
+the vertical test's added dynamic units and changed digest reflect that fixture change. This is focused evidence.
+
+Checked-in minimum-block measurements: [before](benchmarks/object-arrays-2026-09-27-min-block-before.tsv),
+[before samples](benchmarks/object-arrays-2026-09-27-min-block-before-samples.tsv),
+[after](benchmarks/object-arrays-2026-09-27-min-block-after.tsv), and
+[after samples](benchmarks/object-arrays-2026-09-27-min-block-after-samples.tsv).
+
+### Timing at 256 KiB
+
+A matched six-case subset repeats deep copy and pipeline for 4096 one-field mutable records, two-field mutable-record
+controls, and boxed Int arrays. The harness uses `fixed-heap` mode, one warmup and seven fresh samples per case,
+alternating case order. Every timing sample runs at 262,144 bytes; no large-heap fallback occurs. Both revisions use
+the same artifacts and run sequentially after the other checks finish.
+
+| Storage | Operation | Before median | After median | Maintenance units, before → after |
+| --- | --- | ---: | ---: | ---: |
+| One-Int records | Deep copy | 63.08 ms | 61.19 ms | 21,847 → 0 |
+| One-Int records | Pipeline | 77.44 ms | 75.95 ms | 21,164 → 28,685 |
+| Two-Int records | Deep copy | 76.85 ms | 75.03 ms | 21,847 → 21,847 |
+| Two-Int records | Pipeline | 91.61 ms | 89.27 ms | 21,164 → 21,164 |
+| Boxed Int | Deep copy | 51.36 ms | 49.11 ms | 21,847 → 0 |
+| Boxed Int | Pipeline | 64.29 ms | 62.39 ms | 21,164 → 28,685 |
+
+The p10/p90 ranges overlap for every matched case, and the unchanged two-field controls show a similar timing shift.
+This local experiment shows no material pressure-timing regression, including the pipeline with more maintenance
+work; it does not establish a CPU speedup or lower GC work for every workload.
+
+Pressure timing archives: [before](benchmarks/object-arrays-2026-09-27-min-block-pressure-before.tsv),
+[before samples](benchmarks/object-arrays-2026-09-27-min-block-pressure-before-samples.tsv),
+[after](benchmarks/object-arrays-2026-09-27-min-block-pressure-after.tsv), and
+[after samples](benchmarks/object-arrays-2026-09-27-min-block-pressure-after-samples.tsv).
 
 ## Reproduce
 

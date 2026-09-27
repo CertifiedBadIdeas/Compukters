@@ -322,9 +322,11 @@ capability suspension, and host-neutral sessions. Future JIT or AOT tiers must r
 and session contract.
 
 Managed blocks use an eight-byte allocator header followed by a four-byte runtime type identifier, with eight-byte
-block alignment and a 24-byte minimum. Two-Int and three-Int objects both occupy 24 bytes. Reference identity uses
-non-moving managed offsets; no allocation identity token is stored. Free-list links overlap the type identifier and
-first payload word only while a block is free. Payload access uses little-endian byte operations, so wide fields do
+block alignment and a 16-byte minimum. Empty and one-Int objects, including managed Int boxes, occupy 16 bytes;
+two-Int and three-Int objects both occupy 24 bytes. Sixteen-byte free tails are split and reused; only smaller tails
+are absorbed. Reference identity uses non-moving managed offsets; no allocation identity token is stored.
+Free-list links overlap the type identifier and first payload word only while a block is free. Payload access uses
+little-endian byte operations, so wide fields do
 not require the payload address itself to be eight-byte aligned.
 During collection's roots/mark phases, the predecessor-size word temporarily holds the intrusive gray link; Guest
 execution and allocation remain paused. The bounded forward sweep restores predecessor sizes before coalescing,

@@ -8,13 +8,18 @@ package ru.lazyhat.compukters.compiler.worker.k2
 
 internal fun objectArrayBenchmarkCases(): List<ObjectArrayBenchmarkCase> =
     listOf(1024, 4096).flatMap { count ->
-        listOf(2, 3).flatMap { fields ->
+        listOf(1, 2, 3).flatMap { fields ->
             listOf("indexed", "update", "shallow", "deep", "pipeline").flatMap { workload ->
                 val representations = if (workload == "shallow") listOf("objects") else listOf("objects", "packed")
                 representations.map { ObjectArrayBenchmarkCase(it, workload, count, fields, 2) }
             }
         }
-    }
+    } +
+        listOf(1024, 4096).flatMap { count ->
+            listOf("indexed", "shallow", "deep", "pipeline").map { workload ->
+                ObjectArrayBenchmarkCase("boxed", workload, count, 1, 2)
+            }
+        }
 
 internal data class ObjectArrayBenchmarkCase(
     val representation: String,
@@ -50,13 +55,15 @@ internal data class ObjectArrayBenchmarkCase(
 
     fun source(): String {
         val objectStorage = representation == "objects"
+        val boxedStorage = representation == "boxed"
+        val referenceStorage = objectStorage || boxedStorage
 
         fun allocate(
             name: String,
             size: Int,
         ): String =
-            if (objectStorage) {
-                "val $name = arrayOfNulls<Cell>($size)"
+            if (referenceStorage) {
+                "val $name = arrayOfNulls<${if (boxedStorage) "Any" else "Cell"}>($size)"
             } else {
                 (0 until fields).joinToString("\n") { "val ${name}$it = IntArray($size)" }
             }
@@ -65,7 +72,12 @@ internal data class ObjectArrayBenchmarkCase(
             name: String,
             index: String,
             field: Int,
-        ): String = if (objectStorage) "($name[$index] as Cell).f$field" else "${name}$field[$index]"
+        ): String =
+            when {
+                boxedStorage -> "($name[$index] as Int)"
+                objectStorage -> "($name[$index] as Cell).f$field"
+                else -> "${name}$field[$index]"
+            }
 
         fun sum(name: String): String = (0 until fields).joinToString("\n") { "checksum += ${read(name, "index", it)}" }
 
@@ -76,7 +88,9 @@ internal data class ObjectArrayBenchmarkCase(
             originalIndex: String,
             increment: Int,
         ): String =
-            if (objectStorage) {
+            if (boxedStorage) {
+                "$name[$index] = ${read(original, originalIndex, 0)} + $increment"
+            } else if (objectStorage) {
                 val args =
                     (0 until fields).joinToString(
                         ", ",
@@ -101,7 +115,9 @@ internal data class ObjectArrayBenchmarkCase(
             """.trimIndent()
 
         val initialize =
-            if (objectStorage) {
+            if (boxedStorage) {
+                "data[index] = 1000 + index"
+            } else if (objectStorage) {
                 "data[index] = Cell(${(0 until fields).joinToString(", ") { "1000 + index + $it" }})"
             } else {
                 (0 until fields).joinToString("\n") { "data$it[index] = 1000 + index + $it" }
@@ -131,7 +147,7 @@ internal data class ObjectArrayBenchmarkCase(
                     """
                     ${allocate("copied", count)}
                     ${loop(count, copy("copied", "index", "data", "index", 1))}
-                    ${if (objectStorage) "require(copied[0] !== data[0])" else ""}
+                    ${if (referenceStorage) "require(copied[0] !== data[0])" else ""}
                     ${loop(count, sum("copied"))}
                     """.trimIndent()
                 }
@@ -139,7 +155,7 @@ internal data class ObjectArrayBenchmarkCase(
                 "pipeline" -> {
                     // Map to new records, then retain even-index records in a second array.
                     val select =
-                        if (objectStorage) {
+                        if (referenceStorage) {
                             "selected[index] = mapped[index * 2]"
                         } else {
                             (0 until fields).joinToString("\n") { "selected$it[index] = mapped$it[index * 2]" }
@@ -149,7 +165,7 @@ internal data class ObjectArrayBenchmarkCase(
                     ${loop(count, copy("mapped", "index", "data", "index", 1))}
                     ${allocate("selected", count / 2)}
                     ${loop(count / 2, select)}
-                    ${if (objectStorage) "require(selected[0] === mapped[0] && selected[0] !== data[0])" else ""}
+                    ${if (referenceStorage) "require(selected[0] === mapped[0] && selected[0] !== data[0])" else ""}
                     ${loop(count / 2, sum("selected"))}
                     """.trimIndent()
                 }

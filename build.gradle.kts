@@ -1086,7 +1086,7 @@ tasks.register<Exec>("benchmarkObjectArrayHeap") {
         "cargo", "test", "--release", "--locked", "--offline", "--manifest-path",
         compilerArtifactVmConformanceHarness.absolutePath, "--test", "object_arrays_bench", "--",
         objectArrayBenchmarkArtifacts.get().asFile.absolutePath,
-        objectArrayBenchmarkReports.get().asFile.absolutePath, "3",
+        objectArrayBenchmarkReports.get().asFile.absolutePath, "3", "62",
     )
     environment("CARGO_TARGET_DIR", rootProject.file(".toolchain/build/cargo/collection-benchmark").absolutePath)
 }
