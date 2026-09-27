@@ -34,7 +34,7 @@ public class ArrayList<T>(initialCapacity: Int = 10) : MutableList<T> {
 
     public override fun add(index: Int, element: T): Unit {
         require(index >= 0 && index <= size)
-        require(size < 2147483647)
+        require(size < Int.MAX_VALUE)
         storage.ensureCapacity(size + 1)
         var position = size
         while (position > index) {
@@ -165,7 +165,7 @@ internal fun checkedListCapacity(capacity: Int): Int {
 internal fun grownListCapacity(current: Int, minimum: Int): Int {
     require(minimum >= 0)
     val increment = current / 2 + 1
-    val grown = if (current > 2147483647 - increment) 2147483647 else current + increment
+    val grown = if (current > Int.MAX_VALUE - increment) Int.MAX_VALUE else current + increment
     return if (grown < minimum) minimum else grown
 }
 
