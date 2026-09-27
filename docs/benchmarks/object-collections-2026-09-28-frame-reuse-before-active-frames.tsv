@@ -1,0 +1,15 @@
+id	construction_peak_active_frame_bytes	completion_peak_active_frame_bytes	frame_arena_capacity_bytes	configured_frame_limit_bytes	mutable_execution_resident_bytes
+indexed-4096-list-sized	400	400	2688	1048576	16785129
+map-4096-list-sized	544	544	4992	1048576	16787433
+filter-none-4096-list-sized	504	504	4352	1048576	16786793
+filter-all-4096-list-sized	520	616	4608	1048576	16787049
+pipeline-4096-list-sized	656	752	6784	1048576	16789225
+map-not-null-4096-list-sized	608	704	6016	1048576	16788457
+map-not-null-selective-4096-list-sized	600	696	5888	1048576	16788329
+indexed-4096-list-growing	496	496	2688	1048576	16785129
+map-4096-list-growing	640	640	4992	1048576	16787433
+filter-none-4096-list-growing	600	600	4352	1048576	16786793
+filter-all-4096-list-growing	616	616	4608	1048576	16787049
+pipeline-4096-list-growing	752	752	6784	1048576	16789225
+map-not-null-4096-list-growing	704	704	6016	1048576	16788457
+map-not-null-selective-4096-list-growing	696	696	5888	1048576	16788329

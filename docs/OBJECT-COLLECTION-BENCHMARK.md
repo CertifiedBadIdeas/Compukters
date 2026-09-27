@@ -37,6 +37,71 @@ Timing uses a 16 MiB heap, one warmup and three fresh-session samples, alternati
 verification and teardown are outside the timer; final checksum scans and output are included. Three samples
 provide limited local timing evidence. Fixed, dynamic and maintenance work must agree across samples.
 
+## Temporary register reuse
+
+The 2026-09-28 comparison uses baseline artifacts preserved from `af889b858` and compiler implementation `21abf4428`
+([#667](https://github.com/CertifiedBadIdeas/Compukters/issues/667)). All fourteen Guest sources are identical.
+The linker assigns one register to exact-type temporary values with nonoverlapping lifetimes, then rebuilds GC maps,
+module hashes and frame requirements. Parameters and caught-exception destinations retain dedicated slots. Instructions,
+control flow, collection storage and the artifact/runtime ABI are unchanged.
+
+| Operation | Main compact frame (B), before → after | Allocated frame arena (B), before → after | Peak active frames, sized (B), before → after | Peak active frames, growing (B), before → after |
+| --- | ---: | ---: | ---: | ---: |
+| `indexed` | 168 → 48 | 2688 → 896 | 400 → 152 | 496 → 200 |
+| `map` | 312 → 96 | 4992 → 1536 | 544 → 200 | 640 → 248 |
+| `filter-none` | 272 → 80 | 4352 → 1280 | 504 → 184 | 600 → 232 |
+| `filter-all` | 288 → 88 | 4608 → 1408 | 616 → 240 | 616 → 240 |
+| `pipeline` | 424 → 104 | 6784 → 1664 | 752 → 256 | 752 → 256 |
+| `map-not-null` | 376 → 96 | 6016 → 1536 | 704 → 248 | 704 → 248 |
+| `map-not-null-selective` | 368 → 96 | 5888 → 1536 | 696 → 248 | 696 → 248 |
+
+The frame arena shrinks by 66.7–75.5%, saving 1792–5120 bytes per session on these workloads. For 1000–2000 sessions,
+that corresponds to approximately 1.7–9.8 MiB of frame arena storage, depending on workload and session count; this is
+not an estimate of total server memory. Peak simultaneously active frames shrink by 59.7–66.0%. Main register counts
+fall from 42–106 to 12–25. The main function is no longer always the largest: the indexed cases retain a 56-byte
+library frame, so their arena is 56 × 16 = 896 bytes rather than 48 × 16.
+
+The two frame metrics measure different things. The static compact size comes from canonical `ExecutionStorage`
+alignment rules. The VM allocates its frame arena from the artifact's `requiredStackBytes`, which reserves the largest
+frame multiplied by maximum call depth (16 in these programs). The profile's 1 MiB frame limit is an admission limit,
+not the allocated arena capacity. Each program keeps that same profile limit before and after optimization.
+
+Exact active-frame high-water measurements use VM `b140c26243e06140241297bc74e995e44a729865` in both phases. Test-only
+counters track every successful frame reservation/release inside `FrameArena`, including suspended task/caller frames
+and peaks within an execution slice. They exclude frame records, static storage, preallocated unused arena capacity
+and image metadata. The VM's reported mutable execution storage reservation decreases by exactly the arena saving;
+the report's 16 MiB heap capacity is unchanged. Test instrumentation is absent from production builds. Neither metric
+measures process RSS, allocator overhead or total shared image memory.
+
+Heap construction/completion thresholds, checksums, 256 KiB outcomes, executed instruction counts and fixed, dynamic
+and maintenance VM work are identical in all fourteen cases. Artifacts shrink by 2432–3096 bytes.
+Timing samples are archived for reproducibility; the baseline overlaps verification and does not establish CPU speedup.
+Object sizes, backing arrays and independently retained before/after states are unchanged.
+
+To reproduce the exact frame measurement after generating the benchmark artifacts:
+
+```sh
+COMPUKTER_FRAME_BENCHMARK_ARTIFACTS="$PWD/modules/common/compiler-k2/build/generated/benchmarks/object-collections" \
+COMPUKTER_FRAME_BENCHMARK_REPORT=/tmp/object-collection-active-frames.tsv \
+cargo test --release --manifest-path host/compukter-vm/Cargo.toml --locked --offline \
+  --lib object_collection_active_frame_measurement -- --ignored
+```
+
+Verification: 130 artifact tests, 37 engine tests, 142 worker tests (five existing benchmark skips), all 48 registered
+Kotlin-to-VM conformance scenarios, 386 Rust library tests and explicit 14-case active-frame measurements. These checks
+cover this compiler/runtime boundary; they do not establish full-checkout or release readiness.
+
+Raw evidence:
+
+- [Before measurements](benchmarks/object-collections-2026-09-28-frame-reuse-before.tsv) and
+  [samples](benchmarks/object-collections-2026-09-28-frame-reuse-before-samples.tsv).
+- [After measurements](benchmarks/object-collections-2026-09-28-frame-reuse-after.tsv) and
+  [samples](benchmarks/object-collections-2026-09-28-frame-reuse-after-samples.tsv).
+- [Before static frames](benchmarks/object-collections-2026-09-28-frame-reuse-before-frames.tsv) and
+  [after static frames](benchmarks/object-collections-2026-09-28-frame-reuse-after-frames.tsv).
+- [Before active frames](benchmarks/object-collections-2026-09-28-frame-reuse-before-active-frames.tsv) and
+  [after active frames](benchmarks/object-collections-2026-09-28-frame-reuse-after-active-frames.tsv).
+
 ## Collection callback inlining
 
 The 2026-09-28 comparison uses parent baseline `1022800de` and implementation `c723c96a8`

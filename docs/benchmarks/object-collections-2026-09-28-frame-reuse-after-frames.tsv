@@ -1,0 +1,15 @@
+id	main_compact_frame_bytes	maximum_compact_frame_bytes	main_registers	required_stack_bytes
+filter-all-4096-list-growing	88	88	22	1408
+filter-all-4096-list-sized	88	88	22	1408
+filter-none-4096-list-growing	80	80	20	1280
+filter-none-4096-list-sized	80	80	20	1280
+indexed-4096-list-growing	48	56	12	896
+indexed-4096-list-sized	48	56	12	896
+map-4096-list-growing	96	96	24	1536
+map-4096-list-sized	96	96	24	1536
+map-not-null-4096-list-growing	96	96	24	1536
+map-not-null-4096-list-sized	96	96	24	1536
+map-not-null-selective-4096-list-growing	96	96	24	1536
+map-not-null-selective-4096-list-sized	96	96	24	1536
+pipeline-4096-list-growing	104	104	25	1664
+pipeline-4096-list-sized	104	104	25	1664
