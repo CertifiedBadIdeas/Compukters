@@ -6,7 +6,8 @@ title: Verification
 # Verification
 
 Compukters uses different verification gates for fast feedback, a complete local checkout, and a distributable
-multi-platform release. Choose evidence from the changed boundary first, then run the final gate required by the stage.
+multi-platform release. During development, choose focused evidence from the changed boundary. Reserve full-checkout
+verification for release preparation or an explicit user request.
 
 For long runs where console volume is undesirable, use `./gradlew-sandbox-dev-parallel-summary <tasks>`. It preserves
 the complete combined log under `build/agent-logs/`, prints only the final Gradle summary on success, and emits a
@@ -20,8 +21,11 @@ because an input was absent, or otherwise did not execute is not passing evidenc
 is valid only to the extent that the owning task declares all behavior-relevant inputs.
 
 Run evidence after the last relevant change. Record the exact command and result, and limit readiness claims to that
-scope. For a multi-stage implementation, focused checks protect each stage; `verifyLocalFull` is required after all
-stages are integrated.
+scope. Focused checks protect each development iteration and completed implementation stage. Completing a feature,
+a multi-stage plan, or a change spanning multiple modules or repositories does not automatically require
+`verifyLocalFull`. Broaden testing only to resolve a concrete remaining risk or at the user's request. Run
+`verifyLocalFull` on the exact release candidate before declaring release preparation complete; fix failures and
+repeat the affected checks before re-running the release gate.
 
 Use the [in-world VM benchmark](https://certifiedbadideas.github.io/Compukters/VM-BENCHMARK/) for repeatable manual
 profiles of aggregate runnable-computer cost. Its results are environment-specific performance evidence, not a
@@ -63,23 +67,23 @@ release gate.
 
 ## Boundary matrix
 
-The commands below are minimum focused evidence. Add narrower tests for the behavior changed, including malformed,
-limit, lifetime, or failure cases when those contracts are affected.
+The commands below guide selection of evidence for affected boundaries; run only the checks relevant to the change.
+Include behavioral tests for malformed input, limits, lifetime, or failure cases when those contracts are affected.
 
 See [Native runtime test coverage](https://certifiedbadideas.github.io/Compukters/NATIVE-TEST-COVERAGE/) for the semantic ownership matrix across direct Rust,
 FFI, Kotlin-to-VM conformance, runtime-host integration, and NeoForge GameTests.
 
-| Changed boundary | Focused evidence | Final evidence |
+| Changed boundary | Development evidence | Before release |
 | --- | --- | --- |
-| Guest Kotlin declarations, platform metadata, K2 lowering, or IDE semantics | Owning `guest-platform`, `platform-bundle`, `platform-k2`, `compiler-k2-engine`, `compiler-k2`, and affected `ide-*` `check` tasks; `verifyKotlinVmConformance` for an execution claim | `verifyLocalFull` after a completed cross-layer feature |
-| `.cpkt` model, encoding, instruction, verifier, or admission contract | `:compiler-artifact:check`, affected compiler checks, focused VM tests, and the applicable conformance scenario; include malformed and version behavior | `verifyLocalFull` |
-| Worker protocol, payload, isolation, or tooling bundle | Owning client/server module `check`, forked-worker checks, payload/license verification, and wrong-version or malformed framing cases | `verifyLocalFull` when multiple worker boundaries change |
-| Rust VM execution, managed memory, quotas, terminal, filesystem, or persistence | Focused `cargo test --manifest-path host/compukter-vm/Cargo.toml --locked --offline` target or test, plus the owning JVM adapter check when observable there | `verifyLocalFull` when the parent and VM or multiple runtime layers change |
-| Native runtime API, Rust C ABI, JDK FFM adapter, or Java 21 JNI adapter | `:native-runtime-api:check`, focused FFI/JNI Rust checks, the owning `:native-runtime-ffm:verifyNativeRuntime` or `:native-runtime-jni:verifyNativeRuntime`, layout/error/lifetime cases, and a real JVM-to-native integration | `verifyLocalFull` |
-| Loader-independent computer/runtime behavior | `:core:check`; include `programRuntimeIntegrationTest` when VM behavior participates | `verifyLocalFull` for a completed runtime vertical |
-| Minecraft lifecycle, registration, persistence adapter, redstone, or server-visible networking | Owning common/NeoForge checks and `:v26_1-neoforge:runGameTestServer` when world or lifecycle behavior changes | `verifyLocalFull` |
-| Client UI, input, rendering, or other inherently visual behavior | Owning module checks plus a development-client scenario with the observation recorded | `verifyLocalFull` plus the required manual observation |
-| Metadata, resources, native packaging, access transformers, or archive composition | `:v26_1-neoforge:buildProductionUniversalJar` and inspection produced by its verification tasks | `verifyLocalFull`; use the release gate as well only for a release candidate |
+| Guest Kotlin declarations, platform metadata, K2 lowering, or IDE semantics | Focused tests and lint in affected `guest-platform`, `platform-bundle`, `platform-k2`, `compiler-k2-engine`, `compiler-k2`, or `ide-*` modules; the applicable Kotlin-to-VM conformance scenario for an execution claim | `verifyLocalFull` on the release candidate |
+| `.cpkt` model, encoding, instruction, verifier, or admission contract | `:compiler-artifact:check`, affected compiler checks, focused VM tests, and the applicable conformance scenario; include malformed and version behavior | `verifyLocalFull` on the release candidate |
+| Worker protocol, payload, isolation, or tooling bundle | Owning client/server module `check`, forked-worker checks, payload/license verification, and wrong-version or malformed framing cases | `verifyLocalFull` on the release candidate |
+| Rust VM execution, managed memory, quotas, terminal, filesystem, or persistence | Focused `cargo test --manifest-path host/compukter-vm/Cargo.toml --locked --offline` target or test, plus the owning JVM adapter check when observable there | `verifyLocalFull` on the release candidate |
+| Native runtime API, Rust C ABI, JDK FFM adapter, or Java 21 JNI adapter | `:native-runtime-api:check`, focused FFI/JNI Rust checks, the owning `:native-runtime-ffm:verifyNativeRuntime` or `:native-runtime-jni:verifyNativeRuntime`, layout/error/lifetime cases, and a real JVM-to-native integration | `verifyLocalFull` on the release candidate |
+| Loader-independent computer/runtime behavior | `:core:check`; include `programRuntimeIntegrationTest` when VM behavior participates | `verifyLocalFull` on the release candidate |
+| Minecraft lifecycle, registration, persistence adapter, redstone, or server-visible networking | Owning common/NeoForge checks and `:v26_1-neoforge:runGameTestServer` when world or lifecycle behavior changes | `verifyLocalFull` on the release candidate |
+| Client UI, input, rendering, or other inherently visual behavior | Owning module checks plus a development-client scenario with the observation recorded | `verifyLocalFull` on the release candidate plus the required manual observation |
+| Metadata, resources, native packaging, access transformers, or archive composition | `:v26_1-neoforge:buildProductionUniversalJar` and inspection produced by its verification tasks | `verifyLocalFull` on the release candidate |
 | Tagged distributable release | `verifyLocalFull` on the exact candidate revision before tagging | `buildReleaseUniversalJar` from the repository root on the clean exact tag with the published Runtime bundles |
 
 ## Manual client scenarios

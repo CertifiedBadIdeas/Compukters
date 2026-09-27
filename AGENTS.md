@@ -114,6 +114,17 @@ shared commits make the issue range unsafe to rewrite, preserve the history and 
 
 ## Agent-Specific Instructions
 
+### Verification scope
+
+During development, verify each iteration with the narrowest useful behavioral tests, affected conformance scenarios,
+and relevant lint or build checks. Completing a feature or a multi-stage plan does not automatically require
+`verifyLocalFull`, including changes spanning multiple modules or the VM submodule. Broaden checks only to address a
+concrete remaining risk or an explicit user request. Run `verifyLocalFull` on the exact release candidate before
+release preparation is declared complete, then apply the separate tagged release gate when applicable.
+This repository policy overrides shared workflow skills that otherwise require full verification at the end of
+an implementation plan. Report the scope actually verified; focused checks do not establish full-checkout or release
+readiness. See `docs/VERIFICATION.md` for boundary-specific evidence.
+
 Respect user changes in the worktree. Prefer focused edits, run the narrowest useful verification, and update docs or
 active machine ABI references when behavior changes.
 Before changing behavior or packaging, select every applicable repository-local workflow: `compukters-language-feature`
