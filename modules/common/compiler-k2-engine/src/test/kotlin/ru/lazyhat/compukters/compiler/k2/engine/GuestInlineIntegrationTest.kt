@@ -32,12 +32,22 @@ import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.util.dump
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
+import org.jetbrains.kotlin.name.CallableId
+import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
 import ru.lazyhat.compukters.compiler.artifact.link.LibraryModuleLinker
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalCallableSignature
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CapabilityOperationHandler
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.IntrinsicBlockingMode
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicKey
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicRegistration
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicRegistry
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
@@ -52,7 +62,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/** Test-only feasibility adapter; unsupported backend hooks fail explicitly rather than inventing JVM storage. */
+/** Exercises the shared Guest normalization pass and production lowering boundary. */
 @OptIn(UnsafeDuringIrConstructionAPI::class, CompilerConfiguration.Internals::class)
 class GuestInlineIntegrationTest {
     @Test
@@ -164,6 +174,10 @@ class GuestInlineIntegrationTest {
             inline fun wrap(crossinline block: () -> Int): () -> Int = { block() + 1 }
             fun independent(initial: Int): () -> Int { var count = initial; return { count += 1; count } }
             fun addOne(value: Int): Int = value + 1
+            inline fun Int.scale(block: (Int) -> Int): Int = block(this)
+            inline fun defaultCall(value: Int = 3, block: (Int) -> Int = { it + 1 }): Int = block(value)
+            inline fun callable(value: Int): Int = apply(value) { if (it > 0) return 7; 0 }
+            class Initialized(val seed: Int) { val value = transform(seed) { it + 1 } }
             inline fun effect(block: () -> Unit) { block() }
             inline fun terminal(block: () -> Nothing): Nothing = block()
             inline fun wide(value: Long, block: (Long) -> Long): Long = block(value)
@@ -251,10 +265,18 @@ class GuestInlineIntegrationTest {
                 verify(nested() == 14)
                 val function = ::addOne
                 verify(transform(4, function) == 5)
+                verify(next(counter).scale { it + it } == 4)
+                verify(counter.value == 2)
+                verify(defaultCall() == 4)
+                verify(defaultCall(block = { it + 2 }) == 5)
+                verify(Initialized(3).value == 4)
+                val callableReference = ::callable
+                verify(callableReference(3) == 7)
                 // Rust expects this distinct trap only after every preceding assertion has executed.
                 val completion = IntArray(-1)
             }
             """.trimIndent(),
+            throughSharedEntry = true,
         ) { _, facts, diagnostics, artifact ->
             assertTrue(diagnostics.isEmpty(), diagnostics.toString())
             assertTrue(facts.richReferences >= 7, "stored and escaping callbacks must remain managed")
@@ -478,10 +500,83 @@ class GuestInlineIntegrationTest {
         }
     }
 
+    @Test
+    fun `production boundary rejects unavailable and unadmitted inline bodies with located diagnostics`() {
+        probe(
+            "inline fun apply(value: Int): Int = value\nfun main() { val result = apply(3) }",
+            throughSharedEntry = true,
+            bodyUnavailable = true,
+        ) { _, _, diagnostics, artifact ->
+            assertEquals(null, artifact)
+            assertTrue(diagnostics.single().message.contains("unavailable"), diagnostics.toString())
+            assertEquals(VirtualSourcePath.of("project/Main.kt"), diagnostics.single().path)
+            assertNotNull(diagnostics.single().startUtf16)
+        }
+        probe(
+            "import probe.identity\nfun main() { val result = identity(3) }",
+            librarySource = "package probe\ninline fun identity(value: Int): Int = value + 99",
+            throughSharedEntry = true,
+            libraryAdmission = false,
+        ) { _, _, diagnostics, artifact ->
+            assertEquals(null, artifact)
+            assertTrue(diagnostics.single().message.contains("admitted Guest source"), diagnostics.toString())
+            assertEquals(VirtualSourcePath.of("project/Main.kt"), diagnostics.single().path)
+        }
+    }
+
+    @Test
+    fun `expanded library diagnostics retain original source ownership`() {
+        probe(
+            "import probe.identity\nfun main() { val result = identity(3) }",
+            librarySource = "package probe\ninline fun identity(value: Int): Int = try { value } finally { value + 1 }",
+            throughSharedEntry = true,
+        ) { _, _, diagnostics, artifact ->
+            assertEquals(null, artifact)
+            assertEquals(VirtualSourcePath.of("platform/probe/library/Library.kt"), diagnostics.single().path)
+            assertNotNull(diagnostics.single().startUtf16)
+        }
+    }
+
+    @Test
+    fun `source inline wrappers preserve canonical intrinsic symbols without blessing same named player functions`() {
+        probe(
+            "import probe.identity\ninline fun apply(value: Int): Int = identity(value)\nfun main() { val result = apply(3) }",
+            librarySource = "package probe\ninline fun identity(value: Int): Int = value + 99",
+            throughSharedEntry = true,
+            trustedLibrary = true,
+            canonicalIdentity = true,
+        ) { _, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            assertTrue(
+                assertNotNull(
+                    artifact,
+                ).modules.flatMap { it.blocks }.flatMap { it.instructions }.any { it is Instruction.CapabilityCallSync },
+            )
+        }
+        probe(
+            "package probe\ninline fun identity(value: Int): Int = value + 99\nfun main() { val result = identity(3) }",
+            throughSharedEntry = true,
+            canonicalIdentity = true,
+        ) { _, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            assertTrue(
+                assertNotNull(artifact).modules.flatMap { it.blocks }.flatMap { it.instructions }.none {
+                    it is Instruction.CapabilityCallSync ||
+                        it is Instruction.CapabilityCallAsync
+                },
+            )
+        }
+    }
+
     private fun probe(
         source: String,
         librarySource: String? = null,
         invalidReturnTarget: Boolean = false,
+        throughSharedEntry: Boolean = false,
+        libraryAdmission: Boolean = true,
+        trustedLibrary: Boolean = false,
+        canonicalIdentity: Boolean = false,
+        bodyUnavailable: Boolean = false,
         maximumVariants: Int = 256,
         maximumDepth: Int = 64,
         maximumExpansionWork: Long = 1_000_000,
@@ -516,121 +611,93 @@ class GuestInlineIntegrationTest {
                     dependencies,
                 )
             val converted = CompuktersFir2IrPipeline.convert(dependencies + project)
-            val context =
-                object : LoweringContext {
-                    override val configuration = CompilerConfiguration()
-                    override var inVerbosePhase = false
-                    override val irBuiltIns = converted.pluginContext.irBuiltIns
-                    override val irFactory = converted.pluginContext.irFactory
-                    override val messageCollector = MessageCollector.NONE
-                    override val symbols: PreSerializationSymbols get() = error("probe reached backend-specific symbols")
-                    override val sharedVariablesManager: SharedVariablesManager get() =
-                        error(
-                            "probe reached backend shared-variable lowering",
-                        )
-                }
-            val resolver =
-                object : InlineFunctionResolver() {
-                    override fun getFunctionDeclaration(symbol: IrFunctionSymbol): IrFunction? =
-                        symbol.owner.takeIf { (it as? IrSimpleFunction)?.isInline == true && it.body != null }
-                }
-            val inliner = object : FunctionInlining(context, resolver) {}
             val file = converted.irModuleFragment.files.single { it.fileEntry.name.endsWith("Main.kt") }
-            val before = InlineFacts(context.irBuiltIns.anyNType).also { file.accept(it, null) }
-            val beforePreflight = file.dump()
-            try {
-                GuestInlineExpansionGuard(maximumExpansionWork, maximumExpansionDepth).verify(
-                    file.declarations
-                        .filterIsInstance<IrSimpleFunction>()
-                        .filterNot { it.isInline }
-                        .mapNotNull { it.body },
+            val before = InlineFacts(converted.pluginContext.irBuiltIns.anyNType).also { file.accept(it, null) }
+            val foreign = file.declarations.filterIsInstance<IrSimpleFunction>().firstOrNull { it.name.asString() == "apply" }
+            val diagnostics = mutableListOf<WorkerDiagnostic>()
+            val identityModule = PlatformModuleId("probe", "library")
+            val capability = PlatformCapabilityId("test", "inline", 1)
+            val registry =
+                if (canonicalIdentity) {
+                    TrustedIntrinsicRegistry.create(
+                        listOf(
+                            TrustedIntrinsicRegistration(
+                                TrustedIntrinsicKey(
+                                    identityModule,
+                                    CallableId(FqName("probe"), Name.identifier("identity")),
+                                    CanonicalCallableSignature("fun(Int):Int"),
+                                ),
+                                CapabilityOperationHandler(capability, 0u, IntrinsicBlockingMode.NONE),
+                            ),
+                        ),
+                    )
+                } else {
+                    null
+                }
+            val session =
+                CompilationSession(
+                    irSink = { _, _ -> },
+                    diagnosticSink = { diagnostics += it },
+                    sourcePaths =
+                        converted.irModuleFragment.files
+                            .filter {
+                                it.fileEntry.name.endsWith("Main.kt") || (libraryAdmission && it.fileEntry.name.endsWith("Library.kt"))
+                            }.associate {
+                                it.fileEntry.name to
+                                    VirtualSourcePath.of(
+                                        if (it === file) "project/Main.kt" else "platform/probe/library/Library.kt",
+                                    )
+                            },
+                    trustedPlatformSourceModules =
+                        if (trustedLibrary) {
+                            converted.irModuleFragment.files.filter { it.fileEntry.name.endsWith("Library.kt") }.associate {
+                                it.fileEntry.name to
+                                    identityModule
+                            }
+                        } else {
+                            emptyMap()
+                        },
+                    canonicalIntrinsicRegistry = registry,
+                    selectedPlatformModules = if (canonicalIdentity) setOf(identityModule) else emptySet(),
+                    capabilityShapes = if (canonicalIdentity) mapOf(capability to PlatformCapabilityShape(0, 1u)) else emptyMap(),
                 )
-            } finally {
-                assertEquals(beforePreflight, file.dump(), "preflight must not mutate source IR, including on failure")
+            converted.irModuleFragment.files.removeAll {
+                !it.fileEntry.name.endsWith(
+                    "Main.kt",
+                ) && !it.fileEntry.name.endsWith("Library.kt")
             }
-            val specialization = GuestInlineSpecialization(maximumVariants, maximumDepth)
-            val templates =
-                converted.irModuleFragment.files
-                    .flatMap { it.declarations }
+            if (bodyUnavailable) {
+                file.declarations
                     .filterIsInstance<IrSimpleFunction>()
-                    .filter { it.typeParameters.isNotEmpty() }
-                    .associateWith { it.dump() }
-            converted.irModuleFragment.files
-                .toList()
-                .forEach { specialization.lower(it) }
-            templates.forEach { (template, original) -> assertEquals(original, template.dump(), "generic template mutated") }
-            converted.irModuleFragment.files.forEach { sourceFile ->
-                UpgradeCallableReferences(
-                    context,
-                    upgradeFunctionReferencesAndLambdas = true,
-                    upgradePropertyReferences = false,
-                    upgradeLocalDelegatedPropertyReferences = false,
-                    upgradeSamConversions = false,
-                    upgradeExtractedAdaptedBlocks = false,
-                    castDispatchReceiver = false,
-                    generateFakeAccessorsForReflectionProperty = false,
-                ).lower(sourceFile)
+                    .first { it.isInline }
+                    .body = null
             }
-            file.declarations.filterIsInstance<IrSimpleFunction>().filterNot { it.isInline }.forEach { declaration ->
-                declaration.body?.let { inliner.lower(it, declaration) }
+            if (!throughSharedEntry) {
+                GuestInlineNormalization.lower(
+                    converted.irModuleFragment,
+                    converted.pluginContext,
+                    session,
+                    maximumVariants,
+                    maximumDepth,
+                    maximumExpansionWork,
+                    maximumExpansionDepth,
+                )
             }
-            // Specialized copies are concrete, but unused source templates still contain open T types in
-            // escaping closure bodies. Keep templates required by runtime calls/references; discard only
-            // unreachable generic inline definitions in this test-only normalization adapter.
-            val used = mutableSetOf<IrFunctionSymbol>()
-            file.accept(
-                object : IrVisitorVoid() {
-                    override fun visitElement(element: IrElement) {
-                        element.acceptChildren(this, null)
-                    }
-
-                    override fun visitSimpleFunction(declaration: IrSimpleFunction) {
-                        if (declaration.typeParameters.isEmpty()) super.visitSimpleFunction(declaration)
-                    }
-
-                    override fun visitCall(expression: IrCall) {
-                        used += expression.symbol
-                        super.visitCall(expression)
-                    }
-
-                    override fun visitFunctionReference(expression: IrFunctionReference) {
-                        used += expression.symbol
-                        expression.reflectionTarget?.let { used += it }
-                        super.visitFunctionReference(expression)
-                    }
-
-                    override fun visitRichFunctionReference(expression: IrRichFunctionReference) {
-                        expression.reflectionTargetSymbol?.let { used += it }
-                        super.visitRichFunctionReference(expression)
-                    }
-                },
-                null,
-            )
-            file.declarations.removeAll { it is IrSimpleFunction && it.isInline && it.typeParameters.isNotEmpty() && it.symbol !in used }
-            converted.irModuleFragment.files.retainAll(listOf(file))
             val main = file.declarations.filterIsInstance<IrSimpleFunction>().single { it.name.asString() == "main" }
-            val facts =
-                InlineFacts(context.irBuiltIns.anyNType).also { facts ->
+
+            fun collectFacts() =
+                InlineFacts(converted.pluginContext.irBuiltIns.anyNType).also { facts ->
                     file.declarations
                         .filterIsInstance<IrSimpleFunction>()
                         .filterNot { it.isInline }
                         .forEach { it.accept(facts, null) }
                 }
             if (invalidReturnTarget) {
-                val foreign = file.declarations.filterIsInstance<IrSimpleFunction>().single { it.name.asString() == "apply" }
-                facts.returns.first { it.returnTargetSymbol.owner is IrReturnableBlock }.returnTargetSymbol = foreign.symbol
+                collectFacts().returns.first { it.returnTargetSymbol.owner is IrReturnableBlock }.returnTargetSymbol =
+                    requireNotNull(foreign).symbol
             }
-            val diagnostics = mutableListOf<WorkerDiagnostic>()
-            val artifact =
-                MinimalScriptLowering.lower(
-                    converted.irModuleFragment,
-                    converted.pluginContext,
-                    CompilationSession(
-                        irSink = { _, _ -> },
-                        diagnosticSink = { diagnostics += it },
-                        sourcePaths = mapOf(file.fileEntry.name to VirtualSourcePath.of("project/Main.kt")),
-                    ),
-                )
+            val artifact = MinimalScriptLowering.lower(converted.irModuleFragment, converted.pluginContext, session)
+            val facts = collectFacts()
             assertTrue(diagnostics.all { it.code == "UNSUPPORTED_IR" && it.path != null })
             check(main, facts, diagnostics, artifact)
             println(

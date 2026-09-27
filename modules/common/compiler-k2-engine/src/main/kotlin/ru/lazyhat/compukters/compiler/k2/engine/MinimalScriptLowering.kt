@@ -98,10 +98,12 @@ internal object MinimalScriptLowering {
                 return mainArtifact(entry.isSuspend)
             }
             try {
+                GuestInlineNormalization.lower(module, pluginContext, session)
+                val normalized = SourceDeclarationCollector().also { module.accept(it, null) }
                 return KotlinProjectLowering.lower(
-                    functions,
-                    declarations.properties,
-                    declarations.classes,
+                    normalized.functions,
+                    normalized.properties,
+                    normalized.classes,
                     entry,
                     pluginContext,
                     session,
@@ -140,7 +142,7 @@ internal object MinimalScriptLowering {
         if (element is IrErrorExpression) "SYNTAX_ERROR" else "UNSUPPORTED_IR",
         detail?.let { "source IR is outside the minimal script subset: $it" }
             ?: "source IR is outside the minimal script subset",
-        session.virtualSourcePath(
+        session.originalSourcePath(element) ?: session.virtualSourcePath(
             (element as? org.jetbrains.kotlin.ir.declarations.IrDeclaration)?.let { declaration ->
                 runCatching { declaration.file.fileEntry.name }.getOrNull()
             }

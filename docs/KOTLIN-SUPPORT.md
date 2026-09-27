@@ -337,19 +337,20 @@ supported.
   Concrete supported generic collection instances such as `ArrayList<Item>` may be captured through `val` or `var`;
   shared cells follow later reassignment. Evidence: `Iterable destination operations append preserve types and return identity`
   in `MinimalScriptLoweringTest`, executed by `testKotlinDestinationVmConformance`.
-  Production compilation does not expand function calls marked `inline`; general Guest inline/non-local-return
-  support is not enabled. The emitter's normalized inline-block control flow is covered internally by
-  `GuestInlineIntegrationTest` and `testKotlinInlineBlocksVmConformance`, including local/non-local and nested
-  returns, Unit/Nothing, reference identity, nullable and wide results. The test adapter first specializes concrete
-  generic inline bodies, including nested and source-library calls; scalar-only callbacks emit no object allocations
-  in the focused artifact test. Stored/noinline callbacks, escaping crossinline wrappers (including generic wrappers),
-  nested captures, shared mutable cells, independent returned closures and function-reference controls execute in
-  `testKotlinInlineBlocksVmConformance`. The test adapter keeps runtime-referenced definitions while discarding unused
-  generic inline templates. `GuestInlineIntegrationTest` covers non-mutating preflight rejection for recursive inline
-  dependencies, depth and cumulative expansion work, plus generic specialization limits. These are internal safety
-  bounds, not calibrated production budgets. This evidence does not change the non-inline contract of imported
-  collection extensions. Function-value aliases also preserve referential identity in the ordinary
-  `testKotlinFunctionValuesVmConformance` scenario.
+  Programs can declare top-level and extension `inline` functions in project or admitted source-library files.
+  Supported non-suspend, non-reified calls are expanded before closure discovery; concrete generic inline calls retain
+  scalar types. Local/non-local and nested returns, Unit/Nothing, nullable and wide results, default callbacks and
+  class initializers are covered by `GuestInlineIntegrationTest` and `testKotlinInlineBlocksVmConformance`.
+  Direct scalar-only callbacks emit no object allocations in the focused artifact test. Stored/noinline callbacks,
+  escaping crossinline wrappers, nested captures and shared mutable cells retain ordinary managed ownership.
+  Runtime-referenced inline definitions remain usable; unused templates are discarded. Canonical platform/intrinsic
+  calls remain atomic, including transparent suspension through an expanded callback.
+  Member/local, suspend and reified inline declarations, unavailable/unadmitted bodies and unresolved generic type
+  arguments are rejected with TARGET diagnostics. Preflight rejects recursive inline dependencies, depth above 64
+  and cumulative projected work above 1,000,000 units; specialization allows at most 256 variants and 64 active levels.
+  These are conservative compiler safety bounds, not calibrated VM capacity budgets. Production worker and JVM-plugin
+  entry tests exercise the shared pass; function-values, generic-library and transparent-call VM scenarios cover its
+  integration. Imported collection extensions remain non-inline and do not admit non-local returns.
   `Tasks.launch` accepts direct, stored, and returned `() -> Unit` values. A
   direct top-level `Tasks.launch(::worker)` remains a static spawn without a
   closure allocation. Types unsupported elsewhere in Guest Kotlin, local,

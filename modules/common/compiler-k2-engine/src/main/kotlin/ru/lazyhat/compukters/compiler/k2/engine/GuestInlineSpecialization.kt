@@ -31,6 +31,9 @@ import org.jetbrains.kotlin.types.Variance
 internal class GuestInlineSpecialization(
     private val maximumVariants: Int = 256,
     private val maximumDepth: Int = 64,
+    private val inlineTarget: (IrCall) -> IrSimpleFunction? = { call ->
+        call.symbol.owner.takeIf { it.isInline && it.body != null }
+    },
 ) {
     private data class Key(
         val declaration: IrSimpleFunction,
@@ -52,18 +55,23 @@ internal class GuestInlineSpecialization(
             }
 
             override fun visitSimpleFunction(declaration: IrSimpleFunction) {
-                if (declaration.typeParameters.isEmpty()) super.visitSimpleFunction(declaration)
+                if (!declaration.isInline || declaration.typeParameters.isEmpty()) super.visitSimpleFunction(declaration)
             }
 
             override fun visitCall(expression: IrCall) {
                 super.visitCall(expression)
-                val declaration = expression.symbol.owner
+                val declaration = inlineTarget(expression) ?: return
                 require(active.none { copies[it] === declaration }) { "recursive generic inline specialization is unsupported" }
                 if (!declaration.isInline || declaration.typeParameters.isEmpty() || declaration.body == null) return
-                require(declaration.typeParameters.none { it.isReified }) { "reified inline specialization is unsupported" }
-                val arguments = expression.typeArguments.map { requireNotNull(it) { "missing inline type argument" } }
-                require(arguments.size == declaration.typeParameters.size && arguments.none { it.containsTypeParameter() }) {
-                    "inline specialization requires concrete type arguments"
+                if (declaration.typeParameters.any { it.isReified }) {
+                    throw UnsupportedKotlinIr(
+                        expression,
+                        "reified inline specialization is unsupported",
+                    )
+                }
+                val arguments = expression.typeArguments.map { it ?: throw UnsupportedKotlinIr(expression, "missing inline type argument") }
+                if (arguments.size != declaration.typeParameters.size || arguments.any { it.containsTypeParameter() }) {
+                    throw UnsupportedKotlinIr(expression, "inline specialization requires concrete type arguments")
                 }
                 val copy = specialize(Key(declaration, arguments))
                 expression.symbol = copy.symbol

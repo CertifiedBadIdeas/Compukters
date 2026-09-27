@@ -36,6 +36,8 @@ import org.jetbrains.kotlin.ir.expressions.IrWhileLoop
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
@@ -94,7 +96,21 @@ class IrExtensionSmokeTest {
         )
     }
 
-    private fun compileIr(sourceText: String): IrModuleFragment {
+    @Test
+    fun `JVM plugin entry invokes shared Guest inline normalization`() {
+        compileIr(
+            """
+            inline fun apply(value: Int, block: (Int) -> Int): Int = block(value)
+            fun main() { val answer = apply(3) { it + 2 } }
+            """.trimIndent(),
+            expectGuestInline = true,
+        )
+    }
+
+    private fun compileIr(
+        sourceText: String,
+        expectGuestInline: Boolean = false,
+    ): IrModuleFragment {
         val root = createTempDirectory("compukters-k2-ir-test-")
         try {
             val source = root.resolve("project/main.kt")
@@ -121,13 +137,24 @@ class IrExtensionSmokeTest {
                     pluginClasspaths = arrayOf(checkNotNull(System.getProperty("compukters.engine.jar")))
                 }
 
+            val diagnostics = mutableListOf<WorkerDiagnostic>()
+            val session =
+                CompilationSession(
+                    irSink = { module, _ -> modules += module },
+                    diagnosticSink = { diagnostics += it },
+                    sourcePaths = mapOf(source.toString() to VirtualSourcePath.of("project/main.kt")),
+                )
             val exitCode =
-                CompilationBridge.withSession(CompilationSession(irSink = { module, _ -> modules += module })) {
+                CompilationBridge.withSession(session) {
                     K2JVMCompiler().exec(MessageCollector.NONE, Services.EMPTY, arguments)
                 }
 
             assertEquals(ExitCode.OK, exitCode)
             assertEquals(1, modules.size)
+            if (expectGuestInline) {
+                assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+                assertTrue(modules.single() in session.normalizedGuestModules)
+            }
             return modules.single()
         } finally {
             root.toFile().deleteRecursively()

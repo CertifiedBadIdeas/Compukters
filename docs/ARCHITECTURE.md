@@ -415,25 +415,28 @@ arity transition at 22 or 23 arguments in the Guest artifact.
 The emitter also understands normalized Kotlin IR returnable blocks: a local return writes the typed block result
 and jumps to its continuation; a return targeting the enclosing function remains a function return. Nested targets,
 Unit/Nothing paths and terminated branches use the existing artifact control-flow instructions. Unknown return
-targets produce located diagnostics. `testKotlinInlineBlocksVmConformance` exercises this through a test-only common
-Kotlin inliner adapter and the ordinary linker, writer and Rust verifier. Production function inlining and collection
-inline modifiers remain disabled. The internal `GuestInlineSpecialization` pass makes independent symbol-remapped
-copies of top-level generic inline bodies at concrete call-site types before common inlining. This preserves scalar
-inputs instead of erasing them to Any?, including nested forwarding and source-library bodies. Templates remain
-unchanged; copies are cached by declaration and concrete type arguments. The pass rejects reified or non-top-level
-specialization, recursive specialization dependencies, unresolved type arguments, and expansion beyond 256 variants
-or 64 active specialization levels. The test adapter discards unused generic inline templates after expansion while
-keeping definitions referenced by remaining runtime calls or function references.
+targets produce located diagnostics. Both compiler entry paths invoke `GuestInlineNormalization` from
+`MinimalScriptLowering`, before capture and layout discovery. Only session-admitted project and source-library IR
+is expanded; canonical platform/intrinsic calls preserve their symbols and remain atomic. Unsupported shapes and
+unavailable or unadmitted inline bodies produce located TARGET diagnostics. Original source ownership is recorded
+before copying so diagnostics can retain source-library paths.
+The internal `GuestInlineSpecialization` pass makes independent symbol-remapped copies of top-level generic inline
+bodies at concrete call-site types before common inlining. This preserves scalar inputs instead of erasing them to
+Any?, including nested forwarding and source-library bodies. Copies are cached by declaration and concrete type
+arguments. Reified, suspend and non-top-level inline declarations, unresolved type arguments, and expansion beyond
+256 variants or 64 active specialization levels are rejected. Normalization covers bodies, parameter defaults and
+initializers, retaining runtime-referenced definitions while discarding unused templates.
 `GuestInlineExpansionGuard` checks executable roots before specialization or common inlining. It rejects inline
 dependency cycles and depth beyond 64, and caps cumulative projected expansion work at 1,000,000 units. Each source
 node costs one unit; each call additionally charges expanded callee work multiplied by one plus expanded argument
 work. A callee's body and default-expression work are first charged together with a multiplier of one plus default
 work, covering callback defaults substituted at multiple body nodes. Defaults are included even for supplied arguments.
 Memoization avoids repeated analysis, but each call site still pays its full charge. Arithmetic checks reject overflow
-instead of wrapping.
+instead of wrapping. Preflight failure leaves source IR unchanged and never falls back to an ordinary call.
 This deliberately overcharges callback substitution and retained arguments; it is not an exact final-node estimate
-or a calibrated production budget. Failure leaves source IR unchanged and never falls back to an ordinary call.
-Production integration, source provenance and calibrated capacity remain separate work.
+or a calibrated capacity budget. Collection extensions remain non-inline. `testKotlinInlineBlocksVmConformance`,
+function-values, generic-library and transparent-call conformance cover the production path, including host-call
+suspension through expanded callbacks.
 Normalized rich lambdas without reflection targets use their invoke bodies with the existing closure layout and
 capture-cell analysis. Stored/noinline callbacks and escaping crossinline wrappers retain managed ownership;
 source-reference adaptation restrictions still apply. Closure classes inherit runtime Any and implement the concrete

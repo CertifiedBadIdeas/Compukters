@@ -17,6 +17,10 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- Programs can declare supported top-level and extension `inline` functions, including concrete generic callbacks
+  and non-local returns. Direct callbacks can avoid closure allocation; stored or escaping callbacks retain managed
+  ownership. Expansion has compiler safety limits; imported collection extensions remain non-inline.
+
 - Captured local `var` values that are never reassigned use direct closure fields, avoiding an extra heap cell
   while preserving shared state for mutable captures.
 
