@@ -103,6 +103,64 @@ allocator regression repeatedly marks objects out of allocation order, retains t
 around existing free blocks, frees survivors in another order, and verifies the whole arena can be reused.
 This is focused runtime evidence, not complete-checkout or release verification.
 
+## Type-only managed header
+
+The next reduction removes the unused four-byte allocation identity token and its ordinal counter. The allocator
+header remains eight bytes; the managed header now stores only the four-byte runtime type identifier. Managed
+references retain their direct non-moving offsets, so reference equality and shared mutations are unchanged.
+No VM instruction exposes the removed identity hash. This is a VM storage change; Guest Kotlin APIs and the artifact,
+native ABI, and filesystem formats are unchanged.
+
+Block alignment remains eight bytes and the minimum remains 24 bytes. Two-Int records still occupy 24 bytes because
+the smaller header leaves four bytes of rounding padding. Three-Int records shrink from 32 to 24 bytes. Payload reads
+and writes operate on little-endian bytes, including wide fields crossing the arena's 16-byte backing units.
+Free-list links overlap type/payload bytes only while a block is free; GC gray links still use the predecessor-size
+word during the existing paused roots/mark phases.
+
+Two independent arrays of 4096 three-Int records have 96 KiB of field data and 32 KiB of references. Previously their
+records added 128 KiB of headers and 32 KiB of padding; now they add 96 KiB of headers and no record padding. Their
+combined persistent storage is approximately 224 instead of 288 KiB, plus the array headers. Two-Int records retain
+approximately 224 KiB for both states. These layout sums are distinct from empirical whole-program heap thresholds.
+
+Fresh sequential before/after measurements on 2026-09-27 use the same 36 generated artifacts and current harness.
+The parent starting revision is `0748517b59e6d1499e3f5f296b7c32a7191ea54e`; the baseline VM is
+`bbd9faa331fd095f8406bd4e4b9b820caa650643`; the type-only-header VM is
+`a75a9b056faa2118c20f8e8a906070f160c9259d`. The machine and measurement method match the earlier local setup above.
+
+| Fields | Object operation | Before budget | Type-only header budget | After at 256 KiB |
+| ---: | --- | ---: | ---: | --- |
+| 2 | Construction / in-place update | 114,752 B | 114,752 B | Completed |
+| 2 | Shallow copy | 133,152 B | 133,152 B | Completed |
+| 2 | Deep copy | 229,440 B | 229,440 B | Completed |
+| 2 | Pipeline | 238,672 B | 238,672 B | Completed |
+| 3 | Construction / in-place update | 147,520 B | 114,752 B | Completed |
+| 3 | Shallow copy | 165,920 B | 133,152 B | Completed |
+| 3 | Deep copy | 294,960 B | 229,440 B | Completed |
+| 3 | Pipeline | 304,208 B | 238,672 B | Completed |
+
+All 36 pressure runs now complete at 256 KiB and match their expected checksums. The original records remain live
+through the operations. The three-field deep-copy threshold drops by 22.2%; the pipeline threshold drops by 21.5%.
+The change does not introduce object pooling or require different Guest source code.
+
+At 4096 records, three-field object deep-copy timing changes from 95.48 to 89.96 ms, while its packed control changes
+from 56.21 to 54.12 ms. Object pipeline timing changes from 100.10 to 103.06 ms, while its packed control changes from
+65.84 to 66.86 ms. Two-field object indexed reads change from 23.70 to 23.89 ms. Three timing samples do not establish
+a speedup; the controls also vary, and no material timing regression is apparent in this local run. Timing heaps
+remain 16 MiB on both sides. Fixed Guest work and instruction counts match for every case. Some dynamic counts change
+by a small amount because physical string-initialization padding changes; they are not claimed identical.
+
+Verification includes Rust unit/integration/doc tests, fmt and clippy, the 36 benchmark programs, and focused
+Kotlin-to-VM and JVM/native runtime-host checks. New heap tests exercise independently mutable compact records,
+aliases, type preservation, and wide-field accesses across backing-unit boundaries. Existing repeated mark/sweep/reuse
+coverage continues to check payloads, types, and restoration of coalescing metadata. The string failed-retry fixture
+uses a smaller heap because its two live concat results now fit the old budget. Vertical conformance retains the
+same metered work totals; its layout-sensitive diagnostic digest changes. This is focused runtime evidence.
+
+Checked-in type-only-header measurements: [before](benchmarks/object-arrays-2026-09-27-type-header-before.tsv),
+[before samples](benchmarks/object-arrays-2026-09-27-type-header-before-samples.tsv),
+[after](benchmarks/object-arrays-2026-09-27-type-header-after.tsv), and
+[after samples](benchmarks/object-arrays-2026-09-27-type-header-after-samples.tsv).
+
 ## Reproduce
 
 ```text
