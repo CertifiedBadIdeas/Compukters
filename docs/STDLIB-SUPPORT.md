@@ -112,8 +112,13 @@ links to their source files.
   `Int`, nullable elements, and supported Guest references; identity transforms retain stored references and Int boxes.
   The result uses public `ArrayList` storage and existing VM allocation quotas. Evidence: `testKotlinMapVmConformance`
   and `MinimalScriptLoweringTest`, test `Iterable map preserves order independent types and nullable identity`.
+- [x] **Iterable filtering** — `Iterable<T>.filter(predicate: (T) -> Boolean): List<T>` creates a new list of matching
+  elements in iteration order, evaluating the predicate once per element. Nullable types remain nullable; matching
+  references and Int boxes retain identity. Empty or unmatched inputs return an empty list. Evidence:
+  `testKotlinFilterVmConformance` and `MinimalScriptLoweringTest`, test
+  `Iterable filter preserves traversal nullable elements and identity`.
 - [ ] **Other collections and functional helpers — Unsupported** — `Set`, `Map`, sequences,
-  `filter`, and general custom iterator loops have no Guest implementation. Tracking: not scheduled
+  `filterNotNull`, `mapNotNull`, and general custom iterator loops have no Guest implementation. Tracking: not scheduled
 - [ ] **Console I/O — Partial** — `print`, `println`, and `readln` support the documented scalar and string forms through
   the terminal capability. Formatting and other overloads are absent. Evidence: `testKotlinSubsetVmConformance` and
   [`computer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/computer.rs),

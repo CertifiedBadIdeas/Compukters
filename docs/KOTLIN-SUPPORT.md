@@ -825,8 +825,16 @@ links to their source files.
   support non-local returns. Evidence: `MinimalScriptLoweringTest`, test
   `Iterable map preserves order independent types and nullable identity`, executed by `testKotlinMapVmConformance`.
 
+- [x] **Iterable filtering** — `Iterable<T>.filter(predicate: (T) -> Boolean): List<T>` creates a new list of matching
+  elements in iteration order. Each element reaches the predicate once, including null values; empty inputs do not
+  invoke it. Duplicate matches remain duplicated. Filtering retains the original element type, including nullability;
+  `filter { it != null }` does not narrow `List<T?>` to `List<T>`. Stored reference and nullable Int box identity is
+  preserved. Generic callers can forward predicates, and the result uses public `ArrayList<T>` with VM allocation quotas.
+  The imported extension is not inline and does not support non-local returns. Evidence: `MinimalScriptLoweringTest`,
+  test `Iterable filter preserves traversal nullable elements and identity`, executed by `testKotlinFilterVmConformance`.
+
 - [ ] **Other standard collections and functional helpers — Unsupported** — sets, maps,
-  sequences, `filter`, `mapNotNull`, and collection conversion helpers have no Guest implementation. Tracking: not scheduled
+  sequences, `filterNotNull`, `mapNotNull`, and collection conversion helpers have no Guest implementation. Tracking: not scheduled
 
 - [ ] **Standard exceptions, reflection, and coroutine libraries — Unsupported** —
   these packages have no Guest implementation. Tracking: not scheduled

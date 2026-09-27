@@ -114,3 +114,12 @@ public fun <T, R> Iterable<T>.map(transform: (T) -> R): List<R> {
     }
     return result
 }
+
+/** Returns a list containing elements matching [predicate], in their original iteration order. */
+public fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T> {
+    val result = ArrayList<T>()
+    for (element in this) {
+        if (predicate(element)) result.add(element)
+    }
+    return result
+}
