@@ -1340,3 +1340,21 @@ tasks.register<Test>("generateCollectionBenchmarkArtifacts") {
         systemProperty("compukter.bench.collectionsOutput", collectionBenchmarkArtifacts.get().asFile.absolutePath)
     }
 }
+
+val objectArrayBenchmarkArtifacts = layout.buildDirectory.dir("generated/benchmarks/object-arrays")
+
+tasks.register<Test>("generateObjectArrayBenchmarkArtifacts") {
+    description = "Compiles opt-in object-array peak Guest heap workloads."
+    group = "benchmark"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*object array heap benchmark artifacts compile*")
+    inputs.file(workerJar)
+    outputs.dir(objectArrayBenchmarkArtifacts)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.bench.objectArraysOutput", objectArrayBenchmarkArtifacts.get().asFile.absolutePath)
+    }
+}

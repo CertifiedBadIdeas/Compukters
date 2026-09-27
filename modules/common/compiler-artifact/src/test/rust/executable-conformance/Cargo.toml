@@ -16,3 +16,8 @@ harness = false
 name = "collections_bench"
 path = "collections_bench.rs"
 harness = false
+
+[[test]]
+name = "object_arrays_bench"
+path = "object_arrays_bench.rs"
+harness = false
