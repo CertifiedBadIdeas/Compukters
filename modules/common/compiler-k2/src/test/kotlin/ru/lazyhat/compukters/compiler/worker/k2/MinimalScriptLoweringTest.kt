@@ -2383,6 +2383,70 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `Iterable filter preserves traversal nullable elements and identity`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+                class Item(val value: Int)
+                class Values(val values: List<Int>) : Iterable<Int> {
+                    override fun iterator(): Iterator<Int> = values.iterator()
+                }
+                fun <T> select(values: Iterable<T>, predicate: (T) -> Boolean): List<T> = values.filter(predicate)
+                fun main() {
+                    var calls = 0
+                    require(emptyList<Int>().filter { value -> calls += 1; value > 0 }.isEmpty())
+                    require(calls == 0)
+                    val input: Iterable<Int> = Values(listOf(1, 2, 3, 2))
+                    var order = 0
+                    val selected = select(input) { value ->
+                        calls += 1
+                        order = order * 10 + value
+                        value == 2
+                    }
+                    require(calls == 4 && order == 1232)
+                    require(selected.size == 2 && selected[0] == 2 && selected[1] == 2)
+                    require(input.filter { false }.isEmpty())
+                    require(input.filter { true }.size == 4)
+                    val first = Item(1)
+                    val second = Item(2)
+                    val refs = listOf(first, second, first).filter { item -> item.value == 1 }
+                    require(refs.size == 2 && refs[0] === first && refs[1] === first)
+                    val nullable = listOf<Int?>(1000, null, 2000, null)
+                    val boxes: List<Int?> = nullable.filter { value -> value != null }
+                    require(boxes.size == 2 && boxes[1] == 2000)
+                    require((boxes[0] as Any?) === (nullable[0] as Any?))
+                    val nulls = nullable.filter { value -> value == null }
+                    require(nulls.size == 2 && nulls[0] == null && nulls[1] == null)
+                    val all = nullable.filter { true }
+                    require(all.size == 4 && all[1] == null && all[3] == null)
+                    val texts = listOf<String?>("ab", null, "", "c").filter { text -> text == null || text.length > 0 }
+                    require(texts.size == 3 && texts[0] == "ab" && texts[1] == null && texts[2] == "c")
+                    val optional = listOf<Item?>(first, null, second).filter { item -> item == null || item.value == 1 }
+                    require(optional.size == 2 && optional[0] === first && optional[1] == null)
+                    val mixed = listOf<Any?>(1000, first, null, "x").filter { value -> value is Int || value == null }
+                    require(mixed.size == 2 && mixed[0] == 1000 && mixed[1] == null)
+                    val universal: List<Any?> = boxes
+                    require(universal[0] == 1000)
+                    val growing = ArrayList<Int>(0)
+                    var index = 0
+                    while (index < 100) { growing.add(index); index += 1 }
+                    calls = 0
+                    val even = growing.filter { value -> calls += 1; value % 2 == 0 }
+                    require(calls == 100 && even.size == 50 && even[49] == 98)
+                    require(growing.size == 100 && growing[99] == 99)
+                    require(even.map { value -> value + 1 }.fold(0) { total, value -> total + value } == 2500)
+                    println("filter ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.filterArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `Iterable map preserves order independent types and nullable identity`() =
         withAdapter { adapter ->
             val source =

@@ -617,6 +617,15 @@ registerKotlinVmConformance(
     conformanceScenario = "map",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinFilterVmConformance",
+    taskDescription = "Executes Iterable filter with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateFilterConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-filter.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-filter-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_FILTER_ARTIFACT",
+    conformanceScenario = "filter",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinMutableListVmConformance",
     taskDescription = "Executes mutable ArrayList with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateMutableListConformanceArtifact",
