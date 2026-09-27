@@ -17,6 +17,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- Programs can reuse mutable collection buffers through `mapTo`, `filterTo` and `mapNotNullTo`, which append
+  to the supplied destination and return it.
+
 - Programs can use `mapNotNull` to transform and retain non-null results in one pass without an intermediate list.
 
 - `map` on supported lists and statically typed collections reserves the input size for its result, reducing

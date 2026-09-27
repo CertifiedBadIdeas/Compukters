@@ -126,6 +126,13 @@ links to their source files.
   references and Int boxes retain identity. Empty or unmatched inputs return an empty list. Evidence:
   `testKotlinFilterVmConformance` and `MinimalScriptLoweringTest`, test
   `Iterable filter preserves traversal nullable elements and identity`.
+- [x] **Destination collection operations** — `mapTo`, `filterTo` and `mapNotNullTo` append in iteration order to a
+  supplied mutable collection and return it with its concrete type preserved. Existing elements are retained;
+  programs call `clear()` explicitly to reuse a buffer. Empty inputs invoke no callbacks. Generic forwarding,
+  nullable elements, narrowing non-null results, wider destination element types and preserved reference identity
+  are supported. These operations do not create an intermediate result list. Evidence:
+  `testKotlinDestinationVmConformance` and `MinimalScriptLoweringTest`, test
+  `Iterable destination operations append preserve types and return identity`.
 - [x] **Non-null element selection** — `Iterable<T?>.filterNotNull(): List<T>` removes nulls and narrows the result
   element type, preserving order and duplicates. `Int?` is unboxed into ordinary Int list storage; references and
   Int boxes already stored as `Any` retain identity. Ordinary library lists also expose read-only nullable element

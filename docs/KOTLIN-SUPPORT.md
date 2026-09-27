@@ -330,6 +330,9 @@ supported.
   preserve the original referent and aliasing. A captured local `var` uses one
   ordinary managed typed cell per dynamic variable instance, shared by the
   enclosing code and every sibling closure; primitive payloads remain unboxed.
+  Concrete supported generic collection instances such as `ArrayList<Item>` may be captured through `val` or `var`;
+  shared cells follow later reassignment. Evidence: `Iterable destination operations append preserve types and return identity`
+  in `MinimalScriptLoweringTest`, executed by `testKotlinDestinationVmConformance`.
   `Tasks.launch` accepts direct, stored, and returned `() -> Unit` values. A
   direct top-level `Tasks.launch(::worker)` remains a static spawn without a
   closure allocation. Types unsupported elsewhere in Guest Kotlin, local,
@@ -848,6 +851,17 @@ links to their source files.
   preserved. Generic callers can forward predicates, and the result uses public `ArrayList<T>` with VM allocation quotas.
   The imported extension is not inline and does not support non-local returns. Evidence: `MinimalScriptLoweringTest`,
   test `Iterable filter preserves traversal nullable elements and identity`, executed by `testKotlinFilterVmConformance`.
+
+- [x] **Destination collection operations** — `mapTo`, `filterTo` and `mapNotNullTo` append results to a caller-supplied
+  `MutableCollection` in iteration order and return the same destination with its concrete type preserved.
+  Existing contents are retained; empty or unmatched inputs leave the destination unchanged. Transforms and predicates
+  run once per input element, including nulls. `mapTo` preserves nullable results; `mapNotNullTo` excludes null results
+  and narrows their type. Supported generic wrappers and destinations with a wider element type retain reference and
+  box identity where appropriate. These extensions are not inline and do not support non-local returns. They allocate
+  no intermediate result list; destination growth, transforms and iteration can still allocate. Programs explicitly
+  call `clear()` before refilling a reusable buffer; clearing removes references while retaining backing capacity.
+  Use a separate destination when traversing a mutable source. Evidence: `MinimalScriptLoweringTest`, test
+  `Iterable destination operations append preserve types and return identity`, executed by `testKotlinDestinationVmConformance`.
 
 - [x] **Non-null element selection** — `fun <T : Any> Iterable<T?>.filterNotNull(): List<T>` excludes nulls and
   narrows the element type while preserving order and duplicate matches. `Int?` elements are checked and unboxed into
