@@ -1072,3 +1072,26 @@ tasks.register<Exec>("benchmarkObjectArrayHeap") {
     )
     environment("CARGO_TARGET_DIR", rootProject.file(".toolchain/build/cargo/collection-benchmark").absolutePath)
 }
+
+val objectCollectionBenchmarkArtifacts = project(":compiler-k2").layout.buildDirectory.dir("generated/benchmarks/object-collections")
+val objectCollectionBenchmarkReports = layout.buildDirectory.dir("reports/benchmarks/object-collections")
+
+tasks.register<Exec>("benchmarkObjectCollectionHeap") {
+    description = "Measures construction and complete-operation Guest heap budgets for object collections."
+    group = "benchmark"
+    dependsOn(":compiler-k2:generateObjectCollectionBenchmarkArtifacts")
+    inputs.dir(objectCollectionBenchmarkArtifacts)
+    inputs.file(compilerArtifactVmConformanceHarness)
+    inputs.file(compilerArtifactVmConformanceLock)
+    inputs.file(compilerArtifactVmConformanceHarness.resolveSibling("object_arrays_bench.rs"))
+    inputs.dir(compukterVmRoot.resolve("src"))
+    outputs.dir(objectCollectionBenchmarkReports)
+    outputs.upToDateWhen { false }
+    commandLine(
+        "cargo", "test", "--release", "--locked", "--offline", "--manifest-path",
+        compilerArtifactVmConformanceHarness.absolutePath, "--test", "object_arrays_bench", "--",
+        objectCollectionBenchmarkArtifacts.get().asFile.absolutePath,
+        objectCollectionBenchmarkReports.get().asFile.absolutePath, "3", "10",
+    )
+    environment("CARGO_TARGET_DIR", rootProject.file(".toolchain/build/cargo/collection-benchmark").absolutePath)
+}

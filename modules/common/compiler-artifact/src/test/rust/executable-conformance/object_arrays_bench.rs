@@ -177,10 +177,9 @@ fn percentile(mut samples: Vec<u128>, percent: usize) -> u128 {
 
 fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
-    assert_eq!(
-        args.len(),
-        3,
-        "usage: object_arrays_bench ARTIFACT_DIR REPORT_DIR SAMPLES"
+    assert!(
+        args.len() == 3 || args.len() == 4,
+        "usage: object_arrays_bench ARTIFACT_DIR REPORT_DIR SAMPLES [EXPECTED_CASES]"
     );
     let inputs = Path::new(&args[0]);
     let outputs = Path::new(&args[1]);
@@ -208,7 +207,8 @@ fn main() {
             }
         })
         .collect();
-    assert_eq!(cases.len(), 36);
+    let expected_cases = args.get(3).map_or(36, |value| value.parse().unwrap());
+    assert_eq!(cases.len(), expected_cases);
     // Pre-verify every image. Verification, admission, start and teardown are outside elapsed execution times.
     for case in &mut cases {
         assert!(

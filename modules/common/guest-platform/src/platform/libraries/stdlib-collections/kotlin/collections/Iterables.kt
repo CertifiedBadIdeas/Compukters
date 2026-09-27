@@ -115,6 +115,16 @@ public fun <T, R> Iterable<T>.map(transform: (T) -> R): List<R> {
     return result
 }
 
+/** Maps a collection in iteration order, reserving its known size for the result. */
+public fun <T, R> Collection<T>.map(transform: (T) -> R): List<R> {
+    val result = ArrayList<R>(size)
+    val elements: Iterable<T> = this
+    for (element in elements) {
+        result.add(transform(element))
+    }
+    return result
+}
+
 /** Returns a list containing elements matching [predicate], in their original iteration order. */
 public fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T> {
     val result = ArrayList<T>()

@@ -113,6 +113,8 @@ links to their source files.
   `Int`, nullable elements, and supported Guest references; identity transforms retain stored references and Int boxes.
   The result uses public `ArrayList` storage and existing VM allocation quotas. Evidence: `testKotlinMapVmConformance`
   and `MinimalScriptLoweringTest`, test `Iterable map preserves order independent types and nullable identity`.
+  Statically typed `Collection<T>` receivers also expose `map`, reserving their known size for the result;
+  plain `Iterable<T>` receivers retain the growing path.
 - [x] **Iterable filtering** — `Iterable<T>.filter(predicate: (T) -> Boolean): List<T>` creates a new list of matching
   elements in iteration order, evaluating the predicate once per element. Nullable types remain nullable; matching
   references and Int boxes retain identity. Empty or unmatched inputs return an empty list. Evidence:

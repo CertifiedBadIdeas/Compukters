@@ -2604,6 +2604,20 @@ class MinimalScriptLoweringTest {
                     val mapped = growing.map { value -> calls += 1; value + 1 }
                     require(calls == 100 && mapped.size == 100 && mapped[99] == 100)
                     require(growing[99] == 99 && growing.size == 100)
+                    val collection: Collection<Item> = refs
+                    calls = 0
+                    order = 0
+                    val collectionMapped = collection.map { item ->
+                        calls += 1
+                        order = order * 10 + item.value / 1000
+                        item
+                    }
+                    require(calls == 2 && order == 12)
+                    require(collectionMapped[0] === first && collectionMapped[1] === refs[1])
+                    val genericCollection: Collection<Int> = growing
+                    require(genericCollection.map { value -> value + 2 }[99] == 101)
+                    require((emptyList<Item>() as Collection<Item>).map { item -> calls += 1; item }.isEmpty())
+                    require(calls == 2)
                     println("map ok")
                 }
                 """.trimIndent()
@@ -4543,6 +4557,36 @@ class MinimalScriptLoweringTest {
                         case.count,
                         case.fields,
                         case.rounds,
+                        case.checksum(),
+                        bytes.size,
+                        module.types.size,
+                        module.functions.size,
+                    ).joinToString("\t")
+            }
+            output.resolve("manifest.tsv").writeText(manifest.joinToString("\n", postfix = "\n"))
+        }
+
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "compukter.bench.objectCollectionsOutput", matches = ".+")
+    fun `object collection heap benchmark artifacts compile`() =
+        withAdapter { adapter ->
+            val output = Path.of(checkNotNull(System.getProperty("compukter.bench.objectCollectionsOutput"))).createDirectories()
+            val manifest = mutableListOf("id\trepresentation\tworkload\tcount\tfields\trounds\tchecksum\tartifact_bytes\ttypes\tfunctions")
+            objectCollectionBenchmarkCases().forEach { case ->
+                val source = case.source()
+                val result = adapter.compile(request(source))
+                val bytes = collectionBenchmarkArtifact(assertNotNull(result.artifact, "${case.id}: ${result.diagnostics}").toByteArray())
+                val module = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+                output.resolve("${case.id}.cpkt").writeBytes(bytes)
+                output.resolve("${case.id}.kt").writeText(source)
+                manifest +=
+                    listOf(
+                        case.id,
+                        "list-${case.storage}",
+                        case.workload,
+                        case.count,
+                        2,
+                        1,
                         case.checksum(),
                         bytes.size,
                         module.types.size,
