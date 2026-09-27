@@ -6,14 +6,14 @@
 
 package ru.lazyhat.compukters.compiler.worker.k2
 
-internal fun collectionReuseBenchmarkCases(): List<CollectionReuseBenchmarkCase> =
-    listOf("fresh", "reuse-list", "reuse-objects").map { CollectionReuseBenchmarkCase(it) }
+internal fun collectionReuseBenchmarkCases(count: Int = 1024): List<CollectionReuseBenchmarkCase> =
+    listOf("fresh", "reuse-list", "reuse-objects").map { CollectionReuseBenchmarkCase(it, count) }
 
 internal data class CollectionReuseBenchmarkCase(
     val storage: String,
+    val count: Int = 1024,
 ) {
     val workload: String = "map-not-null"
-    val count: Int = 1024
     val rounds: Int = 100
     val id: String get() = "map-not-null-$count-$rounds-$storage"
 

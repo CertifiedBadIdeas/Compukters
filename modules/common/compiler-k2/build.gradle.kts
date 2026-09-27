@@ -1411,7 +1411,11 @@ tasks.register<Test>("generateObjectCollectionBenchmarkArtifacts") {
     }
 }
 
-val collectionReuseBenchmarkArtifacts = layout.buildDirectory.dir("generated/benchmarks/collection-reuse")
+val collectionReuseCount = providers.gradleProperty("compukterCollectionReuseCount").orElse("1024").get().toInt().also {
+    require(it > 0 && it % 2 == 0) { "compukterCollectionReuseCount must be a positive even number" }
+}
+val collectionReuseDirectory = if (collectionReuseCount == 1024) "collection-reuse" else "collection-reuse-$collectionReuseCount"
+val collectionReuseBenchmarkArtifacts = layout.buildDirectory.dir("generated/benchmarks/$collectionReuseDirectory")
 
 tasks.register<Test>("generateCollectionReuseBenchmarkArtifacts") {
     description = "Compiles opt-in repeated collection reuse Guest workloads."
@@ -1422,9 +1426,11 @@ tasks.register<Test>("generateCollectionReuseBenchmarkArtifacts") {
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("*collection reuse heap benchmark artifacts compile*")
     inputs.file(workerJar)
+    inputs.property("collectionReuseCount", collectionReuseCount)
     outputs.dir(collectionReuseBenchmarkArtifacts)
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.bench.collectionReuseCount", collectionReuseCount)
         systemProperty("compukter.bench.collectionReuseOutput", collectionReuseBenchmarkArtifacts.get().asFile.absolutePath)
     }
 }

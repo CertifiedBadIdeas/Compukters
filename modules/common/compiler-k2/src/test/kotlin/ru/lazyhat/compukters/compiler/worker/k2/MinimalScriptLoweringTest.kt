@@ -4762,7 +4762,9 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val output = Path.of(checkNotNull(System.getProperty("compukter.bench.collectionReuseOutput"))).createDirectories()
             val manifest = mutableListOf("id\trepresentation\tworkload\tcount\tfields\trounds\tchecksum\tartifact_bytes\ttypes\tfunctions")
-            collectionReuseBenchmarkCases().forEach { case ->
+            val count = System.getProperty("compukter.bench.collectionReuseCount", "1024").toInt()
+            require(count > 0 && count % 2 == 0)
+            collectionReuseBenchmarkCases(count).forEach { case ->
                 val source = case.source()
                 val result = adapter.compile(request(source))
                 val bytes = collectionBenchmarkArtifact(assertNotNull(result.artifact, "${case.id}: ${result.diagnostics}").toByteArray())
