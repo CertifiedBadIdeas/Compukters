@@ -329,16 +329,16 @@ The Rust VM owns verification, the Tier 0 interpreter, managed memory and collec
 capability suspension, and host-neutral sessions. Future JIT or AOT tiers must remain behind the same verified artifact
 and session contract.
 
-Managed blocks use an eight-byte allocator header followed by a four-byte runtime type identifier, with eight-byte
-block alignment and a 16-byte minimum. Empty and one-Int objects, including managed Int boxes, occupy 16 bytes;
-two-Int and three-Int objects both occupy 24 bytes. Sixteen-byte free tails are split and reused; only smaller tails
-are absorbed. Reference identity uses non-moving managed offsets; no allocation identity token is stored.
-Free-list links overlap the type identifier and first payload word only while a block is free. Payload access uses
-little-endian byte operations, so wide fields do
-not require the payload address itself to be eight-byte aligned.
-During collection's roots/mark phases, the predecessor-size word temporarily holds the intrusive gray link; Guest
-execution and allocation remain paused. The bounded forward sweep restores predecessor sizes before coalescing,
-carrying the effective preceding block size across steps. No per-object side table or extra heap scan is required.
+Managed blocks normally use one eight-byte header with allocated/marked/live flags, aligned block size,
+predecessor size or GC gray link, and runtime type ID packed into bit fields. The VM selects this format when the
+admitted heap and type count fit; larger combinations retain the 12-byte header. In the production 256 KiB heap,
+empty, one-Int, and two-Int objects, including managed Int boxes, occupy 16 bytes; three-Int objects occupy 24 bytes.
+Both formats have eight-byte block alignment and a 16-byte minimum. Sixteen-byte free tails are split and reused;
+only smaller tails are absorbed. Reference identity uses non-moving managed offsets. Free-list links overlap payload
+bytes only while a block is free. Payload access uses little-endian byte operations, so wide fields do not require
+the payload address itself to be eight-byte aligned. During roots/mark, the predecessor-size field temporarily
+holds the intrusive gray link while Guest execution and allocation are paused. The bounded forward sweep restores
+predecessor sizes before coalescing. No per-object side table or extra heap scan is required.
 Arena backing and admitted heap budgets retain their existing 16-byte granularity. See the
 [object-array heap measurements](OBJECT-ARRAY-BENCHMARK.md) for construction and transformation budgets.
 
