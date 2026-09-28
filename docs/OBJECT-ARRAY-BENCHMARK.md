@@ -244,6 +244,45 @@ Pressure timing archives: [before](benchmarks/object-arrays-2026-09-27-min-block
 [after](benchmarks/object-arrays-2026-09-27-min-block-pressure-after.tsv), and
 [after samples](benchmarks/object-arrays-2026-09-27-min-block-pressure-after-samples.tsv).
 
+## Unified 64-bit block header
+
+The next VM change packs allocation flags, aligned block size, predecessor size or GC gray link, and the runtime
+type ID into one eight-byte header. Admission selects the compact format only when the heap bound and number of
+types fit its bit fields; otherwise the previous 12-byte header remains available. The production 256 KiB profile
+uses 16 size bits, 15 link bits, and 30 type bits. Managed references stay 32-bit non-moving offsets, and reference
+arrays are unchanged. The 16-byte minimum block still applies. Two-Int records therefore shrink from 24 to 16 bytes;
+one-Int and three-Int records remain 16 and 24 bytes respectively. The reserved arena size per VM is unchanged.
+
+The same 62 generated artifacts were measured sequentially on 2026-09-28 against baseline VM
+`b140c26243e06140241297bc74e995e44a729865` and the changed checkout. The baseline was built from a temporary
+`git archive`; both runs used the same release harness, one warmup and three timing samples per case. The current
+16 MiB timing heap also selects the compact format because these programs have few types. All 62 pressure runs
+completed at 256 KiB and passed their checksums.
+
+| 4096-record object operation | Before heap budget | Compact heap budget | Reduction |
+| --- | ---: | ---: | ---: |
+| Two-Int construction / indexed reads | 114,752 B | 81,968 B | 28.6% |
+| Two-Int shallow copy | 133,152 B | 100,368 B | 24.6% |
+| Two-Int deep copy | 229,440 B | 163,888 B | 28.6% |
+| Two-Int pipeline | 238,672 B | 173,120 B | 27.5% |
+
+The two-Int records alone use 64 instead of 96 KiB for 4096 instances. A retained input and a deep-copied state
+save 64 KiB of record blocks in total, before reference arrays and temporary objects. One-Int and three-Int object
+thresholds differ by at most 32 bytes from the baseline, reflecting changed string padding rather than record size.
+
+At 16 MiB, two-Int deep-copy medians were 28.67 ms before and 27.98 ms after; the pipeline medians were 28.58 ms
+and 29.68 ms. The unchanged three-Int pipeline moved from 32.17 to 34.51 ms. Three samples with overlapping
+workload variation do not establish a CPU improvement or regression. Fixed work and instruction counts match;
+dynamic units can move by one as string padding changes. At 256 KiB, two-Int deep-copy maintenance fell from
+21,847 to zero units, while pipeline maintenance rose from 21,164 to 28,685 units. Smaller objects change the
+collection schedule, so less heap use does not imply less GC work for every operation. The 256 KiB pressure timing
+is a single observation per case and is not used for a latency claim.
+
+Checked-in matched measurements: [before](benchmarks/object-arrays-2026-09-28-header-before.tsv),
+[before samples](benchmarks/object-arrays-2026-09-28-header-before-samples.tsv),
+[after](benchmarks/object-arrays-2026-09-28-header-after.tsv), and
+[after samples](benchmarks/object-arrays-2026-09-28-header-after-samples.tsv).
+
 ## Reproduce
 
 ```text
