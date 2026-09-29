@@ -6,6 +6,21 @@
 
 package kotlin.collections
 
+/** Calls [action] for each element in iteration order. */
+public inline fun <T> Iterable<T>.forEach(action: (T) -> Unit) {
+    for (element in this) action(element)
+}
+
+/** Calls [action] for each element and its zero-based index in iteration order. */
+public inline fun <T> Iterable<T>.forEachIndexed(action: (Int, T) -> Unit) {
+    var index = 0
+    for (element in this) {
+        require(index >= 0)
+        action(index, element)
+        index += 1
+    }
+}
+
 /** Checks whether this iterable has an element equal to [element]. */
 public operator fun <T> Iterable<T>.contains(element: T): Boolean {
     for (value in this) {

@@ -71,10 +71,18 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val source =
                 """
+                import kotlin.collections.*
+
                 class Box(var value: Int)
                 fun early(): Int { 3.let { return it + 4 }; return -1 }
                 fun earlyReceiver(): Int { Box(9).run { return value }; return -1 }
                 fun earlyBlock(): Int { run { return 11 }; return -1 }
+                fun earlyEach(): Int { listOf(1, 4, 6).forEach { if (it == 4) return it }; return -1 }
+                fun earlyIndexed(): Int {
+                    listOf(3, 5, 7).forEachIndexed { index, value -> if (value == 7) return index }
+                    return -1
+                }
+                fun earlyRepeat(): Int { repeat(5) { if (it == 2) return it }; return -1 }
                 fun main() {
                     var calls = 0
                     val box = Box(1).apply { value = 2 }.also { it.value += 3 }
@@ -100,6 +108,25 @@ class MinimalScriptLoweringTest {
                     require(early() == 7)
                     require(earlyReceiver() == 9)
                     require(earlyBlock() == 11)
+                    var order = 0
+                    val values: Iterable<Int> = listOf(1, 2, 3)
+                    values.forEach { order = order * 10 + it }
+                    emptyList<Int>().forEach { order = -1 }
+                    require(order == 123)
+                    var indexed = 0
+                    listOf(4, 5).forEachIndexed { index, value -> indexed += index * 10 + value }
+                    emptyList<Int>().forEachIndexed { _, _ -> indexed = -1 }
+                    require(indexed == 19)
+                    val references = listOf(box, box)
+                    references.forEachIndexed { index, value -> require(index < 2 && value === box) }
+                    var repeated = 0
+                    repeat(3) { repeated = repeated * 10 + it }
+                    repeat(0) { repeated = -1 }
+                    repeat(-2) { repeated = -1 }
+                    require(repeated == 12)
+                    require(earlyEach() == 4)
+                    require(earlyIndexed() == 2)
+                    require(earlyRepeat() == 2)
                     println("scope ok")
                 }
                 """.trimIndent()

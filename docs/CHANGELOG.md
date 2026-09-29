@@ -19,6 +19,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 - Programs can use the standard `let`, `run`, `with`, `apply`, `also`, `takeIf`, and `takeUnless` scope functions
   with inline lambdas, including supported nullable receivers and non-local returns.
+- Programs can traverse Guest iterables with `forEach` and `forEachIndexed`, or run an indexed action with `repeat`,
+  using inline callbacks and non-local returns.
 
 - Newly compiled programs reuse memory for temporary values with nonoverlapping lifetimes, reducing execution frame
   requirements while preserving types, GC roots and suspended calls.
