@@ -39,7 +39,7 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - `map` on supported lists and statically typed collections reserves the input size for its result, reducing
   temporary backing arrays and peak heap use while preserving iteration order and element identity.
 - Programs can search strings by UTF-16 code unit with `startsWith`, `endsWith`, `contains`, and `indexOf`, including
-  an optional starting index for `indexOf`.
+  an optional starting index for `indexOf`, and parse decimal input with `String.toIntOrNull()`.
 - Programs can use nullable strings and supported class references, compare them with `null`, and use `?:` or
   reference-result `?.` without evaluating the unused branch. Nullable `Int` values use managed boxes, support equality
   and Elvis, and allow Int-result safe calls such as `text?.length`. Other nullable primitives remain unsupported.

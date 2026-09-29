@@ -3889,6 +3889,7 @@ class MinimalScriptLoweringTest {
                         import kotlin.text.endsWith
                         import kotlin.text.indexOf
                         import kotlin.text.startsWith
+                        import kotlin.text.toIntOrNull
 
                         fun main() {
                             val value = CharArray(5)
@@ -3922,6 +3923,20 @@ class MinimalScriptLoweringTest {
                             require("".indexOf("") == 0)
                             require("".indexOf("x") == -1)
                             require("\uD83D\uDE00".indexOf("\uDE00") == 1)
+                            require("0".toIntOrNull() == 0)
+                            require("+00123".toIntOrNull() == 123)
+                            require("-0".toIntOrNull() == 0)
+                            require("2147483647".toIntOrNull() == Int.MAX_VALUE)
+                            require("-2147483648".toIntOrNull() == Int.MIN_VALUE)
+                            require("".toIntOrNull() == null)
+                            require("+".toIntOrNull() == null)
+                            require("-".toIntOrNull() == null)
+                            require("2147483648".toIntOrNull() == null)
+                            require("-2147483649".toIntOrNull() == null)
+                            require(" 12".toIntOrNull() == null)
+                            require("12 ".toIntOrNull() == null)
+                            require("1.2".toIntOrNull() == null)
+                            require("\u0661".toIntOrNull() == null)
                         }
                         """.trimIndent(),
                 )

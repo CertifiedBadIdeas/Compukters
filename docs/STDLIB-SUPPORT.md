@@ -42,8 +42,10 @@ links to their source files.
   [`text_tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/text_tests.rs).
   Tracking: not scheduled
 - [ ] **Numbers and characters — Partial** — the supported `Int`, `Long`, `Float`, `Boolean`, and `Char` operations use
-  Guest scalar values. `Byte`, `Short`, `Double`, parsing helpers, and the Kotlin math package are unavailable. Evidence:
-  `testKotlinLongVmConformance` and `testKotlinFloatVmConformance`. Tracking: not scheduled
+  Guest scalar values. `String.toIntOrNull()` parses optional-sign decimal ASCII digits into an `Int?`, returning null
+  for empty input, invalid characters, or overflow. `Byte`, `Short`, `Double`, other parsing helpers, and the Kotlin
+  math package are unavailable. Evidence: `testKotlinSubsetVmConformance`, `testKotlinLongVmConformance`, and
+  `testKotlinFloatVmConformance`. Tracking: not scheduled
 
 ## Arrays and ranges
 
