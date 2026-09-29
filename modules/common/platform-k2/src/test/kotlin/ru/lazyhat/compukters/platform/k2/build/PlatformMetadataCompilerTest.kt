@@ -45,6 +45,35 @@ class PlatformMetadataCompilerTest {
     private val module = PlatformModuleId("test", "library")
 
     @Test
+    fun `source implementation identities distinguish overloads inline bodies and generic owners`() {
+        val result =
+            compiler.compile(
+                module,
+                listOf(
+                    source(
+                        "mixed.kt",
+                        """
+                        package sample
+                        fun select(value: Int): Int = value
+                        fun <T> select(value: T): T = value
+                        inline fun twice(action: () -> Unit) { action(); action() }
+                        external fun <T> intrinsic(): T
+                        class Cell<T>(val value: T) { fun read(): T = value }
+                        private fun helper(value: Int): Int = value + 1
+                        """.trimIndent(),
+                    ),
+                ),
+            )
+        val sourceDeclarations = result.sourceDeclarations
+        assertTrue(sourceDeclarations.any { it.symbol == "sample.select" && it.signature == "fun(T):T" })
+        assertFalse(sourceDeclarations.any { it.symbol == "sample.select" && it.signature == "fun(Int):Int" })
+        assertTrue(sourceDeclarations.any { it.symbol == "sample.twice" })
+        assertTrue(sourceDeclarations.any { it.symbol == "sample.Cell" })
+        assertTrue(sourceDeclarations.any { it.symbol == "sample.Cell.read" })
+        assertFalse(sourceDeclarations.any { it.symbol == "sample.intrinsic" || it.symbol == "sample.helper" })
+    }
+
+    @Test
     fun `metadata and export indexes are deterministic`() {
         val first = source("z.kt", "package sample\npublic external fun zebra(value: Int): String")
         val second = source("a.kt", "package sample\npublic class Alpha")

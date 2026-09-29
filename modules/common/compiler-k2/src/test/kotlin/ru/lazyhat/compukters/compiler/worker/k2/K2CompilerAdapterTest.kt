@@ -87,11 +87,15 @@ class K2CompilerAdapterTest {
                     fun <T> identity(value: T): T = value
                     inline fun <T, R> transform(value: T, block: (T) -> R): R = block(value)
 
-                    private fun label(size: Int): String = "length=" + size
+                    private fun label(size: Int): String {
+                        require(size >= 0)
+                        return "length=" + size
+                    }
 
                     fun <T> describe(value: T, measure: (T) -> Int): String = label(measure(value))
 
                     fun describeSize(size: Int): String = label(size)
+                    internal fun internalLabel(size: Int): String = label(size)
 
                     fun <T> bad(value: T): T { val nullable: T? = value; return nullable!! }
                     """.trimIndent(),
@@ -111,7 +115,7 @@ class K2CompilerAdapterTest {
                     [[module]]
                     id = "test:generic"
                     version = "1.0.0"
-                    dependencies = ["kotlin:builtins"]
+                    dependencies = ["stdlib:core"]
                     sources = ["libraries/generic/**/*.kt"]
 
                     [[module]]
@@ -131,16 +135,16 @@ class K2CompilerAdapterTest {
             val library = platform.modules.single { it.id.toString() == "test:generic" }
             val classLibrary = platform.modules.single { it.id.toString() == "test:generic-class" }
             val classOnlyLibrary = platform.modules.single { it.id.toString() == "test:generic-class-only" }
-            assertNull(library.libraryFragment)
+            assertNotNull(library.libraryFragment)
             assertNull(classLibrary.libraryFragment)
             assertNull(classOnlyLibrary.libraryFragment)
-            assertTrue(library.sourceOnly)
-            assertTrue(classLibrary.sourceOnly)
-            assertTrue(classOnlyLibrary.sourceOnly)
+            assertTrue(library.sourceDeclarations.any { it.symbol == "sample.describe" })
+            assertTrue(library.sourceDeclarations.none { it.symbol == "sample.describeSize" || it.symbol == "sample.label" })
+            assertTrue(classLibrary.sourceDeclarations.isNotEmpty())
+            assertTrue(classOnlyLibrary.sourceDeclarations.isNotEmpty())
             assertTrue(platform.modules.single { it.id.toString() == "stdlib:core" }.libraryFragment != null)
             val collections = platform.modules.single { it.id.toString() == "stdlib:collections" }
-            assertTrue(collections.sourceOnly)
-            assertNull(collections.libraryFragment)
+            assertTrue(collections.sourceDeclarations.isNotEmpty())
             val workerIdentity = identity(platform)
             val selected =
                 listOf(
@@ -219,6 +223,41 @@ class K2CompilerAdapterTest {
             assertTrue("sample.Cell<String>" in names, names.toString())
             assertTrue("sample.Holder<Int>" in names, names.toString())
             assertTrue("sample.Holder<String>" in names, names.toString())
+            val emittedFunctions =
+                artifact.modules.flatMap { module ->
+                    module.functions.map { module.strings[it.name.value.toInt()].toString() }
+                }
+            assertEquals(1, emittedFunctions.count { it == "label" }, emittedFunctions.toString())
+            assertEquals(1, emittedFunctions.count { it == "describeSize" }, emittedFunctions.toString())
+            assertEquals(1, emittedFunctions.count { it == "require" }, emittedFunctions.toString())
+            val privateAccess =
+                adapter.compile(
+                    CompileRequest(
+                        RequestId.of(4u),
+                        listOf(source("project/Private.kt", "fun main() { sample.label(1) }")),
+                        TargetSettings.KOTLIN_2_4_JVM_17,
+                        workerIdentity,
+                        WorkerLimits(),
+                        selected,
+                        emptyList(),
+                    ),
+                )
+            assertNull(privateAccess.artifact)
+            assertTrue(privateAccess.diagnostics.any { it.code == "INVISIBLE_REFERENCE" }, privateAccess.diagnostics.toString())
+            val internalAccess =
+                adapter.compile(
+                    CompileRequest(
+                        RequestId.of(5u),
+                        listOf(source("project/Internal.kt", "fun main() { sample.internalLabel(1) }")),
+                        TargetSettings.KOTLIN_2_4_JVM_17,
+                        workerIdentity,
+                        WorkerLimits(),
+                        selected,
+                        emptyList(),
+                    ),
+                )
+            assertNull(internalAccess.artifact)
+            assertTrue(internalAccess.diagnostics.any { it.code == "INVISIBLE_REFERENCE" }, internalAccess.diagnostics.toString())
             val wrongCollectionsVersion =
                 TrustedBundleIdentity.of(
                     collections.id.toString(),

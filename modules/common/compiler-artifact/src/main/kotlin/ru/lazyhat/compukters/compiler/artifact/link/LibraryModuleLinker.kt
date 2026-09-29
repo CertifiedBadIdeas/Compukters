@@ -76,6 +76,7 @@ object LibraryModuleLinker {
     fun link(
         application: Artifact,
         libraryArtifacts: List<Artifact>,
+        preserveLibraryExports: Boolean = false,
     ): Artifact {
         val applicationModule = application.modules.single { it.kind == ModuleKind.APPLICATION }
         val applicationCapabilities =
@@ -99,12 +100,13 @@ object LibraryModuleLinker {
                 if (seen.add(hash)) libraries[hash] = LibraryInput(module, capabilityIds)
             }
         }
-        return linkInputs(application, libraries)
+        return linkInputs(application, libraries, preserveLibraryExports)
     }
 
     private fun linkInputs(
         application: Artifact,
         libraries: Map<String, LibraryInput>,
+        preserveLibraryExports: Boolean = false,
     ): Artifact {
         require(application.modules.count { it.kind == ModuleKind.APPLICATION } == 1) {
             "link input must contain exactly one application module"
@@ -131,7 +133,7 @@ object LibraryModuleLinker {
         ) {
             "link input contains duplicate module semantic identities"
         }
-        val reachability = ReachabilityGraph(combined, capabilityIds).analyze()
+        val reachability = ReachabilityGraph(combined, capabilityIds).analyze(preserveLibraryExports)
         val selected =
             combined.modules.indices.filter { index ->
                 val module = combined.modules[index]
@@ -147,7 +149,11 @@ object LibraryModuleLinker {
                 selected
                     .filter { it != applicationIndex }
                     .sortedWith(
-                        compareBy({ moduleName(combined.modules[it]) }, { ArtifactWriter.moduleSemanticHash(combined.modules[it]).hex() }),
+                        compareBy(
+                            { if (preserveLibraryExports && it == 1) 0 else 1 },
+                            { moduleName(combined.modules[it]) },
+                            { ArtifactWriter.moduleSemanticHash(combined.modules[it]).hex() },
+                        ),
                     )
         val moduleIds = ordered.withIndex().associate { (new, old) -> old to new }
         val capabilityMap = reachability.capabilities.withIndex().associate { (new, old) -> old to new }

@@ -980,6 +980,8 @@ internal object KotlinProjectLowering {
                     !includeTrustedPlatformBodies &&
                         it.fqNameWhenAvailable?.asString() !in specializedCollectionInterfaces &&
                         session.trustedPlatformModule(it.file.fileEntry.name) != null
+                }.filterNot { declaration ->
+                    !includeTrustedPlatformBodies && session.platformTypes.any { it.symbol == declaration.fqNameWhenAvailable?.asString() }
                 }.sortedBy { it.fqNameWhenAvailable?.asString().orEmpty() }
         sourceClasses
             .firstOrNull { declaration ->
@@ -1041,6 +1043,12 @@ internal object KotlinProjectLowering {
                     !includeTrustedPlatformBodies &&
                         (function.parent as? IrClass)?.fqNameWhenAvailable?.asString() !in specializedCollectionInterfaces &&
                         session.trustedPlatformModule(function.file.fileEntry.name) != null
+                }.filterNot { function ->
+                    !includeTrustedPlatformBodies &&
+                        session.platformFunctions.any { link ->
+                            link.symbol == function.fqNameWhenAvailable?.asString() &&
+                                link.signature == function.canonicalPlatformSignature()
+                        }
                 }
         val userFunctions =
             playerFunctions.sortedWith(
@@ -3193,22 +3201,24 @@ internal object KotlinProjectLowering {
                     ),
                 ),
             exports =
-                runtimeTypeNames.mapIndexed { index, name ->
-                    Export(
-                        kind = SymbolKind.TYPE,
-                        visibility = ExportVisibility.PUBLIC_LIBRARY,
-                        name = requireNotNull(ids[name]),
-                        localSymbol = index.toUInt(),
-                        signature = TypeRef.Local(TypeId.of(index.toUInt())),
-                    )
-                } +
-                    Export(
-                        kind = SymbolKind.FIELD,
-                        visibility = ExportVisibility.PUBLIC_LIBRARY,
-                        name = requireNotNull(ids[INT_BOX_VALUE_NAME]),
-                        localSymbol = 0u,
-                        signature = TypeRef.Local(TypeId.of(INT_BOX_RUNTIME_TYPE)),
-                    ),
+                (
+                    runtimeTypeNames.mapIndexed { index, name ->
+                        Export(
+                            kind = SymbolKind.TYPE,
+                            visibility = ExportVisibility.PUBLIC_LIBRARY,
+                            name = requireNotNull(ids[name]),
+                            localSymbol = index.toUInt(),
+                            signature = TypeRef.Local(TypeId.of(index.toUInt())),
+                        )
+                    } +
+                        Export(
+                            kind = SymbolKind.FIELD,
+                            visibility = ExportVisibility.PUBLIC_LIBRARY,
+                            name = requireNotNull(ids[INT_BOX_VALUE_NAME]),
+                            localSymbol = 0u,
+                            signature = TypeRef.Local(TypeId.of(INT_BOX_RUNTIME_TYPE)),
+                        )
+                ).sortedWith(compareBy({ it.kind.ordinal }, { names[it.name.value.toInt()] })),
         )
     }
 

@@ -33,11 +33,8 @@ import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.CompilationSession
 import ru.lazyhat.compukters.compiler.k2.engine.CompuktersFir2IrPipeline
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformCapabilityShape
-import ru.lazyhat.compukters.compiler.k2.engine.PlatformFieldLink
-import ru.lazyhat.compukters.compiler.k2.engine.PlatformFunctionLink
-import ru.lazyhat.compukters.compiler.k2.engine.PlatformTypeLink
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.*
-import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryFragmentCodec
+import ru.lazyhat.compukters.compiler.k2.engine.library.loadPlatformLibraries
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryBudget
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryUsage
 import ru.lazyhat.compukters.compiler.worker.protocol.*
@@ -45,6 +42,7 @@ import ru.lazyhat.compukters.platform.bundle.*
 import ru.lazyhat.compukters.platform.k2.CompuktersPlatformCheckers
 import ru.lazyhat.compukters.platform.k2.CompuktersPlatformDiagnosticCode
 import ru.lazyhat.compukters.platform.k2.build.CompuktersFirBuildEnvironment
+import ru.lazyhat.compukters.platform.k2.build.CompuktersFirModuleOutput
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import java.nio.file.Files
 import java.nio.file.Path
@@ -118,7 +116,7 @@ class K2CompilerAdapter(
         if (diagnostics.isNotEmpty()) return failure(diagnostics, reachedIr = false, request.limits)
         val selection = selectModules(request)
         val selected = selection.modules
-        val libraries = loadLibraries(selected)
+        val libraries = loadPlatformLibraries(selected)
         val budget = TemporaryBudget(inputs.temporaryRoot, request.limits)
         budget.requireCapacity(sourceFootprint(request))
         return budget.useRequestDirectory { requestRoot ->
@@ -138,7 +136,7 @@ class K2CompilerAdapter(
                 selected.filter { module ->
                     module.id != platform.builtins.id &&
                         platform.modules.any { packaged -> packaged.id == module.id } &&
-                        module.sourceOnly
+                        module.sourceDeclarations.isNotEmpty()
                 }
             val librarySourceNames =
                 sourceLibraries.flatMap { module ->
@@ -153,7 +151,7 @@ class K2CompilerAdapter(
             val platformSources =
                 request.sources.map { source ->
                     PlatformSource(source.path.value, ImmutableBytes.of(source.content.toByteArray()))
-                } + sourceLibraries.flatMap(PlatformModule::sources)
+                }
             var reachedIr = false
             var artifact: BinaryValue? = null
             val sourcePaths =
@@ -176,13 +174,28 @@ class K2CompilerAdapter(
                         }
                 ).toMap()
             CompuktersFirBuildEnvironment.create().use { environment ->
+                val sourceOutputs = linkedMapOf<PlatformModuleId, CompuktersFirModuleOutput>()
+                val metadataModules = selected - sourceLibraries.toSet()
+                sourceLibraries.forEach { library ->
+                    val dependencyIds =
+                        PlatformModuleGraph(
+                            platform,
+                        ).resolve(
+                            library.dependencies.filterNot { it == platform.builtins.id }.toSet(),
+                        ).modules
+                            .mapTo(mutableSetOf(), PlatformModule::id)
+                    val dependencies = sourceOutputs.filterKeys { it in dependencyIds }.values.toList()
+                    sourceOutputs[library.id] = environment.compileGuest(library.id, library.sources, metadataModules, dependencies)
+                }
                 val output =
                     environment.compileGuest(
                         PlatformModuleId("guest", "application"),
                         platformSources,
-                        selected - sourceLibraries.toSet(),
+                        metadataModules,
+                        sourceOutputs.values.toList(),
                     )
-                output.diagnostics.diagnosticsByFile.forEach { (file, fileDiagnostics) ->
+                val compiledOutputs = sourceOutputs.values + output
+                compiledOutputs.flatMap { it.diagnostics.diagnosticsByFile.entries }.forEach { (file, fileDiagnostics) ->
                     val path = file?.name?.let(sourcePaths::get)
                     fileDiagnostics.forEach { diagnostic ->
                         diagnostics +=
@@ -208,7 +221,7 @@ class K2CompilerAdapter(
                             )
                     }
                 }
-                if (!output.diagnostics.hasErrors) {
+                if (compiledOutputs.none { it.diagnostics.hasErrors }) {
                     val session =
                         CompilationSession(
                             irSink = { _, _ -> reachedIr = true },
@@ -231,7 +244,7 @@ class K2CompilerAdapter(
                             platformScalarConstants = selected.flatMap(PlatformModule::scalarConstants),
                             limits = request.limits,
                         )
-                    CompuktersFir2IrPipeline.lowerGuest(output, session)?.let { lowered ->
+                    CompuktersFir2IrPipeline.lowerGuest(output, session, sourceOutputs.values.toList())?.let { lowered ->
                         val linked = linkLibraries(lowered, libraries.artifacts)
                         when (
                             val result =
@@ -336,105 +349,6 @@ class K2CompilerAdapter(
                 PlatformCapabilityShape(schema.identity.abiMinor, schema.operations.size.toUInt())
         }
 
-    private fun loadLibraries(modules: List<PlatformModule>): LoadedLibraries {
-        val artifacts =
-            modules.mapNotNull { module ->
-                module.libraryFragment?.let { fragmentBytes ->
-                    val fragment = PlatformLibraryFragmentCodec.decode(fragmentBytes)
-                    require(fragment.module == module.id) { "platform library fragment identity mismatch" }
-                    module to ArtifactReader.read(fragment.artifact.toByteArray())
-                }
-            }
-        val functions = mutableListOf<PlatformFunctionLink>()
-        val types = mutableListOf<PlatformTypeLink>()
-        val fields = mutableListOf<PlatformFieldLink>()
-        artifacts.forEach { (platformModule, artifact) ->
-            val library =
-                artifact.modules.single { module ->
-                    module.kind == ModuleKind.LIBRARY && module.exports.any { it.kind == SymbolKind.FUNCTION }
-                }
-            val moduleHash = ArtifactWriter.moduleSemanticHash(library)
-            functions +=
-                platformModule.declarations
-                    .filter { declaration -> !declaration.trustedExternal && declaration.signature.startsWith("fun(") }
-                    .map { declaration ->
-                        val simpleName = declaration.symbol.substringAfterLast('.')
-                        val candidates =
-                            library.exports.filter { export ->
-                                export.kind == SymbolKind.FUNCTION &&
-                                    library.strings[export.name.value.toInt()].toString().let { name ->
-                                        name == simpleName || name.startsWith("$simpleName#")
-                                    }
-                            }
-                        val matching =
-                            candidates.filter { export ->
-                                library.functionSignature(export.signature).shortTypeNames() == declaration.signature.shortTypeNames()
-                            }
-                        val exactName = candidates.filter { export -> library.strings[export.name.value.toInt()].toString() == simpleName }
-                        val sourceShape =
-                            declaration.signature
-                                .removePrefix("fun")
-                                .replaceFirst(":", "->")
-                                .shortTypeNames()
-                        val ownerType = declaration.symbol.substringBeforeLast('.').substringAfterLast('.')
-                        val sourceShapes = setOf(sourceShape, sourceShape.withLeadingSourceParameter(ownerType))
-                        val mangled =
-                            candidates.filter { export ->
-                                library.strings[export.name.value.toInt()]
-                                    .toString()
-                                    .substringAfter('#', "")
-                                    .shortTypeNames() in sourceShapes
-                            }
-                        val export =
-                            mangled.singleOrNull() ?: matching.singleOrNull() ?: exactName.singleOrNull() ?: candidates.singleOrNull()
-                                ?: error(
-                                    "cannot uniquely match ${declaration.symbol} ${declaration.signature} to a platform export: " +
-                                        candidates.joinToString { library.strings[it.name.value.toInt()].toString() },
-                                )
-                        PlatformFunctionLink(
-                            declaration.symbol,
-                            declaration.signature,
-                            library.strings[export.name.value.toInt()].toString(),
-                            moduleHash.copyOf(),
-                            declaration.defaultArguments,
-                        )
-                    }
-            library.exports.filter { it.kind == SymbolKind.TYPE }.forEach { export ->
-                val exportName = library.strings[export.name.value.toInt()].toString()
-                types += PlatformTypeLink(exportName, exportName, moduleHash.copyOf())
-            }
-            library.exports.filter { it.kind == SymbolKind.FIELD }.forEach { export ->
-                val exportName = library.strings[export.name.value.toInt()].toString()
-                val field = library.fields[export.localSymbol.toInt()]
-                val owner = field.owner as? TypeRef.Local ?: error("platform field $exportName has an imported owner")
-                val ownerSymbol =
-                    library.strings[
-                        library.types[owner.id.value.toInt()]
-                            .name.value
-                            .toInt(),
-                    ].toString()
-                fields +=
-                    PlatformFieldLink(
-                        exportName,
-                        ownerSymbol,
-                        exportName,
-                        field.static,
-                        moduleHash.copyOf(),
-                    )
-            }
-        }
-        val linkOrder =
-            compareBy<PlatformFunctionLink>({ it.moduleHash.toHex() }, PlatformFunctionLink::exportName, PlatformFunctionLink::symbol)
-        val typeOrder = compareBy<PlatformTypeLink>({ it.moduleHash.toHex() }, PlatformTypeLink::exportName, PlatformTypeLink::symbol)
-        val fieldOrder = compareBy<PlatformFieldLink>({ it.moduleHash.toHex() }, PlatformFieldLink::exportName, PlatformFieldLink::symbol)
-        return LoadedLibraries(
-            functions.sortedWith(linkOrder),
-            types.distinctBy { "${it.moduleHash.toHex()}:${it.exportName}" }.sortedWith(typeOrder),
-            fields.distinctBy { "${it.moduleHash.toHex()}:${it.exportName}" }.sortedWith(fieldOrder),
-            artifacts.map(Pair<PlatformModule, Artifact>::second),
-        )
-    }
-
     private fun linkLibraries(
         application: Artifact,
         libraryArtifacts: List<Artifact>,
@@ -474,77 +388,7 @@ class K2CompilerAdapter(
     }
 }
 
-private data class LoadedLibraries(
-    val functions: List<PlatformFunctionLink>,
-    val types: List<PlatformTypeLink>,
-    val fields: List<PlatformFieldLink>,
-    val artifacts: List<Artifact>,
-)
-
 private data class SelectedPlatform(
     val modules: List<PlatformModule>,
     val addonBundles: List<AddonGuestApiBundle>,
 )
-
-private fun Module.functionSignature(reference: TypeRef): String {
-    val type = types[(reference as TypeRef.Local).id.value.toInt()] as NominalType.Function
-    return "fun(${type.parameters.joinToString(",", transform = ::canonicalType)}):${canonicalType(type.result)}"
-}
-
-private fun Module.canonicalType(type: ValueType): String =
-    when (type) {
-        ValueType.Unit -> {
-            "kotlin.Unit"
-        }
-
-        ValueType.I32 -> {
-            "kotlin.Int"
-        }
-
-        ValueType.I64 -> {
-            "kotlin.Long"
-        }
-
-        ValueType.F32 -> {
-            "kotlin.Float"
-        }
-
-        ValueType.F64 -> {
-            "kotlin.Double"
-        }
-
-        ValueType.Bool -> {
-            "kotlin.Boolean"
-        }
-
-        ValueType.Char -> {
-            "kotlin.Char"
-        }
-
-        is ValueType.Ref -> {
-            val name =
-                when (val reference = type.type) {
-                    is TypeRef.Local -> {
-                        val nominal = types[reference.id.value.toInt()]
-                        val base = strings[nominal.name.value.toInt()].toString()
-                        if (nominal is NominalType.Array) "$base<${canonicalType(nominal.element)}>" else base
-                    }
-
-                    is TypeRef.Imported -> {
-                        strings[imports[reference.id.value.toInt()].targetName.value.toInt()].toString()
-                    }
-                }
-            name + if (type.nullable) "?" else ""
-        }
-    }
-
-private fun ByteArray.toHex(): String = joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
-
-private fun String.shortTypeNames(): String =
-    Regex("[A-Za-z_][A-Za-z0-9_.]*").replace(this) { match -> match.value.substringAfterLast('.') }
-
-private fun String.withLeadingSourceParameter(type: String): String {
-    require(startsWith("(")) { "not a source function shape: $this" }
-    val insertion = if (this[1] == ')') type else "$type,"
-    return replaceRange(1, 1, insertion)
-}

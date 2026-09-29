@@ -109,7 +109,7 @@ internal class ReachabilityGraph(
     private val importTargets = mutableMapOf<Pair<Int, Int>, Int>()
     private val moduleHashes = artifact.modules.map(ArtifactWriter::moduleSemanticHash)
 
-    fun analyze(): ReachabilityResult {
+    fun analyze(preserveLibraryExports: Boolean = false): ReachabilityResult {
         require(
             artifact.entry.module.value
                 .toInt() in artifact.modules.indices,
@@ -121,6 +121,26 @@ internal class ReachabilityGraph(
                 .toInt(),
         )
         artifact.modules.forEachIndexed { index, module -> markString(index, module.name.value.toInt()) }
+        if (preserveLibraryExports) {
+            artifact.modules.forEachIndexed { index, module ->
+                module.strings.indices.forEach { markString(index, it) }
+                module.utf16Literals.indices.forEach { markLiteral(index, it) }
+                module.types.indices.forEach { markType(index, it) }
+                module.constants.indices.forEach { markConstant(index, it) }
+                module.fields.indices.forEach { markField(index, it) }
+                module.functions.indices.forEach { markFunction(index, it) }
+                module.exports.forEachIndexed { exportIndex, export ->
+                    reachable[index].exports += exportIndex
+                    markString(index, export.name.value.toInt())
+                    markType(index, export.signature)
+                    when (export.kind) {
+                        SymbolKind.TYPE -> markType(index, export.localSymbol.toInt())
+                        SymbolKind.FUNCTION -> markFunction(index, export.localSymbol.toInt())
+                        SymbolKind.FIELD -> markField(index, export.localSymbol.toInt())
+                    }
+                }
+            }
+        }
         while (queue.isNotEmpty()) visit(queue.removeFirst())
         markCapabilityNames()
         markDebugForReachableInstructions()
