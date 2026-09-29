@@ -38,7 +38,6 @@ import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalTransport
 import ru.lazyhat.compukters.impl.ide.target.IdeTerminalCommand
 import ru.lazyhat.compukters.impl.ide.target.IdeTerminalKeyInput
 import ru.lazyhat.compukters.impl.ide.target.IdeTerminalOpened
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
@@ -143,7 +142,7 @@ class IdeScreenFocusTest {
     fun `dialog is modal and drawn above ordinary actions`() {
         val base = IdeViewState.startPage(listOf(IdeProjectSummary("demo", "Demo")))
         val state = base.copy(dialog = IdeDialogState.Confirmation("Delete", "Permanent", 7))
-        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
 
         val model = IdeRenderer.extract(state, geometry)
         val dialogTargets = model.hitTargets.filter { it.focusGroup == IdeFocusGroup.Dialog }
@@ -162,7 +161,7 @@ class IdeScreenFocusTest {
             IdeViewState
                 .startPage(listOf(IdeProjectSummary("demo", "Demo")))
                 .copy(dialog = IdeDialogState.Confirmation("Delete", "Permanent", 7))
-        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
         val model = IdeRenderer.extract(state, geometry)
 
         executeIdeRenderOperations(

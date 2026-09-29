@@ -1,4 +1,5 @@
 path	category	origin	copyright	license	provenance	packaged
+modules/minecraft/shared/neoforge/src/main/resources/assets/compukters/font/ide/jetbrains_mono_regular.ttf	third-party	JetBrains Mono NL Regular v2.304	Copyright 2020 The JetBrains Mono Project Authors	OFL-1.1	modules/minecraft/shared/neoforge/src/main/resources/META-INF/licenses/JetBrains-Mono-PROVENANCE.txt	true
 modules/minecraft/shared/neoforge/src/main/resources/assets/compukters/textures/block/compukter/back.png	original	Compukters	Copyright 2026 Vsevolod Petrov (lazyhat)	CC-BY-4.0	licenses/media/Compukters-textures-PROVENANCE.md	true
 modules/minecraft/shared/neoforge/src/main/resources/assets/compukters/textures/block/compukter/front.png	original	Compukters	Copyright 2026 Vsevolod Petrov (lazyhat)	CC-BY-4.0	licenses/media/Compukters-textures-PROVENANCE.md	true
 docs/assets/images/compukters-icon.svg	generated-derivative	Compukters front texture	Copyright 2026 Vsevolod Petrov (lazyhat)	CC-BY-4.0	licenses/media/Compukters-textures-PROVENANCE.md	false

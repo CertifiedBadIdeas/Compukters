@@ -12,8 +12,6 @@
 
 package ru.lazyhat.compukters.impl.ide
 
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
-
 data class IdeCodeGlyph(
     val value: String,
     val x: Int,
@@ -23,7 +21,7 @@ object IdeCodeGlyphLayout {
     fun layout(
         value: String,
         startX: Int,
-        font: TerminalFontProfile,
+        font: IdeCodeFontProfile,
     ): List<IdeCodeGlyph> {
         val glyphs = ArrayList<IdeCodeGlyph>(value.length)
         var offset = 0
@@ -31,8 +29,7 @@ object IdeCodeGlyphLayout {
         while (offset < value.length) {
             val codePoint = value.codePointAt(offset)
             if (codePoint != ' '.code) {
-                val rendered = font.renderCodePoint(codePoint)
-                glyphs += IdeCodeGlyph(String(Character.toChars(rendered)), startX + column * font.cellWidth)
+                glyphs += IdeCodeGlyph(String(Character.toChars(codePoint)), startX + column * font.cellWidth)
             }
             offset += Character.charCount(codePoint)
             column++

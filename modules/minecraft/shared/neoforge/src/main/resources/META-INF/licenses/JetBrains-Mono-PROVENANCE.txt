@@ -1,0 +1,11 @@
+JetBrains Mono NL Regular v2.304
+
+Project: https://github.com/JetBrains/JetBrainsMono
+Release: https://github.com/JetBrains/JetBrainsMono/releases/tag/v2.304
+Asset: https://raw.githubusercontent.com/JetBrains/JetBrainsMono/v2.304/fonts/ttf/JetBrainsMonoNL-Regular.ttf
+Packaged as: assets/compukters/font/ide/jetbrains_mono_regular.ttf
+SHA-256: fb3b2575d7b0657359707993288f12a7360344d39387bb26050e276d61f6bd2a
+License: SIL Open Font License 1.1; see JetBrains-Mono-OFL-1.1.txt.
+
+The upstream TrueType file is bundled unchanged. The NL variant has no
+programming ligatures; the editor renders individual code points in fixed cells.

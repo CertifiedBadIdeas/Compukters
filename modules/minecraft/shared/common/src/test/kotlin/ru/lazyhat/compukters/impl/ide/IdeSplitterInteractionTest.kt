@@ -12,7 +12,6 @@
 
 package ru.lazyhat.compukters.impl.ide
 
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -49,5 +48,5 @@ class IdeSplitterInteractionTest {
         assertEquals(1, saved.size)
     }
 
-    private fun geometry() = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+    private fun geometry() = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
 }

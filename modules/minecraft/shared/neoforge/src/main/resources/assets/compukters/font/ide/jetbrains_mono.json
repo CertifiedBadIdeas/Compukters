@@ -1,0 +1,11 @@
+{
+  "providers": [
+    {
+      "type": "ttf",
+      "file": "compukters:ide/jetbrains_mono_regular.ttf",
+      "size": 10,
+      "oversample": 4,
+      "shift": [0, 0]
+    }
+  ]
+}

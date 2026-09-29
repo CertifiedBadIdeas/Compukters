@@ -165,6 +165,7 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### In-game IDE
 
+- The code editor uses bundled JetBrains Mono without ligatures, independently of the terminal font setting.
 - Member completion includes the supported operations of built-in Guest Kotlin numeric types.
 - Completion suggests visible variables in string interpolation immediately after `$` and while typing the name.
 - Completion, automatic imports, parameter information, and source navigation include compatible APIs supplied by

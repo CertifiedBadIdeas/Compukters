@@ -43,7 +43,6 @@ import ru.lazyhat.compukters.ide.client.target.IdeTargetState
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 
 object IdeRenderer {
     fun extract(
@@ -94,7 +93,7 @@ object IdeRenderer {
 
     private class Builder(
         private val geometry: IdeRenderGeometry,
-        private val font: TerminalFontProfile,
+        private val font: IdeCodeFontProfile,
         private val treeFirstRow: Int,
         private val selectedTreePath: ProjectPath?,
         private val terminalState: IdeTerminalStatus,
@@ -1149,7 +1148,7 @@ object IdeRenderer {
                     repeat(spaces) { result.append(' ') }
                     columns += spaces
                 } else {
-                    result.appendCodePoint(font.renderCodePoint(codePoint))
+                    result.appendCodePoint(codePoint)
                     columns++
                 }
                 offset += Character.charCount(codePoint)

@@ -338,6 +338,9 @@ translucent dim layer. A separate footer presents rolling `CPU` utilization, cur
 usage, and concise lifecycle activity. Here `CPU` is the virtual computer's consumed/granted semantic Guest-unit
 budget, not physical host timing. Users can select the packaged Cozette 6x13, Dina 6x10, or ProggyTiny 6x10 terminal
 font without changing terminal coordinates or creating a second grid.
+The IDE code editor uses a separate bundled JetBrains Mono NL TrueType profile with a 6x13 cell and no ligatures.
+Its shared metrics drive glyph placement, caret and selection geometry, and hit testing; changing the terminal
+font does not change editor layout. The IDE chrome retains Minecraft's UI font.
 The terminal screen can suspend its observation and open the IDE, whose target terminal view consumes the same
 replicated terminal state but does not yet display these standalone-terminal gauges. Returning from the IDE reopens
 the standalone observation without reopening the screen and receives a fresh authoritative terminal state.
