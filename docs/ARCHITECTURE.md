@@ -336,8 +336,9 @@ update per changed server tick and render text on the oriented front face.
 The client renders the fixed 51x19 grid in a centered compact panel while the world remains visible through a
 translucent dim layer. A separate footer presents rolling `CPU` utilization, current Guest heap and virtual-disk
 usage, and concise lifecycle activity. Here `CPU` is the virtual computer's consumed/granted semantic Guest-unit
-budget, not physical host timing. Users can select the packaged Cozette 6x13, Dina 6x10, or ProggyTiny 6x10 terminal
-font without changing terminal coordinates or creating a second grid.
+budget, not physical host timing. Terminal windows default to packaged JetBrains Mono NL 6x13; existing font
+preferences remain honored. Users can also select Cozette 6x13, Dina 6x10, or ProggyTiny 6x10 without changing
+terminal coordinates or creating a second grid. The standalone screen and IDE terminal overlay share this choice.
 The IDE code editor, completion list and hover information use a separate bundled JetBrains Mono NL TrueType profile
 with a 6x13 cell and no ligatures.
 Its shared metrics drive glyph placement, caret and selection geometry, and hit testing; changing the terminal

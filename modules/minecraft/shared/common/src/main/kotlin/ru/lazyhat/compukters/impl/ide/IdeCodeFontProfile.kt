@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.impl.ide
 
+import ru.lazyhat.compukters.impl.font.JetBrainsMonoFont
+
 /** Shared metrics for drawing, selection and hit testing; independent of the terminal font setting. */
 class IdeCodeFontProfile private constructor(
     val id: String,
@@ -32,15 +34,14 @@ class IdeCodeFontProfile private constructor(
     companion object {
         private const val MINECRAFT_TEXT_BASELINE = 7
 
-        // JetBrains Mono's advance is 600/1000 em: size 10 gives an exact six-pixel cell.
         val DEFAULT =
             IdeCodeFontProfile(
-                id = "jetbrains_mono",
-                cellWidth = 6,
-                cellHeight = 13,
-                baseline = 10,
-                size = 10f,
-                oversample = 4f,
+                id = JetBrainsMonoFont.ID,
+                cellWidth = JetBrainsMonoFont.CELL_WIDTH,
+                cellHeight = JetBrainsMonoFont.CELL_HEIGHT,
+                baseline = JetBrainsMonoFont.BASELINE,
+                size = JetBrainsMonoFont.SIZE,
+                oversample = JetBrainsMonoFont.OVERSAMPLE,
             )
     }
 }

@@ -20,6 +20,8 @@ package ru.lazyhat.compukters.impl.terminal
 
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
+import java.awt.Font
+import java.awt.font.FontRenderContext
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
@@ -31,6 +33,37 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class TerminalFontResourceTest {
+    @Test
+    fun `JetBrains Mono terminal provider reuses the pinned editor face and honest coverage`() {
+        val json = runtimeResource("/assets/compukters/font/terminal/jetbrains_mono.json").reader().use { it.readText() }
+        val provider =
+            GSON
+                .fromJson(json, JsonObject::class.java)
+                .getAsJsonArray("providers")
+                .single()
+                .asJsonObject
+        assertEquals("reference", provider.get("type").asString)
+        assertEquals("compukters:ide/jetbrains_mono", provider.get("id").asString)
+        val face =
+            runtimeResource("/assets/compukters/font/ide/jetbrains_mono_regular.ttf")
+                .use { Font.createFont(Font.TRUETYPE_FONT, it) }
+        val profile = TerminalFontProfile.JETBRAINS_MONO
+        val context = FontRenderContext(null, true, true)
+        // AWT synthesizes invisible glyph 0xffff for default-ignorable characters regardless of the cmap.
+        // Compare the full visible repertoire; controls and these synthetic glyphs cannot validate a font cmap.
+        for (codePoint in 32..Character.MAX_CODE_POINT) {
+            if (!Character.isISOControl(codePoint)) {
+                val present = face.canDisplay(codePoint)
+                if (present && face.createGlyphVector(context, Character.toChars(codePoint)).getGlyphCode(0) == 0xffff) continue
+                assertEquals(present, profile.supports(codePoint), "U+${codePoint.toString(16)}")
+            }
+        }
+        listOf('Ж', 'Ё', '←', '↑', '→', '↓', '─', '│', '┼', '█').forEach { glyph ->
+            assertEquals(glyph.code, profile.renderCodePoint(glyph.code))
+        }
+        assertEquals(0xFFFD, profile.renderCodePoint(0x1F680))
+    }
+
     @Test
     fun `committed resources match every terminal font contract`() {
         EXPECTED_FONTS.forEach(::assertFont)
