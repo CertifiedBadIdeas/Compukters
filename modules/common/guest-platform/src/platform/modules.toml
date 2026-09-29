@@ -11,6 +11,12 @@ dependencies = ["kotlin:builtins"]
 sources = ["libraries/stdlib-core/**/*.kt"]
 
 [[module]]
+id = "stdlib:scope"
+version = "1.0.0"
+dependencies = ["stdlib:core"]
+sources = ["libraries/stdlib-scope/**/*.kt"]
+
+[[module]]
 id = "stdlib:ranges"
 version = "1.1.0"
 dependencies = ["stdlib:core"]

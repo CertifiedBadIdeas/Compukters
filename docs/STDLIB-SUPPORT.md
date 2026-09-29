@@ -24,6 +24,13 @@ links to their source files.
 
 ## Core and text
 
+- [x] **Scope functions** — `let`, `run`, `with`, `apply`, `also`, `takeIf`, and `takeUnless` are available
+  without imports for supported Guest receiver types, including nullable references. Both receiver and receiver-free
+  `run` are available. They are inline: direct lambdas
+  support non-local returns; `let` and `also` receive `it`, while `run`, `with`, and `apply` use a receiver lambda.
+  `apply` and `also` return the original receiver; `takeIf` and `takeUnless` evaluate the predicate once and return
+  the original receiver or null. Evidence: `testKotlinScopeVmConformance` and `MinimalScriptLoweringTest`, test
+  `stdlib scope functions execute with inline receiver and nullable semantics`.
 - [x] **`require(Boolean)`** — true returns `Unit`; false raises a Guest argument failure. Evidence:
   [`Assertions.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/Assertions.kt)
   and the assertions executed by `testKotlinReferenceArrayVmConformance`.

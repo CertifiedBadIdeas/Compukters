@@ -67,6 +67,50 @@ import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
     @Test
+    fun `stdlib scope functions execute with inline receiver and nullable semantics`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class Box(var value: Int)
+                fun early(): Int { 3.let { return it + 4 }; return -1 }
+                fun earlyReceiver(): Int { Box(9).run { return value }; return -1 }
+                fun earlyBlock(): Int { run { return 11 }; return -1 }
+                fun main() {
+                    var calls = 0
+                    val box = Box(1).apply { value = 2 }.also { it.value += 3 }
+                    require(box.value == 5)
+                    require(box.run { value + 1 } == 6)
+                    require(run { 4 + 5 } == 9)
+                    require(with(box) { value + 2 } == 7)
+                    require(box.let { it.value } == 5)
+                    require(box.takeIf { it.value == 5 } === box)
+                    require(box.takeUnless { it.value == 5 } == null)
+                    require(box.takeIf { calls += 1; false } == null)
+                    require(box.takeUnless { calls += 1; false } === box)
+                    require(calls == 2)
+                    require(8.takeIf { it > 5 } == 8)
+                    require(8.takeUnless { it > 5 } == null)
+                    require(8.let { "v" + it } == "v8")
+                    val nullable: String? = null
+                    require(nullable.let { it == null })
+                    require(nullable.run { this == null })
+                    require(nullable.takeIf { it == null } == null)
+                    val text: String? = "abc"
+                    require(text?.let { it.length } == 3)
+                    require(early() == 7)
+                    require(earlyReceiver() == 9)
+                    require(earlyBlock() == 11)
+                    println("scope ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.scopeArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `source generic inline callbacks eliminate closures through production worker`() =
         withAdapter { adapter ->
             val source =
