@@ -31,6 +31,7 @@ fn main() {
         "filter-not-null" => k2_filter_not_null_narrows_values(),
         "filter" => k2_filter_preserves_order_nulls_and_identity(),
         "map" => k2_map_preserves_order_types_and_identity(),
+        "scope" => k2_scope_functions_preserve_receiver_and_result_semantics(),
         "map-not-null" => k2_map_not_null_preserves_order_types_and_identity(),
         "destination" => k2_destination_operations_append_and_preserve_identity(),
         "fold" => k2_fold_specializes_element_and_accumulator_types(),
@@ -1136,6 +1137,10 @@ fn k2_map_not_null_preserves_order_types_and_identity() {
 
 fn k2_map_preserves_order_types_and_identity() {
     k2_expected_prints_with_budget("COMPUKTER_KOTLIN_MAP_ARTIFACT", ["map ok\n"], 256);
+}
+
+fn k2_scope_functions_preserve_receiver_and_result_semantics() {
+    k2_expected_prints_with_budget("COMPUKTER_KOTLIN_SCOPE_ARTIFACT", ["scope ok\n"], 256);
 }
 
 fn k2_fold_specializes_element_and_accumulator_types() {

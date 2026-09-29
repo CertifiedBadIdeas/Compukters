@@ -121,6 +121,8 @@ concrete function and class records, with typed scalar or reference fields and c
 containing generic function or class implementations as source-only; the compiler includes their canonical source with
 the consuming Guest program so reachable bodies and class layouts can be specialized. Ordinary platform modules retain
 precompiled library fragments. Generic binary templates are not part of the platform bundle or VM artifact contract.
+The inline generic scope functions live in source-only `stdlib:scope`; keeping them separate from `stdlib:core`
+preserves the latter's precompiled fragment for dependent modules.
 
 The `stdlib:collections` module publishes read-only lists and public `ArrayList<T>` as source-only declarations.
 `listOf` and `emptyList` create fresh `ArrayList<T>` instances exposed as `List<T>`, with capacity equal to the

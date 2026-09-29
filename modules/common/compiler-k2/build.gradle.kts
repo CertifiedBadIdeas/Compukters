@@ -324,6 +324,7 @@ val filterConformanceArtifact = layout.buildDirectory.file("generated/conformanc
 val destinationConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-destination.cpkt")
 val mapNotNullConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-map-not-null.cpkt")
 val mapConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-map.cpkt")
+val scopeConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-scope.cpkt")
 val foldConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-fold.cpkt")
 val collectionSelectionConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-collection-selection.cpkt")
 val nullableCollectionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-nullable-collections.cpkt")
@@ -955,6 +956,22 @@ val generateMapConformanceArtifact = tasks.register<Test>("generateMapConformanc
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.mapArtifact", mapConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateScopeConformanceArtifact = tasks.register<Test>("generateScopeConformanceArtifact") {
+    description = "Compiles Guest scope functions for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*stdlib scope functions execute with inline receiver and nullable semantics*")
+    inputs.file(workerJar)
+    outputs.file(scopeConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.scopeArtifact", scopeConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

@@ -779,6 +779,7 @@ built-in platform and are not selected individually in `compukter.toml`; there i
 | --- | --- |
 | `kotlin:builtins` | Core language types, arrays, function types, and structural declarations required by K2 |
 | `stdlib:core` | Small native core helpers such as `require`, supported array construction, and bounded cooperative `Task` / `Tasks` declarations |
+| `stdlib:scope` | Inline `let`, both forms of `run`, `with`, `apply`, `also`, `takeIf`, and `takeUnless` for supported Guest values |
 | `stdlib:ranges` | Declaration surface for `IntRange`, `until`, and `rangeUntil`; canonical unit-step `Int` loops lower without runtime range objects |
 | `std:terminal` | `print`, `println`, `readln`, stderr, and raw terminal operations |
 | `std:filesystem` | The bounded filesystem facade |
@@ -806,6 +807,11 @@ and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters
 The detailed API inventory is in [Guest standard library support]({{ '/STDLIB-SUPPORT/' | relative_url }}).
 The [Guest API reference]({{ '/guest-api/' | relative_url }}) lists public symbols, signatures, available KDoc, and
 links to their source files.
+
+- [x] **Scope functions** — `let`, `run`, `with`, `apply`, `also`, `takeIf`, and `takeUnless` are inline
+  Guest library functions with Kotlin receiver and result semantics, nullable receivers, and direct non-local returns.
+  Evidence: `testKotlinScopeVmConformance` and `MinimalScriptLoweringTest`, test
+  `stdlib scope functions execute with inline receiver and nullable semantics`.
 
 - [ ] **Console functions — Partial** — `print` accepts `String`, `Int`, `Long`,
   `Float`, `Boolean`, and `Char`; `println` supports those types plus the no-argument

@@ -626,6 +626,15 @@ registerKotlinVmConformance(
     conformanceScenario = "map",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinScopeVmConformance",
+    taskDescription = "Executes Guest Kotlin scope functions with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateScopeConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-scope.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-scope-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_SCOPE_ARTIFACT",
+    conformanceScenario = "scope",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinMapNotNullVmConformance",
     taskDescription = "Executes Iterable mapNotNull with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateMapNotNullConformanceArtifact",

@@ -28,6 +28,7 @@ import org.jetbrains.kotlin.fir.SessionConfiguration
 import org.jetbrains.kotlin.fir.deserialization.SingleModuleDataProvider
 import org.jetbrains.kotlin.fir.moduleData
 import org.jetbrains.kotlin.fir.resolve.providers.FirSymbolProvider
+import org.jetbrains.kotlin.fir.scopes.FirDefaultImportsProviderHolder
 import org.jetbrains.kotlin.fir.scopes.kotlinScopeProvider
 import org.jetbrains.kotlin.platform.TargetPlatform
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
@@ -62,7 +63,15 @@ object CompuktersLLFirSessionConfigurator : LLFirSessionConfigurator {
     @OptIn(SessionConfiguration::class)
     override fun configure(session: LLFirSession) {
         require(supports(session.ktModule.targetPlatform)) { "Compukters LL FIR configurator received a foreign target" }
-        val library = session.ktModule as? KaLibraryModule ?: return
+        val library = session.ktModule as? KaLibraryModule
+        if (library == null) {
+            // Keep editor resolution aligned with the compiler's Guest default imports.
+            session.register(
+                FirDefaultImportsProviderHolder::class,
+                FirDefaultImportsProviderHolder.Single(CompuktersDefaultImportsProvider),
+            )
+            return
+        }
         if (library.libraryName != PLATFORM_LIBRARY_NAME) return
         val context = requireNotNull(session.project.getUserData(CONTEXT_KEY)) { "Compukters analysis platform is not admitted" }
         val moduleData = session.moduleData

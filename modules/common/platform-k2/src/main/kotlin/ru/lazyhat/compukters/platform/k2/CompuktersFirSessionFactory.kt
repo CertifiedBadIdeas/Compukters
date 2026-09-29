@@ -28,7 +28,9 @@ import org.jetbrains.kotlin.fir.scopes.FirKotlinScopeProvider
 import org.jetbrains.kotlin.fir.scopes.impl.FirEnumEntriesSupport
 import org.jetbrains.kotlin.fir.session.AbstractFirMetadataSessionFactory
 import org.jetbrains.kotlin.fir.session.FirSessionConfigurator
+import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.resolve.DefaultImportsProvider
+import org.jetbrains.kotlin.resolve.ImportPath
 
 /** K2 session factory whose target identity cannot route through a foreign platform factory. */
 class CompuktersFirSessionFactory : AbstractFirMetadataSessionFactory(CompuktersPlatforms.default) {
@@ -52,6 +54,10 @@ class CompuktersFirSessionFactory : AbstractFirMetadataSessionFactory(Compukters
     }
 }
 
-private object CompuktersDefaultImportsProvider : DefaultImportsProvider() {
-    override val platformSpecificDefaultImports = emptyList<org.jetbrains.kotlin.resolve.ImportPath>()
+internal object CompuktersDefaultImportsProvider : DefaultImportsProvider() {
+    // Named imports expose source-only kotlin-package declarations alongside precompiled built-ins.
+    override val platformSpecificDefaultImports =
+        listOf("let", "run", "with", "apply", "also", "takeIf", "takeUnless").map { name ->
+            ImportPath(FqName("kotlin.$name"), false)
+        }
 }

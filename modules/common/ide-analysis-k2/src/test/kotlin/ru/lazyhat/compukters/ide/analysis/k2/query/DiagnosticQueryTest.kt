@@ -31,6 +31,16 @@ import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
     @Test
+    fun `scope functions resolve without imports in native analysis`() {
+        val source = "fun main() { val value = \"text\".let { it.length }; val doubled = with(value) { this * 2 } }"
+        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+            val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+            assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+        }
+    }
+
+    @Test
     fun `collection inline callbacks admit non local returns in native analysis`() {
         val source =
             """
