@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.impl.config
 
+import com.electronwill.nightconfig.core.CommentedConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -25,18 +26,21 @@ import kotlin.test.assertTrue
 
 internal class CompuktersClientConfigTest {
     @Test
-    fun `terminal font config defaults to JetBrains Mono and accepts catalog IDs only`() {
-        val value = CompuktersClientConfig.terminalFontId
-        val specification = value.spec
+    fun `old font preferences are discarded without losing IDE layout`() {
+        listOf("cozette", "dina", "proggy_tiny", "jetbrains_mono").forEach { oldFont ->
+            val config = CommentedConfig.inMemory()
+            config.set<String>("terminal.font", oldFont)
+            config.set<Int>("ide.tree_width", 210)
+            config.set<Int>("ide.diagnostics_height", 90)
+            config.set<Boolean>("ide.diagnostics_expanded", false)
 
-        assertEquals("jetbrains_mono", value.default)
-        assertTrue(specification.test("jetbrains_mono"))
-        assertTrue(specification.test("cozette"))
-        assertTrue(specification.test("dina"))
-        assertTrue(specification.test("proggy_tiny"))
-        assertFalse(specification.test("missing"))
-        assertFalse(specification.test(7))
-        assertFalse(specification.test(null))
+            CompuktersClientConfig.SPEC.correct(config)
+
+            assertFalse(config.contains("terminal.font"))
+            assertEquals(210, config.get<Int>("ide.tree_width"))
+            assertEquals(90, config.get<Int>("ide.diagnostics_height"))
+            assertFalse(config.get<Boolean>("ide.diagnostics_expanded"))
+        }
     }
 
     @Test

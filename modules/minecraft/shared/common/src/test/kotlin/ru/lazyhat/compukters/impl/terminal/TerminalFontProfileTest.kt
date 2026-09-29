@@ -27,7 +27,7 @@ import kotlin.test.assertTrue
 class TerminalFontProfileTest {
     @Test
     fun `default profile exposes fixed JetBrains Mono metrics`() {
-        val profile = TerminalFontProfile.DEFAULT
+        val profile = TerminalFontProfile
 
         assertEquals("jetbrains_mono", profile.id)
         assertEquals(6, profile.cellWidth)
@@ -42,40 +42,12 @@ class TerminalFontProfileTest {
 
     @Test
     fun `fallback is deterministic and never indexes an unsupported code point`() {
-        val profile = TerminalFontProfile.DEFAULT
+        val profile = TerminalFontProfile
 
         assertTrue(profile.supports('Ж'.code))
         assertFalse(profile.supports(0x1F680))
         assertEquals('Ж'.code, profile.renderCodePoint('Ж'.code))
         assertEquals(0xFFFD, profile.renderCodePoint(0x1F680))
         assertEquals(0xFFFD, profile.renderCodePoint(-1))
-    }
-
-    @Test
-    fun `catalog resolves stable IDs and cycles in presentation order`() {
-        assertEquals(TerminalFontProfile.JETBRAINS_MONO, TerminalFontProfile.fromId("jetbrains_mono"))
-        assertEquals(TerminalFontProfile.COZETTE, TerminalFontProfile.fromId("cozette"))
-        assertEquals(TerminalFontProfile.DINA, TerminalFontProfile.fromId("dina"))
-        assertEquals(TerminalFontProfile.PROGGY_TINY, TerminalFontProfile.fromId("proggy_tiny"))
-        assertEquals(TerminalFontProfile.DEFAULT, TerminalFontProfile.fromId("missing"))
-        assertEquals(TerminalFontProfile.DEFAULT, TerminalFontProfile.fromId(null))
-        assertEquals(TerminalFontProfile.DINA, TerminalFontProfile.COZETTE.next())
-        assertEquals(TerminalFontProfile.PROGGY_TINY, TerminalFontProfile.DINA.next())
-        assertEquals(TerminalFontProfile.JETBRAINS_MONO, TerminalFontProfile.PROGGY_TINY.next())
-        assertEquals(TerminalFontProfile.COZETTE, TerminalFontProfile.JETBRAINS_MONO.next())
-    }
-
-    @Test
-    fun `compact profiles use fixed six by ten cells and honest native fallback`() {
-        listOf(TerminalFontProfile.DINA, TerminalFontProfile.PROGGY_TINY).forEach { profile ->
-            assertEquals(6, profile.cellWidth)
-            assertEquals(10, profile.cellHeight)
-            assertEquals(8, profile.ascent)
-            assertEquals(1, profile.glyphDrawOffsetY)
-            assertEquals('?'.code, profile.replacementCodePoint)
-            assertTrue(profile.supports('?'.code))
-            assertFalse(profile.supports('Ж'.code))
-            assertEquals('?'.code, profile.renderCodePoint('Ж'.code))
-        }
     }
 }

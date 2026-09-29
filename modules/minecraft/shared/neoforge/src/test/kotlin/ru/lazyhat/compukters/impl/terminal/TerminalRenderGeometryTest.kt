@@ -27,18 +27,18 @@ import kotlin.test.assertTrue
 class TerminalRenderGeometryTest {
     @Test
     fun `grid geometry can be positioned independently from terminal screen chrome`() {
-        val grid = TerminalGridGeometry(17, 23, TerminalFontProfile.DINA)
+        val grid = TerminalGridGeometry(17, 23)
 
-        assertEquals(TerminalRect(17, 23, 323, 213), grid.bounds)
-        assertEquals(TerminalRect(17, 23, 23, 33), grid.cell(0, 0))
-        assertEquals(TerminalRect(317, 203, 323, 213), grid.cell(50, 18))
-        assertEquals(TerminalRect(29, 62, 35, 63), grid.cursor(TerminalPosition(2, 3)))
+        assertEquals(TerminalRect(17, 23, 323, 270), grid.bounds)
+        assertEquals(TerminalRect(17, 23, 23, 36), grid.cell(0, 0))
+        assertEquals(TerminalRect(317, 257, 323, 270), grid.cell(50, 18))
+        assertEquals(TerminalRect(29, 74, 35, 75), grid.cursor(TerminalPosition(2, 3)))
     }
 
     @Test
     fun `compact panel keeps one fixed 51 by 19 grid centered after resize`() {
-        val small = TerminalRenderGeometry(640, 360, TerminalFontProfile.DEFAULT)
-        val large = TerminalRenderGeometry(1_280, 720, TerminalFontProfile.DEFAULT)
+        val small = TerminalRenderGeometry(640, 360)
+        val large = TerminalRenderGeometry(1_280, 720)
 
         assertEquals(51, small.columns)
         assertEquals(19, small.rows)
@@ -60,7 +60,7 @@ class TerminalRenderGeometryTest {
 
     @Test
     fun `all glyphs share one whole grid clip under root scaling`() {
-        val geometry = TerminalRenderGeometry(640, 360, TerminalFontProfile.COZETTE)
+        val geometry = TerminalRenderGeometry(640, 360)
 
         assertTrue(geometry.glyphClip.left <= geometry.grid.left)
         assertTrue(geometry.glyphClip.top <= geometry.grid.top)
@@ -70,7 +70,7 @@ class TerminalRenderGeometryTest {
 
     @Test
     fun `small viewport preserves scale and centers the overflowing panel`() {
-        val geometry = TerminalRenderGeometry(300, 180, TerminalFontProfile.DEFAULT)
+        val geometry = TerminalRenderGeometry(300, 180)
 
         assertEquals(TerminalRect(-11, -54, 311, 234), geometry.panel)
         assertEquals(TerminalRect(-3, -36, 303, 211), geometry.grid)
@@ -80,33 +80,17 @@ class TerminalRenderGeometryTest {
     }
 
     @Test
-    fun `compact font reduces panel height and keeps toolbar inside title row`() {
-        val cozette = TerminalRenderGeometry(640, 360, TerminalFontProfile.COZETTE)
-        val dina = TerminalRenderGeometry(640, 360, TerminalFontProfile.DINA)
-
-        assertEquals(cozette.columns, dina.columns)
-        assertEquals(cozette.rows, dina.rows)
-        assertEquals(57, cozette.panel.height - dina.panel.height)
-        assertEquals(TerminalRect(159, 64, 481, 295), dina.panel)
-        assertEquals(TerminalRect(297, 66, 373, 80), dina.ideButton)
-        assertEquals(TerminalRect(377, 66, 473, 80), dina.fontButton)
-        assertEquals(4, dina.fontButton.left - dina.ideButton.right)
-        assertTrue(dina.ideButton.left >= dina.panel.left)
-        assertTrue(dina.ideButton.right <= dina.panel.right)
-        assertTrue(dina.ideButton.top >= dina.panel.top)
-        assertTrue(dina.ideButton.bottom <= dina.grid.top)
-        assertTrue(dina.fontButton.left >= dina.panel.left)
-        assertTrue(dina.fontButton.right <= dina.panel.right)
-        assertTrue(dina.fontButton.top >= dina.panel.top)
-        assertTrue(dina.fontButton.bottom <= dina.grid.top)
-        assertEquals(dina.grid.bottom + TerminalRenderGeometry.FOOTER_GAP, dina.footer.top)
-        assertEquals(TerminalRenderGeometry.FOOTER_HEIGHT, dina.footer.height)
-        assertTrue(dina.footer.bottom <= dina.panel.bottom - TerminalRenderGeometry.PANEL_PADDING)
+    fun `IDE action stays right aligned inside the title row`() {
+        val geometry = TerminalRenderGeometry(640, 360)
+        assertEquals(TerminalRect(397, 38, 473, 52), geometry.ideButton)
+        assertEquals(geometry.grid.right, geometry.ideButton.right)
+        assertTrue(geometry.ideButton.top >= geometry.panel.top)
+        assertTrue(geometry.ideButton.bottom <= geometry.grid.top)
     }
 
     @Test
     fun `palette mapping and cursor projection are exact and pure`() {
-        val geometry = TerminalRenderGeometry(640, 360, TerminalFontProfile.DEFAULT)
+        val geometry = TerminalRenderGeometry(640, 360)
         assertEquals(
             listOf(
                 0xFF000000.toInt(),

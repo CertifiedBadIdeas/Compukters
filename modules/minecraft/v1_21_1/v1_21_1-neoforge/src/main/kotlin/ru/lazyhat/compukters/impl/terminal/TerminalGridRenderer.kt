@@ -34,7 +34,6 @@ internal object TerminalGridRenderer {
         graphics: GuiGraphics,
         minecraftFont: Font,
         state: TerminalState,
-        fontProfile: TerminalFontProfile,
         geometry: TerminalGridGeometry,
         viewport: CompuktersUiViewport,
         nowMillis: Long,
@@ -67,10 +66,10 @@ internal object TerminalGridRenderer {
                     if (cell.codePoint == ' '.code) return@cellLoop
                     val glyph =
                         Component
-                            .literal(String(Character.toChars(fontProfile.renderCodePoint(cell.codePoint))))
+                            .literal(String(Character.toChars(TerminalFontProfile.renderCodePoint(cell.codePoint))))
                             .withStyle { style ->
                                 style
-                                    .withFont(fontProfile.fontDescription)
+                                    .withFont(TerminalFontProfile.fontDescription)
                                     .withColor(TerminalRenderGeometry.paletteColor(cell.foreground))
                             }
                     val bounds = geometry.cell(x, y)
@@ -78,7 +77,7 @@ internal object TerminalGridRenderer {
                         minecraftFont,
                         glyph,
                         bounds.left,
-                        bounds.top + fontProfile.glyphDrawOffsetY,
+                        bounds.top + TerminalFontProfile.glyphDrawOffsetY,
                         TerminalRenderGeometry.paletteColor(cell.foreground),
                         false,
                     )

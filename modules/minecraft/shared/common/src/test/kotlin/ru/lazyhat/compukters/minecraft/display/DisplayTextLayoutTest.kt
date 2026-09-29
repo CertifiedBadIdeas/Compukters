@@ -6,7 +6,6 @@
 
 package ru.lazyhat.compukters.minecraft.display
 
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -18,17 +17,19 @@ class DisplayTextLayoutTest {
         buffer.writeAt(owner, { true }, 0, 0, "H")
         buffer.writeAt(owner, { true }, 5, 2, "A")
         buffer.writeAt(owner, { true }, 8, 3, "😀")
+        buffer.writeAt(owner, { true }, 19, 9, "Ж")
 
         val glyphs = mutableListOf<Triple<Int, Int, Int>>()
-        DisplayTextLayout.forEachGlyph(buffer.rows(), TerminalFontProfile.DINA) { x, y, codePoint ->
+        DisplayTextLayout.forEachGlyph(buffer.rows()) { x, y, codePoint ->
             glyphs += Triple(x, y, codePoint)
         }
 
         assertEquals(
             listOf(
-                Triple(-60, -60, 'H'.code),
-                Triple(-60 + 5 * 6, -60 + 2 * 10, 'A'.code),
-                Triple(-60 + 8 * 6, -60 + 3 * 10, '?'.code),
+                Triple(-60, -65 + 3, 'H'.code),
+                Triple(-60 + 5 * 6, -65 + 2 * 13 + 3, 'A'.code),
+                Triple(-60 + 8 * 6, -65 + 3 * 13 + 3, 0xFFFD),
+                Triple(54, 55, 'Ж'.code),
             ),
             glyphs,
         )

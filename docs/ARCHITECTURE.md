@@ -336,15 +336,13 @@ update per changed server tick and render text on the oriented front face.
 The client renders the fixed 51x19 grid in a centered compact panel while the world remains visible through a
 translucent dim layer. A separate footer presents rolling `CPU` utilization, current Guest heap and virtual-disk
 usage, and concise lifecycle activity. Here `CPU` is the virtual computer's consumed/granted semantic Guest-unit
-budget, not physical host timing. Terminal windows default to packaged JetBrains Mono NL 6x13; existing font
-preferences remain honored. Users can also select Cozette 6x13, Dina 6x10, or ProggyTiny 6x10 without changing
-terminal coordinates or creating a second grid. The standalone screen and IDE terminal overlay share this choice.
-The IDE code editor, completion list and hover information use a separate bundled JetBrains Mono NL TrueType profile
-with a 6x13 cell and no ligatures.
+budget, not physical host timing. Terminal windows, IDE terminal overlays and in-world text displays use
+packaged JetBrains Mono NL with 6x13 cells and no font selector. The former terminal font preference is no longer
+part of client configuration; old values are removed by NeoForge configuration correction without affecting IDE layout.
+The IDE code editor, completion list and hover information use the same bundled TrueType face without ligatures.
 Editor and terminal drawing use the same font resource ID directly, without a reference alias: Minecraft 1.21
 warms font IDs in parallel and its FreeType provider does not synchronize access to a shared native face.
-Its shared metrics drive glyph placement, caret and selection geometry, and hit testing; changing the terminal
-font does not change editor layout. The IDE chrome retains Minecraft's UI font.
+Its shared metrics drive glyph placement, caret and selection geometry, and hit testing. The IDE chrome retains Minecraft's UI font.
 The terminal screen can suspend its observation and open the IDE, whose target terminal view consumes the same
 replicated terminal state but does not yet display these standalone-terminal gauges. Returning from the IDE reopens
 the standalone observation without reopening the screen and receives a fresh authoritative terminal state.

@@ -65,12 +65,6 @@ private val maintenanceTasks =
     setOf(
         "cleanWorkspace",
         "downloadCompukterRuntimeBundles",
-        "generateCozetteTerminalFont",
-        "generateDinaTerminalFont",
-        "generateProggyTinyTerminalFont",
-        "verifyCozetteTerminalFont",
-        "verifyDinaTerminalFont",
-        "verifyProggyTinyTerminalFont",
     )
 private val standardVerificationTasks = setOf("check", "test")
 

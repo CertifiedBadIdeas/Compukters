@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
 class TerminalScaledClipTest {
     @Test
     fun `whole grid glyph clip contains fractional transformed grid edges`() {
-        val geometry = TerminalRenderGeometry(640, 360, TerminalFontProfile.COZETTE)
+        val geometry = TerminalRenderGeometry(640, 360)
 
         listOf(0.75f, 0.25f).forEach { scale ->
             val clip = geometry.glyphClip

@@ -23,12 +23,11 @@ internal object TerminalGridRenderer {
         graphics: GuiGraphicsExtractor,
         minecraftFont: Font,
         state: TerminalState,
-        fontProfile: TerminalFontProfile,
         geometry: TerminalGridGeometry,
         nowMillis: Long,
     ) {
         drawBackgroundRuns(graphics, state, geometry)
-        drawGlyphs(graphics, minecraftFont, state, fontProfile, geometry)
+        drawGlyphs(graphics, minecraftFont, state, geometry)
         if (TerminalRenderGeometry.drawCursor(state.cursorVisible, nowMillis)) {
             val cursor = geometry.cursor(state.cursor)
             graphics.fill(cursor.left, cursor.top, cursor.right, cursor.bottom, CURSOR_COLOR)
@@ -60,7 +59,6 @@ internal object TerminalGridRenderer {
         graphics: GuiGraphicsExtractor,
         minecraftFont: Font,
         state: TerminalState,
-        fontProfile: TerminalFontProfile,
         geometry: TerminalGridGeometry,
     ) {
         val clip = geometry.glyphClip
@@ -70,13 +68,13 @@ internal object TerminalGridRenderer {
                 repeat(state.width) cellLoop@{ x ->
                     val cell = cell(state, x, y)
                     if (cell.codePoint == ' '.code) return@cellLoop
-                    val renderedCodePoint = fontProfile.renderCodePoint(cell.codePoint)
+                    val renderedCodePoint = TerminalFontProfile.renderCodePoint(cell.codePoint)
                     val glyph =
                         Component
                             .literal(String(Character.toChars(renderedCodePoint)))
                             .withStyle { style ->
                                 style
-                                    .withFont(fontProfile.fontDescription)
+                                    .withFont(TerminalFontProfile.fontDescription)
                                     .withColor(TerminalRenderGeometry.paletteColor(cell.foreground))
                             }
                     val bounds = geometry.cell(x, y)
@@ -84,7 +82,7 @@ internal object TerminalGridRenderer {
                         minecraftFont,
                         glyph,
                         bounds.left,
-                        bounds.top + fontProfile.glyphDrawOffsetY,
+                        bounds.top + TerminalFontProfile.glyphDrawOffsetY,
                         TerminalRenderGeometry.paletteColor(cell.foreground),
                         false,
                     )

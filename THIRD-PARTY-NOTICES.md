@@ -137,21 +137,13 @@ Google LLC, licensed under Apache-2.0. The complete license and provenance are
 packaged as `META-INF/licenses/Material-Symbols-Apache-2.0.txt` and
 `META-INF/licenses/Material-Symbols-PROVENANCE.txt`.
 
-## Terminal fonts
+## Code and terminal font
 
-The mod distributes generated bitmap atlases derived from these pinned fonts:
-
-- Cozette v1.30.0, copyright Ines, MIT. Complete license and provenance:
-  `modules/minecraft/shared/neoforge/src/main/resources/META-INF/licenses/Cozette-MIT.txt`
-  and `Cozette-PROVENANCE.txt`.
-- Dina v2.92 Regular 6pt, copyright Joergen Ibsen, MIT. Complete license and
-  provenance: `Dina-LICENSE.txt` and `Dina-PROVENANCE.txt` in the same
-  `META-INF/licenses` directory.
-- ProggyTiny at commit `139ec08a38096161291792313ef5803fc4f0e37b`,
-  copyright Tristan Grimmer, MIT. Complete license and provenance:
-  `Proggy-MIT.txt` and `Proggy-PROVENANCE.txt` in that directory.
-
-The source inputs and duplicate provenance records are under `tools/fonts/`.
+The code editor, terminal windows and in-world text displays bundle the unchanged
+JetBrains Mono NL Regular v2.304 TrueType face under SIL Open Font License 1.1.
+Copyright 2020 The JetBrains Mono Project Authors. The complete license and
+provenance are packaged as `META-INF/licenses/JetBrains-Mono-OFL-1.1.txt`
+and `META-INF/licenses/JetBrains-Mono-PROVENANCE.txt`.
 
 ## Gradle Wrapper
 

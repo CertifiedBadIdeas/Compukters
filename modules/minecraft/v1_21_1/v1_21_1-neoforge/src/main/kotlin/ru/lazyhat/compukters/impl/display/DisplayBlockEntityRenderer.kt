@@ -23,7 +23,7 @@ class DisplayBlockEntityRenderer(
     context: BlockEntityRendererProvider.Context,
 ) : BlockEntityRenderer<NeoForgeDisplayBlockEntity> {
     private val font = context.font
-    private val profile = TerminalFontProfile.DINA
+    private val profile = TerminalFontProfile
 
     override fun render(
         entity: NeoForgeDisplayBlockEntity,
@@ -40,7 +40,7 @@ class DisplayBlockEntityRenderer(
         pose.mulPose(Axis.YP.rotationDegrees(-entity.blockState.getValue(DisplayBlock.FACING).toYRot()))
         pose.translate(0.0, 0.0, 0.503)
         pose.scale(SCALE, -SCALE, SCALE)
-        DisplayTextLayout.forEachGlyph(rows, profile) { x, y, codePoint ->
+        DisplayTextLayout.forEachGlyph(rows) { x, y, codePoint ->
             val text =
                 Component.literal(String(Character.toChars(codePoint))).withStyle { style -> style.withFont(profile.fontDescription) }
             font.drawInBatch(

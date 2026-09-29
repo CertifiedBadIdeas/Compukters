@@ -25,5 +25,5 @@ internal val TerminalFontProfile.fontDescription: ResourceLocation
     get() =
         ResourceLocation.fromNamespaceAndPath(
             "compukters",
-            if (id == JetBrainsMonoFont.ID) JetBrainsMonoFont.RESOURCE_PATH else "terminal/$id",
+            JetBrainsMonoFont.RESOURCE_PATH,
         )

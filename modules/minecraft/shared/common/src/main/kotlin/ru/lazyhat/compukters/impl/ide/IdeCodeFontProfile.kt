@@ -20,7 +20,7 @@ package ru.lazyhat.compukters.impl.ide
 
 import ru.lazyhat.compukters.impl.font.JetBrainsMonoFont
 
-/** Shared metrics for drawing, selection and hit testing; independent of the terminal font setting. */
+/** Shared metrics for drawing, selection and hit testing; aligned with the bundled terminal face. */
 class IdeCodeFontProfile private constructor(
     val id: String,
     val cellWidth: Int,

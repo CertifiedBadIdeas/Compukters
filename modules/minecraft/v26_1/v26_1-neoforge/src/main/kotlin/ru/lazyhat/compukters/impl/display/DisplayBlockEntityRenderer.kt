@@ -26,7 +26,7 @@ import ru.lazyhat.compukters.minecraft.display.DisplayTextLayout
 class DisplayBlockEntityRenderer(
     context: BlockEntityRendererProvider.Context,
 ) : BlockEntityRenderer<NeoForgeDisplayBlockEntity, DisplayRenderState> {
-    private val profile = TerminalFontProfile.DINA
+    private val profile = TerminalFontProfile
 
     override fun createRenderState(): DisplayRenderState = DisplayRenderState()
 
@@ -54,7 +54,7 @@ class DisplayBlockEntityRenderer(
         pose.mulPose(Axis.YP.rotationDegrees(-state.facing.toYRot()))
         pose.translate(0.0, 0.0, 0.503)
         pose.scale(SCALE, -SCALE, SCALE)
-        DisplayTextLayout.forEachGlyph(state.rows, profile) { x, y, codePoint ->
+        DisplayTextLayout.forEachGlyph(state.rows) { x, y, codePoint ->
             val text =
                 Component.literal(String(Character.toChars(codePoint))).withStyle { style -> style.withFont(profile.fontDescription) }
             collector.submitText(
