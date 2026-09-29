@@ -133,6 +133,12 @@ platform bundle or VM artifact contract. Bundle format 7 and standalone module f
 The standard library has one owner, `stdlib:core`: core helpers, inline scope functions, `repeat`, ranges and collections.
 Its generic and inline source bodies coexist with ordinary precompiled implementations.
 
+The complete built-in graph is `kotlin:builtins` → `stdlib:core` → `compukter:core`. Compukter core owns environment
+and VM-runtime APIs: compiler, child processes, redstone, sound, text displays, terminal, filesystem, and cooperative
+tasks/channels. This includes the environment-dependent `kotlin.io` facade without changing its package or default
+imports. Module ownership changes the canonical platform content identity, not capability operation schemas or the
+VM executable ABI. Tooling and addons using removed split-module IDs must rebuild against the consolidated owners.
+
 The standard library publishes read-only lists and public `ArrayList<T>` with source bodies for specialization.
 `listOf` and `emptyList` create fresh `ArrayList<T>` instances exposed as `List<T>`, with capacity equal to the
 number of elements. Factories fill them through the specialized `add` method in source order. A read-only view can be

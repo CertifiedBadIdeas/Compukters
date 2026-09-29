@@ -782,14 +782,13 @@ built-in platform and are not selected individually in `compukter.toml`; there i
 | Module | Guest surface |
 | --- | --- |
 | `kotlin:builtins` | Core language types, arrays, function types, and structural declarations required by K2 |
-| `stdlib:core` | Core helpers such as `require`, supported array construction, bounded cooperative `Task` / `Tasks` declarations, inline scope functions, indexed `repeat`, ranges and collections |
-| `std:terminal` | `print`, `println`, `readln`, stderr, and raw terminal operations |
-| `std:filesystem` | The bounded filesystem facade |
-| `compukter:compiler` | Guest compilation operations |
-| `compukter:process` | Child process execution and explicit exit |
-| `compukter:redstone` | Side-oriented redstone reads, waits, and weak/direct output writes |
-| `compukter:sound` | Bounded one-shot computer beeps with admission feedback |
-| `compukter:display` | Typed adjacent and named text-display writes and clearing |
+| `stdlib:core` | Core helpers such as `require`, supported array construction, inline scope functions, indexed `repeat`, ranges and collections |
+| `compukter:core` | Runtime and environment APIs: terminal and `kotlin.io`, filesystem, compiler, child processes, cooperative `Task` / `Tasks` and `IntChannel`, redstone, sound and text displays |
+
+These module owners do not rename Kotlin packages or imports. Environment-dependent `kotlin.io` functions belong to
+`compukter:core`; the rest of the supported standard library belongs to `stdlib:core`. Module identities and the
+platform content hash cover this ownership. Addons depending on removed split-module IDs must rebuild against the
+new owners; old and new platform identities cannot be mixed.
 
 Ordinary functions in these modules are compiled ahead of Guest projects into
 relocatable platform fragments. Only declarations explicitly marked as native
@@ -1038,7 +1037,7 @@ links to their source files.
   Tracking: not scheduled
 
 - [ ] **Compiler facade — Partial** — `Compiler.compile(source, output)` and
-  `Compiler.diagnostics()` are published by `compukter:compiler`, and the
+  `Compiler.diagnostics()` are published by `compukter:core`, and the
   checked-in `/rom/kotlinc` program compiles deterministically. Full
   Guest-to-host compilation behavior is tested at the VM transaction layer
   rather than as one generated Kotlin execution test. Evidence:

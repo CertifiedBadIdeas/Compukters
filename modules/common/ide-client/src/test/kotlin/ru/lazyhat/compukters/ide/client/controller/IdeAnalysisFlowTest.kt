@@ -388,7 +388,7 @@ class IdeAnalysisFlowTest {
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("fun main() { Re }")))
         val active = assertIs<IdeAnalysisState.Active>(fixture.analysisCoordinator?.state())
-        val module = TEST_PLATFORM_CATALOG.entries.single { it.identity.id == ModuleId.parse("compukter:redstone") }
+        val module = TEST_PLATFORM_CATALOG.entries.single { it.identity.id == ModuleId.parse("compukter:core") }
         val start = "fun main() { ".length
         requests.publish(
             AnalysisClientResult.Success(

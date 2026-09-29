@@ -174,15 +174,14 @@ internal class IdeClientServicesTest {
                     platform,
                     listOf(
                         modulesById.getValue("stdlib:core"),
-                        modulesById.getValue("compukter:redstone"),
-                        modulesById.getValue("std:terminal"),
+                        modulesById.getValue("compukter:core"),
                     ).map { descriptor ->
                         val entry = PlatformCatalog.of(platform).require(ModuleId.parse(descriptor.id.toString()))
                         ResolvedPlatformModule(entry.identity, descriptor, direct = true)
                     },
                 )
             assertEquals(
-                listOf("compukter:redstone", "kotlin:builtins", "std:terminal", "stdlib:core"),
+                listOf("compukter:core", "kotlin:builtins", "stdlib:core"),
                 admittedModules.map { it.identity.name },
             )
             AdmittedAnalysisPlatform(compiler.manifest.identity.platformAbi, admittedModules, guestApi.toString())
@@ -190,7 +189,7 @@ internal class IdeClientServicesTest {
             val addonHash = hash(9)
             val addonDescriptor =
                 modulesById
-                    .getValue("std:terminal")
+                    .getValue("compukter:core")
                     .copy(id = PlatformModuleId("fixture", "api"), version = "1.0.0")
             val addonIdentity = ResolvedModule(ModuleId("fixture", "api"), ApiMajor(1), "1.0.0", addonHash)
             val admittedAddon =

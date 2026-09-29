@@ -153,11 +153,32 @@ class K2CompilerAdapterTest {
             assertTrue(core.sourceDeclarations.any { it.symbol == "kotlin.let" })
             assertTrue(core.sourceDeclarations.any { it.symbol == "kotlin.collections.ArrayList" })
             assertTrue(core.declarations.any { it.symbol == "kotlin.ranges.IntRange" })
+            assertTrue(core.declarations.none { it.symbol.startsWith("compukter.") })
+            val runtime = platform.modules.single { it.id.toString() == "compukter:core" }
+            assertNotNull(runtime.libraryFragment)
+            val runtimeSymbols = runtime.declarations.mapTo(mutableSetOf()) { it.symbol }
+            assertTrue(
+                runtimeSymbols.containsAll(
+                    setOf(
+                        "compukter.compiler.Compiler",
+                        "compukter.process.Process",
+                        "compukter.redstone.Redstone",
+                        "compukter.sound.Sound",
+                        "compukter.display.Display",
+                        "compukter.terminal.Terminal",
+                        "compukter.filesystem.FileSystem",
+                        "compukter.concurrent.Task",
+                        "compukter.concurrent.Tasks",
+                        "compukter.concurrent.IntChannel",
+                        "kotlin.io.println",
+                    ),
+                ),
+            )
             val workerIdentity = identity(platform)
             val selected =
                 listOf(
                     platform.modules.single { it.id.toString() == "stdlib:core" },
-                    platform.modules.single { it.id.toString() == "std:terminal" },
+                    platform.modules.single { it.id.toString() == "compukter:core" },
                     library,
                     classLibrary,
                     classOnlyLibrary,
@@ -322,7 +343,7 @@ class K2CompilerAdapterTest {
         assertTrue(K2CompilerAdapter.loadPackagedPlatform().modules.isNotEmpty())
         assertNull(
             K2CompilerAdapter::class.java.getResourceAsStream(
-                "/compukters-platform/sources/libraries/std-terminal/compukter/terminal/Terminal.kt",
+                "/compukters-platform/sources/libraries/compukter-core/compukter/terminal/Terminal.kt",
             ),
         )
     }

@@ -45,10 +45,10 @@ private val TEST_PLATFORM_BUNDLE =
         modules =
             listOf(
                 PlatformModule(
-                    id = PlatformModuleId("compukter", "redstone"),
+                    id = PlatformModuleId("compukter", "core"),
                     version = "1.0.0",
                     dependencies = emptyList(),
-                    metadata = ImmutableBytes.of("redstone".encodeToByteArray()),
+                    metadata = ImmutableBytes.of("compukter-core".encodeToByteArray()),
                     libraryFragment = null,
                     sources = emptyList(),
                     declarations = emptyList(),
