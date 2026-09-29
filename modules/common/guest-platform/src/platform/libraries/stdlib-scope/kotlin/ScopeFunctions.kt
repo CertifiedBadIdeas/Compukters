@@ -6,6 +6,15 @@
 
 package kotlin
 
+/** Calls [action] with each index from zero until [times], or not at all for non-positive counts. */
+public inline fun repeat(times: Int, action: (Int) -> Unit) {
+    var index = 0
+    while (index < times) {
+        action(index)
+        index += 1
+    }
+}
+
 /** Calls [block] with this value and returns its result. */
 public inline fun <T, R> T.let(block: (T) -> R): R = block(this)
 

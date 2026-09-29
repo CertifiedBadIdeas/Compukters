@@ -31,6 +31,12 @@ links to their source files.
   `apply` and `also` return the original receiver; `takeIf` and `takeUnless` evaluate the predicate once and return
   the original receiver or null. Evidence: `testKotlinScopeVmConformance` and `MinimalScriptLoweringTest`, test
   `stdlib scope functions execute with inline receiver and nullable semantics`.
+- [x] **Iteration helpers** — `Iterable<T>.forEach` and `forEachIndexed` visit elements in order without creating a
+  result collection; `forEachIndexed` starts at index zero. Import `kotlin.collections.*` for these iterable helpers.
+  `repeat(times)` is available without an import, calls its action with indexes from zero to `times - 1`, and does
+  nothing for non-positive counts. Direct lambdas are inline and support non-local returns.
+  Evidence: `testKotlinScopeVmConformance` and `MinimalScriptLoweringTest`, test
+  `stdlib scope functions execute with inline receiver and nullable semantics`.
 - [x] **`require(Boolean)`** — true returns `Unit`; false raises a Guest argument failure. Evidence:
   [`Assertions.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/Assertions.kt)
   and the assertions executed by `testKotlinReferenceArrayVmConformance`.

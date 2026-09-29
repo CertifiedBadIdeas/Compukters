@@ -12,7 +12,7 @@ sources = ["libraries/stdlib-core/**/*.kt"]
 
 [[module]]
 id = "stdlib:scope"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = ["stdlib:core"]
 sources = ["libraries/stdlib-scope/**/*.kt"]
 
@@ -24,7 +24,7 @@ sources = ["libraries/stdlib-ranges/**/*.kt"]
 
 [[module]]
 id = "stdlib:collections"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = ["stdlib:core"]
 sources = ["libraries/stdlib-collections/**/*.kt"]
 
