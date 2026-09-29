@@ -593,7 +593,9 @@ supported.
   difference, or the length difference for a prefix. The core library also
   provides `startsWith(prefix: String)`,
   `endsWith(suffix: String)`, `contains(other: String)`, and
-  `indexOf(other: String, startIndex: Int = 0)`. Search uses UTF-16 code units;
+  `indexOf(other: String, startIndex: Int = 0)` and `toIntOrNull()`.
+  `toIntOrNull()` accepts optional `+` or `-` followed by ASCII decimal digits and returns null for invalid input or
+  values outside the `Int` range. Search uses UTF-16 code units;
   a negative start index begins at zero, and an empty search string returns the
   start index clamped to the string length. Other Kotlin text functions are not
   available. Evidence:
@@ -607,7 +609,7 @@ supported.
   `string_substring_preserves_full_identity_and_freshens_proper_ranges`, plus
   `MinimalScriptLoweringTest`, test
   `primitive char array lowers deterministically for exact utf16 materialization`,
-  exercised by `testKotlinSubsetVmConformance` for the four library helpers.
+  exercised by `testKotlinSubsetVmConformance` for the text helpers and integer parsing.
   Tracking: not scheduled
 
 - [ ] **Reference `Array<T>` operations — Partial** — entry `Array<String>`,
