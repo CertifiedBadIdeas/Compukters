@@ -18,8 +18,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 ### Guest Kotlin
 
 - Guest libraries can combine precompiled ordinary implementations with generic and inline source bodies in one
-  module, preserving private and internal visibility and avoiding duplicate ordinary implementations. Scope functions
-  and `repeat` are part of `stdlib:core` without making its ordinary implementations source-only.
+  module, preserving private and internal visibility and avoiding duplicate ordinary implementations. Core helpers,
+  scope functions, `repeat`, ranges and collections share one `stdlib:core` module without making its ordinary
+  implementations source-only.
 - Programs can use the standard `let`, `run`, `with`, `apply`, `also`, `takeIf`, and `takeUnless` scope functions
   with inline lambdas, including supported nullable receivers and non-local returns.
 - Programs can traverse Guest iterables with `forEach` and `forEachIndexed`, or run an indexed action with `repeat`,

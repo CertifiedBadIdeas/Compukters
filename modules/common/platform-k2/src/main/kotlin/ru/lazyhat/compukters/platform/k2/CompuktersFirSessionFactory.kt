@@ -25,10 +25,10 @@ import org.jetbrains.kotlin.fir.resolve.providers.FirSymbolProvider
 import org.jetbrains.kotlin.fir.resolve.providers.impl.FirEmptySymbolProvider
 import org.jetbrains.kotlin.fir.scopes.FirDefaultImportsProviderHolder
 import org.jetbrains.kotlin.fir.scopes.FirKotlinScopeProvider
+import org.jetbrains.kotlin.fir.scopes.FirLookupDefaultStarImportsInSourcesSettingHolder
 import org.jetbrains.kotlin.fir.scopes.impl.FirEnumEntriesSupport
 import org.jetbrains.kotlin.fir.session.AbstractFirMetadataSessionFactory
 import org.jetbrains.kotlin.fir.session.FirSessionConfigurator
-import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.resolve.DefaultImportsProvider
 import org.jetbrains.kotlin.resolve.ImportPath
 
@@ -51,13 +51,11 @@ class CompuktersFirSessionFactory : AbstractFirMetadataSessionFactory(Compukters
     override fun FirSession.registerSourceSessionComponents(c: Context) {
         register(FirEnumEntriesSupport(this))
         register(FirDefaultImportsProviderHolder.Single(CompuktersDefaultImportsProvider))
+        // The platform's default-imported declarations can be source implementations in this very module.
+        register(FirLookupDefaultStarImportsInSourcesSettingHolder::class, FirLookupDefaultStarImportsInSourcesSettingHolder(true))
     }
 }
 
 internal object CompuktersDefaultImportsProvider : DefaultImportsProvider() {
-    // Named imports expose source-compiled kotlin-package declarations alongside precompiled built-ins.
-    override val platformSpecificDefaultImports =
-        listOf("let", "run", "with", "apply", "also", "takeIf", "takeUnless", "repeat").map { name ->
-            ImportPath(FqName("kotlin.$name"), false)
-        }
+    override val platformSpecificDefaultImports = emptyList<ImportPath>()
 }

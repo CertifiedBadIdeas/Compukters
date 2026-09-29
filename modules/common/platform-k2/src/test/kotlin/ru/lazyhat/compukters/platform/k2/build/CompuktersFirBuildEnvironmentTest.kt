@@ -29,6 +29,33 @@ import kotlin.test.assertFalse
 
 class CompuktersFirBuildEnvironmentTest {
     @Test
+    fun `default imports resolve declarations from sources in the same module`() {
+        CompuktersFirBuildEnvironment.create().use { environment ->
+            val builtins =
+                environment.compile(
+                    PlatformModuleId("kotlin", "builtins"),
+                    listOf(source("Builtins.kt", "package kotlin\nopen class Any\nclass Unit")),
+                    emptyList(),
+                )
+            val library =
+                environment.compile(
+                    PlatformModuleId("test", "library"),
+                    listOf(
+                        source("Defaults.kt", "package kotlin\nfun sourceDefault() {}"),
+                        source("Consumer.kt", "package sample\nfun consume() { sourceDefault() }"),
+                    ),
+                    listOf(builtins),
+                )
+
+            assertFalse(builtins.diagnostics.hasErrors)
+            assertFalse(
+                library.diagnostics.hasErrors,
+                library.diagnostics.diagnostics.joinToString { it.factoryName },
+            )
+        }
+    }
+
+    @Test
     fun `source modules use native Compukters FIR sessions in dependency order`() {
         CompuktersFirBuildEnvironment.create().use { environment ->
             val builtins =

@@ -929,7 +929,8 @@ internal object KotlinProjectLowering {
         var usesListFactory = false
 
         fun isCollectionSource(declaration: IrDeclaration): Boolean =
-            session.virtualSourcePath(declaration.file.fileEntry.name)?.value?.startsWith("platform/stdlib/collections/") == true
+            declaration.file.packageFqName == FqName("kotlin.collections") &&
+                session.virtualSourcePath(declaration.file.fileEntry.name) in session.sourcePlatformPaths
         val scannedCollectionHelpers = mutableSetOf<IrSimpleFunctionSymbol>()
         val collectionUsage =
             object : IrVisitorVoid() {
@@ -974,8 +975,7 @@ internal object KotlinProjectLowering {
                 .filterNot { declaration ->
                     !includeTrustedPlatformBodies && !usesListFactory &&
                         declaration !in collectionInterfaceClasses &&
-                        session.virtualSourcePath(declaration.file.fileEntry.name)?.value?.startsWith("platform/stdlib/collections/") ==
-                        true
+                        isCollectionSource(declaration)
                 }.filterNot {
                     !includeTrustedPlatformBodies &&
                         it.fqNameWhenAvailable?.asString() !in specializedCollectionInterfaces &&
@@ -1218,6 +1218,20 @@ internal object KotlinProjectLowering {
                     "${function.fqNameWhenAvailable?.asString() ?: function.name.asString()}<$arguments>"
                 }
             }
+        val platformFunctionExports =
+            if (includeTrustedPlatformBodies) {
+                functionInstances
+                    .filter { instance ->
+                        instance.arguments.isEmpty() && instance.ownerClass?.arguments.isNullOrEmpty()
+                    }.associateWith { instance ->
+                        ru.lazyhat.compukters.compiler.k2.engine.library.platformFunctionExportName(
+                            requireNotNull(instance.declaration.fqNameWhenAvailable).asString(),
+                            instance.declaration.canonicalPlatformSignature(),
+                        )
+                    }
+            } else {
+                emptyMap()
+            }
         val metadataValues =
             (
                 listOf("app") +
@@ -1232,6 +1246,7 @@ internal object KotlinProjectLowering {
                     linkedSymbols.enumEntries.values.map(ExternalFieldTarget::exportName) +
                     linkedSymbols.defaultEnumEntries.values.map(ExternalFieldTarget::exportName) +
                     functionInstances.map { requireNotNull(functionArtifactNames[it]) } +
+                    platformFunctionExports.values +
                     functionShapes.indices.map { index -> functionShapeName(index, functionShapes[index], unitBlockShape) } +
                     listOfNotNull("invoke".takeIf { functionShapes.isNotEmpty() }) +
                     listOfNotNull("<task-launch>".takeIf { usesFunction0Unit }) +
@@ -2773,6 +2788,16 @@ internal object KotlinProjectLowering {
                             },
                 functions = loweredFunctions,
                 blocks = blocks,
+                exports =
+                    platformFunctionExports.map { (instance, name) ->
+                        Export(
+                            SymbolKind.FUNCTION,
+                            ExportVisibility.PUBLIC_LIBRARY,
+                            requireNotNull(metadataIds[name]),
+                            requireNotNull(instanceFunctionIds[instance]).value,
+                            TypeRef.Local(requireNotNull(instanceTypeIds[instance])),
+                        )
+                    },
             )
         val modules = listOf(app, library)
         val maximumCallDepth = 16u

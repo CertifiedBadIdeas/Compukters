@@ -105,6 +105,12 @@ class K2CompilerAdapterTest {
                 parent.createDirectories()
                 writeText("package sample\nclass Cell<T>(var value: T) { fun replace(next: T) { value = next } }\n")
             }
+            root.resolve("libraries/generic/FirstCollision.kt").writeText(
+                "package sample.one\nfun collision(value: Int): Int = value + 1\n",
+            )
+            root.resolve("libraries/generic/SecondCollision.kt").writeText(
+                "package sample.two\nfun collision(value: Int): Int = value + 2\n",
+            )
             root.resolve("libraries/generic-class-only/Holder.kt").apply {
                 parent.createDirectories()
                 writeText("package sample\nclass Holder<T>(val value: T)\n")
@@ -145,8 +151,8 @@ class K2CompilerAdapterTest {
             val core = platform.modules.single { it.id.toString() == "stdlib:core" }
             assertNotNull(core.libraryFragment)
             assertTrue(core.sourceDeclarations.any { it.symbol == "kotlin.let" })
-            val collections = platform.modules.single { it.id.toString() == "stdlib:collections" }
-            assertTrue(collections.sourceDeclarations.isNotEmpty())
+            assertTrue(core.sourceDeclarations.any { it.symbol == "kotlin.collections.ArrayList" })
+            assertTrue(core.declarations.any { it.symbol == "kotlin.ranges.IntRange" })
             val workerIdentity = identity(platform)
             val selected =
                 listOf(
@@ -185,6 +191,8 @@ class K2CompilerAdapterTest {
                         require(describe("hello") { it.length } == "length=5")
                         require(describe(42) { it } == "length=42")
                         require(describeSize(7) == "length=7")
+                        require(sample.one.collision(1) == 2)
+                        require(sample.two.collision(1) == 3)
                         require(transform(3) { it + 2 } == 5)
                         require(transform("abc") { it.length } == 3)
                         println(identity(42))
@@ -260,10 +268,10 @@ class K2CompilerAdapterTest {
                 )
             assertNull(internalAccess.artifact)
             assertTrue(internalAccess.diagnostics.any { it.code == "INVISIBLE_REFERENCE" }, internalAccess.diagnostics.toString())
-            val wrongCollectionsVersion =
+            val wrongCoreVersion =
                 TrustedBundleIdentity.of(
-                    collections.id.toString(),
-                    Hash256.of(PlatformBundleCodec.moduleContentHash(collections.copy(version = "9.9.9")).toByteArray()),
+                    core.id.toString(),
+                    Hash256.of(PlatformBundleCodec.moduleContentHash(core.copy(version = "9.9.9")).toByteArray()),
                 )
             val mismatch =
                 assertFailsWith<IllegalArgumentException> {
@@ -274,7 +282,7 @@ class K2CompilerAdapterTest {
                             TargetSettings.KOTLIN_2_4_JVM_17,
                             workerIdentity,
                             WorkerLimits(),
-                            selected + wrongCollectionsVersion,
+                            selected.map { if (it.name == core.id.toString()) wrongCoreVersion else it },
                             emptyList(),
                         ),
                     )

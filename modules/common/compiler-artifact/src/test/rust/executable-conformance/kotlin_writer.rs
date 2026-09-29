@@ -1242,7 +1242,7 @@ fn list_no_io_profile() -> ExecutionProfile {
 }
 
 fn k2_generic_library_specializes_in_consumer() {
-    k2_expected_prints("COMPUKTER_KOTLIN_GENERIC_LIBRARY_ARTIFACT", ["42\n", "hello\n"]);
+    k2_expected_prints_with_budget("COMPUKTER_KOTLIN_GENERIC_LIBRARY_ARTIFACT", ["42\n", "hello\n"], 128);
 }
 
 fn k2_reference_arrays_retain_typed_guest_objects() {

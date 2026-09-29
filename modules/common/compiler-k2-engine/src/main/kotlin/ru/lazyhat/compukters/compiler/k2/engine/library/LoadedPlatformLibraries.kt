@@ -84,8 +84,15 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
                                 .substringAfter('#', "")
                                 .shortTypeNames() in sourceShapes
                         }
+                    val exactDeclaration =
+                        library.exports.singleOrNull { export ->
+                            export.kind == SymbolKind.FUNCTION &&
+                                library.strings[export.name.value.toInt()].toString() ==
+                                platformFunctionExportName(declaration.symbol, declaration.signature)
+                        }
                     val export =
-                        mangled.singleOrNull() ?: matching.singleOrNull() ?: exactName.singleOrNull() ?: candidates.singleOrNull()
+                        exactDeclaration ?: mangled.singleOrNull() ?: matching.singleOrNull() ?: exactName.singleOrNull()
+                            ?: candidates.singleOrNull()
                             ?: error(
                                 "cannot uniquely match ${declaration.symbol} ${declaration.signature} to a platform export: " +
                                     candidates.joinToString { library.strings[it.name.value.toInt()].toString() },
