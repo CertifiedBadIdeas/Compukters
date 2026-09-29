@@ -498,7 +498,6 @@ val verifyPackagedCompukterFfi =
                 "assets/compukters/models/item/peripheral_configurator.json",
                 "data/compukters/loot_table/blocks/peripheral_cable.json",
                 "assets/compukters/font/terminal/cozette.json",
-                "assets/compukters/font/terminal/jetbrains_mono.json",
                 "assets/compukters/font/ide/jetbrains_mono.json",
                 "assets/compukters/font/ide/jetbrains_mono_regular.ttf",
                 "META-INF/licenses/JetBrains-Mono-OFL-1.1.txt",
@@ -523,6 +522,9 @@ val verifyPackagedCompukterFfi =
             }
             check("assets/compukters/textures/gui/term_font.png" !in entries) {
                 "legacy terminal font atlas leaked into ${archive.name}"
+            }
+            check("assets/compukters/font/terminal/jetbrains_mono.json" !in entries) {
+                "parallel-warmed JetBrains Mono TTF alias leaked into ${archive.name}"
             }
             check(entries.none { it.contains("Spleen", ignoreCase = true) }) {
                 "legacy Spleen font attribution leaked into ${archive.name}"

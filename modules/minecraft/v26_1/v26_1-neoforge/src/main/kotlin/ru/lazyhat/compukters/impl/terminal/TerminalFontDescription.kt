@@ -20,9 +20,13 @@ package ru.lazyhat.compukters.impl.terminal
 
 import net.minecraft.network.chat.FontDescription
 import net.minecraft.resources.Identifier
+import ru.lazyhat.compukters.impl.font.JetBrainsMonoFont
 
 internal val TerminalFontProfile.fontDescription: FontDescription.Resource
     get() =
         FontDescription.Resource(
-            Identifier.fromNamespaceAndPath("compukters", "terminal/$id"),
+            Identifier.fromNamespaceAndPath(
+                "compukters",
+                if (id == JetBrainsMonoFont.ID) JetBrainsMonoFont.RESOURCE_PATH else "terminal/$id",
+            ),
         )

@@ -160,7 +160,6 @@ val verifyProductionJar =
                 "data/compukters/loot_table/blocks/peripheral_cable.json",
                 "assets/compukters/textures/gui/ide_toolbar.png",
                 "assets/compukters/font/ide/jetbrains_mono.json",
-                "assets/compukters/font/terminal/jetbrains_mono.json",
                 "assets/compukters/font/ide/jetbrains_mono_regular.ttf",
                 "META-INF/licenses/JetBrains-Mono-OFL-1.1.txt",
                 "META-INF/licenses/JetBrains-Mono-PROVENANCE.txt",
@@ -170,6 +169,9 @@ val verifyProductionJar =
                 }
             }
             check(entries.size == entries.toSet().size) { "duplicate archive entries found in ${archive.name}" }
+            check("assets/compukters/font/terminal/jetbrains_mono.json" !in entries) {
+                "parallel-warmed JetBrains Mono TTF alias leaked into ${archive.name}"
+            }
             validateRelocatedProjectMetadataLibraries(entries, archive.name)
             verifyRelocatedProjectMetadataRuntime(archive)
             val nativeEntries = entries.filter { it.startsWith("META-INF/natives/") }

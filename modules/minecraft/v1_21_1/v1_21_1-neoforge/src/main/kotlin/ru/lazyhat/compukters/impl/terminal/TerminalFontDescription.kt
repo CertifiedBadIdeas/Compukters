@@ -19,6 +19,11 @@
 package ru.lazyhat.compukters.impl.terminal
 
 import net.minecraft.resources.ResourceLocation
+import ru.lazyhat.compukters.impl.font.JetBrainsMonoFont
 
 internal val TerminalFontProfile.fontDescription: ResourceLocation
-    get() = ResourceLocation.fromNamespaceAndPath("compukters", "terminal/$id")
+    get() =
+        ResourceLocation.fromNamespaceAndPath(
+            "compukters",
+            if (id == JetBrainsMonoFont.ID) JetBrainsMonoFont.RESOURCE_PATH else "terminal/$id",
+        )
