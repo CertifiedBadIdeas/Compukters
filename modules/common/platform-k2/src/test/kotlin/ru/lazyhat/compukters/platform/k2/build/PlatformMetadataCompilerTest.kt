@@ -59,6 +59,8 @@ class PlatformMetadataCompilerTest {
                         inline fun twice(action: () -> Unit) { action(); action() }
                         external fun <T> intrinsic(): T
                         class Cell<T>(val value: T) { fun read(): T = value }
+                        interface Contract<T>
+                        class Concrete : Contract<Int> { fun read(): Int = 1 }
                         private fun helper(value: Int): Int = value + 1
                         """.trimIndent(),
                     ),
@@ -70,6 +72,8 @@ class PlatformMetadataCompilerTest {
         assertTrue(sourceDeclarations.any { it.symbol == "sample.twice" })
         assertTrue(sourceDeclarations.any { it.symbol == "sample.Cell" })
         assertTrue(sourceDeclarations.any { it.symbol == "sample.Cell.read" })
+        assertTrue(sourceDeclarations.any { it.symbol == "sample.Concrete" })
+        assertTrue(sourceDeclarations.any { it.symbol == "sample.Concrete.read" })
         assertFalse(sourceDeclarations.any { it.symbol == "sample.intrinsic" || it.symbol == "sample.helper" })
     }
 

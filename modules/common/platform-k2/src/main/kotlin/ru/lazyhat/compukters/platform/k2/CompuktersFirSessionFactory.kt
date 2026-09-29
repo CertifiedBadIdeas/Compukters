@@ -55,7 +55,7 @@ class CompuktersFirSessionFactory : AbstractFirMetadataSessionFactory(Compukters
 }
 
 internal object CompuktersDefaultImportsProvider : DefaultImportsProvider() {
-    // Named imports expose source-only kotlin-package declarations alongside precompiled built-ins.
+    // Named imports expose source-compiled kotlin-package declarations alongside precompiled built-ins.
     override val platformSpecificDefaultImports =
         listOf("let", "run", "with", "apply", "also", "takeIf", "takeUnless", "repeat").map { name ->
             ImportPath(FqName("kotlin.$name"), false)

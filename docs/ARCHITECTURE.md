@@ -118,19 +118,18 @@ Guest generic functions and final generic classes are specialized before artifac
 specializations are discovered together until no further dependencies appear, including helpers called from generic
 members whose bodies introduce other generic classes. The VM receives ordinary
 concrete function and class records, with typed scalar or reference fields and calls. Platform ABI 3 records the
-symbol and signature of each declaration requiring source compilation: generic implementations, members of generic
-classes, and inline bodies. One module can retain an ordinary precompiled library fragment alongside those source
-bodies. The compiler resolves each source library as a separate Kotlin module over one shared metadata session,
-preserving `internal` and `private` boundaries. It includes canonical sources for resolution and specialization but
-binds ordinary implementations,
-including private helpers, to their compiled fragment instead of emitting them again in the consumer. Kotlin source
-visibility still governs access to those helpers. Fragment assembly retains exported implementations and their
-dependencies; final application linking removes unreachable records. Tooling normalizes dependency module indexes
-into symbolic identities before linking so a shared library retains one owner across fragment containers. The final
-executable restores concrete indexes. Generic binary templates are not part of the
+symbol and signature of each declaration requiring source compilation: generic implementations, classes with generic
+supertypes, members of those classes, and inline bodies. One module can retain an ordinary precompiled library fragment
+alongside those source bodies. The compiler resolves each source library as a separate Kotlin module over one shared
+metadata session, preserving `internal` and `private` boundaries. It includes canonical sources for resolution and
+specialization but binds ordinary implementations, including private helpers, to their compiled fragment instead of
+emitting them again in the consumer. Kotlin source visibility still governs access to those helpers. Fragment assembly retains exported
+implementations and their dependencies; final application linking removes unreachable records. Tooling normalizes
+dependency module indexes into symbolic identities before linking so a shared library retains one owner across
+fragment containers. The final executable restores concrete indexes. Generic binary templates are not part of the
 platform bundle or VM artifact contract. Bundle format 7 and standalone module format 3 reject older representations.
-The inline generic scope functions and `repeat` currently live in `stdlib:scope`; mixed-module ownership permits
-their consolidation into `stdlib:core` without losing ordinary precompiled implementations.
+The inline generic scope functions and `repeat` live in `stdlib:core` alongside its ordinary precompiled
+implementations; their source bodies no longer require a separate module.
 
 The `stdlib:collections` module publishes read-only lists and public `ArrayList<T>` with source bodies for specialization.
 `listOf` and `emptyList` create fresh `ArrayList<T>` instances exposed as `List<T>`, with capacity equal to the

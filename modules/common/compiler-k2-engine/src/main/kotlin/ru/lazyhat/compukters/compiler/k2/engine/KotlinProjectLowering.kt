@@ -982,6 +982,10 @@ internal object KotlinProjectLowering {
                         session.trustedPlatformModule(it.file.fileEntry.name) != null
                 }.filterNot { declaration ->
                     !includeTrustedPlatformBodies && session.platformTypes.any { it.symbol == declaration.fqNameWhenAvailable?.asString() }
+                }.filterNot { declaration ->
+                    !includeTrustedPlatformBodies && declaration !in collectionInterfaceClasses &&
+                        session.virtualSourcePath(declaration.file.fileEntry.name) in session.sourcePlatformPaths &&
+                        declaration.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols
                 }.sortedBy { it.fqNameWhenAvailable?.asString().orEmpty() }
         sourceClasses
             .firstOrNull { declaration ->

@@ -55,6 +55,8 @@ class CompilationSession(
     val platformFields: List<PlatformFieldLink> = emptyList(),
     val platformScalarTypes: List<PlatformScalarType> = emptyList(),
     val platformScalarConstants: List<PlatformScalarConstant> = emptyList(),
+    val sourcePlatformPaths: Set<VirtualSourcePath> = emptySet(),
+    val sourcePlatformSymbols: Set<String> = emptySet(),
     val limits: WorkerLimits = WorkerLimits(),
 ) {
     internal val normalizedGuestModules = java.util.Collections.newSetFromMap(IdentityHashMap<IrModuleFragment, Boolean>())

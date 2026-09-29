@@ -242,6 +242,18 @@ class K2CompilerAdapter(
                             platformFields = libraries.fields,
                             platformScalarTypes = selected.flatMap(PlatformModule::scalarTypes),
                             platformScalarConstants = selected.flatMap(PlatformModule::scalarConstants),
+                            sourcePlatformPaths =
+                                sourceLibraries
+                                    .flatMap { library ->
+                                        library.sources.map { source ->
+                                            VirtualSourcePath.of("platform/${library.id.namespace}/${library.id.name}/${source.path}")
+                                        }
+                                    }.toSet(),
+                            sourcePlatformSymbols =
+                                sourceLibraries
+                                    .flatMap(
+                                        PlatformModule::sourceDeclarations,
+                                    ).mapTo(mutableSetOf(), PlatformDeclarationIdentity::symbol),
                             limits = request.limits,
                         )
                     CompuktersFir2IrPipeline.lowerGuest(output, session, sourceOutputs.values.toList())?.let { lowered ->
