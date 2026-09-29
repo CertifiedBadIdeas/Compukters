@@ -18,8 +18,6 @@
 
 package ru.lazyhat.compukters.impl.ide
 
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
-
 data class IdeRect(
     val left: Int,
     val top: Int,
@@ -69,7 +67,7 @@ class IdeRenderGeometry private constructor(
     val diagnostics: IdeRect?,
     val treeVisible: Boolean,
     val diagnosticsExpanded: Boolean,
-    val font: TerminalFontProfile,
+    val font: IdeCodeFontProfile,
     val fallback: IdeGeometryFallback,
     val unsupportedMessage: String,
 ) {
@@ -141,7 +139,7 @@ class IdeRenderGeometry private constructor(
             diagnosticsHeight: Int,
             diagnosticsExpanded: Boolean,
             treeVisible: Boolean,
-            font: TerminalFontProfile,
+            font: IdeCodeFontProfile,
         ): IdeRenderGeometry {
             require(viewportWidth >= 0 && viewportHeight >= 0) { "IDE viewport must not be negative" }
             val candidates = mutableListOf<Candidate>()
@@ -182,7 +180,7 @@ class IdeRenderGeometry private constructor(
             candidate: Candidate,
             requestedTreeWidth: Int,
             requestedDiagnosticsHeight: Int,
-            font: TerminalFontProfile,
+            font: IdeCodeFontProfile,
         ): IdeRenderGeometry {
             val panel = viewport
             val toolStripe = IdeRect(panel.right - TOOL_STRIPE_WIDTH, panel.top, panel.right, panel.bottom)
@@ -245,7 +243,7 @@ class IdeRenderGeometry private constructor(
 
         private fun unsupported(
             viewport: IdeRect,
-            font: TerminalFontProfile,
+            font: IdeCodeFontProfile,
         ): IdeRenderGeometry {
             val empty = IdeRect(0, 0, 0, 0)
             return IdeRenderGeometry(

@@ -21,7 +21,6 @@ package ru.lazyhat.compukters.impl.ide
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 
 enum class IdePanelKind { Main, Header, Toolbar, ToolStripe, Tree, Editor, Diagnostics, Status, Control, Dialog, ProjectSwitcher, Tooltip }
 
@@ -122,7 +121,7 @@ data class IdeTextDraw(
     val y: Int,
     val color: Int,
     val style: IdeTextStyle,
-    val codeFont: TerminalFontProfile?,
+    val codeFont: IdeCodeFontProfile?,
     val clip: IdeRect?,
     val sourceRange: EditorRange?,
     val zIndex: Int,

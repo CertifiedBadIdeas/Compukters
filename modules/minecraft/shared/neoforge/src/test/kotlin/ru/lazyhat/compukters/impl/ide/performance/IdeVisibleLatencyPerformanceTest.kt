@@ -45,13 +45,13 @@ import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.impl.ide.IdeClientApplication
 import ru.lazyhat.compukters.impl.ide.IdeClientPaths
+import ru.lazyhat.compukters.impl.ide.IdeCodeFontProfile
 import ru.lazyhat.compukters.impl.ide.IdeRenderGeometry
 import ru.lazyhat.compukters.impl.ide.IdeRenderer
 import ru.lazyhat.compukters.impl.ide.IdeVisibleFrameEvidence
 import ru.lazyhat.compukters.impl.ide.ProductionIdeApplicationFactory
 import ru.lazyhat.compukters.impl.ide.TestLayoutStore
 import ru.lazyhat.compukters.impl.ide.TestTargetTransport
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import ru.lazyhat.compukters.worker.process.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.worker.process.WorkerLaunch
 import ru.lazyhat.compukters.worker.process.WorkerProcess
@@ -391,7 +391,7 @@ internal class IdeVisibleLatencyPerformanceTest {
         const val COMPLETION_P95_NANOS = 250_000_000L
         const val MAXIMUM_HEAP_BYTES = 512L * 1024 * 1024
         const val MAXIMUM_METASPACE_BYTES = 256L * 1024 * 1024
-        val GEOMETRY = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val GEOMETRY = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
     }
 }
 

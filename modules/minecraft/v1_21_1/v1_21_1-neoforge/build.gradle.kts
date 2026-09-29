@@ -159,6 +159,10 @@ val verifyProductionJar =
                 "assets/compukters/lang/en_us.json",
                 "data/compukters/loot_table/blocks/peripheral_cable.json",
                 "assets/compukters/textures/gui/ide_toolbar.png",
+                "assets/compukters/font/ide/jetbrains_mono.json",
+                "assets/compukters/font/ide/jetbrains_mono_regular.ttf",
+                "META-INF/licenses/JetBrains-Mono-OFL-1.1.txt",
+                "META-INF/licenses/JetBrains-Mono-PROVENANCE.txt",
             ).forEach { required ->
                 check(entries.count { it == required } == 1) {
                     "$required is missing or duplicated in ${archive.name}"

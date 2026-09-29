@@ -45,7 +45,6 @@ import ru.lazyhat.compukters.ide.highlight.IncrementalKotlinHighlighter
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectTreeStore
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -192,7 +191,7 @@ class IdeVisibleFrameEvidenceTest {
         }
     }
 
-    private fun geometry() = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+    private fun geometry() = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
 
     private companion object {
         const val SOURCE = "val answer = 42\nval hidden = 0"

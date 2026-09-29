@@ -18,7 +18,6 @@
 
 package ru.lazyhat.compukters.impl.ide
 
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -41,14 +40,14 @@ class IdeRenderGeometryTest {
         assertEquals(IdeRect(181, 401, 940, 402), geometry.diagnosticsSplitter)
         assertEquals(IdeRect(181, 402, 940, 522), geometry.diagnostics)
         assertEquals(126, geometry.codeColumns)
-        assertEquals(35, geometry.codeRows)
+        assertEquals(27, geometry.codeRows)
         assertEquals(0, geometry.panel.left % 2, "1920 physical pixels at GUI scale 2 maps deterministically to 960 GUI pixels")
     }
 
     @Test
     fun `small viewport collapses diagnostics then hides tree`() {
         val collapsed =
-            IdeRenderGeometry.compute(500, 240, 96, 64, diagnosticsExpanded = true, treeVisible = true, font = TerminalFontProfile.DINA)
+            IdeRenderGeometry.compute(500, 240, 96, 64, diagnosticsExpanded = true, treeVisible = true, font = IdeCodeFontProfile.DEFAULT)
         assertTrue(collapsed.supported)
         assertFalse(collapsed.diagnosticsExpanded)
         assertTrue(collapsed.treeVisible)
@@ -56,7 +55,7 @@ class IdeRenderGeometryTest {
         assertTrue(collapsed.editor.height >= IdeRenderGeometry.MINIMUM_EDITOR_HEIGHT)
 
         val hidden =
-            IdeRenderGeometry.compute(300, 200, 96, 64, diagnosticsExpanded = true, treeVisible = true, font = TerminalFontProfile.DINA)
+            IdeRenderGeometry.compute(300, 200, 96, 64, diagnosticsExpanded = true, treeVisible = true, font = IdeCodeFontProfile.DEFAULT)
         assertTrue(hidden.supported)
         assertFalse(hidden.diagnosticsExpanded)
         assertFalse(hidden.treeVisible)
@@ -64,22 +63,21 @@ class IdeRenderGeometryTest {
         assertEquals(null, hidden.treeSplitter)
 
         val unsupported =
-            IdeRenderGeometry.compute(200, 170, 96, 64, diagnosticsExpanded = true, treeVisible = true, font = TerminalFontProfile.DINA)
+            IdeRenderGeometry.compute(200, 170, 96, 64, diagnosticsExpanded = true, treeVisible = true, font = IdeCodeFontProfile.DEFAULT)
         assertFalse(unsupported.supported)
         assertIs<IdeGeometryFallback.Unsupported>(unsupported.fallback)
         assertTrue(unsupported.unsupportedMessage.isNotBlank())
     }
 
     @Test
-    fun `explicitly hidden panels remain hidden and all fonts derive their own row count`() {
-        TerminalFontProfile.ALL.forEach { font ->
-            val geometry =
-                IdeRenderGeometry.compute(960, 540, 180, 120, diagnosticsExpanded = false, treeVisible = false, font = font)
-            assertFalse(geometry.treeVisible)
-            assertFalse(geometry.diagnosticsExpanded)
-            assertEquals(geometry.editor.width / font.cellWidth, geometry.codeColumns)
-            assertEquals(geometry.editor.height / font.cellHeight, geometry.codeRows)
-        }
+    fun `explicitly hidden panels remain hidden and editor metrics derive the row count`() {
+        val font = IdeCodeFontProfile.DEFAULT
+        val geometry =
+            IdeRenderGeometry.compute(960, 540, 180, 120, diagnosticsExpanded = false, treeVisible = false, font = font)
+        assertFalse(geometry.treeVisible)
+        assertFalse(geometry.diagnosticsExpanded)
+        assertEquals(geometry.editor.width / font.cellWidth, geometry.codeColumns)
+        assertEquals(geometry.editor.height / font.cellHeight, geometry.codeRows)
     }
 
     @Test
@@ -126,6 +124,6 @@ class IdeRenderGeometryTest {
             diagnosticsHeight = 120,
             diagnosticsExpanded = true,
             treeVisible = true,
-            font = TerminalFontProfile.DINA,
+            font = IdeCodeFontProfile.DEFAULT,
         )
 }

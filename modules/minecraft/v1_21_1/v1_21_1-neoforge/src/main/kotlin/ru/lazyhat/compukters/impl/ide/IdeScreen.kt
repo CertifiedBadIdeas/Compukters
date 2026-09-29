@@ -40,7 +40,6 @@ import ru.lazyhat.compukters.impl.ide.target.IdeTargetReference
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState
 import ru.lazyhat.compukters.impl.terminal.TerminalGridGeometry
 import ru.lazyhat.compukters.impl.terminal.TerminalGridRenderer
-import ru.lazyhat.compukters.impl.terminal.fontDescription
 import ru.lazyhat.compukters.impl.ui.CompuktersUiViewport
 import ru.lazyhat.compukters.impl.ui.withTransform
 import kotlin.math.ceil
@@ -409,7 +408,7 @@ internal class IdeScreen(
         viewport: CompuktersUiViewport,
     ) {
         val profile = CompuktersClientConfig.selectedFont()
-        val geometry = geometry(profile, viewport)
+        val geometry = geometry(viewport)
         val treeFirstRow = admittedTreeFirstRow(geometry)
         val state = application.controller.viewState()
         val model =
@@ -503,10 +502,7 @@ internal class IdeScreen(
 
     override fun isPauseScreen(): Boolean = false
 
-    private fun geometry(
-        profile: ru.lazyhat.compukters.impl.terminal.TerminalFontProfile = CompuktersClientConfig.selectedFont(),
-        viewport: CompuktersUiViewport = viewport(),
-    ): IdeRenderGeometry {
+    private fun geometry(viewport: CompuktersUiViewport = viewport()): IdeRenderGeometry {
         val layout = splitters.layout
         return IdeRenderGeometry.compute(
             viewport.width,
@@ -515,7 +511,7 @@ internal class IdeScreen(
             layout.diagnosticsHeight,
             layout.diagnosticsExpanded,
             treeVisible = true,
-            profile,
+            IdeCodeFontProfile.DEFAULT,
         )
     }
 
@@ -637,7 +633,7 @@ internal class IdeScreen(
     }
 
     private fun terminalOverlayGeometry(geometry: IdeRenderGeometry): IdeTerminalOverlayGeometry =
-        IdeTerminalOverlayGeometry.compute(geometry.content, geometry.font)
+        IdeTerminalOverlayGeometry.compute(geometry.content, CompuktersClientConfig.selectedFont())
 
     private fun renderTerminalOverlay(
         graphics: GuiGraphics,

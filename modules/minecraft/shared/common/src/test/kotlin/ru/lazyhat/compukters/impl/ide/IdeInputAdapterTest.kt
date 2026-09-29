@@ -42,7 +42,6 @@ import ru.lazyhat.compukters.ide.highlight.KotlinLexicalSnapshot
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectFileKind
 import ru.lazyhat.compukters.ide.project.tree.ProjectTreeEntry
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -144,7 +143,7 @@ class IdeInputAdapterTest {
     @Test
     fun `Ctrl click navigates without first moving the caret`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
         val editor = textEditor("answer")
         val codeLeft = geometry.editor.left + 4 * geometry.font.cellWidth
 
@@ -162,7 +161,7 @@ class IdeInputAdapterTest {
     @Test
     fun `double click selects the token under the pointer`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
         val editor = textEditor("answer")
         val codeLeft = geometry.editor.left + 4 * geometry.font.cellWidth
 
@@ -180,7 +179,7 @@ class IdeInputAdapterTest {
     @Test
     fun `pointer mapping preserves tabs and surrogate pairs and clears outside source glyphs`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
         val editor = textEditor("a😀\tb")
         val codeLeft = geometry.editor.left + 4 * geometry.font.cellWidth
         val context = IdePointerContext(geometry, editor)
@@ -233,7 +232,7 @@ class IdeInputAdapterTest {
     @Test
     fun `clicking a declaration chooser row selects and accepts its exact index`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
         val editor = chooserEditor()
         val bounds = IdeRect(300, 100, 500, 112)
         val target =
@@ -329,7 +328,7 @@ class IdeInputAdapterTest {
     @Test
     fun `mouse maps code cells tree rows and start rows to commands`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
         val path = ProjectPath.file("src/main.kt")
         val editor =
             IdeEditorView.Text(
@@ -382,7 +381,7 @@ class IdeInputAdapterTest {
     @Test
     fun `wheel routes editor scroll through controller command`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
         val editor =
             IdeEditorView.Text(
                 ProjectPath.file("main.kt"),
@@ -410,7 +409,7 @@ class IdeInputAdapterTest {
     @Test
     fun `project choice hit target opens the indexed catalog project`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
         val projects = listOf(IdeProjectSummary("demo", "Demo"), IdeProjectSummary("second", "Second"))
         val choice =
             IdeHitTarget(
@@ -437,7 +436,7 @@ class IdeInputAdapterTest {
     @Test
     fun `wheel scrolls project tree without sending an editor command`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
         val entries =
             (0 until 80).map { index ->
                 ProjectTreeEntry(ProjectPath.file("src/file$index.kt"), ProjectFileKind.Text(1), null)
@@ -461,7 +460,7 @@ class IdeInputAdapterTest {
     @Test
     fun `wheel scroll includes computer explorer rows`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
         val metadata = IdeTargetFileMetadata(IdeTargetFileKind.File, 1, 1, false)
         val rows =
             (0 until 80).map { index ->
@@ -483,7 +482,7 @@ class IdeInputAdapterTest {
     @Test
     fun `target toolbar actions dispatch controller commands`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
         val actions = listOf(IdeHitAction.Format, IdeHitAction.Verify, IdeHitAction.Deploy, IdeHitAction.Run)
         actions.forEachIndexed { index, action ->
             val bounds = IdeRect(index * 20, 0, index * 20 + 18, 18)
@@ -515,7 +514,7 @@ class IdeInputAdapterTest {
     @Test
     fun `computer drag waits four pixels and drops only on project directories`() {
         val fixture = fixture()
-        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, TerminalFontProfile.DINA)
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
         val directory = ProjectTreeEntry(ProjectPath.file("src"), ProjectFileKind.Directory, null)
         val source =
             IdeComputerNode.File(

@@ -80,7 +80,6 @@ import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectTreeStore
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -210,7 +209,7 @@ class IdeRendererStateTest {
                 lexical = lexical,
                 analysis = IdeAnalysisState.Active(identity, virtualPath, 1, presentation, null),
             )
-        val geometry = geometry(TerminalFontProfile.COZETTE)
+        val geometry = geometry(IdeCodeFontProfile.DEFAULT)
         val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry)
 
         assertEquals(listOf("2", "3"), model.text.filter { it.kind == IdeTextKind.LineNumber }.map { it.value.trim() })
@@ -220,10 +219,10 @@ class IdeRendererStateTest {
         assertEquals(IdeTextStyle.Lexical(KotlinLexicalKind.Keyword), keyword.style)
         val selection = model.fills.single { it.kind == IdeFillKind.Selection }
         assertEquals(geometry.editor.top, selection.bounds.top)
-        assertEquals(geometry.editor.top + TerminalFontProfile.COZETTE.cellHeight, selection.bounds.bottom)
+        assertEquals(geometry.editor.top + IdeCodeFontProfile.DEFAULT.cellHeight, selection.bounds.bottom)
         val caret = model.fills.single { it.kind == IdeFillKind.Caret }
         assertEquals(geometry.editor.top, caret.bounds.top)
-        assertEquals(geometry.editor.top + TerminalFontProfile.COZETTE.cellHeight, caret.bounds.bottom)
+        assertEquals(geometry.editor.top + IdeCodeFontProfile.DEFAULT.cellHeight, caret.bounds.bottom)
         assertEquals(listOf("Example warning"), model.text.filter { it.kind == IdeTextKind.Diagnostic }.map { it.value })
         assertTrue(model.scissors.any { it.kind == IdeScissorKind.Editor })
         assertTrue(model.text.filter { it.kind == IdeTextKind.TreeRow }.any { "main.kt" in it.value })
@@ -275,7 +274,7 @@ class IdeRendererStateTest {
                 analysis = IdeAnalysisState.Active(identity, virtualPath, 1, presentation, null),
             )
 
-        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry(TerminalFontProfile.COZETTE))
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry(IdeCodeFontProfile.DEFAULT))
 
         assertEquals(IdeTextStyle.Semantic(SemanticCategory.Function), model.sourceStyle("intArrayOf"))
         assertEquals(IdeTextStyle.Lexical(KotlinLexicalKind.Operator), model.sourceStyle("("))
@@ -289,7 +288,7 @@ class IdeRendererStateTest {
         val source = "val answer: Int = 7; println(\"value: \${answer}\\n\") // note"
         val editor = semanticEditor(source) { _, _ -> IdeSemanticInteraction.None }
 
-        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry(TerminalFontProfile.COZETTE))
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry(IdeCodeFontProfile.DEFAULT))
 
         assertEquals(0xFF191A1C.toInt(), model.panels.single { it.kind == IdePanelKind.Editor }.color)
         assertEquals(0xFF4B5059.toInt(), model.text.single { it.kind == IdeTextKind.LineNumber }.color)
@@ -425,7 +424,7 @@ class IdeRendererStateTest {
         val editor = IdeEditorView.Binary(ProjectPath.file("image.bin"), 4_096)
         val build = IdeBuildState.Succeeded(Hash256.zero(), IdeBuiltArtifact.of(Hash256.zero(), ByteArray(321)), "demo", true, 42)
 
-        val model = IdeRenderer.extract(workspaceState(editor, build), geometry(TerminalFontProfile.COZETTE))
+        val model = IdeRenderer.extract(workspaceState(editor, build), geometry(IdeCodeFontProfile.DEFAULT))
 
         assertTrue(model.text.any { it.kind == IdeTextKind.Binary && "4096" in it.value })
         assertTrue(model.text.any { it.kind == IdeTextKind.Status && "321 B" in it.value && "cache" in it.value })
@@ -459,7 +458,7 @@ class IdeRendererStateTest {
         assertTrue(model.text.none { it.kind == IdeTextKind.Toolbar })
         assertTrue(model.hitTargets.filter { it.action in WORKSPACE_ACTIONS }.all { it.tooltip != null })
         listOf(500 to 240, 300 to 200).forEach { (width, height) ->
-            val constrained = IdeRenderGeometry.compute(width, height, 96, 64, true, true, TerminalFontProfile.DINA)
+            val constrained = IdeRenderGeometry.compute(width, height, 96, 64, true, true, IdeCodeFontProfile.DEFAULT)
             val constrainedModel = IdeRenderer.extract(workspaceState(IdeEditorView.Empty, IdeBuildState.Idle), constrained)
             assertTrue(constrained.supported)
             assertTrue(constrainedModel.icons.all { icon -> constrained.toolbar.contains(icon.bounds) })
@@ -906,6 +905,20 @@ class IdeRendererStateTest {
         assertTrue(model.hitTargets.any { it.action == IdeHitAction.RefreshComputer && it.enabled })
     }
 
+    @Test
+    fun `source rendering preserves Unicode and uses the dedicated editor font`() {
+        val source = "val имя = \"😀\"; // Ж"
+        val editor = semanticEditor(source) { _, _ -> IdeSemanticInteraction.None }
+
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry())
+        val runs = model.text.filter { it.kind == IdeTextKind.Source }
+
+        assertEquals(source, runs.joinToString("") { it.value })
+        assertTrue(runs.all { it.codeFont === IdeCodeFontProfile.DEFAULT })
+        assertTrue(model.text.filter { it.kind == IdeTextKind.LineNumber }.all { it.codeFont === IdeCodeFontProfile.DEFAULT })
+        assertTrue(model.text.filter { it.kind == IdeTextKind.Header }.all { it.codeFont == null })
+    }
+
     private fun workspaceState(
         editor: IdeEditorView,
         build: IdeBuildState,
@@ -998,7 +1011,7 @@ class IdeRendererStateTest {
         )
     }
 
-    private fun geometry(font: TerminalFontProfile = TerminalFontProfile.DINA) =
+    private fun geometry(font: IdeCodeFontProfile = IdeCodeFontProfile.DEFAULT) =
         IdeRenderGeometry.compute(960, 540, 180, 120, true, true, font)
 }
 

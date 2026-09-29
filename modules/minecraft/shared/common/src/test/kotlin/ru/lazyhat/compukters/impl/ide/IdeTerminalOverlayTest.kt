@@ -69,7 +69,7 @@ internal class IdeTerminalOverlayTest {
     @Test
     fun `every font keeps the exact guest grid and anchors the panel over immutable content`() {
         TerminalFontProfile.ALL.forEach { font ->
-            val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, font)
+            val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
             val editor = geometry.editor
 
             val overlay = IdeTerminalOverlayGeometry.compute(geometry.content, font)
