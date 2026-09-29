@@ -21,6 +21,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   module, preserving private and internal visibility and avoiding duplicate ordinary implementations. Core helpers,
   scope functions, `repeat`, ranges and collections share one `stdlib:core` module without making its ordinary
   implementations source-only.
+- Runtime and environment APIs share one `compukter:core` module: compiler, processes, terminal, filesystem,
+  cooperative tasks/channels, redstone, sound and displays. Kotlin packages and imports remain unchanged; addons
+  depending on the removed split-module IDs need to rebuild against the consolidated owners.
 - Programs can use the standard `let`, `run`, `with`, `apply`, `also`, `takeIf`, and `takeUnless` scope functions
   with inline lambdas, including supported nullable receivers and non-local returns.
 - Programs can traverse Guest iterables with `forEach` and `forEachIndexed`, or run an indexed action with `repeat`,

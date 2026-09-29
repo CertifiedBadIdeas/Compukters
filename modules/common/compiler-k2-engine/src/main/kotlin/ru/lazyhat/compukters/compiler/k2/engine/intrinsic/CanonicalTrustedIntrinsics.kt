@@ -196,18 +196,18 @@ object CanonicalTrustedIntrinsics {
                 "fun(CharArray.Int,Int):String",
             )
             primitive("stdlib", "core", "kotlin", "emptyArray", "fun():Array<T>")
-            primitive("stdlib", "core", "compukter.concurrent", "Task.join", "fun():Unit")
-            primitive("stdlib", "core", "compukter.concurrent", "IntChannel.send", "fun(Int):Unit")
-            primitive("stdlib", "core", "compukter.concurrent", "IntChannel.receive", "fun():Int")
+            primitive("compukter", "core", "compukter.concurrent", "Task.join", "fun():Unit")
+            primitive("compukter", "core", "compukter.concurrent", "IntChannel.send", "fun(Int):Unit")
+            primitive("compukter", "core", "compukter.concurrent", "IntChannel.receive", "fun():Int")
             primitive(
-                "stdlib",
+                "compukter",
                 "core",
                 "compukter.concurrent",
                 "Tasks.launch",
                 "fun(()->Unit):Task",
             )
             capability(
-                "stdlib",
+                "compukter",
                 "core",
                 "compukter.concurrent",
                 "TimerBindings.sleepTicks",
@@ -222,13 +222,13 @@ object CanonicalTrustedIntrinsics {
             primitive("stdlib", "core", "kotlin.ranges", "step", "fun(IntProgression.Int):IntProgression")
             primitive("stdlib", "core", "kotlin.ranges", "until", "fun(Int.Int):IntRange")
 
-            capability("compukter", "compiler", "compukter.compiler", "Compiler.compile", "fun(String,String):Int", compiler, 0u, true)
-            capability("compukter", "compiler", "compukter.compiler", "Compiler.diagnostics", "fun():String", compiler, 1u)
-            capability("compukter", "process", "compukter.process", "ProcessBindings.run", "fun(String,String):Int", process, 0u, true)
-            capability("compukter", "process", "compukter.process", "ProcessBindings.takeFailureDiagnostic", "fun():String", process, 1u)
+            capability("compukter", "core", "compukter.compiler", "Compiler.compile", "fun(String,String):Int", compiler, 0u, true)
+            capability("compukter", "core", "compukter.compiler", "Compiler.diagnostics", "fun():String", compiler, 1u)
+            capability("compukter", "core", "compukter.process", "ProcessBindings.run", "fun(String,String):Int", process, 0u, true)
+            capability("compukter", "core", "compukter.process", "ProcessBindings.takeFailureDiagnostic", "fun():String", process, 1u)
             capability(
                 "compukter",
-                "process",
+                "core",
                 "compukter.process",
                 "ProcessBindings.exit",
                 "fun(Int):Nothing",
@@ -249,7 +249,7 @@ object CanonicalTrustedIntrinsics {
             ).forEachIndexed { operation, (name, signature, blocking) ->
                 capability(
                     "compukter",
-                    "redstone",
+                    "core",
                     "compukter.redstone",
                     "RedstoneBindings.$name",
                     signature,
@@ -261,7 +261,7 @@ object CanonicalTrustedIntrinsics {
 
             capability(
                 "compukter",
-                "sound",
+                "core",
                 "compukter.sound",
                 "SoundBindings.beep",
                 "fun(Int,Int):Boolean",
@@ -278,7 +278,7 @@ object CanonicalTrustedIntrinsics {
             ).forEach { (name, signature, operation) ->
                 capability(
                     "compukter",
-                    "display",
+                    "core",
                     "compukter.display",
                     "DisplayBindings.$name",
                     signature,
@@ -294,11 +294,11 @@ object CanonicalTrustedIntrinsics {
                 Triple("readText", "fun(String):String", 2u),
                 Triple("writeText", "fun(String,String):Int", 3u),
             ).forEach { (name, signature, operation) ->
-                capability("std", "filesystem", "compukter.filesystem", "FileSystem.$name", signature, filesystem, operation)
+                capability("compukter", "core", "compukter.filesystem", "FileSystem.$name", signature, filesystem, operation)
             }
 
-            capability("std", "terminal", "compukter.io", "Stderr.write", "fun(String):Unit", stdio, 2u)
-            capability("std", "terminal", "compukter.io", "StdioBindings.write", "fun(String):Unit", stdio, 1u)
+            capability("compukter", "core", "compukter.io", "Stderr.write", "fun(String):Unit", stdio, 2u)
+            capability("compukter", "core", "compukter.io", "StdioBindings.write", "fun(String):Unit", stdio, 1u)
             val terminalOperations =
                 listOf(
                     Triple("write", "fun(String):Unit", false),
@@ -317,9 +317,9 @@ object CanonicalTrustedIntrinsics {
                     Triple("fill", "fun(Int,Int,Int,Int,Char):Unit", false),
                 )
             terminalOperations.forEachIndexed { operation, (name, signature, blocking) ->
-                capability("std", "terminal", "compukter.terminal", "Terminal.$name", signature, terminal, operation.toUInt(), blocking)
+                capability("compukter", "core", "compukter.terminal", "Terminal.$name", signature, terminal, operation.toUInt(), blocking)
             }
-            capability("std", "terminal", "kotlin.io", "readln", "fun():String", stdio, 0u, true)
+            capability("compukter", "core", "kotlin.io", "readln", "fun():String", stdio, 0u, true)
         }
 
     private fun MutableList<TrustedIntrinsicRegistration>.primitive(

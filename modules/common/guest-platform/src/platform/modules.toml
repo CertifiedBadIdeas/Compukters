@@ -11,43 +11,7 @@ dependencies = ["kotlin:builtins"]
 sources = ["libraries/stdlib-core/**/*.kt"]
 
 [[module]]
-id = "std:terminal"
-version = "1.2.0"
-dependencies = ["stdlib:core"]
-sources = ["libraries/std-terminal/**/*.kt"]
-
-[[module]]
-id = "std:filesystem"
+id = "compukter:core"
 version = "1.0.0"
 dependencies = ["stdlib:core"]
-sources = ["libraries/std-filesystem/**/*.kt"]
-
-[[module]]
-id = "compukter:compiler"
-version = "1.0.0"
-dependencies = ["stdlib:core"]
-sources = ["libraries/compukter-compiler/**/*.kt"]
-
-[[module]]
-id = "compukter:process"
-version = "2.0.0"
-dependencies = ["stdlib:core"]
-sources = ["libraries/compukter-process/**/*.kt"]
-
-[[module]]
-id = "compukter:redstone"
-version = "2.0.0"
-dependencies = ["stdlib:core"]
-sources = ["libraries/compukter-redstone/**/*.kt"]
-
-[[module]]
-id = "compukter:sound"
-version = "1.0.0"
-dependencies = ["stdlib:core"]
-sources = ["libraries/compukter-sound/**/*.kt"]
-
-[[module]]
-id = "compukter:display"
-version = "1.0.0"
-dependencies = ["stdlib:core"]
-sources = ["libraries/compukter-display/**/*.kt"]
+sources = ["libraries/compukter-core/**/*.kt"]

@@ -117,7 +117,7 @@ class ExpressionInfoQueryTest {
                 ) as AnalysisResult.ExpressionInfo
 
             val bundle = assertIs<DeclarationOrigin.Platform>(assertNotNull(result.value).origin)
-            assertEquals("std:terminal", bundle.identity.name)
+            assertEquals("compukter:core", bundle.identity.name)
         }
     }
 

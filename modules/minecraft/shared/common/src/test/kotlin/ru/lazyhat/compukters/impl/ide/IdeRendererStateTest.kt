@@ -805,7 +805,7 @@ class IdeRendererStateTest {
         val identity = AnalysisSnapshotIdentity(SourceSnapshotId(Hash256.zero()), AnalysisProfileIdentity(Hash256.zero()))
         val path = ProjectPath.file("src/main.kt")
         val virtualPath = VirtualSourcePath.kotlin(path.value)
-        val action = "import compukter.redstone.Redstone · enable compukter:redstone"
+        val action = "import compukter.redstone.Redstone · enable compukter:core"
         val completion =
             IdeCompletionState.create(
                 identity,
