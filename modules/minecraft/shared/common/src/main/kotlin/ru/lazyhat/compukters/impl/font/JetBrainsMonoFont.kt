@@ -21,6 +21,9 @@ package ru.lazyhat.compukters.impl.font
 /** Metrics of the single bundled JetBrains Mono NL Regular face used by editor and terminal grids. */
 object JetBrainsMonoFont {
     const val ID = "jetbrains_mono"
+
+    // One resource ID prevents parallel font warmups from sharing a non-thread-safe 1.21 FreeType face.
+    const val RESOURCE_PATH = "ide/$ID"
     const val CELL_WIDTH = 6
     const val CELL_HEIGHT = 13
     const val BASELINE = 10

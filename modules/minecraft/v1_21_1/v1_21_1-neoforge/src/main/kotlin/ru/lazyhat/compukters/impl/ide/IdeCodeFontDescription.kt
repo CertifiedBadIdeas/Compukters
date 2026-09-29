@@ -19,7 +19,8 @@
 package ru.lazyhat.compukters.impl.ide
 
 import net.minecraft.resources.ResourceLocation
+import ru.lazyhat.compukters.impl.font.JetBrainsMonoFont
 
 internal val IdeCodeFontProfile.fontDescription: ResourceLocation
     get() =
-        ResourceLocation.fromNamespaceAndPath("compukters", "ide/$id")
+        ResourceLocation.fromNamespaceAndPath("compukters", JetBrainsMonoFont.RESOURCE_PATH)

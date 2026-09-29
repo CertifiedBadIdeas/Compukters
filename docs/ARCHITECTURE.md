@@ -341,6 +341,8 @@ preferences remain honored. Users can also select Cozette 6x13, Dina 6x10, or Pr
 terminal coordinates or creating a second grid. The standalone screen and IDE terminal overlay share this choice.
 The IDE code editor, completion list and hover information use a separate bundled JetBrains Mono NL TrueType profile
 with a 6x13 cell and no ligatures.
+Editor and terminal drawing use the same font resource ID directly, without a reference alias: Minecraft 1.21
+warms font IDs in parallel and its FreeType provider does not synchronize access to a shared native face.
 Its shared metrics drive glyph placement, caret and selection geometry, and hit testing; changing the terminal
 font does not change editor layout. The IDE chrome retains Minecraft's UI font.
 The terminal screen can suspend its observation and open the IDE, whose target terminal view consumes the same

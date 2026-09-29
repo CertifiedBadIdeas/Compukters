@@ -34,16 +34,7 @@ import kotlin.test.assertTrue
 
 class TerminalFontResourceTest {
     @Test
-    fun `JetBrains Mono terminal provider reuses the pinned editor face and honest coverage`() {
-        val json = runtimeResource("/assets/compukters/font/terminal/jetbrains_mono.json").reader().use { it.readText() }
-        val provider =
-            GSON
-                .fromJson(json, JsonObject::class.java)
-                .getAsJsonArray("providers")
-                .single()
-                .asJsonObject
-        assertEquals("reference", provider.get("type").asString)
-        assertEquals("compukters:ide/jetbrains_mono", provider.get("id").asString)
+    fun `JetBrains Mono terminal uses the pinned face and honest coverage`() {
         val face =
             runtimeResource("/assets/compukters/font/ide/jetbrains_mono_regular.ttf")
                 .use { Font.createFont(Font.TRUETYPE_FONT, it) }
