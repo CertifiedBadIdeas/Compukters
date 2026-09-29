@@ -693,17 +693,17 @@ object IdeRenderer {
                     SEMANTIC_POPUP_MINIMUM_WIDTH,
                     lines.maxOf(::visualColumns) * font.cellWidth + POPUP_HORIZONTAL_PADDING,
                 )
-            val popup = geometry.anchoredPopup(anchor, requestedWidth, lines.size * UI_LINE_HEIGHT + POPUP_VERTICAL_PADDING)
+            val popup = geometry.anchoredPopup(anchor, requestedWidth, lines.size * font.cellHeight + POPUP_VERTICAL_PADDING)
             semanticPopupPanel(popup.bounds)
             lines.forEachIndexed { index, value ->
-                ui(
+                code(
                     IdeTextKind.Hover,
                     value,
                     popup.bounds.left + 4,
-                    popup.bounds.top + 3 + index * UI_LINE_HEIGHT,
+                    popup.bounds.top + 3 + font.glyphDrawOffsetY + index * font.cellHeight,
                     IdeColors.TEXT,
                     popup.bounds,
-                    Z_POPUP_TEXT,
+                    z = Z_POPUP_TEXT,
                 )
             }
         }
@@ -824,19 +824,19 @@ object IdeRenderer {
                 geometry.completionPopup(
                     caret,
                     maxOf(COMPLETION_MINIMUM_WIDTH, contentWidth),
-                    visibleItems.size * UI_LINE_HEIGHT + 4,
+                    visibleItems.size * font.cellHeight + 4,
                 )
             panel(IdePanelKind.Dialog, popup.bounds, IdeColors.PANEL_ALT, Z_POPUP)
             scissors += IdeScissorDraw(IdeScissorKind.Completion, popup.bounds, Z_POPUP)
             rows.forEachIndexed { index, row ->
-                ui(
+                code(
                     IdeTextKind.Completion,
                     row,
                     popup.bounds.left + 4,
-                    popup.bounds.top + 3 + index * UI_LINE_HEIGHT,
+                    popup.bounds.top + 3 + font.glyphDrawOffsetY + index * font.cellHeight,
                     if (completion.firstVisibleIndex + index == completion.selectedIndex) IdeColors.ACCENT else IdeColors.TEXT,
                     popup.bounds,
-                    Z_POPUP_TEXT,
+                    z = Z_POPUP_TEXT,
                 )
             }
         }
@@ -1090,8 +1090,9 @@ object IdeRenderer {
             clip: IdeRect,
             style: IdeTextStyle = IdeTextStyle.Plain,
             sourceRange: EditorRange? = null,
+            z: Int = Z_TEXT,
         ) {
-            text += IdeTextDraw(kind, value, x, y, color, style, font, clip, sourceRange, Z_TEXT)
+            text += IdeTextDraw(kind, value, x, y, color, style, font, clip, sourceRange, z)
         }
 
         private fun panel(
