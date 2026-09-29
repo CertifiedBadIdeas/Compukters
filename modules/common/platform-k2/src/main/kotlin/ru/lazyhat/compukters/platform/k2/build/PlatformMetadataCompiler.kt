@@ -50,6 +50,7 @@ import ru.lazyhat.compukters.platform.bundle.CompuktersDefaultImports
 import ru.lazyhat.compukters.platform.bundle.PlatformCompletionDeclaration
 import ru.lazyhat.compukters.platform.bundle.PlatformCompletionKind
 import ru.lazyhat.compukters.platform.bundle.PlatformDeclaration
+import ru.lazyhat.compukters.platform.bundle.PlatformDeclarationIdentity
 import ru.lazyhat.compukters.platform.bundle.PlatformDefaultArgument
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformScalarConstant
@@ -73,7 +74,7 @@ data class CompiledPlatformMetadata(
     val libraryDeclarations: List<PlatformLibraryDeclaration>,
     val scalarTypes: List<PlatformScalarType> = emptyList(),
     val scalarConstants: List<PlatformScalarConstant> = emptyList(),
-    val sourceOnly: Boolean = false,
+    val sourceDeclarations: List<PlatformDeclarationIdentity> = emptyList(),
 )
 
 data class PlatformLibraryDeclaration(
@@ -178,7 +179,7 @@ class PlatformMetadataCompiler {
                     },
             scalarTypes = parsedPlatform.scalarTypes.sortedBy(PlatformScalarType::symbol),
             scalarConstants = parsedPlatform.scalarConstants.sortedBy(PlatformScalarConstant::symbol),
-            sourceOnly = parsedPlatform.sourceOnly,
+            sourceDeclarations = declarations.filter(ParsedDeclaration::requiresSource).map { it.declaration.identity },
         )
     }
 
@@ -239,7 +240,6 @@ class PlatformMetadataCompiler {
             val completionDeclarations = mutableListOf<PlatformCompletionDeclaration>()
             val scalarTypes = mutableListOf<PlatformScalarType>()
             val scalarConstants = mutableListOf<PlatformScalarConstant>()
-            var sourceOnly = false
             sources
                 .sortedBy(PlatformSource::path)
                 .forEach { source ->
@@ -250,14 +250,6 @@ class PlatformMetadataCompiler {
                         "invalid Kotlin platform source ${source.path}: ${errors.joinToString { it.errorDescription }}"
                     }
                     val packageName = file.packageFqName.asString()
-                    if (
-                        file.collectDescendantsOfType<KtClass>().any { it.typeParameters.isNotEmpty() } ||
-                        file.collectDescendantsOfType<KtNamedFunction>().any {
-                            it.typeParameters.isNotEmpty() && it.hasBody() && !it.hasModifier(KtTokens.EXTERNAL_KEYWORD)
-                        }
-                    ) {
-                        sourceOnly = true
-                    }
                     file.declarations.forEach { declaration ->
                         declarations += collect(module, source.path, packageName, emptyList(), declaration = declaration)
                         completionDeclaration(module, source.path, packageName, declaration)?.let(completionDeclarations::add)
@@ -267,7 +259,7 @@ class PlatformMetadataCompiler {
                         }
                     }
                 }
-            ParsedPlatform(declarations, completionDeclarations, scalarTypes, scalarConstants, sourceOnly)
+            ParsedPlatform(declarations, completionDeclarations, scalarTypes, scalarConstants)
         } finally {
             Disposer.dispose(disposable)
         }
@@ -428,6 +420,7 @@ class PlatformMetadataCompiler {
         owners: List<String>,
         inheritedPrivate: Boolean = false,
         ownerHasDispatchReceiver: Boolean = false,
+        inheritedSource: Boolean = false,
         declaration: KtDeclaration,
     ): List<ParsedDeclaration> {
         val named = declaration as? KtNamedDeclaration ?: return emptyList()
@@ -439,6 +432,15 @@ class PlatformMetadataCompiler {
             }
         val symbol = (listOf(packageName).filter(String::isNotEmpty) + owners + name).joinToString(".")
         val external = declaration.hasModifier(KtTokens.EXTERNAL_KEYWORD)
+        val requiresSource =
+            !external && (
+                inheritedSource ||
+                    (declaration is KtClass && declaration.typeParameters.isNotEmpty()) ||
+                    (
+                        declaration is KtNamedFunction && declaration.hasBody() &&
+                            (declaration.typeParameters.isNotEmpty() || declaration.hasModifier(KtTokens.INLINE_KEYWORD))
+                    )
+            )
         val platformDeclaration =
             PlatformDeclaration(
                 symbol = symbol,
@@ -471,6 +473,7 @@ class PlatformMetadataCompiler {
                     owners + name,
                     private,
                     declaration is KtClass,
+                    requiresSource,
                     child,
                 )
             }
@@ -491,6 +494,7 @@ class PlatformMetadataCompiler {
                     is KtClass -> PlatformLibraryDeclarationKind.TYPE.takeUnless { declaration.hasModifier(KtTokens.VALUE_KEYWORD) }
                     else -> null
                 },
+                requiresSource,
             )
         val getter =
             (declaration as? KtProperty)
@@ -504,6 +508,7 @@ class PlatformMetadataCompiler {
                         private,
                         hasBody = true,
                         libraryKind = PlatformLibraryDeclarationKind.FUNCTION,
+                        requiresSource = requiresSource,
                     )
                 }
         return listOf(parsed) + listOfNotNull(getter) + nested
@@ -612,6 +617,7 @@ class PlatformMetadataCompiler {
         val private: Boolean,
         val hasBody: Boolean,
         val libraryKind: PlatformLibraryDeclarationKind?,
+        val requiresSource: Boolean = false,
     )
 
     private data class ParsedPlatform(
@@ -619,7 +625,6 @@ class PlatformMetadataCompiler {
         val completionDeclarations: List<PlatformCompletionDeclaration>,
         val scalarTypes: List<PlatformScalarType>,
         val scalarConstants: List<PlatformScalarConstant>,
-        val sourceOnly: Boolean,
     )
 
     private data class ScalarExtraction(

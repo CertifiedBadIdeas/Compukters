@@ -61,8 +61,9 @@ object CompuktersFir2IrPipeline {
     fun lowerGuest(
         output: CompuktersFirModuleOutput,
         session: CompilationSession,
+        sourceDependencies: List<CompuktersFirModuleOutput> = emptyList(),
     ): Artifact? {
-        val converted = convert(listOf(output))
+        val converted = convert(sourceDependencies + output)
         session.irSink.accept(converted.irModuleFragment, converted.pluginContext)
         return MinimalScriptLowering.lower(converted.irModuleFragment, converted.pluginContext, session)
     }

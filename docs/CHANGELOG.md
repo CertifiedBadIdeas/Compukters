@@ -17,6 +17,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- Guest libraries can combine precompiled ordinary implementations with generic and inline source bodies in one
+  module, preserving private helper visibility and avoiding duplicate ordinary implementations.
 - Programs can use the standard `let`, `run`, `with`, `apply`, `also`, `takeIf`, and `takeUnless` scope functions
   with inline lambdas, including supported nullable receivers and non-local returns.
 - Programs can traverse Guest iterables with `forEach` and `forEachIndexed`, or run an indexed action with `repeat`,
@@ -151,7 +153,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - Device handles remain bound to the exact acquired block, and named handles expire when their cable path disconnects.
   Missing, disconnected, unloaded, removed, or replaced devices fail deterministically and produce a descriptive
   terminal diagnostic.
-- Addon SDK 0.3.1 lets independent addons map a cable touching any supported block or multiblock part to one canonical
+- Addon SDK 0.4.0 uses platform ABI 3; addon bundles must be rebuilt against the new base platform. It lets
+  independent addons map a cable touching any supported block or multiblock part to one canonical
   logical device, validate retained handles against current reachability, and preserve the existing adjacent-side
   registration API.
 

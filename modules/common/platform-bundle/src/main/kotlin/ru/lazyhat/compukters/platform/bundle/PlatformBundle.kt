@@ -59,6 +59,13 @@ data class PlatformDeclaration(
     val endUtf16: Int,
     val trustedExternal: Boolean,
     val defaultArguments: List<PlatformDefaultArgument?> = emptyList(),
+) {
+    val identity: PlatformDeclarationIdentity get() = PlatformDeclarationIdentity(symbol, signature)
+}
+
+data class PlatformDeclarationIdentity(
+    val symbol: String,
+    val signature: String,
 )
 
 sealed interface PlatformDefaultArgument {
@@ -140,7 +147,7 @@ data class PlatformModule(
     val completionDeclarations: List<PlatformCompletionDeclaration>,
     val scalarTypes: List<PlatformScalarType> = emptyList(),
     val scalarConstants: List<PlatformScalarConstant> = emptyList(),
-    val sourceOnly: Boolean = false,
+    val sourceDeclarations: List<PlatformDeclarationIdentity> = emptyList(),
 )
 
 data class PlatformBundle(

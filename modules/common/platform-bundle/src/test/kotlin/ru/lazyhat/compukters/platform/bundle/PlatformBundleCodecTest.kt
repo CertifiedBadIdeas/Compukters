@@ -171,29 +171,45 @@ class PlatformBundleCodecTest {
     }
 
     @Test
-    fun `source-only module identity round trips and rejects a fragment`() {
+    fun `mixed module ownership round trips and rejects invalid source declarations`() {
         val base = fixture()
-        val sourceOnly = base.modules.first().copy(sourceOnly = true)
+        val original =
+            base.modules.first().let { module ->
+                module.copy(declarations = module.declarations.map { it.copy(trustedExternal = false) })
+            }
+        val declaration = original.declarations.first { !it.trustedExternal }.identity
+        val mixed = original.copy(sourceDeclarations = listOf(declaration), libraryFragment = ImmutableBytes.of(byteArrayOf(1)))
         val bundle =
             PlatformBundleCodec.assemble(
                 "2.4",
                 PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
                 base.builtins,
-                listOf(sourceOnly) + base.modules.drop(1),
+                listOf(mixed) + base.modules.drop(1),
             )
 
         val decoded = PlatformBundleCodec.decode(PlatformBundleCodec.encode(bundle))
-        assertTrue(decoded.modules.first().sourceOnly)
+        assertEquals(mixed.sourceDeclarations, decoded.modules.first().sourceDeclarations)
+        assertEquals(mixed.libraryFragment, decoded.modules.first().libraryFragment)
         assertNotEquals(
             PlatformBundleCodec.moduleContentHash(base.modules.first()),
-            PlatformBundleCodec.moduleContentHash(sourceOnly),
+            PlatformBundleCodec.moduleContentHash(mixed),
         )
         assertFailsWith<IllegalArgumentException> {
             PlatformBundleCodec.assemble(
                 "2.4",
                 PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
                 base.builtins,
-                listOf(sourceOnly.copy(libraryFragment = ImmutableBytes.of(byteArrayOf(1)))) + base.modules.drop(1),
+                listOf(mixed.copy(sourceDeclarations = listOf(declaration, declaration))) + base.modules.drop(1),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            PlatformBundleCodec.assemble(
+                "2.4",
+                PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
+                base.builtins,
+                listOf(
+                    mixed.copy(sourceDeclarations = listOf(PlatformDeclarationIdentity("missing", "fun():Unit"))),
+                ) + base.modules.drop(1),
             )
         }
     }
@@ -222,7 +238,7 @@ class PlatformBundleCodecTest {
         val unsupportedAbi =
             encoded.copyOf().also { bytes ->
                 val abiOffset = languageOffset + "2.4".encodeToByteArray().size
-                bytes[abiOffset] = 3
+                bytes[abiOffset] = 2
             }
         assertFailsWith<IllegalArgumentException> { PlatformBundleCodec.decode(unsupportedAbi) }
 

@@ -117,14 +117,22 @@ verifier over FFM; runtime admission quotas are deliberately not part of cache v
 Guest generic functions and final generic classes are specialized before artifact writing. Function and class
 specializations are discovered together until no further dependencies appear, including helpers called from generic
 members whose bodies introduce other generic classes. The VM receives ordinary
-concrete function and class records, with typed scalar or reference fields and calls. Platform ABI 2 marks modules
-containing generic function or class implementations as source-only; the compiler includes their canonical source with
-the consuming Guest program so reachable bodies and class layouts can be specialized. Ordinary platform modules retain
-precompiled library fragments. Generic binary templates are not part of the platform bundle or VM artifact contract.
-The inline generic scope functions and `repeat` live in source-only `stdlib:scope`; keeping them separate from
-`stdlib:core` preserves the latter's precompiled fragment for dependent modules.
+concrete function and class records, with typed scalar or reference fields and calls. Platform ABI 3 records the
+symbol and signature of each declaration requiring source compilation: generic implementations, members of generic
+classes, and inline bodies. One module can retain an ordinary precompiled library fragment alongside those source
+bodies. The compiler resolves each source library as a separate Kotlin module over one shared metadata session,
+preserving `internal` and `private` boundaries. It includes canonical sources for resolution and specialization but
+binds ordinary implementations,
+including private helpers, to their compiled fragment instead of emitting them again in the consumer. Kotlin source
+visibility still governs access to those helpers. Fragment assembly retains exported implementations and their
+dependencies; final application linking removes unreachable records. Tooling normalizes dependency module indexes
+into symbolic identities before linking so a shared library retains one owner across fragment containers. The final
+executable restores concrete indexes. Generic binary templates are not part of the
+platform bundle or VM artifact contract. Bundle format 7 and standalone module format 3 reject older representations.
+The inline generic scope functions and `repeat` currently live in `stdlib:scope`; mixed-module ownership permits
+their consolidation into `stdlib:core` without losing ordinary precompiled implementations.
 
-The `stdlib:collections` module publishes read-only lists and public `ArrayList<T>` as source-only declarations.
+The `stdlib:collections` module publishes read-only lists and public `ArrayList<T>` with source bodies for specialization.
 `listOf` and `emptyList` create fresh `ArrayList<T>` instances exposed as `List<T>`, with capacity equal to the
 number of elements. Factories fill them through the specialized `add` method in source order. A read-only view can be
 cast to `MutableList<T>` or `ArrayList<T>` and changed; it is not an immutable object. `Int` storage uses i32 arrays;

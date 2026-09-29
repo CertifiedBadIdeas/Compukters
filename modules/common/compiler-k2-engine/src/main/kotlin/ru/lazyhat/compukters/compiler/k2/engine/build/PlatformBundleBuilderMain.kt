@@ -120,19 +120,24 @@ class PlatformBundleBuilder(
                 val sources = sourceByModule.getValue(descriptorModule.id)
                 val metadata = metadataByModule.getValue(descriptorModule.id)
                 val libraryFragment =
-                    if (metadata.sourceOnly || metadata.libraryDeclarations.isEmpty()) {
+                    if (metadata.libraryDeclarations.isEmpty()) {
                         null
                     } else {
                         val converted = requireNotNull(ir)
                         libraryCompiler.compile(
                             descriptorModule.id,
-                            metadata.libraryDeclarations,
+                            metadata.libraryDeclarations.filter { declaration ->
+                                metadata.sourceDeclarations.none {
+                                    it.symbol == declaration.symbol && it.signature == declaration.signature
+                                }
+                            },
                             converted.irModuleFragment,
                             converted.pluginContext,
                             sources.mapTo(mutableSetOf(), PlatformSource::path),
                             sourceModules,
                             intrinsicRegistry,
                             capabilityShapes,
+                            catalog.transitiveDependencies(descriptorModule.id).map(modules::getValue),
                         )
                     }
                 modules[descriptorModule.id] =
@@ -147,7 +152,7 @@ class PlatformBundleBuilder(
                         completionDeclarations = metadata.completionDeclarations,
                         scalarTypes = metadata.scalarTypes,
                         scalarConstants = metadata.scalarConstants,
-                        sourceOnly = descriptorModule.id != builtinsId && metadata.sourceOnly,
+                        sourceDeclarations = if (descriptorModule.id == builtinsId) emptyList() else metadata.sourceDeclarations,
                     )
             }
         }

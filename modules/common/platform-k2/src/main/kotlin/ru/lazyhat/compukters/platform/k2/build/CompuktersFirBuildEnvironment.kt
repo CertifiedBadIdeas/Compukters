@@ -86,6 +86,8 @@ class CompuktersFirBuildEnvironment private constructor(
             context,
         )
     private val baseModuleData = FirBinaryDependenciesModuleData(Name.special("<compukters-base>"))
+    private var guestLibraryModuleData: FirBinaryDependenciesModuleData? = null
+    private var guestPlatformModules: List<PlatformModule>? = null
     private val baseLibrarySession =
         factory.createLibrarySession(
             sharedLibrarySession,
@@ -132,32 +134,40 @@ class CompuktersFirBuildEnvironment private constructor(
         module: PlatformModuleId,
         sources: List<PlatformSource>,
         platformModules: List<PlatformModule>,
+        sourceDependencies: List<CompuktersFirModuleOutput> = emptyList(),
     ): CompuktersFirModuleOutput {
         require(platformModules.isNotEmpty()) { "Guest FIR requires Compukters built-ins metadata" }
-        val libraryModuleData = FirBinaryDependenciesModuleData(Name.special("<compukters-platform-binaries>"))
-        factory.createLibrarySession(
-            sharedLibrarySession,
-            SingleModuleDataProvider(libraryModuleData),
-            emptyList(),
-            null,
-            emptyList(),
-            LanguageVersionSettingsImpl.DEFAULT,
-            context,
-        ) { session, moduleDataProvider, scopeProvider, _ ->
-            listOf(
-                CompuktersMetadataSymbolProvider(
-                    session,
-                    moduleDataProvider,
-                    scopeProvider,
-                    platformModules,
-                    libraryModuleData,
-                ),
-            )
-        }
+        val libraryModuleData =
+            guestLibraryModuleData ?: run {
+                val data = FirBinaryDependenciesModuleData(Name.special("<compukters-platform-binaries>"))
+                factory.createLibrarySession(
+                    sharedLibrarySession,
+                    SingleModuleDataProvider(data),
+                    emptyList(),
+                    null,
+                    emptyList(),
+                    LanguageVersionSettingsImpl.DEFAULT,
+                    context,
+                ) { session, moduleDataProvider, scopeProvider, _ ->
+                    listOf(
+                        CompuktersMetadataSymbolProvider(
+                            session,
+                            moduleDataProvider,
+                            scopeProvider,
+                            platformModules,
+                            data,
+                        ),
+                    )
+                }
+                guestPlatformModules = platformModules.toList()
+                guestLibraryModuleData = data
+                data
+            }
+        require(guestPlatformModules == platformModules) { "Guest FIR metadata changed within one environment" }
         val moduleData =
             FirSourceModuleData(
                 Name.special("<$module>"),
-                listOf(libraryModuleData),
+                listOf(libraryModuleData) + sourceDependencies.map(CompuktersFirModuleOutput::moduleData),
                 emptyList(),
                 emptyList(),
                 CompuktersPlatforms.default,

@@ -29,9 +29,9 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 object PlatformBundleCodec {
-    const val SUPPORTED_PLATFORM_ABI = 2
+    const val SUPPORTED_PLATFORM_ABI = 3
 
-    private const val FORMAT_VERSION = 6
+    private const val FORMAT_VERSION = 7
     private const val MAX_BUNDLE_BYTES = 128 * 1024 * 1024
     private const val MAX_BINARY_BYTES = 64 * 1024 * 1024
     private const val MAX_TEXT_BYTES = 1024 * 1024
@@ -45,7 +45,7 @@ object PlatformBundleCodec {
     private const val MAX_SCALAR_CONSTANTS = 262_144
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'B'.code.toByte(), 'F'.code.toByte())
     private val MODULE_MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'M'.code.toByte(), 'D'.code.toByte())
-    private const val MODULE_FORMAT_VERSION = 2
+    private const val MODULE_FORMAT_VERSION = 3
 
     fun assemble(
         languageVersion: String,
@@ -115,6 +115,7 @@ object PlatformBundleCodec {
 
     fun encodeModule(module: PlatformModule): ByteArray {
         val canonical = canonicalize(module)
+        validateSourceDeclarations(canonical)
         val semantic = Sink().apply { module(canonical) }.result()
         val hash = moduleContentHash(canonical)
         return Sink()
@@ -138,7 +139,20 @@ object PlatformBundleCodec {
         val canonical = canonicalize(module)
         require(canonical == module) { "platform module is not canonical" }
         require(moduleContentHash(canonical) == storedHash) { "platform module content hash mismatch" }
+        validateSourceDeclarations(canonical)
         return canonical
+    }
+
+    private fun validateSourceDeclarations(module: PlatformModule) {
+        require(module.sourceDeclarations.size <= MAX_DECLARATIONS) { "source declaration count exceeds limit" }
+        require(module.sourceDeclarations.toSet().size == module.sourceDeclarations.size) { "duplicate source declaration" }
+        val sourceEligible =
+            module.declarations
+                .filterNot(
+                    PlatformDeclaration::trustedExternal,
+                ).mapTo(mutableSetOf(), PlatformDeclaration::identity)
+        require(module.sourceDeclarations.all { it in sourceEligible }) { "source declaration is missing or external" }
+        require(module.sourceDeclarations.isEmpty() || module.sources.isNotEmpty()) { "source declarations have no sources" }
     }
 
     private fun canonicalize(module: PlatformModule): PlatformModule =
@@ -167,6 +181,10 @@ object PlatformBundleCodec {
                 ),
             scalarTypes = module.scalarTypes.sortedBy(PlatformScalarType::symbol),
             scalarConstants = module.scalarConstants.sortedBy(PlatformScalarConstant::symbol),
+            sourceDeclarations =
+                module.sourceDeclarations.sortedWith(
+                    compareBy(PlatformDeclarationIdentity::symbol, PlatformDeclarationIdentity::signature),
+                ),
         )
 
     private fun validate(bundle: PlatformBundle) {
@@ -176,7 +194,7 @@ object PlatformBundleCodec {
             "platform bundle contains duplicate module ids"
         }
         require(bundle.builtins.dependencies.isEmpty()) { "platform builtins must not have dependencies" }
-        require(!bundle.builtins.sourceOnly) { "platform builtins cannot be source-only" }
+        require(bundle.builtins.sourceDeclarations.isEmpty()) { "platform builtins cannot require source compilation" }
         val sourceOwners = mutableMapOf<String, PlatformModuleId>()
         allModules.forEach { module ->
             require(module.version.isNotBlank()) { "platform module ${module.id} has a blank version" }
@@ -189,12 +207,7 @@ object PlatformBundleCodec {
             require((module.libraryFragment?.size ?: 0) <= MAX_BINARY_BYTES) {
                 "platform module ${module.id} library fragment exceeds byte limit"
             }
-            require(!module.sourceOnly || module.libraryFragment == null) {
-                "source-only platform module ${module.id} cannot contain a library fragment"
-            }
-            require(!module.sourceOnly || module.sources.isNotEmpty()) {
-                "source-only platform module ${module.id} has no sources"
-            }
+            validateSourceDeclarations(module)
             require(module.sources.size <= MAX_SOURCES) { "platform module ${module.id} has too many sources" }
             require(module.declarations.size <= MAX_DECLARATIONS) { "platform module ${module.id} has too many declarations" }
             require(module.completionDeclarations.size <= MAX_COMPLETION_DECLARATIONS) {
@@ -375,7 +388,6 @@ object PlatformBundleCodec {
             immutableBytes(value.metadata)
             output.write(
                 when {
-                    value.sourceOnly -> 2
                     value.libraryFragment == null -> 0
                     else -> 1
                 },
@@ -447,6 +459,11 @@ object PlatformBundleCodec {
                 string(constant.symbol)
                 string(constant.typeSymbol)
                 scalarValue(constant.value)
+            }
+            count(value.sourceDeclarations.size)
+            value.sourceDeclarations.forEach { declaration ->
+                string(declaration.symbol)
+                string(declaration.signature)
             }
         }
 
@@ -531,10 +548,8 @@ object PlatformBundleCodec {
                 when (libraryPresence) {
                     0 -> null
                     1 -> immutableBytes()
-                    2 -> null
                     else -> throw IllegalArgumentException("invalid library fragment presence: $libraryPresence")
                 }
-            val sourceOnly = libraryPresence == 2
             val sources =
                 List(count(MAX_SOURCES, "platform source")) {
                     PlatformSource(string("platform source path"), immutableBytes())
@@ -624,6 +639,10 @@ object PlatformBundleCodec {
                         scalarValue(),
                     )
                 }
+            val sourceDeclarations =
+                List(count(MAX_DECLARATIONS, "source declaration")) {
+                    PlatformDeclarationIdentity(string("source declaration symbol"), string("source declaration signature"))
+                }
             return PlatformModule(
                 id,
                 version,
@@ -635,7 +654,7 @@ object PlatformBundleCodec {
                 completionDeclarations,
                 scalarTypes,
                 scalarConstants,
-                sourceOnly,
+                sourceDeclarations,
             )
         }
 

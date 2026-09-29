@@ -27,6 +27,7 @@ import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
+import ru.lazyhat.compukters.compiler.artifact.link.LibraryModuleLinker
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
@@ -54,6 +55,7 @@ import ru.lazyhat.compukters.compiler.k2.engine.PlatformCapabilityShape
 import ru.lazyhat.compukters.compiler.k2.engine.UnsupportedKotlinIr
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicRegistry
+import ru.lazyhat.compukters.platform.bundle.PlatformModule
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.k2.build.PlatformLibraryDeclaration
 import ru.lazyhat.compukters.platform.k2.build.PlatformLibraryDeclarationKind
@@ -79,6 +81,7 @@ class PlatformLibraryCompiler {
         sourceModules: Map<String, PlatformModuleId>,
         intrinsicRegistry: TrustedIntrinsicRegistry,
         capabilityShapes: Map<PlatformCapabilityId, PlatformCapabilityShape> = emptyMap(),
+        dependencies: List<PlatformModule> = emptyList(),
     ): ImmutableBytes? {
         if (declarations.none { it.kind == PlatformLibraryDeclarationKind.FUNCTION }) return null
         val filesByPath = ir.files.associateBy { file -> matchSourcePath(file.fileEntry.name, sourceModules.keys) }
@@ -87,17 +90,10 @@ class PlatformLibraryCompiler {
         val collected = LibraryDeclarationCollector(currentFiles).also { ir.accept(it, null) }
         val ordinarySymbols =
             declarations.filter { it.kind == PlatformLibraryDeclarationKind.FUNCTION }.mapTo(mutableSetOf()) { it.symbol }
-        val genericFunctions =
-            collected.functions.filter { function ->
-                function.fqNameWhenAvailable?.asString() in ordinarySymbols && function.typeParameters.isNotEmpty()
-            }
         val ordinaryFunctions =
             collected.functions.filter { function ->
-                function.fqNameWhenAvailable?.asString() in ordinarySymbols && function.typeParameters.isEmpty()
+                function.fqNameWhenAvailable?.asString() in ordinarySymbols && function.typeParameters.isEmpty() && !function.isInline
             }
-        require(genericFunctions.isEmpty() || ordinaryFunctions.isEmpty()) {
-            "platform module $module must separate source generic functions from precompiled ordinary functions"
-        }
         val entry =
             ordinaryFunctions
                 .filter { it.body != null }
@@ -106,12 +102,16 @@ class PlatformLibraryCompiler {
                 ?: return null
         val physicalModules =
             filesByPath.entries.associate { (path, file) -> file.fileEntry.name to sourceModules.getValue(path) }
+        val libraries = loadPlatformLibraries(dependencies)
         val session =
             CompilationSession(
                 irSink = { _, _ -> },
                 trustedPlatformSourceModules = physicalModules,
                 canonicalIntrinsicRegistry = intrinsicRegistry,
                 capabilityShapes = capabilityShapes,
+                platformFunctions = libraries.functions,
+                platformTypes = libraries.types,
+                platformFields = libraries.fields,
             )
         val artifact =
             try {
@@ -130,7 +130,12 @@ class PlatformLibraryCompiler {
                     unsupported,
                 )
             }
-        val wrapper = artifact.withLibraryFragmentEntry(declarations)
+        val wrapper =
+            LibraryModuleLinker.link(
+                artifact.withLibraryFragmentEntry(declarations),
+                libraries.artifacts,
+                preserveLibraryExports = true,
+            )
         val bytes =
             when (val result = ArtifactWriter.write(wrapper)) {
                 is ArtifactWriteResult.Success -> {

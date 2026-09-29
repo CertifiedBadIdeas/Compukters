@@ -66,6 +66,24 @@ import kotlin.test.assertTrue
 
 class LibraryModuleLinkerTest {
     @Test
+    fun `fragment assembly retains exports that an application entry does not call`() {
+        val library = libraryModule()
+        val base = application(library)
+        val anchor =
+            base.modules.single().copy(
+                imports = emptyList(),
+                blocks = listOf(Block(FunctionId.of(0u), false, listOf(Instruction.Return(Destination.Unit)))),
+            )
+        val input = base.copy(modules = listOf(anchor, library))
+        val fragment = LibraryModuleLinker.link(input, emptyList(), preserveLibraryExports = true)
+        assertEquals(2, fragment.modules.size)
+        assertEquals(2, fragment.modules[1].functions.size)
+        assertEquals(2, fragment.modules[1].exports.size)
+        assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(fragment))
+        assertEquals(1, LibraryModuleLinker.link(input, emptyList()).modules.size)
+    }
+
+    @Test
     fun `reachable library class retains and relocates its initializer`() {
         val (application, library) = applicationWithInitializedLibraryClass()
 

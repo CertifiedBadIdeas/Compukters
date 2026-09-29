@@ -277,12 +277,14 @@ supported.
   with inferred or explicit concrete arguments and final invariant `class Cell<T>`
   style declarations are specialized at compile time. Primary-constructor
   fields and direct methods use concrete scalar or reference types; a non-null
-  `Int` remains unboxed in both calls and fields. Source-only platform library
-  modules containing generic functions or final generic classes are specialized
+  `Int` remains unboxed in both calls and fields. Platform library
+  bodies containing generic functions or final generic classes are specialized
   in a consumer; generic class methods and constructor fields retain concrete
   `Int` and reference layouts. Generic member bodies can call top-level generic helpers that introduce further
   generic class instances; class and function dependencies are collected until specialization is complete.
-  Function-valued parameters of source-only
+  Mixed modules retain precompiled ordinary functions alongside generic/inline bodies; specialization can call a
+  shared compiled private helper without publishing it as Kotlin API or duplicating its implementation.
+  Function-valued parameters of source-compiled
   generic functions use the specialized element type, as exercised by the
   `Iterable<T>` predicate helpers.
   Concrete generic interfaces and covariant result interfaces support the read-only `List<T>` contract.
@@ -302,7 +304,7 @@ supported.
   test `source library generic functions and classes specialize in consumer`; VM
   conformance tasks `testKotlinGenericFunctionsVmConformance`,
   `testKotlinGenericCellVmConformance`, and
-  `testKotlinGenericLibraryVmConformance`. Tracking: #652, #656
+  `testKotlinGenericLibraryVmConformance`. Tracking: #652, #656, #670
 
 - [ ] **Lambdas, local functions, and function references — Partial** —
   Non-null function values using supported Guest parameter and result types
