@@ -22,7 +22,6 @@ import ru.lazyhat.compukters.impl.ide.IdeCodeFontProfile
 import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import ru.lazyhat.compukters.impl.ide.fontDescription as editorFontDescription
 import ru.lazyhat.compukters.impl.terminal.fontDescription as terminalFontDescription
@@ -30,14 +29,7 @@ import ru.lazyhat.compukters.impl.terminal.fontDescription as terminalFontDescri
 class JetBrainsMonoResourceIdentityTest {
     @Test
     fun `editor and terminal use one font ID without a parallel-warmed TTF alias`() {
-        assertEquals(IdeCodeFontProfile.DEFAULT.editorFontDescription, TerminalFontProfile.JETBRAINS_MONO.terminalFontDescription)
+        assertEquals(IdeCodeFontProfile.DEFAULT.editorFontDescription, TerminalFontProfile.terminalFontDescription)
         assertNull(javaClass.getResource("/assets/compukters/font/terminal/jetbrains_mono.json"))
-    }
-
-    @Test
-    fun `bitmap preferences retain independent font IDs`() {
-        listOf(TerminalFontProfile.COZETTE, TerminalFontProfile.DINA, TerminalFontProfile.PROGGY_TINY).forEach { profile ->
-            assertNotEquals(IdeCodeFontProfile.DEFAULT.editorFontDescription, profile.terminalFontDescription)
-        }
     }
 }

@@ -83,119 +83,6 @@ val visibleIdeLatencyPerformanceTest =
         mustRunAfter(tasks.test)
     }
 
-data class TerminalFontBuildSpec(
-    val id: String,
-    val taskStem: String,
-    val displayName: String,
-    val sourceDescription: String,
-    val bdfPath: String,
-    val cellHeight: Int,
-    val ascent: Int,
-    val replacementCodePoint: Int,
-    val selectedRanges: List<String>,
-)
-
-fun registerTerminalFont(spec: TerminalFontBuildSpec) {
-    val bdf = rootProject.layout.projectDirectory.file(spec.bdfPath)
-    val sharedNeoForgeDirectory =
-        rootProject.layout.projectDirectory.dir("modules/minecraft/shared/neoforge/src/main")
-    val sharedCommonDirectory =
-        rootProject.layout.projectDirectory.dir("modules/minecraft/shared/common/src/main")
-    val fontJson = sharedNeoForgeDirectory.file("resources/assets/compukters/font/terminal/${spec.id}.json")
-    val atlas = sharedNeoForgeDirectory.file("resources/assets/compukters/textures/font/terminal/${spec.id}.png")
-    val manifest =
-        sharedNeoForgeDirectory.file("resources/assets/compukters/font/terminal/${spec.id}-codepoints.txt")
-    val coverage =
-        sharedCommonDirectory.file(
-            "kotlin/ru/lazyhat/compukters/impl/terminal/${spec.taskStem}FontCoverage.kt",
-        )
-    val coverageName = "${spec.id.uppercase()}_SUPPORTED_CODE_POINTS"
-    val generate =
-        tasks.register<GenerateTerminalBitmapFont>("generate${spec.taskStem}TerminalFont") {
-            description = "Regenerates committed ${spec.displayName} terminal font resources from the pinned BDF."
-            group = "build setup"
-            bdfFile.set(bdf)
-            displayName.set(spec.displayName)
-            resourceName.set(spec.id)
-            coveragePropertyName.set(coverageName)
-            sourceDescription.set(spec.sourceDescription)
-            cellWidth.set(6)
-            cellHeight.set(spec.cellHeight)
-            ascent.set(spec.ascent)
-            descent.set(spec.cellHeight - spec.ascent)
-            replacementCodePoint.set(spec.replacementCodePoint)
-            selectedRanges.set(spec.selectedRanges)
-            fontJsonFile.set(fontJson)
-            atlasPngFile.set(atlas)
-            manifestFile.set(manifest)
-            coverageKotlinFile.set(coverage)
-        }
-    val verify =
-        tasks.register<VerifyTerminalBitmapFont>("verify${spec.taskStem}TerminalFont") {
-            description = "Rejects committed ${spec.displayName} terminal font resources that drifted from its BDF."
-            group = "verification"
-            regenerationTaskName.set(generate.name)
-            bdfFile.set(bdf)
-            displayName.set(spec.displayName)
-            resourceName.set(spec.id)
-            coveragePropertyName.set(coverageName)
-            sourceDescription.set(spec.sourceDescription)
-            cellWidth.set(6)
-            cellHeight.set(spec.cellHeight)
-            ascent.set(spec.ascent)
-            descent.set(spec.cellHeight - spec.ascent)
-            replacementCodePoint.set(spec.replacementCodePoint)
-            selectedRanges.set(spec.selectedRanges)
-            fontJsonFile.set(fontJson)
-            atlasPngFile.set(atlas)
-            manifestFile.set(manifest)
-            coverageKotlinFile.set(coverage)
-            mustRunAfter(generate)
-        }
-    tasks.named("check") { dependsOn(verify) }
-}
-
-registerTerminalFont(
-    TerminalFontBuildSpec(
-        id = "cozette",
-        taskStem = "Cozette",
-        displayName = "Cozette",
-        sourceDescription = "pinned Cozette v.1.30.0",
-        bdfPath = "tools/fonts/cozette/v.1.30.0/cozette.bdf",
-        cellHeight = 13,
-        ascent = 10,
-        replacementCodePoint = 0xFFFD,
-        selectedRanges =
-            listOf("32..126", "160..255", "1024..1279", "8592..8703", "9472..9599", "9600..9631", "65533..65533"),
-    ),
-)
-registerTerminalFont(
-    TerminalFontBuildSpec(
-        id = "dina",
-        taskStem = "Dina",
-        displayName = "Dina",
-        sourceDescription = "pinned Dina v2.92 Regular 6pt",
-        bdfPath = "tools/fonts/dina/v2.92/Dina_r400-6.bdf",
-        cellHeight = 10,
-        ascent = 8,
-        replacementCodePoint = '?'.code,
-        selectedRanges = listOf("32..126", "160..255"),
-    ),
-)
-registerTerminalFont(
-    TerminalFontBuildSpec(
-        id = "proggy_tiny",
-        taskStem = "ProggyTiny",
-        displayName = "ProggyTiny",
-        sourceDescription = "pinned ProggyTiny commit 139ec08a",
-        bdfPath = "tools/fonts/proggy/139ec08a/ProggyTiny.bdf",
-        cellHeight = 10,
-        ascent = 8,
-        replacementCodePoint = '?'.code,
-        selectedRanges = listOf("32..126", "160..255"),
-    ),
-)
-
 val nativeOs =
     when {
         System.getProperty("os.name").trim().lowercase(Locale.ROOT).startsWith("linux") -> "linux"
@@ -497,25 +384,10 @@ val verifyPackagedCompukterFfi =
                 "assets/compukters/items/peripheral_configurator.json",
                 "assets/compukters/models/item/peripheral_configurator.json",
                 "data/compukters/loot_table/blocks/peripheral_cable.json",
-                "assets/compukters/font/terminal/cozette.json",
                 "assets/compukters/font/ide/jetbrains_mono.json",
                 "assets/compukters/font/ide/jetbrains_mono_regular.ttf",
                 "META-INF/licenses/JetBrains-Mono-OFL-1.1.txt",
                 "META-INF/licenses/JetBrains-Mono-PROVENANCE.txt",
-                "assets/compukters/font/terminal/cozette-codepoints.txt",
-                "assets/compukters/textures/font/terminal/cozette.png",
-                "META-INF/licenses/Cozette-MIT.txt",
-                "META-INF/licenses/Cozette-PROVENANCE.txt",
-                "assets/compukters/font/terminal/dina.json",
-                "assets/compukters/font/terminal/dina-codepoints.txt",
-                "assets/compukters/textures/font/terminal/dina.png",
-                "META-INF/licenses/Dina-LICENSE.txt",
-                "META-INF/licenses/Dina-PROVENANCE.txt",
-                "assets/compukters/font/terminal/proggy_tiny.json",
-                "assets/compukters/font/terminal/proggy_tiny-codepoints.txt",
-                "assets/compukters/textures/font/terminal/proggy_tiny.png",
-                "META-INF/licenses/Proggy-MIT.txt",
-                "META-INF/licenses/Proggy-PROVENANCE.txt",
                 "assets/compukters/textures/gui/ide_toolbar.png",
             ).forEach { required ->
                 check(required in entries) { "$required is missing from ${archive.name}" }
@@ -523,8 +395,8 @@ val verifyPackagedCompukterFfi =
             check("assets/compukters/textures/gui/term_font.png" !in entries) {
                 "legacy terminal font atlas leaked into ${archive.name}"
             }
-            check("assets/compukters/font/terminal/jetbrains_mono.json" !in entries) {
-                "parallel-warmed JetBrains Mono TTF alias leaked into ${archive.name}"
+            check(entries.none { it.startsWith("assets/compukters/font/terminal/") || it.startsWith("assets/compukters/textures/font/terminal/") }) {
+                "obsolete terminal font resources leaked into ${archive.name}"
             }
             check(entries.none { it.contains("Spleen", ignoreCase = true) }) {
                 "legacy Spleen font attribution leaked into ${archive.name}"

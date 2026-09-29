@@ -169,8 +169,8 @@ val verifyProductionJar =
                 }
             }
             check(entries.size == entries.toSet().size) { "duplicate archive entries found in ${archive.name}" }
-            check("assets/compukters/font/terminal/jetbrains_mono.json" !in entries) {
-                "parallel-warmed JetBrains Mono TTF alias leaked into ${archive.name}"
+            check(entries.none { it.startsWith("assets/compukters/font/terminal/") || it.startsWith("assets/compukters/textures/font/terminal/") }) {
+                "obsolete terminal font resources leaked into ${archive.name}"
             }
             validateRelocatedProjectMetadataLibraries(entries, archive.name)
             verifyRelocatedProjectMetadataRuntime(archive)

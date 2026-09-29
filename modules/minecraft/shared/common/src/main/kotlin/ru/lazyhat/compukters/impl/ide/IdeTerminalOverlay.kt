@@ -30,12 +30,9 @@ data class IdeTerminalOverlayGeometry(
     val unsupportedMessage: String,
 ) {
     companion object {
-        fun compute(
-            content: IdeRect,
-            font: TerminalFontProfile,
-        ): IdeTerminalOverlayGeometry {
-            val gridWidth = TerminalModel.WIDTH * font.cellWidth
-            val gridHeight = TerminalModel.HEIGHT * font.cellHeight
+        fun compute(content: IdeRect): IdeTerminalOverlayGeometry {
+            val gridWidth = TerminalModel.WIDTH * TerminalFontProfile.cellWidth
+            val gridHeight = TerminalModel.HEIGHT * TerminalFontProfile.cellHeight
             val preferredWidth = gridWidth + BORDER_SIZE * 2 + GRID_PADDING * 2
             val preferredHeight =
                 gridHeight + BORDER_SIZE * 2 + TITLE_HEIGHT + GRID_PADDING * 2

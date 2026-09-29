@@ -36,7 +36,6 @@ data class TerminalRect(
 class TerminalGridGeometry(
     originX: Int,
     originY: Int,
-    private val fontProfile: TerminalFontProfile,
 ) {
     val columns: Int = TerminalRenderGeometry.COLUMNS
     val rows: Int = TerminalRenderGeometry.ROWS
@@ -44,8 +43,8 @@ class TerminalGridGeometry(
         TerminalRect(
             originX,
             originY,
-            originX + columns * fontProfile.cellWidth,
-            originY + rows * fontProfile.cellHeight,
+            originX + columns * TerminalFontProfile.cellWidth,
+            originY + rows * TerminalFontProfile.cellHeight,
         )
 
     fun cell(
@@ -53,9 +52,9 @@ class TerminalGridGeometry(
         y: Int,
     ): TerminalRect {
         require(x in 0 until columns && y in 0 until rows) { "terminal cell is outside the grid" }
-        val left = bounds.left + x * fontProfile.cellWidth
-        val top = bounds.top + y * fontProfile.cellHeight
-        return TerminalRect(left, top, left + fontProfile.cellWidth, top + fontProfile.cellHeight)
+        val left = bounds.left + x * TerminalFontProfile.cellWidth
+        val top = bounds.top + y * TerminalFontProfile.cellHeight
+        return TerminalRect(left, top, left + TerminalFontProfile.cellWidth, top + TerminalFontProfile.cellHeight)
     }
 
     val glyphClip: TerminalRect
@@ -65,8 +64,8 @@ class TerminalGridGeometry(
             TerminalRect(
                 bounds.left,
                 bounds.top,
-                bounds.right + fontProfile.cellWidth,
-                bounds.bottom + fontProfile.cellHeight,
+                bounds.right + TerminalFontProfile.cellWidth,
+                bounds.bottom + TerminalFontProfile.cellHeight,
             )
 
     fun cursor(position: TerminalPosition): TerminalRect {
@@ -78,7 +77,6 @@ class TerminalGridGeometry(
 class TerminalRenderGeometry(
     viewportWidth: Int,
     viewportHeight: Int,
-    private val fontProfile: TerminalFontProfile = TerminalFontProfile.DEFAULT,
 ) {
     init {
         require(viewportWidth >= 0 && viewportHeight >= 0) { "terminal viewport must not be negative" }
@@ -86,8 +84,8 @@ class TerminalRenderGeometry(
 
     val columns: Int = COLUMNS
     val rows: Int = ROWS
-    val gridWidth: Int = columns * fontProfile.cellWidth
-    val gridHeight: Int = rows * fontProfile.cellHeight
+    val gridWidth: Int = columns * TerminalFontProfile.cellWidth
+    val gridHeight: Int = rows * TerminalFontProfile.cellHeight
     val panelWidth: Int = gridWidth + PANEL_PADDING * 2
     val panelHeight: Int = TITLE_HEIGHT + gridHeight + FOOTER_GAP + FOOTER_HEIGHT + PANEL_PADDING
     val panel: TerminalRect =
@@ -111,24 +109,17 @@ class TerminalRenderGeometry(
             grid.right,
             grid.bottom + FOOTER_GAP + FOOTER_HEIGHT,
         )
-    val gridGeometry = TerminalGridGeometry(grid.left, grid.top, fontProfile)
+    val gridGeometry = TerminalGridGeometry(grid.left, grid.top)
     val originX: Int = grid.left
     val originY: Int = grid.top
     val titleX: Int = panel.left + PANEL_PADDING
     val titleY: Int = panel.top + TITLE_TOP
-    val fontButton: TerminalRect =
-        TerminalRect(
-            panel.right - PANEL_PADDING - FONT_BUTTON_WIDTH,
-            panel.top + (TITLE_HEIGHT - FONT_BUTTON_HEIGHT) / 2,
-            panel.right - PANEL_PADDING,
-            panel.top + (TITLE_HEIGHT - FONT_BUTTON_HEIGHT) / 2 + FONT_BUTTON_HEIGHT,
-        )
     val ideButton: TerminalRect =
         TerminalRect(
-            fontButton.left - TITLE_BUTTON_GAP - IDE_BUTTON_WIDTH,
-            fontButton.top,
-            fontButton.left - TITLE_BUTTON_GAP,
-            fontButton.bottom,
+            panel.right - PANEL_PADDING - IDE_BUTTON_WIDTH,
+            panel.top + (TITLE_HEIGHT - IDE_BUTTON_HEIGHT) / 2,
+            panel.right - PANEL_PADDING,
+            panel.top + (TITLE_HEIGHT - IDE_BUTTON_HEIGHT) / 2 + IDE_BUTTON_HEIGHT,
         )
 
     fun cell(
@@ -149,10 +140,8 @@ class TerminalRenderGeometry(
         const val TITLE_TOP = 5
         const val FOOTER_GAP = 2
         const val FOOTER_HEIGHT = 13
-        private const val FONT_BUTTON_WIDTH = 96
-        private const val FONT_BUTTON_HEIGHT = 14
+        private const val IDE_BUTTON_HEIGHT = 14
         private const val IDE_BUTTON_WIDTH = 76
-        private const val TITLE_BUTTON_GAP = 4
         private const val CURSOR_HALF_PERIOD_MILLISECONDS = 500L
         private val PALETTE =
             intArrayOf(

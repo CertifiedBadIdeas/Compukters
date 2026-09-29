@@ -21,23 +21,10 @@ package ru.lazyhat.compukters.impl.config
 import net.neoforged.neoforge.common.ModConfigSpec
 import ru.lazyhat.compukters.impl.ide.IdeLayoutSettings
 import ru.lazyhat.compukters.impl.ide.IdeLayoutStore
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
-import java.util.function.Predicate
 
 /** Client preferences backed by the NeoForge configuration store. */
 object CompuktersClientConfig {
     private val builder = ModConfigSpec.Builder()
-
-    @Suppress("UNCHECKED_CAST")
-    private val terminalFontValidator =
-        Predicate<Any?> { value ->
-            value is String && TerminalFontProfile.ALL.any { it.id == value }
-        } as Predicate<Any>
-
-    internal val terminalFontId =
-        builder
-            .comment("Font used by the local terminal screen")
-            .define("terminal.font", TerminalFontProfile.DEFAULT.id, terminalFontValidator)
 
     internal val ideTreeWidth =
         builder
@@ -63,13 +50,6 @@ object CompuktersClientConfig {
             .define("ide.diagnostics_expanded", true)
 
     val SPEC: ModConfigSpec = builder.build()
-
-    fun selectedFont(): TerminalFontProfile = TerminalFontProfile.fromId(terminalFontId.get())
-
-    fun selectFont(profile: TerminalFontProfile) {
-        terminalFontId.set(profile.id)
-        terminalFontId.save()
-    }
 
     internal fun admitIdeLayout(
         treeWidth: Int,

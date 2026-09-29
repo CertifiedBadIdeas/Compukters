@@ -27,7 +27,6 @@ import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload
 import net.neoforged.neoforge.network.PacketDistributor
 import org.lwjgl.glfw.GLFW
-import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
 import ru.lazyhat.compukters.impl.ide.ChildScreenParent
 import ru.lazyhat.compukters.impl.ide.IdeClientBootstrap
 import ru.lazyhat.compukters.impl.ui.CompuktersUiViewport
@@ -49,9 +48,7 @@ internal class TerminalScreen(
     internal val resourceGauges: TerminalResourceGauges
         get() = resourceReplica.gauges
     private val pressedKeys = mutableSetOf<Int>()
-    private var fontProfile = CompuktersClientConfig.selectedFont()
     private lateinit var ideButton: Button
-    private lateinit var fontButton: Button
     private val childLifecycle =
         TerminalChildLifecycle(
             transport::connectionIdentity,
@@ -64,21 +61,13 @@ internal class TerminalScreen(
         super.init()
         val viewport = viewport()
         if (!viewport.supported) return
-        val geometry = TerminalRenderGeometry(viewport.width, viewport.height, fontProfile)
+        val geometry = TerminalRenderGeometry(viewport.width, viewport.height)
         val ideBounds = geometry.ideButton
         ideButton =
             addRenderableWidget(
                 Button
                     .builder(Component.literal("IDE  Ctrl+I")) { openIde() }
                     .bounds(ideBounds.left, ideBounds.top, ideBounds.width, ideBounds.height)
-                    .build(),
-            )
-        val fontBounds = geometry.fontButton
-        fontButton =
-            addRenderableWidget(
-                Button
-                    .builder(fontButtonLabel()) { cycleFont() }
-                    .bounds(fontBounds.left, fontBounds.top, fontBounds.width, fontBounds.height)
                     .build(),
             )
     }
@@ -188,7 +177,7 @@ internal class TerminalScreen(
                 graphics.drawString(font, TerminalScreenStyle.UNSUPPORTED_MESSAGE, 4, 4, TerminalScreenStyle.TITLE_COLOR, false)
                 return@withTransform
             }
-            val geometry = TerminalRenderGeometry(viewport.width, viewport.height, fontProfile)
+            val geometry = TerminalRenderGeometry(viewport.width, viewport.height)
             graphics.fill(
                 geometry.panel.left - 1,
                 geometry.panel.top - 1,
@@ -208,7 +197,6 @@ internal class TerminalScreen(
                 graphics,
                 font,
                 replica.state,
-                fontProfile,
                 geometry.gridGeometry,
                 viewport,
                 TerminalScreenStyle.animationMillis(),
@@ -216,12 +204,12 @@ internal class TerminalScreen(
             val resources =
                 Component
                     .literal(TerminalResourceText.format(resourceReplica.gauges))
-                    .withStyle { it.withFont(fontProfile.fontDescription) }
+                    .withStyle { it.withFont(TerminalFontProfile.fontDescription) }
             graphics.drawString(
                 font,
                 resources,
                 geometry.footer.left,
-                geometry.footer.top + fontProfile.glyphDrawOffsetY,
+                geometry.footer.top + TerminalFontProfile.glyphDrawOffsetY,
                 TerminalScreenStyle.RESOURCE_COLOR,
                 false,
             )
@@ -242,26 +230,6 @@ internal class TerminalScreen(
     ) = Unit
 
     override fun isPauseScreen(): Boolean = false
-
-    private fun cycleFont() {
-        fontProfile = fontProfile.next()
-        CompuktersClientConfig.selectFont(fontProfile)
-        fontButton.message = fontButtonLabel()
-        positionToolbarButtons()
-    }
-
-    private fun positionToolbarButtons() {
-        if (!::ideButton.isInitialized || !::fontButton.isInitialized) return
-        val viewport = viewport()
-        if (!viewport.supported) return
-        val geometry = TerminalRenderGeometry(viewport.width, viewport.height, fontProfile)
-        ideButton.x = geometry.ideButton.left
-        ideButton.y = geometry.ideButton.top
-        fontButton.x = geometry.fontButton.left
-        fontButton.y = geometry.fontButton.top
-    }
-
-    private fun fontButtonLabel(): Component = Component.literal("Font: ${fontProfile.displayName}")
 
     private fun openIde() {
         IdeClientBootstrap.open(requireNotNull(minecraft) { "terminal screen is not attached to a Minecraft client" })

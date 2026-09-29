@@ -384,7 +384,6 @@ internal class IdeScreen(
         partialTick: Float,
         viewport: CompuktersUiViewport,
     ) {
-        val profile = CompuktersClientConfig.selectedFont()
         val geometry = geometry(viewport)
         val treeFirstRow = admittedTreeFirstRow(geometry)
         val state = application.controller.viewState()
@@ -460,7 +459,7 @@ internal class IdeScreen(
         executeIdeRenderOperations(
             operations = operations,
             terminalVisible = terminalOverlay.visible,
-            renderTerminal = { renderTerminalOverlay(graphics, terminalOverlayGeometry(geometry), profile) },
+            renderTerminal = { renderTerminalOverlay(graphics, terminalOverlayGeometry(geometry)) },
         )
         super.extractRenderState(
             graphics,
@@ -603,12 +602,11 @@ internal class IdeScreen(
     }
 
     private fun terminalOverlayGeometry(geometry: IdeRenderGeometry): IdeTerminalOverlayGeometry =
-        IdeTerminalOverlayGeometry.compute(geometry.content, CompuktersClientConfig.selectedFont())
+        IdeTerminalOverlayGeometry.compute(geometry.content)
 
     private fun renderTerminalOverlay(
         graphics: GuiGraphicsExtractor,
         overlay: IdeTerminalOverlayGeometry,
-        profile: ru.lazyhat.compukters.impl.terminal.TerminalFontProfile,
     ) {
         graphics.fill(overlay.shadow, TERMINAL_SHADOW)
         graphics.fill(overlay.panel, TERMINAL_BORDER)
@@ -655,8 +653,7 @@ internal class IdeScreen(
                     graphics,
                     font,
                     replica.state,
-                    profile,
-                    TerminalGridGeometry(grid.left, grid.top, profile),
+                    TerminalGridGeometry(grid.left, grid.top),
                     System.nanoTime() / 1_000_000L,
                 )
             }

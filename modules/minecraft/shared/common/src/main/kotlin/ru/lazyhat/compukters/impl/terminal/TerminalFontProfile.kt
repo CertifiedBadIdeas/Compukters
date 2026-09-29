@@ -20,112 +20,18 @@ package ru.lazyhat.compukters.impl.terminal
 
 import ru.lazyhat.compukters.impl.font.JetBrainsMonoFont
 
-class TerminalFontProfile private constructor(
-    val id: String,
-    val displayName: String,
-    val cellWidth: Int,
-    val cellHeight: Int,
-    val ascent: Int,
-    supportedCodePoints: IntArray,
-    val replacementCodePoint: Int,
-) {
-    private val supportedCodePoints = supportedCodePoints.copyOf()
+/** The single terminal/display face; geometry remains a fixed character grid. */
+object TerminalFontProfile {
+    val id = JetBrainsMonoFont.ID
+    val cellWidth = JetBrainsMonoFont.CELL_WIDTH
+    val cellHeight = JetBrainsMonoFont.CELL_HEIGHT
+    val ascent = JetBrainsMonoFont.BASELINE
+    val replacementCodePoint = 0xFFFD
 
-    val glyphDrawOffsetY: Int = ascent - MINECRAFT_TEXT_BASELINE
+    // Minecraft positions text from a baseline of 7, not the top of the grid cell.
+    val glyphDrawOffsetY = ascent - 7
 
-    init {
-        require(cellWidth > 0 && cellHeight > 0) { "terminal font cell must be positive" }
-        require(ascent in 1..cellHeight) { "terminal font ascent must fit the cell" }
-        require(this.supportedCodePoints.contentEquals(this.supportedCodePoints.sortedArray())) {
-            "terminal font coverage must be sorted"
-        }
-        require(
-            (1 until this.supportedCodePoints.size).none { index ->
-                this.supportedCodePoints[index - 1] == this.supportedCodePoints[index]
-            },
-        ) {
-            "terminal font coverage must not contain duplicates"
-        }
-        require(this.supportedCodePoints.binarySearch(replacementCodePoint) >= 0) {
-            "terminal font coverage must contain its replacement glyph"
-        }
-    }
-
-    fun supports(codePoint: Int): Boolean = supportedCodePoints.binarySearch(codePoint) >= 0
+    fun supports(codePoint: Int): Boolean = JETBRAINS_MONO_SUPPORTED_CODE_POINTS.binarySearch(codePoint) >= 0
 
     fun renderCodePoint(codePoint: Int): Int = if (supports(codePoint)) codePoint else replacementCodePoint
-
-    fun next(): TerminalFontProfile {
-        val index = ALL.indexOfFirst { it === this }
-        require(index >= 0) { "terminal font profile is not registered: $id" }
-        return ALL[(index + 1) % ALL.size]
-    }
-
-    companion object {
-        private const val MINECRAFT_TEXT_BASELINE = 7
-
-        val JETBRAINS_MONO =
-            terminalProfile(
-                id = JetBrainsMonoFont.ID,
-                displayName = "JetBrains Mono",
-                cellWidth = JetBrainsMonoFont.CELL_WIDTH,
-                cellHeight = JetBrainsMonoFont.CELL_HEIGHT,
-                ascent = JetBrainsMonoFont.BASELINE,
-                supportedCodePoints = JETBRAINS_MONO_SUPPORTED_CODE_POINTS,
-                replacementCodePoint = 0xFFFD,
-            )
-
-        val COZETTE =
-            terminalProfile(
-                id = "cozette",
-                displayName = "Cozette",
-                cellWidth = 6,
-                cellHeight = 13,
-                ascent = 10,
-                supportedCodePoints = COZETTE_SUPPORTED_CODE_POINTS,
-                replacementCodePoint = 0xFFFD,
-            )
-        val DINA =
-            terminalProfile(
-                id = "dina",
-                displayName = "Dina",
-                cellWidth = 6,
-                cellHeight = 10,
-                ascent = 8,
-                supportedCodePoints = DINA_SUPPORTED_CODE_POINTS,
-                replacementCodePoint = '?'.code,
-            )
-        val PROGGY_TINY =
-            terminalProfile(
-                id = "proggy_tiny",
-                displayName = "ProggyTiny",
-                cellWidth = 6,
-                cellHeight = 10,
-                ascent = 8,
-                supportedCodePoints = PROGGY_TINY_SUPPORTED_CODE_POINTS,
-                replacementCodePoint = '?'.code,
-            )
-        val ALL = listOf(JETBRAINS_MONO, COZETTE, DINA, PROGGY_TINY)
-        val DEFAULT = JETBRAINS_MONO
-
-        fun fromId(id: String?): TerminalFontProfile = ALL.firstOrNull { it.id == id } ?: DEFAULT
-
-        private fun terminalProfile(
-            id: String,
-            displayName: String,
-            cellWidth: Int,
-            cellHeight: Int,
-            ascent: Int,
-            supportedCodePoints: IntArray,
-            replacementCodePoint: Int,
-        ) = TerminalFontProfile(
-            id = id,
-            displayName = displayName,
-            cellWidth = cellWidth,
-            cellHeight = cellHeight,
-            ascent = ascent,
-            supportedCodePoints = supportedCodePoints,
-            replacementCodePoint = replacementCodePoint,
-        )
-    }
 }

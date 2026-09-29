@@ -27,6 +27,6 @@ internal val TerminalFontProfile.fontDescription: FontDescription.Resource
         FontDescription.Resource(
             Identifier.fromNamespaceAndPath(
                 "compukters",
-                if (id == JetBrainsMonoFont.ID) JetBrainsMonoFont.RESOURCE_PATH else "terminal/$id",
+                JetBrainsMonoFont.RESOURCE_PATH,
             ),
         )

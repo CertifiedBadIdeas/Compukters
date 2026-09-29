@@ -34,11 +34,8 @@ and Modrinth description. The screenshot composition is copyright 2026 lazyhat, 
 Create game assets visible in the image retain their own ownership and licensing. See the
 [provenance record](licenses/media/Boiler-showcase-PROVENANCE.md).
 
-## Terminal fonts
+## Code and terminal font
 
-The Cozette, Dina, and ProggyTiny BDF sources and the bitmap atlases generated
-from them retain their respective upstream MIT terms. Sources, license copies,
-and provenance are stored under `tools/fonts/`; copies required by the
-production archive are stored under the NeoForge module's
-`META-INF/licenses/` resources. See
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for attribution details.
+JetBrains Mono NL Regular v2.304 retains its upstream SIL Open Font License 1.1.
+The bundled font, license and provenance are listed in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) and `licenses/media-assets.tsv`.

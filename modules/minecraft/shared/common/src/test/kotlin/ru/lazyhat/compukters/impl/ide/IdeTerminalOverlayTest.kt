@@ -27,10 +27,10 @@ import kotlin.test.assertTrue
 
 internal class IdeTerminalOverlayTest {
     @Test
-    fun `Cozette overlay keeps the exact grid without a dedicated footer`() {
+    fun `JetBrains Mono overlay keeps the exact grid without a dedicated footer`() {
         val content = IdeRect(0, 0, 640, 360)
 
-        val overlay = IdeTerminalOverlayGeometry.compute(content, TerminalFontProfile.COZETTE)
+        val overlay = IdeTerminalOverlayGeometry.compute(content)
 
         assertTrue(overlay.supported)
         assertEquals(279, overlay.panel.height)
@@ -67,29 +67,28 @@ internal class IdeTerminalOverlayTest {
     }
 
     @Test
-    fun `every font keeps the exact guest grid and anchors the panel over immutable content`() {
-        TerminalFontProfile.ALL.forEach { font ->
-            val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
-            val editor = geometry.editor
+    fun `the fixed font keeps the exact guest grid and anchors the panel over immutable content`() {
+        val font = TerminalFontProfile
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
+        val editor = geometry.editor
 
-            val overlay = IdeTerminalOverlayGeometry.compute(geometry.content, font)
+        val overlay = IdeTerminalOverlayGeometry.compute(geometry.content)
 
-            assertTrue(overlay.supported)
-            assertEquals(geometry.content.right, overlay.panel.right)
-            assertEquals(geometry.toolStripe.left, overlay.panel.right)
-            assertEquals(51 * font.cellWidth, overlay.grid?.width)
-            assertEquals(19 * font.cellHeight, overlay.grid?.height)
-            assertTrue(overlay.panel.top > geometry.content.top)
-            assertTrue(overlay.panel.bottom < geometry.content.bottom)
-            assertEquals(editor, geometry.editor)
-        }
+        assertTrue(overlay.supported)
+        assertEquals(geometry.content.right, overlay.panel.right)
+        assertEquals(geometry.toolStripe.left, overlay.panel.right)
+        assertEquals(51 * font.cellWidth, overlay.grid?.width)
+        assertEquals(19 * font.cellHeight, overlay.grid?.height)
+        assertTrue(overlay.panel.top > geometry.content.top)
+        assertTrue(overlay.panel.bottom < geometry.content.bottom)
+        assertEquals(editor, geometry.editor)
     }
 
     @Test
     fun `small content produces a bounded unavailable surface instead of a cropped grid`() {
         val content = IdeRect(10, 20, 210, 140)
 
-        val overlay = IdeTerminalOverlayGeometry.compute(content, TerminalFontProfile.COZETTE)
+        val overlay = IdeTerminalOverlayGeometry.compute(content)
 
         assertFalse(overlay.supported)
         assertEquals(content, overlay.panel)
