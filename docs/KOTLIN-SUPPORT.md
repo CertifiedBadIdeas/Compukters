@@ -782,8 +782,7 @@ built-in platform and are not selected individually in `compukter.toml`; there i
 | Module | Guest surface |
 | --- | --- |
 | `kotlin:builtins` | Core language types, arrays, function types, and structural declarations required by K2 |
-| `stdlib:core` | Small native core helpers such as `require`, supported array construction, and bounded cooperative `Task` / `Tasks` declarations |
-| `stdlib:scope` | Inline scope functions for supported Guest values and indexed `repeat` |
+| `stdlib:core` | Core helpers such as `require`, supported array construction, bounded cooperative `Task` / `Tasks` declarations, inline scope functions and indexed `repeat` |
 | `stdlib:ranges` | Declaration surface for `IntRange`, `until`, and `rangeUntil`; canonical unit-step `Int` loops lower without runtime range objects |
 | `std:terminal` | `print`, `println`, `readln`, stderr, and raw terminal operations |
 | `std:filesystem` | The bounded filesystem facade |

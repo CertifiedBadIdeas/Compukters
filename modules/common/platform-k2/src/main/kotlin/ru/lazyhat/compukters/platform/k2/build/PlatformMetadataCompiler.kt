@@ -45,6 +45,7 @@ import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.psi.KtTypeAlias
+import org.jetbrains.kotlin.psi.KtUserType
 import org.jetbrains.kotlin.psi.psiUtil.collectDescendantsOfType
 import ru.lazyhat.compukters.platform.bundle.CompuktersDefaultImports
 import ru.lazyhat.compukters.platform.bundle.PlatformCompletionDeclaration
@@ -435,7 +436,14 @@ class PlatformMetadataCompiler {
         val requiresSource =
             !external && (
                 inheritedSource ||
-                    (declaration is KtClass && declaration.typeParameters.isNotEmpty()) ||
+                    (
+                        declaration is KtClass && (
+                            declaration.typeParameters.isNotEmpty() ||
+                                declaration.superTypeListEntries.any { entry ->
+                                    (entry.typeReference?.typeElement as? KtUserType)?.typeArguments?.isNotEmpty() == true
+                                }
+                        )
+                    ) ||
                     (
                         declaration is KtNamedFunction && declaration.hasBody() &&
                             (declaration.typeParameters.isNotEmpty() || declaration.hasModifier(KtTokens.INLINE_KEYWORD))

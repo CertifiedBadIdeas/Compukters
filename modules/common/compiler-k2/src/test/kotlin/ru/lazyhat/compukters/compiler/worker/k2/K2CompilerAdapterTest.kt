@@ -142,7 +142,9 @@ class K2CompilerAdapterTest {
             assertTrue(library.sourceDeclarations.none { it.symbol == "sample.describeSize" || it.symbol == "sample.label" })
             assertTrue(classLibrary.sourceDeclarations.isNotEmpty())
             assertTrue(classOnlyLibrary.sourceDeclarations.isNotEmpty())
-            assertTrue(platform.modules.single { it.id.toString() == "stdlib:core" }.libraryFragment != null)
+            val core = platform.modules.single { it.id.toString() == "stdlib:core" }
+            assertNotNull(core.libraryFragment)
+            assertTrue(core.sourceDeclarations.any { it.symbol == "kotlin.let" })
             val collections = platform.modules.single { it.id.toString() == "stdlib:collections" }
             assertTrue(collections.sourceDeclarations.isNotEmpty())
             val workerIdentity = identity(platform)
