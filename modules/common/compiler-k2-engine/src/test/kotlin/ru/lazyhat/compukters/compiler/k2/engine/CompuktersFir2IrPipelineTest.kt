@@ -260,7 +260,7 @@ class CompuktersFir2IrPipelineTest {
                     module.kind == ModuleKind.LIBRARY &&
                         module.exports.any { export ->
                             export.kind == SymbolKind.FUNCTION &&
-                                module.strings[export.name.value.toInt()].toString() == "answer"
+                                module.strings[export.name.value.toInt()].toString() == "sample.answer#fun():Int"
                         }
                 }
             val exports = libraryModule.exports.associateBy { libraryModule.strings[it.name.value.toInt()].toString() }

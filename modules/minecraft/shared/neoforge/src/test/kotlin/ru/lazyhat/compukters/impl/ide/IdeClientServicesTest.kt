@@ -174,7 +174,6 @@ internal class IdeClientServicesTest {
                     platform,
                     listOf(
                         modulesById.getValue("stdlib:core"),
-                        modulesById.getValue("stdlib:ranges"),
                         modulesById.getValue("compukter:redstone"),
                         modulesById.getValue("std:terminal"),
                     ).map { descriptor ->
@@ -183,7 +182,7 @@ internal class IdeClientServicesTest {
                     },
                 )
             assertEquals(
-                listOf("compukter:redstone", "kotlin:builtins", "std:terminal", "stdlib:core", "stdlib:ranges"),
+                listOf("compukter:redstone", "kotlin:builtins", "std:terminal", "stdlib:core"),
                 admittedModules.map { it.identity.name },
             )
             AdmittedAnalysisPlatform(compiler.manifest.identity.platformAbi, admittedModules, guestApi.toString())

@@ -6,21 +6,9 @@ sources = ["builtins/kotlin/**/*.kt"]
 
 [[module]]
 id = "stdlib:core"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = ["kotlin:builtins"]
 sources = ["libraries/stdlib-core/**/*.kt"]
-
-[[module]]
-id = "stdlib:ranges"
-version = "1.1.0"
-dependencies = ["stdlib:core"]
-sources = ["libraries/stdlib-ranges/**/*.kt"]
-
-[[module]]
-id = "stdlib:collections"
-version = "1.2.0"
-dependencies = ["stdlib:core"]
-sources = ["libraries/stdlib-collections/**/*.kt"]
 
 [[module]]
 id = "std:terminal"
@@ -49,7 +37,7 @@ sources = ["libraries/compukter-process/**/*.kt"]
 [[module]]
 id = "compukter:redstone"
 version = "2.0.0"
-dependencies = ["stdlib:core", "stdlib:ranges"]
+dependencies = ["stdlib:core"]
 sources = ["libraries/compukter-redstone/**/*.kt"]
 
 [[module]]
@@ -61,5 +49,5 @@ sources = ["libraries/compukter-sound/**/*.kt"]
 [[module]]
 id = "compukter:display"
 version = "1.0.0"
-dependencies = ["stdlib:core", "stdlib:ranges"]
+dependencies = ["stdlib:core"]
 sources = ["libraries/compukter-display/**/*.kt"]

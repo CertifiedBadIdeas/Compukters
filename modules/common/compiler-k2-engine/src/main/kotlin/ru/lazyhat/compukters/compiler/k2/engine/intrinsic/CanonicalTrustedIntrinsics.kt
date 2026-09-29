@@ -72,9 +72,9 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "Function0.invoke", "fun():R")
             primitive("kotlin", "builtins", "kotlin", "Function1.invoke", "fun(P1):R")
             primitive("kotlin", "builtins", "kotlin", "Function2.invoke", "fun(P1,P2):R")
-            primitive("stdlib", "collections", "kotlin.collections", "listOf", "fun(T):List<T>")
-            primitive("stdlib", "collections", "kotlin.collections", "emptyList", "fun():List<T>")
-            primitive("stdlib", "collections", "kotlin.collections", "mutableListStorage", "fun(Int):MutableListStorage<T>")
+            primitive("stdlib", "core", "kotlin.collections", "listOf", "fun(T):List<T>")
+            primitive("stdlib", "core", "kotlin.collections", "emptyList", "fun():List<T>")
+            primitive("stdlib", "core", "kotlin.collections", "mutableListStorage", "fun(Int):MutableListStorage<T>")
             listOf(
                 "and" to "fun(Int):Int",
                 "compareTo" to "fun(Int):Int",
@@ -216,11 +216,11 @@ object CanonicalTrustedIntrinsics {
                 0u,
                 true,
             )
-            primitive("stdlib", "ranges", "kotlin.ranges", "IntProgression.iterator", "fun():IntIterator")
-            primitive("stdlib", "ranges", "kotlin.ranges", "downTo", "fun(Int.Int):IntProgression")
-            primitive("stdlib", "ranges", "kotlin.ranges", "rangeUntil", "fun(Int.Int):IntRange")
-            primitive("stdlib", "ranges", "kotlin.ranges", "step", "fun(IntProgression.Int):IntProgression")
-            primitive("stdlib", "ranges", "kotlin.ranges", "until", "fun(Int.Int):IntRange")
+            primitive("stdlib", "core", "kotlin.ranges", "IntProgression.iterator", "fun():IntIterator")
+            primitive("stdlib", "core", "kotlin.ranges", "downTo", "fun(Int.Int):IntProgression")
+            primitive("stdlib", "core", "kotlin.ranges", "rangeUntil", "fun(Int.Int):IntRange")
+            primitive("stdlib", "core", "kotlin.ranges", "step", "fun(IntProgression.Int):IntProgression")
+            primitive("stdlib", "core", "kotlin.ranges", "until", "fun(Int.Int):IntRange")
 
             capability("compukter", "compiler", "compukter.compiler", "Compiler.compile", "fun(String,String):Int", compiler, 0u, true)
             capability("compukter", "compiler", "compukter.compiler", "Compiler.diagnostics", "fun():String", compiler, 1u)

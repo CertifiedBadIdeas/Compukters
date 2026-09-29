@@ -29,6 +29,7 @@ import org.jetbrains.kotlin.fir.deserialization.SingleModuleDataProvider
 import org.jetbrains.kotlin.fir.moduleData
 import org.jetbrains.kotlin.fir.resolve.providers.FirSymbolProvider
 import org.jetbrains.kotlin.fir.scopes.FirDefaultImportsProviderHolder
+import org.jetbrains.kotlin.fir.scopes.FirLookupDefaultStarImportsInSourcesSettingHolder
 import org.jetbrains.kotlin.fir.scopes.kotlinScopeProvider
 import org.jetbrains.kotlin.platform.TargetPlatform
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
@@ -69,6 +70,10 @@ object CompuktersLLFirSessionConfigurator : LLFirSessionConfigurator {
             session.register(
                 FirDefaultImportsProviderHolder::class,
                 FirDefaultImportsProviderHolder.Single(CompuktersDefaultImportsProvider),
+            )
+            session.register(
+                FirLookupDefaultStarImportsInSourcesSettingHolder::class,
+                FirLookupDefaultStarImportsInSourcesSettingHolder(true),
             )
             return
         }

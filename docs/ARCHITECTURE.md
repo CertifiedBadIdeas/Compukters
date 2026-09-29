@@ -123,15 +123,17 @@ supertypes, members of those classes, and inline bodies. One module can retain a
 alongside those source bodies. The compiler resolves each source library as a separate Kotlin module over one shared
 metadata session, preserving `internal` and `private` boundaries. It includes canonical sources for resolution and
 specialization but binds ordinary implementations, including private helpers, to their compiled fragment instead of
-emitting them again in the consumer. Kotlin source visibility still governs access to those helpers. Fragment assembly retains exported
+emitting them again in the consumer. Kotlin source visibility still governs access to those helpers. Ordinary function
+exports use the qualified declaration symbol and canonical signature, so same-name functions in different packages or
+owners remain distinct even when their lowered signatures coincide. Fragment assembly retains exported
 implementations and their dependencies; final application linking removes unreachable records. Tooling normalizes
 dependency module indexes into symbolic identities before linking so a shared library retains one owner across
 fragment containers. The final executable restores concrete indexes. Generic binary templates are not part of the
 platform bundle or VM artifact contract. Bundle format 7 and standalone module format 3 reject older representations.
-The inline generic scope functions and `repeat` live in `stdlib:core` alongside its ordinary precompiled
-implementations; their source bodies no longer require a separate module.
+The standard library has one owner, `stdlib:core`: core helpers, inline scope functions, `repeat`, ranges and collections.
+Its generic and inline source bodies coexist with ordinary precompiled implementations.
 
-The `stdlib:collections` module publishes read-only lists and public `ArrayList<T>` with source bodies for specialization.
+The standard library publishes read-only lists and public `ArrayList<T>` with source bodies for specialization.
 `listOf` and `emptyList` create fresh `ArrayList<T>` instances exposed as `List<T>`, with capacity equal to the
 number of elements. Factories fill them through the specialized `add` method in source order. A read-only view can be
 cast to `MutableList<T>` or `ArrayList<T>` and changed; it is not an immutable object. `Int` storage uses i32 arrays;

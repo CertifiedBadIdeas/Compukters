@@ -411,7 +411,7 @@ class PlatformBundleCodecTest {
         module(
             id = RANGES,
             dependencies = listOf(BUILTINS),
-            sourcePath = "libraries/stdlib-ranges/kotlin/ranges/IntRange.kt",
+            sourcePath = "libraries/stdlib-core/kotlin/ranges/IntRange.kt",
             symbol = "kotlin.ranges/IntRange",
         )
 

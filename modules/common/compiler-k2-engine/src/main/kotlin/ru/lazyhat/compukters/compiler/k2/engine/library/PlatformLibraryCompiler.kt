@@ -226,17 +226,19 @@ private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFr
             )
         }
     val initializerFunctions = lowered.types.filterIsInstance<NominalType.Class>().mapNotNullTo(mutableSetOf()) { it.initializer?.value }
+    val namedFunctions = lowered.exports.mapTo(mutableSetOf(), Export::localSymbol)
     val functionExports =
-        lowered.functions.mapIndexedNotNull { index, function ->
-            if (index.toUInt() in initializerFunctions) return@mapIndexedNotNull null
-            Export(
-                SymbolKind.FUNCTION,
-                ExportVisibility.PUBLIC_LIBRARY,
-                function.name,
-                index.toUInt(),
-                function.signature,
-            )
-        }
+        lowered.exports +
+            lowered.functions.mapIndexedNotNull { index, function ->
+                if (index.toUInt() in initializerFunctions || index.toUInt() in namedFunctions) return@mapIndexedNotNull null
+                Export(
+                    SymbolKind.FUNCTION,
+                    ExportVisibility.PUBLIC_LIBRARY,
+                    function.name,
+                    index.toUInt(),
+                    function.signature,
+                )
+            }
     val fieldExports =
         fieldDeclarations.keys.sorted().map { symbol ->
             val fieldIndex = requireNotNull(fieldSymbols[symbol]) { "cannot match platform field $symbol" }

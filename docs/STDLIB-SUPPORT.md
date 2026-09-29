@@ -81,7 +81,7 @@ links to their source files.
 - [ ] **`IntRange` and `IntProgression` — Partial** — direct `for` loops over `..`, `until`, `..<`, `downTo`, and one
   positive `step` compile to unboxed scalar loops. Stored range objects and general iteration do not execute. Evidence:
   `testKotlinIntLoopsVmConformance` and
-  [`IntRange.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-ranges/kotlin/ranges/IntRange.kt).
+  [`IntRange.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/ranges/IntRange.kt).
   Tracking: not scheduled
 
 ## Collections and I/O
@@ -100,7 +100,7 @@ links to their source files.
   lists widen to `List<Any?>` without copying. Spread arguments are unsupported. Evidence:
   `testKotlinNullableCollectionsVmConformance`, `testKotlinListVmConformance`, `testKotlinListAnyVmConformance`, `testKotlinListAnyQuotaVmConformance`,
   `testKotlinListBoundsVmConformance`, `testKotlinListQuotaVmConformance`, and
-  [`Lists.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-collections/kotlin/collections/Lists.kt). Tracking:
+  [`Lists.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/collections/Lists.kt). Tracking:
   [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656),
   [#581](https://github.com/CertifiedBadIdeas/Compukters/issues/581)
 - [x] **Nullable element selection** — `Iterable<T>.firstOrNull` / `lastOrNull` support predicate and no-predicate

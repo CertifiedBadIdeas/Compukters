@@ -78,8 +78,6 @@ class CanonicalPlatformSourceTest {
             setOf(
                 "kotlin:builtins",
                 "stdlib:core",
-                "stdlib:ranges",
-                "stdlib:collections",
                 "std:terminal",
                 "std:filesystem",
                 "compukter:compiler",
@@ -91,8 +89,7 @@ class CanonicalPlatformSourceTest {
             modulesById.keys,
         )
         assertTrue(modulesById.getValue("kotlin:builtins").dependencies.isEmpty())
-        assertEquals("1.4.0", modulesById.getValue("stdlib:core").version)
-        assertEquals("1.2.0", modulesById.getValue("stdlib:collections").version)
+        assertEquals("1.5.0", modulesById.getValue("stdlib:core").version)
         assertEquals("2.0.0", modulesById.getValue("compukter:redstone").version)
         assertEquals("1.0.0", modulesById.getValue("compukter:sound").version)
         assertEquals("1.0.0", modulesById.getValue("compukter:display").version)
