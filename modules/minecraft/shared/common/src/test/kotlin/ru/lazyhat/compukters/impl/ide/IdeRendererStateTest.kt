@@ -350,6 +350,11 @@ class IdeRendererStateTest {
         assertTrue(hover.any { it.value == "val answer: kotlin.Int" })
         assertTrue(hover.any { "kotlin.Int" in it.value })
         assertTrue(hover.any { "std.core" in it.value })
+        assertTrue(hover.all { it.codeFont === IdeCodeFontProfile.DEFAULT })
+        assertEquals(listOf(13, 13), hover.zipWithNext { first, second -> second.y - first.y })
+        val hoverBounds = requireNotNull(hover.first().clip)
+        assertEquals(3 * IdeCodeFontProfile.DEFAULT.cellHeight + 4, hoverBounds.height)
+        assertEquals(hoverBounds.top + 3 + IdeCodeFontProfile.DEFAULT.glyphDrawOffsetY, hover.first().y)
         assertTrue(hover.maxOf { it.zIndex } < model.text.filter { it.kind == IdeTextKind.Dialog }.minOf { it.zIndex })
         assertTrue(
             hover.all {
@@ -685,6 +690,10 @@ class IdeRendererStateTest {
         val popup = model.panels.single { it.kind == IdePanelKind.Dialog }.bounds
 
         assertTrue(model.text.any { it.kind == IdeTextKind.Completion && it.value == "$label · function" })
+        val row = model.text.single { it.kind == IdeTextKind.Completion }
+        assertEquals(IdeCodeFontProfile.DEFAULT, row.codeFont)
+        assertEquals(IdeCodeFontProfile.DEFAULT.cellHeight + 4, popup.height)
+        assertEquals(popup.top + 3 + IdeCodeFontProfile.DEFAULT.glyphDrawOffsetY, row.y)
         assertTrue(popup.width > 220, popup.toString())
         assertTrue(popup.width <= geometry.editor.width, popup.toString())
     }
@@ -794,6 +803,8 @@ class IdeRendererStateTest {
 
         assertEquals((1..8).map { "item$it · function" }, completionText.map { it.value })
         assertEquals(IdeColors.ACCENT, completionText.last().color)
+        assertTrue(completionText.all { it.codeFont === IdeCodeFontProfile.DEFAULT })
+        assertTrue(completionText.zipWithNext().all { (first, second) -> second.y - first.y == IdeCodeFontProfile.DEFAULT.cellHeight })
     }
 
     @Test
