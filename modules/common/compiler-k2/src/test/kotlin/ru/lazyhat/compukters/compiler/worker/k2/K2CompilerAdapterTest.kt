@@ -81,7 +81,20 @@ class K2CompilerAdapterTest {
             root.resolve("libraries/generic/Identity.kt").apply {
                 parent.createDirectories()
                 writeText(
-                    "package sample\nfun <T> identity(value: T): T = value\ninline fun <T, R> transform(value: T, block: (T) -> R): R = block(value)\nfun <T> bad(value: T): T { val nullable: T? = value; return nullable!! }\n",
+                    """
+                    package sample
+
+                    fun <T> identity(value: T): T = value
+                    inline fun <T, R> transform(value: T, block: (T) -> R): R = block(value)
+
+                    private fun label(size: Int): String = "length=" + size
+
+                    fun <T> describe(value: T, measure: (T) -> Int): String = label(measure(value))
+
+                    fun describeSize(size: Int): String = label(size)
+
+                    fun <T> bad(value: T): T { val nullable: T? = value; return nullable!! }
+                    """.trimIndent(),
                 )
             }
             root.resolve("libraries/generic-class/Cell.kt").apply {
@@ -157,10 +170,15 @@ class K2CompilerAdapterTest {
                     """
                     import sample.Cell
                     import sample.Holder
+                    import sample.describe
+                    import sample.describeSize
                     import sample.identity
                     import sample.transform
 
                     fun main() {
+                        require(describe("hello") { it.length } == "length=5")
+                        require(describe(42) { it } == "length=42")
+                        require(describeSize(7) == "length=7")
                         require(transform(3) { it + 2 } == 5)
                         require(transform("abc") { it.length } == 3)
                         println(identity(42))
