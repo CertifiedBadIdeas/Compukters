@@ -498,6 +498,7 @@ val verifyPackagedCompukterFfi =
                 "assets/compukters/models/item/peripheral_configurator.json",
                 "data/compukters/loot_table/blocks/peripheral_cable.json",
                 "assets/compukters/font/terminal/cozette.json",
+                "assets/compukters/font/terminal/jetbrains_mono.json",
                 "assets/compukters/font/ide/jetbrains_mono.json",
                 "assets/compukters/font/ide/jetbrains_mono_regular.ttf",
                 "META-INF/licenses/JetBrains-Mono-OFL-1.1.txt",

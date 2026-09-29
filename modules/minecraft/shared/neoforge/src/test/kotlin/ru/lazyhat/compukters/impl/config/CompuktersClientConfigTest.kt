@@ -25,11 +25,12 @@ import kotlin.test.assertTrue
 
 internal class CompuktersClientConfigTest {
     @Test
-    fun `terminal font config defaults to Cozette and accepts catalog IDs only`() {
+    fun `terminal font config defaults to JetBrains Mono and accepts catalog IDs only`() {
         val value = CompuktersClientConfig.terminalFontId
         val specification = value.spec
 
-        assertEquals("cozette", value.default)
+        assertEquals("jetbrains_mono", value.default)
+        assertTrue(specification.test("jetbrains_mono"))
         assertTrue(specification.test("cozette"))
         assertTrue(specification.test("dina"))
         assertTrue(specification.test("proggy_tiny"))

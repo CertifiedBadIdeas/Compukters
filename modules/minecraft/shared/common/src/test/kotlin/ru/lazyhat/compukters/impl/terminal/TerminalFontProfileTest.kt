@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.impl.terminal
 
+import ru.lazyhat.compukters.impl.ide.IdeCodeFontProfile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -25,15 +26,18 @@ import kotlin.test.assertTrue
 
 class TerminalFontProfileTest {
     @Test
-    fun `default profile exposes fixed Cozette metrics`() {
+    fun `default profile exposes fixed JetBrains Mono metrics`() {
         val profile = TerminalFontProfile.DEFAULT
 
-        assertEquals("cozette", profile.id)
+        assertEquals("jetbrains_mono", profile.id)
         assertEquals(6, profile.cellWidth)
         assertEquals(13, profile.cellHeight)
         assertEquals(10, profile.ascent)
         assertEquals(3, profile.glyphDrawOffsetY)
         assertEquals(0xFFFD, profile.replacementCodePoint)
+        assertEquals(IdeCodeFontProfile.DEFAULT.cellWidth, profile.cellWidth)
+        assertEquals(IdeCodeFontProfile.DEFAULT.cellHeight, profile.cellHeight)
+        assertEquals(IdeCodeFontProfile.DEFAULT.baseline, profile.ascent)
     }
 
     @Test
@@ -49,6 +53,7 @@ class TerminalFontProfileTest {
 
     @Test
     fun `catalog resolves stable IDs and cycles in presentation order`() {
+        assertEquals(TerminalFontProfile.JETBRAINS_MONO, TerminalFontProfile.fromId("jetbrains_mono"))
         assertEquals(TerminalFontProfile.COZETTE, TerminalFontProfile.fromId("cozette"))
         assertEquals(TerminalFontProfile.DINA, TerminalFontProfile.fromId("dina"))
         assertEquals(TerminalFontProfile.PROGGY_TINY, TerminalFontProfile.fromId("proggy_tiny"))
@@ -56,7 +61,8 @@ class TerminalFontProfileTest {
         assertEquals(TerminalFontProfile.DEFAULT, TerminalFontProfile.fromId(null))
         assertEquals(TerminalFontProfile.DINA, TerminalFontProfile.COZETTE.next())
         assertEquals(TerminalFontProfile.PROGGY_TINY, TerminalFontProfile.DINA.next())
-        assertEquals(TerminalFontProfile.COZETTE, TerminalFontProfile.PROGGY_TINY.next())
+        assertEquals(TerminalFontProfile.JETBRAINS_MONO, TerminalFontProfile.PROGGY_TINY.next())
+        assertEquals(TerminalFontProfile.COZETTE, TerminalFontProfile.JETBRAINS_MONO.next())
     }
 
     @Test

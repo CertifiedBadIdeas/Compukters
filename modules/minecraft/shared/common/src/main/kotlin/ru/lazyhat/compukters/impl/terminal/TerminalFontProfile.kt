@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.impl.terminal
 
+import ru.lazyhat.compukters.impl.font.JetBrainsMonoFont
+
 class TerminalFontProfile private constructor(
     val id: String,
     val displayName: String,
@@ -62,6 +64,17 @@ class TerminalFontProfile private constructor(
     companion object {
         private const val MINECRAFT_TEXT_BASELINE = 7
 
+        val JETBRAINS_MONO =
+            terminalProfile(
+                id = JetBrainsMonoFont.ID,
+                displayName = "JetBrains Mono",
+                cellWidth = JetBrainsMonoFont.CELL_WIDTH,
+                cellHeight = JetBrainsMonoFont.CELL_HEIGHT,
+                ascent = JetBrainsMonoFont.BASELINE,
+                supportedCodePoints = JETBRAINS_MONO_SUPPORTED_CODE_POINTS,
+                replacementCodePoint = 0xFFFD,
+            )
+
         val COZETTE =
             terminalProfile(
                 id = "cozette",
@@ -92,8 +105,8 @@ class TerminalFontProfile private constructor(
                 supportedCodePoints = PROGGY_TINY_SUPPORTED_CODE_POINTS,
                 replacementCodePoint = '?'.code,
             )
-        val ALL = listOf(COZETTE, DINA, PROGGY_TINY)
-        val DEFAULT = COZETTE
+        val ALL = listOf(JETBRAINS_MONO, COZETTE, DINA, PROGGY_TINY)
+        val DEFAULT = JETBRAINS_MONO
 
         fun fromId(id: String?): TerminalFontProfile = ALL.firstOrNull { it.id == id } ?: DEFAULT
 
