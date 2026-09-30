@@ -44,6 +44,7 @@ import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
 import ru.lazyhat.compukters.ide.analysis.EditorExpressionInfo
 import ru.lazyhat.compukters.ide.analysis.EditorParameterInfo
 import ru.lazyhat.compukters.ide.analysis.EditorPresentationLimits
+import ru.lazyhat.compukters.ide.analysis.MAX_RENAME_NAME_BYTES
 import ru.lazyhat.compukters.ide.analysis.MethodUsageCount
 import ru.lazyhat.compukters.ide.analysis.ParameterInfoItem
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
@@ -421,6 +422,10 @@ private fun validateQuery(
             context.validate(query.path, query.offsetUtf16)
         }
 
+        is AnalysisQuery.Rename -> {
+            context.validate(query.path, query.offsetUtf16)
+        }
+
         is AnalysisQuery.Format -> {
             context.validate(query.path, 0)
             require(strictUtf8Size(query.source) <= context.limits.sourceFileBytes) {
@@ -495,7 +500,15 @@ private fun validateResult(
         }
 
         is AnalysisResult.References -> {
-            require(query is AnalysisQuery.References) { "analysis result kind does not match its query" }
+            require(query is AnalysisQuery.References || query is AnalysisQuery.Rename) { "analysis result kind does not match its query" }
+            if (query is AnalysisQuery.Rename) {
+                require(
+                    result.locations.all {
+                        it is DeclarationLocation.Source &&
+                            it.origin == DeclarationOrigin.Project
+                    },
+                ) { "rename contains a read-only location" }
+            }
             AnalysisResult.References.create(result.identity, result.locations, sourceLengths, limits.resultLimits())
         }
 
@@ -622,6 +635,7 @@ private class MessageSink {
                 is AnalysisQuery.Declaration -> QueryKind.Declaration
                 is AnalysisQuery.References -> QueryKind.References
                 is AnalysisQuery.Format -> QueryKind.Format
+                is AnalysisQuery.Rename -> QueryKind.Rename
             },
         )
         identity(value.identity)
@@ -650,6 +664,11 @@ private class MessageSink {
 
             is AnalysisQuery.References -> {
                 cursor(value.path, value.offsetUtf16)
+            }
+
+            is AnalysisQuery.Rename -> {
+                cursor(value.path, value.offsetUtf16)
+                string(value.newName)
             }
 
             is AnalysisQuery.Format -> {
@@ -1067,6 +1086,10 @@ private class MessageSource(
             QueryKind.Format -> {
                 AnalysisQuery.Format(identity, kotlinPath(), string(context.limits.sourceFileBytes), u32())
             }
+
+            QueryKind.Rename -> {
+                AnalysisQuery.Rename(identity, kotlinPath(), u32(), string(MAX_RENAME_NAME_BYTES))
+            }
         }
     }
 
@@ -1289,7 +1312,7 @@ private class MessageSource(
     }
 }
 
-private enum class QueryKind { Presentation, Completion, ExpressionInfo, ParameterInfo, Declaration, References, Format }
+private enum class QueryKind { Presentation, Completion, ExpressionInfo, ParameterInfo, Declaration, References, Format, Rename }
 
 private enum class ResultKind { Presentation, Completion, ExpressionInfo, ParameterInfo, Declaration, References, Format }
 

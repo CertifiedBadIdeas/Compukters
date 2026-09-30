@@ -58,6 +58,27 @@ import kotlin.test.assertTrue
 
 class AnalysisWorkerControllerTest {
     @Test
+    fun `invalidated query workspace is reopened before the next query`() =
+        withController(1) { controller, _, processes, workerIdentity, limits ->
+            val worker = processes.single()
+            val snapshot = open(controller, worker, workerIdentity, limits)
+            val query = AnalysisQuery.ExpressionInfo(snapshot.identity, path(), 3)
+            val first = controller.query(snapshot, query)
+            val failedRequest = assertIs<AnalysisQueryRequest>(worker.awaitWrite())
+            worker.enqueue(
+                AnalysisFailure(failedRequest.requestId, snapshot.identity, AnalysisFailureKind.InvalidSnapshot, "reopen required"),
+            )
+            assertIs<AnalysisClientResult.Failure>(first.get(5, TimeUnit.SECONDS))
+            val second = controller.query(snapshot, query)
+            val reopen = assertIs<OpenSnapshotRequest>(worker.awaitWrite())
+            worker.enqueue(SnapshotReady(reopen.requestId, snapshot.identity))
+            val request = assertIs<AnalysisQueryRequest>(worker.awaitWrite())
+            val expression = AnalysisResult.ExpressionInfo.create(snapshot.identity, null, mapOf(path() to 15))
+            worker.enqueue(AnalysisQuerySuccess(request.requestId, expression))
+            assertEquals(AnalysisClientResult.Success(expression), second.get(5, TimeUnit.SECONDS))
+        }
+
+    @Test
     fun `worker capability may exceed requested controller limits`() =
         withController(1) { controller, _, processes, workerIdentity, limits ->
             val worker = processes.single()

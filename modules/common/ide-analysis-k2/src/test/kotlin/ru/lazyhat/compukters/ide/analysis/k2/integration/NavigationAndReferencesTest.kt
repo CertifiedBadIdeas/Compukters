@@ -149,6 +149,47 @@ class NavigationAndReferencesTest {
                         ).get(90, TimeUnit.SECONDS),
                 ).result as AnalysisResult.References
             assertEquals(2, references.locations.size)
+            val rename =
+                assertIs<AnalysisClientResult.Success>(
+                    controller
+                        .query(
+                            admitted,
+                            AnalysisQuery.Rename(
+                                identity,
+                                VirtualSourcePath.kotlin("demo/Declaration.kt"),
+                                declaration.indexOf("target"),
+                                "renamed",
+                            ),
+                        ).get(90, TimeUnit.SECONDS),
+                ).result as AnalysisResult.References
+            assertEquals(3, rename.locations.size)
+            val rejected =
+                assertIs<AnalysisClientResult.Failure>(
+                    controller
+                        .query(
+                            admitted,
+                            AnalysisQuery.Rename(
+                                identity,
+                                VirtualSourcePath.kotlin("demo/Declaration.kt"),
+                                declaration.indexOf("target"),
+                                "fun",
+                            ),
+                        ).get(90, TimeUnit.SECONDS),
+                )
+            assertEquals(ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFailureKind.RefactoringRejected, rejected.kind)
+            val restored =
+                assertIs<AnalysisClientResult.Success>(
+                    controller
+                        .query(
+                            admitted,
+                            AnalysisQuery.References(
+                                identity,
+                                VirtualSourcePath.kotlin("demo/Declaration.kt"),
+                                declaration.indexOf("target"),
+                            ),
+                        ).get(90, TimeUnit.SECONDS),
+                ).result as AnalysisResult.References
+            assertEquals(references.locations, restored.locations)
             val presentation =
                 assertIs<AnalysisClientResult.Success>(
                     controller

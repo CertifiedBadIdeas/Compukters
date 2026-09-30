@@ -86,7 +86,13 @@ workspace and answers diagnostics, completion, symbol, reference, expression, an
 and analysis use the same resolved platform bundle and source-snapshot identities, but have separate worker sessions
 and result contracts.
 
-Analysis protocol v10 also carries explicit Kotlin format and parameter-information requests. Presentation results
+Analysis protocol v11 also carries explicit Kotlin format, rename-admission, and parameter-information requests. Rename
+returns bounded editable project locations after validating a single Kotlin identifier and speculatively checking
+project diagnostics and reference bindings. The worker restores its original PSI, source identity, and completion
+state even on cancellation; a failed restoration invalidates the workspace and requires a fresh snapshot open.
+Rename currently rejects projects with analysis errors, read-only library symbols, the `main` entry point,
+and inheritance or convention-based declarations rather than attempting partial refactoring.
+Presentation results
 include bounded method-name ranges with non-negative project usage counts. K2 gathers declarations in the active
 source and resolves references in one project traversal under the presentation session, keeping overloads and
 same-named methods separate. Counts share the semantic-token item bound, are checked against the correlated source,

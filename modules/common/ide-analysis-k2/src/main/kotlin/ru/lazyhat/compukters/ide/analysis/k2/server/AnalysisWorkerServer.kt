@@ -171,8 +171,18 @@ internal class AnalysisWorkerServer(
                 }
                 val snapshot = workspace.view()
                 val response =
-                    K2ProgressCancellation.run(cancellation) {
-                        queryHandler.execute(request, snapshot, cancellation)
+                    try {
+                        K2ProgressCancellation.run(cancellation) {
+                            queryHandler.execute(request, snapshot, cancellation)
+                        }
+                    } catch (failure: K2WorkspaceReopenRequiredException) {
+                        active = null
+                        AnalysisFailure(
+                            request.requestId,
+                            request.query.identity,
+                            AnalysisFailureKind.InvalidSnapshot,
+                            bounded(failure.message ?: "K2 workspace needs a reopen", limits.detailTextBytes),
+                        )
                     }
                 if (!cancellation.isCancelled) write(response)
             },

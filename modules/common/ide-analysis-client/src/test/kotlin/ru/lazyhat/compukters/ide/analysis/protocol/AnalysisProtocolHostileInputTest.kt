@@ -136,7 +136,7 @@ class AnalysisProtocolHostileInputTest {
                 ),
                 context,
             )
-        val wrongProtocol = handshake.copy(payload = handshake.payload.copyOf().also { it[0] = 9 })
+        val wrongProtocol = handshake.copy(payload = handshake.payload.copyOf().also { it[0] = 10 })
         assertEquals(AnalysisProtocolError.WrongVersion, messageFailure(wrongProtocol).error)
     }
 

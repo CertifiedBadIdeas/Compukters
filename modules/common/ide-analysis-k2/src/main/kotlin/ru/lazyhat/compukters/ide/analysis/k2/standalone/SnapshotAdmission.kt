@@ -55,7 +55,14 @@ internal class AdmittedK2Snapshot(
     val platform: CompuktersAnalysisPlatformContext,
     val projectCompletionIndex: GlobalCompletionIndex,
     val platformCompletionIndex: GlobalCompletionIndex,
-)
+    private val workspace: IncrementalK2Workspace,
+) {
+    fun <T> preview(
+        changedTexts: Map<VirtualSourcePath, String>,
+        limits: ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits,
+        operation: (AdmittedK2Snapshot) -> T,
+    ): T = workspace.preview(identity, changedTexts, limits, operation)
+}
 
 internal class SnapshotAdmission(
     private val temporaryRoot: Path,

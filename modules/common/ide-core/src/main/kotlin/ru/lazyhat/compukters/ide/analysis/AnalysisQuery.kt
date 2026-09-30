@@ -30,6 +30,8 @@ enum class CompletionTrigger {
     Manual,
 }
 
+const val MAX_RENAME_NAME_BYTES: Int = 256
+
 sealed interface AnalysisQuery {
     val identity: AnalysisSnapshotIdentity
 
@@ -104,6 +106,18 @@ sealed interface AnalysisQuery {
             require(caretOffsetUtf16 <= source.length) { "format caret offset exceeds its source" }
             requireUtf16Boundary(source, caretOffsetUtf16, "format caret offset")
             strictUtf8Size(source)
+        }
+    }
+
+    data class Rename(
+        override val identity: AnalysisSnapshotIdentity,
+        val path: VirtualSourcePath,
+        val offsetUtf16: Int,
+        val newName: String,
+    ) : AnalysisQuery {
+        init {
+            validateCursor(path, offsetUtf16)
+            require(newName.isNotEmpty() && strictUtf8Size(newName) <= MAX_RENAME_NAME_BYTES) { "rename name exceeds identifier limit" }
         }
     }
 }
