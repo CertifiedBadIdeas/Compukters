@@ -286,6 +286,7 @@ class IdeAnalysisCoordinator(
             check(!closed) { "analysis coordinator is closed" }
             invalidateSemanticLocked()
             invalidateParameterInfoLocked(close = false)
+            caretOccurrencesEnabled = false
             val current = session
             if (current == null || current.project !== project || current.path != path) {
                 open(project, path, text, documentRevision, sourceOverlays)
@@ -321,7 +322,7 @@ class IdeAnalysisCoordinator(
         rebuild?.let { pending -> rebuild(pending.version, requireNotNull(pending.session.input)) }
     }
 
-    fun reload() {
+    fun reload(sourceOverlays: Map<VirtualSourcePath, String>? = null) {
         val project: ProjectHandle
         val expectedVersion: Long
         synchronized(lock) {
@@ -332,7 +333,7 @@ class IdeAnalysisCoordinator(
             version = Math.incrementExact(version)
             expectedVersion = version
             project = current.project
-            session = current.copy(input = null, snapshot = null)
+            session = current.copy(input = null, snapshot = null, overlays = sourceOverlays?.toMap() ?: current.overlays)
             publishedState.set(IdeAnalysisState.Loading(current.path, current.documentRevision))
         }
         cancelPointerRequests()
@@ -476,14 +477,18 @@ class IdeAnalysisCoordinator(
         request?.let(::dispatchParameterInfo)
     }
 
-    fun caretMoved(offsetUtf16: Int) {
+    fun caretMoved(
+        offsetUtf16: Int,
+        requestOccurrences: Boolean = true,
+    ) {
         val request: ParameterInfoRequest?
         synchronized(lock) {
             val current = session ?: return
             require(offsetUtf16 in 0..current.text.length) { "analysis caret exceeds current source" }
             val updated = current.copy(caretOffsetUtf16 = offsetUtf16)
             session = updated
-            caretOccurrencesEnabled = true
+            caretOccurrencesEnabled = requestOccurrences
+            if (!requestOccurrences) invalidateCaretOccurrencesLocked()
             request =
                 if (parameterInfoRequested) {
                     updated.snapshot?.let { snapshot -> beginParameterInfoLocked(updated, snapshot) }
@@ -494,6 +499,7 @@ class IdeAnalysisCoordinator(
             if (active != null && parameterInfoRequested) publishedState.set(active.copy(parameterInfo = null))
         }
         request?.let(::dispatchParameterInfo)
+        if (!requestOccurrences) requests.cancelSymbolOccurrences()
         refreshCaretOccurrences()
     }
 

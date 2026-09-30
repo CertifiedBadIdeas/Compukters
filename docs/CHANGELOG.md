@@ -176,6 +176,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   read-only for this action, and projects must have no analysis errors.
 - Placing the text caret on an analyzed Kotlin identifier highlights its declaration and references in the current project file,
   distinguishing overloads and unrelated same-named symbols, including references inside string interpolation.
+  Typing hides symbol occurrences until the cursor is explicitly placed or moved again, preventing highlights from
+  appearing or flashing during text entry.
   Selecting text highlights its literal occurrences everywhere: from two characters inside strings and from three
   elsewhere, also in read-only files. Symbol occurrences do not wait for hover and are independent of mouse movement.
   Explicit Ctrl+F results take priority while search is open.
