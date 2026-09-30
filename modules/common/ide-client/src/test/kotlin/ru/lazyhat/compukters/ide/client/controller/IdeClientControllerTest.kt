@@ -90,6 +90,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
@@ -123,6 +124,49 @@ class IdeClientControllerTest {
         assertEquals("demo", workspace.project.directoryName)
         assertEquals(ProjectPath.file("src/main.kt"), workspace.activeFile)
         assertIs<IdeEditorView.Text>(workspace.editor)
+    }
+
+    @Test
+    fun `find selects and reveals matches without editing source and follows file switches`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("val first = 1\nval second = 2\n")))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(0, false)))
+        val revision = fixture.textEditor().contentRevision
+        fixture.controller.dispatch(IdeCommand.OpenFind)
+        fixture.controller.dispatch(IdeCommand.EditFind(IdeEditorInput.Type("val")))
+        assertEquals(
+            2,
+            fixture
+                .textEditor()
+                .find!!
+                .matches.size,
+        )
+        assertEquals(0, fixture.textEditor().find!!.selectedIndex)
+        fixture.controller.dispatch(IdeCommand.NavigateFind(false))
+        assertEquals(1, fixture.textEditor().find!!.selectedIndex)
+        assertEquals(1, fixture.textEditor().firstVisibleLine)
+        assertEquals(revision, fixture.textEditor().contentRevision)
+        fixture.controller.dispatch(IdeCommand.FocusFind(false))
+        assertFalse(fixture.textEditor().find!!.focused)
+        fixture.controller.dispatch(IdeCommand.CloseFind)
+        assertNull(fixture.textEditor().find)
+        fixture.controller.dispatch(IdeCommand.Save)
+        fixture.workspace.completeSave()
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.OpenFind)
+        fixture.controller.dispatch(IdeCommand.OpenFile(ProjectPath.file("notes.txt")))
+        fixture.controller.tick()
+        assertTrue(
+            fixture
+                .textEditor()
+                .find!!
+                .matches
+                .isEmpty(),
+        )
+        assertEquals("val", fixture.textEditor().find!!.query)
+        fixture.controller.close()
     }
 
     @Test

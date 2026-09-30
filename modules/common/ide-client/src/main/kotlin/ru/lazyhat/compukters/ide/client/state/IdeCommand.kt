@@ -87,6 +87,22 @@ sealed interface IdeCommand {
 
     data object Save : IdeCommand
 
+    data object OpenFind : IdeCommand
+
+    data object CloseFind : IdeCommand
+
+    data class FocusFind(
+        val focused: Boolean,
+    ) : IdeCommand
+
+    data class EditFind(
+        val input: IdeEditorInput,
+    ) : IdeCommand
+
+    data class NavigateFind(
+        val backwards: Boolean,
+    ) : IdeCommand
+
     data object Format : IdeCommand
 
     /** Requests an admitted external-change poll. */

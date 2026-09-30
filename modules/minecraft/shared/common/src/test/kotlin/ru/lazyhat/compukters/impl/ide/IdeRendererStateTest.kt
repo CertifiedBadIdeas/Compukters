@@ -49,6 +49,7 @@ import ru.lazyhat.compukters.ide.client.build.IdeBuiltArtifact
 import ru.lazyhat.compukters.ide.client.files.IdeComputerChildren
 import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
+import ru.lazyhat.compukters.ide.client.search.IdeFindView
 import ru.lazyhat.compukters.ide.client.state.IdeBusyOperation
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
@@ -88,6 +89,24 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
+    @Test
+    fun `find bar renders a counter and clipped literal highlights without covering code`() {
+        val search = IdeFindView("val", 3, null, listOf(EditorRange(0, 3), EditorRange(13, 16)), 0, true)
+        val editor = semanticEditor("val one = 1; val two = 2", find = search) { _, _ -> IdeSemanticInteraction.None }
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT, findVisible = true)
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry)
+        assertTrue(model.text.any { it.kind == IdeTextKind.Find && it.value == "1/2" })
+        assertEquals(2, model.fills.count { it.kind == IdeFillKind.SearchMatch })
+        assertTrue(
+            model.fills.filter { it.kind == IdeFillKind.SearchMatch }.all {
+                it.bounds.top >= geometry.editor.top &&
+                    it.bounds.right <= geometry.editor.right
+            },
+        )
+        assertTrue(model.hitTargets.any { it.action == IdeHitAction.FindClose && it.enabled })
+        assertTrue(model.text.filter { it.kind == IdeTextKind.Source }.all { it.y >= geometry.findBar!!.bottom })
+    }
+
     @Test
     fun `start page exposes bounded project rows and actions`() {
         val state =
@@ -354,7 +373,9 @@ class IdeRendererStateTest {
         assertEquals(listOf(13, 13), hover.zipWithNext { first, second -> second.y - first.y })
         val hoverBounds = requireNotNull(hover.first().clip)
         val popupPanel = model.panels.single { it.bounds == hoverBounds }
-        assertTrue(model.fills.any { it.kind == IdeFillKind.Shadow && it.zIndex < popupPanel.zIndex && it.bounds.bottom > hoverBounds.bottom })
+        assertTrue(
+            model.fills.any { it.kind == IdeFillKind.Shadow && it.zIndex < popupPanel.zIndex && it.bounds.bottom > hoverBounds.bottom },
+        )
         assertEquals(3 * IdeCodeFontProfile.DEFAULT.cellHeight + 4, hoverBounds.height)
         assertEquals(hoverBounds.top + 3 + IdeCodeFontProfile.DEFAULT.glyphDrawOffsetY, hover.first().y)
         assertTrue(hover.maxOf { it.zIndex } < model.text.filter { it.kind == IdeTextKind.Dialog }.minOf { it.zIndex })
@@ -990,6 +1011,7 @@ class IdeRendererStateTest {
 
     private fun semanticEditor(
         source: String,
+        find: IdeFindView? = null,
         interaction: (AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeSemanticInteraction,
     ): IdeEditorView.Text {
         val document = EditorDocument(source)
@@ -1012,6 +1034,7 @@ class IdeRendererStateTest {
             dirty = false,
             conflict = false,
             lexical = lexical,
+            find = find,
             analysis =
                 IdeAnalysisState.Active(
                     identity,

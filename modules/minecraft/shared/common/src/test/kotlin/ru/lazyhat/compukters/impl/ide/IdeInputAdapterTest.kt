@@ -49,6 +49,29 @@ import kotlin.test.assertTrue
 
 class IdeInputAdapterTest {
     @Test
+    fun `find input takes precedence over completion and never edits source`() {
+        val fixture = fixture()
+        val focus = IdeFocusState(IdeFocusArea.Editor, completionVisible = true, findVisible = true, findFocused = true)
+        fixture.adapter.keyPressed(key(IdeKeyCode.F, IdeModifier.CONTROL), IdeFocusState.Editor)
+        fixture.adapter.charTyped(IdeCharacterInput("😀"), focus)
+        fixture.adapter.keyPressed(key(IdeKeyCode.ENTER), focus)
+        fixture.adapter.keyPressed(key(IdeKeyCode.ENTER, IdeModifier.SHIFT), focus)
+        fixture.adapter.keyPressed(key(IdeKeyCode.BACKSPACE), focus)
+        fixture.adapter.keyPressed(key(IdeKeyCode.ESCAPE), focus)
+        assertEquals(
+            listOf(
+                IdeCommand.OpenFind,
+                IdeCommand.EditFind(IdeEditorInput.Type("😀")),
+                IdeCommand.NavigateFind(false),
+                IdeCommand.NavigateFind(true),
+                IdeCommand.EditFind(IdeEditorInput.Backspace),
+                IdeCommand.CloseFind,
+            ),
+            fixture.commands,
+        )
+    }
+
+    @Test
     fun `character input preserves supplementary code points only for editor focus`() {
         val fixture = fixture()
 

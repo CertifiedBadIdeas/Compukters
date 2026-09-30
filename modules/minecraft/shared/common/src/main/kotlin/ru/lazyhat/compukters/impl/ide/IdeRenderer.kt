@@ -32,6 +32,7 @@ import ru.lazyhat.compukters.ide.client.files.IdeComputerChildren
 import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTransferState
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
+import ru.lazyhat.compukters.ide.client.search.IdeFindView
 import ru.lazyhat.compukters.ide.client.state.IdeBusyOperation
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
@@ -500,6 +501,7 @@ object IdeRenderer {
             caretVisible: Boolean,
         ) {
             val bounds = geometry.editor
+            editor.find?.let { findBar(it) }
             scissors += IdeScissorDraw(IdeScissorKind.Editor, bounds, Z_CLIP)
             val rows = minOf(geometry.codeRows, editor.visibleLines.size)
             val gutterDigits =
@@ -522,6 +524,7 @@ object IdeRenderer {
                     IdeColors.LINE_NUMBER,
                     bounds,
                 )
+                findMatches(editor, line, lineStart, codeLeft, rowTop)
                 selection(editor, line, lineStart, codeLeft, rowTop)
                 styledLine(editor, lineNumber, line, lineStart, codeLeft, y)
                 val nextLineStart = editor.visibleLineStartsUtf16.getOrNull(visibleIndex + 1)
@@ -575,6 +578,110 @@ object IdeRenderer {
                     IdeColors.SELECTION,
                     Z_SELECTION,
                 )
+        }
+
+        private fun findBar(find: IdeFindView) {
+            val bounds = geometry.findBar ?: return
+            panel(IdePanelKind.Control, bounds, IdeColors.PANEL_ALT)
+            val field = IdeRect(bounds.left + 4, bounds.top + 3, bounds.right - 166, bounds.bottom - 3)
+            fills += IdeFillDraw(IdeFillKind.Border, field, if (find.focused) IdeColors.ACCENT else IdeColors.BORDER, Z_CONTENT + 1)
+            val inside = IdeRect(field.left + 1, field.top + 1, field.right - 1, field.bottom - 1)
+            fills += IdeFillDraw(IdeFillKind.Background, inside, IdeColors.EDITOR, Z_CONTENT + 2)
+            target(IdeHitAction.FindFocus, field, true, "Find in current file (Ctrl+F)")
+            val columns = ((inside.width - 6) / font.cellWidth).coerceAtLeast(1)
+            val beforeCaret = visualColumns(find.query.substring(0, find.queryCaretUtf16))
+            val scroll = (beforeCaret - columns + 1).coerceAtLeast(0)
+            val queryGlyphs = projectGlyphs(find.query)
+            val queryStart = queryGlyphs.offsetByCodePoints(0, minOf(scroll, queryGlyphs.codePointCount(0, queryGlyphs.length)))
+            val visibleQuery = queryGlyphs.substring(queryStart)
+            val x = inside.left + 3
+            val y = inside.top + 1 + font.glyphDrawOffsetY
+            if (find.focused) {
+                find.querySelection?.let { selection ->
+                    val start = visualColumns(find.query.substring(0, selection.startUtf16)) - scroll
+                    val end = visualColumns(find.query.substring(0, selection.endUtf16)) - scroll
+                    val left = (x + start * font.cellWidth).coerceIn(inside.left, inside.right)
+                    val right = (x + end * font.cellWidth).coerceIn(left, inside.right)
+                    fills +=
+                        IdeFillDraw(
+                            IdeFillKind.Selection,
+                            IdeRect(left, inside.top, right, inside.bottom),
+                            IdeColors.SELECTION,
+                            Z_SELECTION,
+                        )
+                }
+                val caretX = x + (beforeCaret - scroll) * font.cellWidth
+                if (caretX in inside.left until inside.right) {
+                    fills +=
+                        IdeFillDraw(IdeFillKind.Caret, IdeRect(caretX, inside.top, caretX + 1, inside.bottom), IdeColors.CARET, Z_CARET)
+                }
+            }
+            code(IdeTextKind.Find, visibleQuery.ifEmpty { if (find.focused) "" else "Find" }, x, y, IdeColors.TEXT, inside)
+            val count = "${find.selectedIndex + 1}/${find.matches.size}"
+            val counter = IdeRect(bounds.right - 160, bounds.top, bounds.right - 76, bounds.bottom)
+            ui(
+                IdeTextKind.Find,
+                count,
+                counter.left,
+                bounds.top + 8,
+                if (find.query.isNotEmpty() &&
+                    find.matches.isEmpty()
+                ) {
+                    IdeColors.ERROR
+                } else {
+                    IdeColors.MUTED
+                },
+                clip = counter,
+            )
+            val previous = IdeRect(bounds.right - 72, bounds.top + 3, bounds.right - 50, bounds.bottom - 3)
+            val next = IdeRect(bounds.right - 48, previous.top, bounds.right - 26, previous.bottom)
+            val close = IdeRect(bounds.right - 24, previous.top, bounds.right - 2, previous.bottom)
+            target(IdeHitAction.FindPrevious, previous, find.matches.isNotEmpty(), "Previous match (Shift+Enter)")
+            target(IdeHitAction.FindNext, next, find.matches.isNotEmpty(), "Next match (Enter)")
+            target(IdeHitAction.FindClose, close, true, "Close search (Escape)")
+            ui(IdeTextKind.Find, "↑", previous.left + 7, previous.top + 5)
+            ui(IdeTextKind.Find, "↓", next.left + 7, next.top + 5)
+            ui(IdeTextKind.Find, "×", close.left + 7, close.top + 5)
+        }
+
+        private fun findMatches(
+            editor: IdeEditorView.Text,
+            line: String,
+            lineStart: Int,
+            codeLeft: Int,
+            rowTop: Int,
+        ) {
+            val matches = editor.find?.matches ?: return
+            val insertion = matches.binarySearch { if (it.endUtf16 <= lineStart) -1 else 1 }
+            var index = -insertion - 1
+            while (index < matches.size && matches[index].startUtf16 < lineStart + line.length) {
+                val match = matches[index++]
+                val start = (match.startUtf16 - lineStart).coerceIn(0, line.length)
+                val end = (match.endUtf16 - lineStart).coerceIn(start, line.length)
+                val left =
+                    (
+                        codeLeft + (
+                            visualColumns(
+                                line.substring(0, start),
+                            ) - editor.firstVisibleColumn
+                        ) * font.cellWidth
+                    ).coerceIn(codeLeft, geometry.editor.right)
+                val right =
+                    (
+                        codeLeft + (
+                            visualColumns(
+                                line.substring(0, end),
+                            ) - editor.firstVisibleColumn
+                        ) * font.cellWidth
+                    ).coerceIn(left, geometry.editor.right)
+                fills +=
+                    IdeFillDraw(
+                        IdeFillKind.SearchMatch,
+                        IdeRect(left, rowTop, right, rowTop + font.cellHeight),
+                        IdeColors.SEARCH_MATCH,
+                        Z_SELECTION - 1,
+                    )
+            }
         }
 
         private fun styledLine(

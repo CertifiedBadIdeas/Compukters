@@ -44,11 +44,24 @@ enum class IdeTextKind {
     ProjectChoice,
     ProjectAction,
     Tooltip,
+    Find,
 }
 
 enum class IdeTextRotation { None, Clockwise90 }
 
-enum class IdeFillKind { Background, Border, Shadow, Selection, DropTarget, Caret, Splitter, HyperlinkUnderline, MutableUnderline, DialogScrim }
+enum class IdeFillKind {
+    Background,
+    Border,
+    Shadow,
+    SearchMatch,
+    Selection,
+    DropTarget,
+    Caret,
+    Splitter,
+    HyperlinkUnderline,
+    MutableUnderline,
+    DialogScrim,
+}
 
 enum class IdeScissorKind { Tree, Editor, Diagnostics, Completion, SemanticPopup, ProjectSwitcher, Tooltip }
 
@@ -73,6 +86,10 @@ enum class IdeHitAction {
     Confirm,
     Dismiss,
     DeclarationChoice,
+    FindFocus,
+    FindPrevious,
+    FindNext,
+    FindClose,
 }
 
 enum class IdeFocusGroup { Page, Dialog }

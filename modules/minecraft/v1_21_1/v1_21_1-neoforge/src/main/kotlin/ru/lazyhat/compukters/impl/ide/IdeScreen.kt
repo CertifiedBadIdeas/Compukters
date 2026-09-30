@@ -192,8 +192,20 @@ internal class IdeScreen(
             focusArea =
                 when {
                     hitAction == IdeHitAction.Terminal && terminalOverlay.visible -> IdeFocusArea.Terminal
+
+                    hitAction in
+                        setOf(
+                            IdeHitAction.FindFocus,
+                            IdeHitAction.FindPrevious,
+                            IdeHitAction.FindNext,
+                            IdeHitAction.FindClose,
+                        )
+                    -> IdeFocusArea.Editor
+
                     geometry.editor.contains(uiX, uiY) -> IdeFocusArea.Editor
+
                     geometry.tree?.contains(uiX, uiY) == true -> IdeFocusArea.Tree
+
                     else -> IdeFocusArea.Panel
                 }
             clearFocus()
@@ -511,6 +523,8 @@ internal class IdeScreen(
             layout.diagnosticsExpanded,
             treeVisible = true,
             IdeCodeFontProfile.DEFAULT,
+            findVisible =
+                ((application.controller.viewState().page as? IdePageState.Workspace)?.value?.editor as? IdeEditorView.Text)?.find != null,
         )
     }
 
@@ -533,6 +547,9 @@ internal class IdeScreen(
             state.dialog,
             geometry().codeRows.coerceAtLeast(1),
             analysis?.parameterInfo != null,
+            findVisible = editor?.find != null,
+            findFocused = editor?.find?.focused == true,
+            findSelectedText = editor?.find?.let { find -> find.querySelection?.let { find.query.substring(it.startUtf16, it.endUtf16) } },
         )
     }
 

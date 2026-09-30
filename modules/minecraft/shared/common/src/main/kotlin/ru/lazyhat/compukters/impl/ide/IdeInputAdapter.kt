@@ -59,6 +59,9 @@ data class IdeFocusState(
     val dialog: IdeDialogState? = null,
     val editorPageRows: Int = 1,
     val parameterInfoVisible: Boolean = false,
+    val findVisible: Boolean = false,
+    val findFocused: Boolean = false,
+    val findSelectedText: String? = null,
 ) {
     companion object {
         val Initial = IdeFocusState(IdeFocusArea.Editor)
@@ -119,6 +122,11 @@ class IdeInputAdapter(
         focus: IdeFocusState,
     ): Boolean {
         focus.dialog?.let { return dialogKey(event, it) }
+        if (focus.area == IdeFocusArea.Editor) {
+            if (event.modifiers and IdeModifier.CONTROL != 0 && event.key == IdeKeyCode.F) return dispatch(IdeCommand.OpenFind)
+            if (focus.findVisible && event.key == IdeKeyCode.ESCAPE) return dispatch(IdeCommand.CloseFind)
+            if (focus.findFocused) return findKey(event, focus)
+        }
         if (focus.declarationChooserVisible) chooserKey(event)?.let { return dispatch(it) }
         if (focus.parameterInfoVisible && event.key == IdeKeyCode.ESCAPE) {
             return dispatch(IdeCommand.DismissParameterInfo)
@@ -166,7 +174,40 @@ class IdeInputAdapter(
         focus: IdeFocusState,
     ): Boolean {
         if (focus.dialog != null || focus.area != IdeFocusArea.Editor) return false
+        if (focus.findFocused) return dispatch(IdeCommand.EditFind(IdeEditorInput.Type(event.text)))
         return dispatchType(event.text)
+    }
+
+    private fun findKey(
+        event: IdeKeyInput,
+        focus: IdeFocusState,
+    ): Boolean {
+        val control = event.modifiers and IdeModifier.CONTROL != 0
+        val shift = event.modifiers and IdeModifier.SHIFT != 0
+        if (event.paste) return dispatch(IdeCommand.EditFind(IdeEditorInput.Type(boundedClipboard(clipboard.text()))))
+        if (event.key == IdeKeyCode.ENTER) return dispatch(IdeCommand.NavigateFind(shift))
+        if (event.key == IdeKeyCode.TAB) return dispatch(IdeCommand.FocusFind(false))
+        if (control && event.key == IdeKeyCode.C) {
+            focus.findSelectedText?.let(clipboardWriter::setText)
+            return true
+        }
+        val input =
+            if (control) {
+                when (event.key) {
+                    IdeKeyCode.A -> IdeEditorInput.SelectAll
+                    IdeKeyCode.Z -> IdeEditorInput.Undo
+                    IdeKeyCode.Y -> IdeEditorInput.Redo
+                    IdeKeyCode.LEFT -> IdeEditorInput.MoveWord(IdeHorizontalDirection.Left, shift)
+                    IdeKeyCode.RIGHT -> IdeEditorInput.MoveWord(IdeHorizontalDirection.Right, shift)
+                    IdeKeyCode.BACKSPACE -> IdeEditorInput.DeleteWordBackward
+                    IdeKeyCode.DELETE -> IdeEditorInput.DeleteWordForward
+                    else -> null
+                }
+            } else {
+                (editorKey(event.key, shift, 1) as? IdeCommand.Edit)?.input
+            }
+        input?.let { dispatch(IdeCommand.EditFind(it)) }
+        return true
     }
 
     fun keyReleased(event: IdeKeyInput): Boolean =
@@ -289,6 +330,7 @@ class IdeInputAdapter(
                 return handled
             }
         if (geometry.editor.contains(x, y)) {
+            if (context.editor?.find != null) sink.dispatch(IdeCommand.FocusFind(false))
             val editor = context.editor
             if (editor != null) {
                 val offset = editorOffset(x, y, editor, geometry) ?: return true
@@ -360,6 +402,22 @@ class IdeInputAdapter(
         dialog: IdeDialogState?,
     ): Boolean =
         when (action) {
+            IdeHitAction.FindFocus -> {
+                dispatch(IdeCommand.FocusFind(true))
+            }
+
+            IdeHitAction.FindPrevious -> {
+                dispatch(IdeCommand.NavigateFind(true))
+            }
+
+            IdeHitAction.FindNext -> {
+                dispatch(IdeCommand.NavigateFind(false))
+            }
+
+            IdeHitAction.FindClose -> {
+                dispatch(IdeCommand.CloseFind)
+            }
+
             IdeHitAction.Resolve -> {
                 dispatch(IdeCommand.Resolve)
             }
