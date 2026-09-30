@@ -130,6 +130,7 @@ val analysisWorkerRuntimeClasspath = configurations.create("analysisWorkerRuntim
         "org.jetbrains.kotlin" to "kotlin-script-runtime",
         "org.checkerframework" to "checker-qual",
         "com.google.errorprone" to "error_prone_annotations",
+        "org.jspecify" to "jspecify",
     ).forEach { (group, module) -> exclude(group = group, module = module) }
 }
 
@@ -158,13 +159,13 @@ val prepareAnalysisWorkerPayload = tasks.register<Sync>("prepareAnalysisWorkerPa
     from(rootProject.layout.projectDirectory.file("THIRD-PARTY-NOTICES.md")) {
         into("META-INF")
     }
-    from(rootProject.layout.projectDirectory.dir("licenses/kotlin/v2.4.10")) {
-        into("META-INF/licenses/kotlin/v2.4.10")
+    from(rootProject.layout.projectDirectory.dir("licenses/kotlin/v$pinnedKotlinVersion")) {
+        into("META-INF/licenses/kotlin/v$pinnedKotlinVersion")
     }
     from(rootProject.layout.projectDirectory.file("licenses/jvm/ktlint-1.8.0-MIT.txt")) {
         into("META-INF/licenses/jvm")
     }
-    from(rootProject.layout.projectDirectory.file("licenses/jvm/slf4j-2.0.18-MIT.txt")) {
+    from(rootProject.layout.projectDirectory.file("licenses/jvm/slf4j-${libs.versions.slf4j.get()}-MIT.txt")) {
         into("META-INF/licenses/jvm")
     }
     from(rootProject.layout.projectDirectory.file("licenses/distribution-components.tsv")) {
@@ -246,7 +247,7 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
         listOf(
             "META-INF/licenses/Compukters-Apache-2.0.txt",
             "META-INF/licenses/jvm/ktlint-1.8.0-MIT.txt",
-            "META-INF/licenses/jvm/slf4j-2.0.18-MIT.txt",
+            "META-INF/licenses/jvm/slf4j-${libs.versions.slf4j.get()}-MIT.txt",
             "META-INF/NOTICE.txt",
             "META-INF/THIRD-PARTY-NOTICES.md",
         ).forEach { required ->

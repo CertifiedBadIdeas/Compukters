@@ -53,9 +53,9 @@ retained until a replacement has been fully decoded and verified, then replaced 
 Kotlin compiler and Analysis API internals stay inside the workers and do not enter the mod runtime classpath.
 `worker-client` owns the generic payload publication, process, framing, deadline, and immutable-byte machinery shared
 by both worker clients.
-The production mod archive embeds Tomlj and its ANTLR runtime under a private relocated Compukters namespace. They do
-not enter NeoForge's module layer as separate automatic modules and therefore cannot collide with loader-provided
-versions; Checker Qual remains compile-only.
+The production mod archive embeds Tomlj under a private relocated Compukters namespace. Tomlj carries its own
+relocated ANTLR runtime, so no standalone ANTLR or Checker Qual dependency is needed. These libraries do not enter
+NeoForge's module layer as separate automatic modules and therefore cannot collide with loader-provided versions.
 
 The two execution-producing paths are:
 

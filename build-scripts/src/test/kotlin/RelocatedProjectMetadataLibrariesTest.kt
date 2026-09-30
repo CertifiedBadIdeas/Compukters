@@ -23,7 +23,7 @@ class RelocatedProjectMetadataLibrariesTest {
     private val relocatedEntries =
         listOf(
             "ru/lazyhat/compukters/internal/vendor/tomlj/Toml.class",
-            "ru/lazyhat/compukters/internal/vendor/antlr/v4/runtime/Parser.class",
+            "ru/lazyhat/compukters/internal/vendor/tomlj/internal/antlr/v4/runtime/Parser.class",
         )
 
     @Test
@@ -46,6 +46,16 @@ class RelocatedProjectMetadataLibrariesTest {
         assertThrows<IllegalStateException> {
             validateRelocatedProjectMetadataLibraries(
                 relocatedEntries + "org/antlr/v4/runtime/Parser.class",
+                "compukters.jar",
+            )
+        }
+    }
+
+    @Test
+    fun rejectsDuplicatedStandaloneAntlrRuntime() {
+        assertThrows<IllegalStateException> {
+            validateRelocatedProjectMetadataLibraries(
+                relocatedEntries + "ru/lazyhat/compukters/internal/vendor/antlr/v4/runtime/Parser.class",
                 "compukters.jar",
             )
         }

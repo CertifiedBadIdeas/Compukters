@@ -79,10 +79,7 @@ dependencies {
         "kotlinx-coroutines-core",
         "xz",
     ).forEach { alias -> neoForgeImplementation(libs.findLibrary(alias).get()) }
-    listOf("tomlj", "antlr4-runtime").forEach { alias ->
-        neoForgeRelocatedImplementation(libs.findLibrary(alias).get())
-    }
-    compileOnly(libs.findLibrary("checker-qual").get())
+    neoForgeRelocatedImplementation(libs.findLibrary("tomlj").get())
 }
 
 tasks.named<Jar>("jar") {
@@ -94,7 +91,6 @@ fun com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar.mergeCompuktersRu
     duplicatesStrategy = DuplicatesStrategy.FAIL
     exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
     relocate("org.tomlj", "ru.lazyhat.compukters.internal.vendor.tomlj")
-    relocate("org.antlr.v4.runtime", "ru.lazyhat.compukters.internal.vendor.antlr.v4.runtime")
 }
 
 val productionJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
