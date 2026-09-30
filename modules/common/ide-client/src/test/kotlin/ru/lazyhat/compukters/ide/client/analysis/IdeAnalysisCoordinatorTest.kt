@@ -79,6 +79,56 @@ import kotlin.test.assertTrue
 
 class IdeAnalysisCoordinatorTest {
     @Test
+    fun `unsaved background sources join the active source in every admitted analysis identity`() {
+        val background = VirtualSourcePath.kotlin("src/other.kt")
+        val fixture =
+            AnalysisFixture(
+                "val active = old",
+                extraSources = listOf(ProjectSource(background, BinaryValue.of("val old = 1".encodeToByteArray()))),
+            )
+        val disk = fixture.open()
+        val overlays = mutableMapOf(background to "val renamed = 1")
+        fixture.coordinator.open(fixture.project, path(), "val active = renamed", 1, overlays)
+        overlays[background] = "not admitted"
+        val current = fixture.requests.snapshots.last()
+        assertEquals(
+            "val renamed = 1",
+            current.sources.sources
+                .single { it.path == background }
+                .content
+                .toByteArray()
+                .decodeToString(),
+        )
+        assertEquals(
+            "val active = renamed",
+            current.sources.sources
+                .single { it.path == path() }
+                .content
+                .toByteArray()
+                .decodeToString(),
+        )
+        assertTrue(current.identity.source != disk.identity.source)
+        assertEquals(SourceSnapshotIdentity.of(current.sources), current.identity.source)
+        fixture.coordinator.reload()
+        assertEquals(
+            "val renamed = 1",
+            fixture.requests.snapshots
+                .last()
+                .sources.sources
+                .single { it.path == background }
+                .content
+                .toByteArray()
+                .decodeToString(),
+        )
+        assertEquals(
+            current.identity,
+            fixture.requests.snapshots
+                .last()
+                .identity,
+        )
+    }
+
+    @Test
     fun `caret position set while input loads starts occurrences when its snapshot is ready`() {
         val fixture = AnalysisFixture("val answer = 42\nprintln(answer)", deferredInput = true)
         fixture.coordinator.open(fixture.project, path(), fixture.text, 0)
@@ -936,6 +986,7 @@ private class AnalysisFixture(
     private val rejectedText: String? = null,
     visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
     attachedSources: IdeAttachedSourceCatalog = IdeAttachedSourceCatalog.empty(),
+    private val extraSources: List<ProjectSource> = emptyList(),
 ) {
     var text = initialText
     val descriptor = ProjectCatalog.open(createTempDirectory("compukters-analysis-")).create("demo")
@@ -976,7 +1027,7 @@ private class AnalysisFixture(
             project,
             ProjectManifestCodec.encode(descriptor.manifest).encodeToByteArray(),
             null,
-            source(text),
+            ProjectSnapshot.of((source(text).sources + extraSources).sortedBy { it.path.value }, ANALYSIS_LIMITS),
         )
 
     private fun snapshot(

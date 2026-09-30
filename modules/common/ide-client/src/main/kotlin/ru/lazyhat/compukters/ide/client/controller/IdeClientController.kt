@@ -84,6 +84,7 @@ import ru.lazyhat.compukters.ide.editor.EditorEditResult
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.editor.EditorTextEdit
 import ru.lazyhat.compukters.ide.editor.KotlinSmartTyping
+import ru.lazyhat.compukters.ide.editor.ProjectEditHistory
 import ru.lazyhat.compukters.ide.highlight.IncrementalKotlinHighlighter
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalSnapshot
 import ru.lazyhat.compukters.ide.project.ProjectDependencyReceipt
@@ -151,6 +152,8 @@ class IdeClientController(
     private var project: ProjectDescriptor? = null
     private var tree: ProjectTree? = null
     private var editor: EditorSession? = null
+    private val documents = linkedMapOf<ProjectPath, EditorSession>()
+    private val projectHistory = ProjectEditHistory()
     private val find = IdeFindSession()
     private val selectionOccurrences = IdeSelectionOccurrences()
     private var binary: IdeEditorView.Binary? = null
@@ -170,6 +173,7 @@ class IdeClientController(
     private var pendingAttachedNavigation: PendingAttachedNavigation? = null
     private var openingProjectNavigation: PendingProjectNavigation? = null
     private var pendingProjectDirectory: String? = null
+    private var pendingProjectCreation: String? = null
     private var pendingSave = false
     private var pendingFormat = false
     private var restoreEditorState: IdeProjectEditorState? = null
@@ -350,18 +354,12 @@ class IdeClientController(
             }
 
             IdeCommand.PointerActivity -> {
-                if (editor?.dirty == true) requestSave()
+                if (documents.values.any { it.dirty }) requestSave()
             }
 
             IdeCommand.CloseRequested -> {
                 closeRequested = true
-                val active = editor
-                when {
-                    active == null || (!active.dirty && active.formatInFlight == null) -> closeReady = true
-                    active.conflict -> showConflictDialog(closing = true)
-                    active.formatInFlight != null -> pendingSave = true
-                    else -> requestSave()
-                }
+                continueClosing()
             }
 
             is IdeCommand.ResolveConflict -> {
@@ -498,13 +496,12 @@ class IdeClientController(
         targetCoordinator?.tick()
         refreshTargetState()
         refreshComputerFiles()
-        val active = editor
-        if (
-            active != null && active.dirty && !active.conflict && active.saveInFlight == null && active.formatInFlight == null &&
-            clock.nowMillis() - active.lastEditMillis >= AUTOSAVE_DELAY_MILLIS
-        ) {
-            requestSave()
-        }
+        val active =
+            documents.values.firstOrNull {
+                it.dirty && !it.conflict && it.saveInFlight == null && it.formatInFlight == null &&
+                    clock.nowMillis() - it.lastEditMillis >= AUTOSAVE_DELAY_MILLIS
+            }
+        if (active != null) saveDocument(active)
         refreshAnalysisState()
     }
 
@@ -565,8 +562,7 @@ class IdeClientController(
         }
         generation = Math.incrementExact(generation)
         project?.let { persistPreferences(editor?.path ?: binary?.path) }
-        editor?.close()
-        editor = null
+        closeProjectDocuments()
         closeComputerPreview()
         closeAttachedSourcePreview()
         closeAnalysisFile(forceDrop = true)
@@ -597,8 +593,7 @@ class IdeClientController(
         pendingSave = false
         pendingFormat = false
         buildState = IdeBuildState.Idle
-        editor?.close()
-        editor = null
+        closeProjectDocuments()
         closeComputerPreview()
         closeAttachedSourcePreview()
         closeAnalysisFile()
@@ -622,6 +617,15 @@ class IdeClientController(
     }
 
     private fun createProject(name: String) {
+        val remaining = documents.values.firstOrNull { it.dirty || it.saveInFlight != null || it.formatInFlight != null }
+        if (remaining != null) {
+            pendingProjectCreation = name
+            saveDocument(remaining)
+            return
+        }
+        project?.let { persistPreferences(editor?.path ?: binary?.path) }
+        closeProjectDocuments()
+        closeAnalysisFile()
         generation = Math.incrementExact(generation)
         navigationHistory.clear()
         cancelComputerTransfer()
@@ -646,10 +650,11 @@ class IdeClientController(
     }
 
     private fun requestProjectSwitch(directoryName: String) {
-        val active = editor
+        pendingProjectCreation = null
+        val active = documents.values.firstOrNull { it.dirty }
         if (active != null && active.dirty) {
             pendingProjectDirectory = directoryName
-            requestSave()
+            saveDocument(active)
         } else {
             openProject(directoryName)
         }
@@ -680,6 +685,10 @@ class IdeClientController(
         val operationId = nextOperationId++
         latestOpenOperation = operationId
         openingProjectNavigation = navigation
+        documents[path]?.let { cached ->
+            activateDocument(cached, navigation)
+            return
+        }
         state = state.copy(busy = state.busy + IdeBusyOperation.Project)
         val requestGeneration = generation
         workspace.open(selected.handle, path).whenComplete { result, failure ->
@@ -692,6 +701,50 @@ class IdeClientController(
     }
 
     private fun currentDocument(): EditorDocument? = attachedSourcePreview?.document ?: computerPreview?.document ?: editor?.document
+
+    private fun activateDocument(
+        session: EditorSession,
+        navigation: PendingProjectNavigation? = null,
+    ) {
+        closeAnalysisFile()
+        editor = session
+        binary = null
+        openingProjectNavigation = null
+        navigation?.let {
+            restoreCaret(session.document, it.caretUtf16)
+            session.firstVisibleLine = it.firstVisibleLine ?: session.document.lineContaining(session.document.caretOffset)
+            session.firstVisibleColumn = it.firstVisibleColumn
+        }
+        openAnalysis(session)
+        state = state.copy(busy = state.busy - IdeBusyOperation.Project)
+        publishWorkspace()
+        persistPreferences(session.path)
+        if (navigation != null) completeNavigation(navigation)
+    }
+
+    private fun closeProjectDocuments() {
+        documents.values.forEach(EditorSession::close)
+        documents.clear()
+        projectHistory.clear()
+        pendingProjectCreation = null
+        editor = null
+    }
+
+    private fun removeDocument(session: EditorSession) {
+        documents.remove(session.path)
+        if (editor === session) editor = null
+        session.close()
+    }
+
+    private fun admitDocument(): Boolean {
+        if (documents.size < limits.projectDocuments) return true
+        val disposable =
+            documents.values.firstOrNull {
+                !it.dirty && it.saveInFlight == null && it.formatInFlight == null && !projectHistory.retains(it.document)
+            } ?: return false
+        removeDocument(disposable)
+        return true
+    }
 
     private fun navigateFind(
         backwards: Boolean,
@@ -836,11 +889,11 @@ class IdeClientController(
                 }
 
                 IdeEditorInput.Undo -> {
-                    active.document.undo()
+                    moveProjectHistory(active, redo = false)
                 }
 
                 IdeEditorInput.Redo -> {
-                    active.document.redo()
+                    moveProjectHistory(active, redo = true)
                 }
 
                 IdeEditorInput.SelectAll -> {
@@ -864,6 +917,26 @@ class IdeClientController(
         }
         publishWorkspace()
     }
+
+    private fun moveProjectHistory(
+        active: EditorSession,
+        redo: Boolean,
+    ): EditorEditResult =
+        when (val result = if (redo) projectHistory.redo(active.document) else projectHistory.undo(active.document)) {
+            is ProjectEditHistory.Result.Applied -> {
+                documents.values.filter { it.document in result.changes }.forEach { it.lastEditMillis = clock.nowMillis() }
+                result.changes[active.document]?.let { EditorEditResult.Applied(it) } ?: EditorEditResult.NoChange
+            }
+
+            ProjectEditHistory.Result.NoChange -> {
+                EditorEditResult.NoChange
+            }
+
+            is ProjectEditHistory.Result.Rejected -> {
+                publishStatus("Cannot ${if (redo) "redo" else "undo"}: ${result.detail}", IdeProblemSeverity.Warning)
+                EditorEditResult.NoChange
+            }
+        }
 
     private fun acceptCompletion(selection: IdeCompletionSelection) {
         val requirement = selection.entry.addonRequirement
@@ -1075,13 +1148,21 @@ class IdeClientController(
             publishStatus("Computer files are read-only", IdeProblemSeverity.Info)
             return
         }
+        val active = editor?.takeIf { it.dirty } ?: documents.values.firstOrNull { it.dirty } ?: return
+        saveDocument(active)
+    }
+
+    private fun saveDocument(active: EditorSession) {
         val selected = project ?: return
-        val active = editor ?: return
         if (IdeBusyOperation.Project in state.busy) {
             pendingSave = true
             return
         }
-        if (!active.dirty || active.conflict || active.saveInFlight != null) return
+        if (active.conflict) {
+            showConflictDialog(closeRequested, active)
+            return
+        }
+        if (!active.dirty || documents.values.any { it.saveInFlight != null } || active.formatInFlight != null) return
         val operationId = nextOperationId++
         latestSaveOperation = operationId
         val submittedRevision = active.document.revision
@@ -1187,7 +1268,7 @@ class IdeClientController(
         val busy = if (action.isCompilation) IdeBusyOperation.Build else IdeBusyOperation.Resolve
         state = state.copy(busy = state.busy + busy)
         publishWorkspace()
-        val active = editor
+        val active = documents.values.firstOrNull { it.conflict || it.dirty || it.formatInFlight != null }
         if (active != null && (active.dirty || active.formatInFlight != null)) {
             if (active.conflict) {
                 failPendingBuild(IdeBuildFailureKind.Conflict, "save conflict must be resolved before build")
@@ -1468,7 +1549,11 @@ class IdeClientController(
         if (event.operationId != latestOpenOperation) return
         val navigation = openingProjectNavigation
         openingProjectNavigation = null
-        editor?.close()
+        if (event.result is ProjectFileOpenResult.Text && !admitDocument()) {
+            state = state.copy(busy = state.busy - IdeBusyOperation.Project)
+            publishStatus("Project document limit reached; reopen the project to release history", IdeProblemSeverity.Warning)
+            return
+        }
         editor = null
         binary = null
         closeAnalysisFile()
@@ -1476,6 +1561,7 @@ class IdeClientController(
             is ProjectFileOpenResult.Text -> {
                 val document = EditorDocument(result.snapshot.text)
                 val session = EditorSession(event.path, document, result.snapshot.revision)
+                documents[event.path] = session
                 val remembered = restoreEditorState
                 restoreEditorState = null
                 remembered
@@ -1507,7 +1593,7 @@ class IdeClientController(
 
     private fun acceptSave(event: IdeEvent.SaveCompleted) {
         if (event.operationId != latestSaveOperation) return
-        val active = editor ?: return
+        val active = documents[event.path] ?: return
         if (active.path != event.path || active.saveInFlight != event.editorRevision) return
         active.saveInFlight = null
         state = state.copy(busy = state.busy - IdeBusyOperation.Save)
@@ -1533,11 +1619,17 @@ class IdeClientController(
             }
         }
         publishWorkspace()
-        if (active.conflict) showConflictDialog(closeRequested)
-        if (closeRequested && !active.dirty && active.formatInFlight == null) closeReady = true
+        if (active.conflict) showConflictDialog(closeRequested, active)
+        continueClosing()
         continuePendingSave()
         continuePendingNavigation()
         continuePendingBuild()
+    }
+
+    private fun continueClosing() {
+        if (!closeRequested) return
+        val remaining = documents.values.firstOrNull { it.conflict || it.dirty || it.saveInFlight != null || it.formatInFlight != null }
+        if (remaining == null) closeReady = true else saveDocument(remaining)
     }
 
     private fun acceptFormat(event: IdeEvent.FormatCompleted) {
@@ -1618,13 +1710,13 @@ class IdeClientController(
             continuePendingBuild()
         }
         continuePendingNavigation()
-        if (closeRequested && active != null && !active.dirty && active.saveInFlight == null) closeReady = true
+        continueClosing()
     }
 
     private fun acceptPoll(event: IdeEvent.PollCompleted) {
         tree = event.tree
-        val active = editor
-        if (active != null) {
+        val activeBefore = editor
+        documents.values.toList().forEach { active ->
             val diskRevision =
                 event.tree
                     .flatten()
@@ -1633,17 +1725,22 @@ class IdeClientController(
             if (diskRevision != active.diskRevision) {
                 if (active.dirty) {
                     active.conflict = true
-                    showConflictDialog(closeRequested)
+                    if (active === editor || closeRequested) showConflictDialog(closeRequested, active)
                 } else if (diskRevision == null) {
-                    active.close()
-                    editor = null
-                    closeAnalysisFile()
-                    publishProblem("Active file was removed outside the IDE")
+                    val wasActive = active === editor
+                    removeDocument(active)
+                    if (wasActive) {
+                        closeAnalysisFile()
+                        publishProblem("Active file was removed outside the IDE")
+                    }
                 } else {
-                    openFile(active.path)
+                    val wasActive = active === editor
+                    removeDocument(active)
+                    if (wasActive) openFile(active.path)
                 }
             }
-        } else {
+        }
+        if (activeBefore == null) {
             val shownBinary = binary
             if (shownBinary != null && event.tree.flatten().none { it.path == shownBinary.path }) binary = null
         }
@@ -1776,11 +1873,15 @@ class IdeClientController(
         source: ProjectPath,
         target: ProjectPath,
     ) {
-        editor?.takeIf { it.path.isWithin(source) }?.let { active ->
+        documents.values.filter { it.path.isWithin(source) }.forEach { active ->
             val wasKotlinSource = active.path.isKotlinSource
+            documents.remove(active.path)
             active.path = active.path.rebase(source, target)
-            if (wasKotlinSource && active.path.isKotlinSource) visibleLatency.dropActive()
-            openAnalysis(active)
+            documents[active.path] = active
+            if (active === editor) {
+                if (wasKotlinSource && active.path.isKotlinSource) visibleLatency.dropActive()
+                openAnalysis(active)
+            }
         }
         binary?.takeIf { it.path.isWithin(source) }?.let { active ->
             binary = IdeEditorView.Binary(active.path.rebase(source, target), active.bytes)
@@ -1788,16 +1889,15 @@ class IdeClientController(
     }
 
     private fun applyDelete(deleted: ProjectPath) {
-        val active = editor
-        if (active != null && active.path.isWithin(deleted)) {
+        documents.values.filter { it.path.isWithin(deleted) }.forEach { active ->
             if (active.dirty) {
                 active.conflict = true
                 publishProblem("Active file was deleted; use Save As to keep local edits")
-                showConflictDialog(closing = false)
+                showConflictDialog(closing = false, active)
             } else {
-                active.close()
-                editor = null
-                closeAnalysisFile()
+                val wasActive = active === editor
+                removeDocument(active)
+                if (wasActive) closeAnalysisFile()
             }
         }
         if (binary?.path?.isWithin(deleted) == true) binary = null
@@ -1805,8 +1905,10 @@ class IdeClientController(
 
     private fun acceptFailure(event: IdeEvent.Failed) {
         if (event.operation == IdeBusyOperation.Save) {
-            editor?.saveInFlight = null
-            editor?.lastEditMillis = clock.nowMillis()
+            documents.values.filter { it.saveInFlight != null }.forEach {
+                it.saveInFlight = null
+                it.lastEditMillis = clock.nowMillis()
+            }
         }
         if (event.operation == IdeBusyOperation.Project) openingProjectNavigation = null
         if (project?.handle?.isValid() == false) {
@@ -1828,11 +1930,18 @@ class IdeClientController(
             IdeConflictAction.ReloadFromDisk -> {
                 state = state.copy(dialog = null)
                 closeRequested = false
+                removeDocument(active)
                 openFile(active.path)
             }
 
             is IdeConflictAction.SaveAs -> {
+                if (documents[action.path]?.let { it !== active } == true) {
+                    publishStatus("Destination is already open in the IDE", IdeProblemSeverity.Warning)
+                    return
+                }
+                documents.remove(active.path)
                 active.path = action.path
+                documents[active.path] = active
                 active.diskRevision = FileRevision.Absent
                 active.conflict = false
                 state = state.copy(dialog = null)
@@ -1854,18 +1963,37 @@ class IdeClientController(
         publishWorkspace()
     }
 
-    private fun showConflictDialog(closing: Boolean) {
-        val active = editor ?: return
+    private fun showConflictDialog(
+        closing: Boolean,
+        session: EditorSession? = editor,
+    ) {
+        val active = session ?: return
+        if (active !== editor) {
+            closeComputerPreview()
+            closeAttachedSourcePreview()
+            activateDocument(active)
+        }
         state = state.copy(dialog = IdeDialogState.FileConflict(active.path, closing))
     }
 
     private fun continuePendingNavigation() {
+        val creation = pendingProjectCreation
+        if (creation != null) {
+            val remaining = documents.values.firstOrNull { it.dirty || it.saveInFlight != null || it.formatInFlight != null }
+            if (remaining != null) {
+                saveDocument(remaining)
+            } else {
+                pendingProjectCreation = null
+                createProject(creation)
+            }
+            return
+        }
         val targetProject = pendingProjectDirectory
         if (targetProject != null) {
-            val active = editor
+            val active = documents.values.firstOrNull { it.dirty || it.saveInFlight != null || it.formatInFlight != null }
             if (active?.conflict == true) return
-            if (active?.dirty == true) {
-                requestSave()
+            if (active != null) {
+                saveDocument(active)
             } else {
                 pendingProjectDirectory = null
                 pendingFile = null
@@ -1922,12 +2050,15 @@ class IdeClientController(
 
     private fun continuePendingBuild() {
         val pending = pendingBuildAction ?: return
-        val active = editor
+        val active = documents.values.firstOrNull { it.conflict || it.dirty || it.saveInFlight != null || it.formatInFlight != null }
         if (active?.conflict == true) {
             failPendingBuild(IdeBuildFailureKind.Conflict, "save conflict must be resolved before build")
             return
         }
-        if (active?.dirty == true || active?.saveInFlight != null || active?.formatInFlight != null) return
+        if (active != null) {
+            saveDocument(active)
+            return
+        }
         val selected = project ?: return
         loadBuildInput(selected, pending.operationId, pending.action, pending.target)
     }
@@ -2322,6 +2453,7 @@ class IdeClientController(
             VirtualSourcePath.kotlin(active.path.value),
             active.document.materialize(),
             active.document.revision,
+            sourceOverlays(),
         )
         analysisCoordinator?.caretMoved(active.document.caretOffset)
         refreshAnalysisState()
@@ -2348,9 +2480,15 @@ class IdeClientController(
             insertedText,
             active.document.caretOffset,
             change,
+            sourceOverlays(),
         )
         refreshAnalysisState()
     }
+
+    private fun sourceOverlays(): Map<VirtualSourcePath, String> =
+        documents.values.filter { it.dirty && it.path.isKotlinSource }.associate {
+            VirtualSourcePath.kotlin(it.path.value) to it.document.materialize()
+        }
 
     private fun refreshAnalysisState() {
         val current = analysisCoordinator?.state() ?: IdeAnalysisState.Idle
@@ -2666,8 +2804,7 @@ class IdeClientController(
         pendingSave = false
         pendingFormat = false
         buildState = IdeBuildState.Idle
-        editor?.close()
-        editor = null
+        closeProjectDocuments()
         closeComputerPreview()
         closeAttachedSourcePreview()
         closeAnalysisFile()

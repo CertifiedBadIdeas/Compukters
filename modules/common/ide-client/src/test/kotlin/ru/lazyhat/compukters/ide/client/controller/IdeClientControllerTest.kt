@@ -485,6 +485,84 @@ class IdeClientControllerTest {
     }
 
     @Test
+    fun `returning to a saved document preserves its undo and editor position without rereading`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        val original = fixture.textEditor().visibleLines.joinToString("\n")
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("local")))
+        val edited = fixture.textEditor().visibleLines.joinToString("\n")
+        val caret = fixture.textEditor().caretUtf16
+        fixture.controller.dispatch(IdeCommand.OpenFile(ProjectPath.file("notes.txt")))
+        fixture.workspace.completeSave()
+        fixture.controller.tick()
+        fixture.controller.tick()
+        val opens = fixture.workspace.openRequests.size
+        fixture.controller.dispatch(IdeCommand.OpenFile(ProjectPath.file("src/main.kt")))
+        assertEquals(opens, fixture.workspace.openRequests.size)
+        assertEquals(edited, fixture.textEditor().visibleLines.joinToString("\n"))
+        assertEquals(caret, fixture.textEditor().caretUtf16)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Undo))
+        assertEquals(original, fixture.textEditor().visibleLines.joinToString("\n"))
+        assertTrue(fixture.textEditor().dirty)
+    }
+
+    @Test
+    fun `poll invalidates a clean background document before it is activated again`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.OpenFile(ProjectPath.file("notes.txt")))
+        fixture.controller.tick()
+        fixture.workspace.replaceMainExternally("changed")
+        fixture.controller.dispatch(IdeCommand.Poll)
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.OpenFile(ProjectPath.file("src/main.kt")))
+        fixture.controller.tick()
+        assertEquals("changed", fixture.textEditor().visibleLines.single())
+    }
+
+    @Test
+    fun `bounded document cache releases clean inactive documents`() {
+        val fixture =
+            ControllerFixture(
+                preferences = preferences("demo", "src/main.kt"),
+                limits =
+                    ru.lazyhat.compukters.ide.client
+                        .IdeClientLimits(projectDocuments = 2),
+            )
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.OpenFile(ProjectPath.file("notes.txt")))
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.OpenFile(ProjectPath.file("src/other.kt")))
+        fixture.controller.tick()
+        val opens = fixture.workspace.openRequests.size
+        fixture.controller.dispatch(IdeCommand.OpenFile(ProjectPath.file("src/main.kt")))
+        fixture.controller.tick()
+        assertEquals(opens + 1, fixture.workspace.openRequests.size)
+    }
+
+    @Test
+    fun `new project creation drains local changes and never reuses old project buffers`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("local edits")))
+        fixture.controller.dispatch(IdeCommand.CreateProject("created"))
+        assertEquals("demo", fixture.workspaceView().project.directoryName)
+        assertEquals(
+            "local edits",
+            fixture.workspace.saveRequests
+                .single()
+                .text,
+        )
+        fixture.workspace.completeSave()
+        fixture.controller.tick()
+        fixture.controller.tick()
+        fixture.controller.tick()
+        assertEquals("created", fixture.workspaceView().project.directoryName)
+        assertTrue(fixture.textEditor().visibleLines.joinToString("\n") != "local edits")
+    }
+
+    @Test
     fun `close conflict offers cancel or explicit discard`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
         fixture.startAndTick()
@@ -856,6 +934,9 @@ internal class ControllerFixture(
     tooling: CompletableFuture<IdeClientTooling>? = null,
     visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
     analysisFailureReporter: IdeAnalysisFailureReporter = IdeAnalysisFailureReporter.None,
+    limits: ru.lazyhat.compukters.ide.client.IdeClientLimits =
+        ru.lazyhat.compukters.ide.client
+            .IdeClientLimits(),
     buildCoordinatorFactory: ((ControlledWorkspace, MutableClock) -> IdeBuildCoordinator)? = null,
 ) {
     val clock = MutableClock()
@@ -871,6 +952,7 @@ internal class ControllerFixture(
             this.preferences,
             clock,
             eventQueue,
+            limits = limits,
             buildCoordinator = buildCoordinator,
             analysisCoordinator = analysisCoordinator,
             targetCoordinator = targetCoordinator,
@@ -920,6 +1002,7 @@ internal class ControlledWorkspace(
     private val other = ProjectPath.file("src/other.kt")
     val openResults = mutableMapOf<ProjectPath, ProjectFileOpenResult>()
     val saveRequests = mutableListOf<IdeSaveRequest>()
+    val openRequests = mutableListOf<ProjectPath>()
     var buildInputRequests = 0
     private val pendingSaves = ArrayDeque<CompletableFuture<IdeSaveResult>>()
 
@@ -947,12 +1030,14 @@ internal class ControlledWorkspace(
     override fun open(
         project: ProjectHandle,
         path: ProjectPath,
-    ): CompletableFuture<ProjectFileOpenResult> =
-        if (project == descriptor.handle) {
+    ): CompletableFuture<ProjectFileOpenResult> {
+        openRequests += path
+        return if (project == descriptor.handle) {
             completed(requireNotNull(openResults[path]) { "missing fake result for $path" })
         } else {
             completeCall { ProjectFileOpenResult.Text(ProjectDocumentStore(project).open(path)) }
         }
+    }
 
     override fun save(request: IdeSaveRequest): CompletableFuture<IdeSaveResult> {
         saveRequests += request
