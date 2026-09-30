@@ -58,6 +58,10 @@ class EditorDocument(
     internal val undoEntryCount: Int
         get() = history.undoEntryCount
 
+    val undoTransactionId: Long? get() = history.undoTransactionId
+    val redoTransactionId: Long? get() = history.redoTransactionId
+    internal val isClosed: Boolean get() = closed
+
     fun materialize(): String = buffer.materialize()
 
     /** Copies one logical line without its line separator. */
@@ -194,6 +198,7 @@ class EditorDocument(
     fun replaceAll(
         text: String,
         caretOffsetUtf16: Int,
+        transactionId: Long? = null,
     ): EditorEditResult {
         if (
             caretOffsetUtf16 !in 0..text.length ||
@@ -211,7 +216,31 @@ class EditorDocument(
             return EditorEditResult.NoChange
         }
         val caret = EditorSelection(caretOffsetUtf16, caretOffsetUtf16)
-        return replace(EditorRange(0, length), text, EditorHistoryKind.Atomic, EditorChangeOrigin.User, caret)
+        return replace(EditorRange(0, length), text, EditorHistoryKind.Atomic, EditorChangeOrigin.User, caret, transactionId)
+    }
+
+    /** Admission before applying an owner-thread coordinated multi-document operation. */
+    fun canReplaceAll(
+        text: String,
+        caretOffsetUtf16: Int,
+    ): Boolean {
+        if (closed || caretOffsetUtf16 !in 0..text.length) return false
+        if (caretOffsetUtf16 > 0 && caretOffsetUtf16 < text.length &&
+            text[caretOffsetUtf16 - 1].isHighSurrogate() && text[caretOffsetUtf16].isLowSurrogate()
+        ) {
+            return false
+        }
+        val bytes = Utf16.strictUtf8Length(text) ?: return false
+        if (text.length > limits.maxCodeUnits || bytes > limits.maxUtf8Bytes) return false
+        if (contentEquals(text)) return true
+        return history.canRecord(
+            EditorHistoryEntry(
+                listOf(EditorHistoryEdit(0, 0, materialize(), text)),
+                selection,
+                EditorSelection(caretOffsetUtf16, caretOffsetUtf16),
+                EditorHistoryKind.Atomic,
+            ),
+        )
     }
 
     fun replaceRanges(
@@ -408,6 +437,7 @@ class EditorDocument(
         kind: EditorHistoryKind,
         origin: EditorChangeOrigin,
         afterSelection: EditorSelection = EditorSelection(range.startUtf16 + text.length, range.startUtf16 + text.length),
+        transactionId: Long? = null,
     ): EditorEditResult {
         if (closed) return EditorEditResult.Rejected(EditorRejection.Closed)
         if (!isCaretBoundary(range.startUtf16) || !isCaretBoundary(range.endUtf16)) {
@@ -422,6 +452,7 @@ class EditorDocument(
                 before,
                 afterSelection,
                 kind,
+                transactionId,
             )
         if (!history.canRecord(entry)) return EditorEditResult.Rejected(EditorRejection.UndoLimit)
         val oldLines = lines.affectedLines(range)
