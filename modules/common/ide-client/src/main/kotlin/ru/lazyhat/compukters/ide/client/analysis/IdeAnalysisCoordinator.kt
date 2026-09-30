@@ -329,6 +329,50 @@ class IdeAnalysisCoordinator(
         request?.let { requests.manualCompletion(it.path, it.offsetUtf16) }
     }
 
+    fun rename(
+        offsetUtf16: Int,
+        documentRevision: Long,
+        newName: String,
+    ): CompletableFuture<IdeRenameOutcome> {
+        val current =
+            synchronized(lock) { session?.takeIf { !closed && it.documentRevision == documentRevision && it.snapshot != null } }
+                ?: return CompletableFuture.completedFuture(IdeRenameOutcome.Failed("Analysis is not ready"))
+        val snapshot = requireNotNull(current.snapshot)
+        return requests.rename(current.path, offsetUtf16, newName).handle { result, failure ->
+            val references = (result as? AnalysisClientResult.Success)?.result as? AnalysisResult.References
+            if (!isCurrent(snapshot.identity, current.path, documentRevision) || failure != null ||
+                references?.identity != snapshot.identity ||
+                references.locations.isEmpty()
+            ) {
+                IdeRenameOutcome.Failed(
+                    (result as? AnalysisClientResult.Failure)?.detail ?: failure?.message ?: "Sources changed or Rename did not complete",
+                )
+            } else {
+                IdeRenameOutcome.Prepared(
+                    IdeRenamePlan(
+                        snapshot.identity,
+                        current.path,
+                        documentRevision,
+                        newName,
+                        snapshot.sources.sources.associate { it.path to it.content.toByteArray().decodeToString() },
+                        references.locations.filterIsInstance<DeclarationLocation.Source>(),
+                        requireNotNull(current.input).manifestBytes,
+                        current.input.lockBytes,
+                    ),
+                )
+            }
+        }
+    }
+
+    fun isCurrent(
+        identity: AnalysisSnapshotIdentity,
+        path: VirtualSourcePath,
+        revision: Long,
+    ): Boolean =
+        synchronized(lock) {
+            !closed && session?.let { it.snapshot?.identity == identity && it.path == path && it.documentRevision == revision } == true
+        }
+
     fun findUsages(
         offsetUtf16: Int,
         documentRevision: Long,

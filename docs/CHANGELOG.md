@@ -169,6 +169,10 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - Returning to a project file preserves its caret, viewport and undo history within a bounded document cache.
 - `Alt+F7` opens semantic Find Usages with file/line context, clickable results and keyboard navigation; source edits invalidate stale results.
 - Method declarations show clickable project usage counts on the same line, distinguishing overloads and unrelated same-named methods.
+- `Shift+F6` safely renames project symbols across Kotlin files, including unopened files and unsaved buffers.
+  K2 checks name collisions and reference resolution before applying one undoable edit; `Ctrl+Z` and redo cover
+  every affected file. Library symbols, the `main` entry point and inheritance/convention-based declarations remain
+  read-only for this action, and projects must have no analysis errors.
 - Placing the text caret on an analyzed Kotlin identifier highlights its declaration and references in the current project file,
   distinguishing overloads and unrelated same-named symbols, including references inside string interpolation.
   Selecting text highlights its literal occurrences everywhere: from two characters inside strings and from three

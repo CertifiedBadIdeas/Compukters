@@ -21,6 +21,18 @@ import kotlin.test.assertNull
 
 class IdePromptTest {
     @Test
+    fun `symbol rename prompt emits refactoring not filesystem mutation`() {
+        val prompt = IdePromptController()
+        prompt.open(IdePromptKind.RenameSymbol)
+        prompt.type("renamed")
+        assertEquals(IdeCommand.RenameSymbol("renamed"), prompt.confirm())
+        prompt.open(IdePromptKind.RenameSymbol)
+        prompt.type("я".repeat(129))
+        assertNull(prompt.confirm())
+        assertNotNull(prompt.state?.error)
+    }
+
+    @Test
     fun `project prompt rejects blank names and emits create command`() {
         val prompt = IdePromptController()
         prompt.open(IdePromptKind.CreateProject, "   ")

@@ -49,6 +49,27 @@ import kotlin.test.assertTrue
 
 class IdeInputAdapterTest {
     @Test
+    fun `Shift F6 opens semantic rename only in the editor and Ctrl Shift Z redoes`() {
+        val commands = mutableListOf<IdeCommand>()
+        val actions = mutableListOf<IdeHitAction>()
+        val adapter =
+            IdeInputAdapter(
+                commands::add,
+                IdeClipboard { "" },
+                IdeClientLimits(),
+                IdeUiActionSink {
+                    actions += it
+                    true
+                },
+            )
+        assertTrue(adapter.keyPressed(key(IdeKeyCode.F6, IdeModifier.SHIFT), IdeFocusState.Editor))
+        assertFalse(adapter.keyPressed(key(IdeKeyCode.F6, IdeModifier.SHIFT), IdeFocusState.Tree))
+        assertTrue(adapter.keyPressed(key(IdeKeyCode.Z, IdeModifier.CONTROL or IdeModifier.SHIFT), IdeFocusState.Editor))
+        assertEquals(listOf(IdeHitAction.RenameSymbol), actions)
+        assertEquals(listOf<IdeCommand>(IdeCommand.Edit(IdeEditorInput.Redo)), commands)
+    }
+
+    @Test
     fun `Find Usages shortcut and results keyboard navigation leave editor commands separate`() {
         val fixture = fixture()
         fixture.adapter.keyPressed(key(IdeKeyCode.F7, IdeModifier.ALT), IdeFocusState.Editor)

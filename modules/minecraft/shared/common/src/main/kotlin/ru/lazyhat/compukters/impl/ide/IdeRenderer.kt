@@ -1240,6 +1240,7 @@ object IdeRenderer {
                     IdePromptKind.CreateText -> "Create text file"
                     IdePromptKind.CreateDirectory -> "Create directory"
                     is IdePromptKind.Rename -> "Rename ${promptKind.source.value}"
+                    IdePromptKind.RenameSymbol -> "Rename symbol · new name"
                 }
             ui(IdeTextKind.Dialog, title, bounds.left + 10, bounds.top + 10, clip = bounds, z = Z_DIALOG_TEXT)
             ui(IdeTextKind.Dialog, prompt.value + "_", bounds.left + 10, bounds.top + 34, clip = bounds, z = Z_DIALOG_TEXT)

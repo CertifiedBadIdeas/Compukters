@@ -66,6 +66,10 @@ sealed interface IdeCommand {
         val target: ProjectPath,
     ) : IdeCommand
 
+    data class RenameSymbol(
+        val newName: String,
+    ) : IdeCommand
+
     data class RequestDelete(
         val path: ProjectPath,
     ) : IdeCommand
