@@ -29,6 +29,8 @@ import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionSelection
 import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationOutcome
 import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationTarget
+import ru.lazyhat.compukters.ide.client.analysis.IdeUsages
+import ru.lazyhat.compukters.ide.client.analysis.IdeUsagesOutcome
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
 import ru.lazyhat.compukters.ide.client.analysis.KotlinSourceTokenRange
 import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
@@ -164,6 +166,8 @@ class IdeClientController(
     private var latestProjectOperation = 0L
     private var latestOpenOperation = 0L
     private var latestDeclarationOperation = 0L
+    private var latestUsagesOperation = 0L
+    private var usages: IdeUsages? = null
     private var latestSaveOperation = 0L
     private var latestFormatOperation = 0L
     private var latestMutationOperation = 0L
@@ -314,6 +318,7 @@ class IdeClientController(
             }
 
             IdeCommand.OpenFind -> {
+                usages = usages?.unfocus()
                 currentDocument()?.let(find::open)
                 analysisCoordinator?.dismissCompletion()
                 analysisCoordinator?.dismissParameterInfo()
@@ -347,6 +352,30 @@ class IdeClientController(
 
             IdeCommand.Format -> {
                 requestFormat()
+            }
+
+            IdeCommand.FindUsages -> {
+                findUsages()
+            }
+
+            IdeCommand.CloseUsages -> {
+                invalidateUsages()
+                latestUsagesOperation = nextOperationId++
+                publishWorkspace()
+            }
+
+            IdeCommand.UnfocusUsages -> {
+                usages = usages?.unfocus()
+                publishWorkspace()
+            }
+
+            is IdeCommand.MoveUsage -> {
+                usages = usages?.move(command.delta)
+                publishWorkspace()
+            }
+
+            is IdeCommand.OpenUsage -> {
+                openUsage(command.index)
             }
 
             IdeCommand.Poll -> {
@@ -726,6 +755,7 @@ class IdeClientController(
         documents.values.forEach(EditorSession::close)
         documents.clear()
         projectHistory.clear()
+        invalidateUsages()
         pendingProjectCreation = null
         editor = null
     }
@@ -902,6 +932,7 @@ class IdeClientController(
                 }
             }
         if (result is EditorEditResult.Applied) {
+            invalidateUsages()
             active.lastEditMillis = clock.nowMillis()
             if (active.path.isKotlinSource && analysisCoordinator != null) {
                 visibleLatency.editApplied(active.document.revision)
@@ -1355,47 +1386,96 @@ class IdeClientController(
     private fun accept(event: IdeEvent) {
         if (event.generationOrNull() != null && event.generationOrNull() != generation) return
         when (event) {
-            is IdeEvent.ToolingReady -> acceptTooling(event.tooling)
+            is IdeEvent.ToolingReady -> {
+                acceptTooling(event.tooling)
+            }
 
-            is IdeEvent.ToolingFailed -> acceptToolingFailure(event.detail)
+            is IdeEvent.ToolingFailed -> {
+                acceptToolingFailure(event.detail)
+            }
 
-            is IdeEvent.ProjectCatalogLoaded -> acceptCatalog(event)
+            is IdeEvent.ProjectCatalogLoaded -> {
+                acceptCatalog(event)
+            }
 
-            is IdeEvent.BuildInputLoaded -> acceptBuildInput(event)
+            is IdeEvent.BuildInputLoaded -> {
+                acceptBuildInput(event)
+            }
 
-            is IdeEvent.BuildStateChanged -> acceptBuildState(event)
+            is IdeEvent.BuildStateChanged -> {
+                acceptBuildState(event)
+            }
 
-            is IdeEvent.ResolveCompleted -> acceptResolve(event)
+            is IdeEvent.ResolveCompleted -> {
+                acceptResolve(event)
+            }
 
-            is IdeEvent.CompletionModuleEnabled -> acceptCompletionModule(event)
+            is IdeEvent.CompletionModuleEnabled -> {
+                acceptCompletionModule(event)
+            }
 
-            is IdeEvent.CompletionModuleRollbackCompleted -> acceptCompletionRollback(event)
+            is IdeEvent.CompletionModuleRollbackCompleted -> {
+                acceptCompletionRollback(event)
+            }
 
-            is IdeEvent.ProjectOpened -> acceptProject(event)
+            is IdeEvent.ProjectOpened -> {
+                acceptProject(event)
+            }
 
-            is IdeEvent.FileOpened -> acceptFile(event)
+            is IdeEvent.FileOpened -> {
+                acceptFile(event)
+            }
 
-            is IdeEvent.DeclarationResolved -> acceptDeclaration(event)
+            is IdeEvent.DeclarationResolved -> {
+                acceptDeclaration(event)
+            }
 
-            is IdeEvent.SaveCompleted -> acceptSave(event)
+            is IdeEvent.UsagesResolved -> {
+                if (event.operationId != latestUsagesOperation) return
+                when (val result = event.outcome) {
+                    is IdeUsagesOutcome.Found -> usages = result.value
+                    is IdeUsagesOutcome.Failed -> publishStatus(result.detail, IdeProblemSeverity.Warning)
+                }
+                publishWorkspace()
+            }
 
-            is IdeEvent.FormatCompleted -> acceptFormat(event)
+            is IdeEvent.SaveCompleted -> {
+                acceptSave(event)
+            }
 
-            is IdeEvent.DeleteAdmitted -> acceptDeleteAdmitted(event)
+            is IdeEvent.FormatCompleted -> {
+                acceptFormat(event)
+            }
 
-            is IdeEvent.MutationCompleted -> acceptMutation(event)
+            is IdeEvent.DeleteAdmitted -> {
+                acceptDeleteAdmitted(event)
+            }
 
-            is IdeEvent.ComputerImportCompleted -> acceptComputerImport(event)
+            is IdeEvent.MutationCompleted -> {
+                acceptMutation(event)
+            }
 
-            is IdeEvent.ComputerImportFailed -> acceptComputerImportFailure(event)
+            is IdeEvent.ComputerImportCompleted -> {
+                acceptComputerImport(event)
+            }
 
-            is IdeEvent.PollCompleted -> acceptPoll(event)
+            is IdeEvent.ComputerImportFailed -> {
+                acceptComputerImportFailure(event)
+            }
 
-            is IdeEvent.Failed -> acceptFailure(event)
+            is IdeEvent.PollCompleted -> {
+                acceptPoll(event)
+            }
+
+            is IdeEvent.Failed -> {
+                acceptFailure(event)
+            }
 
             is IdeEvent.CatalogLoaded,
             is IdeEvent.BuildCompleted,
-            -> Unit
+            -> {
+                Unit
+            }
         }
     }
 
@@ -1723,6 +1803,7 @@ class IdeClientController(
                     .singleOrNull { it.path == active.path }
                     ?.revision
             if (diskRevision != active.diskRevision) {
+                invalidateUsages()
                 if (active.dirty) {
                     active.conflict = true
                     if (active === editor || closeRequested) showConflictDialog(closeRequested, active)
@@ -1873,6 +1954,7 @@ class IdeClientController(
         source: ProjectPath,
         target: ProjectPath,
     ) {
+        invalidateUsages()
         documents.values.filter { it.path.isWithin(source) }.forEach { active ->
             val wasKotlinSource = active.path.isKotlinSource
             documents.remove(active.path)
@@ -1889,6 +1971,7 @@ class IdeClientController(
     }
 
     private fun applyDelete(deleted: ProjectPath) {
+        invalidateUsages()
         documents.values.filter { it.path.isWithin(deleted) }.forEach { active ->
             if (active.dirty) {
                 active.conflict = true
@@ -2097,6 +2180,7 @@ class IdeClientController(
                             computerFiles?.state() ?: IdeComputerTreeState.NoTarget,
                             computerFiles?.transfer() ?: IdeComputerTransferState.Idle,
                             catalog.take(limits.projectRows).map(::summary),
+                            usages,
                         ),
                     ),
             )
@@ -2249,6 +2333,45 @@ class IdeClientController(
                 }
             enqueue(IdeEvent.DeclarationResolved(requestGeneration, operationId, admitted))
         }
+    }
+
+    private fun findUsages() {
+        if (attachedSourcePreview != null || computerPreview != null || binary != null) return
+        val active = editor?.takeIf { it.path.isKotlinSource } ?: return
+        val coordinator = analysisCoordinator ?: return
+        val text = active.document.materialize()
+        val caret = active.document.caretOffset
+        val token =
+            KotlinSourceTokenRange.find(text, caret)
+                ?: caret.takeIf { it > 0 }?.let { KotlinSourceTokenRange.find(text, it - Character.charCount(text.codePointBefore(it))) }
+                ?: return
+        latestUsagesOperation = nextOperationId++
+        val operation = latestUsagesOperation
+        val requestGeneration = generation
+        coordinator.dismissCompletion()
+        coordinator.dismissParameterInfo()
+        coordinator.findUsages(token.startUtf16, active.document.revision).whenComplete { result, failure ->
+            enqueue(
+                IdeEvent.UsagesResolved(
+                    requestGeneration,
+                    operation,
+                    result ?: IdeUsagesOutcome.Failed(failure?.message ?: "Find Usages failed"),
+                ),
+            )
+        }
+    }
+
+    private fun invalidateUsages() {
+        usages = null
+        latestUsagesOperation = nextOperationId++
+    }
+
+    private fun openUsage(index: Int?) {
+        val results = usages ?: return
+        val row = results.rows.getOrNull(index ?: results.selectedIndex) ?: return
+        usages = results.unfocus()
+        val from = currentNavigationPosition() ?: return
+        navigateToProject(PendingProjectNavigation(row.path, row.range.startUtf16, row.line, 0, NavigationTransition.Fresh(from)))
     }
 
     private fun acceptDeclaration(event: IdeEvent.DeclarationResolved) {
@@ -3015,6 +3138,8 @@ private fun IdeEvent.generationOrNull(): Long? =
         is IdeEvent.FileOpened -> generation
 
         is IdeEvent.DeclarationResolved -> generation
+
+        is IdeEvent.UsagesResolved -> generation
 
         is IdeEvent.SaveCompleted -> generation
 

@@ -56,6 +56,7 @@ object IdeKeyCode {
     const val HOME = 268
     const val END = 269
     const val F8 = 297
+    const val F7 = 296
     const val F9 = 298
     const val LEFT_CONTROL = 341
     const val RIGHT_CONTROL = 345

@@ -90,6 +90,35 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `usage rows expose clipped source context and clickable navigation in the lower panel`() {
+        val editor = semanticEditor("val answer = answer") { _, _ -> IdeSemanticInteraction.None }
+        val base = workspaceState(editor, IdeBuildState.Idle)
+        val page = (base.page as IdePageState.Workspace).value
+        val identity = AnalysisSnapshotIdentity(SourceSnapshotId(Hash256.zero()), AnalysisProfileIdentity(Hash256.zero()))
+        val results =
+            ru.lazyhat.compukters.ide.client.analysis.IdeUsages(
+                identity,
+                listOf(
+                    ru.lazyhat.compukters.ide.client.analysis.IdeUsage(
+                        ProjectPath.file("src/main.kt"),
+                        EditorRange(13, 19),
+                        0,
+                        "val answer = answer",
+                    ),
+                ),
+                1,
+            )
+        val bounds = geometry()
+        val model = IdeRenderer.extract(base.copy(page = IdePageState.Workspace(page.copy(usages = results))), bounds)
+        val usage = model.hitTargets.single { it.action == IdeHitAction.UsageChoice }
+        assertEquals(0, usage.choiceIndex)
+        assertTrue(usage.bounds.left >= bounds.diagnostics!!.left && usage.bounds.right <= bounds.diagnostics!!.right)
+        assertTrue(usage.bounds.top >= bounds.diagnostics!!.top && usage.bounds.bottom <= bounds.diagnostics!!.bottom)
+        assertTrue(model.text.any { it.value.contains("src/main.kt:1") && it.value.contains("val answer = answer") })
+        assertTrue(model.hitTargets.any { it.action == IdeHitAction.UsagesClose })
+    }
+
+    @Test
     fun `current line spans the editor and remains below occurrence marks`() {
         val editor = semanticEditor("val x = x", occurrences = listOf(EditorRange(8, 9))) { _, _ -> IdeSemanticInteraction.None }
         val bounds = geometry()

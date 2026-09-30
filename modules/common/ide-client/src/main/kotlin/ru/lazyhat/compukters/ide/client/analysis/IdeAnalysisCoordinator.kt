@@ -321,6 +321,63 @@ class IdeAnalysisCoordinator(
         request?.let { requests.manualCompletion(it.path, it.offsetUtf16) }
     }
 
+    fun findUsages(
+        offsetUtf16: Int,
+        documentRevision: Long,
+    ): CompletableFuture<IdeUsagesOutcome> {
+        val current =
+            synchronized(lock) { session?.takeIf { !closed && it.documentRevision == documentRevision && it.snapshot != null } }
+                ?: return CompletableFuture.completedFuture(IdeUsagesOutcome.Failed("Analysis is not ready"))
+        val snapshot = requireNotNull(current.snapshot)
+        val result = CompletableFuture<IdeUsagesOutcome>()
+        requests.cancelSymbolOccurrences()
+        requests.symbolOccurrences(current.path, offsetUtf16).whenComplete { values, failure ->
+            val fresh = synchronized(lock) { !closed && session?.snapshot === snapshot }
+            val references =
+                values
+                    ?.filterIsInstance<AnalysisClientResult.Success>()
+                    ?.map { it.result }
+                    ?.filterIsInstance<AnalysisResult.References>()
+                    ?.singleOrNull()
+                    ?.takeIf { it.identity == snapshot.identity }
+            val declarations =
+                values
+                    ?.filterIsInstance<AnalysisClientResult.Success>()
+                    ?.map { it.result }
+                    ?.filterIsInstance<AnalysisResult.Declaration>()
+                    ?.singleOrNull()
+                    ?.takeIf { it.identity == snapshot.identity }
+            if (!fresh || failure != null || references == null || declarations?.locations?.distinct()?.size != 1) {
+                result.complete(
+                    IdeUsagesOutcome.Failed(if (!fresh) "Sources changed; run Find Usages again" else "Find Usages did not complete"),
+                )
+            } else {
+                val texts = snapshot.sources.sources.associate { it.path to it.content.toByteArray().decodeToString() }
+                val locations =
+                    references.locations.filterIsInstance<DeclarationLocation.Source>().filter {
+                        it.origin ==
+                            DeclarationOrigin.Project
+                    }
+                val rows =
+                    locations.take(limits.usageRows).map { location ->
+                        val text = texts.getValue(location.path)
+                        val start = text.lastIndexOf('\n', (location.range.startUtf16 - 1).coerceAtLeast(-1)) + 1
+                        val end = text.indexOf('\n', location.range.endUtf16).takeIf { it >= 0 } ?: text.length
+                        IdeUsage(
+                            ProjectPath.file(location.path.value),
+                            location.range,
+                            text.substring(0, start).count {
+                                it == '\n'
+                            },
+                            text.substring(start, end).trim().take(256),
+                        )
+                    }
+                result.complete(IdeUsagesOutcome.Found(IdeUsages(snapshot.identity, rows, locations.size)))
+            }
+        }
+        return result
+    }
+
     fun showParameterInfo() {
         val request: ParameterInfoRequest?
         synchronized(lock) {

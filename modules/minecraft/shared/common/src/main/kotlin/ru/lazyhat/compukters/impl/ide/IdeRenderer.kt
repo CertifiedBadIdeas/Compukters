@@ -1033,6 +1033,48 @@ object IdeRenderer {
         private fun diagnostics(workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView) {
             val bounds = geometry.diagnostics ?: return
             scissors += IdeScissorDraw(IdeScissorKind.Diagnostics, bounds, Z_CLIP)
+            workspace.usages?.let { usages ->
+                ui(
+                    IdeTextKind.Diagnostic,
+                    "Find Usages: ${usages.total} (${usages.rows.size} shown) — ↑↓ / Enter / Esc",
+                    bounds.left + 6,
+                    bounds.top + 4,
+                    IdeColors.MUTED,
+                    bounds,
+                )
+                val close = IdeRect(bounds.right - 24, bounds.top, bounds.right, bounds.top + UI_LINE_HEIGHT)
+                target(IdeHitAction.UsagesClose, close, true, "Close Find Usages")
+                ui(IdeTextKind.Diagnostic, "×", close.left + 6, close.top + 4, IdeColors.MUTED, bounds)
+                val count = ((bounds.height - UI_LINE_HEIGHT - 4) / UI_LINE_HEIGHT).coerceAtLeast(0)
+                val first = (usages.selectedIndex - count + 1).coerceAtLeast(0)
+                usages.rows.drop(first).take(count).forEachIndexed { visible, usage ->
+                    val index = first + visible
+                    val top = bounds.top + UI_LINE_HEIGHT + visible * UI_LINE_HEIGHT
+                    val row = IdeRect(bounds.left, top, bounds.right, top + UI_LINE_HEIGHT)
+                    if (index == usages.selectedIndex) fills += IdeFillDraw(IdeFillKind.Selection, row, IdeColors.SELECTION, Z_SELECTION)
+                    ui(
+                        IdeTextKind.Diagnostic,
+                        "${usage.path.value}:${usage.line + 1}  ${usage.context}",
+                        row.left + 6,
+                        row.top + 4,
+                        IdeColors.TEXT,
+                        bounds,
+                    )
+                    hitTargets +=
+                        IdeHitTarget(IdeHitAction.UsageChoice, row, true, "Open usage", IdeFocusGroup.Page, Z_TARGET, choiceIndex = index)
+                }
+                if (usages.rows.isEmpty()) {
+                    ui(
+                        IdeTextKind.Diagnostic,
+                        "No usages found",
+                        bounds.left + 6,
+                        bounds.top + UI_LINE_HEIGHT + 4,
+                        IdeColors.MUTED,
+                        bounds,
+                    )
+                }
+                return
+            }
             val values = mutableListOf<EditorDiagnostic>()
             val analysis = (workspace.editor as? IdeEditorView.Text)?.analysis as? IdeAnalysisState.Active
             values += analysis?.presentation?.diagnostics.orEmpty()

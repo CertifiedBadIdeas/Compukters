@@ -70,6 +70,7 @@ data class IdeWorkspaceView(
     val computerTree: IdeComputerTreeState = IdeComputerTreeState.NoTarget,
     val computerTransfer: IdeComputerTransferState = IdeComputerTransferState.Idle,
     val projects: List<IdeProjectSummary> = emptyList(),
+    val usages: ru.lazyhat.compukters.ide.client.analysis.IdeUsages? = null,
 )
 
 sealed interface IdePageState {

@@ -33,6 +33,7 @@ data class IdeClientLimits(
     val parameterInfoItems: Int = 32,
     val navigationHistory: Int = 128,
     val projectDocuments: Int = 128,
+    val usageRows: Int = 512,
 ) {
     init {
         require(eventQueueCapacity > 0) { "event queue capacity must be positive" }
@@ -49,5 +50,6 @@ data class IdeClientLimits(
         require(parameterInfoItems > 0) { "parameter-info item limit must be positive" }
         require(navigationHistory > 0) { "navigation history limit must be positive" }
         require(projectDocuments > 0) { "project document limit must be positive" }
+        require(usageRows > 0) { "usage row limit must be positive" }
     }
 }

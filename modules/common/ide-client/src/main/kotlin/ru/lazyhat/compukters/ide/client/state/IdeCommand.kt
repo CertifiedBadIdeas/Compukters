@@ -105,6 +105,20 @@ sealed interface IdeCommand {
 
     data object Format : IdeCommand
 
+    data object FindUsages : IdeCommand
+
+    data object CloseUsages : IdeCommand
+
+    data object UnfocusUsages : IdeCommand
+
+    data class MoveUsage(
+        val delta: Int,
+    ) : IdeCommand
+
+    data class OpenUsage(
+        val index: Int? = null,
+    ) : IdeCommand
+
     /** Requests an admitted external-change poll. */
     data object Poll : IdeCommand
 

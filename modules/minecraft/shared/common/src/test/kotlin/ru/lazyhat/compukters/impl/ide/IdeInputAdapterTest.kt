@@ -49,6 +49,20 @@ import kotlin.test.assertTrue
 
 class IdeInputAdapterTest {
     @Test
+    fun `Find Usages shortcut and results keyboard navigation leave editor commands separate`() {
+        val fixture = fixture()
+        fixture.adapter.keyPressed(key(IdeKeyCode.F7, IdeModifier.ALT), IdeFocusState.Editor)
+        val results = IdeFocusState.Editor.copy(usagesFocused = true)
+        fixture.adapter.keyPressed(key(IdeKeyCode.DOWN), results)
+        fixture.adapter.keyPressed(key(IdeKeyCode.ENTER), results)
+        fixture.adapter.keyPressed(key(IdeKeyCode.ESCAPE), results)
+        assertEquals(
+            listOf(IdeCommand.FindUsages, IdeCommand.MoveUsage(1), IdeCommand.OpenUsage(), IdeCommand.CloseUsages),
+            fixture.commands,
+        )
+    }
+
+    @Test
     fun `find input takes precedence over completion and never edits source`() {
         val fixture = fixture()
         val focus = IdeFocusState(IdeFocusArea.Editor, completionVisible = true, findVisible = true, findFocused = true)
