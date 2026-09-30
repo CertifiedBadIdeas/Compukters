@@ -47,6 +47,8 @@ import ru.lazyhat.compukters.ide.client.preferences.IdePreferences
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferencesStore
 import ru.lazyhat.compukters.ide.client.preferences.IdeProjectEditorState
 import ru.lazyhat.compukters.ide.client.search.IdeFindSession
+import ru.lazyhat.compukters.ide.client.search.IdePointerOccurrences
+import ru.lazyhat.compukters.ide.client.search.IdeSelectionOccurrences
 import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
 import ru.lazyhat.compukters.ide.client.state.IdeBuildAction
 import ru.lazyhat.compukters.ide.client.state.IdeBusyOperation
@@ -80,9 +82,11 @@ import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
 import ru.lazyhat.compukters.ide.editor.EditorChange
 import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorEditResult
+import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.editor.EditorTextEdit
 import ru.lazyhat.compukters.ide.editor.KotlinSmartTyping
 import ru.lazyhat.compukters.ide.highlight.IncrementalKotlinHighlighter
+import ru.lazyhat.compukters.ide.highlight.KotlinLexicalSnapshot
 import ru.lazyhat.compukters.ide.project.ProjectDependencyReceipt
 import ru.lazyhat.compukters.ide.project.ProjectDependencyRollback
 import ru.lazyhat.compukters.ide.project.ProjectDependencyUpdate
@@ -149,6 +153,8 @@ class IdeClientController(
     private var tree: ProjectTree? = null
     private var editor: EditorSession? = null
     private val find = IdeFindSession()
+    private val pointerOccurrences = IdePointerOccurrences()
+    private val selectionOccurrences = IdeSelectionOccurrences()
     private var binary: IdeEditorView.Binary? = null
     private var computerPreview: ComputerPreviewSession? = null
     private var attachedSourcePreview: AttachedSourcePreviewSession? = null
@@ -474,8 +480,10 @@ class IdeClientController(
             }
 
             IdeCommand.EditorFocusLost -> {
+                pointerOccurrences.clear()
                 analysisCoordinator?.focusLost()
                 refreshAnalysisState()
+                publishWorkspace()
             }
         }
     }
@@ -547,6 +555,8 @@ class IdeClientController(
         if (closed) return
         closed = true
         find.close()
+        pointerOccurrences.clear()
+        selectionOccurrences.clear()
         acceptsTooling.set(false)
         acceptsCompletionResults.set(false)
         events.drain().forEach { event ->
@@ -1029,6 +1039,7 @@ class IdeClientController(
         lines: Int,
         columns: Int,
     ) {
+        pointerOccurrences.clear()
         attachedSourcePreview?.let { preview ->
             scrollAttachedSourcePreview(preview, lines, columns)
             return
@@ -1937,7 +1948,11 @@ class IdeClientController(
     }
 
     private fun publishWorkspace() {
-        if (currentDocument() == null) find.dismiss()
+        if (currentDocument() == null) {
+            find.dismiss()
+            pointerOccurrences.clear()
+            selectionOccurrences.clear()
+        }
         val selected = project ?: return
         val selectedTree = tree ?: return
         val editorView = attachedSourcePreview?.toView() ?: computerPreview?.toView() ?: editor?.toView() ?: binary ?: IdeEditorView.Empty
@@ -1959,6 +1974,16 @@ class IdeClientController(
                     ),
             )
     }
+
+    private fun occurrenceRanges(
+        document: EditorDocument,
+        lexical: KotlinLexicalSnapshot,
+    ): List<EditorRange> =
+        when {
+            find.visible -> emptyList()
+            document.selectionRange != null -> selectionOccurrences.matches(document, lexical)
+            else -> pointerOccurrences.matches(document)
+        }
 
     private fun EditorSession.toView(): IdeEditorView.Text {
         val first = firstVisibleLine.coerceIn(0, document.lineCount - 1)
@@ -1983,6 +2008,7 @@ class IdeClientController(
             highlighter.snapshot(),
             admittedAnalysisState(this),
             find = find.view(document),
+            occurrenceRanges = occurrenceRanges(document, highlighter.snapshot()),
         )
     }
 
@@ -2011,6 +2037,7 @@ class IdeClientController(
             source = IdeEditorSource.Computer(path, targetId, generation),
             readOnly = true,
             find = find.view(document),
+            occurrenceRanges = occurrenceRanges(document, highlighter.snapshot()),
         )
     }
 
@@ -2039,6 +2066,7 @@ class IdeClientController(
             source = IdeEditorSource.AttachedApi(module, path),
             readOnly = true,
             find = find.view(document),
+            occurrenceRanges = occurrenceRanges(document, highlighter.snapshot()),
         )
     }
 
@@ -2046,6 +2074,9 @@ class IdeClientController(
         offsetUtf16: Int?,
         controlDown: Boolean,
     ) {
+        val lexical =
+            attachedSourcePreview?.highlighter?.snapshot() ?: computerPreview?.highlighter?.snapshot() ?: editor?.highlighter?.snapshot()
+        pointerOccurrences.pointAt(currentDocument(), offsetUtf16, lexical)
         val active = editor
         val source =
             active

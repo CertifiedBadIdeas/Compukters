@@ -54,6 +54,7 @@ enum class IdeFillKind {
     Border,
     Shadow,
     SearchMatch,
+    WordOccurrence,
     Selection,
     DropTarget,
     Caret,
