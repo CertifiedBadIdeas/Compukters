@@ -10,7 +10,6 @@ permalink: pretty
 theme: null
 
 exclude:
-  - api-build
   - guest-source
 
 plugins:

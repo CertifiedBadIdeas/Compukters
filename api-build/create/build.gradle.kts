@@ -12,8 +12,8 @@ repositories {
     mavenCentral()
 }
 
-val createSources = rootProject.layout.projectDirectory.dir("../../addons/create/src/compuktersAddon/kotlin")
-val addonVersion = providers.fileContents(rootProject.layout.projectDirectory.file("../../addons/create/gradle.properties")).asText.map { properties ->
+val createSources = rootProject.layout.projectDirectory.dir("../addons/create/src/compuktersAddon/kotlin")
+val addonVersion = providers.fileContents(rootProject.layout.projectDirectory.file("../addons/create/gradle.properties")).asText.map { properties ->
     Regex("(?m)^addonVersion\\s*=\\s*(\\S+)").find(properties)?.groupValues?.get(1)
         ?: error("Missing addonVersion in addons/create/gradle.properties")
 }

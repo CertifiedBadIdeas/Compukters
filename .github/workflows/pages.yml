@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/pages.yml"
       - "docs/**"
+      - "api-build/**"
       - "modules/common/guest-platform/src/platform/**"
       - "addons/create/src/compuktersAddon/kotlin/**"
       - "addons/create/gradle.properties"
@@ -36,7 +37,7 @@ jobs:
         id: pages
         uses: actions/configure-pages@v5
       - name: Generate Guest API reference
-        run: ./gradlew -p docs/api-build dokkaGeneratePublicationHtml --no-daemon
+        run: ./gradlew -p api-build dokkaGeneratePublicationHtml --no-daemon
       - name: Stage Guest API reference
         run: python3 docs/_tools/build_guest_api.py
       - name: Build with Jekyll

@@ -24,7 +24,7 @@ repositories {
     mavenCentral()
 }
 
-val modVersion = providers.fileContents(layout.projectDirectory.file("../../gradle.properties")).asText.map { properties ->
+val modVersion = providers.fileContents(layout.projectDirectory.file("../gradle.properties")).asText.map { properties ->
     Regex("(?m)^version\\s*=\\s*(\\S+)").find(properties)?.groupValues?.get(1)
         ?: error("Missing version in gradle.properties")
 }
@@ -36,7 +36,7 @@ dokka {
         },
     )
     pluginsConfiguration.html {
-        customAssets.from(layout.projectDirectory.file("../assets/images/compukters-icon.svg"))
+        customAssets.from(layout.projectDirectory.file("../docs/assets/images/compukters-icon.svg"))
         customStyleSheets.from(layout.projectDirectory.file("logo-styles.css"))
     }
     dokkaPublications.html {

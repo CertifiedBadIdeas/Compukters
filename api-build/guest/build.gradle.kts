@@ -12,8 +12,8 @@ repositories {
     mavenCentral()
 }
 
-val guestSources = rootProject.layout.projectDirectory.dir("../../modules/common/guest-platform/src/platform")
-val modVersion = providers.fileContents(rootProject.layout.projectDirectory.file("../../gradle.properties")).asText.map { properties ->
+val guestSources = rootProject.layout.projectDirectory.dir("../modules/common/guest-platform/src/platform")
+val modVersion = providers.fileContents(rootProject.layout.projectDirectory.file("../gradle.properties")).asText.map { properties ->
     Regex("(?m)^version\\s*=\\s*(\\S+)").find(properties)?.groupValues?.get(1)
         ?: error("Missing version in gradle.properties")
 }

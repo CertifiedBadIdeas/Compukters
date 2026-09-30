@@ -9,7 +9,7 @@ import shutil
 
 
 REPOSITORY = Path(__file__).resolve().parents[2]
-SOURCE = REPOSITORY / "docs/api-build/build/dokka/html"
+SOURCE = REPOSITORY / "api-build/build/dokka/html"
 OUTPUT = REPOSITORY / "docs/guest-api"
 
 
@@ -36,7 +36,7 @@ def main() -> None:
     if missing_pages:
         raise SystemExit(
             f"Dokka output is missing API pages {missing_pages}; "
-            "run ./gradlew -p docs/api-build dokkaGeneratePublicationHtml"
+            "run ./gradlew -p api-build dokkaGeneratePublicationHtml"
         )
 
     if args.check:
