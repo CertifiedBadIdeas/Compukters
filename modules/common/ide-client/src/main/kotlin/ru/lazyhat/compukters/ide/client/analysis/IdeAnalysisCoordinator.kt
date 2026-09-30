@@ -81,9 +81,16 @@ sealed interface IdeHighlightStyle {
 class IdeAnalysisPresentation private constructor(
     diagnostics: List<EditorDiagnostic>,
     semanticTokens: List<SemanticToken>,
+    methodUsages: List<ru.lazyhat.compukters.ide.analysis.MethodUsageCount> = emptyList(),
 ) {
     val diagnostics: List<EditorDiagnostic> = Collections.unmodifiableList(diagnostics.toList())
     val semanticTokens: List<SemanticToken> = Collections.unmodifiableList(semanticTokens.toList())
+    val methodUsages: List<ru.lazyhat.compukters.ide.analysis.MethodUsageCount> =
+        Collections.unmodifiableList(
+            methodUsages.sortedBy {
+                it.range.startUtf16
+            },
+        )
 
     fun styleAt(
         path: VirtualSourcePath,
@@ -130,7 +137,8 @@ class IdeAnalysisPresentation private constructor(
         fun of(
             diagnostics: List<EditorDiagnostic>,
             semanticTokens: List<SemanticToken>,
-        ): IdeAnalysisPresentation = IdeAnalysisPresentation(diagnostics, semanticTokens)
+            methodUsages: List<ru.lazyhat.compukters.ide.analysis.MethodUsageCount> = emptyList(),
+        ): IdeAnalysisPresentation = IdeAnalysisPresentation(diagnostics, semanticTokens, methodUsages)
     }
 }
 
@@ -776,7 +784,7 @@ class IdeAnalysisCoordinator(
                         snapshot.identity,
                         current.path,
                         current.documentRevision,
-                        IdeAnalysisPresentation.of(accepted.diagnostics, accepted.semanticTokens),
+                        IdeAnalysisPresentation.of(accepted.diagnostics, accepted.semanticTokens, accepted.methodUsages),
                         prior?.completion,
                         prior?.interaction ?: IdeSemanticInteraction.None,
                         prior?.parameterInfo,

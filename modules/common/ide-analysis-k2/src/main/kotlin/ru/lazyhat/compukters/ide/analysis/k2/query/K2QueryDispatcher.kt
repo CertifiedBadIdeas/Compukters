@@ -58,6 +58,7 @@ internal object K2QueryDispatcher {
                 PresentationParts(
                     DiagnosticQuery.collect(this, query.path, file, limits),
                     SemanticTokenQuery.collect(this, query.path, file, limits),
+                    MethodUsageQuery.collect(this, query.path, file, snapshot, limits),
                 )
             }
         val presentation =
@@ -72,6 +73,7 @@ internal object K2QueryDispatcher {
                         maxDiagnosticMessageUtf8Bytes = limits.diagnosticTextBytes,
                         maxSemanticTokens = limits.semanticTokens,
                     ),
+                methodUsages = collected.methodUsages,
             )
         return AnalysisResult.Presentation(query.identity, presentation)
     }
@@ -80,6 +82,7 @@ internal object K2QueryDispatcher {
 private data class PresentationParts(
     val diagnostics: List<ru.lazyhat.compukters.ide.analysis.EditorDiagnostic>,
     val semanticTokens: List<ru.lazyhat.compukters.ide.analysis.SemanticToken>,
+    val methodUsages: List<ru.lazyhat.compukters.ide.analysis.MethodUsageCount>,
 )
 
 internal class AnalysisOutputLimitException(

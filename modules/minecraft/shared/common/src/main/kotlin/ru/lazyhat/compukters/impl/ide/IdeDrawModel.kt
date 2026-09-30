@@ -34,6 +34,7 @@ enum class IdeTextKind {
     LineNumber,
     Source,
     Diagnostic,
+    MethodUsageCount,
     Status,
     Binary,
     Dialog,
@@ -93,6 +94,7 @@ enum class IdeHitAction {
     FindNext,
     FindClose,
     UsageChoice,
+    MethodUsages,
     UsagesClose,
 }
 

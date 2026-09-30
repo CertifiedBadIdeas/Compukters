@@ -107,6 +107,10 @@ sealed interface IdeCommand {
 
     data object FindUsages : IdeCommand
 
+    data class FindUsagesAt(
+        val offsetUtf16: Int,
+    ) : IdeCommand
+
     data object CloseUsages : IdeCommand
 
     data object UnfocusUsages : IdeCommand

@@ -79,6 +79,33 @@ import kotlin.test.assertTrue
 
 class IdeAnalysisCoordinatorTest {
     @Test
+    fun `method counters belong only to the accepted snapshot and disappear on provisional edits`() {
+        val fixture = fixture("fun work() = 1")
+        val snapshot = fixture.open()
+        val value =
+            SnapshotPresentation.create(
+                snapshot.identity,
+                mapOf(path() to 14),
+                methodUsages =
+                    listOf(
+                        ru.lazyhat.compukters.ide.analysis
+                            .MethodUsageCount(path(), EditorRange(4, 8), 3),
+                    ),
+            )
+        fixture.publish(AnalysisClientResult.Success(AnalysisResult.Presentation(snapshot.identity, value)))
+        assertEquals(
+            3,
+            activeState(fixture)
+                .presentation.methodUsages
+                .single()
+                .count,
+        )
+        fixture.coordinator.sourceChanged(fixture.project, path(), "fun work() = 12", 1, null)
+        fixture.publish(AnalysisClientResult.Success(AnalysisResult.Presentation(snapshot.identity, value)))
+        assertTrue(activeState(fixture).presentation.methodUsages.isEmpty())
+    }
+
+    @Test
     fun `Find Usages retains semantic locations across files with source context and stale rejection`() {
         val other = VirtualSourcePath.kotlin("src/other.kt")
         val fixture =

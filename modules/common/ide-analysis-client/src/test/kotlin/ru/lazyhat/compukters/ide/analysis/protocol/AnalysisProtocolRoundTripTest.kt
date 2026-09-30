@@ -59,6 +59,46 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class AnalysisProtocolRoundTripTest {
+    @Test
+    fun `method usage counts round trip and reject another source in correlated presentation`() {
+        val value =
+            SnapshotPresentation.create(
+                identity,
+                sourceLengths(),
+                methodUsages =
+                    listOf(
+                        ru.lazyhat.compukters.ide.analysis
+                            .MethodUsageCount(path(), EditorRange(4, 10), 3),
+                    ),
+            )
+        val query = AnalysisQuery.Presentation(identity, path())
+        val decoded =
+            assertIs<AnalysisQuerySuccess>(
+                roundTrip(AnalysisQuerySuccess(requestId, AnalysisResult.Presentation(identity, value)), context.forQuery(query)),
+            )
+        val result = assertIs<AnalysisResult.Presentation>(decoded.result)
+        assertEquals(3, assertIs<SnapshotPresentationAcceptance.Active>(result.value.accept(identity)).methodUsages.single().count)
+        val another = VirtualSourcePath.kotlin("src/other.kt")
+        val input = snapshot("src/main.kt" to "val answer = 42", "src/other.kt" to "fun work() = 1")
+        val admittedIdentity = identity.copy(source = SourceSnapshotIdentity.of(input))
+        val invalid =
+            SnapshotPresentation.create(
+                admittedIdentity,
+                mapOf(path() to 15, another to 14),
+                methodUsages =
+                    listOf(
+                        ru.lazyhat.compukters.ide.analysis
+                            .MethodUsageCount(another, EditorRange(4, 8), 0),
+                    ),
+            )
+        assertFailsWith<IllegalArgumentException> {
+            roundTrip(
+                AnalysisQuerySuccess(requestId, AnalysisResult.Presentation(admittedIdentity, invalid)),
+                AnalysisProtocolContext.of(input).forQuery(AnalysisQuery.Presentation(admittedIdentity, path())),
+            )
+        }
+    }
+
     private val snapshot = snapshot("src/main.kt" to "val answer = 42")
     private val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(snapshot), AnalysisProfileIdentity(hash(2)))
     private val context = AnalysisProtocolContext.of(snapshot)

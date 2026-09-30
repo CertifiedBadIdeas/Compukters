@@ -95,6 +95,23 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
+    fun `external background source changes reload analysis without requiring the file to be opened`() {
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture = navigationFixture(requests)
+        activateNavigation(fixture, requests)
+        val prior = requests.snapshots.size
+        fixture.workspace.descriptor.handle.canonicalPath
+            .resolve("src/other.kt")
+            .toFile()
+            .writeText("fun added() = 1")
+        fixture.controller.dispatch(IdeCommand.Poll)
+        fixture.controller.tick()
+        assertEquals(ProjectPath.file("src/main.kt"), fixture.workspaceView().activeFile)
+        assertEquals(prior + 1, requests.snapshots.size)
+        fixture.controller.close()
+    }
+
+    @Test
     fun `Find Usages opens semantic locations and discards results after edits`() {
         val requests = ControllerRecordingAnalysisRequests()
         val fixture = navigationFixture(requests)

@@ -317,6 +317,12 @@ class IdeInputAdapter(
             .asReversed()
             .firstOrNull { it.enabled && it.bounds.contains(x, y) }
             ?.let { target ->
+                if (target.action == IdeHitAction.MethodUsages) {
+                    val counts = (context.editor?.analysis as? IdeAnalysisState.Active)?.presentation?.methodUsages
+                    val usage = target.choiceIndex?.let { counts?.getOrNull(it) } ?: return false
+                    sink.dispatch(IdeCommand.FindUsagesAt(usage.range.startUtf16))
+                    return true
+                }
                 if (target.action == IdeHitAction.UsageChoice && target.choiceIndex != null) {
                     sink.dispatch(IdeCommand.OpenUsage(target.choiceIndex))
                     return true
@@ -441,6 +447,10 @@ class IdeInputAdapter(
             }
 
             IdeHitAction.UsageChoice -> {
+                false
+            }
+
+            IdeHitAction.MethodUsages -> {
                 false
             }
 

@@ -510,6 +510,8 @@ object IdeRenderer {
                     .length
                     .coerceAtLeast(2)
             val codeLeft = bounds.left + (gutterDigits + 2) * font.cellWidth
+            val counts = (editor.analysis as? IdeAnalysisState.Active)?.presentation?.methodUsages.orEmpty()
+            var usageIndex = 0
             repeat(rows) { visibleIndex ->
                 val lineNumber = editor.firstVisibleLine + visibleIndex
                 val line = editor.visibleLines[visibleIndex]
@@ -540,6 +542,29 @@ object IdeRenderer {
                 occurrenceHighlights(editor, line, lineStart, codeLeft, rowTop)
                 selection(editor, line, lineStart, codeLeft, rowTop)
                 styledLine(editor, lineNumber, line, lineStart, codeLeft, y)
+                while (usageIndex < counts.size && counts[usageIndex].range.startUtf16 < lineStart) usageIndex++
+                var usageX = codeLeft + (visualColumns(line) - editor.firstVisibleColumn + 2) * font.cellWidth
+                while (usageIndex < counts.size && counts[usageIndex].range.startUtf16 < lineStart + line.length) {
+                    val index = usageIndex++
+                    val usage = counts[index]
+                    val label = "${usage.count} ${if (usage.count == 1) "usage" else "usages"}"
+                    val x = usageX
+                    val right = x + label.length * font.cellWidth
+                    if (x >= codeLeft && right <= bounds.right - font.cellWidth) {
+                        code(IdeTextKind.MethodUsageCount, label, x, y, IdeColors.MUTED, bounds)
+                        hitTargets +=
+                            IdeHitTarget(
+                                IdeHitAction.MethodUsages,
+                                IdeRect(x, rowTop, right, rowTop + font.cellHeight),
+                                true,
+                                "Find Usages (Alt+F7)",
+                                IdeFocusGroup.Page,
+                                Z_TARGET,
+                                choiceIndex = index,
+                            )
+                    }
+                    usageX = right + 2 * font.cellWidth
+                }
                 if (caretVisible && caretBelongsToLine) {
                     val local = (editor.caretUtf16 - lineStart).coerceAtMost(line.length)
                     val x = codeLeft + (visualColumns(line.substring(0, local)) - editor.firstVisibleColumn) * font.cellWidth

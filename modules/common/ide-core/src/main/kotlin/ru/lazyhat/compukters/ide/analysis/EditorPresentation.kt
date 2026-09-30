@@ -100,11 +100,23 @@ data class SourceLocation(
     }
 }
 
+data class MethodUsageCount(
+    val path: VirtualSourcePath,
+    val range: EditorRange,
+    val count: Int,
+) {
+    init {
+        VirtualSourcePath.kotlin(path.value)
+        require(range.length > 0 && count >= 0) { "method usage count must have a name range and non-negative count" }
+    }
+}
+
 sealed interface SnapshotPresentationAcceptance {
     data class Active(
         val diagnostics: List<EditorDiagnostic>,
         val semanticTokens: List<SemanticToken>,
         val locations: List<SourceLocation>,
+        val methodUsages: List<MethodUsageCount> = emptyList(),
     ) : SnapshotPresentationAcceptance
 
     data object Stale : SnapshotPresentationAcceptance
@@ -115,10 +127,11 @@ class SnapshotPresentation private constructor(
     private val diagnostics: List<EditorDiagnostic>,
     private val semanticTokens: List<SemanticToken>,
     private val locations: List<SourceLocation>,
+    private val methodUsages: List<MethodUsageCount>,
 ) {
     fun accept(currentIdentity: AnalysisSnapshotIdentity): SnapshotPresentationAcceptance =
         if (currentIdentity == identity) {
-            SnapshotPresentationAcceptance.Active(diagnostics, semanticTokens, locations)
+            SnapshotPresentationAcceptance.Active(diagnostics, semanticTokens, locations, methodUsages)
         } else {
             SnapshotPresentationAcceptance.Stale
         }
@@ -131,10 +144,13 @@ class SnapshotPresentation private constructor(
             semanticTokens: List<SemanticToken> = emptyList(),
             locations: List<SourceLocation> = emptyList(),
             limits: EditorPresentationLimits = EditorPresentationLimits(),
+            methodUsages: List<MethodUsageCount> = emptyList(),
         ): SnapshotPresentation {
             require(diagnostics.size <= limits.maxDiagnostics) { "diagnostic count exceeds presentation limit" }
             require(semanticTokens.size <= limits.maxSemanticTokens) { "semantic-token count exceeds presentation limit" }
             require(locations.size <= limits.maxLocations) { "source-location count exceeds presentation limit" }
+            require(methodUsages.size <= limits.maxSemanticTokens) { "method-usage count exceeds presentation limit" }
+            require(methodUsages.map { it.path to it.range }.distinct().size == methodUsages.size) { "duplicate method usage count" }
             val sourceLengths = sourceLengthsUtf16.toMap()
             sourceLengths.forEach { (path, length) ->
                 VirtualSourcePath.kotlin(path.value)
@@ -148,11 +164,13 @@ class SnapshotPresentation private constructor(
             }
             semanticTokens.forEach { token -> validateRange(sourceLengths, token.path, token.range) }
             locations.forEach { location -> validateRange(sourceLengths, location.path, location.range) }
+            methodUsages.forEach { usage -> validateRange(sourceLengths, usage.path, usage.range) }
             return SnapshotPresentation(
                 identity,
                 immutableCopy(diagnostics),
                 immutableCopy(semanticTokens),
                 immutableCopy(locations),
+                immutableCopy(methodUsages),
             )
         }
 

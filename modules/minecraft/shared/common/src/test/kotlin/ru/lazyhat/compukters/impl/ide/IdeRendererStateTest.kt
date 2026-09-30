@@ -90,6 +90,47 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `method usage counter stays to the right of source without extra rows and opens exact method usages`() {
+        val counts =
+            listOf(
+                ru.lazyhat.compukters.ide.analysis
+                    .MethodUsageCount(VirtualSourcePath.kotlin("src/main.kt"), EditorRange(4, 8), 2),
+            )
+        val editor = semanticEditor("fun work() = 1", methodUsages = counts) { _, _ -> IdeSemanticInteraction.None }
+        val bounds = geometry()
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), bounds)
+        val label = model.text.single { it.kind == IdeTextKind.MethodUsageCount }
+        val target = model.hitTargets.single { it.action == IdeHitAction.MethodUsages }
+        assertEquals("2 usages", label.value)
+        assertEquals(bounds.editor.top, target.bounds.top)
+        assertEquals(IdeCodeFontProfile.DEFAULT.cellHeight, target.bounds.height)
+        assertTrue(target.bounds.left >= bounds.editor.left + (4 + "fun work() = 1".length + 2) * IdeCodeFontProfile.DEFAULT.cellWidth)
+        val commands = mutableListOf<ru.lazyhat.compukters.ide.client.state.IdeCommand>()
+        val input =
+            IdeInputAdapter(
+                IdeCommandSink { commands += it },
+                IdeClipboard { "" },
+                ru.lazyhat.compukters.ide.client
+                    .IdeClientLimits(),
+            )
+        assertTrue(
+            input.pointerClicked(
+                target.bounds.left + 1.0,
+                target.bounds.top + 1.0,
+                0,
+                IdePointerContext(bounds, editor = editor, hitTargets = model.hitTargets),
+            ),
+        )
+        assertEquals(
+            listOf<ru.lazyhat.compukters.ide.client.state.IdeCommand>(
+                ru.lazyhat.compukters.ide.client.state.IdeCommand
+                    .FindUsagesAt(4),
+            ),
+            commands,
+        )
+    }
+
+    @Test
     fun `usage rows expose clipped source context and clickable navigation in the lower panel`() {
         val editor = semanticEditor("val answer = answer") { _, _ -> IdeSemanticInteraction.None }
         val base = workspaceState(editor, IdeBuildState.Idle)
@@ -1074,6 +1115,7 @@ class IdeRendererStateTest {
         source: String,
         find: IdeFindView? = null,
         occurrences: List<EditorRange> = emptyList(),
+        methodUsages: List<ru.lazyhat.compukters.ide.analysis.MethodUsageCount> = emptyList(),
         interaction: (AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeSemanticInteraction,
     ): IdeEditorView.Text {
         val document = EditorDocument(source)
@@ -1103,7 +1145,7 @@ class IdeRendererStateTest {
                     identity,
                     virtualPath,
                     0,
-                    IdeAnalysisPresentation.Empty,
+                    IdeAnalysisPresentation.of(emptyList(), emptyList(), methodUsages),
                     completion = null,
                     interaction = interaction(identity, virtualPath),
                 ),

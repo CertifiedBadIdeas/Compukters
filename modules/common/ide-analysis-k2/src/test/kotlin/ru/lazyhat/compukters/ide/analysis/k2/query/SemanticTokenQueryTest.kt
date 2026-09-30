@@ -29,6 +29,46 @@ import kotlin.test.assertTrue
 
 class SemanticTokenQueryTest {
     @Test
+    fun `method usage counts distinguish overloads members and local functions across project files`() {
+        val declarations =
+            """
+            fun work(value: Int) = value
+            fun work(value: String) = value
+            class Box { fun work() = 1 }
+            fun unused() = 0
+            """.trimIndent()
+        val calls =
+            """
+            fun main() {
+                work(1)
+                work(2)
+                work("text")
+                Box().work()
+                fun work() = 2
+                work()
+            }
+            """.trimIndent()
+        K2QueryFixture.source("decl.kt" to declarations, "uses.kt" to calls).use { fixture ->
+            val result = fixture.execute(fixture.presentation("decl.kt")) as AnalysisResult.Presentation
+            val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+            assertEquals(listOf(2, 1, 1, 0), active.methodUsages.map { it.count })
+            fixture.update("uses.kt" to "fun main() = work(1)")
+            val updated = fixture.execute(fixture.presentation("decl.kt")) as AnalysisResult.Presentation
+            assertEquals(
+                listOf(
+                    1,
+                    0,
+                    0,
+                    0,
+                ),
+                (updated.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active).methodUsages.map {
+                    it.count
+                },
+            )
+        }
+    }
+
+    @Test
     fun `presentation classifies declarations and extension functions`() {
         val source = "class Box(val value: Int)\nfun Box.doubled() = value * 2"
         K2QueryFixture.source("main.kt" to source).use { fixture ->
