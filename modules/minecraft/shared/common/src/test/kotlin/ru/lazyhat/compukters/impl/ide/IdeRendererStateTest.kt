@@ -90,6 +90,20 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `current line spans the editor and remains below occurrence marks`() {
+        val editor = semanticEditor("val x = x", occurrences = listOf(EditorRange(8, 9))) { _, _ -> IdeSemanticInteraction.None }
+        val bounds = geometry()
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), bounds, caretVisible = false)
+        val line = model.fills.single { it.kind == IdeFillKind.CurrentLine }
+        assertEquals(IdeColors.CURRENT_LINE, line.color)
+        assertEquals(bounds.editor.left, line.bounds.left)
+        assertEquals(bounds.editor.right, line.bounds.right)
+        assertEquals(bounds.editor.top, line.bounds.top)
+        assertTrue(line.zIndex < model.fills.single { it.kind == IdeFillKind.WordOccurrence }.zIndex)
+        assertFalse(model.fills.any { it.kind == IdeFillKind.Caret })
+    }
+
+    @Test
     fun `word occurrences are subtle backgrounds below source text and search takes priority`() {
         val editor = semanticEditor("val x = x", occurrences = listOf(EditorRange(8, 9))) { _, _ -> IdeSemanticInteraction.None }
         val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry())

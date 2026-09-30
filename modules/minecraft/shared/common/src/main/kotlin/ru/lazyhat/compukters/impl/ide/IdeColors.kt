@@ -24,6 +24,7 @@ object IdeColors {
     const val PANEL = 0xFF191A1C.toInt()
     const val PANEL_ALT = 0xFF212326.toInt()
     const val EDITOR = 0xFF1E1F22.toInt()
+    const val CURRENT_LINE = 0xFF26282E.toInt()
     const val BORDER = 0xFF26282C.toInt()
     const val TEXT = 0xFFD1D3D9.toInt()
     const val EDITOR_TEXT = 0xFFBCBEC4.toInt()

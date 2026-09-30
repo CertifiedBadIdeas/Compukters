@@ -50,6 +50,7 @@ enum class IdeTextKind {
 enum class IdeTextRotation { None, Clockwise90 }
 
 enum class IdeFillKind {
+    CurrentLine,
     Background,
     Border,
     Shadow,
