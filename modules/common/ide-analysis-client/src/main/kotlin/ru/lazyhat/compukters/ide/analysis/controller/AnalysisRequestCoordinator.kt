@@ -68,6 +68,15 @@ interface AnalysisRequestCoordinator : AutoCloseable {
 
     fun cancelPointerInteraction() = Unit
 
+    /** Resolves references and the declaration together, independently of hover information. */
+    fun symbolOccurrences(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<List<AnalysisClientResult>> =
+        CompletableFuture.failedFuture(UnsupportedOperationException("symbol occurrences are not configured"))
+
+    fun cancelSymbolOccurrences() = Unit
+
     fun cancelParameterInfo() = Unit
 }
 
@@ -99,6 +108,9 @@ class DefaultAnalysisRequestCoordinator(
     private var navigationFuture: CompletableFuture<AnalysisClientResult>? = null
     private var navigationResult: CompletableFuture<AnalysisClientResult>? = null
     private var parameterInfoFuture: CompletableFuture<AnalysisClientResult>? = null
+    private var occurrencesTask: AnalysisScheduledTask? = null
+    private var occurrencesFutures = emptyList<CompletableFuture<AnalysisClientResult>>()
+    private var occurrencesResult: CompletableFuture<List<AnalysisClientResult>>? = null
     private var closed = false
 
     init {
@@ -116,9 +128,11 @@ class DefaultAnalysisRequestCoordinator(
         val oldPointer: CompletableFuture<AnalysisClientResult>?
         val oldNavigation: CompletableFuture<AnalysisClientResult>?
         val oldParameterInfo: CompletableFuture<AnalysisClientResult>?
+        val oldOccurrences: List<CompletableFuture<AnalysisClientResult>>
         synchronized(lock) {
             check(!closed) { "analysis request coordinator is closed" }
             this.snapshot = snapshot
+            oldOccurrences = detachOccurrencesLocked()
             presentationTask?.cancel()
             completionTask?.cancel()
             pointerTask?.cancel()
@@ -149,6 +163,7 @@ class DefaultAnalysisRequestCoordinator(
         oldPointer?.let(client::cancel)
         oldNavigation?.let(client::cancel)
         oldParameterInfo?.let(client::cancel)
+        oldOccurrences.forEach(client::cancel)
     }
 
     override fun automaticCompletion(
@@ -270,6 +285,100 @@ class DefaultAnalysisRequestCoordinator(
         oldPointer?.let(client::cancel)
     }
 
+    override fun symbolOccurrences(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<List<AnalysisClientResult>> {
+        val result = CompletableFuture<List<AnalysisClientResult>>()
+        val previous: List<CompletableFuture<AnalysisClientResult>>
+        synchronized(lock) {
+            check(!closed) { "analysis request coordinator is closed" }
+            val expected = checkNotNull(snapshot) { "analysis snapshot is not open" }
+            previous = detachOccurrencesLocked()
+            occurrencesResult = result
+            occurrencesTask =
+                scheduler.schedule(0) {
+                    dispatchOccurrences(expected, path, offsetUtf16, result)
+                }
+        }
+        previous.forEach(client::cancel)
+        return result
+    }
+
+    override fun cancelSymbolOccurrences() {
+        val previous: List<CompletableFuture<AnalysisClientResult>>
+        synchronized(lock) {
+            previous = detachOccurrencesLocked()
+        }
+        previous.forEach(client::cancel)
+    }
+
+    private fun detachOccurrencesLocked(): List<CompletableFuture<AnalysisClientResult>> {
+        occurrencesTask?.cancel()
+        occurrencesTask = null
+        val previous = occurrencesFutures
+        occurrencesFutures = emptyList()
+        val result = occurrencesResult
+        occurrencesResult = null
+        result?.cancel(false)
+        return previous
+    }
+
+    private fun dispatchOccurrences(
+        expected: AdmittedAnalysisSnapshot,
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+        result: CompletableFuture<List<AnalysisClientResult>>,
+    ) {
+        val references =
+            synchronized(lock) {
+                if (closed || snapshot !== expected || occurrencesResult !== result) return
+                occurrencesTask = null
+                client
+                    .query(expected, AnalysisQuery.References(expected.identity, path, offsetUtf16))
+                    .also { occurrencesFutures = listOf(it) }
+            }
+        // The bounded worker queue has one interactive slot: never enqueue both queries at once.
+        references.whenComplete { value, failure ->
+            if (failure != null) {
+                finishOccurrences(expected, result, emptyList(), failure)
+                return@whenComplete
+            }
+            if (value !is AnalysisClientResult.Success) {
+                finishOccurrences(expected, result, listOfNotNull(value), null)
+                return@whenComplete
+            }
+            val declaration =
+                synchronized(lock) {
+                    if (closed || snapshot !== expected || occurrencesResult !== result) return@whenComplete
+                    client
+                        .query(expected, AnalysisQuery.Declaration(expected.identity, path, offsetUtf16))
+                        .also { occurrencesFutures = listOf(it) }
+                }
+            declaration.whenComplete { target, error ->
+                finishOccurrences(expected, result, listOfNotNull(value, target), error)
+            }
+        }
+    }
+
+    private fun finishOccurrences(
+        expected: AdmittedAnalysisSnapshot,
+        result: CompletableFuture<List<AnalysisClientResult>>,
+        values: List<AnalysisClientResult>,
+        failure: Throwable?,
+    ) {
+        val admitted =
+            synchronized(lock) {
+                if (closed || snapshot !== expected || occurrencesResult !== result) return@synchronized false
+                occurrencesResult = null
+                occurrencesFutures = emptyList()
+                true
+            }
+        if (admitted) {
+            if (failure != null) result.completeExceptionally(failure) else result.complete(values)
+        }
+    }
+
     override fun parameterInfo(
         path: VirtualSourcePath,
         offsetUtf16: Int,
@@ -310,7 +419,8 @@ class DefaultAnalysisRequestCoordinator(
             completionTask = null
             pointerResult?.cancel(false)
             navigationResult?.cancel(false)
-            futures = listOfNotNull(presentationFuture, completionFuture, pointerFuture, navigationFuture, parameterInfoFuture)
+            futures = listOfNotNull(presentationFuture, completionFuture, pointerFuture, navigationFuture, parameterInfoFuture) +
+                detachOccurrencesLocked()
             presentationFuture = null
             completionFuture = null
             pointerTask = null

@@ -32,6 +32,57 @@ import kotlin.test.assertTrue
 
 class AnalysisRequestCoordinatorTest {
     @Test
+    fun `symbol occurrences coalesce serialize their queries and cancel on source change`() {
+        val scheduler = ManualAnalysisTaskScheduler()
+        val client = RecordingAnalysisClient()
+        val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 1_000, 0, 400)
+        val snapshot = admittedSnapshot("val answer = 42")
+        coordinator.sourceChanged(snapshot, testPath())
+        val first = coordinator.symbolOccurrences(testPath(), 5)
+        val second = coordinator.symbolOccurrences(testPath(), 6)
+        assertTrue(first.isCancelled)
+        assertTrue(client.queries.isEmpty())
+        scheduler.advanceBy(0)
+        assertEquals(1, client.queries.size)
+        assertIs<AnalysisQuery.References>(client.queries[0])
+        client.queryFutures[0].complete(
+            AnalysisClientResult.Success(
+                AnalysisResult.References.create(snapshot.identity, emptyList(), mapOf(testPath() to 15)),
+            ),
+        )
+        assertEquals(2, client.queries.size)
+        assertIs<AnalysisQuery.Declaration>(client.queries[1])
+        coordinator.sourceChanged(admittedSnapshot("val answer = 43"), testPath())
+        assertTrue(second.isCancelled)
+        assertEquals(listOf(client.queryFutures[1]), client.cancelled)
+        client.queryFutures.forEach { it.complete(AnalysisClientResult.Stale) }
+        assertTrue(second.isCancelled)
+        coordinator.close()
+    }
+
+    @Test
+    fun `symbol occurrence results finish together without changing hover results`() {
+        val scheduler = ManualAnalysisTaskScheduler()
+        val client = RecordingAnalysisClient()
+        val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 1_000, 0, 400)
+        val snapshot = admittedSnapshot("val answer = 42")
+        coordinator.sourceChanged(snapshot, testPath())
+        val result = coordinator.symbolOccurrences(testPath(), 6)
+        val hover = coordinator.hoverInfo(testPath(), 6)
+        scheduler.advanceBy(0)
+        val references =
+            AnalysisClientResult.Success(
+                AnalysisResult.References.create(snapshot.identity, emptyList(), mapOf(testPath() to 15)),
+            )
+        client.queryFutures[0].complete(references)
+        assertFalse(result.isDone)
+        client.queryFutures[1].complete(AnalysisClientResult.Cancelled)
+        assertEquals(listOf(references, AnalysisClientResult.Cancelled), result.join())
+        assertFalse(hover.isDone)
+        coordinator.close()
+    }
+
+    @Test
     fun `parameter info is immediate and a newer request cancels the prior query`() {
         val client = RecordingAnalysisClient()
         val coordinator = DefaultAnalysisRequestCoordinator(client, ManualAnalysisTaskScheduler(), 0, 0)

@@ -1159,12 +1159,24 @@ links to their source files.
   their attached sources without matching unrelated same-spelling symbols.
   Evidence:
   [`NavigationAndReferencesTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/integration/NavigationAndReferencesTest.kt),
-  tests `forked worker navigates and finds exact project references` and
+  tests `forked worker navigates and finds exact project references including the pointer query chain` and
   `forked worker navigates to attached builtin source`, paired
   with [`DeclarationQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/DeclarationQueryTest.kt),
   test `navigation maps int array factory to its platform source`, and
   [`ReferenceQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/ReferenceQueryTest.kt),
   test `references cross project files and exclude unrelated same spelling symbols`.
+
+- [x] **Pointer symbol occurrences** — hovering an analyzed project identifier
+  highlights its declaration and current-file references, distinguishing overloads
+  and unrelated same-named variables and methods. Interpolated references participate,
+  while ordinary literal text does not; stale pointer and editor results are discarded.
+  Selection matching remains textual, from two Unicode characters inside string text
+  and three elsewhere. Evidence: `ReferenceQueryTest`, test
+  `references distinguish overloads locals methods and string interpolation`;
+  `IdeAnalysisCoordinatorTest`, tests
+  `pointer occurrences include declaration and only current file resolved references` and
+  `late occurrence results never highlight a different token or edited document`;
+  `IdeSelectionOccurrencesTest` and `IdeClientControllerTest`.
 
 - [x] **Local project build and cache** — the client builds real project
   snapshots, reuses the global compiler cache, deduplicates active work, and

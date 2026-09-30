@@ -31,6 +31,64 @@ import kotlin.test.assertFailsWith
 
 class ReferenceQueryTest {
     @Test
+    fun `references do not mix shadowed locals with the same name`() {
+        val source = "fun main() { val item = 1; println(item); run { val item = 2; println(item) }; println(item) }"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val result =
+                fixture.execute(
+                    AnalysisQuery.References(fixture.identity, VirtualSourcePath.kotlin("main.kt"), source.indexOf("item") + 1),
+                ) as AnalysisResult.References
+            assertEquals(
+                listOf(
+                    sourceLocation("main.kt", source.indexOf("item)"), "item"),
+                    sourceLocation("main.kt", source.lastIndexOf("item)"), "item"),
+                ),
+                result.locations,
+            )
+        }
+    }
+
+    @Test
+    fun `references distinguish overloads locals methods and string interpolation`() {
+        val source =
+            """
+            fun target(value: Int) = value
+            fun target(value: String) = value
+            fun main() {
+                target(1)
+                target("text")
+                val target = 3
+                val text = "${'$'}target ${'$'}{target} target"
+                val raw = """ + "\"\"\"${'$'}target ${'$'}{target} target\"\"\"" +
+                """
+                    println(target)
+                }
+                """.trimIndent()
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            fun references(offset: Int): List<DeclarationLocation> =
+                (
+                    fixture.execute(AnalysisQuery.References(fixture.identity, VirtualSourcePath.kotlin("main.kt"), offset))
+                        as AnalysisResult.References
+                ).locations
+            assertEquals(listOf(sourceLocation("main.kt", source.indexOf("target(1)"), "target")), references(source.indexOf("target") + 1))
+            assertEquals(
+                listOf(sourceLocation("main.kt", source.indexOf("target(\"text\")"), "target")),
+                references(source.indexOf("target(value: String)") + 1),
+            )
+            val localUsages =
+                listOf("${'$'}target", "${'$'}{target}").flatMap { marker ->
+                    generateSequence(source.indexOf(marker)) { start -> source.indexOf(marker, start + marker.length).takeIf { it >= 0 } }
+                        .map { start -> sourceLocation("main.kt", start + marker.indexOf("target"), "target") }
+                        .toList()
+                } + sourceLocation("main.kt", source.indexOf("target)"), "target")
+            assertEquals(
+                localUsages.sortedBy { (it as DeclarationLocation.Source).range.startUtf16 },
+                references(source.indexOf("val target") + 5),
+            )
+        }
+    }
+
+    @Test
     fun `references cross project files and exclude unrelated same spelling symbols`() {
         val declaration = "package sample\nfun target() = Unit"
         val firstUsage = "package sample\nfun first() = target()"
