@@ -25,16 +25,29 @@ import kotlin.test.assertTrue
 
 class CompuktersUiViewportTest {
     @Test
-    fun `IDE scale is one step smaller with minimum one and exact pointer transform`() {
+    fun `IDE scale is one step smaller with minimum two and exact pointer transform`() {
         for ((width, height) in listOf(640 to 360, 1280 to 720, 1920 to 1080, 2560 to 1440, 3840 to 2160)) {
             val original = CompuktersUiViewport.admit(width, height, 4)
-            val ide = CompuktersUiViewport.admit(width, height, 4, scaleReduction = 1)
-            assertEquals((original.physicalScale - 1).coerceAtLeast(1), ide.physicalScale)
+            val ide = CompuktersUiViewport.admit(width, height, 4, scaleReduction = 1, minimumScale = 2)
+            assertEquals((original.physicalScale - 1).coerceAtLeast(2), ide.physicalScale)
             assertEquals(width / ide.physicalScale, ide.width)
             assertEquals(height / ide.physicalScale, ide.height)
             assertEquals(120.0, ide.toMinecraftX(ide.toVirtualX(120.0)), 0.0001)
-            assertEquals(original.supported, ide.supported)
+            assertEquals(width >= 1280 && height >= 720, ide.supported)
         }
+    }
+
+    @Test
+    fun `IDE rejects undersized windows without reducing scale below two`() {
+        for ((width, height) in listOf(1279 to 720, 1280 to 719, 0 to -1)) {
+            val ide = CompuktersUiViewport.admit(width, height, 4, scaleReduction = 1, minimumScale = 2)
+            assertEquals(2, ide.physicalScale)
+            assertFalse(ide.supported)
+        }
+        val ide = CompuktersUiViewport.admit(1280, 720, 4, scaleReduction = 1, minimumScale = 2)
+        assertEquals(640, ide.width)
+        assertEquals(360, ide.height)
+        assertTrue(ide.supported)
     }
 
     @Test
