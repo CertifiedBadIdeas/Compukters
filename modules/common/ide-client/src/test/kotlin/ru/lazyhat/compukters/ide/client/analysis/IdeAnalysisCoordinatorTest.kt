@@ -79,6 +79,78 @@ import kotlin.test.assertTrue
 
 class IdeAnalysisCoordinatorTest {
     @Test
+    fun `pointer occurrences include declaration and only current file resolved references`() {
+        val fixture = fixture("val answer = 42\nprintln(answer)")
+        val active = fixture.open()
+        fixture.coordinator.pointerMoved(EditorRange(24, 30), 26, false)
+        fixture.requests.completeHover(expressionInfo(active.identity, EditorRange(24, 30)))
+        val request = fixture.requests.occurrencesRequests.single()
+        fixture.coordinator.pointerMoved(EditorRange(24, 30), 27, false)
+        assertEquals(1, fixture.requests.occurrencesRequests.size)
+        request.complete(occurrences(active.identity))
+        assertEquals(listOf(EditorRange(4, 10), EditorRange(24, 30)), activeState(fixture).occurrenceRanges)
+        assertEquals(2, activeState(fixture).occurrenceRanges.size)
+        fixture.coordinator.pointerMoved(null, null, false)
+        assertTrue(activeState(fixture).occurrenceRanges.isEmpty())
+    }
+
+    @Test
+    fun `late occurrence results never highlight a different token or edited document`() {
+        val fixture = fixture("val answer = 42\nprintln(answer)")
+        val active = fixture.open()
+        fixture.coordinator.pointerMoved(EditorRange(4, 10), 6, false)
+        fixture.requests.completeHover(expressionInfo(active.identity, EditorRange(4, 10)))
+        val first = fixture.requests.occurrencesRequests.last()
+        fixture.coordinator.pointerMoved(EditorRange(16, 23), 18, false)
+        first.complete(occurrences(active.identity))
+        assertTrue(activeState(fixture).occurrenceRanges.isEmpty())
+        fixture.requests.completeHover(expressionInfo(active.identity, EditorRange(16, 23)))
+        val second = fixture.requests.occurrencesRequests.last()
+        fixture.coordinator.sourceChanged(
+            fixture.project,
+            path(),
+            "xval answer = 42\nprintln(answer)",
+            1,
+            insertedText = "x",
+            caretOffsetUtf16 = 1,
+            change = insertion(0, 0, 1),
+        )
+        second.complete(occurrences(active.identity))
+        assertTrue(activeState(fixture).occurrenceRanges.isEmpty())
+    }
+
+    private fun occurrences(identity: AnalysisSnapshotIdentity): List<AnalysisClientResult> =
+        listOf(
+            AnalysisClientResult.Success(
+                AnalysisResult.References.create(
+                    identity,
+                    listOf(
+                        projectLocation(24, 30),
+                        DeclarationLocation.Source(
+                            DeclarationOrigin.Project,
+                            VirtualSourcePath.kotlin("other.kt"),
+                            EditorRange(0, 6),
+                        ),
+                    ),
+                    mapOf(path() to 31, VirtualSourcePath.kotlin("other.kt") to 6),
+                ),
+            ),
+            declaration(identity, projectLocation(4, 10)),
+        )
+
+    @Test
+    fun `a surrounding symbol result cannot highlight ordinary literal text`() {
+        val fixture = fixture("val answer = 42\nprintln(\"answer\")")
+        val active = fixture.open()
+        fixture.coordinator.pointerMoved(EditorRange(25, 31), 26, false)
+        fixture.requests.completeHover(expressionInfo(active.identity, EditorRange(25, 31)))
+        fixture.requests.occurrencesRequests
+            .single()
+            .complete(occurrences(active.identity))
+        assertTrue(activeState(fixture).occurrenceRanges.isEmpty())
+    }
+
+    @Test
     fun `hover link and explicit declaration admit only their exact anchors`() {
         val fixture = fixture("val answer = 42\nprintln(answer)")
         val active = fixture.open()
@@ -924,6 +996,7 @@ private class RecordingRequests : AnalysisRequestCoordinator {
     val automaticOffsets = mutableListOf<Int>()
     val manualOffsets = mutableListOf<Int>()
     val hoverRequests = mutableListOf<CompletableFuture<AnalysisClientResult>>()
+    val occurrencesRequests = mutableListOf<CompletableFuture<List<AnalysisClientResult>>>()
     val probeRequests = mutableListOf<CompletableFuture<AnalysisClientResult>>()
     val navigationRequests = mutableListOf<CompletableFuture<AnalysisClientResult>>()
     var pointerCancelCount = 0
@@ -956,6 +1029,11 @@ private class RecordingRequests : AnalysisRequestCoordinator {
         path: VirtualSourcePath,
         offsetUtf16: Int,
     ): CompletableFuture<AnalysisClientResult> = CompletableFuture<AnalysisClientResult>().also(hoverRequests::add)
+
+    override fun symbolOccurrences(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<List<AnalysisClientResult>> = CompletableFuture<List<AnalysisClientResult>>().also(occurrencesRequests::add)
 
     override fun declarationProbe(
         path: VirtualSourcePath,

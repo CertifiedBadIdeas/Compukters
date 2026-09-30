@@ -28,7 +28,7 @@ import kotlin.test.assertTrue
 class IdeSelectionOccurrencesTest {
     @Test
     fun `string selections require two Unicode characters and exclude selected occurrence`() {
-        val document = EditorDocument("val s = \"ab ab\"")
+        val document = EditorDocument("val s = \"ab ab\"; val other = 1")
         IncrementalKotlinHighlighter(document).use { highlighter ->
             val occurrences = IdeSelectionOccurrences()
             document.setCaret(9, false)
@@ -38,6 +38,8 @@ class IdeSelectionOccurrencesTest {
             assertEquals(listOf(EditorRange(12, 14)), occurrences.matches(document, highlighter.snapshot()))
             document.setCaret(0, false)
             document.setCaret(3, true)
+            assertEquals(listOf(EditorRange(17, 20)), occurrences.matches(document, highlighter.snapshot()))
+            document.setCaret(2, true)
             assertTrue(occurrences.matches(document, highlighter.snapshot()).isEmpty())
         }
         document.close()
@@ -55,7 +57,7 @@ class IdeSelectionOccurrencesTest {
     }
 
     @Test
-    fun `raw string text is eligible and interpolation identifiers are not`() {
+    fun `raw string and interpolation selections match literally with their respective thresholds`() {
         val document = EditorDocument("\"\"\"abc abc\"\"\"; \"\$name \$name\"")
         IncrementalKotlinHighlighter(document).use { highlighter ->
             val occurrences = IdeSelectionOccurrences()
@@ -65,7 +67,20 @@ class IdeSelectionOccurrencesTest {
             val offset = document.materialize().indexOf("name")
             document.setCaret(offset, false)
             document.setCaret(offset + 4, true)
-            assertTrue(occurrences.matches(document, highlighter.snapshot()).isEmpty())
+            assertEquals(listOf(EditorRange(offset + 6, offset + 10)), occurrences.matches(document, highlighter.snapshot()))
+        }
+        document.close()
+    }
+
+    @Test
+    fun `selection in code matches comments strings and other identifiers without semantic filtering`() {
+        val text = "val maven = 1; fun maven() = Unit; // maven\n\"maven\""
+        val document = EditorDocument(text)
+        IncrementalKotlinHighlighter(document).use { highlighter ->
+            val range = literalMatches(text, "maven").first()
+            document.setCaret(range.startUtf16, false)
+            document.setCaret(range.endUtf16, true)
+            assertEquals(literalMatches(text, "maven").drop(1), IdeSelectionOccurrences().matches(document, highlighter.snapshot()))
         }
         document.close()
     }

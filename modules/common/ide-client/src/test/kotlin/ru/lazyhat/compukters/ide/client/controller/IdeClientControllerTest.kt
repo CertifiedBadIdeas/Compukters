@@ -95,7 +95,33 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
-    fun `hovered identifiers and string selections highlight without editing source and defer to search`() {
+    fun `resolved pointer occurrences reach the editor and remain subordinate to selection and search`() {
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture = navigationFixture(requests)
+        activateNavigation(fixture, requests)
+        val source = "val answer = 42\nfun main() = answer"
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type(source)))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(0, false)))
+        fixture.controller.dispatch(IdeCommand.SourcePointer(5, false))
+        val ranges = listOf(EditorRange(4, 10), EditorRange(source.lastIndexOf("answer"), source.length))
+        requests.completeOccurrences(ranges)
+        fixture.controller.tick()
+        assertEquals(ranges, fixture.textEditor().occurrenceRanges)
+        fixture.controller.dispatch(IdeCommand.OpenFind)
+        assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
+        fixture.controller.dispatch(IdeCommand.CloseFind)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(4, false)))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(6, true)))
+        assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(0, false)))
+        fixture.controller.dispatch(IdeCommand.ScrollEditor(1, 0))
+        assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `selection occurrences do not edit source and absent analysis never falls back to text hover`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
         fixture.startAndTick()
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
@@ -103,7 +129,7 @@ class IdeClientControllerTest {
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(0, false)))
         fixture.controller.dispatch(IdeCommand.SourcePointer(5, false))
         val revision = fixture.textEditor().contentRevision
-        assertEquals(listOf(EditorRange(4, 8), EditorRange(11, 15)), fixture.textEditor().occurrenceRanges)
+        assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
         fixture.controller.dispatch(IdeCommand.OpenFind)
         assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
         fixture.controller.dispatch(IdeCommand.CloseFind)
@@ -114,6 +140,14 @@ class IdeClientControllerTest {
         assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(28, true)))
         assertEquals(listOf(EditorRange(29, 31)), fixture.textEditor().occurrenceRanges)
+        fixture.controller.dispatch(IdeCommand.OpenFind)
+        assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
+        fixture.controller.dispatch(IdeCommand.CloseFind)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(4, false)))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(6, true)))
+        assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(8, true)))
+        assertEquals(listOf(EditorRange(11, 15)), fixture.textEditor().occurrenceRanges)
         assertEquals(revision, fixture.textEditor().contentRevision)
         fixture.controller.close()
     }
@@ -1009,6 +1043,40 @@ private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
     lateinit var sink: AnalysisResultSink
     val snapshots = mutableListOf<AdmittedAnalysisSnapshot>()
     private val navigation = ArrayDeque<CompletableFuture<AnalysisClientResult>>()
+    private val occurrences = ArrayDeque<CompletableFuture<List<AnalysisClientResult>>>()
+
+    override fun hoverInfo(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> =
+        CompletableFuture.completedFuture(
+            AnalysisClientResult.Success(AnalysisResult.ExpressionInfo.create(snapshots.last().identity, null, emptyMap())),
+        )
+
+    override fun symbolOccurrences(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<List<AnalysisClientResult>> = CompletableFuture<List<AnalysisClientResult>>().also(occurrences::addLast)
+
+    fun completeOccurrences(ranges: List<EditorRange>) {
+        val snapshot = snapshots.last()
+        val path = VirtualSourcePath.kotlin("src/main.kt")
+        val lengths =
+            snapshot.sources.sources.associate {
+                it.path to
+                    it.content
+                        .toByteArray()
+                        .decodeToString()
+                        .length
+            }
+        val locations = ranges.map { DeclarationLocation.Source(DeclarationOrigin.Project, path, it) }
+        occurrences.removeFirst().complete(
+            listOf(
+                AnalysisClientResult.Success(AnalysisResult.References.create(snapshot.identity, locations.drop(1), lengths)),
+                AnalysisClientResult.Success(AnalysisResult.Declaration.create(snapshot.identity, locations.take(1), lengths)),
+            ),
+        )
+    }
 
     override fun sourceChanged(
         snapshot: AdmittedAnalysisSnapshot,

@@ -24,7 +24,7 @@ import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalSnapshot
 import java.util.Collections
 
-/** Textual occurrences are enabled only for selections inside string literal text. */
+/** Literal selection matches use a shorter threshold inside string literal text. */
 class IdeSelectionOccurrences {
     private var source: EditorDocument? = null
     private var revision = -1L
@@ -42,12 +42,13 @@ class IdeSelectionOccurrences {
         selection = range
         occurrences = emptyList()
         if (range == null) return occurrences
-        val token = lexicalTokenAt(document, lexical, range.startUtf16) ?: return occurrences
-        if (token.second != KotlinLexicalKind.String && token.second != KotlinLexicalKind.MultilineString) return occurrences
-        if (range.endUtf16 > token.first.endUtf16) return occurrences
+        val token = lexicalTokenAt(document, lexical, range.startUtf16)
+        val insideString =
+            token != null && range.endUtf16 <= token.first.endUtf16 &&
+                (token.second == KotlinLexicalKind.String || token.second == KotlinLexicalKind.MultilineString)
         val content = document.materialize()
         val text = content.substring(range.startUtf16, range.endUtf16)
-        if (text.codePointCount(0, text.length) < 2 || text.isBlank() || '\n' in text || '\r' in text) return occurrences
+        if (text.codePointCount(0, text.length) < (if (insideString) 2 else 3) || text.isBlank()) return occurrences
         occurrences = Collections.unmodifiableList(literalMatches(content, text).filterNot { it == range })
         return occurrences
     }

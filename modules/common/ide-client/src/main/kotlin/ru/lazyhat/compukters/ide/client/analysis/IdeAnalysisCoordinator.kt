@@ -145,6 +145,7 @@ sealed interface IdeAnalysisState {
         val completion: IdeCompletionState?,
         val interaction: IdeSemanticInteraction = IdeSemanticInteraction.None,
         val parameterInfo: IdeParameterInfoState? = null,
+        val occurrenceRanges: List<EditorRange> = emptyList(),
     ) : IdeAnalysisState
 
     data class Unavailable(
@@ -207,7 +208,7 @@ class IdeAnalysisCoordinator(
             session = Session(project, admittedPath, text, documentRevision, text.length, null, null)
             publishedState.set(IdeAnalysisState.Loading(admittedPath, documentRevision))
         }
-        requests.cancelPointerInteraction()
+        cancelPointerRequests()
         requests.cancelParameterInfo()
         inputLoader.load(project).whenComplete { input, failure ->
             if (failure == null && input != null) {
@@ -263,7 +264,7 @@ class IdeAnalysisCoordinator(
             publishedState.set(IdeAnalysisState.Loading(updated.path, documentRevision))
             rebuild = updated.input?.let { Rebuild(version, updated) }
         }
-        requests.cancelPointerInteraction()
+        cancelPointerRequests()
         requests.cancelParameterInfo()
         if (completionExpected) visibleLatency.automaticCompletionExpected(documentRevision)
         rebuild?.let { pending -> rebuild(pending.version, requireNotNull(pending.session.input)) }
@@ -283,7 +284,7 @@ class IdeAnalysisCoordinator(
             session = current.copy(input = null, snapshot = null)
             publishedState.set(IdeAnalysisState.Loading(current.path, current.documentRevision))
         }
-        requests.cancelPointerInteraction()
+        cancelPointerRequests()
         requests.cancelParameterInfo()
         inputLoader.load(project).whenComplete { input, failure ->
             if (failure == null && input != null) {
@@ -317,7 +318,7 @@ class IdeAnalysisCoordinator(
             val active = publishedState.get() as? IdeAnalysisState.Active
             if (active != null) publishedState.set(active.copy(completion = null, parameterInfo = null))
         }
-        requests.cancelPointerInteraction()
+        cancelPointerRequests()
         requests.cancelParameterInfo()
         request?.let(::dispatchParameterInfo)
     }
@@ -405,12 +406,13 @@ class IdeAnalysisCoordinator(
                 ) {
                     return
                 }
-                request = PointerInteraction(Math.incrementExact(semanticOperation), snapshot, anchor, controlDown)
+                semanticOperation = Math.incrementExact(semanticOperation)
+                request = PointerInteraction(semanticOperation, snapshot, anchor, controlDown)
                 pointer = request
-                publishedState.set(active.copy(interaction = IdeSemanticInteraction.None))
+                publishedState.set(active.copy(interaction = IdeSemanticInteraction.None, occurrenceRanges = emptyList()))
             }
         }
-        requests.cancelPointerInteraction()
+        cancelPointerRequests()
         request ?: return
         val future =
             if (request.controlDown) {
@@ -418,7 +420,17 @@ class IdeAnalysisCoordinator(
             } else {
                 requests.hoverInfo(request.anchor.path, request.anchor.offsetUtf16)
             }
-        future.whenComplete { result, failure -> acceptPointer(request, result, failure) }
+        future.whenComplete { result, failure ->
+            acceptPointer(request, result, failure)
+            val current = synchronized(lock) { currentPointer(request) }
+            if (current && failure == null && result is AnalysisClientResult.Success &&
+                result.result.identity == request.snapshot.identity
+            ) {
+                requests.symbolOccurrences(request.anchor.path, request.anchor.offsetUtf16).whenComplete { results, error ->
+                    acceptOccurrences(request, results, error)
+                }
+            }
+        }
     }
 
     fun controlReleased() {
@@ -490,7 +502,7 @@ class IdeAnalysisCoordinator(
         synchronized(lock) {
             invalidatePointerLocked()
         }
-        requests.cancelPointerInteraction()
+        cancelPointerRequests()
     }
 
     fun moveCompletion(delta: Int) = updateCompletion { it.move(delta) }
@@ -561,7 +573,7 @@ class IdeAnalysisCoordinator(
             session = null
             publishedState.set(IdeAnalysisState.Idle)
         }
-        requests.cancelPointerInteraction()
+        cancelPointerRequests()
         requests.cancelParameterInfo()
     }
 
@@ -691,6 +703,7 @@ class IdeAnalysisCoordinator(
                         prior?.completion,
                         prior?.interaction ?: IdeSemanticInteraction.None,
                         prior?.parameterInfo,
+                        prior?.occurrenceRanges ?: emptyList(),
                     )
                 visibleLatency.analysisPublished(IdeVisibleLatencyKind.Presentation, current.documentRevision)
                 publishedState.set(next)
@@ -775,6 +788,34 @@ class IdeAnalysisCoordinator(
                     }
                 }
             publishedState.set(active.copy(interaction = interaction))
+        }
+    }
+
+    private fun acceptOccurrences(
+        expected: PointerInteraction,
+        results: List<AnalysisClientResult>?,
+        failure: Throwable?,
+    ) {
+        synchronized(lock) {
+            if (!currentPointer(expected)) return
+            val active = publishedState.get() as? IdeAnalysisState.Active ?: return
+            val current = session ?: return
+            if (failure != null || results == null) return
+            val values = results.mapNotNull { (it as? AnalysisClientResult.Success)?.result }
+            if (values.size != 2 || values.any { it.identity != expected.snapshot.identity }) return
+            val references = values.filterIsInstance<AnalysisResult.References>().singleOrNull() ?: return
+            val declaration = values.filterIsInstance<AnalysisResult.Declaration>().singleOrNull() ?: return
+            val ranges =
+                (references.locations + declaration.locations)
+                    .filterIsInstance<DeclarationLocation.Source>()
+                    .filter { it.origin == DeclarationOrigin.Project && it.path == expected.anchor.path }
+                    .map { it.range }
+                    .filter { validRange(current.text, it.startUtf16, it.endUtf16) }
+                    .distinct()
+                    .sortedWith(compareBy({ it.startUtf16 }, { it.endUtf16 }))
+            // A surrounding call must not turn literal text, comments or unresolved words into a symbol hover.
+            if (expected.anchor.tokenRange !in ranges) return
+            publishedState.set(active.copy(occurrenceRanges = Collections.unmodifiableList(ranges)))
         }
     }
 
@@ -988,7 +1029,12 @@ class IdeAnalysisCoordinator(
         semanticOperation = Math.incrementExact(semanticOperation)
         pointer = null
         val active = publishedState.get() as? IdeAnalysisState.Active ?: return
-        publishedState.set(active.copy(interaction = IdeSemanticInteraction.None))
+        publishedState.set(active.copy(interaction = IdeSemanticInteraction.None, occurrenceRanges = emptyList()))
+    }
+
+    private fun cancelPointerRequests() {
+        requests.cancelPointerInteraction()
+        requests.cancelSymbolOccurrences()
     }
 
     private fun sameAnchor(

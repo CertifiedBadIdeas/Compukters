@@ -33,8 +33,11 @@ import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.controller.AdmittedAnalysisSnapshot
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisClientResult
+import ru.lazyhat.compukters.ide.analysis.controller.AnalysisScheduledTask
+import ru.lazyhat.compukters.ide.analysis.controller.AnalysisTaskScheduler
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisWorkerController
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisWorkerPolicy
+import ru.lazyhat.compukters.ide.analysis.controller.DefaultAnalysisRequestCoordinator
 import ru.lazyhat.compukters.ide.analysis.controller.SnapshotOpenResult
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
@@ -92,7 +95,7 @@ class NavigationAndReferencesTest {
     }
 
     @Test
-    fun `forked worker navigates and finds exact project references`() {
+    fun `forked worker navigates and finds exact project references including the pointer query chain`() {
         val declaration = "package demo\nfun target() = Unit"
         val usage = "package demo\nfun first() = target()\nfun second() = target()"
         val sources =
@@ -147,6 +150,33 @@ class NavigationAndReferencesTest {
                 ).result as AnalysisResult.References
             assertEquals(2, references.locations.size)
             assertEquals(setOf("demo/Usage.kt"), references.locations.map { assertIs<DeclarationLocation.Source>(it).path.value }.toSet())
+            val scheduler =
+                object : AnalysisTaskScheduler {
+                    override fun schedule(
+                        delayNanos: Long,
+                        action: () -> Unit,
+                    ): AnalysisScheduledTask {
+                        if (delayNanos == 0L) action()
+                        return AnalysisScheduledTask {}
+                    }
+
+                    override fun close() = Unit
+                }
+            DefaultAnalysisRequestCoordinator(controller, scheduler, 1, 0, 0).use { requests ->
+                val path = VirtualSourcePath.kotlin("demo/Usage.kt")
+                val offset = usage.indexOf("target") + 1
+                requests.sourceChanged(admitted, path)
+                val occurrences =
+                    requests
+                        .hoverInfo(path, offset)
+                        .thenCompose { hover ->
+                            assertIs<AnalysisClientResult.Success>(hover)
+                            requests.symbolOccurrences(path, offset)
+                        }.get(90, TimeUnit.SECONDS)
+                val resolved = occurrences.map { assertIs<AnalysisClientResult.Success>(it).result }
+                assertEquals(2, assertIs<AnalysisResult.References>(resolved[0]).locations.size)
+                assertEquals(1, assertIs<AnalysisResult.Declaration>(resolved[1]).locations.size)
+            }
         }
     }
 
