@@ -29,6 +29,7 @@ internal data class EditorHistoryEntry(
     val beforeSelection: EditorSelection,
     val afterSelection: EditorSelection,
     val kind: EditorHistoryKind,
+    val transactionId: Long? = null,
 ) {
     val charge: Int
         get() = edits.sumOf { it.removed.length + it.inserted.length }
@@ -51,6 +52,9 @@ internal class EditorHistory(
 
     val undoEntryCount: Int
         get() = undo.size
+
+    val undoTransactionId: Long? get() = undo.lastOrNull()?.transactionId
+    val redoTransactionId: Long? get() = redo.lastOrNull()?.transactionId
 
     fun canRecord(entry: EditorHistoryEntry): Boolean {
         if (limits.maxUndoEntries == 0) return false
