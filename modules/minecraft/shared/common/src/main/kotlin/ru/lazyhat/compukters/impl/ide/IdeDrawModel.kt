@@ -48,7 +48,7 @@ enum class IdeTextKind {
 
 enum class IdeTextRotation { None, Clockwise90 }
 
-enum class IdeFillKind { Background, Border, Selection, DropTarget, Caret, Splitter, HyperlinkUnderline, MutableUnderline, DialogScrim }
+enum class IdeFillKind { Background, Border, Shadow, Selection, DropTarget, Caret, Splitter, HyperlinkUnderline, MutableUnderline, DialogScrim }
 
 enum class IdeScissorKind { Tree, Editor, Diagnostics, Completion, SemanticPopup, ProjectSwitcher, Tooltip }
 

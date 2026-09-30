@@ -486,7 +486,7 @@ internal class IdeScreen(
 
     private fun viewport(): CompuktersUiViewport {
         val window = minecraft.window
-        return CompuktersUiViewport.admit(window.width, window.height, window.guiScale)
+        return CompuktersUiViewport.admit(window.width, window.height, window.guiScale, scaleReduction = 1)
     }
 
     private fun focusState(): IdeFocusState {

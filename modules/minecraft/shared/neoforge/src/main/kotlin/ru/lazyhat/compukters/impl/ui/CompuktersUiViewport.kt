@@ -46,7 +46,9 @@ internal class CompuktersUiViewport private constructor(
             framebufferWidth: Int,
             framebufferHeight: Int,
             minecraftGuiScale: Int,
+            scaleReduction: Int = 0,
         ): CompuktersUiViewport {
+            require(scaleReduction >= 0) { "UI scale reduction must not be negative" }
             val safeWidth = framebufferWidth.coerceAtLeast(0)
             val safeHeight = framebufferHeight.coerceAtLeast(0)
             val safeMinecraftScale = minecraftGuiScale.coerceAtLeast(1)
@@ -54,7 +56,7 @@ internal class CompuktersUiViewport private constructor(
                 minOf(
                     safeWidth / MIN_WIDTH,
                     safeHeight / MIN_HEIGHT,
-                ).coerceAtLeast(1)
+                ).let { (it - scaleReduction).coerceAtLeast(1) }
             return CompuktersUiViewport(
                 physicalScale = physicalScale,
                 minecraftGuiScale = safeMinecraftScale,

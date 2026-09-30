@@ -113,15 +113,15 @@ object IdeRenderer {
             if (!geometry.supported) return
             fills += IdeFillDraw(IdeFillKind.Border, expand(geometry.panel, 1), IdeColors.BORDER, Z_PANEL)
             panel(IdePanelKind.Main, geometry.panel, IdeColors.PANEL)
-            panel(IdePanelKind.Header, geometry.header, IdeColors.PANEL_ALT)
+            panel(IdePanelKind.Header, geometry.header, IdeColors.PANEL)
             panel(IdePanelKind.Toolbar, geometry.toolbar, IdeColors.PANEL)
-            panel(IdePanelKind.ToolStripe, geometry.toolStripe, IdeColors.PANEL_ALT)
-            panel(IdePanelKind.Status, geometry.status, IdeColors.PANEL_ALT)
+            panel(IdePanelKind.ToolStripe, geometry.toolStripe, IdeColors.PANEL)
+            panel(IdePanelKind.Status, geometry.status, IdeColors.PANEL)
             geometry.tree?.let { panel(IdePanelKind.Tree, it, IdeColors.PANEL_ALT) }
             panel(IdePanelKind.Editor, geometry.editor, IdeColors.EDITOR)
             geometry.diagnostics?.let { panel(IdePanelKind.Diagnostics, it, IdeColors.PANEL_ALT) }
-            geometry.treeSplitter?.let { fills += IdeFillDraw(IdeFillKind.Splitter, it, IdeColors.BORDER, Z_CONTENT) }
-            geometry.diagnosticsSplitter?.let { fills += IdeFillDraw(IdeFillKind.Splitter, it, IdeColors.BORDER, Z_CONTENT) }
+            geometry.treeSplitter?.let { fills += IdeFillDraw(IdeFillKind.Splitter, it, IdeColors.PANEL, Z_CONTENT) }
+            geometry.diagnosticsSplitter?.let { fills += IdeFillDraw(IdeFillKind.Splitter, it, IdeColors.PANEL, Z_CONTENT) }
         }
 
         fun start(
@@ -1101,6 +1101,12 @@ object IdeRenderer {
             color: Int,
             z: Int = Z_CONTENT,
         ) {
+            if (z >= Z_POPUP) {
+                for (spread in 6 downTo 1) {
+                    val shadow = IdeRect(bounds.left - spread, bounds.top - spread + 2, bounds.right + spread, bounds.bottom + spread + 2)
+                    fills += IdeFillDraw(IdeFillKind.Shadow, shadow, 0x08000000, z - 1)
+                }
+            }
             panels += IdePanelDraw(kind, bounds, color, z)
         }
 

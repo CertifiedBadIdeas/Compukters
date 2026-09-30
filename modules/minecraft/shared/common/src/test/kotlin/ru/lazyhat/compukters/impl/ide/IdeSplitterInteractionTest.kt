@@ -28,9 +28,29 @@ class IdeSplitterInteractionTest {
         assertTrue(interaction.press(geometry.treeSplitter!!.left, 100, geometry))
         assertTrue(interaction.drag(10_000, 100, geometry))
         assertTrue(saved.isEmpty())
-        assertEquals(699, interaction.layout.treeWidth)
+        assertEquals(695, interaction.layout.treeWidth)
         assertTrue(interaction.release())
-        assertEquals(listOf(IdeLayoutSettings.admit(699, 120, true)), saved)
+        assertEquals(listOf(IdeLayoutSettings.admit(695, 120, true)), saved)
+    }
+
+    @Test
+    fun `every pixel across both thick splitters admits capture but neighboring panels do not`() {
+        val geometry = geometry()
+        val interaction = IdeSplitterInteraction(IdeLayoutSettings.defaults()) {}
+        val tree = geometry.treeSplitter!!
+        for (x in tree.left until tree.right) {
+            assertTrue(interaction.press(x, 100, geometry))
+            interaction.release()
+        }
+        assertFalse(interaction.press(tree.left - 1, 100, geometry))
+        assertFalse(interaction.press(tree.right, 100, geometry))
+        val diagnostics = geometry.diagnosticsSplitter!!
+        for (y in diagnostics.top until diagnostics.bottom) {
+            assertTrue(interaction.press(300, y, geometry))
+            interaction.release()
+        }
+        assertFalse(interaction.press(300, diagnostics.top - 1, geometry))
+        assertFalse(interaction.press(300, diagnostics.bottom, geometry))
     }
 
     @Test

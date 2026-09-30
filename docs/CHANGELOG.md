@@ -165,6 +165,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### In-game IDE
 
+- IDE panels use contrasting dark surfaces, wider draggable dividers and soft shadows on popups. Automatic IDE
+  scaling is one step smaller (minimum 1), leaving more space for code without changing terminal scaling.
 - The code editor, completion list, hover information, terminal windows and in-world text displays use
   bundled JetBrains Mono without ligatures. The terminal keeps its 51x19 grid; bitmap fonts and the font
   selector are removed, and old font preferences no longer affect rendering.

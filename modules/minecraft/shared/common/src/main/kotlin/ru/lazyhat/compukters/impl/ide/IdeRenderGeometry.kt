@@ -125,7 +125,7 @@ class IdeRenderGeometry private constructor(
         const val MINIMUM_EDITOR_HEIGHT = 120
         const val MINIMUM_TREE_WIDTH = 96
         const val MINIMUM_DIAGNOSTICS_HEIGHT = 64
-        const val SPLITTER_SIZE = 1
+        const val SPLITTER_SIZE = 5
         const val HEADER_HEIGHT = 24
         const val TOOLBAR_HEIGHT = 22
         const val STATUS_HEIGHT = 18
