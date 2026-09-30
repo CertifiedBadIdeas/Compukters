@@ -95,7 +95,7 @@ class NavigationAndReferencesTest {
     }
 
     @Test
-    fun `forked worker navigates and finds exact project references including the pointer query chain`() {
+    fun `forked worker navigates and finds exact project references including caret occurrences`() {
         val declaration = "package demo\nfun target() = Unit"
         val usage = "package demo\nfun first() = target()\nfun second() = target()"
         val sources =
@@ -166,13 +166,7 @@ class NavigationAndReferencesTest {
                 val path = VirtualSourcePath.kotlin("demo/Usage.kt")
                 val offset = usage.indexOf("target") + 1
                 requests.sourceChanged(admitted, path)
-                val occurrences =
-                    requests
-                        .hoverInfo(path, offset)
-                        .thenCompose { hover ->
-                            assertIs<AnalysisClientResult.Success>(hover)
-                            requests.symbolOccurrences(path, offset)
-                        }.get(90, TimeUnit.SECONDS)
+                val occurrences = requests.symbolOccurrences(path, offset).get(90, TimeUnit.SECONDS)
                 val resolved = occurrences.map { assertIs<AnalysisClientResult.Success>(it).result }
                 assertEquals(2, assertIs<AnalysisResult.References>(resolved[0]).locations.size)
                 assertEquals(1, assertIs<AnalysisResult.Declaration>(resolved[1]).locations.size)

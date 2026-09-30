@@ -79,32 +79,49 @@ import kotlin.test.assertTrue
 
 class IdeAnalysisCoordinatorTest {
     @Test
-    fun `pointer occurrences include declaration and only current file resolved references`() {
+    fun `caret position set while input loads starts occurrences when its snapshot is ready`() {
+        val fixture = AnalysisFixture("val answer = 42\nprintln(answer)", deferredInput = true)
+        fixture.coordinator.open(fixture.project, path(), fixture.text, 0)
+        fixture.coordinator.caretMoved(26)
+        assertTrue(fixture.requests.occurrencesRequests.isEmpty())
+        fixture.completeInput()
+        val snapshot = fixture.requests.snapshots.last()
+        fixture.requests.occurrencesRequests
+            .single()
+            .complete(occurrences(snapshot.identity))
+        assertEquals(listOf(EditorRange(4, 10), EditorRange(24, 30)), activeState(fixture).occurrenceRanges)
+        assertTrue(fixture.requests.hoverRequests.isEmpty())
+    }
+
+    @Test
+    fun `caret occurrences include declaration and current file references without waiting for hover`() {
         val fixture = fixture("val answer = 42\nprintln(answer)")
         val active = fixture.open()
-        fixture.coordinator.pointerMoved(EditorRange(24, 30), 26, false)
-        fixture.requests.completeHover(expressionInfo(active.identity, EditorRange(24, 30)))
+        fixture.coordinator.caretMoved(26)
         val request = fixture.requests.occurrencesRequests.single()
-        fixture.coordinator.pointerMoved(EditorRange(24, 30), 27, false)
+        fixture.coordinator.caretMoved(27)
         assertEquals(1, fixture.requests.occurrencesRequests.size)
         request.complete(occurrences(active.identity))
         assertEquals(listOf(EditorRange(4, 10), EditorRange(24, 30)), activeState(fixture).occurrenceRanges)
         assertEquals(2, activeState(fixture).occurrenceRanges.size)
+        fixture.coordinator.caretMoved(30)
+        assertEquals(1, fixture.requests.occurrencesRequests.size)
+        fixture.coordinator.pointerMoved(EditorRange(16, 23), 18, false)
         fixture.coordinator.pointerMoved(null, null, false)
+        assertEquals(2, activeState(fixture).occurrenceRanges.size)
+        fixture.coordinator.focusLost()
         assertTrue(activeState(fixture).occurrenceRanges.isEmpty())
     }
 
     @Test
-    fun `late occurrence results never highlight a different token or edited document`() {
+    fun `late occurrence results never highlight a different caret token or edited document`() {
         val fixture = fixture("val answer = 42\nprintln(answer)")
         val active = fixture.open()
-        fixture.coordinator.pointerMoved(EditorRange(4, 10), 6, false)
-        fixture.requests.completeHover(expressionInfo(active.identity, EditorRange(4, 10)))
+        fixture.coordinator.caretMoved(6)
         val first = fixture.requests.occurrencesRequests.last()
-        fixture.coordinator.pointerMoved(EditorRange(16, 23), 18, false)
+        fixture.coordinator.caretMoved(18)
         first.complete(occurrences(active.identity))
         assertTrue(activeState(fixture).occurrenceRanges.isEmpty())
-        fixture.requests.completeHover(expressionInfo(active.identity, EditorRange(16, 23)))
         val second = fixture.requests.occurrencesRequests.last()
         fixture.coordinator.sourceChanged(
             fixture.project,
@@ -142,8 +159,7 @@ class IdeAnalysisCoordinatorTest {
     fun `a surrounding symbol result cannot highlight ordinary literal text`() {
         val fixture = fixture("val answer = 42\nprintln(\"answer\")")
         val active = fixture.open()
-        fixture.coordinator.pointerMoved(EditorRange(25, 31), 26, false)
-        fixture.requests.completeHover(expressionInfo(active.identity, EditorRange(25, 31)))
+        fixture.coordinator.caretMoved(26)
         fixture.requests.occurrencesRequests
             .single()
             .complete(occurrences(active.identity))

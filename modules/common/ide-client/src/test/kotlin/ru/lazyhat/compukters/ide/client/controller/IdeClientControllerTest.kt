@@ -95,27 +95,39 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
-    fun `resolved pointer occurrences reach the editor and remain subordinate to selection and search`() {
+    fun `resolved caret occurrences follow editor input and remain subordinate to selection and search`() {
         val requests = ControllerRecordingAnalysisRequests()
         val fixture = navigationFixture(requests)
         activateNavigation(fixture, requests)
         val source = "val answer = 42\nfun main() = answer"
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type(source)))
-        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(0, false)))
-        fixture.controller.dispatch(IdeCommand.SourcePointer(5, false))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(5, false)))
         val ranges = listOf(EditorRange(4, 10), EditorRange(source.lastIndexOf("answer"), source.length))
         requests.completeOccurrences(ranges)
         fixture.controller.tick()
         assertEquals(ranges, fixture.textEditor().occurrenceRanges)
+        fixture.controller.dispatch(
+            IdeCommand.Edit(
+                IdeEditorInput.Move(
+                    ru.lazyhat.compukters.ide.client.state.IdeMoveDirection.Right,
+                    false,
+                ),
+            ),
+        )
+        assertEquals(ranges, fixture.textEditor().occurrenceRanges)
         fixture.controller.dispatch(IdeCommand.OpenFind)
         assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
         fixture.controller.dispatch(IdeCommand.CloseFind)
+        fixture.controller.dispatch(IdeCommand.SourcePointer(null, false))
+        assertEquals(ranges, fixture.textEditor().occurrenceRanges)
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(4, false)))
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(6, true)))
         assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
-        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(0, false)))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(5, false)))
         fixture.controller.dispatch(IdeCommand.ScrollEditor(1, 0))
+        assertEquals(ranges, fixture.textEditor().occurrenceRanges)
+        fixture.controller.dispatch(IdeCommand.EditorFocusLost)
         assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
         fixture.controller.close()
     }
@@ -1044,6 +1056,10 @@ private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
     val snapshots = mutableListOf<AdmittedAnalysisSnapshot>()
     private val navigation = ArrayDeque<CompletableFuture<AnalysisClientResult>>()
     private val occurrences = ArrayDeque<CompletableFuture<List<AnalysisClientResult>>>()
+
+    override fun cancelSymbolOccurrences() {
+        occurrences.clear()
+    }
 
     override fun hoverInfo(
         path: VirtualSourcePath,
