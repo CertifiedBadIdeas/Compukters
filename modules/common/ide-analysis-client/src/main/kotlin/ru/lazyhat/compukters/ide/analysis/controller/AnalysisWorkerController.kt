@@ -363,6 +363,7 @@ class AnalysisWorkerController(
                 if (response.requestId != pending.requestId || response.identity != pending.query.identity) {
                     throw ControllerFault(AnalysisFailureKind.Protocol, "analysis failure response mismatch")
                 }
+                if (response.failure == AnalysisFailureKind.InvalidSnapshot) synchronized(lock) { workerSnapshot = null }
                 if (pending.cancelled) {
                     pending.future.complete(AnalysisClientResult.Cancelled)
                 } else {

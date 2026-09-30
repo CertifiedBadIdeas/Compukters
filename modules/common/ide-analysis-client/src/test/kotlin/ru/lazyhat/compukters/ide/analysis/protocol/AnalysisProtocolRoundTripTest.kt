@@ -60,6 +60,28 @@ import kotlin.test.assertIs
 
 class AnalysisProtocolRoundTripTest {
     @Test
+    fun `rename query and editable locations round trip`() {
+        val query = AnalysisQuery.Rename(identity, path(), 5, "renamed")
+        assertEquals(AnalysisQueryRequest(requestId, query), roundTrip(AnalysisQueryRequest(requestId, query), context))
+        val result =
+            AnalysisResult.References.create(
+                identity,
+                listOf(DeclarationLocation.Source(DeclarationOrigin.Project, path(), EditorRange(4, 10))),
+                sourceLengths(),
+            )
+        assertEquals(AnalysisQuerySuccess(requestId, result), roundTrip(AnalysisQuerySuccess(requestId, result), context.forQuery(query)))
+        assertFailsWith<IllegalArgumentException> {
+            AnalysisResult.References.create(
+                identity,
+                listOf(DeclarationLocation.SourceUnavailable(DeclarationOrigin.Platform(AnalysisModuleIdentity("std", hash(3))))),
+                sourceLengths(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> { AnalysisQuery.Rename(identity, path(), 5, "x".repeat(257)) }
+        assertFailsWith<IllegalArgumentException> { AnalysisQuery.Rename(identity, path(), 5, "") }
+    }
+
+    @Test
     fun `method usage counts round trip and reject another source in correlated presentation`() {
         val value =
             SnapshotPresentation.create(

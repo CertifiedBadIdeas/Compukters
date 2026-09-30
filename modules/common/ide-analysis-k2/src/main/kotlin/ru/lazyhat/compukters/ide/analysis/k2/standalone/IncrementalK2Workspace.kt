@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.ide.analysis.k2.standalone
 
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.command.CommandProcessor
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.psi.PsiDocumentManager
 import org.jetbrains.kotlin.analysis.api.KaPlatformInterface
 import org.jetbrains.kotlin.analysis.api.platform.modification.KaElementModificationType
@@ -66,6 +67,7 @@ internal class IncrementalK2Workspace(
     private val platformSourceFiles = platformSourceFiles.toMap()
     private var poisoned = false
     private var closed = false
+    private var previewing = false
 
     val identity: AnalysisSnapshotIdentity
         get() {
@@ -75,17 +77,71 @@ internal class IncrementalK2Workspace(
 
     fun view(): AdmittedK2Snapshot {
         checkHealthy()
-        return AdmittedK2Snapshot(
+        return snapshotView(sourceLengthsUtf16)
+    }
+
+    private fun snapshotView(lengths: Map<VirtualSourcePath, Int>): AdmittedK2Snapshot =
+        AdmittedK2Snapshot(
             currentIdentity,
             environment,
             files,
-            sourceLengthsUtf16,
+            lengths,
             moduleIdentities,
             platformSourceFiles,
             platform,
             projectCompletionIndex,
             platformCompletionIndex,
+            this,
         )
+
+    /** Serialized worker-only speculation; never commits identity, sources or completion data. */
+    fun <T> preview(
+        expectedIdentity: AnalysisSnapshotIdentity,
+        changedTexts: Map<VirtualSourcePath, String>,
+        limits: AnalysisLimits,
+        operation: (AdmittedK2Snapshot) -> T,
+    ): T {
+        checkHealthy()
+        check(!previewing) { "nested K2 preview" }
+        require(expectedIdentity == currentIdentity) { "preview source identity is stale" }
+        require(changedTexts.keys.all { it in files }) { "preview contains an unknown source" }
+        val candidate =
+            ProjectSnapshot.of(
+                sources.sources.map { source ->
+                    changedTexts[source.path]?.let { ProjectSource(source.path, BinaryValue.of(it.encodeToByteArray())) } ?: source
+                },
+                limits.workerLimits(),
+            )
+        val originalTexts =
+            ReadAction.compute<Map<VirtualSourcePath, String>, RuntimeException> {
+                changedTexts.keys.associateWith { files.getValue(it).text }
+            }
+        val lengths = sourceLengthsUtf16 + candidate.sources.associate { it.path to decodeStrict(it.content).length }
+        previewing = true
+        try {
+            sourceUpdater.update(environment, files, changedTexts)
+            ReadAction.run<RuntimeException> {
+                changedTexts.forEach { (path, text) -> check(files.getValue(path).text == text) { "preview PSI differs from source" } }
+            }
+            return operation(snapshotView(lengths))
+        } finally {
+            try {
+                ProgressManager.getInstance().executeNonCancelableSection {
+                    sourceUpdater.update(environment, files, originalTexts)
+                    ReadAction.run<RuntimeException> {
+                        originalTexts.forEach { (path, text) ->
+                            check(files.getValue(path).text == text) { "restored PSI differs from source" }
+                        }
+                    }
+                }
+            } catch (failure: Exception) {
+                poisoned = true
+                dispose()
+                throw K2WorkspaceReopenRequiredException("K2 preview could not restore its source; reopen required", failure)
+            } finally {
+                previewing = false
+            }
+        }
     }
 
     fun update(
@@ -93,6 +149,7 @@ internal class IncrementalK2Workspace(
         limits: AnalysisLimits,
     ) {
         checkHealthy()
+        check(!previewing) { "cannot commit sources inside a K2 preview" }
         require(request.baseIdentity == currentIdentity) { "snapshot update base identity is not active" }
         require(request.targetIdentity.profile == currentIdentity.profile) { "snapshot update profile identity changed" }
         require(request.changedSources.size <= limits.sourceFiles) { "changed source count exceeds analysis limit" }

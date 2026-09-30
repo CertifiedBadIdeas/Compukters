@@ -45,9 +45,17 @@ internal class K2AnalysisQueryHandler(
         is AnalysisQuery.ParameterInfo,
         is AnalysisQuery.Declaration,
         is AnalysisQuery.References,
+        is AnalysisQuery.Rename,
         -> {
             try {
                 AnalysisQuerySuccess(request.requestId, K2QueryDispatcher.execute(request.query, snapshot, limits))
+            } catch (exception: RenameAdmissionException) {
+                AnalysisFailure(
+                    request.requestId,
+                    request.query.identity,
+                    AnalysisFailureKind.RefactoringRejected,
+                    boundedUtf8(exception.message ?: "Rename rejected", limits.detailTextBytes),
+                )
             } catch (exception: AnalysisOutputLimitException) {
                 AnalysisFailure(
                     request.requestId,
