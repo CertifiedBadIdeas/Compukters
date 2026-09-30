@@ -175,6 +175,8 @@ class IdeAnalysisCoordinator(
     private var version = 0L
     private var semanticOperation = 0L
     private var pointer: PointerInteraction? = null
+    private var caretOccurrences: CaretOccurrences? = null
+    private var caretOccurrencesEnabled = false
     private var navigationResult: CompletableFuture<IdeDeclarationOutcome>? = null
     private var parameterInfoRequested = false
     private var parameterInfoOperation = 0L
@@ -202,6 +204,7 @@ class IdeAnalysisCoordinator(
         synchronized(lock) {
             check(!closed) { "analysis coordinator is closed" }
             invalidateSemanticLocked()
+            caretOccurrencesEnabled = false
             invalidateParameterInfoLocked(close = true)
             version = Math.incrementExact(version)
             expectedVersion = version
@@ -209,6 +212,7 @@ class IdeAnalysisCoordinator(
             publishedState.set(IdeAnalysisState.Loading(admittedPath, documentRevision))
         }
         cancelPointerRequests()
+        requests.cancelSymbolOccurrences()
         requests.cancelParameterInfo()
         inputLoader.load(project).whenComplete { input, failure ->
             if (failure == null && input != null) {
@@ -265,6 +269,7 @@ class IdeAnalysisCoordinator(
             rebuild = updated.input?.let { Rebuild(version, updated) }
         }
         cancelPointerRequests()
+        requests.cancelSymbolOccurrences()
         requests.cancelParameterInfo()
         if (completionExpected) visibleLatency.automaticCompletionExpected(documentRevision)
         rebuild?.let { pending -> rebuild(pending.version, requireNotNull(pending.session.input)) }
@@ -285,6 +290,7 @@ class IdeAnalysisCoordinator(
             publishedState.set(IdeAnalysisState.Loading(current.path, current.documentRevision))
         }
         cancelPointerRequests()
+        requests.cancelSymbolOccurrences()
         requests.cancelParameterInfo()
         inputLoader.load(project).whenComplete { input, failure ->
             if (failure == null && input != null) {
@@ -330,6 +336,7 @@ class IdeAnalysisCoordinator(
             require(offsetUtf16 in 0..current.text.length) { "analysis caret exceeds current source" }
             val updated = current.copy(caretOffsetUtf16 = offsetUtf16)
             session = updated
+            caretOccurrencesEnabled = true
             request =
                 if (parameterInfoRequested) {
                     updated.snapshot?.let { snapshot -> beginParameterInfoLocked(updated, snapshot) }
@@ -340,6 +347,7 @@ class IdeAnalysisCoordinator(
             if (active != null && parameterInfoRequested) publishedState.set(active.copy(parameterInfo = null))
         }
         request?.let(::dispatchParameterInfo)
+        refreshCaretOccurrences()
     }
 
     fun dismissParameterInfo() {
@@ -409,7 +417,7 @@ class IdeAnalysisCoordinator(
                 semanticOperation = Math.incrementExact(semanticOperation)
                 request = PointerInteraction(semanticOperation, snapshot, anchor, controlDown)
                 pointer = request
-                publishedState.set(active.copy(interaction = IdeSemanticInteraction.None, occurrenceRanges = emptyList()))
+                publishedState.set(active.copy(interaction = IdeSemanticInteraction.None))
             }
         }
         cancelPointerRequests()
@@ -420,17 +428,7 @@ class IdeAnalysisCoordinator(
             } else {
                 requests.hoverInfo(request.anchor.path, request.anchor.offsetUtf16)
             }
-        future.whenComplete { result, failure ->
-            acceptPointer(request, result, failure)
-            val current = synchronized(lock) { currentPointer(request) }
-            if (current && failure == null && result is AnalysisClientResult.Success &&
-                result.result.identity == request.snapshot.identity
-            ) {
-                requests.symbolOccurrences(request.anchor.path, request.anchor.offsetUtf16).whenComplete { results, error ->
-                    acceptOccurrences(request, results, error)
-                }
-            }
-        }
+        future.whenComplete { result, failure -> acceptPointer(request, result, failure) }
     }
 
     fun controlReleased() {
@@ -513,6 +511,11 @@ class IdeAnalysisCoordinator(
     ) = updateCompletion { it.movePage(pages, pageSize) }
 
     fun focusLost() {
+        synchronized(lock) {
+            caretOccurrencesEnabled = false
+            invalidateCaretOccurrencesLocked()
+        }
+        requests.cancelSymbolOccurrences()
         dismissCompletion()
         dismissSemanticInteraction()
         dismissParameterInfo()
@@ -574,6 +577,7 @@ class IdeAnalysisCoordinator(
             publishedState.set(IdeAnalysisState.Idle)
         }
         cancelPointerRequests()
+        requests.cancelSymbolOccurrences()
         requests.cancelParameterInfo()
     }
 
@@ -606,6 +610,11 @@ class IdeAnalysisCoordinator(
                     Unit
                 }
             }
+        }
+        if (result is AnalysisClientResult.Success &&
+            (result.result is AnalysisResult.Presentation || result.result is AnalysisResult.Completion)
+        ) {
+            refreshCaretOccurrences()
         }
     }
 
@@ -678,6 +687,7 @@ class IdeAnalysisCoordinator(
             null -> Unit
         }
         parameterInfo?.let(::dispatchParameterInfo)
+        if (completion == null && parameterInfo == null) refreshCaretOccurrences()
     }
 
     private fun publishSuccess(
@@ -791,15 +801,66 @@ class IdeAnalysisCoordinator(
         }
     }
 
+    private fun refreshCaretOccurrences() {
+        val request: CaretOccurrences?
+        synchronized(lock) {
+            val current = session ?: return
+            if (closed || !caretOccurrencesEnabled) return
+            val snapshot = current.snapshot ?: return
+            val offset = current.caretOffsetUtf16
+            val token =
+                KotlinSourceTokenRange.find(current.text, offset)
+                    ?: if (offset > 0) {
+                        KotlinSourceTokenRange
+                            .find(
+                                current.text,
+                                offset - Character.charCount(current.text.codePointBefore(offset)),
+                            )?.takeIf { it.endUtf16 == offset }
+                    } else {
+                        null
+                    }
+            if (token != null && caretOccurrences?.let {
+                    it.snapshot === snapshot && it.anchor.tokenRange == token && it.anchor.documentRevision == current.documentRevision
+                } == true
+            ) {
+                return
+            }
+            invalidateCaretOccurrencesLocked()
+            request =
+                token?.let {
+                    CaretOccurrences(
+                        snapshot,
+                        IdeSemanticAnchor(
+                            snapshot.identity,
+                            current.path,
+                            current.documentRevision,
+                            it.startUtf16,
+                            it,
+                        ),
+                    )
+                }
+            caretOccurrences = request
+        }
+        requests.cancelSymbolOccurrences()
+        request ?: return
+        requests.symbolOccurrences(request.anchor.path, request.anchor.offsetUtf16).whenComplete { results, failure ->
+            acceptOccurrences(request, results, failure)
+        }
+    }
+
     private fun acceptOccurrences(
-        expected: PointerInteraction,
+        expected: CaretOccurrences,
         results: List<AnalysisClientResult>?,
         failure: Throwable?,
     ) {
         synchronized(lock) {
-            if (!currentPointer(expected)) return
-            val active = publishedState.get() as? IdeAnalysisState.Active ?: return
             val current = session ?: return
+            if (closed || caretOccurrences !== expected || current.snapshot !== expected.snapshot ||
+                current.path != expected.anchor.path || current.documentRevision != expected.anchor.documentRevision
+            ) {
+                return
+            }
+            val active = publishedState.get() as? IdeAnalysisState.Active ?: return
             if (failure != null || results == null) return
             val values = results.mapNotNull { (it as? AnalysisClientResult.Success)?.result }
             if (values.size != 2 || values.any { it.identity != expected.snapshot.identity }) return
@@ -813,7 +874,7 @@ class IdeAnalysisCoordinator(
                     .filter { validRange(current.text, it.startUtf16, it.endUtf16) }
                     .distinct()
                     .sortedWith(compareBy({ it.startUtf16 }, { it.endUtf16 }))
-            // A surrounding call must not turn literal text, comments or unresolved words into a symbol hover.
+            // A surrounding call must not turn literal text, comments or unresolved words into a symbol occurrence.
             if (expected.anchor.tokenRange !in ranges) return
             publishedState.set(active.copy(occurrenceRanges = Collections.unmodifiableList(ranges)))
         }
@@ -946,6 +1007,7 @@ class IdeAnalysisCoordinator(
 
     private fun invalidateSemanticLocked() {
         invalidatePointerLocked()
+        invalidateCaretOccurrencesLocked()
         navigationResult?.cancel(false)
         navigationResult = null
     }
@@ -1029,12 +1091,17 @@ class IdeAnalysisCoordinator(
         semanticOperation = Math.incrementExact(semanticOperation)
         pointer = null
         val active = publishedState.get() as? IdeAnalysisState.Active ?: return
-        publishedState.set(active.copy(interaction = IdeSemanticInteraction.None, occurrenceRanges = emptyList()))
+        publishedState.set(active.copy(interaction = IdeSemanticInteraction.None))
+    }
+
+    private fun invalidateCaretOccurrencesLocked() {
+        caretOccurrences = null
+        val active = publishedState.get() as? IdeAnalysisState.Active ?: return
+        publishedState.set(active.copy(occurrenceRanges = emptyList()))
     }
 
     private fun cancelPointerRequests() {
         requests.cancelPointerInteraction()
-        requests.cancelSymbolOccurrences()
     }
 
     private fun sameAnchor(
@@ -1110,6 +1177,11 @@ class IdeAnalysisCoordinator(
         val snapshot: AdmittedAnalysisSnapshot,
         val anchor: IdeSemanticAnchor,
         val controlDown: Boolean,
+    )
+
+    private data class CaretOccurrences(
+        val snapshot: AdmittedAnalysisSnapshot,
+        val anchor: IdeSemanticAnchor,
     )
 
     private data class NavigationInteraction(

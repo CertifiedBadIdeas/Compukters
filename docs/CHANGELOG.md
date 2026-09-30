@@ -165,10 +165,11 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### In-game IDE
 
-- Hovering an analyzed Kotlin identifier highlights its declaration and references in the current project file,
+- Placing the text caret on an analyzed Kotlin identifier highlights its declaration and references in the current project file,
   distinguishing overloads and unrelated same-named symbols, including references inside string interpolation.
   Selecting text highlights its literal occurrences everywhere: from two characters inside strings and from three
-  elsewhere, also in read-only files. Explicit Ctrl+F results take priority while search is open.
+  elsewhere, also in read-only files. Symbol occurrences do not wait for hover and are independent of mouse movement.
+  Explicit Ctrl+F results take priority while search is open.
 - Ctrl+F searches the current file with literal, case-sensitive matching, highlighted results and a match counter.
   Enter/Shift+Enter cycle through results; Escape closes search. Search also supports read-only computer and API files.
 - IDE panels use contrasting dark surfaces, wider draggable dividers and soft shadows on popups. Automatic IDE

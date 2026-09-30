@@ -2323,6 +2323,7 @@ class IdeClientController(
             active.document.materialize(),
             active.document.revision,
         )
+        analysisCoordinator?.caretMoved(active.document.caretOffset)
         refreshAnalysisState()
     }
 
