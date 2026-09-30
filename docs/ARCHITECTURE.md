@@ -96,8 +96,10 @@ Presentation results
 include bounded method-name ranges with non-negative project usage counts. K2 gathers declarations in the active
 source and resolves references in one project traversal under the presentation session, keeping overloads and
 same-named methods separate. Counts share the semantic-token item bound, are checked against the correlated source,
-and appear as clickable same-line labels to the right of declarations; edits drop provisional counts until the new
-snapshot is analyzed. The previous worker protocol is intentionally incompatible and rejected at handshake.
+and appear as clickable same-line labels to the right of declarations; zero counts are hidden. During pending
+analysis, exact edits rebase the last known counts for untouched method names, avoiding flicker. Edits touching
+or extending a name discard its label; a fresh accepted presentation replaces provisional counts, while stale
+responses remain rejected. The previous worker protocol is intentionally incompatible and rejected at handshake.
 Parameter information
 resolves the innermost call at a UTF-16 caret into a bounded, deterministically ordered set of K2-substituted callable
 signatures with active-parameter spans; client-side snapshot, revision, path, caret, and call-range checks reject stale

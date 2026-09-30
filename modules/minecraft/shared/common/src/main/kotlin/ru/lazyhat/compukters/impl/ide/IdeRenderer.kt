@@ -547,6 +547,7 @@ object IdeRenderer {
                 while (usageIndex < counts.size && counts[usageIndex].range.startUtf16 < lineStart + line.length) {
                     val index = usageIndex++
                     val usage = counts[index]
+                    if (usage.count == 0) continue
                     val label = "${usage.count} ${if (usage.count == 1) "usage" else "usages"}"
                     val x = usageX
                     val right = x + label.length * font.cellWidth

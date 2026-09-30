@@ -90,6 +90,41 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `hidden zero count does not shift the clickable index of another method`() {
+        val source = "fun unused() = 0; fun work() = 1"
+        val counts =
+            listOf(
+                ru.lazyhat.compukters.ide.analysis
+                    .MethodUsageCount(VirtualSourcePath.kotlin("src/main.kt"), EditorRange(4, 10), 0),
+                ru.lazyhat.compukters.ide.analysis.MethodUsageCount(
+                    VirtualSourcePath.kotlin("src/main.kt"),
+                    EditorRange(
+                        source.indexOf("work"),
+                        source.indexOf("work") + 4,
+                    ),
+                    2,
+                ),
+            )
+        val editor = semanticEditor(source, methodUsages = counts) { _, _ -> IdeSemanticInteraction.None }
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry())
+        assertEquals("2 usages", model.text.single { it.kind == IdeTextKind.MethodUsageCount }.value)
+        assertEquals(1, model.hitTargets.single { it.action == IdeHitAction.MethodUsages }.choiceIndex)
+    }
+
+    @Test
+    fun `zero usage counters draw neither a label nor a clickable target`() {
+        val counts =
+            listOf(
+                ru.lazyhat.compukters.ide.analysis
+                    .MethodUsageCount(VirtualSourcePath.kotlin("src/main.kt"), EditorRange(4, 8), 0),
+            )
+        val editor = semanticEditor("fun work() = 1", methodUsages = counts) { _, _ -> IdeSemanticInteraction.None }
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry())
+        assertTrue(model.text.none { it.kind == IdeTextKind.MethodUsageCount })
+        assertTrue(model.hitTargets.none { it.action == IdeHitAction.MethodUsages })
+    }
+
+    @Test
     fun `method usage counter stays to the right of source without extra rows and opens exact method usages`() {
         val counts =
             listOf(

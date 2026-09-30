@@ -106,6 +106,7 @@ class IdeAnalysisPresentation private constructor(
     fun rebase(
         activePath: VirtualSourcePath,
         change: EditorChange,
+        newText: String? = null,
     ): IdeAnalysisPresentation {
         val delta = Math.subtractExact(change.insertedCodeUnits, change.oldRange.length)
         val rebased =
@@ -128,7 +129,36 @@ class IdeAnalysisPresentation private constructor(
                     }
                 }
             }
-        return IdeAnalysisPresentation(emptyList(), rebased)
+        val counts =
+            methodUsages.mapNotNull { usage ->
+                if (usage.path != activePath) return@mapNotNull usage
+                val range = usage.range
+                val shifted =
+                    when {
+                        range.endUtf16 <= change.oldRange.startUtf16 -> {
+                            range
+                        }
+
+                        range.startUtf16 >= change.oldRange.endUtf16 -> {
+                            EditorRange(
+                                Math.addExact(range.startUtf16, delta),
+                                Math.addExact(range.endUtf16, delta),
+                            )
+                        }
+
+                        else -> {
+                            return@mapNotNull null
+                        }
+                    }
+                // Boundary edits can join identifier text despite not intersecting the old name range.
+                if (change.oldRange.startUtf16 <= range.endUtf16 && change.oldRange.endUtf16 >= range.startUtf16 &&
+                    (newText == null || KotlinSourceTokenRange.find(newText, shifted.startUtf16) != shifted)
+                ) {
+                    return@mapNotNull null
+                }
+                usage.copy(range = shifted)
+            }
+        return IdeAnalysisPresentation(emptyList(), rebased, counts)
     }
 
     companion object {
@@ -266,7 +296,7 @@ class IdeAnalysisCoordinator(
                 change?.let { exactChange ->
                     (publishedState.get() as? IdeAnalysisState.Active)
                         ?.presentation
-                        ?.rebase(current.path, exactChange)
+                        ?.rebase(current.path, exactChange, text)
                 } ?: IdeAnalysisPresentation.Empty
             val updated =
                 current.copy(

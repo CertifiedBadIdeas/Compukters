@@ -79,7 +79,38 @@ import kotlin.test.assertTrue
 
 class IdeAnalysisCoordinatorTest {
     @Test
-    fun `method counters belong only to the accepted snapshot and disappear on provisional edits`() {
+    fun `method count anchors survive whitespace but not identifier joins or name replacements`() {
+        val original = "fun work () = 1"
+        val presentation =
+            IdeAnalysisPresentation.of(
+                emptyList(),
+                emptyList(),
+                listOf(
+                    ru.lazyhat.compukters.ide.analysis
+                        .MethodUsageCount(path(), EditorRange(4, 8), 2),
+                ),
+            )
+
+        fun after(
+            range: EditorRange,
+            replacement: String,
+        ): IdeAnalysisPresentation {
+            val document = EditorDocument(original)
+            try {
+                val edit = assertIs<ru.lazyhat.compukters.ide.editor.EditorEditResult.Applied>(document.replaceRange(range, replacement))
+                return presentation.rebase(path(), edit.change, document.materialize())
+            } finally {
+                document.close()
+            }
+        }
+        assertEquals(2, after(EditorRange(8, 8), " ").methodUsages.single().count)
+        assertEquals(2, after(EditorRange(8, 9), "").methodUsages.single().count)
+        assertTrue(after(EditorRange(3, 4), "").methodUsages.isEmpty())
+        assertTrue(after(EditorRange(4, 8), "renamed").methodUsages.isEmpty())
+    }
+
+    @Test
+    fun `method counters persist through unrelated pending edits shift anchors and reject stale results`() {
         val fixture = fixture("fun work() = 1")
         val snapshot = fixture.open()
         val value =
@@ -100,8 +131,40 @@ class IdeAnalysisCoordinatorTest {
                 .single()
                 .count,
         )
-        fixture.coordinator.sourceChanged(fixture.project, path(), "fun work() = 12", 1, null)
+        fixture.coordinator.sourceChanged(fixture.project, path(), "fun work() = 12", 1, null, change = insertion(14, 0, 1))
         fixture.publish(AnalysisClientResult.Success(AnalysisResult.Presentation(snapshot.identity, value)))
+        assertEquals(
+            3,
+            activeState(fixture)
+                .presentation.methodUsages
+                .single()
+                .count,
+        )
+        fixture.coordinator.sourceChanged(fixture.project, path(), "\nfun work() = 12", 2, null, change = insertion(0, 1, 2))
+        val shifted = activeState(fixture).presentation.methodUsages.single()
+        assertEquals(EditorRange(5, 9), shifted.range)
+        assertEquals(3, shifted.count)
+        val fresh = fixture.requests.snapshots.last()
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Presentation(
+                    fresh.identity,
+                    SnapshotPresentation.create(
+                        fresh.identity,
+                        mapOf(path() to 16),
+                        methodUsages = listOf(shifted.copy(count = 1)),
+                    ),
+                ),
+            ),
+        )
+        assertEquals(
+            1,
+            activeState(fixture)
+                .presentation.methodUsages
+                .single()
+                .count,
+        )
+        fixture.coordinator.sourceChanged(fixture.project, path(), "\nfun workx() = 12", 3, null, change = insertion(9, 2, 3))
         assertTrue(activeState(fixture).presentation.methodUsages.isEmpty())
     }
 

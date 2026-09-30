@@ -1181,8 +1181,9 @@ links to their source files.
 
 - [x] **Find Usages and method counters** — `Alt+F7` opens bounded semantic usage results with file/line
   context and navigation. Same-line method labels count resolved project references in a single presentation
-  traversal, distinguish overloads and unrelated methods, and open the same result panel when clicked. Edits discard
-  stale counts and results. Evidence: `SemanticTokenQueryTest`, test
+  traversal, distinguish overloads and unrelated methods, and open the same result panel when clicked. Zero counts
+  are hidden. Untouched name anchors retain rebased last-known counts while analysis is pending; fresh results
+  replace them, and edits touching a name discard its count. Usage results still invalidate on edits. Evidence: `SemanticTokenQueryTest`, test
   `method usage counts distinguish overloads members and local functions across project files`;
   `NavigationAndReferencesTest`, `IdeAnalysisCoordinatorTest`, `IdeClientControllerTest`, and `IdeRendererStateTest`.
 
