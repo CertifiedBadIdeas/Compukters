@@ -516,6 +516,19 @@ object IdeRenderer {
                 val lineStart = editor.visibleLineStartsUtf16[visibleIndex]
                 val rowTop = bounds.top + visibleIndex * font.cellHeight
                 val y = rowTop + font.glyphDrawOffsetY
+                val nextLineStart = editor.visibleLineStartsUtf16.getOrNull(visibleIndex + 1)
+                val caretBelongsToLine =
+                    editor.caretUtf16 >= lineStart &&
+                        (nextLineStart?.let { editor.caretUtf16 < it } ?: (editor.caretUtf16 <= lineStart + line.length))
+                if (caretBelongsToLine) {
+                    fills +=
+                        IdeFillDraw(
+                            IdeFillKind.CurrentLine,
+                            IdeRect(bounds.left, rowTop, bounds.right, rowTop + font.cellHeight),
+                            IdeColors.CURRENT_LINE,
+                            Z_SELECTION - 2,
+                        )
+                }
                 code(
                     IdeTextKind.LineNumber,
                     (lineNumber + 1).toString().padStart(gutterDigits),
@@ -527,10 +540,6 @@ object IdeRenderer {
                 occurrenceHighlights(editor, line, lineStart, codeLeft, rowTop)
                 selection(editor, line, lineStart, codeLeft, rowTop)
                 styledLine(editor, lineNumber, line, lineStart, codeLeft, y)
-                val nextLineStart = editor.visibleLineStartsUtf16.getOrNull(visibleIndex + 1)
-                val caretBelongsToLine =
-                    editor.caretUtf16 >= lineStart &&
-                        (nextLineStart?.let { editor.caretUtf16 < it } ?: (editor.caretUtf16 <= lineStart + line.length))
                 if (caretVisible && caretBelongsToLine) {
                     val local = (editor.caretUtf16 - lineStart).coerceAtMost(line.length)
                     val x = codeLeft + (visualColumns(line.substring(0, local)) - editor.firstVisibleColumn) * font.cellWidth
