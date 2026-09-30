@@ -183,6 +183,11 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   fairly between computers under overload, while waiting computers leave the runnable pool until input or a world
   completion wakes them. Server operators can inspect the capacity and throttling counters with `vmbench status`.
 
+### Build tooling
+
+- Main, Create addon and API documentation Gradle wrappers use 9.8.0, which supports running Gradle on JDK 27.
+  Compilation toolchains and JVM targets remain unchanged at Java 21 and 25.
+
 ## 0.4.0 — 2026-09-12
 
 This release makes the integrated multi-file Kotlin IDE available on both supported Minecraft versions, adds a Java
