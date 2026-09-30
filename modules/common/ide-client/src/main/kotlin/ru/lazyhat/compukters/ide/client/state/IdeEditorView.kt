@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.ide.client.state
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
+import ru.lazyhat.compukters.ide.client.search.IdeFindView
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalSnapshot
@@ -69,6 +70,7 @@ sealed interface IdeEditorView {
         val analysis: IdeAnalysisState,
         val source: IdeEditorSource = IdeEditorSource.Project(requireNotNull(path)),
         val readOnly: Boolean = false,
+        val find: IdeFindView? = null,
     ) : IdeEditorView {
         val visibleLines: List<String> = Collections.unmodifiableList(visibleLines.toList())
         val visibleLineStartsUtf16: List<Int> = Collections.unmodifiableList(visibleLineStartsUtf16.toList())

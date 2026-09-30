@@ -46,6 +46,7 @@ import ru.lazyhat.compukters.ide.client.navigation.IdeNavigationSource
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferences
 import ru.lazyhat.compukters.ide.client.preferences.IdePreferencesStore
 import ru.lazyhat.compukters.ide.client.preferences.IdeProjectEditorState
+import ru.lazyhat.compukters.ide.client.search.IdeFindSession
 import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
 import ru.lazyhat.compukters.ide.client.state.IdeBuildAction
 import ru.lazyhat.compukters.ide.client.state.IdeBusyOperation
@@ -147,6 +148,7 @@ class IdeClientController(
     private var project: ProjectDescriptor? = null
     private var tree: ProjectTree? = null
     private var editor: EditorSession? = null
+    private val find = IdeFindSession()
     private var binary: IdeEditorView.Binary? = null
     private var computerPreview: ComputerPreviewSession? = null
     private var attachedSourcePreview: AttachedSourcePreviewSession? = null
@@ -301,6 +303,34 @@ class IdeClientController(
 
             is IdeCommand.ScrollEditor -> {
                 scrollEditor(command.lines, command.columns)
+            }
+
+            IdeCommand.OpenFind -> {
+                currentDocument()?.let(find::open)
+                analysisCoordinator?.dismissCompletion()
+                analysisCoordinator?.dismissParameterInfo()
+                refreshAnalysisState()
+                publishWorkspace()
+            }
+
+            IdeCommand.CloseFind -> {
+                find.dismiss()
+                publishWorkspace()
+            }
+
+            is IdeCommand.FocusFind -> {
+                find.focus(command.focused)
+                publishWorkspace()
+            }
+
+            is IdeCommand.EditFind -> {
+                if (!find.visible) return
+                find.edit(command.input)
+                navigateFind(backwards = false, includeCurrent = true)
+            }
+
+            is IdeCommand.NavigateFind -> {
+                if (find.visible) navigateFind(command.backwards)
             }
 
             IdeCommand.Save -> {
@@ -516,6 +546,7 @@ class IdeClientController(
         checkOwner()
         if (closed) return
         closed = true
+        find.close()
         acceptsTooling.set(false)
         acceptsCompletionResults.set(false)
         events.drain().forEach { event ->
@@ -652,6 +683,48 @@ class IdeClientController(
                 enqueueFailure(requestGeneration, IdeBusyOperation.Project, failure)
             }
         }
+    }
+
+    private fun currentDocument(): EditorDocument? = attachedSourcePreview?.document ?: computerPreview?.document ?: editor?.document
+
+    private fun navigateFind(
+        backwards: Boolean,
+        includeCurrent: Boolean = false,
+    ) {
+        val document = currentDocument() ?: return
+        val match = find.navigate(document, backwards, includeCurrent)
+        if (match != null) {
+            document.setCaret(match.startUtf16, false)
+            val line = document.lineContaining(match.startUtf16)
+            val column = (document.caretVisualColumn - 4).coerceAtLeast(0)
+            document.setCaret(match.endUtf16, true)
+            when {
+                attachedSourcePreview != null -> {
+                    attachedSourcePreview!!.let {
+                        it.firstVisibleLine = line
+                        it.firstVisibleColumn = column
+                    }
+                }
+
+                computerPreview != null -> {
+                    computerPreview!!.let {
+                        it.firstVisibleLine = line
+                        it.firstVisibleColumn = column
+                    }
+                }
+
+                else -> {
+                    editor?.let {
+                        it.firstVisibleLine = line
+                        it.firstVisibleColumn = column
+                    }
+                }
+            }
+            analysisCoordinator?.caretMoved(document.caretOffset)
+            analysisCoordinator?.dismissCompletion()
+            refreshAnalysisState()
+        }
+        publishWorkspace()
     }
 
     private fun edit(input: IdeEditorInput) {
@@ -1864,6 +1937,7 @@ class IdeClientController(
     }
 
     private fun publishWorkspace() {
+        if (currentDocument() == null) find.dismiss()
         val selected = project ?: return
         val selectedTree = tree ?: return
         val editorView = attachedSourcePreview?.toView() ?: computerPreview?.toView() ?: editor?.toView() ?: binary ?: IdeEditorView.Empty
@@ -1908,6 +1982,7 @@ class IdeClientController(
             conflict,
             highlighter.snapshot(),
             admittedAnalysisState(this),
+            find = find.view(document),
         )
     }
 
@@ -1935,6 +2010,7 @@ class IdeClientController(
             analysis = IdeAnalysisState.Idle,
             source = IdeEditorSource.Computer(path, targetId, generation),
             readOnly = true,
+            find = find.view(document),
         )
     }
 
@@ -1962,6 +2038,7 @@ class IdeClientController(
             analysis = IdeAnalysisState.Idle,
             source = IdeEditorSource.AttachedApi(module, path),
             readOnly = true,
+            find = find.view(document),
         )
     }
 

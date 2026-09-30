@@ -33,6 +33,7 @@ object IdeColors {
     const val COMPUTER = 0xFF71A1FE.toInt()
     const val DISABLED = 0xFF4C4F56.toInt()
     const val SELECTION = 0xFF214283.toInt()
+    const val SEARCH_MATCH = 0xFF54452B.toInt()
     const val DROP_TARGET = 0x4D366ACF
     const val CARET = 0xFFCED0D6.toInt()
     const val ERROR = 0xFFF57E84.toInt()

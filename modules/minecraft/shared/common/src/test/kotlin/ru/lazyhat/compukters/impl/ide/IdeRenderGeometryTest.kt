@@ -26,6 +26,18 @@ import kotlin.test.assertTrue
 
 class IdeRenderGeometryTest {
     @Test
+    fun `find bar reserves space without changing source hit testing origin or minimum editor size`() {
+        val normal = geometry()
+        val searching = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT, findVisible = true)
+        assertEquals(normal.editor.top + IdeRenderGeometry.FIND_BAR_HEIGHT, searching.editor.top)
+        assertEquals(searching.editor.top, searching.findBar!!.bottom)
+        assertEquals(normal.editor.bottom, searching.editor.bottom)
+        val compact = IdeRenderGeometry.compute(500, 240, 96, 64, true, true, IdeCodeFontProfile.DEFAULT, findVisible = true)
+        assertTrue(compact.supported)
+        assertTrue(compact.editor.height >= IdeRenderGeometry.MINIMUM_EDITOR_HEIGHT)
+    }
+
+    @Test
     fun `normal scaled viewport produces exact half-open panels and code cells`() {
         val geometry = geometry()
 

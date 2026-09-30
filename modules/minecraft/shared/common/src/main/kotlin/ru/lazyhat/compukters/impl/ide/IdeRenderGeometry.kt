@@ -70,6 +70,7 @@ class IdeRenderGeometry private constructor(
     val font: IdeCodeFontProfile,
     val fallback: IdeGeometryFallback,
     val unsupportedMessage: String,
+    val findBar: IdeRect? = null,
 ) {
     val supported: Boolean = fallback != IdeGeometryFallback.Unsupported
     val codeColumns: Int = editor.width / font.cellWidth
@@ -83,7 +84,7 @@ class IdeRenderGeometry private constructor(
 
     fun diagnosticsHeightAt(pointerY: Int): Int {
         check(supported && diagnosticsExpanded) { "diagnostics panel is not expanded" }
-        val maximum = content.height - SPLITTER_SIZE - MINIMUM_EDITOR_HEIGHT
+        val maximum = content.height - SPLITTER_SIZE - MINIMUM_EDITOR_HEIGHT - (findBar?.height ?: 0)
         return (content.bottom - pointerY).coerceIn(MINIMUM_DIAGNOSTICS_HEIGHT, maximum)
     }
 
@@ -126,6 +127,7 @@ class IdeRenderGeometry private constructor(
         const val MINIMUM_TREE_WIDTH = 96
         const val MINIMUM_DIAGNOSTICS_HEIGHT = 64
         const val SPLITTER_SIZE = 5
+        const val FIND_BAR_HEIGHT = 24
         const val HEADER_HEIGHT = 24
         const val TOOLBAR_HEIGHT = 22
         const val STATUS_HEIGHT = 18
@@ -140,6 +142,7 @@ class IdeRenderGeometry private constructor(
             diagnosticsExpanded: Boolean,
             treeVisible: Boolean,
             font: IdeCodeFontProfile,
+            findVisible: Boolean = false,
         ): IdeRenderGeometry {
             require(viewportWidth >= 0 && viewportHeight >= 0) { "IDE viewport must not be negative" }
             val candidates = mutableListOf<Candidate>()
@@ -157,8 +160,8 @@ class IdeRenderGeometry private constructor(
             if (diagnosticsExpanded) candidate(false, treeVisible, IdeGeometryFallback.DiagnosticsCollapsed)
             if (treeVisible) candidate(false, false, IdeGeometryFallback.TreeHidden)
             val viewport = IdeRect(0, 0, viewportWidth, viewportHeight)
-            candidates.firstOrNull { it.fits(viewportWidth, viewportHeight) }?.let { selected ->
-                return build(viewport, selected, treeWidth, diagnosticsHeight, font)
+            candidates.firstOrNull { it.fits(viewportWidth, viewportHeight, findVisible) }?.let { selected ->
+                return build(viewport, selected, treeWidth, diagnosticsHeight, font, findVisible)
             }
             return unsupported(viewport, font)
         }
@@ -166,12 +169,15 @@ class IdeRenderGeometry private constructor(
         private fun Candidate.fits(
             viewportWidth: Int,
             viewportHeight: Int,
+            findVisible: Boolean,
         ): Boolean {
             val panelWidth = viewportWidth - TOOL_STRIPE_WIDTH.toLong()
             val panelHeight = viewportHeight.toLong()
             val contentHeight = panelHeight - HEADER_HEIGHT - TOOLBAR_HEIGHT - STATUS_HEIGHT
             val requiredWidth = MINIMUM_EDITOR_WIDTH + if (tree) MINIMUM_TREE_WIDTH + SPLITTER_SIZE else 0
-            val requiredHeight = MINIMUM_EDITOR_HEIGHT + if (diagnostics) MINIMUM_DIAGNOSTICS_HEIGHT + SPLITTER_SIZE else 0
+            val requiredHeight =
+                MINIMUM_EDITOR_HEIGHT + (if (findVisible) FIND_BAR_HEIGHT else 0) +
+                    (if (diagnostics) MINIMUM_DIAGNOSTICS_HEIGHT + SPLITTER_SIZE else 0)
             return panelWidth >= requiredWidth && contentHeight >= requiredHeight
         }
 
@@ -181,6 +187,7 @@ class IdeRenderGeometry private constructor(
             requestedTreeWidth: Int,
             requestedDiagnosticsHeight: Int,
             font: IdeCodeFontProfile,
+            findVisible: Boolean,
         ): IdeRenderGeometry {
             val panel = viewport
             val toolStripe = IdeRect(panel.right - TOOL_STRIPE_WIDTH, panel.top, panel.right, panel.bottom)
@@ -205,7 +212,7 @@ class IdeRenderGeometry private constructor(
                 if (candidate.diagnostics) {
                     requestedDiagnosticsHeight.coerceIn(
                         MINIMUM_DIAGNOSTICS_HEIGHT,
-                        editorArea.height - SPLITTER_SIZE - MINIMUM_EDITOR_HEIGHT,
+                        editorArea.height - SPLITTER_SIZE - MINIMUM_EDITOR_HEIGHT - (if (findVisible) FIND_BAR_HEIGHT else 0),
                     )
                 } else {
                     0
@@ -219,7 +226,18 @@ class IdeRenderGeometry private constructor(
             val diagnosticsSplitter =
                 diagnostics?.let { IdeRect(editorArea.left, it.top - SPLITTER_SIZE, editorArea.right, it.top) }
             val editorBottom = diagnosticsSplitter?.top ?: editorArea.bottom
-            val editor = IdeRect(editorArea.left, editorArea.top, editorArea.right, editorBottom)
+            val findBar =
+                if (findVisible) {
+                    IdeRect(
+                        editorArea.left,
+                        editorArea.top,
+                        editorArea.right,
+                        editorArea.top + FIND_BAR_HEIGHT,
+                    )
+                } else {
+                    null
+                }
+            val editor = IdeRect(editorArea.left, findBar?.bottom ?: editorArea.top, editorArea.right, editorBottom)
             return IdeRenderGeometry(
                 viewport,
                 panel,
@@ -238,6 +256,7 @@ class IdeRenderGeometry private constructor(
                 font,
                 candidate.fallback,
                 "",
+                findBar,
             )
         }
 
