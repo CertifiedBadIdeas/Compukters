@@ -44,6 +44,7 @@ import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
 import ru.lazyhat.compukters.ide.analysis.EditorExpressionInfo
 import ru.lazyhat.compukters.ide.analysis.EditorParameterInfo
 import ru.lazyhat.compukters.ide.analysis.EditorPresentationLimits
+import ru.lazyhat.compukters.ide.analysis.MethodUsageCount
 import ru.lazyhat.compukters.ide.analysis.ParameterInfoItem
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
 import ru.lazyhat.compukters.ide.analysis.SemanticToken
@@ -448,6 +449,7 @@ private fun validateResult(
             require(active.semanticTokens.all { it.path == query.path }) {
                 "presentation semantic token does not belong to the active source"
             }
+            require(active.methodUsages.all { it.path == query.path }) { "method usage count does not belong to the active source" }
             SnapshotPresentation.create(
                 result.identity,
                 sourceLengths,
@@ -455,6 +457,7 @@ private fun validateResult(
                 active.semanticTokens,
                 active.locations,
                 limits.presentationLimits(),
+                active.methodUsages,
             )
         }
 
@@ -722,6 +725,12 @@ private class MessageSink {
         active.locations.forEach { location ->
             string(location.path.value)
             range(location.range)
+        }
+        u32(active.methodUsages.size)
+        active.methodUsages.forEach { usage ->
+            string(usage.path.value)
+            range(usage.range)
+            u32(usage.count)
         }
     }
 
@@ -1132,6 +1141,10 @@ private class MessageSource(
             List(boundedCount(context.limits.declarationLocations, "source location")) {
                 SourceLocation(kotlinPath(), range())
             }
+        val methodUsages =
+            List(boundedCount(context.limits.semanticTokens, "method usage count")) {
+                MethodUsageCount(kotlinPath(), range(), u32())
+            }
         val value =
             SnapshotPresentation.create(
                 identity,
@@ -1140,6 +1153,7 @@ private class MessageSource(
                 tokens,
                 locations,
                 context.limits.presentationLimits(),
+                methodUsages,
             )
         return AnalysisResult.Presentation(identity, value)
     }

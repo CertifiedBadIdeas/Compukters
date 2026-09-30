@@ -168,6 +168,7 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - The editor subtly highlights the current line beneath selections and occurrence marks, independently of caret blinking.
 - Returning to a project file preserves its caret, viewport and undo history within a bounded document cache.
 - `Alt+F7` opens semantic Find Usages with file/line context, clickable results and keyboard navigation; source edits invalidate stale results.
+- Method declarations show clickable project usage counts on the same line, distinguishing overloads and unrelated same-named methods.
 - Placing the text caret on an analyzed Kotlin identifier highlights its declaration and references in the current project file,
   distinguishing overloads and unrelated same-named symbols, including references inside string interpolation.
   Selecting text highlights its literal occurrences everywhere: from two characters inside strings and from three

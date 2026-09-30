@@ -27,6 +27,30 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class EditorPresentationTest {
+    @Test
+    fun `method counts are immutable source-bound and bounded independently of semantic tokens`() {
+        val counts = mutableListOf(MethodUsageCount(main, EditorRange(1, 3), 2))
+        val presentation = SnapshotPresentation.create(identity, mapOf(main to 10), methodUsages = counts)
+        counts.clear()
+        assertEquals(2, assertIs<SnapshotPresentationAcceptance.Active>(presentation.accept(identity)).methodUsages.single().count)
+        assertFailsWith<IllegalArgumentException> { MethodUsageCount(main, EditorRange(1, 3), -1) }
+        assertFailsWith<IllegalArgumentException> {
+            SnapshotPresentation.create(identity, mapOf(main to 1), methodUsages = listOf(MethodUsageCount(main, EditorRange(1, 3), 0)))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SnapshotPresentation.create(
+                identity,
+                mapOf(main to 10),
+                limits = EditorPresentationLimits(maxSemanticTokens = 0),
+                methodUsages = listOf(MethodUsageCount(main, EditorRange(1, 3), 0)),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            val duplicate = MethodUsageCount(main, EditorRange(1, 3), 0)
+            SnapshotPresentation.create(identity, mapOf(main to 10), methodUsages = listOf(duplicate, duplicate))
+        }
+    }
+
     private val main = VirtualSourcePath.kotlin("src/main.kt")
     private val util = VirtualSourcePath.kotlin("src/util.kt")
     private val snapshotId = SourceSnapshotId(Hash256.of(ByteArray(32) { 1 }))

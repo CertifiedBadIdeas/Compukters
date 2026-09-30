@@ -1179,6 +1179,13 @@ links to their source files.
   `late occurrence results never highlight a different caret token or edited document`;
   `IdeSelectionOccurrencesTest` and `IdeClientControllerTest`.
 
+- [x] **Find Usages and method counters** — `Alt+F7` opens bounded semantic usage results with file/line
+  context and navigation. Same-line method labels count resolved project references in a single presentation
+  traversal, distinguish overloads and unrelated methods, and open the same result panel when clicked. Edits discard
+  stale counts and results. Evidence: `SemanticTokenQueryTest`, test
+  `method usage counts distinguish overloads members and local functions across project files`;
+  `NavigationAndReferencesTest`, `IdeAnalysisCoordinatorTest`, `IdeClientControllerTest`, and `IdeRendererStateTest`.
+
 - [x] **Local project build and cache** — the client builds real project
   snapshots, reuses the global compiler cache, deduplicates active work, and
   keeps compiler I/O off the caller thread. Evidence:

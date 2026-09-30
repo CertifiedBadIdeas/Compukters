@@ -358,6 +358,10 @@ class IdeClientController(
                 findUsages()
             }
 
+            is IdeCommand.FindUsagesAt -> {
+                findUsages(command.offsetUtf16)
+            }
+
             IdeCommand.CloseUsages -> {
                 invalidateUsages()
                 latestUsagesOperation = nextOperationId++
@@ -1794,6 +1798,12 @@ class IdeClientController(
     }
 
     private fun acceptPoll(event: IdeEvent.PollCompleted) {
+        val previousSources = tree?.flatten()?.filter { it.path.isKotlinSource }?.map { it.path to it.revision }
+        val nextSources =
+            event.tree
+                .flatten()
+                .filter { it.path.isKotlinSource }
+                .map { it.path to it.revision }
         tree = event.tree
         val activeBefore = editor
         documents.values.toList().forEach { active ->
@@ -1824,6 +1834,12 @@ class IdeClientController(
         if (activeBefore == null) {
             val shownBinary = binary
             if (shownBinary != null && event.tree.flatten().none { it.path == shownBinary.path }) binary = null
+        }
+        if (previousSources != null && previousSources != nextSources && editor === activeBefore &&
+            IdeBusyOperation.Project !in state.busy
+        ) {
+            invalidateUsages()
+            editor?.let(::openAnalysis)
         }
         publishWorkspace()
     }
@@ -1859,6 +1875,8 @@ class IdeClientController(
                     is IdeMutationRequest.CreateDirectory,
                     -> Unit
                 }
+                invalidateUsages()
+                editor?.let(::openAnalysis)
             }
 
             is ProjectMutationResult.Conflict -> {
@@ -2335,12 +2353,13 @@ class IdeClientController(
         }
     }
 
-    private fun findUsages() {
+    private fun findUsages(offsetUtf16: Int? = null) {
         if (attachedSourcePreview != null || computerPreview != null || binary != null) return
         val active = editor?.takeIf { it.path.isKotlinSource } ?: return
         val coordinator = analysisCoordinator ?: return
         val text = active.document.materialize()
-        val caret = active.document.caretOffset
+        val caret = offsetUtf16 ?: active.document.caretOffset
+        if (caret !in 0..text.length) return
         val token =
             KotlinSourceTokenRange.find(text, caret)
                 ?: caret.takeIf { it > 0 }?.let { KotlinSourceTokenRange.find(text, it - Character.charCount(text.codePointBefore(it))) }

@@ -149,6 +149,20 @@ class NavigationAndReferencesTest {
                         ).get(90, TimeUnit.SECONDS),
                 ).result as AnalysisResult.References
             assertEquals(2, references.locations.size)
+            val presentation =
+                assertIs<AnalysisClientResult.Success>(
+                    controller
+                        .query(
+                            admitted,
+                            AnalysisQuery.Presentation(identity, VirtualSourcePath.kotlin("demo/Declaration.kt")),
+                        ).get(90, TimeUnit.SECONDS),
+                ).result as AnalysisResult.Presentation
+            val counts =
+                assertIs<ru.lazyhat.compukters.ide.analysis.SnapshotPresentationAcceptance.Active>(
+                    presentation.value.accept(identity),
+                ).methodUsages
+            assertEquals(2, counts.single().count)
+            assertEquals(declaration.indexOf("target"), counts.single().range.startUtf16)
             assertEquals(setOf("demo/Usage.kt"), references.locations.map { assertIs<DeclarationLocation.Source>(it).path.value }.toSet())
             val scheduler =
                 object : AnalysisTaskScheduler {

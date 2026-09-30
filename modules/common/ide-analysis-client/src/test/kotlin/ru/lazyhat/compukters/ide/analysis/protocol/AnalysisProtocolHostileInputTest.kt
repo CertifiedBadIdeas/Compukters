@@ -44,6 +44,37 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class AnalysisProtocolHostileInputTest {
+    @Test
+    fun `method usage decoder rejects count overflow and exhausted item budget`() {
+        val path = VirtualSourcePath.kotlin("main.kt")
+        val query = AnalysisQuery.Presentation(identity, path)
+        val value =
+            SnapshotPresentation.create(
+                identity,
+                mapOf(path to 13),
+                methodUsages =
+                    listOf(
+                        ru.lazyhat.compukters.ide.analysis
+                            .MethodUsageCount(path, EditorRange(4, 9), 0),
+                    ),
+            )
+        val frame =
+            AnalysisMessageCodec.encode(
+                AnalysisQuerySuccess(RequestId.of(1uL), AnalysisResult.Presentation(identity, value)),
+                context.forQuery(query),
+            )
+        val overflow =
+            frame.copy(
+                payload =
+                    frame.payload.copyOf().also { bytes ->
+                        repeat(4) { bytes[bytes.lastIndex - it] = 0xff.toByte() }
+                    },
+            )
+        assertEquals(AnalysisProtocolError.CountLimit, messageFailure(overflow, context.forQuery(query)).error)
+        val limited = AnalysisProtocolContext.of(snapshot, limits = AnalysisLimits(semanticTokens = 0)).forQuery(query)
+        assertEquals(AnalysisProtocolError.CountLimit, messageFailure(frame, limited).error)
+    }
+
     private val snapshot = snapshot("main.kt", "val value = 1")
     private val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(snapshot), AnalysisProfileIdentity(hash(1)))
     private val context = AnalysisProtocolContext.of(snapshot)
@@ -105,7 +136,7 @@ class AnalysisProtocolHostileInputTest {
                 ),
                 context,
             )
-        val wrongProtocol = handshake.copy(payload = handshake.payload.copyOf().also { it[0] = 1 })
+        val wrongProtocol = handshake.copy(payload = handshake.payload.copyOf().also { it[0] = 9 })
         assertEquals(AnalysisProtocolError.WrongVersion, messageFailure(wrongProtocol).error)
     }
 
@@ -133,7 +164,7 @@ class AnalysisProtocolHostileInputTest {
                 AnalysisQuerySuccess(RequestId.of(1uL), AnalysisResult.Presentation(identity, presentation)),
                 context.forQuery(query),
             )
-        val malformed = encoded.copy(payload = encoded.payload.copyOf().also { it[it.lastIndex - 4] = 2 })
+        val malformed = encoded.copy(payload = encoded.payload.copyOf().also { it[it.lastIndex - 8] = 2 })
 
         assertEquals(AnalysisProtocolError.InvalidMessageValue, messageFailure(malformed, context.forQuery(query)).error)
     }

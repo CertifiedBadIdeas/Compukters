@@ -86,7 +86,13 @@ workspace and answers diagnostics, completion, symbol, reference, expression, an
 and analysis use the same resolved platform bundle and source-snapshot identities, but have separate worker sessions
 and result contracts.
 
-Analysis protocol v8 also carries explicit Kotlin format and parameter-information requests. Parameter information
+Analysis protocol v10 also carries explicit Kotlin format and parameter-information requests. Presentation results
+include bounded method-name ranges with non-negative project usage counts. K2 gathers declarations in the active
+source and resolves references in one project traversal under the presentation session, keeping overloads and
+same-named methods separate. Counts share the semantic-token item bound, are checked against the correlated source,
+and appear as clickable same-line labels to the right of declarations; edits drop provisional counts until the new
+snapshot is analyzed. The previous worker protocol is intentionally incompatible and rejected at handshake.
+Parameter information
 resolves the innermost call at a UTF-16 caret into a bounded, deterministically ordered set of K2-substituted callable
 signatures with active-parameter spans; client-side snapshot, revision, path, caret, and call-range checks reject stale
 popup results. The format request includes the exact editor text and
