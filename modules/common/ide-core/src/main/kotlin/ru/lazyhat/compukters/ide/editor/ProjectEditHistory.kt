@@ -71,6 +71,8 @@ class ProjectEditHistory(
 
     fun redo(document: EditorDocument): Result = move(document, redo = true)
 
+    fun retains(document: EditorDocument): Boolean = groups.values.any { document in it }
+
     private fun move(
         document: EditorDocument,
         redo: Boolean,

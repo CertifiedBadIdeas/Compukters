@@ -343,6 +343,11 @@ The IDE code editor, completion list and hover information use the same bundled 
 Editor and terminal drawing use the same font resource ID directly, without a reference alias: Minecraft 1.21
 warms font IDs in parallel and its FreeType provider does not synchronize access to a shared native face.
 Its shared metrics drive glyph placement, caret and selection geometry, and hit testing. The IDE chrome retains Minecraft's UI font.
+The IDE controller owns a bounded project-document cache (128 editor-limited documents by default), so returning to
+a file preserves its caret, viewport and undo history. Dirty background buffers participate in autosave and are
+drained before a build, project transition or ordinary close. Polling invalidates clean changed buffers and retains
+dirty conflicts. Analysis snapshots overlay unsaved project buffers under the admitted source limits and recompute
+their source identity; they never analyze a mix of renamed active text and stale background disk text.
 The terminal screen can suspend its observation and open the IDE, whose target terminal view consumes the same
 replicated terminal state but does not yet display these standalone-terminal gauges. Returning from the IDE reopens
 the standalone observation without reopening the screen and receives a fresh authoritative terminal state.

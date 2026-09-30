@@ -18,7 +18,11 @@
 
 package ru.lazyhat.compukters.ide.client.analysis
 
+import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
+import ru.lazyhat.compukters.compiler.project.ProjectSource
+import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
@@ -27,6 +31,7 @@ import ru.lazyhat.compukters.ide.analysis.EditorDiagnostic
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
 import ru.lazyhat.compukters.ide.analysis.SemanticToken
 import ru.lazyhat.compukters.ide.analysis.SnapshotPresentationAcceptance
+import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.controller.AdmittedAnalysisSnapshot
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisClientResult
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisRequestCoordinator
@@ -197,6 +202,7 @@ class IdeAnalysisCoordinator(
         path: VirtualSourcePath,
         text: String,
         documentRevision: Long,
+        sourceOverlays: Map<VirtualSourcePath, String> = emptyMap(),
     ) {
         require(documentRevision >= 0) { "document revision must not be negative" }
         val admittedPath = VirtualSourcePath.kotlin(path.value)
@@ -208,7 +214,7 @@ class IdeAnalysisCoordinator(
             invalidateParameterInfoLocked(close = true)
             version = Math.incrementExact(version)
             expectedVersion = version
-            session = Session(project, admittedPath, text, documentRevision, text.length, null, null)
+            session = Session(project, admittedPath, text, documentRevision, text.length, null, null, overlays = sourceOverlays.toMap())
             publishedState.set(IdeAnalysisState.Loading(admittedPath, documentRevision))
         }
         cancelPointerRequests()
@@ -231,6 +237,7 @@ class IdeAnalysisCoordinator(
         insertedText: String?,
         caretOffsetUtf16: Int = text.length,
         change: EditorChange? = null,
+        sourceOverlays: Map<VirtualSourcePath, String> = emptyMap(),
     ) {
         require(documentRevision >= 0) { "document revision must not be negative" }
         require(caretOffsetUtf16 in 0..text.length) { "analysis caret exceeds current source" }
@@ -243,7 +250,7 @@ class IdeAnalysisCoordinator(
             invalidateParameterInfoLocked(close = false)
             val current = session
             if (current == null || current.project !== project || current.path != path) {
-                open(project, path, text, documentRevision)
+                open(project, path, text, documentRevision, sourceOverlays)
                 return
             }
             if (current.input != null) version = Math.incrementExact(version)
@@ -262,6 +269,7 @@ class IdeAnalysisCoordinator(
                     pendingCompletion =
                         if (trigger && !parameterInfoRequested) PendingCompletion.Automatic else null,
                     provisionalPresentation = presentation,
+                    overlays = sourceOverlays.toMap(),
                 )
             completionExpected = updated.pendingCompletion == PendingCompletion.Automatic
             session = updated
@@ -657,7 +665,9 @@ class IdeAnalysisCoordinator(
             }
         val snapshot =
             try {
-                snapshotFactory.create(input, current.path, current.text, target).also { validateSnapshot(it, current) }
+                overlaySnapshot(snapshotFactory.create(input, current.path, current.text, target), current).also {
+                    validateSnapshot(it, current)
+                }
             } catch (failure: Throwable) {
                 unavailable(expectedVersion, failure.message ?: "invalid analysis snapshot")
                 return
@@ -1147,6 +1157,30 @@ class IdeAnalysisCoordinator(
         }
     }
 
+    private fun overlaySnapshot(
+        snapshot: AdmittedAnalysisSnapshot,
+        current: Session,
+    ): AdmittedAnalysisSnapshot {
+        if (current.overlays.isEmpty()) return snapshot
+        require(current.overlays.keys.all { path -> snapshot.sources.sources.any { it.path == path } }) {
+            "unsaved source no longer belongs to the project"
+        }
+        val sources =
+            ProjectSnapshot.of(
+                snapshot.sources.sources.map { source ->
+                    val text = current.overlays[source.path]?.takeUnless { source.path == current.path }
+                    if (text == null) source else ProjectSource(source.path, BinaryValue.of(text.encodeToByteArray()))
+                },
+                WorkerLimits(
+                    sourceFiles = snapshot.limits.sourceFiles,
+                    sourceFileBytes = snapshot.limits.sourceFileBytes,
+                    sourceBytes = snapshot.limits.sourceBytes,
+                    frameBytes = snapshot.limits.frameBytes,
+                ),
+            )
+        return snapshot.copy(identity = snapshot.identity.copy(source = SourceSnapshotIdentity.of(sources)), sources = sources)
+    }
+
     private data class Session(
         val project: ProjectHandle,
         val path: VirtualSourcePath,
@@ -1157,6 +1191,7 @@ class IdeAnalysisCoordinator(
         val snapshot: AdmittedAnalysisSnapshot?,
         val pendingCompletion: PendingCompletion? = null,
         val provisionalPresentation: IdeAnalysisPresentation = IdeAnalysisPresentation.Empty,
+        val overlays: Map<VirtualSourcePath, String> = emptyMap(),
     )
 
     private data class ParameterInfoRequest(
