@@ -52,6 +52,7 @@ enum class IdeTextRotation { None, Clockwise90 }
 
 enum class IdeFillKind {
     CurrentLine,
+    DiagnosticMarker,
     Background,
     Border,
     Shadow,
@@ -97,6 +98,7 @@ enum class IdeHitAction {
     UsageChoice,
     MethodUsages,
     UsagesClose,
+    DiagnosticChoice,
 }
 
 enum class IdeFocusGroup { Page, Dialog }
@@ -174,6 +176,7 @@ data class IdeHitTarget(
     val zIndex: Int,
     val selected: Boolean = false,
     val choiceIndex: Int? = null,
+    val diagnostic: ru.lazyhat.compukters.ide.client.state.IdeDiagnosticRow? = null,
 )
 
 data class IdeDrawModel(

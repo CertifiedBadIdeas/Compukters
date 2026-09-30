@@ -318,6 +318,10 @@ class IdeInputAdapter(
             .asReversed()
             .firstOrNull { it.enabled && it.bounds.contains(x, y) }
             ?.let { target ->
+                if (target.action == IdeHitAction.DiagnosticChoice) {
+                    val row = target.diagnostic ?: return false
+                    return dispatch(IdeCommand.OpenDiagnostic(row))
+                }
                 if (target.action == IdeHitAction.MethodUsages) {
                     val counts = (context.editor?.analysis as? IdeAnalysisState.Active)?.presentation?.methodUsages
                     val usage = target.choiceIndex?.let { counts?.getOrNull(it) } ?: return false
@@ -527,7 +531,7 @@ class IdeInputAdapter(
                 false
             }
 
-            IdeHitAction.ProjectChoice -> {
+            IdeHitAction.ProjectChoice, IdeHitAction.DiagnosticChoice -> {
                 false
             }
         }
@@ -624,6 +628,10 @@ class IdeInputAdapter(
         pageRows: Int,
     ): IdeCommand? =
         when (key) {
+            IdeKeyCode.F2 -> {
+                IdeCommand.NavigateDiagnostic(shift)
+            }
+
             IdeKeyCode.LEFT -> {
                 move(IdeMoveDirection.Left, shift)
             }

@@ -71,6 +71,7 @@ data class IdeWorkspaceView(
     val computerTransfer: IdeComputerTransferState = IdeComputerTransferState.Idle,
     val projects: List<IdeProjectSummary> = emptyList(),
     val usages: ru.lazyhat.compukters.ide.client.analysis.IdeUsages? = null,
+    val diagnostics: IdeDiagnostics = IdeDiagnostics.unlocated(editor, build),
 )
 
 sealed interface IdePageState {

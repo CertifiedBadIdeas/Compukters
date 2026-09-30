@@ -49,6 +49,21 @@ import kotlin.test.assertTrue
 
 class IdeInputAdapterTest {
     @Test
+    fun `F2 navigates problems without stealing find dialog or terminal input`() {
+        val fixture = fixture()
+        assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.F2), IdeFocusState.Editor))
+        assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.F2, IdeModifier.SHIFT), IdeFocusState.Editor))
+        assertFalse(fixture.adapter.keyPressed(key(IdeKeyCode.F2, IdeModifier.CONTROL), IdeFocusState.Editor))
+        assertFalse(fixture.adapter.keyPressed(key(IdeKeyCode.F2), IdeFocusState(IdeFocusArea.Terminal)))
+        fixture.adapter.keyPressed(key(IdeKeyCode.F2), IdeFocusState.Editor.copy(findVisible = true, findFocused = true))
+        fixture.adapter.keyPressed(
+            key(IdeKeyCode.F2),
+            IdeFocusState.Editor.copy(dialog = IdeDialogState.Confirmation("Delete", "Sure?", 1)),
+        )
+        assertEquals(listOf<IdeCommand>(IdeCommand.NavigateDiagnostic(), IdeCommand.NavigateDiagnostic(true)), fixture.commands)
+    }
+
+    @Test
     fun `Shift F6 opens semantic rename only in the editor and Ctrl Shift Z redoes`() {
         val commands = mutableListOf<IdeCommand>()
         val actions = mutableListOf<IdeHitAction>()

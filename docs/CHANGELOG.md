@@ -168,6 +168,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - The editor subtly highlights the current line beneath selections and occurrence marks, independently of caret blinking.
 - Returning to a project file preserves its caret, viewport and undo history within a bounded document cache.
 - `Alt+F7` opens semantic Find Usages with file/line context, clickable results and keyboard navigation; source edits invalidate stale results.
+- IDE problems have clickable source locations, severity markers beside line numbers, error/warning counts in the
+  status bar, and cyclic `F2` / `Shift+F2` navigation. Build locations require matching source text before navigation;
+  outdated messages remain visible without applying stale offsets.
 - Method declarations show clickable non-zero project usage counts on the same line, distinguishing overloads and
   unrelated same-named methods. Counts remain visible during analysis of edits that leave the method name untouched.
 - `Shift+F6` safely renames project symbols across Kotlin files, including unopened files and unsaved buffers.

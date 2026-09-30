@@ -51,6 +51,8 @@ import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.search.IdeFindView
 import ru.lazyhat.compukters.ide.client.state.IdeBusyOperation
+import ru.lazyhat.compukters.ide.client.state.IdeDiagnosticRow
+import ru.lazyhat.compukters.ide.client.state.IdeDiagnostics
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
@@ -89,6 +91,71 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
+    @Test
+    fun `diagnostic rows and gutter use exact locations without shifting code and expose counts`() {
+        val source = "fun work() = 1\nfun second() = 2"
+        val editor = semanticEditor(source) { _, _ -> IdeSemanticInteraction.None }
+        val path = VirtualSourcePath.kotlin("src/main.kt")
+        val error = IdeDiagnosticRow(EditorDiagnostic(EditorDiagnosticSeverity.Error, "Bad call", path, EditorRange(4, 8)), source)
+        val warning = IdeDiagnosticRow(EditorDiagnostic(EditorDiagnosticSeverity.Warning, "Warning", path, EditorRange(0, 3)), source)
+        val stale = IdeDiagnosticRow(EditorDiagnostic(EditorDiagnosticSeverity.Error, "Old", path, EditorRange(18, 24)))
+        val state = workspaceState(editor, IdeBuildState.Idle)
+        val workspace = (state.page as IdePageState.Workspace).value
+        val diagnostics = IdeDiagnostics(listOf(error, warning, stale))
+        val bounds = geometry()
+        val baseline = IdeRenderer.extract(state, bounds)
+        val model = IdeRenderer.extract(state.copy(page = IdePageState.Workspace(workspace.copy(diagnostics = diagnostics))), bounds)
+        assertEquals(baseline.text.filter { it.kind == IdeTextKind.Source }, model.text.filter { it.kind == IdeTextKind.Source })
+        val marker = model.fills.single { it.kind == IdeFillKind.DiagnosticMarker }
+        assertEquals(IdeColors.ERROR, marker.color)
+        assertEquals(bounds.editor.top, marker.bounds.top - 3)
+        assertTrue(
+            model.text
+                .single { it.kind == IdeTextKind.Status }
+                .value
+                .startsWith("2 errors · 1 warning"),
+        )
+        val targets = model.hitTargets.filter { it.action == IdeHitAction.DiagnosticChoice }
+        val gutter = targets.single { it.bounds.top == bounds.editor.top }
+        assertEquals(error, gutter.diagnostic)
+        assertFalse(targets.single { it.diagnostic == stale }.enabled)
+        val commands = mutableListOf<ru.lazyhat.compukters.ide.client.state.IdeCommand>()
+        val adapter =
+            IdeInputAdapter(
+                commands::add,
+                IdeClipboard { "" },
+                ru.lazyhat.compukters.ide.client
+                    .IdeClientLimits(),
+            )
+        assertTrue(
+            adapter.pointerClicked(
+                gutter.bounds.left + 1.0,
+                gutter.bounds.top + 1.0,
+                0,
+                IdePointerContext(bounds, editor = editor, hitTargets = model.hitTargets),
+            ),
+        )
+        assertEquals(
+            listOf<ru.lazyhat.compukters.ide.client.state.IdeCommand>(
+                ru.lazyhat.compukters.ide.client.state.IdeCommand
+                    .OpenDiagnostic(error),
+            ),
+            commands,
+        )
+        val row = targets.first { it.enabled && bounds.diagnostics!!.contains(it.bounds) }
+        adapter.pointerClicked(
+            row.bounds.left + 1.0,
+            row.bounds.top + 1.0,
+            0,
+            IdePointerContext(bounds, editor = editor, hitTargets = model.hitTargets),
+        )
+        assertEquals(
+            ru.lazyhat.compukters.ide.client.state.IdeCommand
+                .OpenDiagnostic(row.diagnostic!!),
+            commands.last(),
+        )
+    }
+
     @Test
     fun `hidden zero count does not shift the clickable index of another method`() {
         val source = "fun unused() = 0; fun work() = 1"
@@ -379,7 +446,10 @@ class IdeRendererStateTest {
         val caret = model.fills.single { it.kind == IdeFillKind.Caret }
         assertEquals(geometry.editor.top, caret.bounds.top)
         assertEquals(geometry.editor.top + IdeCodeFontProfile.DEFAULT.cellHeight, caret.bounds.bottom)
-        assertEquals(listOf("Example warning"), model.text.filter { it.kind == IdeTextKind.Diagnostic }.map { it.value })
+        assertEquals(
+            listOf("src/main.kt  Example warning [outdated]"),
+            model.text.filter { it.kind == IdeTextKind.Diagnostic }.map { it.value },
+        )
         assertTrue(model.scissors.any { it.kind == IdeScissorKind.Editor })
         assertTrue(model.text.filter { it.kind == IdeTextKind.TreeRow }.any { "main.kt" in it.value })
     }

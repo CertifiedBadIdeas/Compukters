@@ -55,6 +55,8 @@ import ru.lazyhat.compukters.ide.client.state.IdeBuildAction
 import ru.lazyhat.compukters.ide.client.state.IdeBusyOperation
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeConflictAction
+import ru.lazyhat.compukters.ide.client.state.IdeDiagnosticRow
+import ru.lazyhat.compukters.ide.client.state.IdeDiagnostics
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
 import ru.lazyhat.compukters.ide.client.state.IdeEditorSource
@@ -358,6 +360,14 @@ class IdeClientController(
 
             IdeCommand.Format -> {
                 requestFormat()
+            }
+
+            is IdeCommand.OpenDiagnostic -> {
+                openDiagnostic(command.row)
+            }
+
+            is IdeCommand.NavigateDiagnostic -> {
+                currentDiagnostics().next(editor?.path, editor?.document?.caretOffset ?: 0, command.backwards)?.let(::openDiagnostic)
             }
 
             IdeCommand.FindUsages -> {
@@ -745,6 +755,10 @@ class IdeClientController(
         session: EditorSession,
         navigation: PendingProjectNavigation? = null,
     ) {
+        if (navigation?.expectedText != null && !admitNavigation(navigation, session.document.materialize())) {
+            openingProjectNavigation = null
+            return
+        }
         closeAnalysisFile()
         editor = session
         binary = null
@@ -1648,6 +1662,13 @@ class IdeClientController(
         if (event.operationId != latestOpenOperation) return
         val navigation = openingProjectNavigation
         openingProjectNavigation = null
+        if (navigation?.expectedText != null &&
+            !admitNavigation(navigation, (event.result as? ProjectFileOpenResult.Text)?.snapshot?.text)
+        ) {
+            state = state.copy(busy = state.busy - IdeBusyOperation.Project)
+            publishWorkspace()
+            return
+        }
         if (event.result is ProjectFileOpenResult.Text && !admitDocument()) {
             state = state.copy(busy = state.busy - IdeBusyOperation.Project)
             publishStatus("Project document limit reached; reopen the project to release history", IdeProblemSeverity.Warning)
@@ -2214,6 +2235,7 @@ class IdeClientController(
                             computerFiles?.transfer() ?: IdeComputerTransferState.Idle,
                             catalog.take(limits.projectRows).map(::summary),
                             usages,
+                            currentDiagnostics(),
                         ),
                     ),
             )
@@ -2561,6 +2583,78 @@ class IdeClientController(
         }
     }
 
+    private fun currentDiagnostics(): IdeDiagnostics {
+        val rows = mutableListOf<IdeDiagnosticRow>()
+        val active = editor
+        if (attachedSourcePreview == null && computerPreview == null && active != null) {
+            val analysis = observedAnalysisState as? IdeAnalysisState.Active
+            val values = analysis?.presentation?.diagnostics.orEmpty()
+            if (values.isNotEmpty()) {
+                val text = active.document.materialize()
+                rows +=
+                    values.map { value ->
+                        IdeDiagnosticRow(value, text.takeIf { value.path?.value == active.path.value })
+                    }
+            }
+        }
+        (buildState as? IdeBuildState.Diagnostics)?.let { build ->
+            val paths =
+                tree
+                    ?.flatten()
+                    ?.map { it.path.value }
+                    ?.toSet()
+                    .orEmpty()
+            val currentTexts =
+                build.values.mapNotNull { it.path }.distinct().associate { path ->
+                    path.value to documents[ProjectPath.file(path.value)]?.document?.materialize()
+                }
+            rows +=
+                build.values.map { value ->
+                    val source = build.sourceTexts[value.path]
+                    val current = currentTexts[value.path?.value]
+                    IdeDiagnosticRow(value, source?.takeIf { value.path?.value in paths && (current == null || it == current) })
+                }
+        }
+        return IdeDiagnostics(rows)
+    }
+
+    private fun openDiagnostic(row: IdeDiagnosticRow) {
+        if (!row.navigable || row !in currentDiagnostics().rows) return
+        val path = ProjectPath.file(row.diagnostic.path!!.value)
+        if (tree?.flatten()?.none { it.path == path } != false) return
+        val from = currentNavigationPosition()
+        analysisCoordinator?.dismissCompletion()
+        analysisCoordinator?.dismissParameterInfo()
+        find.focus(false)
+        usages = usages?.unfocus()
+        navigateToProject(
+            PendingProjectNavigation(
+                path,
+                row.diagnostic.range!!.startUtf16,
+                row.line,
+                0,
+                from?.let { NavigationTransition.Fresh(it) } ?: NavigationTransition.Untracked,
+                row.sourceText,
+            ),
+        )
+    }
+
+    private fun admitNavigation(
+        navigation: PendingProjectNavigation?,
+        text: String?,
+    ): Boolean {
+        if (navigation?.expectedText == null || navigation.expectedText == text) return true
+        (buildState as? IdeBuildState.Diagnostics)?.let { build ->
+            val path = VirtualSourcePath.kotlin(navigation.path.value)
+            if (build.sourceTexts[path] == navigation.expectedText) {
+                buildState = IdeBuildState.Diagnostics(build.identity, build.sourceSnapshotId, build.values, build.sourceTexts - path)
+            }
+        }
+        publishStatus("Diagnostic source changed; refresh diagnostics before navigating", IdeProblemSeverity.Warning)
+        publishWorkspace()
+        return false
+    }
+
     private fun openUsage(index: Int?) {
         val results = usages ?: return
         val row = results.rows.getOrNull(index ?: results.selectedIndex) ?: return
@@ -2660,12 +2754,15 @@ class IdeClientController(
         pendingAttachedNavigation = null
         val active = editor
         if (active != null && active.path == navigation.path) {
+            if (navigation.expectedText != null && !admitNavigation(navigation, active.document.materialize())) return
             closeComputerPreview()
             closeAttachedSourcePreview()
             restoreCaret(active.document, navigation.caretUtf16)
             active.firstVisibleLine = navigation.firstVisibleLine ?: active.document.lineContaining(active.document.caretOffset)
             active.firstVisibleColumn = navigation.firstVisibleColumn
             analysisCoordinator?.dismissSemanticInteraction()
+            analysisCoordinator?.caretMoved(active.document.caretOffset)
+            refreshAnalysisState()
             completeNavigation(navigation)
             publishWorkspace()
             persistPreferences(active.path)
@@ -2728,6 +2825,10 @@ class IdeClientController(
     private fun completeNavigation(transition: NavigationTransition) {
         val current = currentNavigationPosition() ?: return
         when (transition) {
+            NavigationTransition.Untracked -> {
+                return
+            }
+
             is NavigationTransition.Fresh -> {
                 navigationHistory.record(transition.from, current)
             }
@@ -3272,6 +3373,7 @@ class IdeClientController(
         val firstVisibleLine: Int?,
         val firstVisibleColumn: Int,
         val transition: NavigationTransition,
+        val expectedText: String? = null,
     )
 
     private data class PendingAttachedNavigation(
@@ -3284,6 +3386,8 @@ class IdeClientController(
     )
 
     private sealed interface NavigationTransition {
+        data object Untracked : NavigationTransition
+
         data class Fresh(
             val from: IdeNavigationPosition,
         ) : NavigationTransition

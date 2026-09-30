@@ -199,6 +199,7 @@ internal class IdeScreen(
                             IdeHitAction.FindPrevious,
                             IdeHitAction.FindNext,
                             IdeHitAction.FindClose,
+                            IdeHitAction.DiagnosticChoice,
                         )
                     -> IdeFocusArea.Editor
 

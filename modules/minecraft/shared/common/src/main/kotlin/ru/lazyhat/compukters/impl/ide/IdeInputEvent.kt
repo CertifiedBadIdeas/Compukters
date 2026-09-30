@@ -55,6 +55,7 @@ object IdeKeyCode {
     const val PAGE_DOWN = 267
     const val HOME = 268
     const val END = 269
+    const val F2 = 291
     const val F8 = 297
     const val F7 = 296
     const val F6 = 295

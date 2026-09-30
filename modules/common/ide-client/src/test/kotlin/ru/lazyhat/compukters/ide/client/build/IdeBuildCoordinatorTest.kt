@@ -236,6 +236,7 @@ class IdeBuildCoordinatorTest {
         assertEquals(compiling.sourceSnapshotId, diagnostics.sourceSnapshotId)
         assertEquals(EditorDiagnosticSeverity.Error, diagnostics.values.single().severity)
         assertEquals("bad type", diagnostics.values.single().message)
+        assertEquals("fun main() {}", diagnostics.sourceTexts[VirtualSourcePath.kotlin("src/main.kt")])
     }
 
     @Test

@@ -19,7 +19,6 @@
 package ru.lazyhat.compukters.impl.ide
 
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
-import ru.lazyhat.compukters.ide.analysis.EditorDiagnostic
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
@@ -34,6 +33,7 @@ import ru.lazyhat.compukters.ide.client.files.IdeComputerTransferState
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.search.IdeFindView
 import ru.lazyhat.compukters.ide.client.state.IdeBusyOperation
+import ru.lazyhat.compukters.ide.client.state.IdeDiagnostics
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
@@ -199,7 +199,7 @@ object IdeRenderer {
                 }
 
                 is IdeEditorView.Text -> {
-                    editor(editor, caretVisible)
+                    editor(editor, caretVisible, workspace.diagnostics)
                 }
             }
             diagnostics(workspace)
@@ -499,6 +499,7 @@ object IdeRenderer {
         private fun editor(
             editor: IdeEditorView.Text,
             caretVisible: Boolean,
+            diagnostics: IdeDiagnostics,
         ) {
             val bounds = geometry.editor
             editor.find?.let { findBar(it) }
@@ -518,6 +519,30 @@ object IdeRenderer {
                 val lineStart = editor.visibleLineStartsUtf16[visibleIndex]
                 val rowTop = bounds.top + visibleIndex * font.cellHeight
                 val y = rowTop + font.glyphDrawOffsetY
+                val diagnostic =
+                    diagnostics.rows
+                        .filter { it.navigable && it.diagnostic.path?.value == editor.path?.value && it.line == lineNumber }
+                        .maxByOrNull { it.diagnostic.severity.ordinal }
+                diagnostic?.let { row ->
+                    val left = bounds.left + gutterDigits * font.cellWidth
+                    fills +=
+                        IdeFillDraw(
+                            IdeFillKind.DiagnosticMarker,
+                            IdeRect(left + 3, rowTop + 3, left + 7, rowTop + font.cellHeight - 3),
+                            diagnosticColor(row.diagnostic.severity),
+                            Z_CONTENT,
+                        )
+                    hitTargets +=
+                        IdeHitTarget(
+                            IdeHitAction.DiagnosticChoice,
+                            IdeRect(left, rowTop, codeLeft, rowTop + font.cellHeight),
+                            true,
+                            row.diagnostic.message,
+                            IdeFocusGroup.Page,
+                            Z_TARGET,
+                            diagnostic = row,
+                        )
+                }
                 val nextLineStart = editor.visibleLineStartsUtf16.getOrNull(visibleIndex + 1)
                 val caretBelongsToLine =
                     editor.caretUtf16 >= lineStart &&
@@ -1101,20 +1126,44 @@ object IdeRenderer {
                 }
                 return
             }
-            val values = mutableListOf<EditorDiagnostic>()
-            val analysis = (workspace.editor as? IdeEditorView.Text)?.analysis as? IdeAnalysisState.Active
-            values += analysis?.presentation?.diagnostics.orEmpty()
-            val build = workspace.build
-            if (build is IdeBuildState.Diagnostics) values += build.values
-            values.take(bounds.height / UI_LINE_HEIGHT).forEachIndexed { index, diagnostic ->
+            val editor = workspace.editor as? IdeEditorView.Text
+            val values = workspace.diagnostics.rows
+            val selected =
+                values.indexOfFirst {
+                    it.navigable && it.diagnostic.path?.value == editor?.path?.value &&
+                        it.diagnostic.range?.startUtf16 == editor?.caretUtf16
+                }
+            val count = ((bounds.height - 4) / UI_LINE_HEIGHT).coerceAtLeast(0)
+            val first = (selected - count + 1).coerceAtLeast(0)
+            values.drop(first).take(count).forEachIndexed { index, row ->
+                val diagnostic = row.diagnostic
+                val top = bounds.top + index * UI_LINE_HEIGHT
+                val rowBounds = IdeRect(bounds.left, top, bounds.right, top + UI_LINE_HEIGHT)
+                val location =
+                    diagnostic.path
+                        ?.value
+                        ?.let { path -> "$path${row.line?.let { ":${it + 1}" }.orEmpty()}  " }
+                        .orEmpty()
+                val stale = if (diagnostic.range != null && !row.navigable) " [outdated]" else ""
+                if (first + index == selected) fills += IdeFillDraw(IdeFillKind.Selection, rowBounds, IdeColors.SELECTION, Z_SELECTION)
                 ui(
                     IdeTextKind.Diagnostic,
-                    diagnostic.message,
+                    "$location${diagnostic.message}$stale",
                     bounds.left + 6,
                     bounds.top + 4 + index * UI_LINE_HEIGHT,
                     diagnosticColor(diagnostic.severity),
                     bounds,
                 )
+                hitTargets +=
+                    IdeHitTarget(
+                        IdeHitAction.DiagnosticChoice,
+                        rowBounds,
+                        row.navigable,
+                        if (row.navigable) "Go to problem (F2 / Shift+F2)" else "No current source location",
+                        IdeFocusGroup.Page,
+                        Z_TARGET,
+                        diagnostic = row,
+                    )
             }
         }
 
@@ -1125,6 +1174,9 @@ object IdeRenderer {
             busy: Set<IdeBusyOperation>,
         ) {
             val parts = linkedSetOf<String>()
+            val errors = workspace.diagnostics.errors
+            val warnings = workspace.diagnostics.warnings
+            parts += "$errors ${if (errors == 1) "error" else "errors"} · $warnings ${if (warnings == 1) "warning" else "warnings"}"
             (workspace.editor as? IdeEditorView.Text)?.let { editor ->
                 parts +=
                     if (editor.conflict) {
