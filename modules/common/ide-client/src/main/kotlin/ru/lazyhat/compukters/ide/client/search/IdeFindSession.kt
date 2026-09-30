@@ -174,18 +174,25 @@ class IdeFindSession : AutoCloseable {
             matches = emptyList()
             return
         }
-        val content = document.materialize()
-        val found = mutableListOf<EditorRange>()
-        var offset = content.indexOf(text)
-        while (offset >= 0) {
-            found += EditorRange(offset, offset + text.length)
-            offset = content.indexOf(text, offset + text.length)
-        }
-        matches = Collections.unmodifiableList(found)
+        matches = literalMatches(document.materialize(), text)
     }
 
     override fun close() {
         dismiss()
         query.close()
     }
+}
+
+internal fun literalMatches(
+    content: String,
+    text: String,
+): List<EditorRange> {
+    if (text.isEmpty()) return emptyList()
+    val found = mutableListOf<EditorRange>()
+    var offset = content.indexOf(text)
+    while (offset >= 0) {
+        found += EditorRange(offset, offset + text.length)
+        offset = content.indexOf(text, offset + text.length)
+    }
+    return Collections.unmodifiableList(found)
 }

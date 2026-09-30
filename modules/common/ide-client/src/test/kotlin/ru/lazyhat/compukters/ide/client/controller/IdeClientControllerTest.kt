@@ -95,6 +95,30 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
+    fun `hovered identifiers and string selections highlight without editing source and defer to search`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("val word = word; val s = \"ab ab\"")))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(0, false)))
+        fixture.controller.dispatch(IdeCommand.SourcePointer(5, false))
+        val revision = fixture.textEditor().contentRevision
+        assertEquals(listOf(EditorRange(4, 8), EditorRange(11, 15)), fixture.textEditor().occurrenceRanges)
+        fixture.controller.dispatch(IdeCommand.OpenFind)
+        assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
+        fixture.controller.dispatch(IdeCommand.CloseFind)
+        fixture.controller.dispatch(IdeCommand.SourcePointer(null, false))
+        assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(26, false)))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(27, true)))
+        assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(28, true)))
+        assertEquals(listOf(EditorRange(29, 31)), fixture.textEditor().occurrenceRanges)
+        assertEquals(revision, fixture.textEditor().contentRevision)
+        fixture.controller.close()
+    }
+
+    @Test
     fun `failed background tooling leaves the editor open and reports its state`() {
         val tooling = CompletableFuture<IdeClientTooling>()
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"), tooling = tooling)

@@ -90,6 +90,24 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `word occurrences are subtle backgrounds below source text and search takes priority`() {
+        val editor = semanticEditor("val x = x", occurrences = listOf(EditorRange(8, 9))) { _, _ -> IdeSemanticInteraction.None }
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry())
+        val highlight = model.fills.single { it.kind == IdeFillKind.WordOccurrence }
+        assertEquals(IdeColors.WORD_OCCURRENCE, highlight.color)
+        assertTrue(highlight.zIndex < model.text.first { it.kind == IdeTextKind.Source }.zIndex)
+        assertTrue(highlight.bounds.left >= geometry().editor.left && highlight.bounds.right <= geometry().editor.right)
+        val searching =
+            semanticEditor(
+                "val x = x",
+                find = IdeFindView("missing", 7, null, emptyList(), -1, true),
+                occurrences = listOf(EditorRange(8, 9)),
+            ) { _, _ -> IdeSemanticInteraction.None }
+        val searchModel = IdeRenderer.extract(workspaceState(searching, IdeBuildState.Idle), geometry())
+        assertFalse(searchModel.fills.any { it.kind == IdeFillKind.WordOccurrence })
+    }
+
+    @Test
     fun `find bar renders a counter and clipped literal highlights without covering code`() {
         val search = IdeFindView("val", 3, null, listOf(EditorRange(0, 3), EditorRange(13, 16)), 0, true)
         val editor = semanticEditor("val one = 1; val two = 2", find = search) { _, _ -> IdeSemanticInteraction.None }
@@ -1012,6 +1030,7 @@ class IdeRendererStateTest {
     private fun semanticEditor(
         source: String,
         find: IdeFindView? = null,
+        occurrences: List<EditorRange> = emptyList(),
         interaction: (AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeSemanticInteraction,
     ): IdeEditorView.Text {
         val document = EditorDocument(source)
@@ -1035,6 +1054,7 @@ class IdeRendererStateTest {
             conflict = false,
             lexical = lexical,
             find = find,
+            occurrenceRanges = occurrences,
             analysis =
                 IdeAnalysisState.Active(
                     identity,

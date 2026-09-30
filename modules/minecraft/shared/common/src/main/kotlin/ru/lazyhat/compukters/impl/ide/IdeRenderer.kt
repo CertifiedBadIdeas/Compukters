@@ -524,7 +524,7 @@ object IdeRenderer {
                     IdeColors.LINE_NUMBER,
                     bounds,
                 )
-                findMatches(editor, line, lineStart, codeLeft, rowTop)
+                occurrenceHighlights(editor, line, lineStart, codeLeft, rowTop)
                 selection(editor, line, lineStart, codeLeft, rowTop)
                 styledLine(editor, lineNumber, line, lineStart, codeLeft, y)
                 val nextLineStart = editor.visibleLineStartsUtf16.getOrNull(visibleIndex + 1)
@@ -644,14 +644,15 @@ object IdeRenderer {
             ui(IdeTextKind.Find, "×", close.left + 7, close.top + 5)
         }
 
-        private fun findMatches(
+        private fun occurrenceHighlights(
             editor: IdeEditorView.Text,
             line: String,
             lineStart: Int,
             codeLeft: Int,
             rowTop: Int,
         ) {
-            val matches = editor.find?.matches ?: return
+            val searching = editor.find != null
+            val matches = editor.find?.matches ?: editor.occurrenceRanges
             val insertion = matches.binarySearch { if (it.endUtf16 <= lineStart) -1 else 1 }
             var index = -insertion - 1
             while (index < matches.size && matches[index].startUtf16 < lineStart + line.length) {
@@ -676,9 +677,9 @@ object IdeRenderer {
                     ).coerceIn(left, geometry.editor.right)
                 fills +=
                     IdeFillDraw(
-                        IdeFillKind.SearchMatch,
+                        if (searching) IdeFillKind.SearchMatch else IdeFillKind.WordOccurrence,
                         IdeRect(left, rowTop, right, rowTop + font.cellHeight),
-                        IdeColors.SEARCH_MATCH,
+                        if (searching) IdeColors.SEARCH_MATCH else IdeColors.WORD_OCCURRENCE,
                         Z_SELECTION - 1,
                     )
             }

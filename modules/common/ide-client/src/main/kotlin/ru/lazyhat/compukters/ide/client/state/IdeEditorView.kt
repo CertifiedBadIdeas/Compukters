@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.search.IdeFindView
 import ru.lazyhat.compukters.ide.client.target.IdeTargetId
 import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
+import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalSnapshot
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import java.util.Collections
@@ -71,7 +72,9 @@ sealed interface IdeEditorView {
         val source: IdeEditorSource = IdeEditorSource.Project(requireNotNull(path)),
         val readOnly: Boolean = false,
         val find: IdeFindView? = null,
+        occurrenceRanges: List<EditorRange> = emptyList(),
     ) : IdeEditorView {
+        val occurrenceRanges = Collections.unmodifiableList(occurrenceRanges.toList())
         val visibleLines: List<String> = Collections.unmodifiableList(visibleLines.toList())
         val visibleLineStartsUtf16: List<Int> = Collections.unmodifiableList(visibleLineStartsUtf16.toList())
         val title: String =
