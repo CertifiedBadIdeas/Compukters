@@ -85,7 +85,7 @@ dependencies {
             parchment("org.parchmentmc.data:parchment-1.21.1:2024.11.17@zip")
         },
     )
-    neoForge("net.neoforged:neoforge:21.1.250")
+    neoForge("net.neoforged:neoforge:21.1.252")
 
     runtimeOnly(compuktersDevelopmentMod)
     testImplementation(compuktersCommonApi)
@@ -100,7 +100,7 @@ dependencies {
         "org.jetbrains.kotlin:kotlin-stdlib:2.4.10",
         "io.github.oshai:kotlin-logging-jvm:8.0.4",
         "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.11.0",
-        "org.tukaani:xz:1.10",
+        "org.tukaani:xz:1.12",
     ).forEach { dependency ->
         forgeRuntimeLibrary(dependency) { isTransitive = false }
     }

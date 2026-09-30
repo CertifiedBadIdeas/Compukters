@@ -90,7 +90,6 @@ fun Project.addCompuktersNeoForgeDevelopmentRuntime() {
             "kotlinx-coroutines-core",
             "xz",
             "tomlj",
-            "antlr4-runtime",
         ).forEach { alias ->
             addNonTransitive(
                 configuration = "forgeRuntimeLibrary",
@@ -152,13 +151,19 @@ fun validateRelocatedProjectMetadataLibraries(
     }
     listOf(
         "ru/lazyhat/compukters/internal/vendor/tomlj/Toml.class",
-        "ru/lazyhat/compukters/internal/vendor/antlr/v4/runtime/Parser.class",
+        "ru/lazyhat/compukters/internal/vendor/tomlj/internal/antlr/v4/runtime/Parser.class",
     ).forEach { required ->
         check(entries.count { it == required } == 1) {
             "$required is missing or duplicated in $archiveName"
         }
     }
-    check(entries.none { it.startsWith("org/tomlj/") || it.startsWith("org/antlr/v4/runtime/") }) {
+    check(
+        entries.none {
+            it.startsWith("org/tomlj/") ||
+                it.startsWith("org/antlr/v4/runtime/") ||
+                it.startsWith("ru/lazyhat/compukters/internal/vendor/antlr/")
+        },
+    ) {
         "unrelocated project metadata classes leaked into $archiveName"
     }
 }

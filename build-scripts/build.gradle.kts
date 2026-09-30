@@ -37,12 +37,12 @@ dependencies {
     implementation(plugin(libs.plugins.architectury.plugin))
     implementation(plugin(libs.plugins.shadow))
     implementation("org.apache.commons:commons-compress:1.28.0")
-    implementation("org.tukaani:xz:1.10")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.7.3")
+    implementation(libs.xz)
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:${libs.versions.kotlinx.serialization.runtime.get()}")
 
-    testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.1")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:6.1.1")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.1")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.3")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:6.1.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.3")
 }
 
 tasks.test {

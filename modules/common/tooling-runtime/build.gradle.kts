@@ -164,7 +164,7 @@ val verifyToolingRuntimeLicenses =
                 "manifests/analysis.payload",
                 "META-INF/licenses/Compukters-Apache-2.0.txt",
                 "META-INF/licenses/jvm/ktlint-1.8.0-MIT.txt",
-                "META-INF/licenses/jvm/slf4j-2.0.18-MIT.txt",
+                "META-INF/licenses/jvm/slf4j-${libs.versions.slf4j.get()}-MIT.txt",
                 "META-INF/NOTICE.txt",
                 "META-INF/THIRD-PARTY-NOTICES.md",
             ).forEach { required ->

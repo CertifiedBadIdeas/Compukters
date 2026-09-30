@@ -185,6 +185,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Build tooling
 
+- Runtime dependencies and NeoForge are updated within the existing Minecraft 1.21.1 and 26.1.2 targets;
+  Tomlj 2.1.1 now carries its own private ANTLR runtime instead of a separate JAR. Kotlin remains pinned at 2.4.10.
 - Main, Create addon and API documentation Gradle wrappers use 9.8.0, which supports running Gradle on JDK 27.
   Compilation toolchains and JVM targets remain unchanged at Java 21 and 25.
 - Documentation CI runs on Temurin JDK 27.

@@ -162,8 +162,8 @@ val verifyPackagedCompukterFfi =
                 "META-INF/licenses/Compukters-Textures-PROVENANCE.txt",
                 "META-INF/licenses/Material-Symbols-Apache-2.0.txt",
                 "META-INF/licenses/Material-Symbols-PROVENANCE.txt",
-                "META-INF/licenses/jvm/antlr4-runtime-4.11.1-BSD-3-Clause.txt",
-                "META-INF/licenses/jvm/xz-java-1.10-0BSD.txt",
+                "META-INF/licenses/jvm/antlr4-runtime-4.13.2-BSD-3-Clause.txt",
+                "META-INF/licenses/jvm/xz-java-${libs.versions.xz.get()}-0BSD.txt",
                 "META-INF/NOTICE.txt",
                 "META-INF/THIRD-PARTY-NOTICES.md",
             ).forEach { required ->

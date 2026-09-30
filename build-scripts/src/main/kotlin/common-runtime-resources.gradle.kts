@@ -20,6 +20,9 @@ plugins {
     java
 }
 
+val pinnedKotlinVersion = libsCatalog().findVersion("kotlin").get().requiredVersion
+val pinnedXzVersion = libsCatalog().findVersion("xz").get().requiredVersion
+
 val systemPrograms =
     mapOf(
         "boot" to "generateBootArtifact",
@@ -61,15 +64,15 @@ tasks.processResources {
     from(rootProject.layout.projectDirectory.file("THIRD-PARTY-NOTICES.md")) {
         into("META-INF")
     }
-    from(rootProject.layout.projectDirectory.dir("licenses/kotlin/v2.4.10")) {
-        into("META-INF/licenses/kotlin/v2.4.10")
+    from(rootProject.layout.projectDirectory.dir("licenses/kotlin/v$pinnedKotlinVersion")) {
+        into("META-INF/licenses/kotlin/v$pinnedKotlinVersion")
     }
     from(rootProject.layout.projectDirectory.file("licenses/rust/generic-array-0.14.7-LICENSE.txt")) {
         into("META-INF/licenses/rust")
     }
     listOf(
-        "antlr4-runtime-4.11.1-BSD-3-Clause.txt",
-        "xz-java-1.10-0BSD.txt",
+        "antlr4-runtime-4.13.2-BSD-3-Clause.txt",
+        "xz-java-$pinnedXzVersion-0BSD.txt",
     ).forEach { filename ->
         from(rootProject.layout.projectDirectory.file("licenses/jvm/$filename")) {
             into("META-INF/licenses/jvm")

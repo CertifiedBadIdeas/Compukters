@@ -15,11 +15,11 @@ by archive verification. Dependency version changes must update both files.
 
 ## XZ decompression
 
-The outer mod archive contains XZ for Java 1.10 for deterministic compression
+The outer mod archive contains XZ for Java 1.12 for deterministic compression
 and pure-Java streaming decompression of the packaged K2 tooling bundle. XZ
 for Java is copyright the XZ for Java authors and contributors and licensed
 under 0BSD. The complete license is at
-`licenses/jvm/xz-java-1.10-0BSD.txt`; upstream:
+`licenses/jvm/xz-java-1.12-0BSD.txt`; upstream:
 <https://github.com/tukaani-project/xz-java>.
 
 ## Kotlin compiler and libraries
@@ -51,12 +51,10 @@ listed above.
 The worker also contains these pinned runtime dependencies:
 
 - IntelliJ's patched `kotlinx-coroutines-core-jvm` 1.8.0-intellij-13,
-  `kotlinx-serialization-core-jvm` 1.7.3, Caffeine 2.9.3, Error Prone
-  annotations 2.10.0, and JetBrains annotations 23.0.0 — Apache-2.0.
+  `kotlinx-serialization-core-jvm` 1.11.0, Caffeine 3.3.0
+  — Apache-2.0. Annotation-only dependencies are excluded from its payload.
 - IntelliJ Platform `util-diff` 251.27812.49 — Apache-2.0; upstream:
   <https://github.com/JetBrains/intellij-community>.
-- Checker Qual 3.19.0 — MIT; complete text at
-  `licenses/jvm/checker-qual-3.19.0-MIT.txt`.
 
 The Analysis API artifacts come from
 <https://packages.jetbrains.team/maven/p/ij/intellij-dependencies>. Their
@@ -78,8 +76,8 @@ namespace and reuses the analysis worker's packaged Kotlin compiler/runtime
 files. Those files are loaded again in a separate child classloader rather than
 duplicated in the distribution or shared with the live K2 Analysis API state.
 
-SLF4J API 2.0.18 is copyright QOS.ch Sarl and licensed under MIT. Its complete
-license is at `licenses/jvm/slf4j-2.0.18-MIT.txt`.
+SLF4J API 2.0.20 is copyright QOS.ch Sarl and licensed under MIT. Its complete
+license is at `licenses/jvm/slf4j-2.0.20-MIT.txt`.
 
 - Ktlint upstream: <https://github.com/pinterest/ktlint>
 - EditorConfig Java upstream: <https://github.com/ec4j/editorconfig-core-java>
@@ -102,10 +100,10 @@ Ohad Shai and contributors and is licensed under Apache-2.0:
 The main mod archive privately embeds and relocates the lightweight libraries
 used to read local IDE project manifests and lock files:
 
-- Tomlj 1.1.1 — Apache-2.0. The complete Apache License 2.0 text is packaged
+- Tomlj 2.1.1 — Apache-2.0. The complete Apache License 2.0 text is packaged
   at `META-INF/licenses/Compukters-Apache-2.0.txt`.
-- ANTLR 4 Runtime 4.11.1 — BSD-3-Clause; complete text at
-  `licenses/jvm/antlr4-runtime-4.11.1-BSD-3-Clause.txt`.
+- ANTLR 4 Runtime 4.13.2, bundled inside Tomlj's private namespace — BSD-3-Clause; complete text at
+  `licenses/jvm/antlr4-runtime-4.13.2-BSD-3-Clause.txt`.
 
 ## Statically linked Rust crates
 

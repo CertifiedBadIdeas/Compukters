@@ -125,8 +125,8 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
     from(rootProject.layout.projectDirectory.file("THIRD-PARTY-NOTICES.md")) {
         into("META-INF")
     }
-    from(rootProject.layout.projectDirectory.dir("licenses/kotlin/v2.4.10")) {
-        into("META-INF/licenses/kotlin/v2.4.10")
+    from(rootProject.layout.projectDirectory.dir("licenses/kotlin/v$pinnedKotlinVersion")) {
+        into("META-INF/licenses/kotlin/v$pinnedKotlinVersion")
     }
     from(rootProject.layout.projectDirectory.file("licenses/rust/generic-array-0.14.7-LICENSE.txt")) {
         into("META-INF/licenses/rust")
