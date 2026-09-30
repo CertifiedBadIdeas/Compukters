@@ -187,6 +187,7 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 - Main, Create addon and API documentation Gradle wrappers use 9.8.0, which supports running Gradle on JDK 27.
   Compilation toolchains and JVM targets remain unchanged at Java 21 and 25.
+- Documentation CI runs on Temurin JDK 27.
 - The independent API documentation Gradle project lives at the repository root in `api-build/`.
 
 ## 0.4.0 — 2026-09-12
