@@ -95,6 +95,43 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
+    fun `typing hides symbol matches until mouse placement or arrow movement even when typing changes no text`() {
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture = navigationFixture(requests)
+        activateNavigation(fixture, requests)
+        val source = "val answer = 42\nfun main() = answer"
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type(source)))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(5, false)))
+        val ranges = listOf(EditorRange(4, 10), EditorRange(source.lastIndexOf("answer"), source.length))
+        requests.completeOccurrences(ranges)
+        fixture.controller.tick()
+        assertEquals(ranges, fixture.textEditor().occurrenceRanges)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("")))
+        fixture.controller.tick()
+        assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
+        fixture.controller.dispatch(
+            IdeCommand.Edit(IdeEditorInput.Move(ru.lazyhat.compukters.ide.client.state.IdeMoveDirection.Right, false)),
+        )
+        requests.completeOccurrences(ranges)
+        fixture.controller.tick()
+        assertEquals(ranges, fixture.textEditor().occurrenceRanges)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("x")))
+        fixture.workspace.replaceSourceExternally(ProjectPath.file("src/other.kt"), "fun changed() = 1")
+        fixture.controller.dispatch(IdeCommand.Poll)
+        fixture.controller.tick()
+        requests.publishFreshPresentation()
+        fixture.controller.tick()
+        assertTrue(fixture.textEditor().occurrenceRanges.isEmpty())
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(5, false)))
+        val updated = listOf(EditorRange(4, 11), EditorRange(source.lastIndexOf("answer") + 1, source.length + 1))
+        requests.completeOccurrences(updated)
+        fixture.controller.tick()
+        assertEquals(updated, fixture.textEditor().occurrenceRanges)
+        fixture.controller.close()
+    }
+
+    @Test
     fun `second Rename includes unsaved edits in background buffers`() {
         val requests = ControllerRecordingAnalysisRequests()
         val fixture = renameFixture(requests)

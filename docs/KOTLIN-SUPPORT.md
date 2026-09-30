@@ -1171,12 +1171,15 @@ links to their source files.
   and unrelated same-named variables and methods. Interpolated references participate,
   while ordinary literal text does not; stale caret and editor results are discarded.
   Queries start without hover delay; mouse movement and scrolling do not reset the matches.
+  Text edits suppress symbol occurrences until explicit cursor placement or keyboard navigation; background
+  analysis and reloads do not re-enable them. Text entry without a content change also hides the matches.
   Selection matching remains textual, from two Unicode characters inside string text
   and three elsewhere. Evidence: `ReferenceQueryTest`, test
   `references distinguish overloads locals methods and string interpolation`;
   `IdeAnalysisCoordinatorTest`, tests
   `caret occurrences include declaration and current file references without waiting for hover` and
-  `late occurrence results never highlight a different caret token or edited document`;
+  `late occurrence results never highlight a different caret token or edited document` and
+  `typing suppresses caret occurrences across fresh analysis and reload until explicit caret movement`;
   `IdeSelectionOccurrencesTest` and `IdeClientControllerTest`.
 
 - [x] **Find Usages and method counters** — `Alt+F7` opens bounded semantic usage results with file/line

@@ -953,7 +953,7 @@ class IdeClientController(
             input is IdeEditorInput.SetCaret || input is IdeEditorInput.Move || input is IdeEditorInput.MoveWord ||
             input is IdeEditorInput.Page || input is IdeEditorInput.SelectToken || input is IdeEditorInput.Type
         ) {
-            analysisCoordinator?.caretMoved(active.document.caretOffset)
+            analysisCoordinator?.caretMoved(active.document.caretOffset, requestOccurrences = input !is IdeEditorInput.Type)
             analysisCoordinator?.dismissCompletion()
             refreshAnalysisState()
         }
@@ -1854,7 +1854,7 @@ class IdeClientController(
             IdeBusyOperation.Project !in state.busy
         ) {
             invalidateUsages()
-            editor?.let(::openAnalysis)
+            analysisCoordinator?.reload(sourceOverlays())
         }
         publishWorkspace()
     }

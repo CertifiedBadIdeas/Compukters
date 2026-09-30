@@ -79,6 +79,39 @@ import kotlin.test.assertTrue
 
 class IdeAnalysisCoordinatorTest {
     @Test
+    fun `typing suppresses caret occurrences across fresh analysis and reload until explicit caret movement`() {
+        val fixture = fixture("val answer = 42\nprintln(answer)")
+        val initial = fixture.open()
+        fixture.coordinator.caretMoved(26)
+        val pending = fixture.requests.occurrencesRequests.single()
+        val edited = "val answer = 42\nprintln(answer) "
+        fixture.coordinator.sourceChanged(fixture.project, path(), edited, 1, " ", caretOffsetUtf16 = 26, change = insertion(31, 0, 1))
+        pending.complete(occurrences(initial.identity))
+        assertTrue(activeState(fixture).occurrenceRanges.isEmpty())
+        assertEquals(1, fixture.requests.occurrencesRequests.size)
+        fixture.coordinator.reload()
+        val snapshot = fixture.requests.snapshots.last()
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Presentation(
+                    snapshot.identity,
+                    SnapshotPresentation.create(
+                        snapshot.identity,
+                        mapOf(path() to edited.length),
+                    ),
+                ),
+            ),
+        )
+        assertTrue(activeState(fixture).occurrenceRanges.isEmpty())
+        assertEquals(1, fixture.requests.occurrencesRequests.size)
+        fixture.coordinator.caretMoved(26)
+        fixture.requests.occurrencesRequests
+            .last()
+            .complete(occurrences(snapshot.identity))
+        assertEquals(listOf(EditorRange(4, 10), EditorRange(24, 30)), activeState(fixture).occurrenceRanges)
+    }
+
+    @Test
     fun `method count anchors survive whitespace but not identifier joins or name replacements`() {
         val original = "fun work () = 1"
         val presentation =
@@ -267,6 +300,29 @@ class IdeAnalysisCoordinatorTest {
                 .last()
                 .identity,
         )
+    }
+
+    @Test
+    fun `reload replaces supplied background overlays without rearming suppressed caret occurrences`() {
+        val background = VirtualSourcePath.kotlin("src/other.kt")
+        val fixture =
+            AnalysisFixture(
+                "val active = 1",
+                extraSources = listOf(ProjectSource(background, BinaryValue.of("val disk = 1".encodeToByteArray()))),
+            )
+        fixture.coordinator.open(fixture.project, path(), fixture.text, 0, mapOf(background to "val unsaved = 2"))
+        fixture.coordinator.caretMoved(5, requestOccurrences = false)
+        fixture.coordinator.reload(emptyMap())
+        val current = fixture.requests.snapshots.last()
+        assertEquals(
+            "val disk = 1",
+            current.sources.sources
+                .single { it.path == background }
+                .content
+                .toByteArray()
+                .decodeToString(),
+        )
+        assertTrue(fixture.requests.occurrencesRequests.isEmpty())
     }
 
     @Test
