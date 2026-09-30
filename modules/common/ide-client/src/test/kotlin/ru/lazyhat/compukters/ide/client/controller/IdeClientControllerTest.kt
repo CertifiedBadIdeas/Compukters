@@ -95,6 +95,36 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
+    fun `Find Usages opens semantic locations and discards results after edits`() {
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture = navigationFixture(requests)
+        activateNavigation(fixture, requests)
+        val source = "val answer = 42\nfun main() = answer"
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type(source)))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(5, false)))
+        fixture.controller.dispatch(IdeCommand.FindUsages)
+        requests.completeOccurrences(listOf(EditorRange(4, 10), EditorRange(source.lastIndexOf("answer"), source.length)))
+        fixture.controller.tick()
+        assertEquals(1, fixture.workspaceView().usages?.total)
+        assertEquals(
+            "fun main() = answer",
+            fixture
+                .workspaceView()
+                .usages
+                ?.rows
+                ?.single()
+                ?.context,
+        )
+        fixture.controller.dispatch(IdeCommand.OpenUsage())
+        assertEquals(source.lastIndexOf("answer"), fixture.textEditor().caretUtf16)
+        assertEquals(false, fixture.workspaceView().usages?.focused)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("x")))
+        assertEquals(null, fixture.workspaceView().usages)
+        fixture.controller.close()
+    }
+
+    @Test
     fun `resolved caret occurrences follow editor input and remain subordinate to selection and search`() {
         val requests = ControllerRecordingAnalysisRequests()
         val fixture = navigationFixture(requests)

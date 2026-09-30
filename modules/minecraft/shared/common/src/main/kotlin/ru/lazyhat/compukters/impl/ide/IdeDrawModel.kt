@@ -92,6 +92,8 @@ enum class IdeHitAction {
     FindPrevious,
     FindNext,
     FindClose,
+    UsageChoice,
+    UsagesClose,
 }
 
 enum class IdeFocusGroup { Page, Dialog }

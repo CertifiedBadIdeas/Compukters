@@ -348,6 +348,9 @@ a file preserves its caret, viewport and undo history. Dirty background buffers 
 drained before a build, project transition or ordinary close. Polling invalidates clean changed buffers and retains
 dirty conflicts. Analysis snapshots overlay unsaved project buffers under the admitted source limits and recompute
 their source identity; they never analyze a mix of renamed active text and stale background disk text.
+Explicit Find Usages reuses the serialized reference/declaration analysis lane and requires a single resolved
+declaration. The controller publishes bounded immutable source-context rows in the lower panel, navigates through
+the existing project navigation history, and rejects queued results invalidated by source edits or project changes.
 The terminal screen can suspend its observation and open the IDE, whose target terminal view consumes the same
 replicated terminal state but does not yet display these standalone-terminal gauges. Returning from the IDE reopens
 the standalone observation without reopening the screen and receives a fresh authoritative terminal state.

@@ -520,7 +520,7 @@ internal class IdeScreen(
             viewport.height,
             layout.treeWidth,
             layout.diagnosticsHeight,
-            layout.diagnosticsExpanded,
+            layout.diagnosticsExpanded || (application.controller.viewState().page as? IdePageState.Workspace)?.value?.usages != null,
             treeVisible = true,
             IdeCodeFontProfile.DEFAULT,
             findVisible =
@@ -548,6 +548,7 @@ internal class IdeScreen(
             geometry().codeRows.coerceAtLeast(1),
             analysis?.parameterInfo != null,
             findVisible = editor?.find != null,
+            usagesFocused = (state.page as? IdePageState.Workspace)?.value?.usages?.focused == true,
             findFocused = editor?.find?.focused == true,
             findSelectedText = editor?.find?.let { find -> find.querySelection?.let { find.query.substring(it.startUtf16, it.endUtf16) } },
         )
@@ -582,6 +583,7 @@ internal class IdeScreen(
                 IdePointerContext(
                     geometry,
                     editor = page.value.editor as? IdeEditorView.Text,
+                    usages = page.value.usages,
                     projects = page.value.projects,
                     tree = page.value.tree.flatten(),
                     explorer = page.value.explorerRows(),

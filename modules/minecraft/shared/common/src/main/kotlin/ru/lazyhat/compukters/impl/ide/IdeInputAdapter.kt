@@ -62,6 +62,7 @@ data class IdeFocusState(
     val findVisible: Boolean = false,
     val findFocused: Boolean = false,
     val findSelectedText: String? = null,
+    val usagesFocused: Boolean = false,
 ) {
     companion object {
         val Initial = IdeFocusState(IdeFocusArea.Editor)
@@ -81,6 +82,7 @@ data class IdePointerContext(
     val treeFirstRow: Int = 0,
     val hitTargets: List<IdeHitTarget> = emptyList(),
     val dialog: IdeDialogState? = null,
+    val usages: ru.lazyhat.compukters.ide.client.analysis.IdeUsages? = null,
 )
 
 data class IdeExplorerDragVisual(
@@ -122,6 +124,15 @@ class IdeInputAdapter(
         focus: IdeFocusState,
     ): Boolean {
         focus.dialog?.let { return dialogKey(event, it) }
+        if (focus.usagesFocused) {
+            when (event.key) {
+                IdeKeyCode.UP -> return dispatch(IdeCommand.MoveUsage(-1))
+                IdeKeyCode.DOWN -> return dispatch(IdeCommand.MoveUsage(1))
+                IdeKeyCode.ENTER -> return dispatch(IdeCommand.OpenUsage())
+                IdeKeyCode.ESCAPE -> return dispatch(IdeCommand.CloseUsages)
+                IdeKeyCode.TAB -> return dispatch(IdeCommand.UnfocusUsages)
+            }
+        }
         if (focus.area == IdeFocusArea.Editor) {
             if (event.modifiers and IdeModifier.CONTROL != 0 && event.key == IdeKeyCode.F) return dispatch(IdeCommand.OpenFind)
             if (focus.findVisible && event.key == IdeKeyCode.ESCAPE) return dispatch(IdeCommand.CloseFind)
@@ -161,6 +172,7 @@ class IdeInputAdapter(
                 when (event.key) {
                     IdeKeyCode.LEFT -> IdeCommand.NavigateBack
                     IdeKeyCode.RIGHT -> IdeCommand.NavigateForward
+                    IdeKeyCode.F7 -> IdeCommand.FindUsages
                     else -> null
                 }
             } else {
@@ -173,6 +185,7 @@ class IdeInputAdapter(
         event: IdeCharacterInput,
         focus: IdeFocusState,
     ): Boolean {
+        if (focus.usagesFocused) return true
         if (focus.dialog != null || focus.area != IdeFocusArea.Editor) return false
         if (focus.findFocused) return dispatch(IdeCommand.EditFind(IdeEditorInput.Type(event.text)))
         return dispatchType(event.text)
@@ -304,6 +317,10 @@ class IdeInputAdapter(
             .asReversed()
             .firstOrNull { it.enabled && it.bounds.contains(x, y) }
             ?.let { target ->
+                if (target.action == IdeHitAction.UsageChoice && target.choiceIndex != null) {
+                    sink.dispatch(IdeCommand.OpenUsage(target.choiceIndex))
+                    return true
+                }
                 if (target.action == IdeHitAction.DeclarationChoice) {
                     val chooser =
                         ((context.editor?.analysis as? IdeAnalysisState.Active)?.interaction as? IdeSemanticInteraction.Chooser)
@@ -330,6 +347,7 @@ class IdeInputAdapter(
                 return handled
             }
         if (geometry.editor.contains(x, y)) {
+            if (context.usages?.focused == true) sink.dispatch(IdeCommand.UnfocusUsages)
             if (context.editor?.find != null) sink.dispatch(IdeCommand.FocusFind(false))
             val editor = context.editor
             if (editor != null) {
@@ -418,6 +436,14 @@ class IdeInputAdapter(
                 dispatch(IdeCommand.CloseFind)
             }
 
+            IdeHitAction.UsagesClose -> {
+                dispatch(IdeCommand.CloseUsages)
+            }
+
+            IdeHitAction.UsageChoice -> {
+                false
+            }
+
             IdeHitAction.Resolve -> {
                 dispatch(IdeCommand.Resolve)
             }
@@ -501,6 +527,11 @@ class IdeInputAdapter(
         vertical: Double,
         context: IdePointerContext,
     ): Boolean {
+        if (context.usages != null && context.geometry.diagnostics?.contains(x, y) == true) {
+            val rows = (-vertical * SCROLL_ROWS).toInt()
+            if (rows != 0) sink.dispatch(IdeCommand.MoveUsage(rows))
+            return true
+        }
         if (context.geometry.editor.contains(x, y) && context.editor != null) {
             val lines = (-vertical * SCROLL_ROWS).toInt()
             val columns = (horizontal * SCROLL_COLUMNS).toInt()

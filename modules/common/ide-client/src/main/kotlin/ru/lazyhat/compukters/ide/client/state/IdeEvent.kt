@@ -41,6 +41,12 @@ import ru.lazyhat.compukters.ide.project.tree.ProjectTree
 import java.util.Collections
 
 sealed interface IdeEvent {
+    data class UsagesResolved(
+        val generation: Long,
+        val operationId: Long,
+        val outcome: ru.lazyhat.compukters.ide.client.analysis.IdeUsagesOutcome,
+    ) : IdeEvent
+
     data class ToolingReady(
         val tooling: IdeClientTooling,
     ) : IdeEvent
@@ -210,6 +216,7 @@ internal fun IdeEvent.copyForQueue(): IdeEvent =
         is IdeEvent.ProjectOpened,
         is IdeEvent.FileOpened,
         is IdeEvent.DeclarationResolved,
+        is IdeEvent.UsagesResolved,
         is IdeEvent.SaveCompleted,
         is IdeEvent.FormatCompleted,
         is IdeEvent.DeleteAdmitted,

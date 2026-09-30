@@ -79,6 +79,57 @@ import kotlin.test.assertTrue
 
 class IdeAnalysisCoordinatorTest {
     @Test
+    fun `Find Usages retains semantic locations across files with source context and stale rejection`() {
+        val other = VirtualSourcePath.kotlin("src/other.kt")
+        val fixture =
+            AnalysisFixture(
+                "val answer = 1\nprintln(answer)",
+                extraSources = listOf(ProjectSource(other, BinaryValue.of("println(answer)".encodeToByteArray()))),
+            )
+        val snapshot = fixture.open()
+        val result = fixture.coordinator.findUsages(4, 0)
+        fixture.requests.occurrencesRequests.last().complete(
+            listOf(
+                AnalysisClientResult.Success(
+                    AnalysisResult.References.create(
+                        snapshot.identity,
+                        listOf(
+                            DeclarationLocation.Source(DeclarationOrigin.Project, path(), EditorRange(23, 29)),
+                            DeclarationLocation.Source(DeclarationOrigin.Project, other, EditorRange(8, 14)),
+                        ),
+                        mapOf(path() to 30, other to 15),
+                    ),
+                ),
+                AnalysisClientResult.Success(
+                    AnalysisResult.Declaration.create(
+                        snapshot.identity,
+                        listOf(DeclarationLocation.Source(DeclarationOrigin.Project, path(), EditorRange(4, 10))),
+                        mapOf(path() to 30, other to 15),
+                    ),
+                ),
+            ),
+        )
+        val found = assertIs<IdeUsagesOutcome.Found>(result.join()).value
+        assertEquals(2, found.total)
+        assertEquals(listOf("println(answer)", "println(answer)"), found.rows.map { it.context })
+        assertEquals(listOf(1, 0), found.rows.map { it.line })
+        val stale = fixture.coordinator.findUsages(4, 0)
+        fixture.coordinator.sourceChanged(fixture.project, path(), "val changed = 1", 1, null)
+        fixture.requests.occurrencesRequests.last().complete(
+            listOf(
+                AnalysisClientResult.Success(
+                    AnalysisResult.References.create(
+                        snapshot.identity,
+                        emptyList(),
+                        mapOf(path() to 30, other to 15),
+                    ),
+                ),
+            ),
+        )
+        assertIs<IdeUsagesOutcome.Failed>(stale.join())
+    }
+
+    @Test
     fun `unsaved background sources join the active source in every admitted analysis identity`() {
         val background = VirtualSourcePath.kotlin("src/other.kt")
         val fixture =
