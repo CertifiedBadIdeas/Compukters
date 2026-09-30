@@ -290,7 +290,7 @@ class IdeRendererStateTest {
 
         val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry(IdeCodeFontProfile.DEFAULT))
 
-        assertEquals(0xFF191A1C.toInt(), model.panels.single { it.kind == IdePanelKind.Editor }.color)
+        assertEquals(0xFF1E1F22.toInt(), model.panels.single { it.kind == IdePanelKind.Editor }.color)
         assertEquals(0xFF4B5059.toInt(), model.text.single { it.kind == IdeTextKind.LineNumber }.color)
         assertEquals(0xFFCF8E6D.toInt(), model.sourceDraw("val").color)
         assertEquals(0xFFBCBEC4.toInt(), model.sourceDraw("Int").color)
@@ -353,6 +353,8 @@ class IdeRendererStateTest {
         assertTrue(hover.all { it.codeFont === IdeCodeFontProfile.DEFAULT })
         assertEquals(listOf(13, 13), hover.zipWithNext { first, second -> second.y - first.y })
         val hoverBounds = requireNotNull(hover.first().clip)
+        val popupPanel = model.panels.single { it.bounds == hoverBounds }
+        assertTrue(model.fills.any { it.kind == IdeFillKind.Shadow && it.zIndex < popupPanel.zIndex && it.bounds.bottom > hoverBounds.bottom })
         assertEquals(3 * IdeCodeFontProfile.DEFAULT.cellHeight + 4, hoverBounds.height)
         assertEquals(hoverBounds.top + 3 + IdeCodeFontProfile.DEFAULT.glyphDrawOffsetY, hover.first().y)
         assertTrue(hover.maxOf { it.zIndex } < model.text.filter { it.kind == IdeTextKind.Dialog }.minOf { it.zIndex })

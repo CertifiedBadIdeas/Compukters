@@ -516,7 +516,7 @@ internal class IdeScreen(
 
     private fun viewport(): CompuktersUiViewport {
         val window = client().window
-        return CompuktersUiViewport.admit(window.width, window.height, window.guiScale.toInt())
+        return CompuktersUiViewport.admit(window.width, window.height, window.guiScale.toInt(), scaleReduction = 1)
     }
 
     private fun focusState(): IdeFocusState {

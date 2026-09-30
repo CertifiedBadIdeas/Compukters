@@ -25,6 +25,19 @@ import kotlin.test.assertTrue
 
 class CompuktersUiViewportTest {
     @Test
+    fun `IDE scale is one step smaller with minimum one and exact pointer transform`() {
+        for ((width, height) in listOf(640 to 360, 1280 to 720, 1920 to 1080, 2560 to 1440, 3840 to 2160)) {
+            val original = CompuktersUiViewport.admit(width, height, 4)
+            val ide = CompuktersUiViewport.admit(width, height, 4, scaleReduction = 1)
+            assertEquals((original.physicalScale - 1).coerceAtLeast(1), ide.physicalScale)
+            assertEquals(width / ide.physicalScale, ide.width)
+            assertEquals(height / ide.physicalScale, ide.height)
+            assertEquals(120.0, ide.toMinecraftX(ide.toVirtualX(120.0)), 0.0001)
+            assertEquals(original.supported, ide.supported)
+        }
+    }
+
+    @Test
     fun `full HD admits a crisp scale three viewport`() {
         val viewport = CompuktersUiViewport.admit(1_920, 1_080, 4)
 

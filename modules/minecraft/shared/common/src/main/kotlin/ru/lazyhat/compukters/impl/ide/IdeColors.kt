@@ -23,7 +23,7 @@ object IdeColors {
     const val DIM = 0x45000000
     const val PANEL = 0xFF191A1C.toInt()
     const val PANEL_ALT = 0xFF212326.toInt()
-    const val EDITOR = 0xFF191A1C.toInt()
+    const val EDITOR = 0xFF1E1F22.toInt()
     const val BORDER = 0xFF26282C.toInt()
     const val TEXT = 0xFFD1D3D9.toInt()
     const val EDITOR_TEXT = 0xFFBCBEC4.toInt()

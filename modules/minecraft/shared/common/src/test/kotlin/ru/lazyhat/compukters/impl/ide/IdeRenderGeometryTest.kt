@@ -35,11 +35,11 @@ class IdeRenderGeometryTest {
         assertEquals(IdeRect(0, 24, 940, 46), geometry.toolbar)
         assertEquals(IdeRect(0, 522, 940, 540), geometry.status)
         assertEquals(IdeRect(0, 46, 180, 522), geometry.tree)
-        assertEquals(IdeRect(180, 46, 181, 522), geometry.treeSplitter)
-        assertEquals(IdeRect(181, 46, 940, 401), geometry.editor)
-        assertEquals(IdeRect(181, 401, 940, 402), geometry.diagnosticsSplitter)
-        assertEquals(IdeRect(181, 402, 940, 522), geometry.diagnostics)
-        assertEquals(126, geometry.codeColumns)
+        assertEquals(IdeRect(180, 46, 185, 522), geometry.treeSplitter)
+        assertEquals(IdeRect(185, 46, 940, 397), geometry.editor)
+        assertEquals(IdeRect(185, 397, 940, 402), geometry.diagnosticsSplitter)
+        assertEquals(IdeRect(185, 402, 940, 522), geometry.diagnostics)
+        assertEquals(125, geometry.codeColumns)
         assertEquals(27, geometry.codeRows)
         assertEquals(0, geometry.panel.left % 2, "1920 physical pixels at GUI scale 2 maps deterministically to 960 GUI pixels")
     }
@@ -85,9 +85,9 @@ class IdeRenderGeometryTest {
         val geometry = geometry()
 
         assertEquals(IdeRenderGeometry.MINIMUM_TREE_WIDTH, geometry.treeWidthAt(-10_000))
-        assertEquals(699, geometry.treeWidthAt(10_000))
+        assertEquals(695, geometry.treeWidthAt(10_000))
         assertEquals(IdeRenderGeometry.MINIMUM_DIAGNOSTICS_HEIGHT, geometry.diagnosticsHeightAt(10_000))
-        assertEquals(355, geometry.diagnosticsHeightAt(-10_000))
+        assertEquals(351, geometry.diagnosticsHeightAt(-10_000))
         assertEquals(233, geometry.treeWidthAt(geometry.content.left + 233))
         assertEquals(151, geometry.diagnosticsHeightAt(geometry.content.bottom - 151))
     }
@@ -107,13 +107,13 @@ class IdeRenderGeometryTest {
     @Test
     fun `anchored semantic popup stays inside editor at both edge anchors`() {
         val geometry = geometry()
-        val below = geometry.anchoredPopup(IdeRect(181, 46, 187, 56), 300, 90)
-        val above = geometry.anchoredPopup(IdeRect(934, 391, 940, 401), 300, 90)
+        val below = geometry.anchoredPopup(IdeRect(185, 46, 187, 56), 300, 90)
+        val above = geometry.anchoredPopup(IdeRect(934, 387, 940, 397), 300, 90)
 
         assertEquals(AnchoredPopupPlacement.Below, below.placement)
-        assertEquals(IdeRect(181, 56, 481, 146), below.bounds)
+        assertEquals(IdeRect(185, 56, 485, 146), below.bounds)
         assertEquals(AnchoredPopupPlacement.Above, above.placement)
-        assertEquals(IdeRect(640, 301, 940, 391), above.bounds)
+        assertEquals(IdeRect(640, 297, 940, 387), above.bounds)
     }
 
     private fun geometry() =
