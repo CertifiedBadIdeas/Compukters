@@ -95,6 +95,170 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
+    fun `build diagnostic navigation saves dirty source before opening another file and retains history`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        val other = ProjectPath.file("src/other.kt")
+        val text = assertIs<ProjectFileOpenResult.Text>(fixture.workspace.openResults[other]).snapshot.text
+        val path = VirtualSourcePath.kotlin(other.value)
+        val diagnostic =
+            ru.lazyhat.compukters.ide.analysis.EditorDiagnostic(
+                ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity.Error,
+                "Problem",
+                path,
+                EditorRange(4, 9),
+            )
+        fixture.eventQueue.offer(
+            IdeEvent.BuildStateChanged(
+                fixture.controller.viewState().generation,
+                0,
+                ru.lazyhat.compukters.ide.client.build.IdeBuildState.Diagnostics(
+                    Hash256.zero(),
+                    ru.lazyhat.compukters.ide.analysis
+                        .SourceSnapshotId(Hash256.zero()),
+                    listOf(diagnostic),
+                    mapOf(path to text),
+                ),
+            ),
+        )
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("x")))
+        fixture.controller.dispatch(IdeCommand.NavigateDiagnostic())
+        assertEquals(ProjectPath.file("src/main.kt"), fixture.workspaceView().activeFile)
+        assertEquals(1, fixture.workspace.saveRequests.size)
+        fixture.workspace.completeSave()
+        fixture.controller.tick()
+        fixture.controller.tick()
+        assertEquals(other, fixture.workspaceView().activeFile)
+        assertEquals(4, fixture.textEditor().caretUtf16)
+        fixture.controller.dispatch(IdeCommand.NavigateBack)
+        assertEquals(ProjectPath.file("src/main.kt"), fixture.workspaceView().activeFile)
+        assertEquals(1, fixture.textEditor().caretUtf16)
+        fixture.controller.dispatch(IdeCommand.NavigateForward)
+        val row =
+            fixture
+                .workspaceView()
+                .diagnostics.rows
+                .single()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("changed")))
+        assertFalse(
+            fixture
+                .workspaceView()
+                .diagnostics.rows
+                .single()
+                .navigable,
+        )
+        val caret = fixture.textEditor().caretUtf16
+        fixture.controller.dispatch(IdeCommand.OpenDiagnostic(row))
+        fixture.controller.dispatch(IdeCommand.NavigateDiagnostic())
+        assertEquals(caret, fixture.textEditor().caretUtf16)
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `opening a diagnostic checks the actual disk text before applying its offset`() {
+        for (binary in listOf(false, true)) {
+            val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+            fixture.startAndTick()
+            val other = ProjectPath.file("src/other.kt")
+            val text = assertIs<ProjectFileOpenResult.Text>(fixture.workspace.openResults[other]).snapshot.text
+            val path = VirtualSourcePath.kotlin(other.value)
+            val diagnostic =
+                ru.lazyhat.compukters.ide.analysis.EditorDiagnostic(
+                    ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity.Error,
+                    "Problem",
+                    path,
+                    EditorRange(4, 9),
+                )
+            fixture.eventQueue.offer(
+                IdeEvent.BuildStateChanged(
+                    fixture.controller.viewState().generation,
+                    0,
+                    ru.lazyhat.compukters.ide.client.build.IdeBuildState.Diagnostics(
+                        Hash256.zero(),
+                        ru.lazyhat.compukters.ide.analysis
+                            .SourceSnapshotId(Hash256.zero()),
+                        listOf(diagnostic),
+                        mapOf(path to text),
+                    ),
+                ),
+            )
+            fixture.controller.tick()
+            val row =
+                fixture
+                    .workspaceView()
+                    .diagnostics.rows
+                    .single()
+            if (binary) {
+                fixture.workspace.openResults[other] = ProjectFileOpenResult.Binary(other, 12)
+            } else {
+                fixture.workspace.replaceSourceExternally(other, "fun changed() = 1")
+            }
+            fixture.controller.dispatch(IdeCommand.OpenDiagnostic(row))
+            fixture.controller.tick()
+            assertEquals(ProjectPath.file("src/main.kt"), fixture.workspaceView().activeFile)
+            assertEquals(0, fixture.textEditor().caretUtf16)
+            assertTrue(
+                fixture
+                    .workspaceView()
+                    .status!!
+                    .message
+                    .contains("source changed"),
+            )
+            assertFalse(
+                fixture
+                    .workspaceView()
+                    .diagnostics.rows
+                    .single()
+                    .navigable,
+            )
+            val opens = fixture.workspace.openRequests.size
+            fixture.controller.dispatch(IdeCommand.NavigateDiagnostic())
+            assertEquals(opens, fixture.workspace.openRequests.size)
+            fixture.controller.close()
+        }
+    }
+
+    @Test
+    fun `diagnostic clicks and cycling navigate with history and reject rows invalidated by typing`() {
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture = navigationFixture(requests)
+        activateNavigation(fixture, requests)
+        val path = VirtualSourcePath.kotlin("src/main.kt")
+        val diagnostic =
+            ru.lazyhat.compukters.ide.analysis.EditorDiagnostic(
+                ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity.Error,
+                "Problem",
+                path,
+                EditorRange(4, 5),
+            )
+        requests.publishFreshPresentation(listOf(diagnostic))
+        fixture.controller.tick()
+        val row =
+            fixture
+                .workspaceView()
+                .diagnostics.rows
+                .single()
+        fixture.controller.dispatch(IdeCommand.OpenDiagnostic(row))
+        assertEquals(4, fixture.textEditor().caretUtf16)
+        fixture.controller.dispatch(IdeCommand.NavigateBack)
+        assertEquals(0, fixture.textEditor().caretUtf16)
+        fixture.controller.dispatch(IdeCommand.NavigateDiagnostic())
+        assertEquals(4, fixture.textEditor().caretUtf16)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("x")))
+        val caret = fixture.textEditor().caretUtf16
+        fixture.controller.dispatch(IdeCommand.OpenDiagnostic(row))
+        assertEquals(caret, fixture.textEditor().caretUtf16)
+        assertTrue(
+            fixture
+                .workspaceView()
+                .diagnostics.rows
+                .isEmpty(),
+        )
+        fixture.controller.close()
+    }
+
+    @Test
     fun `typing hides symbol matches until mouse placement or arrow movement even when typing changes no text`() {
         val requests = ControllerRecordingAnalysisRequests()
         val fixture = navigationFixture(requests)
@@ -1457,7 +1621,7 @@ private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
 
     override fun close() = Unit
 
-    fun publishFreshPresentation() {
+    fun publishFreshPresentation(diagnostics: List<ru.lazyhat.compukters.ide.analysis.EditorDiagnostic> = emptyList()) {
         val snapshot = snapshots.last()
         val lengths =
             snapshot.sources.sources.associate {
@@ -1471,7 +1635,7 @@ private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
             AnalysisClientResult.Success(
                 AnalysisResult.Presentation(
                     snapshot.identity,
-                    SnapshotPresentation.create(snapshot.identity, lengths),
+                    SnapshotPresentation.create(snapshot.identity, lengths, diagnostics = diagnostics),
                 ),
             ),
         )

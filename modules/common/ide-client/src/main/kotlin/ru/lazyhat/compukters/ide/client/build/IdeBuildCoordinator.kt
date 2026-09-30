@@ -351,6 +351,8 @@ class IdeBuildCoordinator(
                         result.identity,
                         prepared.sourceSnapshotId,
                         diagnostics(result.values, prepared.snapshot),
+                        prepared.snapshot.sources.sources
+                            .associate { it.path to decodeStrict(it.content.toByteArray()) },
                     )
                 }
             }

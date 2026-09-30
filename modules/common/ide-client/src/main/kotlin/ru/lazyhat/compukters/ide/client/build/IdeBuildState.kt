@@ -82,8 +82,11 @@ sealed interface IdeBuildState {
         val identity: Hash256,
         val sourceSnapshotId: SourceSnapshotId,
         values: List<EditorDiagnostic>,
+        sourceTexts: Map<ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath, String> = emptyMap(),
     ) : IdeBuildState {
         val values: List<EditorDiagnostic> = Collections.unmodifiableList(values.toList())
+        val sourceTexts: Map<ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath, String> =
+            Collections.unmodifiableMap(sourceTexts.toMap())
     }
 
     data class Failed(

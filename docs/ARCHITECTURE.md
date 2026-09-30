@@ -365,6 +365,10 @@ their source identity; they never analyze a mix of renamed active text and stale
 Explicit Find Usages reuses the serialized reference/declaration analysis lane and requires a single resolved
 declaration. The controller publishes bounded immutable source-context rows in the lower panel, navigates through
 the existing project navigation history, and rejects queued results invalidated by source edits or project changes.
+The controller also owns one deduplicated diagnostic view for the problems panel, gutter, counters and F2 navigation.
+Navigable rows carry exact source evidence; build diagnostics retain bounded admitted source text. Opening a target
+checks that evidence before applying a UTF-16 offset, including after an asynchronous open or implicit save. Stale
+build messages remain visible but do not contribute clickable locations or gutter markers.
 The terminal screen can suspend its observation and open the IDE, whose target terminal view consumes the same
 replicated terminal state but does not yet display these standalone-terminal gauges. Returning from the IDE reopens
 the standalone observation without reopening the screen and receives a fresh authoritative terminal state.

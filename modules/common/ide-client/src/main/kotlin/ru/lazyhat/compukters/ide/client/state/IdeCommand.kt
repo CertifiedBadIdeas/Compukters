@@ -109,6 +109,14 @@ sealed interface IdeCommand {
 
     data object Format : IdeCommand
 
+    data class OpenDiagnostic(
+        val row: IdeDiagnosticRow,
+    ) : IdeCommand
+
+    data class NavigateDiagnostic(
+        val backwards: Boolean = false,
+    ) : IdeCommand
+
     data object FindUsages : IdeCommand
 
     data class FindUsagesAt(
