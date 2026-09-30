@@ -148,6 +148,7 @@ class IdeInputAdapter(
         val control = event.modifiers and IdeModifier.CONTROL != 0
         val alt = event.modifiers and IdeModifier.ALT != 0
         val shift = event.modifiers and IdeModifier.SHIFT != 0
+        if (shift && !control && !alt && event.key == IdeKeyCode.F6) return uiActions.activate(IdeHitAction.RenameSymbol)
         if (control && event.key == IdeKeyCode.C) return copySelection()
         if (control && event.key == IdeKeyCode.X) return cutSelection()
         val command =
@@ -159,7 +160,7 @@ class IdeInputAdapter(
                     IdeKeyCode.P -> IdeCommand.ShowParameterInfo
                     IdeKeyCode.F9 -> IdeCommand.Build
                     IdeKeyCode.SPACE -> IdeCommand.ManualCompletion
-                    IdeKeyCode.Z -> IdeCommand.Edit(IdeEditorInput.Undo)
+                    IdeKeyCode.Z -> IdeCommand.Edit(if (shift) IdeEditorInput.Redo else IdeEditorInput.Undo)
                     IdeKeyCode.Y -> IdeCommand.Edit(IdeEditorInput.Redo)
                     IdeKeyCode.A -> IdeCommand.Edit(IdeEditorInput.SelectAll)
                     IdeKeyCode.LEFT -> wordMove(IdeHorizontalDirection.Left, shift)
@@ -208,7 +209,7 @@ class IdeInputAdapter(
             if (control) {
                 when (event.key) {
                     IdeKeyCode.A -> IdeEditorInput.SelectAll
-                    IdeKeyCode.Z -> IdeEditorInput.Undo
+                    IdeKeyCode.Z -> if (shift) IdeEditorInput.Redo else IdeEditorInput.Undo
                     IdeKeyCode.Y -> IdeEditorInput.Redo
                     IdeKeyCode.LEFT -> IdeEditorInput.MoveWord(IdeHorizontalDirection.Left, shift)
                     IdeKeyCode.RIGHT -> IdeEditorInput.MoveWord(IdeHorizontalDirection.Right, shift)
@@ -480,6 +481,7 @@ class IdeInputAdapter(
             IdeHitAction.CreateText,
             IdeHitAction.CreateDirectory,
             IdeHitAction.Rename,
+            IdeHitAction.RenameSymbol,
             IdeHitAction.Terminal,
             -> {
                 uiActions.activate(action)

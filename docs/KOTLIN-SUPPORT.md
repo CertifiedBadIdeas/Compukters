@@ -1186,6 +1186,14 @@ links to their source files.
   `method usage counts distinguish overloads members and local functions across project files`;
   `NavigationAndReferencesTest`, `IdeAnalysisCoordinatorTest`, `IdeClientControllerTest`, and `IdeRendererStateTest`.
 
+- [ ] **Semantic Rename — Partial** — `Shift+F6` admits exact writable project declarations and references,
+  speculatively checks diagnostics and binding preservation, then updates bounded document buffers as one
+  project-wide undo/redo group. Unopened files are loaded and unsaved sources participate in analysis; source,
+  revision, disk and manifest/lock checks reject stale plans. Saving uses the existing autosave/conflict workflow.
+  Library symbols, `main`, inheritance and operator/infix declarations are rejected, as are projects with analysis
+  errors. Evidence: `RenameQueryTest`, `NavigationAndReferencesTest`, `AnalysisWorkerControllerTest`,
+  `ProjectEditHistoryTest`, and `IdeClientControllerTest`. Tracking: [#672](https://github.com/CertifiedBadIdeas/Compukters/issues/672).
+
 - [x] **Local project build and cache** — the client builds real project
   snapshots, reuses the global compiler cache, deduplicates active work, and
   keeps compiler I/O off the caller thread. Evidence:

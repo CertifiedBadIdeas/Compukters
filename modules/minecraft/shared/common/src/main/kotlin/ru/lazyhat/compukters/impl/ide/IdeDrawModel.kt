@@ -76,6 +76,7 @@ enum class IdeHitAction {
     CreateText,
     CreateDirectory,
     Rename,
+    RenameSymbol,
     Delete,
     Resolve,
     Format,

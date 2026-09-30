@@ -41,6 +41,21 @@ import ru.lazyhat.compukters.ide.project.tree.ProjectTree
 import java.util.Collections
 
 sealed interface IdeEvent {
+    data class RenameResolved(
+        val generation: Long,
+        val operationId: Long,
+        val outcome: ru.lazyhat.compukters.ide.client.analysis.IdeRenameOutcome,
+    ) : IdeEvent
+
+    data class RenameLoaded(
+        val generation: Long,
+        val operationId: Long,
+        val plan: ru.lazyhat.compukters.ide.client.analysis.IdeRenamePlan,
+        val input: IdeBuildInput?,
+        val files: Map<ProjectPath, ProjectFileOpenResult>,
+        val failure: String? = null,
+    ) : IdeEvent
+
     data class UsagesResolved(
         val generation: Long,
         val operationId: Long,
@@ -202,6 +217,8 @@ interface ReplaceableIdeEvent {
 
 internal fun IdeEvent.copyForQueue(): IdeEvent =
     when (this) {
+        is IdeEvent.RenameLoaded -> copy(files = Collections.unmodifiableMap(files.toMap()))
+
         is IdeEvent.ProjectCatalogLoaded -> copy(projects = Collections.unmodifiableList(projects.toList()))
 
         is IdeEvent.CatalogLoaded -> copy(projects = Collections.unmodifiableList(projects.toList()))
@@ -217,6 +234,7 @@ internal fun IdeEvent.copyForQueue(): IdeEvent =
         is IdeEvent.FileOpened,
         is IdeEvent.DeclarationResolved,
         is IdeEvent.UsagesResolved,
+        is IdeEvent.RenameResolved,
         is IdeEvent.SaveCompleted,
         is IdeEvent.FormatCompleted,
         is IdeEvent.DeleteAdmitted,

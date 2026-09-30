@@ -100,6 +100,7 @@ import ru.lazyhat.compukters.ide.project.tree.AdmittedProjectDelete
 import ru.lazyhat.compukters.ide.project.tree.ProjectImport
 import ru.lazyhat.compukters.ide.project.tree.ProjectMutationResult
 import ru.lazyhat.compukters.ide.project.tree.ProjectTree
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
 import java.util.concurrent.CompletionStage
 import java.util.concurrent.atomic.AtomicBoolean
@@ -167,6 +168,7 @@ class IdeClientController(
     private var latestOpenOperation = 0L
     private var latestDeclarationOperation = 0L
     private var latestUsagesOperation = 0L
+    private var pendingRename: PendingRename? = null
     private var usages: IdeUsages? = null
     private var latestSaveOperation = 0L
     private var latestFormatOperation = 0L
@@ -289,6 +291,10 @@ class IdeClientController(
 
             is IdeCommand.Rename -> {
                 mutate(IdeMutationRequest.Rename(requireProject(), command.source, command.target))
+            }
+
+            is IdeCommand.RenameSymbol -> {
+                renameSymbol(command.newName)
             }
 
             is IdeCommand.RequestDelete -> {
@@ -534,7 +540,7 @@ class IdeClientController(
                 it.dirty && !it.conflict && it.saveInFlight == null && it.formatInFlight == null &&
                     clock.nowMillis() - it.lastEditMillis >= AUTOSAVE_DELAY_MILLIS
             }
-        if (active != null) saveDocument(active)
+        if (active != null && pendingRename == null) saveDocument(active)
         refreshAnalysisState()
     }
 
@@ -756,6 +762,7 @@ class IdeClientController(
     }
 
     private fun closeProjectDocuments() {
+        pendingRename = null
         documents.values.forEach(EditorSession::close)
         documents.clear()
         projectHistory.clear()
@@ -1441,6 +1448,14 @@ class IdeClientController(
                     is IdeUsagesOutcome.Failed -> publishStatus(result.detail, IdeProblemSeverity.Warning)
                 }
                 publishWorkspace()
+            }
+
+            is IdeEvent.RenameResolved -> {
+                acceptRename(event)
+            }
+
+            is IdeEvent.RenameLoaded -> {
+                applyRename(event)
             }
 
             is IdeEvent.SaveCompleted -> {
@@ -2385,6 +2400,167 @@ class IdeClientController(
         latestUsagesOperation = nextOperationId++
     }
 
+    private fun renameSymbol(newName: String) {
+        if (attachedSourcePreview != null || computerPreview != null || binary != null) return
+        val active = editor?.takeIf { it.path.isKotlinSource } ?: return
+        val coordinator = analysisCoordinator ?: return
+        if (pendingRename != null || state.busy.isNotEmpty() ||
+            documents.values.any { it.conflict || it.saveInFlight != null || it.formatInFlight != null }
+        ) {
+            publishStatus("Finish the current operation before Rename", IdeProblemSeverity.Warning)
+            return
+        }
+        val text = active.document.materialize()
+        val caret = active.document.caretOffset
+        val token =
+            KotlinSourceTokenRange.find(text, caret)
+                ?: caret.takeIf { it > 0 }?.let { KotlinSourceTokenRange.find(text, it - Character.charCount(text.codePointBefore(it))) }
+                ?: return
+        if (newName.isEmpty() || newName.encodeToByteArray().size > ru.lazyhat.compukters.ide.analysis.MAX_RENAME_NAME_BYTES) {
+            publishStatus("Rename name exceeds limit or is empty", IdeProblemSeverity.Warning)
+            return
+        }
+        val operation = nextOperationId++
+        val requestGeneration = generation
+        val selected = requireProject()
+        val sourceTree = requireNotNull(tree)
+        pendingRename =
+            PendingRename(
+                operation,
+                selected,
+                documents.mapValues { (_, session) -> session.document.revision },
+                sourceTree.flatten().filter { it.path.isKotlinSource }.associate { it.path to it.revision },
+            )
+        coordinator.dismissCompletion()
+        coordinator.dismissParameterInfo()
+        publishStatus("Checking Rename…", IdeProblemSeverity.Info)
+        coordinator.rename(token.startUtf16, active.document.revision, newName).whenComplete { result, failure ->
+            enqueue(
+                IdeEvent.RenameResolved(
+                    requestGeneration,
+                    operation,
+                    result ?: ru.lazyhat.compukters.ide.client.analysis.IdeRenameOutcome
+                        .Failed(failure?.message ?: "Rename failed"),
+                ),
+            )
+        }
+    }
+
+    private fun acceptRename(event: IdeEvent.RenameResolved) {
+        val pending = pendingRename?.takeIf { it.operation == event.operationId } ?: return
+        val outcome = event.outcome
+        if (outcome is ru.lazyhat.compukters.ide.client.analysis.IdeRenameOutcome.Failed) {
+            pendingRename = null
+            publishStatus(outcome.detail, IdeProblemSeverity.Warning)
+            return
+        }
+        val plan = (outcome as ru.lazyhat.compukters.ide.client.analysis.IdeRenameOutcome.Prepared).plan
+        if (!renameIsFresh(pending, plan)) {
+            pendingRename = null
+            publishStatus("Sources changed; run Rename again", IdeProblemSeverity.Warning)
+            return
+        }
+        val opened = plan.edits.keys.associate { path -> ProjectPath.file(path.value).let { it to workspace.open(pending.project, it) } }
+        val input = workspace.buildInput(pending.project)
+        CompletableFuture.allOf(input, *opened.values.toTypedArray()).whenComplete { _, failure ->
+            enqueue(
+                IdeEvent.RenameLoaded(
+                    event.generation,
+                    event.operationId,
+                    plan,
+                    if (failure == null) input.join() else null,
+                    if (failure == null) opened.mapValues { it.value.join() } else emptyMap(),
+                    failure?.message,
+                ),
+            )
+        }
+    }
+
+    private fun renameIsFresh(
+        pending: PendingRename,
+        plan: ru.lazyhat.compukters.ide.client.analysis.IdeRenamePlan,
+    ): Boolean =
+        project?.handle == pending.project &&
+            documents.mapValues { (_, session) -> session.document.revision } == pending.revisions &&
+            tree?.flatten()?.filter { it.path.isKotlinSource }?.associate { it.path to it.revision } == pending.diskRevisions &&
+            documents.values.none { it.conflict || it.saveInFlight != null || it.formatInFlight != null } &&
+            state.busy.isEmpty() &&
+            analysisCoordinator?.isCurrent(plan.identity, plan.activePath, plan.documentRevision) == true
+
+    private fun applyRename(event: IdeEvent.RenameLoaded) {
+        val pending = pendingRename?.takeIf { it.operation == event.operationId } ?: return
+        pendingRename = null
+        val plan = event.plan
+
+        fun reject(detail: String) = publishStatus(detail, IdeProblemSeverity.Warning)
+        if (event.failure != null || !renameIsFresh(pending, plan)) {
+            reject(event.failure ?: "Sources changed; run Rename again")
+            return
+        }
+        val input = event.input ?: return
+        val freshSources =
+            input.sources.sources
+                .associate { source ->
+                    source.path to source.content.toByteArray().decodeToString()
+                }.toMutableMap()
+        sourceOverlays().forEach { (path, text) -> if (path in freshSources) freshSources[path] = text }
+        if (freshSources != plan.sources || !plan.matchesConfiguration(input)) {
+            reject("Project sources or configuration changed; run Rename again")
+            return
+        }
+        val missing = event.files.keys.filter { it !in documents }
+        if (documents.size + missing.size > limits.projectDocuments) {
+            reject("Project document limit reached; Rename was not applied")
+            return
+        }
+        val added = linkedMapOf<ProjectPath, EditorSession>()
+        val replacements = arrayListOf<ProjectEditHistory.Replacement>()
+        try {
+            event.files.forEach { (path, result) ->
+                val opened = result as? ProjectFileOpenResult.Text ?: error("Rename source is not text")
+                check(opened.snapshot.revision == pending.diskRevisions[path]) { "A Rename source changed on disk" }
+                val virtualPath = VirtualSourcePath.kotlin(path.value)
+                val session =
+                    documents[path]
+                        ?: EditorSession(path, EditorDocument(opened.snapshot.text), opened.snapshot.revision).also { added[path] = it }
+                check(session.document.materialize() == plan.sources.getValue(virtualPath)) { "A Rename document changed" }
+                replacements +=
+                    ProjectEditHistory.Replacement(
+                        session.document,
+                        session.document.revision,
+                        plan.replacement(virtualPath),
+                        plan.caret(virtualPath, session.document.caretOffset),
+                    )
+            }
+            when (val result = projectHistory.apply(replacements)) {
+                is ProjectEditHistory.Result.Rejected -> {
+                    error("Rename was not applied: ${result.detail}")
+                }
+
+                ProjectEditHistory.Result.NoChange -> {
+                    added.values.forEach { it.close() }
+                    publishStatus("Name is unchanged", IdeProblemSeverity.Info)
+                    return
+                }
+
+                is ProjectEditHistory.Result.Applied -> {
+                    documents.putAll(added)
+                    documents.values.filter { it.document in result.changes }.forEach { it.lastEditMillis = clock.nowMillis() }
+                    invalidateUsages()
+                    editor?.let { active ->
+                        result.changes[active.document]?.let { updateAnalysis(active, null, it) }
+                            ?: openAnalysis(active)
+                    }
+                    publishStatus("Renamed in ${result.changes.size} files", IdeProblemSeverity.Info)
+                    publishWorkspace()
+                }
+            }
+        } catch (failure: RuntimeException) {
+            added.values.filter { it.path !in documents }.forEach { it.close() }
+            reject(failure.message ?: "Rename could not be applied")
+        }
+    }
+
     private fun openUsage(index: Int?) {
         val results = usages ?: return
         val row = results.rows.getOrNull(index ?: results.selectedIndex) ?: return
@@ -3027,6 +3203,13 @@ class IdeClientController(
 
     private fun requireProject() = requireNotNull(project) { "no project is open" }.handle
 
+    private data class PendingRename(
+        val operation: Long,
+        val project: ru.lazyhat.compukters.ide.project.ProjectHandle,
+        val revisions: Map<ProjectPath, Long>,
+        val diskRevisions: Map<ProjectPath, FileRevision?>,
+    )
+
     private class EditorSession(
         var path: ProjectPath,
         val document: EditorDocument,
@@ -3159,6 +3342,10 @@ private fun IdeEvent.generationOrNull(): Long? =
         is IdeEvent.DeclarationResolved -> generation
 
         is IdeEvent.UsagesResolved -> generation
+
+        is IdeEvent.RenameResolved -> generation
+
+        is IdeEvent.RenameLoaded -> generation
 
         is IdeEvent.SaveCompleted -> generation
 

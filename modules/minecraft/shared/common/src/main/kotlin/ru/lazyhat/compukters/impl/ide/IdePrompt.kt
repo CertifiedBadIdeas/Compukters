@@ -22,6 +22,8 @@ sealed interface IdePromptKind {
 
     data object CreateDirectory : IdePromptKind
 
+    data object RenameSymbol : IdePromptKind
+
     data class Rename(
         val source: ProjectPath,
     ) : IdePromptKind
@@ -75,10 +77,28 @@ class IdePromptController {
         val command =
             runCatching {
                 when (val kind = current.kind) {
-                    IdePromptKind.CreateProject -> IdeCommand.CreateProject(value)
-                    IdePromptKind.CreateText -> IdeCommand.CreateText(ProjectPath.file(value))
-                    IdePromptKind.CreateDirectory -> IdeCommand.CreateDirectory(ProjectPath.file(value))
-                    is IdePromptKind.Rename -> IdeCommand.Rename(kind.source, ProjectPath.file(value))
+                    IdePromptKind.CreateProject -> {
+                        IdeCommand.CreateProject(value)
+                    }
+
+                    IdePromptKind.CreateText -> {
+                        IdeCommand.CreateText(ProjectPath.file(value))
+                    }
+
+                    IdePromptKind.CreateDirectory -> {
+                        IdeCommand.CreateDirectory(ProjectPath.file(value))
+                    }
+
+                    is IdePromptKind.Rename -> {
+                        IdeCommand.Rename(kind.source, ProjectPath.file(value))
+                    }
+
+                    IdePromptKind.RenameSymbol -> {
+                        require(
+                            value.encodeToByteArray().size <= ru.lazyhat.compukters.ide.analysis.MAX_RENAME_NAME_BYTES,
+                        ) { "Name is too long" }
+                        IdeCommand.RenameSymbol(value)
+                    }
                 }
             }.getOrElse { failure ->
                 state = current.copy(error = failure.message ?: "Invalid name")

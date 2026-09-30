@@ -95,6 +95,128 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
+    fun `second Rename includes unsaved edits in background buffers`() {
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture = renameFixture(requests)
+        activateNavigation(fixture, requests)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(5, false)))
+        fixture.controller.dispatch(IdeCommand.RenameSymbol("renamedLonger"))
+        requests.completeRename(renameLocations())
+        fixture.controller.tick()
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.RenameSymbol("shorter"))
+        requests.completeRename(
+            listOf(
+                DeclarationLocation.Source(DeclarationOrigin.Project, VirtualSourcePath.kotlin("src/main.kt"), EditorRange(4, 17)),
+                DeclarationLocation.Source(DeclarationOrigin.Project, VirtualSourcePath.kotlin("src/other.kt"), EditorRange(12, 25)),
+            ),
+        )
+        fixture.controller.tick()
+        fixture.controller.tick()
+        assertEquals(listOf("fun shorter() = 1"), fixture.textEditor().visibleLines)
+        assertEquals(emptyList(), fixture.workspace.saveRequests)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Undo))
+        assertEquals(listOf("fun renamedLonger() = 1"), fixture.textEditor().visibleLines)
+        switchAndSave(fixture, "src/other.kt")
+        assertEquals(listOf("fun use() = renamedLonger()"), fixture.textEditor().visibleLines)
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `semantic rename loads unopened files changes only buffers and undo redo spans every file`() {
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture = renameFixture(requests)
+        activateNavigation(fixture, requests)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(5, false)))
+        fixture.controller.dispatch(IdeCommand.RenameSymbol("renamedLonger"))
+        requests.completeRename(renameLocations())
+        fixture.controller.tick()
+        fixture.controller.tick()
+        assertEquals(listOf("fun renamedLonger() = 1"), fixture.textEditor().visibleLines)
+        assertTrue(fixture.textEditor().dirty)
+        assertEquals(emptyList(), fixture.workspace.saveRequests)
+        assertEquals(
+            "fun target() = 1",
+            fixture.workspace.descriptor.handle.canonicalPath
+                .resolve("src/main.kt")
+                .toFile()
+                .readText(),
+        )
+        switchAndSave(fixture, "src/other.kt")
+        assertEquals(listOf("fun use() = renamedLonger()"), fixture.textEditor().visibleLines)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Undo))
+        assertEquals(listOf("fun use() = target()"), fixture.textEditor().visibleLines)
+        switchAndSave(fixture, "src/main.kt")
+        assertEquals(listOf("fun target() = 1"), fixture.textEditor().visibleLines)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Redo))
+        assertEquals(listOf("fun renamedLonger() = 1"), fixture.textEditor().visibleLines)
+        switchAndSave(fixture, "src/other.kt")
+        assertEquals(listOf("fun use() = renamedLonger()"), fixture.textEditor().visibleLines)
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `semantic rename rejects edits made while checking without partial changes`() {
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture = renameFixture(requests)
+        activateNavigation(fixture, requests)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(5, false)))
+        fixture.controller.dispatch(IdeCommand.RenameSymbol("renamed"))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("x")))
+        requests.completeRename(renameLocations())
+        fixture.controller.tick()
+        assertEquals(listOf("fun txarget() = 1"), fixture.textEditor().visibleLines)
+        switchAndSave(fixture, "src/other.kt")
+        assertEquals(listOf("fun use() = target()"), fixture.textEditor().visibleLines)
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `semantic rename rejects disk changes and document capacity before applying any edit`() {
+        listOf(false, true).forEach { limited ->
+            val requests = ControllerRecordingAnalysisRequests()
+            val fixture = renameFixture(requests, if (limited) 1 else 128)
+            activateNavigation(fixture, requests)
+            fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(5, false)))
+            fixture.controller.dispatch(IdeCommand.RenameSymbol("renamed"))
+            requests.completeRename(renameLocations())
+            if (!limited) fixture.workspace.replaceSourceExternally(ProjectPath.file("src/other.kt"), "fun use() = 2")
+            fixture.controller.tick()
+            fixture.controller.tick()
+            assertEquals(listOf("fun target() = 1"), fixture.textEditor().visibleLines)
+            assertEquals(emptyList(), fixture.workspace.saveRequests)
+            fixture.controller.close()
+        }
+    }
+
+    private fun renameFixture(
+        requests: ControllerRecordingAnalysisRequests,
+        maxDocuments: Int = 128,
+    ): ControllerFixture =
+        navigationFixture(requests, maxDocuments = maxDocuments).also { fixture ->
+            fixture.workspace.includeAllSources = true
+            fixture.workspace.replaceMainExternally("fun target() = 1")
+            fixture.workspace.replaceSourceExternally(ProjectPath.file("src/other.kt"), "fun use() = target()")
+        }
+
+    private fun switchAndSave(
+        fixture: ControllerFixture,
+        path: String,
+    ) {
+        val prior = fixture.workspace.saveRequests.size
+        fixture.controller.dispatch(IdeCommand.OpenFile(ProjectPath.file(path)))
+        if (fixture.workspace.saveRequests.size > prior) fixture.workspace.completeSave()
+        fixture.controller.tick()
+        fixture.controller.tick()
+    }
+
+    private fun renameLocations(): List<DeclarationLocation.Source> =
+        listOf(
+            DeclarationLocation.Source(DeclarationOrigin.Project, VirtualSourcePath.kotlin("src/main.kt"), EditorRange(4, 10)),
+            DeclarationLocation.Source(DeclarationOrigin.Project, VirtualSourcePath.kotlin("src/other.kt"), EditorRange(12, 18)),
+        )
+
+    @Test
     fun `external background source changes reload analysis without requiring the file to be opened`() {
         val requests = ControllerRecordingAnalysisRequests()
         val fixture = navigationFixture(requests)
@@ -949,8 +1071,12 @@ class IdeClientControllerTest {
     private fun navigationFixture(
         requests: ControllerRecordingAnalysisRequests,
         attachedSources: IdeAttachedSourceCatalog = IdeAttachedSourceCatalog.empty(),
+        maxDocuments: Int = 128,
     ): ControllerFixture =
         ControllerFixture(
+            limits =
+                ru.lazyhat.compukters.ide.client
+                    .IdeClientLimits(projectDocuments = maxDocuments),
             preferences = preferences("demo", "src/main.kt"),
             analysisCoordinatorFactory = { workspace ->
                 IdeAnalysisCoordinator(
@@ -1051,6 +1177,7 @@ internal class ControlledWorkspace(
     val saveRequests = mutableListOf<IdeSaveRequest>()
     val openRequests = mutableListOf<ProjectPath>()
     var buildInputRequests = 0
+    var includeAllSources = false
     private val pendingSaves = ArrayDeque<CompletableFuture<IdeSaveResult>>()
 
     init {
@@ -1122,6 +1249,17 @@ internal class ControlledWorkspace(
         openResults[main] = ProjectFileOpenResult.Text(ProjectDocumentStore(descriptor.handle).open(main))
     }
 
+    fun replaceSourceExternally(
+        path: ProjectPath,
+        text: String,
+    ) {
+        descriptor.handle.canonicalPath
+            .resolve(path.value)
+            .toFile()
+            .writeText(text)
+        openResults[path] = ProjectFileOpenResult.Text(ProjectDocumentStore(descriptor.handle).open(path))
+    }
+
     fun invalidateProjectRoot() {
         val oldRoot = descriptor.handle.canonicalPath
         val displaced = root.resolve("demo-displaced")
@@ -1161,7 +1299,16 @@ internal class ControlledWorkspace(
                     .takeIf { it.exists() }
                     ?.readBytes(),
                 ProjectSnapshot.of(
-                    listOf(ProjectSource(VirtualSourcePath.kotlin(main.value), BinaryValue.of(source.encodeToByteArray()))),
+                    if (includeAllSources) {
+                        openResults.filterKeys { it.value.endsWith(".kt") }.map { (path, result) ->
+                            ProjectSource(
+                                VirtualSourcePath.kotlin(path.value),
+                                BinaryValue.of(assertIs<ProjectFileOpenResult.Text>(result).snapshot.text.encodeToByteArray()),
+                            )
+                        }
+                    } else {
+                        listOf(ProjectSource(VirtualSourcePath.kotlin(main.value), BinaryValue.of(source.encodeToByteArray())))
+                    },
                     WorkerLimits(sourceFiles = 8, sourceFileBytes = 4096, sourceBytes = 8192),
                 ),
             ),
@@ -1188,6 +1335,29 @@ private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
     val snapshots = mutableListOf<AdmittedAnalysisSnapshot>()
     private val navigation = ArrayDeque<CompletableFuture<AnalysisClientResult>>()
     private val occurrences = ArrayDeque<CompletableFuture<List<AnalysisClientResult>>>()
+    private val renames = ArrayDeque<Pair<AdmittedAnalysisSnapshot, CompletableFuture<AnalysisClientResult>>>()
+
+    override fun rename(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+        newName: String,
+    ): CompletableFuture<AnalysisClientResult> =
+        CompletableFuture<AnalysisClientResult>().also {
+            renames.addLast(snapshots.last() to it)
+        }
+
+    fun completeRename(locations: List<DeclarationLocation.Source>) {
+        val (snapshot, future) = renames.removeFirst()
+        val lengths =
+            snapshot.sources.sources.associate {
+                it.path to
+                    it.content
+                        .toByteArray()
+                        .decodeToString()
+                        .length
+            }
+        future.complete(AnalysisClientResult.Success(AnalysisResult.References.create(snapshot.identity, locations, lengths)))
+    }
 
     override fun cancelSymbolOccurrences() {
         occurrences.clear()

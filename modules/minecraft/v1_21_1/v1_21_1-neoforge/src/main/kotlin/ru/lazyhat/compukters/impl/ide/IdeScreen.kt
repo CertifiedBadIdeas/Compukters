@@ -624,6 +624,13 @@ internal class IdeScreen(
                 prompt.open(IdePromptKind.Rename(path), path.value)
             }
 
+            IdeHitAction.RenameSymbol -> {
+                val workspace = application.controller.viewState().page as? IdePageState.Workspace ?: return false
+                val editor = workspace.value.editor as? IdeEditorView.Text ?: return false
+                if (editor.readOnly || editor.path?.value?.endsWith(".kt") != true) return false
+                prompt.open(IdePromptKind.RenameSymbol)
+            }
+
             IdeHitAction.Delete -> {
                 val path = selectedTreePath ?: activeFile() ?: return false
                 application.controller.dispatch(IdeCommand.RequestDelete(path))
