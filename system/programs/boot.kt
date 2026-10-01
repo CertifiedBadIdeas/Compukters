@@ -23,23 +23,21 @@ import compukter.process.ProcessResult
 
 fun main() {
     val diagnostic = bootDiagnostic(Process.run("/rom/shell"))
-    if (diagnostic != "") Stderr.write("boot failed: " + diagnostic + "\n")
+    if (diagnostic.isNotEmpty()) Stderr.write("boot failed: " + diagnostic + "\n")
 }
 
-private fun bootDiagnostic(result: ProcessResult): String {
-    if (result is ProcessResult.Exited) {
-        if (result.code == 0) return ""
-        return "shell exited with an error"
+private fun bootDiagnostic(result: ProcessResult): String =
+    when (result) {
+        is ProcessResult.Exited -> if (result.code == 0) "" else "shell exited with an error"
+        is ProcessResult.Failed -> processFailure(result.reason, result.diagnostic)
+        else -> "shell failed"
     }
-    if (result is ProcessResult.Failed) return processFailure(result.reason, result.diagnostic)
-    return "shell failed"
-}
 
 private fun processFailure(
     reason: ProcessFailureReason,
     diagnostic: String,
 ): String {
-    if (diagnostic != "") return diagnostic
+    if (diagnostic.isNotEmpty()) return diagnostic
     if (reason == ProcessFailureReason.INVALID_PATH) return "invalid path"
     if (reason == ProcessFailureReason.NOT_FOUND) return "shell not found"
     if (reason == ProcessFailureReason.ACCESS_DENIED) return "access denied"

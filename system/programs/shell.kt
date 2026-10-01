@@ -42,60 +42,61 @@ private fun dispatch(line: String) {
 private fun dispatchWords(words: Array<String>) {
     if (words.size == 0) return
     val command = words[0]
-    if (command == "help") {
-        println("help echo clear pwd ls stat kotlinc edit vmbench")
-    } else if (command == "echo") {
-        var index = 1
-        while (index < words.size) {
-            if (index > 1) print(" ")
-            print(words[index])
-            index = index + 1
+    when (command) {
+        "help" -> println("help echo clear pwd ls stat kotlinc edit vmbench")
+        "echo" -> {
+            for (index in 1 until words.size) {
+                if (index > 1) print(" ")
+                print(words[index])
+            }
+            println()
         }
-        println()
-    } else if (command == "clear") {
-        if (words.size == 1) Terminal.clear() else Stderr.write("usage: clear\n")
-    } else if (command == "pwd") {
-        if (words.size == 1) println("/home") else Stderr.write("usage: pwd\n")
-    } else if (command == "ls") {
-        if (words.size == 1) writeList("/home")
-        else if (words.size == 2 && words[1] != "") writeList(resolvePath(words[1]))
-        else Stderr.write("usage: ls [path]\n")
-    } else if (command == "stat") {
-        if (words.size == 2 && words[1] != "") writeStat(resolvePath(words[1]))
-        else Stderr.write("usage: stat <path>\n")
-    } else if (command == "") {
-        Stderr.write("empty command\n")
-    } else {
-        executeExternal(words)
+        "clear" -> {
+            if (words.size == 1) Terminal.clear() else Stderr.write("usage: clear\n")
+        }
+        "pwd" -> {
+            if (words.size == 1) println("/home") else Stderr.write("usage: pwd\n")
+        }
+        "ls" -> {
+            if (words.size == 1) writeList("/home")
+            else if (words.size == 2 && words[1].isNotEmpty()) writeList(resolvePath(words[1]))
+            else Stderr.write("usage: ls [path]\n")
+        }
+        "stat" -> {
+            if (words.size == 2 && words[1].isNotEmpty()) writeStat(resolvePath(words[1]))
+            else Stderr.write("usage: stat <path>\n")
+        }
+        "" -> Stderr.write("empty command\n")
+        else -> executeExternal(words)
     }
 }
 
 private fun executeExternal(words: Array<String>) {
     val command = words[0]
     val arguments = words.copyOfRange(1, words.size)
-    var path = if (command[0] == '/') command else "/home/" + command
+    var path = resolvePath(command)
     var result = Process.run(path, arguments)
     val fallback = shellFallbackPath(command, result)
-    if (fallback != "") {
+    if (fallback.isNotEmpty()) {
         path = fallback
         result = Process.run(path, arguments)
     }
     val diagnostic = shellProcessDiagnostic(result, path)
-    if (diagnostic != "") Stderr.write(diagnostic + "\n")
+    if (diagnostic.isNotEmpty()) Stderr.write(diagnostic + "\n")
 }
 
 fun shellFallbackPath(
     command: String,
     result: ProcessResult,
 ): String {
-    if (command == "" || command[0] == '/') return ""
+    if (command.isEmpty() || command.startsWith("/")) return ""
     if (result is ProcessResult.Failed && result.reason == ProcessFailureReason.NOT_FOUND) {
         return "/rom/" + command
     }
     return ""
 }
 
-private fun resolvePath(path: String): String = if (path[0] == '/') path else "/home/" + path
+private fun resolvePath(path: String): String = if (path.startsWith("/")) path else "/home/" + path
 
 private fun writeList(path: String) {
     val kind = FileSystem.stat(path)
@@ -105,8 +106,8 @@ private fun writeList(path: String) {
         val names = FileSystem.list(path)
         var start = 0
         while (start < names.length) {
-            var end = start
-            while (end < names.length && names[end] != '\u0000') end = end + 1
+            val separator = names.indexOf('\u0000', start)
+            val end = if (separator < 0) names.length else separator
             if (end != start) println(names.substring(start, end))
             start = end + 1
         }

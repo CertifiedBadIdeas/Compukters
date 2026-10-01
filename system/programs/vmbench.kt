@@ -32,12 +32,10 @@ fun main(args: Array<String>) {
         return
     }
 
-    if (args[0] == "cpu") {
-        runCpu(rounds)
-    } else if (args[0] == "redstone") {
-        runRedstone(rounds)
-    } else {
-        writeUsage()
+    when (args[0]) {
+        "cpu" -> runCpu(rounds)
+        "redstone" -> runRedstone(rounds)
+        else -> writeUsage()
     }
 }
 
@@ -57,11 +55,9 @@ private fun runRedstone(rounds: Int) {
     println(", transitions per round=2")
 
     Redstone.top.set(0)
-    var round = 0
-    while (round < rounds) {
+    repeat(rounds) {
         Redstone.top.set(15)
         Redstone.top.set(0)
-        round = round + 1
     }
 
     print("vmbench redstone: acknowledged transitions=")

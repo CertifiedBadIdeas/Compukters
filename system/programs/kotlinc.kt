@@ -22,80 +22,50 @@ import compukter.compiler.Compiler
 import compukter.io.Stderr
 
 fun main(args: Array<String>) {
-    val error = kotlincError(args)
-    if (error != "") {
-        Stderr.write(error + "\n")
-    } else {
-        val source = kotlincSource(args)
-        val output = kotlincOutput(args)
-        val result = Compiler.compile(source, output)
-        if (result == 0) {
-            println("compiled: " + output)
-        } else {
-            val diagnostics = Compiler.diagnostics()
-            if (diagnostics != "") Stderr.write(diagnostics + "\n")
-            else Stderr.write("compilation failed\n")
+    when (val arguments = parseKotlincArguments(args)) {
+        is KotlincArguments.Error -> Stderr.write(arguments.message + "\n")
+        is KotlincArguments.Source -> {
+            val result = Compiler.compile(arguments.path, arguments.output)
+            if (result == 0) {
+                println("compiled: " + arguments.output)
+            } else {
+                val diagnostics = Compiler.diagnostics()
+                if (diagnostics.isNotEmpty()) Stderr.write(diagnostics + "\n")
+                else Stderr.write("compilation failed\n")
+            }
         }
     }
 }
 
-fun kotlincError(args: Array<String>): String {
-    val parsed = parseKotlincArguments(args)
-    val separator = separator(parsed, 0)
-    return parsed.substring(0, separator)
+sealed interface KotlincArguments {
+    data class Source(val path: String, val output: String) : KotlincArguments
+
+    data class Error(val message: String) : KotlincArguments
 }
 
-fun kotlincSource(args: Array<String>): String {
-    val parsed = parseKotlincArguments(args)
-    val first = separator(parsed, 0)
-    val second = separator(parsed, first + 1)
-    return parsed.substring(first + 1, second)
-}
-
-fun kotlincOutput(args: Array<String>): String {
-    val parsed = parseKotlincArguments(args)
-    val first = separator(parsed, 0)
-    val second = separator(parsed, first + 1)
-    return parsed.substring(second + 1, parsed.length)
-}
-
-private fun parseKotlincArguments(args: Array<String>): String {
+fun parseKotlincArguments(args: Array<String>): KotlincArguments {
     val count = args.size
-    if (count == 0) return failure("usage: kotlinc <source.kt> [-o output]")
+    if (count == 0) return KotlincArguments.Error("usage: kotlinc <source.kt> [-o output]")
 
     var outputOptions = 0
-    var index = 0
-    while (index < count) {
+    for (index in 0 until count) {
         if (args[index] == "-o") outputOptions = outputOptions + 1
-        index = index + 1
     }
-    if (outputOptions > 1) return failure("duplicate -o option")
+    if (outputOptions > 1) return KotlincArguments.Error("duplicate -o option")
 
     val source = args[0]
-    if (source == "-o") return failure("source file must precede -o")
-    if (!hasKotlinExtension(source)) return failure("source file must end in .kt")
+    if (source == "-o") return KotlincArguments.Error("source file must precede -o")
+    if (source.length <= 3 || !source.endsWith(".kt")) return KotlincArguments.Error("source file must end in .kt")
 
     val resolvedSource = resolveUserPath(source)
-    var output = ""
-    if (count == 1) output = resolvedSource.substring(0, resolvedSource.length - 3)
-    else if (count == 2 && args[1] == "-o") return failure("missing output after -o")
-    else if (count == 3 && args[1] == "-o") output = resolveUserPath(args[2])
-    else return failure("kotlinc accepts exactly one source file")
-    return "\u0000" + resolvedSource + "\u0000" + output
+    val output =
+        when {
+            count == 1 -> resolvedSource.removeSuffix(".kt")
+            count == 2 && args[1] == "-o" -> return KotlincArguments.Error("missing output after -o")
+            count == 3 && args[1] == "-o" -> resolveUserPath(args[2])
+            else -> return KotlincArguments.Error("kotlinc accepts exactly one source file")
+        }
+    return KotlincArguments.Source(resolvedSource, output)
 }
 
-private fun failure(message: String): String = message + "\u0000\u0000"
-
-private fun separator(
-    value: String,
-    start: Int,
-): Int {
-    var index = start
-    while (index < value.length && value[index] != '\u0000') index = index + 1
-    return index
-}
-
-private fun hasKotlinExtension(path: String): Boolean =
-    path.length > 3 && path.substring(path.length - 3, path.length) == ".kt"
-
-private fun resolveUserPath(path: String): String = if (path[0] == '/') path else "/home/" + path
+private fun resolveUserPath(path: String): String = if (path.startsWith("/")) path else "/home/" + path

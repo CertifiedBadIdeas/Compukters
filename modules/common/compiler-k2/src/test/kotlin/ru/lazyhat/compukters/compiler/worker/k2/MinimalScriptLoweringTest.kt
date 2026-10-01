@@ -5065,6 +5065,18 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `checked in hello example compiles with standard input and interpolation`() =
+        withAdapter { adapter ->
+            val greeting = repositoryFile("examples/hello/greeting.kt").readText()
+            val main = repositoryFile("examples/hello/main.kt").readText()
+            val first = adapter.compile(request("examples/hello/greeting.kt" to greeting, "examples/hello/main.kt" to main))
+            val second = adapter.compile(request("examples/hello/greeting.kt" to greeting, "examples/hello/main.kt" to main))
+            val bytes = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
+            assertOrdinaryEntry(bytes)
+        }
+
+    @Test
     fun `checked in boot compiles deterministically with process intrinsic`() =
         withAdapter { adapter ->
             val source = repositoryFile("system/programs/boot.kt").readText()

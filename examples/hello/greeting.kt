@@ -1,1 +1,1 @@
-fun greeting(name: String): String = "Hello, " + name + "!"
+fun greeting(name: String): String = "Hello, $name!"
