@@ -927,6 +927,11 @@ class ProgramRuntimeHostTest {
             listOf(
                 Triple(VmOutcome.Halted(VmValue.I32(42)), ProgramRuntimeState.Halted(VmValue.I32(42)), 0),
                 Triple(
+                    VmOutcome.UncaughtException("Uncaught exception: CustomFailure"),
+                    ProgramRuntimeState.Failed(ProgramFailure.UncaughtException("Uncaught exception: CustomFailure")),
+                    1,
+                ),
+                Triple(
                     VmOutcome.AllocationExhausted(true, "at allocate (src/Other.kt:2:5)"),
                     ProgramRuntimeState.Failed(ProgramFailure.Allocation(true, "at allocate (src/Other.kt:2:5)")),
                     1,

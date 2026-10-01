@@ -41,6 +41,23 @@ import kotlin.test.assertTrue
 
 class FfmBridgeIntegrationTest {
     @Test
+    fun `FFM preserves uncaught exception class message and source stack`() {
+        FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
+            val artifact = Path.of(requiredProperty("compukters.exceptions.artifact")).readBytes()
+            VmSession.open(artifact, bridge).use { session ->
+                var outcome: VmOutcome = VmOutcome.SliceExhausted
+                repeat(1000) {
+                    if (outcome == VmOutcome.SliceExhausted) outcome = session.advance(64, 64, Int.MAX_VALUE)
+                }
+                val failure = assertIs<VmOutcome.UncaughtException>(outcome)
+                assertTrue("kotlin.IllegalArgumentException: bad argument" in failure.diagnostic, failure.diagnostic)
+                assertTrue("fail" in failure.diagnostic && "main" in failure.diagnostic, failure.diagnostic)
+                assertEquals(failure, session.advance(64, 64, Int.MAX_VALUE))
+            }
+        }
+    }
+
+    @Test
     fun `FFM admits a machine with a typed addon capability schema`() {
         FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
             val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
@@ -55,7 +72,7 @@ class FfmBridgeIntegrationTest {
     @Test
     fun `JDK 25 FFM reads the native ABI version`() {
         FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
-            assertEquals(17, bridge.abiVersion())
+            assertEquals(18, bridge.abiVersion())
         }
     }
 

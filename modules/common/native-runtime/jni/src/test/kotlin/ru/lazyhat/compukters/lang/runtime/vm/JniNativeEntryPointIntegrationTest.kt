@@ -19,13 +19,31 @@
 package ru.lazyhat.compukters.lang.runtime.vm
 
 import java.nio.file.Path
+import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class JniNativeEntryPointIntegrationTest {
     @Test
-    fun `every Java 21 JNI entry point resolves against ABI v17 adapter`() {
+    fun `JNI preserves uncaught exception class message and source stack`() {
+        val bridge = JniBridge.open(Path.of(requiredProperty("compukter.jni.library")))
+        val artifact = Path.of(requiredProperty("compukters.exceptions.artifact")).readBytes()
+        VmSession.open(artifact, bridge).use { session ->
+            var outcome: VmOutcome = VmOutcome.SliceExhausted
+            repeat(1000) {
+                if (outcome == VmOutcome.SliceExhausted) outcome = session.advance(64, 64, Int.MAX_VALUE)
+            }
+            val failure = assertIs<VmOutcome.UncaughtException>(outcome)
+            assertTrue("kotlin.IllegalArgumentException: bad argument" in failure.diagnostic, failure.diagnostic)
+            assertTrue("fail" in failure.diagnostic && "main" in failure.diagnostic, failure.diagnostic)
+            assertEquals(failure, session.advance(64, 64, Int.MAX_VALUE))
+        }
+    }
+
+    @Test
+    fun `every Java 21 JNI entry point resolves against ABI v18 adapter`() {
         JniBridge.open(Path.of(requiredProperty("compukter.jni.library")))
         val bytes = ByteArray(0)
         val output = ByteArray(1)
@@ -35,7 +53,7 @@ class JniNativeEntryPointIntegrationTest {
         val candidate = LongArray(1)
         val capabilitySchemas = byteArrayOf(1, 0)
 
-        assertEquals(17, JniNative.abiVersion())
+        assertEquals(18, JniNative.abiVersion())
         assertTrue(JniNative.maximumOutcomeBytes() > 0)
         assertTrue(JniNative.maximumCreateBytes() > 0)
         statuses(

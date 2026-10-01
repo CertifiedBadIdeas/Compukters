@@ -757,9 +757,22 @@ private class InlineValueClassRegistry private constructor(
 
 private const val ANY_RUNTIME_TYPE = 5u
 private const val INT_BOX_RUNTIME_TYPE = 6u
-private const val INT_BOX_VALUE_IMPORT = 7u
+private const val INT_BOX_VALUE_IMPORT = 9u
+private const val THROWABLE_MESSAGE_IMPORT = 10u
+private const val THROWABLE_CAUSE_IMPORT = 11u
 private const val INT_ARRAY_RUNTIME_TYPE = 4u
 private const val INT_BOX_VALUE_NAME = "kotlin.Int.<boxed-value>"
+private const val THROWABLE_MESSAGE_NAME = "kotlin.Throwable.message"
+private const val THROWABLE_CAUSE_NAME = "kotlin.Throwable.cause"
+
+private fun IrClass.runtimeExceptionType(): UInt? =
+    when (fqNameWhenAvailable?.asString()) {
+        "kotlin.Throwable" -> 2u
+        "kotlin.IllegalArgumentException" -> 3u
+        "kotlin.Exception" -> 7u
+        "kotlin.RuntimeException" -> 8u
+        else -> null
+    }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private fun mapGuestValueType(
@@ -799,6 +812,9 @@ private fun mapGuestValueType(
     }
     if (type.isNullableInt()) {
         return ValueType.Ref(nullable = true, type = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE)))
+    }
+    ((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.runtimeExceptionType()?.let {
+        return ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Imported(ImportId.of(it)))
     }
     if (type.isNullable()) {
         val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
@@ -918,10 +934,12 @@ internal object KotlinProjectLowering {
             "kotlin.CharArray",
             "kotlin.String",
             "kotlin.Throwable",
-            "runtime.IllegalArgumentException",
+            "kotlin.IllegalArgumentException",
             "kotlin.IntArray",
             "kotlin.Any",
             "kotlin.Int",
+            "kotlin.Exception",
+            "kotlin.RuntimeException",
         )
 
     fun lower(
@@ -1254,7 +1272,7 @@ internal object KotlinProjectLowering {
             (
                 listOf("app") +
                     runtimeTypeNames +
-                    INT_BOX_VALUE_NAME +
+                    listOf(INT_BOX_VALUE_NAME, THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME) +
                     listOfNotNull("kotlin.Array".takeIf { usesStringArray }) +
                     referenceArrays.keys +
                     capabilityIdentities.flatMap { listOf(it.namespace, it.name) } +
@@ -1505,7 +1523,7 @@ internal object KotlinProjectLowering {
             linkedSymbols.types.entries
                 .sortedBy { (_, target) -> target.sortKey }
                 .mapIndexed { index, (symbol, target) ->
-                    symbol to target.copy(importId = ImportId.of((runtimeTypeNames.size + 1 + index).toUInt()))
+                    symbol to target.copy(importId = ImportId.of((runtimeTypeNames.size + 3 + index).toUInt()))
                 }.toMap()
         val externalClassTypes = externalTypeImports.mapValues { (_, target) -> TypeRef.Imported(target.importId) }
         val externalFieldImports =
@@ -1513,7 +1531,7 @@ internal object KotlinProjectLowering {
                 .distinctBy(ExternalFieldTarget::sortKey)
                 .sortedBy(ExternalFieldTarget::sortKey)
                 .mapIndexed { index, target ->
-                    target.copy(importId = ImportId.of((runtimeTypeNames.size + 1 + externalTypeImports.size + index).toUInt()))
+                    target.copy(importId = ImportId.of((runtimeTypeNames.size + 3 + externalTypeImports.size + index).toUInt()))
                 }
         val externalFieldsBySortKey = externalFieldImports.associateBy(ExternalFieldTarget::sortKey)
         val externalGetterFieldImports =
@@ -1532,7 +1550,7 @@ internal object KotlinProjectLowering {
                         target.copy(
                             importId =
                                 ImportId.of(
-                                    (runtimeTypeNames.size + 1 + externalTypeImports.size + externalFieldImportCount + index).toUInt(),
+                                    (runtimeTypeNames.size + 3 + externalTypeImports.size + externalFieldImportCount + index).toUInt(),
                                 ),
                         )
                 }.toMap()
@@ -2543,7 +2561,12 @@ internal object KotlinProjectLowering {
                             bridgeInterfaces
                     ).distinct()
                         .sortedBy { (it as TypeRef.Local).id.value }
-                val superType = sourceParents.firstOrNull { (symbol, _) -> symbol.owner.kind != ClassKind.INTERFACE }?.second
+                val superType =
+                    sourceParents.firstOrNull { (symbol, _) -> symbol.owner.kind != ClassKind.INTERFACE }?.second
+                        ?: declaration.superTypes
+                            .mapNotNull { ((it as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.runtimeExceptionType() }
+                            .singleOrNull()
+                            ?.let { TypeRef.Imported(ImportId.of(it)) }
                 val name = layout.instance.name
                 if (declaration.kind == ClassKind.INTERFACE) {
                     val methods = memberFunctionsByOwner[declaration.symbol].orEmpty()
@@ -2782,6 +2805,15 @@ internal object KotlinProjectLowering {
                             expectedSignature = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE)),
                             targetModuleHash = libraryHash,
                         ) +
+                        listOf(THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME).map { name ->
+                            Import(
+                                kind = SymbolKind.FIELD,
+                                targetModule = ModuleId.of(1u),
+                                targetName = requireNotNull(metadataIds[name]),
+                                expectedSignature = TypeRef.Imported(ImportId.of(2u)),
+                                targetModuleHash = libraryHash,
+                            )
+                        } +
                         externalTypeImports.entries
                             .sortedBy { (_, target) -> target.sortKey }
                             .mapIndexed { index, (_, target) ->
@@ -2861,6 +2893,7 @@ internal object KotlinProjectLowering {
         return Artifact(
             minimumRuntimeAbi =
                 when {
+                    modules.any { module -> module.types.any { it is NominalType.Class && it.throwableRoot } } -> AbiVersion(1u, 8u)
                     modules.any { module -> module.types.any { it is NominalType.Array && it.superType != null } } -> AbiVersion(1u, 7u)
                     modules.any { it.hasHeterogeneousReferenceComparison() } -> AbiVersion(1u, 6u)
                     usesArrayCopy -> AbiVersion(1u, 5u)
@@ -3225,7 +3258,7 @@ internal object KotlinProjectLowering {
     }
 
     private fun kotlinLibrary(): Module {
-        val names = (runtimeTypeNames + INT_BOX_VALUE_NAME).sorted()
+        val names = (runtimeTypeNames + listOf(INT_BOX_VALUE_NAME, THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME)).sorted()
         val ids = names.withIndex().associate { (index, name) -> name to StringId.of(index.toUInt()) }
         val anyType = TypeRef.Local(TypeId.of(ANY_RUNTIME_TYPE))
         return Module(
@@ -3236,11 +3269,17 @@ internal object KotlinProjectLowering {
                 listOf(
                     NominalType.Array(name = requireNotNull(ids["kotlin.CharArray"]), element = ValueType.Char, superType = anyType),
                     NominalType.Class(name = requireNotNull(ids["kotlin.String"]), final = true, superType = anyType),
-                    NominalType.Class(name = requireNotNull(ids["kotlin.Throwable"]), superType = anyType),
                     NominalType.Class(
-                        name = requireNotNull(ids["runtime.IllegalArgumentException"]),
+                        name = requireNotNull(ids["kotlin.Throwable"]),
+                        superType = anyType,
+                        throwableRoot = true,
+                        fieldStart = 1u,
+                        fieldCount = 2u,
+                    ),
+                    NominalType.Class(
+                        name = requireNotNull(ids["kotlin.IllegalArgumentException"]),
                         final = true,
-                        superType = TypeRef.Local(TypeId.of(2u)),
+                        superType = TypeRef.Local(TypeId.of(8u)),
                     ),
                     NominalType.Array(name = requireNotNull(ids["kotlin.IntArray"]), element = ValueType.I32, superType = anyType),
                     NominalType.Class(name = requireNotNull(ids["kotlin.Any"])),
@@ -3251,6 +3290,8 @@ internal object KotlinProjectLowering {
                         fieldStart = 0u,
                         fieldCount = 1u,
                     ),
+                    NominalType.Class(name = requireNotNull(ids["kotlin.Exception"]), superType = TypeRef.Local(TypeId.of(2u))),
+                    NominalType.Class(name = requireNotNull(ids["kotlin.RuntimeException"]), superType = TypeRef.Local(TypeId.of(7u))),
                 ),
             fields =
                 listOf(
@@ -3258,6 +3299,20 @@ internal object KotlinProjectLowering {
                         owner = TypeRef.Local(TypeId.of(INT_BOX_RUNTIME_TYPE)),
                         name = requireNotNull(ids[INT_BOX_VALUE_NAME]),
                         type = ValueType.I32,
+                        mutable = true,
+                        static = false,
+                    ),
+                    Field(
+                        owner = TypeRef.Local(TypeId.of(2u)),
+                        name = requireNotNull(ids[THROWABLE_MESSAGE_NAME]),
+                        type = ValueType.Ref(true, TypeRef.Local(TypeId.of(1u))),
+                        mutable = true,
+                        static = false,
+                    ),
+                    Field(
+                        owner = TypeRef.Local(TypeId.of(2u)),
+                        name = requireNotNull(ids[THROWABLE_CAUSE_NAME]),
+                        type = ValueType.Ref(true, TypeRef.Local(TypeId.of(2u))),
                         mutable = true,
                         static = false,
                     ),
@@ -3279,7 +3334,16 @@ internal object KotlinProjectLowering {
                             name = requireNotNull(ids[INT_BOX_VALUE_NAME]),
                             localSymbol = 0u,
                             signature = TypeRef.Local(TypeId.of(INT_BOX_RUNTIME_TYPE)),
-                        )
+                        ) +
+                        listOf(THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME).mapIndexed { index, name ->
+                            Export(
+                                kind = SymbolKind.FIELD,
+                                visibility = ExportVisibility.PUBLIC_LIBRARY,
+                                name = requireNotNull(ids[name]),
+                                localSymbol = (index + 1).toUInt(),
+                                signature = TypeRef.Local(TypeId.of(2u)),
+                            )
+                        }
                 ).sortedWith(compareBy({ it.kind.ordinal }, { names[it.name.value.toInt()] })),
         )
     }
@@ -4101,18 +4165,16 @@ private class FunctionCompiler(
             layout.intRange?.let { emitIntRangePrecondition(value, it, call) }
             return value
         }
-        val exceptionImport =
-            when (target.parentAsClass.fqNameWhenAvailable?.asString()) {
-                "kotlin.Throwable", "kotlin.Exception", "kotlin.RuntimeException" -> ImportId.of(2u)
-                "kotlin.IllegalArgumentException" -> ImportId.of(3u)
-                else -> null
-            }
+        val exceptionImport = target.parentAsClass.runtimeExceptionType()?.let(ImportId::of)
         if (exceptionImport != null) {
-            arguments.forEach(::compileExpression)
+            val message =
+                arguments.map(::compileExpression).singleOrNull()
+                    ?: throw UnsupportedKotlinIr(call, "exception constructor requires a message")
             prepareAllocationBlock()
             val type = TypeRef.Imported(exceptionImport)
             return allocate(ValueType.Ref(nullable = false, type = type)).also { destination ->
                 emit(Instruction.NewObject(destination, type))
+                emit(Instruction.FieldSet(destination, FieldRef.Imported(ImportId.of(THROWABLE_MESSAGE_IMPORT)), message))
             }
         }
         if (target.parentAsClass.symbol == kotlinCharArrayClass &&

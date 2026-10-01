@@ -47,6 +47,10 @@ fun interface PlaygroundExecutor {
 }
 
 sealed interface PlaygroundExecution {
+    data class UncaughtException(
+        val diagnostic: String,
+    ) : PlaygroundExecution
+
     data object Success : PlaygroundExecution
 
     data object VerificationFailure : PlaygroundExecution
@@ -169,6 +173,10 @@ class NativePlaygroundExecutor(
 
                         is VmOutcome.Crashed -> {
                             return PlaygroundExecution.Trap(outcome.trap)
+                        }
+
+                        is VmOutcome.UncaughtException -> {
+                            return PlaygroundExecution.UncaughtException(outcome.diagnostic)
                         }
 
                         is VmOutcome.Faulted -> {

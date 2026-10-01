@@ -293,6 +293,17 @@ class VmSessionTest {
     }
 
     @Test
+    fun `advance decodes uncaught exception independently from traps`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(11)))
+        val session = VmSession.open(byteArrayOf(1), bridge)
+        val diagnostic = "Uncaught exception: kotlin.Exception: reason\nat fail (src/main.kt:2:1)"
+        bridge.outcomes += bytes(12, text(diagnostic))
+        assertEquals(VmOutcome.UncaughtException(diagnostic), session.advance(64, 64, Int.MAX_VALUE))
+        bridge.outcomes += bytes(12, text(""))
+        assertFailsWith<VmBridgeException> { session.advance(64, 64, Int.MAX_VALUE) }
+    }
+
+    @Test
     fun `advance forwards host request budget and maps quota waiting`() {
         val bridge = FakeBridge(createResult = bytes(0, long(11)))
         val session = VmSession.open(byteArrayOf(1), bridge)

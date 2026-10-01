@@ -266,6 +266,10 @@ sealed interface VmOutcome {
         val diagnostic: String? = null,
     ) : VmOutcome
 
+    data class UncaughtException(
+        val diagnostic: String,
+    ) : VmOutcome
+
     data class HostFailed(
         val kind: HostFailureKind,
         val detail: String,

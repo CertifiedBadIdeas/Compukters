@@ -70,7 +70,7 @@ class PlaygroundEndToEndTest {
                 val exit = application.run(listOf(root.resolve("examples/hello").toString(), "--emit", emitted.toString()))
 
                 assertEquals(PlaygroundExit.SUCCESS, exit, stderr.toString(Charsets.UTF_8))
-                assertEquals("Your name: Hello, Ada!\n", stdout.toString(Charsets.UTF_8))
+                assertEquals("Your name: Ada\nHello, Ada!\n", stdout.toString(Charsets.UTF_8))
                 assertEquals("", stderr.toString(Charsets.UTF_8))
                 assertContentEquals("CPKT".encodeToByteArray(), emitted.readBytes().copyOf(4))
             } finally {

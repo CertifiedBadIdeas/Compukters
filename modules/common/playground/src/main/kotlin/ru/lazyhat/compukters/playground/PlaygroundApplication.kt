@@ -117,6 +117,10 @@ class PlaygroundApplication(
                 report(PlaygroundExit.GUEST_TRAP, "guest trap: ${result.trap.name.lowercase()}")
             }
 
+            is PlaygroundExecution.UncaughtException -> {
+                report(PlaygroundExit.GUEST_TRAP, result.diagnostic)
+            }
+
             is PlaygroundExecution.Fault -> {
                 report(PlaygroundExit.VM_FAULT, "VM fault: ${result.fault.name.lowercase()}")
             }

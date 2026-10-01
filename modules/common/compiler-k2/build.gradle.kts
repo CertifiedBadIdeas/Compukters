@@ -305,6 +305,7 @@ val tasksConformanceArtifact = layout.buildDirectory.file("generated/conformance
 val channelConformanceArtifact = layout.buildDirectory.file("generated/conformance/channel.cpkt")
 val timerConformanceArtifact = layout.buildDirectory.file("generated/conformance/timer.cpkt")
 val whenConformanceArtifact = layout.buildDirectory.file("generated/conformance/when.cpkt")
+val exceptionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/exceptions.cpkt")
 val argvConformanceArtifact = layout.buildDirectory.file("generated/conformance/argv.cpkt")
 val platformScalarConformanceArtifact = layout.buildDirectory.file("generated/conformance/platform-scalar.cpkt")
 val redstoneConformanceArtifact = layout.buildDirectory.file("generated/conformance/redstone.cpkt")
@@ -638,6 +639,22 @@ val generateBlockingCallConformanceArtifact = tasks.register<Test>("generateBloc
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.blockingCallArtifact", blockingCallConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateExceptionsConformanceArtifact = tasks.register<Test>("generateExceptionsConformanceArtifact") {
+    description = "Compiles a managed exception program for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*explicit exception preserves class and message for vm execution*")
+    inputs.file(workerJar)
+    outputs.file(exceptionsConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.exceptionsArtifact", exceptionsConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

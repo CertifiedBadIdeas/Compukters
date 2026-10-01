@@ -525,7 +525,28 @@ internal fun validateArtifact(
             runCatching { encodeModuleSections(module, limits).semanticHash }.getOrNull()
         }
 
-    if (artifact.modules.sumOf { module -> module.types.count { it is NominalType.Class && it.throwableRoot } } > 1) {
+    val throwableRoots =
+        artifact.modules.flatMapIndexed { moduleIndex, module ->
+            module.types.mapIndexedNotNull { typeIndex, type ->
+                (moduleIndex to typeIndex).takeIf {
+                    type is NominalType.Class &&
+                        type.throwableRoot
+                }
+            }
+        }
+    val throwableRoot = throwableRoots.singleOrNull()
+    val usesExceptions =
+        artifact.modules.any { module ->
+            module.exceptions.isNotEmpty() ||
+                module.blocks.any { block -> block.instructions.any { it is Instruction.Throw } }
+        }
+    if (usesExceptions && artifact.minimumRuntimeAbi < AbiVersion(1u, 8u)) {
+        add(ArtifactWriteErrorCode.INVALID_RANGE, "legacy exception artifact: rebuild for Runtime ABI 1.8")
+    }
+    if (usesExceptions && throwableRoot == null) {
+        add(ArtifactWriteErrorCode.BAD_REFERENCE, "exception artifact requires a verified Throwable root; rebuild libraries")
+    }
+    if (throwableRoots.size > 1) {
         add(ArtifactWriteErrorCode.BAD_REFERENCE, "multiple Throwable roots", ArtifactWriteLocation(table = "TYPES"))
     }
     artifact.modules.forEachIndexed { moduleIndex, module ->
@@ -1756,6 +1777,20 @@ internal fun validateArtifact(
                             )
                         } else if (registerType is ValueType.Ref && !registerType.nullable) {
                             val catchValue = ValueType.Ref(nullable = false, type = catchType)
+                            if (throwableRoot != null &&
+                                !valueAssignable(
+                                    moduleIndex,
+                                    catchValue,
+                                    throwableRoot.first,
+                                    ValueType.Ref(false, TypeRef.Local(TypeId.of(throwableRoot.second.toUInt()))),
+                                )
+                            ) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "catch type is not a Throwable subclass",
+                                    ArtifactWriteLocation(moduleLocation, "EXCEPTIONS"),
+                                )
+                            }
                             if (!valueAssignable(moduleIndex, catchValue, moduleIndex, registerType)) {
                                 add(
                                     ArtifactWriteErrorCode.INVALID_RANGE,
@@ -1765,8 +1800,41 @@ internal fun validateArtifact(
                             }
                         }
                     }
+                    if (exception.catchType == null && registerType is ValueType.Ref && throwableRoot != null) {
+                        val registerIdentity = resolveType(moduleIndex, registerType.type)
+                        if (registerIdentity?.module != throwableRoot.first || registerIdentity.type != throwableRoot.second) {
+                            add(
+                                ArtifactWriteErrorCode.INVALID_RANGE,
+                                "catch-all register must be the Throwable root",
+                                ArtifactWriteLocation(moduleLocation, "EXCEPTIONS"),
+                            )
+                        }
+                    }
                     structurallyValid
                 }
+            if (blockRangeValid && throwableRoot != null) {
+                for (block in module.blocks.subList(blockStart, blockEnd.toInt())) {
+                    for (instruction in block.instructions) {
+                        if (instruction is Instruction.Throw) {
+                            val operand = function.values.getOrNull(instruction.exception.value.toInt())?.semanticType
+                            if (operand !is ValueType.Ref || operand.nullable ||
+                                !valueAssignable(
+                                    moduleIndex,
+                                    operand,
+                                    throwableRoot.first,
+                                    ValueType.Ref(false, TypeRef.Local(TypeId.of(throwableRoot.second.toUInt()))),
+                                )
+                            ) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "throw operand is not a non-null Throwable",
+                                    ArtifactWriteLocation(moduleLocation, "CODE"),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             val orderedHandlers =
                 handlers.sortedWith(
                     compareBy<ExceptionEntry> {

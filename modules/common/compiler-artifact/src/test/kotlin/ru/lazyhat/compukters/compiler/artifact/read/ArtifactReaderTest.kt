@@ -42,6 +42,7 @@ import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.artifact.write.channelArtifact
 import ru.lazyhat.compukters.compiler.artifact.write.languageRuntimeArtifact
+import ru.lazyhat.compukters.compiler.artifact.write.scalarLanguageRuntimeArtifact
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
@@ -66,8 +67,7 @@ class ArtifactReaderTest {
             )
         val typedModule =
             module.copy(
-                strings = module.strings + MetadataText.of("kotlin.String"),
-                types = listOf(root) + module.types.drop(1) + NominalType.Class(StringId.of(4u), final = true),
+                types = listOf(root) + module.types.drop(1),
                 fields = fields,
             )
         val artifact = source.copy(minimumRuntimeAbi = AbiVersion(1u, 8u), modules = listOf(typedModule))
@@ -120,7 +120,7 @@ class ArtifactReaderTest {
 
     @Test
     fun `array superclass round trips and requires ABI 1_7 and stateless root`() {
-        val source = languageRuntimeArtifact()
+        val source = scalarLanguageRuntimeArtifact()
         val module = source.modules.single()
         val array = (module.types[1] as NominalType.Array).copy(superType = TypeRef.Local(TypeId.of(0u)))
         val artifact =
@@ -197,7 +197,7 @@ class ArtifactReaderTest {
 
     @Test
     fun `heterogeneous reference comparisons round trip with ABI gate and typed operands`() {
-        val source = languageRuntimeArtifact()
+        val source = scalarLanguageRuntimeArtifact()
         val module = source.modules.single()
         for (comparison in listOf(
             Instruction.RefEqual(RegisterId.of(2u), RegisterId.of(4u), RegisterId.of(0u)),
@@ -249,7 +249,7 @@ class ArtifactReaderTest {
 
     @Test
     fun `array copy round trips and requires valid operands feature and runtime ABI`() {
-        val source = languageRuntimeArtifact()
+        val source = scalarLanguageRuntimeArtifact()
         val module = source.modules.single()
         val copy = Instruction.ArrayCopy(RegisterId.of(4u), RegisterId.of(4u), RegisterId.of(7u), RegisterId.of(7u), RegisterId.of(7u))
         val blocks =
@@ -401,7 +401,7 @@ class ArtifactReaderTest {
 
     @Test
     fun `class initializer survives writer reader round trip`() {
-        val source = languageRuntimeArtifact()
+        val source = scalarLanguageRuntimeArtifact()
         val module = source.modules.single()
         val initializerId = FunctionId.of(1u)
         val artifact =

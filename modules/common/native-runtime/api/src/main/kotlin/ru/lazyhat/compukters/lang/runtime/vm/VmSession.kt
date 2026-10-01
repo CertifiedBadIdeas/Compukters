@@ -648,6 +648,7 @@ private class WireDecoder(
             9 -> VmOutcome.WaitingForTerminalEvent
             10 -> compilation(i64().also { require(it > 0) { "invalid native compilation token" } })
             11 -> VmOutcome.WaitingForHostQuota
+            12 -> VmOutcome.UncaughtException(text().also { require(it.isNotEmpty()) { "empty exception diagnostic" } })
             else -> invalid()
         }.also { end() }
 

@@ -264,6 +264,11 @@ class ProgramRuntimeHost internal constructor(
                     return
                 }
 
+                is VmOutcome.UncaughtException -> {
+                    finish(ProgramRuntimeState.Failed(ProgramFailure.UncaughtException(outcome.diagnostic)))
+                    return
+                }
+
                 is VmOutcome.Faulted -> {
                     finish(ProgramRuntimeState.Failed(ProgramFailure.Fault(outcome.fault, outcome.diagnostic)))
                     return
