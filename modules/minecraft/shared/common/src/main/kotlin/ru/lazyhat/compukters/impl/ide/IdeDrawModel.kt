@@ -39,6 +39,8 @@ enum class IdeTextKind {
     Binary,
     Dialog,
     Completion,
+    CompletionBadge,
+    CompletionReturnType,
     ParameterInfo,
     Hover,
     DeclarationChoice,

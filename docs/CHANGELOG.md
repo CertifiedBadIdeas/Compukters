@@ -198,6 +198,10 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   required input. Existing delimiters are reused; autoimports and caret placement undo and redo together.
   Functions with a single lambda argument show a brace signature with the argument name and function type,
   omitting names of parameters inside the lambda type.
+  Completion rows use colored F/M/V/C/I kind badges, show receiver and package context beside callable signatures,
+  and align receiver-specialized return types in a separate right-hand column.
+  Diagnostic passes pause during completion while semantic analysis continues; existing unrelated problems remain
+  visible and diagnostics resume for the current text when completion ends.
   Enter inside an empty lambda adds an indented body line and moves its closing brace to a separate line.
   Typing a function declaration name does not open automatic completion; explicit completion remains available.
 - Completion suggests visible variables in string interpolation immediately after `$` and while typing the name.

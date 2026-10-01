@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.impl.ide
 
+import ru.lazyhat.compukters.ide.analysis.CompletionKind
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
@@ -512,6 +513,7 @@ object IdeRenderer {
                     .coerceAtLeast(2)
             val codeLeft = bounds.left + (gutterDigits + 2) * font.cellWidth
             val counts = (editor.analysis as? IdeAnalysisState.Active)?.presentation?.methodUsages.orEmpty()
+            val completion = (editor.analysis as? IdeAnalysisState.Active)?.completion
             var usageIndex = 0
             repeat(rows) { visibleIndex ->
                 val lineNumber = editor.firstVisibleLine + visibleIndex
@@ -519,10 +521,21 @@ object IdeRenderer {
                 val lineStart = editor.visibleLineStartsUtf16[visibleIndex]
                 val rowTop = bounds.top + visibleIndex * font.cellHeight
                 val y = rowTop + font.glyphDrawOffsetY
+                val completionRange =
+                    completion?.replacement?.let { range ->
+                        val localStart = range.startUtf16 - lineStart
+                        val start = if (localStart > 0 && line.getOrNull(localStart - 1) == '.') range.startUtf16 - 1 else range.startUtf16
+                        EditorRange(start, range.endUtf16)
+                    }
                 val diagnostic =
                     diagnostics.rows
                         .filter { it.navigable && it.diagnostic.path?.value == editor.path?.value && it.line == lineNumber }
-                        .maxByOrNull { it.diagnostic.severity.ordinal }
+                        .filterNot { row ->
+                            val range = row.diagnostic.range
+                            if (range == null || completionRange == null) return@filterNot false
+                            val overlaps = range.startUtf16 < completionRange.endUtf16 && completionRange.startUtf16 < range.endUtf16
+                            overlaps
+                        }.maxByOrNull { it.diagnostic.severity.ordinal }
                 diagnostic?.let { row ->
                     val left = bounds.left + gutterDigits * font.cellWidth
                     fills +=
@@ -987,7 +1000,15 @@ object IdeRenderer {
             val caret = caretBounds(editor, codeLeft) ?: return
             val visibleItems = completion.visibleEntries
             val rows = visibleItems.map(::completionRow)
-            val contentWidth = rows.maxOf(::visualColumns) * font.cellWidth + COMPLETION_HORIZONTAL_PADDING
+            val results =
+                visibleItems.map {
+                    it.proposal.callablePresentation
+                        ?.returnType
+                        .orEmpty()
+                }
+            val resultColumns = results.maxOf(::visualColumns)
+            val contentColumns = rows.maxOf(::visualColumns) + 2 + if (resultColumns > 0) resultColumns + 2 else 0
+            val contentWidth = contentColumns * font.cellWidth + COMPLETION_HORIZONTAL_PADDING
             val popup =
                 geometry.completionPopup(
                     caret,
@@ -996,17 +1017,62 @@ object IdeRenderer {
                 )
             panel(IdePanelKind.Dialog, popup.bounds, IdeColors.PANEL_ALT, Z_POPUP)
             scissors += IdeScissorDraw(IdeScissorKind.Completion, popup.bounds, Z_POPUP)
+            val innerLeft = minOf(popup.bounds.left + 4, popup.bounds.right)
+            val innerRight = maxOf(innerLeft, popup.bounds.right - 4)
+            val left = minOf(innerLeft + 2 * font.cellWidth, innerRight)
+            val available = innerRight - left
+            val resultWidth = minOf(resultColumns * font.cellWidth, available / 2 / font.cellWidth * font.cellWidth)
+            val gap = if (resultWidth > 0) minOf(2 * font.cellWidth, available - resultWidth) else 0
+            val leftRight = innerRight - resultWidth - gap
+            val leftClip = IdeRect(left, popup.bounds.top, leftRight, popup.bounds.bottom)
+            val resultClip = IdeRect(innerRight - resultWidth, popup.bounds.top, innerRight, popup.bounds.bottom)
             rows.forEachIndexed { index, row ->
+                val selected = completion.firstVisibleIndex + index == completion.selectedIndex
+                val y = popup.bounds.top + 3 + font.glyphDrawOffsetY + index * font.cellHeight
+                completionBadge(visibleItems[index].proposal.kind)?.let { (letter, color) ->
+                    code(IdeTextKind.CompletionBadge, letter, innerLeft, y, color, popup.bounds, z = Z_POPUP_TEXT)
+                }
                 code(
                     IdeTextKind.Completion,
-                    row,
-                    popup.bounds.left + 4,
-                    popup.bounds.top + 3 + font.glyphDrawOffsetY + index * font.cellHeight,
-                    if (completion.firstVisibleIndex + index == completion.selectedIndex) IdeColors.ACCENT else IdeColors.TEXT,
-                    popup.bounds,
+                    completionText(row, leftClip.width),
+                    left,
+                    y,
+                    if (selected) IdeColors.ACCENT else IdeColors.TEXT,
+                    leftClip,
                     z = Z_POPUP_TEXT,
                 )
+                if (results[index].isNotEmpty() && resultWidth > 0) {
+                    val result = completionText(results[index], resultWidth)
+                    code(
+                        IdeTextKind.CompletionReturnType,
+                        result,
+                        innerRight - visualColumns(result) * font.cellWidth,
+                        y,
+                        if (selected) IdeColors.ACCENT else IdeColors.MUTED,
+                        resultClip,
+                        z = Z_POPUP_TEXT,
+                    )
+                }
             }
+        }
+
+        private fun completionText(
+            value: String,
+            width: Int,
+        ): String {
+            val columns = width / font.cellWidth
+            if (columns <= 0) return ""
+            if (visualColumns(value) <= columns) return value
+            val result = StringBuilder()
+            var offset = 0
+            var written = 0
+            while (offset < value.length && written < columns - 1) {
+                val point = value.codePointAt(offset)
+                result.appendCodePoint(point)
+                offset += Character.charCount(point)
+                written++
+            }
+            return result.append('…').toString()
         }
 
         private fun parameterInfo(
@@ -1069,15 +1135,46 @@ object IdeRenderer {
         private fun completionRow(entry: ru.lazyhat.compukters.ide.client.analysis.IdeCompletionEntry): String =
             buildString {
                 append(entry.proposal.label)
-                append(" · ")
-                append(
-                    entry.proposal.kind.name
-                        .replace(Regex("([a-z])([A-Z])"), "$1 $2")
-                        .lowercase(),
-                )
+                val presentation = entry.proposal.callablePresentation
+                presentation?.receiverType?.let { append(" (for $it)") }
+                presentation?.packageName?.let { append(" · in $it") }
+                if (completionBadge(entry.proposal.kind) == null) {
+                    append(" · ")
+                    append(
+                        entry.proposal.kind.name
+                            .lowercase(),
+                    )
+                }
                 entry.actionText?.let {
                     append(" · ")
                     append(it)
+                }
+            }
+
+        private fun completionBadge(kind: CompletionKind): Pair<String, Int>? =
+            when (kind) {
+                CompletionKind.Function, CompletionKind.ExtensionFunction -> {
+                    "F" to IdeColors.COMPLETION_CALLABLE
+                }
+
+                CompletionKind.MemberFunction -> {
+                    "M" to IdeColors.COMPLETION_CALLABLE
+                }
+
+                CompletionKind.Property, CompletionKind.LocalVariable, CompletionKind.Parameter, CompletionKind.EnumEntry -> {
+                    "V" to IdeColors.COMPLETION_VARIABLE
+                }
+
+                CompletionKind.Class, CompletionKind.Object, CompletionKind.TypeParameter, CompletionKind.TypeAlias -> {
+                    "C" to IdeColors.COMPLETION_CLASS
+                }
+
+                CompletionKind.Interface -> {
+                    "I" to IdeColors.COMPLETION_INTERFACE
+                }
+
+                CompletionKind.Package, CompletionKind.Keyword -> {
+                    null
                 }
             }
 

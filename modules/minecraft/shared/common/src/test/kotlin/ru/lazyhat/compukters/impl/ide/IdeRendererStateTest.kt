@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
+import ru.lazyhat.compukters.ide.analysis.CompletionCallablePresentation
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
 import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
@@ -91,6 +92,136 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
+    @Test
+    fun `completion separates colored kind badges from context and right aligned return types`() {
+        val source = "box.re"
+        val proposals =
+            listOf(
+                CompletionItem(
+                    "result()",
+                    "result",
+                    CompletionKind.MemberFunction,
+                    callablePresentation = CompletionCallablePresentation(null, "sample", "Int"),
+                ),
+                CompletionItem(
+                    "read()",
+                    "read",
+                    CompletionKind.Function,
+                    callablePresentation = CompletionCallablePresentation(null, "sample", "String"),
+                ),
+                CompletionItem(
+                    "reduce()",
+                    "reduce",
+                    CompletionKind.ExtensionFunction,
+                    callablePresentation = CompletionCallablePresentation("T", "sample", "Int"),
+                ),
+                CompletionItem("value", "value", CompletionKind.Property),
+                CompletionItem("Box", "Box", CompletionKind.Class),
+                CompletionItem("Reader", "Reader", CompletionKind.Interface),
+            )
+        val editor = completionEditor(source, proposals, EditorRange(4, 6))
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry())
+        val badges = model.text.filter { it.kind == IdeTextKind.CompletionBadge }
+        assertEquals(listOf("M", "F", "F", "V", "C", "I"), badges.map { it.value })
+        assertEquals(
+            listOf(
+                IdeColors.COMPLETION_CALLABLE,
+                IdeColors.COMPLETION_CALLABLE,
+                IdeColors.COMPLETION_CALLABLE,
+                IdeColors.COMPLETION_VARIABLE,
+                IdeColors.COMPLETION_CLASS,
+                IdeColors.COMPLETION_INTERFACE,
+            ),
+            badges.map { it.color },
+        )
+        val rows = model.text.filter { it.kind == IdeTextKind.Completion }
+        assertEquals("reduce() (for T) · in sample", rows[2].value)
+        assertTrue(rows.none { "function" in it.value || "property" in it.value })
+        val results = model.text.filter { it.kind == IdeTextKind.CompletionReturnType }
+        assertEquals(listOf("Int", "String", "Int"), results.map { it.value })
+        val popup = model.panels.single { it.kind == IdePanelKind.Dialog }.bounds
+        for (result in results) {
+            assertEquals(popup.right - 4, result.x + result.value.length * IdeCodeFontProfile.DEFAULT.cellWidth)
+            assertTrue(rows.single { it.y == result.y }.clip!!.right < result.clip!!.left)
+        }
+        assertEquals(IdeColors.ACCENT, results.first().color)
+        assertEquals(IdeColors.MUTED, results.last().color)
+        assertTrue(badges.all { it.x < rows.first().x })
+    }
+
+    @Test
+    fun `narrow completion popup keeps result column visible without overlapping long context`() {
+        val editor =
+            completionEditor(
+                "box.re",
+                listOf(
+                    CompletionItem(
+                        "reallyLongMethodName(value: SomeVeryLongType)",
+                        "result",
+                        CompletionKind.MemberFunction,
+                        callablePresentation =
+                            CompletionCallablePresentation(
+                                null,
+                                "very.long.package.name",
+                                "AnotherExtremelyLongReturnType",
+                            ),
+                    ),
+                ),
+                EditorRange(4, 6),
+            )
+        val bounds = IdeRenderGeometry.compute(360, 280, 180, 64, true, true, IdeCodeFontProfile.DEFAULT)
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), bounds)
+        val left = model.text.single { it.kind == IdeTextKind.Completion }
+        val right = model.text.single { it.kind == IdeTextKind.CompletionReturnType }
+        assertTrue(left.value.endsWith('…'))
+        assertTrue(right.value.endsWith('…'))
+        assertTrue(left.clip!!.right < right.clip!!.left)
+        assertTrue(left.x + left.value.length * IdeCodeFontProfile.DEFAULT.cellWidth <= left.clip!!.right)
+        assertEquals(right.clip!!.right, right.x + right.value.length * IdeCodeFontProfile.DEFAULT.cellWidth)
+    }
+
+    @Test
+    fun `completion suppresses only diagnostic markers intersecting its dot and prefix and restores on close`() {
+        val source = "unrelated; box.re"
+        val editor = completionEditor(source, listOf(CompletionItem("read()", "read", CompletionKind.MemberFunction)), EditorRange(15, 17))
+        val path = VirtualSourcePath.kotlin("src/main.kt")
+        val unrelated =
+            IdeDiagnosticRow(EditorDiagnostic(EditorDiagnosticSeverity.Warning, "Other problem", path, EditorRange(0, 9)), source)
+        val local =
+            IdeDiagnosticRow(EditorDiagnostic(EditorDiagnosticSeverity.Error, "Unfinished reference", path, EditorRange(14, 17)), source)
+
+        fun state(value: IdeEditorView.Text): IdeViewState {
+            val base = workspaceState(value, IdeBuildState.Idle)
+            val workspace = (base.page as IdePageState.Workspace).value
+            return base.copy(page = IdePageState.Workspace(workspace.copy(diagnostics = IdeDiagnostics(listOf(unrelated, local)))))
+        }
+        val open = IdeRenderer.extract(state(editor), geometry())
+        val marker = open.fills.single { it.kind == IdeFillKind.DiagnosticMarker }
+        assertEquals(IdeColors.WARNING, marker.color)
+        assertTrue(open.hitTargets.any { it.diagnostic == unrelated })
+        assertTrue(open.hitTargets.none { it.diagnostic == local && it.bounds.top == geometry().editor.top })
+        val closed =
+            IdeRenderer.extract(
+                state(semanticEditor(source, caretUtf16 = source.length) { _, _ -> IdeSemanticInteraction.None }),
+                geometry(),
+            )
+        assertEquals(IdeColors.ERROR, closed.fills.single { it.kind == IdeFillKind.DiagnosticMarker }.color)
+        assertEquals(open.text.single { it.kind == IdeTextKind.Status }.value, closed.text.single { it.kind == IdeTextKind.Status }.value)
+    }
+
+    private fun completionEditor(
+        source: String,
+        proposals: List<CompletionItem>,
+        replacement: EditorRange,
+    ): IdeEditorView.Text =
+        semanticEditor(
+            source,
+            caretUtf16 = source.length,
+            completion = { identity, path ->
+                IdeCompletionState.create(identity, path, 0, 0, replacement, proposals.map { IdeCompletionEntry(it, null, null) })
+            },
+        ) { _, _ -> IdeSemanticInteraction.None }
+
     @Test
     fun `diagnostic rows and gutter use exact locations without shifting code and expose counts`() {
         val source = "fun work() = 1\nfun second() = 2"
@@ -919,7 +1050,7 @@ class IdeRendererStateTest {
         val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry)
         val popup = model.panels.single { it.kind == IdePanelKind.Dialog }.bounds
 
-        assertTrue(model.text.any { it.kind == IdeTextKind.Completion && it.value == "$label · function" })
+        assertTrue(model.text.any { it.kind == IdeTextKind.Completion && it.value == label })
         val row = model.text.single { it.kind == IdeTextKind.Completion }
         assertEquals(IdeCodeFontProfile.DEFAULT, row.codeFont)
         assertEquals(IdeCodeFontProfile.DEFAULT.cellHeight + 4, popup.height)
@@ -1031,7 +1162,7 @@ class IdeRendererStateTest {
                 .text
                 .filter { it.kind == IdeTextKind.Completion }
 
-        assertEquals((1..8).map { "item$it · function" }, completionText.map { it.value })
+        assertEquals((1..8).map { "item$it" }, completionText.map { it.value })
         assertEquals(IdeColors.ACCENT, completionText.last().color)
         assertTrue(completionText.all { it.codeFont === IdeCodeFontProfile.DEFAULT })
         assertTrue(completionText.zipWithNext().all { (first, second) -> second.y - first.y == IdeCodeFontProfile.DEFAULT.cellHeight })
@@ -1088,7 +1219,7 @@ class IdeRendererStateTest {
                 .text
                 .single { it.kind == IdeTextKind.Completion }
 
-        assertEquals("Redstone · object · $action", row.value)
+        assertEquals("Redstone · $action", row.value)
         assertEquals(IdeColors.ACCENT, row.color)
     }
 
@@ -1221,6 +1352,8 @@ class IdeRendererStateTest {
         find: IdeFindView? = null,
         occurrences: List<EditorRange> = emptyList(),
         methodUsages: List<ru.lazyhat.compukters.ide.analysis.MethodUsageCount> = emptyList(),
+        caretUtf16: Int = 0,
+        completion: ((AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeCompletionState)? = null,
         interaction: (AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeSemanticInteraction,
     ): IdeEditorView.Text {
         val document = EditorDocument(source)
@@ -1235,7 +1368,7 @@ class IdeRendererStateTest {
             firstVisibleLine = 0,
             firstVisibleColumn = 0,
             totalLines = 1,
-            caretUtf16 = 0,
+            caretUtf16 = caretUtf16,
             selectionStartUtf16 = null,
             selectionEndUtf16 = null,
             contentRevision = 0,
@@ -1251,7 +1384,7 @@ class IdeRendererStateTest {
                     virtualPath,
                     0,
                     IdeAnalysisPresentation.of(emptyList(), emptyList(), methodUsages),
-                    completion = null,
+                    completion = completion?.invoke(identity, virtualPath),
                     interaction = interaction(identity, virtualPath),
                 ),
         )
