@@ -2743,6 +2743,7 @@ internal object KotlinProjectLowering {
                                 NominalType.Array(
                                     name = requireNotNull(metadataIds["kotlin.Array"]),
                                     element = stringType,
+                                    superType = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)),
                                 ),
                             )
                         } else {
@@ -2751,6 +2752,7 @@ internal object KotlinProjectLowering {
                         referenceArrays.map { (name, element) ->
                             NominalType.Array(
                                 name = requireNotNull(metadataIds[name]),
+                                superType = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)),
                                 element =
                                     ValueType.Ref(
                                         nullable = element.nullable,
@@ -2859,6 +2861,7 @@ internal object KotlinProjectLowering {
         return Artifact(
             minimumRuntimeAbi =
                 when {
+                    modules.any { module -> module.types.any { it is NominalType.Array && it.superType != null } } -> AbiVersion(1u, 7u)
                     modules.any { it.hasHeterogeneousReferenceComparison() } -> AbiVersion(1u, 6u)
                     usesArrayCopy -> AbiVersion(1u, 5u)
                     usesF32StringConversion -> AbiVersion(1u, 4u)
@@ -3231,7 +3234,7 @@ internal object KotlinProjectLowering {
             strings = names.map(MetadataText::of),
             types =
                 listOf(
-                    NominalType.Array(name = requireNotNull(ids["kotlin.CharArray"]), element = ValueType.Char),
+                    NominalType.Array(name = requireNotNull(ids["kotlin.CharArray"]), element = ValueType.Char, superType = anyType),
                     NominalType.Class(name = requireNotNull(ids["kotlin.String"]), final = true, superType = anyType),
                     NominalType.Class(name = requireNotNull(ids["kotlin.Throwable"]), superType = anyType),
                     NominalType.Class(
@@ -3239,7 +3242,7 @@ internal object KotlinProjectLowering {
                         final = true,
                         superType = TypeRef.Local(TypeId.of(2u)),
                     ),
-                    NominalType.Array(name = requireNotNull(ids["kotlin.IntArray"]), element = ValueType.I32),
+                    NominalType.Array(name = requireNotNull(ids["kotlin.IntArray"]), element = ValueType.I32, superType = anyType),
                     NominalType.Class(name = requireNotNull(ids["kotlin.Any"])),
                     NominalType.Class(
                         name = requireNotNull(ids["kotlin.Int"]),

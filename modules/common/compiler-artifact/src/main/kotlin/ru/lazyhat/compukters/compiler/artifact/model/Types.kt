@@ -190,6 +190,7 @@ sealed interface NominalType {
     data class Array(
         override val name: StringId,
         val element: ValueType,
+        val superType: TypeRef? = null,
     ) : NominalType
 
     data class Function(

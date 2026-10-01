@@ -306,6 +306,9 @@ private fun minimumRuntimeAbi(
 ): AbiVersion {
     var required = declared
     if (modules.any { it.hasHeterogeneousReferenceComparison() }) required = maxOf(required, AbiVersion(1u, 6u))
+    if (modules.any { module -> module.types.any { it is NominalType.Array && it.superType != null } }) {
+        required = maxOf(required, AbiVersion(1u, 7u))
+    }
     modules.asSequence().flatMap { module -> module.blocks.asSequence() }.flatMap { block -> block.instructions.asSequence() }.forEach {
         when (it) {
             is Instruction.ArrayCopy -> {
@@ -543,7 +546,7 @@ private fun relocateType(
 ): NominalType =
     when (type) {
         is NominalType.Array -> {
-            type.copy(name = ids.string(type.name), element = ids.value(type.element))
+            type.copy(name = ids.string(type.name), element = ids.value(type.element), superType = type.superType?.let(ids::type))
         }
 
         is NominalType.Function -> {

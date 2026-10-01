@@ -196,6 +196,7 @@ internal class ReachabilityGraph(
         when (type) {
             is NominalType.Array -> {
                 markValueType(module, type.element)
+                type.superType?.let { markType(module, it) }
             }
 
             is NominalType.Function -> {

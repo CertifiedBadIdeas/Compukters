@@ -599,7 +599,8 @@ class MinimalScriptLoweringTest {
             val instructions = artifact.modules.flatMap { module -> module.blocks.flatMap(Block::instructions) }
 
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 3u), artifact.minimumRuntimeAbi)
+            // Mixed output also calls stdoutInt, whose CharArray has an explicit root superclass.
+            assertEquals(AbiVersion(1u, 7u), artifact.minimumRuntimeAbi)
             assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.I64 })
             assertTrue(instructions.any { it is Instruction.Subtract && it.type == ScalarValueType.I64 })
             assertTrue(instructions.any { it is Instruction.Multiply && it.type == ScalarValueType.I64 })
@@ -685,7 +686,8 @@ class MinimalScriptLoweringTest {
             val instructions = artifact.modules.flatMap { module -> module.blocks.flatMap(Block::instructions) }
 
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 4u), artifact.minimumRuntimeAbi)
+            // Mixed output also calls stdoutInt, whose CharArray has an explicit root superclass.
+            assertEquals(AbiVersion(1u, 7u), artifact.minimumRuntimeAbi)
             assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.F32 })
             assertTrue(instructions.any { it is Instruction.Subtract && it.type == ScalarValueType.F32 })
             assertTrue(instructions.any { it is Instruction.Multiply && it.type == ScalarValueType.F32 })
@@ -861,7 +863,8 @@ class MinimalScriptLoweringTest {
             assertTrue(0xea in opcodes, "send must stay inside the VM: $opcodes")
             assertTrue(0xeb in opcodes, "receive must stay inside the VM: $opcodes")
             assertTrue(0x37 in opcodes && 0x38 in opcodes, "top-level state must use static storage: $opcodes")
-            assertEquals(AbiVersion(1u, 2u), artifact.minimumRuntimeAbi)
+            // Printing the received Int retains stdoutInt's rooted CharArray type.
+            assertEquals(AbiVersion(1u, 7u), artifact.minimumRuntimeAbi)
             assertEquals(1u, artifact.manifest.maximumChannels)
             assertEquals(1u, artifact.manifest.maximumChannelValues)
             assertTrue(SemanticFeature.CHANNELS in artifact.semanticFeatures)
@@ -4240,6 +4243,11 @@ class MinimalScriptLoweringTest {
                 import compukter.terminal.Terminal
 
                 class CopyItem(val value: Int)
+                class AnyHolder(val value: Any)
+                fun eraseArray(value: Any): Any = value
+                fun isIntArray(value: Any): Boolean = value is IntArray
+                fun isCharArray(value: Any): Boolean = value is CharArray
+                fun <T> retain(value: T): T = value
                 fun copySource(copyReceiverCalls: IntArray): IntArray {
                     copyReceiverCalls[0] += 1
                     return intArrayOf(5, 6, 7)
@@ -4258,6 +4266,17 @@ class MinimalScriptLoweringTest {
                     require(grown !== original && original === original)
                     val originalAlias = original
                     require(originalAlias === original && originalAlias !== original.copyOf())
+                    val erased: Any = original
+                    val nullableErased: Any? = original
+                    require(erased === original && nullableErased === original)
+                    require((erased as IntArray) === original)
+                    require((eraseArray(original) as IntArray) === original)
+                    require((AnyHolder(original).value as IntArray) === original)
+                    require((retain<Any>(original) as IntArray) === original)
+                    require(isIntArray(erased) && isCharArray(erased) == false)
+                    (eraseArray(original) as IntArray)[0] = 42
+                    require(original[0] == 42)
+                    original[0] = 0
                     val identitySteps = intArrayOf(0)
                     require(identityOperand(original, identitySteps, 0) === identityOperand(originalAlias, identitySteps, 1))
                     require(identitySteps[0] == 2)
@@ -4282,6 +4301,9 @@ class MinimalScriptLoweringTest {
                     original.copyInto(destination, endIndex = 0)
 
                     val chars = CharArray(2)
+                    val erasedChars = eraseArray(chars)
+                    require(isCharArray(erasedChars) && isIntArray(erasedChars) == false)
+                    require((erasedChars as CharArray) === chars)
                     chars[0] = 'A'; chars[1] = '\uD800'
                     val moreChars = chars.copyOf(3)
                     require(moreChars !== chars && chars === chars)
@@ -4295,6 +4317,9 @@ class MinimalScriptLoweringTest {
                     require(nullableItem === first && nullableItem !== missingItem && missingItem === null)
                     val second = CopyItem(2)
                     val objects = arrayOf(first, second)
+                    require((eraseArray(objects) as Array<CopyItem>) === objects)
+                    val strings = arrayOf("first", "second")
+                    require((eraseArray(strings) as Array<String>) === strings)
                     require(copyGeneric(objects)[0] === first)
                     val nullable = objects.copyOf(3)
                     require(nullable !== objects && objects === objects)
@@ -4306,6 +4331,8 @@ class MinimalScriptLoweringTest {
                     val anyValues = arrayOfNulls<Any>(3)
                     objects.copyInto(anyValues)
                     require(anyValues[0] === first && anyValues[1] === second)
+                    anyValues[2] = original
+                    require((anyValues[2] as IntArray) === original)
                     val boxes = arrayOfNulls<Int>(2)
                     boxes[0] = 42
                     val copiedBoxes = boxes.copyOf(3)
@@ -4406,7 +4433,7 @@ class MinimalScriptLoweringTest {
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             val decoded = ArtifactReader.read(artifact)
-            assertEquals(AbiVersion(1u, 6u), decoded.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 7u), decoded.minimumRuntimeAbi)
             assertTrue(SemanticFeature.ARRAY_COPY in decoded.semanticFeatures)
             System.getProperty("compukter.vm.intArrayArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
