@@ -28,6 +28,14 @@ import ru.lazyhat.compukters.impl.terminal.fontDescription as terminalFontDescri
 
 class JetBrainsMonoResourceIdentityTest {
     @Test
+    fun `editor uses 1_2 line spacing while terminal preserves its grid`() {
+        assertEquals(1.2f, IdeCodeFontProfile.DEFAULT.cellHeight / IdeCodeFontProfile.DEFAULT.size)
+        assertEquals(13, TerminalFontProfile.cellHeight)
+        assertEquals(TerminalFontProfile.cellWidth, IdeCodeFontProfile.DEFAULT.cellWidth)
+        assertEquals(TerminalFontProfile.glyphDrawOffsetY, IdeCodeFontProfile.DEFAULT.glyphDrawOffsetY)
+    }
+
+    @Test
     fun `editor and terminal use one font ID without a parallel-warmed TTF alias`() {
         assertEquals(IdeCodeFontProfile.DEFAULT.editorFontDescription, TerminalFontProfile.terminalFontDescription)
         assertNull(javaClass.getResource("/assets/compukters/font/terminal/jetbrains_mono.json"))

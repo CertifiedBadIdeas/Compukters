@@ -15,6 +15,7 @@ package ru.lazyhat.compukters.impl.terminal
 import net.minecraft.client.gui.Font
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.chat.Component
+import ru.lazyhat.compukters.impl.font.JetBrainsMonoRendering
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 
@@ -78,13 +79,13 @@ internal object TerminalGridRenderer {
                                     .withColor(TerminalRenderGeometry.paletteColor(cell.foreground))
                             }
                     val bounds = geometry.cell(x, y)
-                    graphics.text(
+                    JetBrainsMonoRendering.drawString(
+                        graphics,
                         minecraftFont,
                         glyph,
                         bounds.left,
                         bounds.top + TerminalFontProfile.glyphDrawOffsetY,
                         TerminalRenderGeometry.paletteColor(cell.foreground),
-                        false,
                     )
                 }
             }

@@ -20,7 +20,7 @@ package ru.lazyhat.compukters.impl.ide
 
 import ru.lazyhat.compukters.impl.font.JetBrainsMonoFont
 
-/** Shared metrics for drawing, selection and hit testing; aligned with the bundled terminal face. */
+/** Editor metrics for drawing, selection and hit testing; the terminal keeps its own row spacing. */
 class IdeCodeFontProfile private constructor(
     val id: String,
     val cellWidth: Int,
@@ -38,7 +38,8 @@ class IdeCodeFontProfile private constructor(
             IdeCodeFontProfile(
                 id = JetBrainsMonoFont.ID,
                 cellWidth = JetBrainsMonoFont.CELL_WIDTH,
-                cellHeight = JetBrainsMonoFont.CELL_HEIGHT,
+                // Size 10 with 1.2 line spacing, without changing the face or its baseline.
+                cellHeight = 12,
                 baseline = JetBrainsMonoFont.BASELINE,
                 size = JetBrainsMonoFont.SIZE,
                 oversample = JetBrainsMonoFont.OVERSAMPLE,

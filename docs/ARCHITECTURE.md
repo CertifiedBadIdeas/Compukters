@@ -353,14 +353,17 @@ usage, and concise lifecycle activity. Here `CPU` is the virtual computer's cons
 budget, not physical host timing. Terminal windows, IDE terminal overlays and in-world text displays use
 packaged JetBrains Mono NL with 6x13 cells and no font selector. The former terminal font preference is no longer
 part of client configuration; old values are removed by NeoForge configuration correction without affecting IDE layout.
-The IDE code editor, completion list and hover information use the same bundled TrueType face without ligatures.
+The IDE code editor, completion list and hover information use the same bundled TrueType face without ligatures,
+with 6x12 editor cells (size 10 and line spacing 1.2); terminal/display cells remain 6x13.
 Editor and terminal drawing use the same font resource ID directly, without a reference alias: Minecraft 1.21
 warms font IDs in parallel and its FreeType provider does not synchronize access to a shared native face.
-Its shared metrics drive glyph placement, caret and selection geometry, and hit testing. The IDE chrome retains Minecraft's UI font.
+The editor metrics drive glyph placement, caret and selection geometry, and hit testing. The IDE chrome retains Minecraft's UI font.
 The Minecraft 1.21.1 adapter opts these explicit JetBrains Mono draws into linear texture filtering. A bounded
 render-type wrapper delegates vanilla shader, blend, depth and geometry state, applies filtering after vanilla's
 nearest-filter setup, and restores the previous texture filters, binding and active unit after drawing. Other fonts
-and the 26.1 renderer are unchanged; visual quality still requires an in-client comparison at the chosen UI scale.
+remain unchanged. The 26.1 adapter submits prepared glyphs with a cached linear GUI sampler and uses NeoForge's
+linear text render types for in-world displays, preserving clipping, transforms and polygon offset without global
+font or texture-state changes. Visual quality still requires an in-client comparison at the chosen UI scale.
 The IDE controller owns a bounded project-document cache (128 editor-limited documents by default), so returning to
 a file preserves its caret, viewport and undo history. Dirty background buffers participate in autosave and are
 drained before a build, project transition or ordinary close. Polling invalidates clean changed buffers and retains
