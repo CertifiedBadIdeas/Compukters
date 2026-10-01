@@ -128,13 +128,19 @@ internal object DeclarationOriginMapper {
 @OptIn(KaExperimentalApi::class)
 internal fun KaSession.canonicalPlatformSignature(symbol: KaFunctionSymbol): String {
     val parameters =
-        listOfNotNull(symbol.receiverParameter?.returnType)
-            .plus(symbol.valueParameters.map { it.returnType })
+        symbol.valueParameters
+            .map { it.returnType }
             .joinToString(",") { type ->
                 type.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT)
             }
     val result = symbol.returnType.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT)
-    return "fun($parameters):$result"
+    val receiver =
+        symbol.receiverParameter
+            ?.returnType
+            ?.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT)
+            ?.let { "$it." }
+            .orEmpty()
+    return "fun($receiver$parameters):$result"
 }
 
 private fun KaSymbol.stableId(): String? =

@@ -1050,6 +1050,7 @@ val generateTextStdlibConformanceArtifact = tasks.register<Test>("generateTextSt
     filter.includeTestsMatching("*text stdlib preserves UTF16 cleanup search extraction and transformations*")
     inputs.file(workerJar)
     outputs.file(textStdlibConformanceArtifact)
+    outputs.file(textStdlibConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.failure.cpkt") })
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.textStdlibArtifact", textStdlibConformanceArtifact.get().asFile.absolutePath)

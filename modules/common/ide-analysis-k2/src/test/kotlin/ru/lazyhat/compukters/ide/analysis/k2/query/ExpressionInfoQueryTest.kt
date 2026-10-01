@@ -67,6 +67,27 @@ class ExpressionInfoQueryTest {
     }
 
     @Test
+    fun `string stdlib hover resolves exact overload documentation`() {
+        val source = "fun main() { \"hello\".trim(); \"hello\".split(\"\"); \"hello\".split(','); \"hello\".replace(\"l\", \"x\") }"
+        K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
+            for ((offset, expected) in listOf(
+                source.indexOf("trim") to "Removes leading and trailing whitespace.",
+                source.indexOf("split") to "An empty delimiter separates UTF-16 code units",
+                source.lastIndexOf("split") to "Zero limit means no limit",
+                source.indexOf("replace") to "Replaces nonoverlapping oldValue matches",
+            )) {
+                val info =
+                    fixture.execute(
+                        AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), offset),
+                    ) as AnalysisResult.ExpressionInfo
+                assertTrue(assertNotNull(info.value).documentation.orEmpty().contains(expected), "$expected: ${info.value}")
+                val origin = assertIs<DeclarationOrigin.Platform>(assertNotNull(info.value).origin)
+                assertEquals("stdlib:core", origin.identity.name)
+            }
+        }
+    }
+
+    @Test
     fun `hover documentation comes from exact attached platform source`() {
         val source = "fun main() { \"hello\".takeIf { true } }"
         K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->

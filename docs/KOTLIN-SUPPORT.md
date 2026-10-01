@@ -613,7 +613,13 @@ supported.
   `removePrefix`/`removeSuffix`. Extraction overloads accept an explicit missing-delimiter
   fallback; otherwise they return the input. Reverse search defaults to the last
   character index (including for an empty needle); explicit starts clamp to the last
-  possible match. Regex and case-insensitive search remain unavailable. Evidence:
+  possible match. Case-sensitive `split(delimiter: Char|String, limit: Int = 0)` returns `List<String>` and retains
+  trailing empty parts; zero means unlimited, positive limits retain the unprocessed suffix, and negative limits
+  raise an argument failure. Empty String delimiters split at UTF-16 boundaries. `lines()` handles CRLF, LF and CR
+  and retains the final empty line. `replace(Char, Char)` and `replace(String, String)` handle nonoverlapping matches;
+  an empty old String inserts at every UTF-16 boundary. Replacement checks output-length overflow before allocation
+  and materializes through one sized `CharArray`; both splitting and replacement respect managed heap quotas.
+  Regex, case-insensitive operations and multiple-delimiter overloads remain unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `shell language subset lowers control flow scalars strings and raw terminal calls`
   and `String compareTo and ordering operators lower UTF-16 order for vm conformance`, with VM
@@ -627,7 +633,7 @@ supported.
   `MinimalScriptLoweringTest`, test
   `primitive char array lowers deterministically for exact utf16 materialization`,
   exercised by `testKotlinSubsetVmConformance` for the text helpers and integer parsing.
-  Tracking: not scheduled
+  Tracking: #676
 
 - [ ] **Reference `Array<T>` operations — Partial** — entry `Array<String>`,
   `emptyArray<T>()`, direct `arrayOf` calls, `size`, and indexed get/set work for

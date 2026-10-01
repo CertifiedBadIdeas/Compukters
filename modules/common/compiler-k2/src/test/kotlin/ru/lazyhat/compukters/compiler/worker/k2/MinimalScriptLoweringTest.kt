@@ -71,7 +71,21 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val source =
                 """
-                fun checkText(text: String) {
+                package example
+                import kotlin.collections.*
+                import String as RootString
+
+                class String(val value: kotlin.String)
+                class Word(val value: kotlin.String)
+                fun checkParts(actual: List<kotlin.String>, expected: List<kotlin.String>) {
+                    require(actual.size == expected.size)
+                    var index = 0
+                    while (index < actual.size) {
+                        require(actual[index] == expected[index])
+                        index += 1
+                    }
+                }
+                fun checkText(text: kotlin.String) {
                     require(text.trim() == "alpha::beta::")
                     require(text.trimStart() == "alpha::beta:: \n")
                     require(text.trimEnd() == "\t alpha::beta::")
@@ -114,13 +128,124 @@ class MinimalScriptLoweringTest {
                     val utf16 = "a\uD83D\uDE00a"
                     require(utf16.indexOf('\uDE00') == 2 && utf16.lastIndexOf('a') == 3)
                     require(utf16.lastIndexOf("\uD83D\uDE00") == 1)
+                    checkParts("a,,b,".split(','), listOf("a", "", "b", ""))
+                    checkParts("a,,b,".split(',', 1), listOf("a,,b,"))
+                    checkParts("a,,b,".split(',', 2), listOf("a", ",b,"))
+                    checkParts("a,,b,".split(',', 3), listOf("a", "", "b,"))
+                    checkParts("a,,b,".split(',', 4), listOf("a", "", "b", ""))
+                    checkParts("".split(','), listOf(""))
+                    checkParts("plain".split("absent"), listOf("plain"))
+                    checkParts("aaaaa".split("aa"), listOf("", "", "a"))
+                    checkParts("a::b::".split("::", 2), listOf("a", "b::"))
+                    checkParts("ab".split(""), listOf("", "a", "b", ""))
+                    checkParts("ab".split("", 1), listOf("ab"))
+                    checkParts("ab".split("", 2), listOf("", "ab"))
+                    checkParts("ab".split("", 3), listOf("", "a", "b"))
+                    checkParts("".split(""), listOf("", ""))
+                    checkParts(utf16.split(""), listOf("", "a", "\uD83D", "\uDE00", "a", ""))
+                    checkParts("a\r\nb\nc\r".lines(), listOf("a", "b", "c", ""))
+                    checkParts("\r\n\n\r".lines(), listOf("", "", "", ""))
+                    checkParts("".lines(), listOf(""))
+                    checkParts("plain".lines(), listOf("plain"))
+                    require("banana".replace('a', 'o') == "bonono")
+                    require("banana".replace('a', 'a') == "banana")
+                    require("banana".replace('x', 'o') == "banana")
+                    require("aaaaa".replace("aa", "b") == "bba")
+                    require("banana".replace("ana", "") == "bna")
+                    require("ab".replace("", "-") == "-a-b-")
+                    require("".replace("", "-") == "-")
+                    require("ab".replace("", "") == "ab")
+                    require("ab".replace("absent", "!") == "ab")
+                    require(utf16.replace("a", "xy") == "xy\uD83D\uDE00xy")
+                    require(utf16.replace("", "-") == "-a-\uD83D-\uDE00-a-")
+                    require(utf16.replace('\uDE00', 'x') == "a\uD83Dxa")
+                    val local = ArrayList<kotlin.String>()
+                    local.add("one")
+                    local.add("two")
+                    checkParts(local, listOf("one", "two"))
+                    val mutable = "a,b".split(',') as MutableList<kotlin.String>
+                    mutable.add("c")
+                    mutable[0] = "z"
+                    checkParts(mutable, listOf("z", "b", "c"))
+                    checkParts(" a , b ".split(',').map { it.trim() }, listOf("a", "b"))
+                    val widened: List<Any> = "a,b".split(',')
+                    require(widened[0] == "a" && widened.contains("b"))
+                    val widenedIterator = widened.iterator()
+                    require(widenedIterator.next() == "a" && widenedIterator.next() == "b")
+                    val nullableView: List<kotlin.String?> = "a,b".split(',')
+                    require(nullableView[1] == "b" && !nullableView.contains(null))
+                    val ints = ArrayList<Int>()
+                    ints.add(42)
+                    require(ints[0] == 42)
+                    val words = ArrayList<Word>()
+                    words.add(Word("local variant"))
+                    require(words[0].value == "local variant")
+                    val namedLikeBuiltin = ArrayList<String>()
+                    namedLikeBuiltin.add(String("guest class"))
+                    require(namedLikeBuiltin[0].value == "guest class")
+                    val rootNamedLikeBuiltin = ArrayList<RootString>()
+                    rootNamedLikeBuiltin.add(RootString("root guest class"))
+                    require(rootNamedLikeBuiltin[0].value == "root guest class")
                     println("text stdlib ok")
                 }
                 """.trimIndent()
-            val result = adapter.compile(request(source))
+            val result =
+                adapter.compile(
+                    request(
+                        "project/RootString.kt" to "class String(val value: kotlin.String)",
+                        "project/main.kt" to source,
+                    ),
+                )
             val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val parsed = ArtifactReader.read(bytes)
+            for (name in listOf("kotlin.collections.ArrayList<String>", "kotlin.collections.List<String>")) {
+                assertEquals(
+                    1,
+                    parsed.modules.sumOf { module ->
+                        module.types.count { module.strings[it.name.value.toInt()].toString() == name }
+                    },
+                    "precompiled specialization must retain a single nominal owner: $name",
+                )
+            }
+            assertTrue(
+                parsed.modules.single { it.kind == ModuleKind.APPLICATION }.let { module ->
+                    listOf(
+                        "kotlin.collections.ArrayList<example.Word>",
+                        "kotlin.collections.ArrayList<example.String>",
+                        "kotlin.collections.ArrayList<<root>.String>",
+                    ).all { name ->
+                        module.types.any { module.strings[it.name.value.toInt()].toString() == name }
+                    }
+                },
+                "a variant absent from libraries must remain locally specialized",
+            )
             System.getProperty("compukter.vm.textStdlibArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+            val failureSource =
+                """
+                fun main(args: Array<String>) {
+                    val mode = args[0]
+                    if (mode == "negative-char-limit") { "abc".split(',', -1); return }
+                    if (mode == "negative-string-limit") { "abc".split("", -1); return }
+                    val size = if (mode == "overflow") 50000 else if (mode == "split-quota") 10000 else 1000
+                    val chars = CharArray(size)
+                    var index = 0
+                    while (index < size) { chars[index] = 'a'; index += 1 }
+                    val text = String(chars, 0, chars.size)
+                    if (mode == "split-quota") {
+                        val parts = text.split("")
+                        require(parts.size == size + 2)
+                        return
+                    }
+                    val result = text.replace("a", text)
+                    require(result.length == 1000000)
+                }
+                """.trimIndent()
+            val failures = adapter.compile(request(failureSource))
+            val failureBytes = assertNotNull(failures.artifact, failures.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.textStdlibArtifact")?.let { output ->
+                Path.of("$output.failure.cpkt").writeBytes(failureBytes)
             }
         }
 

@@ -42,11 +42,21 @@ links to their source files.
   and the assertions executed by `testKotlinReferenceArrayVmConformance`.
 - [ ] **`String` basics — Partial** — `length`, indexed UTF-16 access, concatenation, equality, and `substring` execute.
   `startsWith`, `endsWith`, `contains`, and `indexOf` are provided by `stdlib:core`; `indexOf` accepts an optional start
-  index. Regex, locale-sensitive case conversion, Unicode categories, and broad formatting are absent. Evidence:
+  index. The library also provides Char search, backward `lastIndexOf`, emptiness/blank checks, Unicode-whitespace
+  `trim`/`trimStart`/`trimEnd`, Char/String delimiter extraction with optional fallback and prefix/suffix removal.
+  Case-sensitive `split(Char|String, limit = 0)` retains empty parts; zero means unlimited, positive limits retain
+  the remaining suffix and negative limits fail. `lines()` recognizes CRLF, LF and CR. `replace(Char, Char)` and
+  `replace(String, String)` replace nonoverlapping matches; empty String delimiters and replacements operate at
+  UTF-16 boundaries. Split results use reusable library-owned `List<String>`/`ArrayList<String>` variants; new
+  element types still specialize locally. Regex, case-insensitive operations, multiple-delimiter overloads,
+  locale-sensitive case conversion, Unicode categories, and broad formatting are absent. Evidence:
   [`TextSearch.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/text/TextSearch.kt),
-  `testKotlinSubsetVmConformance`, and
+  [`TextSplit.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/text/TextSplit.kt),
+  [`TextReplace.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/text/TextReplace.kt),
+  `testKotlinSubsetVmConformance`, `testKotlinTextStdlibVmConformance` (including invalid limits, length overflow and
+  heap quota failures), and
   [`text_tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/text_tests.rs).
-  Tracking: not scheduled
+  Tracking: #676
 - [ ] **Numbers and characters — Partial** — the supported `Int`, `Long`, `Float`, `Boolean`, and `Char` operations use
   Guest scalar values. `String.toIntOrNull()` parses optional-sign decimal ASCII digits into an `Int?`, returning null
   for empty input, invalid characters, or overflow. `Byte`, `Short`, `Double`, other parsing helpers, and the Kotlin
