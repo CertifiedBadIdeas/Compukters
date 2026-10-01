@@ -31,6 +31,58 @@ import kotlin.test.assertTrue
 
 class ExpressionInfoQueryTest {
     @Test
+    fun `hover documentation follows resolved overload and declaration names`() {
+        val source =
+            """
+            /** Integer documentation. */
+            fun value(x: Int) = x
+            /** String documentation.
+             * @param x the text
+             * @return the same text
+             */
+            fun value(x: String) = x
+            /** Box documentation. */
+            class Box
+            fun main() { value(1); value("hello"); Box() }
+            """.trimIndent()
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            fun hover(offset: Int) =
+                assertNotNull(
+                    (
+                        fixture.execute(
+                            AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), offset),
+                        ) as AnalysisResult.ExpressionInfo
+                    ).value,
+                )
+            assertEquals("Integer documentation.", hover(source.indexOf("fun value") + 4).documentation)
+            assertEquals("Integer documentation.", hover(source.lastIndexOf("value(1)")).documentation)
+            val string = assertNotNull(hover(source.lastIndexOf("value(\"hello\")")).documentation)
+            assertTrue(string.startsWith("String documentation."))
+            assertTrue(string.contains("@param x the text"))
+            assertTrue(string.contains("@return the same text"))
+            assertEquals("Box documentation.", hover(source.indexOf("class Box") + 6).documentation)
+            assertEquals("Box documentation.", hover(source.lastIndexOf("Box()")).documentation)
+            assertEquals(null, hover(source.indexOf("fun main") + 4).documentation)
+        }
+    }
+
+    @Test
+    fun `hover documentation comes from exact attached platform source`() {
+        val source = "fun main() { \"hello\".takeIf { true } }"
+        K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
+            val info =
+                assertNotNull(
+                    (
+                        fixture.execute(
+                            AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), source.indexOf("takeIf")),
+                        ) as AnalysisResult.ExpressionInfo
+                    ).value,
+                )
+            assertEquals("Returns this value when [predicate] is true, or null otherwise.", info.documentation)
+        }
+    }
+
+    @Test
     fun `expression query renders the inferred type on a local declaration name`() {
         val source = "fun main() { val k = 2 }"
         K2QueryFixture.source("main.kt" to source).use { fixture ->

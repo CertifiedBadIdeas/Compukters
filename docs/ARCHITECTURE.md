@@ -86,7 +86,13 @@ workspace and answers diagnostics, completion, symbol, reference, expression, an
 and analysis use the same resolved platform bundle and source-snapshot identities, but have separate worker sessions
 and result contracts.
 
-Analysis protocol v13 also carries explicit Kotlin format, rename-admission, and parameter-information requests.
+Analysis protocol v14 also carries explicit Kotlin format, rename-admission, and parameter-information requests.
+Completion records carry immutable ordered UTF-16 label-relative name-match ranges, derived by the same worker-owned
+contiguous word-fragment matcher used for filtering and ranking. The client renders these ranges without repeating
+the matching algorithm. Expression information carries optional bounded plain-text KDoc from the resolved project
+declaration or its exact attached platform source. Both fields are validated at the worker/client boundary, including
+Unicode boundaries, nonoverlapping ranges and negotiated UTF-8 documentation limits. Hover wraps documentation and
+bounds its visible height; it does not execute HTML or fetch external content.
 Callable completions carry bounded independent presentation fields for the declared extension receiver, package and
 specialized return type. Type-scope member signatures retain K2 substitutions; extension applicability supplies
 receiver substitutions through the pinned K2 completion checker. Explicit receiver checks use a query-only contextual
@@ -107,7 +113,7 @@ receive name-only insertions. The client uses that shape to add or reuse call de
 caret together with autoimports in one atomic editor history entry. Newly generated delimiters join smart typing's
 tracked closers. Structural Enter expands an empty Kotlin brace pair even when it was inserted by completion or
 loaded from source, removing inner padding and preserving the document's line endings and leading indentation.
-Protocol v12 workers are rejected at handshake;
+Protocol v13 workers are rejected at handshake;
 the platform bundle, compiler protocol and VM artifact ABI are unchanged. Rename
 returns bounded editable project locations after validating a single Kotlin identifier and speculatively checking
 project diagnostics and reference bindings. The worker restores its original PSI, source identity, and completion

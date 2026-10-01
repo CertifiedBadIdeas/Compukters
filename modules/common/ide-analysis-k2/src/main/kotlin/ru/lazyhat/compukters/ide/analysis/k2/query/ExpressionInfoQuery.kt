@@ -19,20 +19,23 @@
 package ru.lazyhat.compukters.ide.analysis.k2.query
 
 import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
+import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.components.expressionType
 import org.jetbrains.kotlin.analysis.api.components.render
 import org.jetbrains.kotlin.analysis.api.components.resolveSymbol
 import org.jetbrains.kotlin.analysis.api.renderer.declarations.impl.KaDeclarationRendererForSource
 import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.symbol
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
-import org.jetbrains.kotlin.psi.KtVariableDeclaration
+import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.types.Variance
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisResultLimits
+import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
 import ru.lazyhat.compukters.ide.analysis.EditorExpressionInfo
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
@@ -56,7 +59,7 @@ internal object ExpressionInfoQuery {
                 .toList()
         val declaration =
             generateSequence(element) { it.parent }
-                .filterIsInstance<KtVariableDeclaration>()
+                .filterIsInstance<KtNamedDeclaration>()
                 .firstOrNull { candidate ->
                     val range = candidate.nameIdentifier?.textRange
                     range != null && query.offsetUtf16 in range.startOffset until range.endOffset
@@ -64,14 +67,15 @@ internal object ExpressionInfoQuery {
         val info =
             element?.let {
                 analyze(file) {
-                    val declarationSymbol = declaration?.symbol as? KaCallableSymbol
+                    val declarationSymbol = declaration?.symbol
                     if (declarationSymbol != null) {
                         val nameRange = requireNotNull(declaration.nameIdentifier).textRange
                         return@analyze EditorExpressionInfo(
                             query.path,
                             EditorRange(nameRange.startOffset, nameRange.endOffset),
                             requiredBoundedUtf8(
-                                declarationSymbol.returnType.render(position = Variance.INVARIANT),
+                                (declarationSymbol as? KaCallableSymbol)?.returnType?.render(position = Variance.INVARIANT)
+                                    ?: requireNotNull(declaration.name),
                                 limits.detailTextBytes,
                                 "rendered type",
                             ),
@@ -83,6 +87,7 @@ internal object ExpressionInfoQuery {
                                 DeclarationOriginMapper
                                     .run { map(declarationSymbol, snapshot) }
                                     ?.let { mapped -> DeclarationOriginMapper.run { mapped.origin() } },
+                            documentation = documentation(declarationSymbol, snapshot, limits.detailTextBytes),
                         )
                     }
                     val expression = expressions.firstOrNull { candidate -> candidate.expressionType != null } ?: return@analyze null
@@ -107,6 +112,7 @@ internal object ExpressionInfoQuery {
                         rendered,
                         signature = signature,
                         origin = origin,
+                        documentation = symbol?.let { documentation(it, snapshot, limits.detailTextBytes) },
                     )
                 }
             }
@@ -116,5 +122,53 @@ internal object ExpressionInfoQuery {
             snapshot.sourceLengthsUtf16,
             AnalysisResultLimits(maxDetailUtf8Bytes = limits.detailTextBytes),
         )
+    }
+
+    private fun KaSession.documentation(
+        symbol: KaSymbol,
+        snapshot: AdmittedK2Snapshot,
+        maximumBytes: Int,
+    ): String? {
+        val source = symbol.psi as? KtNamedDeclaration
+        val declaration =
+            if (source?.docComment != null) {
+                source
+            } else {
+                val mapped = DeclarationOriginMapper.run { map(symbol, snapshot) }
+                val (file, range) =
+                    when (mapped) {
+                        is MappedDeclaration.PlatformTarget -> {
+                            (snapshot.platformSourceFiles[mapped.sourcePath] ?: return null) to
+                                EditorRange(mapped.startUtf16, mapped.endUtf16)
+                        }
+
+                        is MappedDeclaration.Location -> {
+                            val location = mapped.value as? DeclarationLocation.Source ?: return null
+                            (snapshot.files[location.path] ?: return null) to location.range
+                        }
+
+                        null -> {
+                            return null
+                        }
+                    }
+                if (file.textLength == 0) return null
+                generateSequence(file.findElementAt(range.startUtf16.coerceAtMost(file.textLength - 1))) { it.parent }
+                    .filterIsInstance<KtNamedDeclaration>()
+                    .firstOrNull { it.textRange.startOffset <= range.startUtf16 && it.textRange.endOffset >= range.endUtf16 }
+            }
+        val raw = declaration?.docComment?.text ?: return null
+        val text =
+            raw
+                .removePrefix("/**")
+                .removeSuffix("*/")
+                .lines()
+                .joinToString("\n") {
+                    it
+                        .trimStart()
+                        .removePrefix("*")
+                        .removePrefix(" ")
+                        .trimEnd()
+                }.trim()
+        return boundedUtf8(text, maximumBytes).takeIf { it.isNotBlank() }
     }
 }

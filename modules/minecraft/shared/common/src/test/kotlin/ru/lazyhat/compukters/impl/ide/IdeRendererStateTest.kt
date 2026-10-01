@@ -93,6 +93,76 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `completion highlights exact name fragments and preserves unicode positions and result alignment`() {
+        val source = "tf"
+        val proposals =
+            listOf(
+                CompletionItem(
+                    "takeIf { predicate: (T) -> Boolean }",
+                    "takeIf",
+                    CompletionKind.ExtensionFunction,
+                    callablePresentation = CompletionCallablePresentation("T", "kotlin", "String?"),
+                    matchedNameRanges = listOf(EditorRange(0, 1), EditorRange(5, 6)),
+                ),
+                CompletionItem(
+                    "😀takeIf()",
+                    "😀takeIf",
+                    CompletionKind.Function,
+                    callablePresentation = CompletionCallablePresentation(null, null, "Int"),
+                    matchedNameRanges = listOf(EditorRange(2, 3), EditorRange(7, 8)),
+                ),
+            )
+        val editor =
+            semanticEditor(source, caretUtf16 = 2, completion = { identity, path ->
+                IdeCompletionState.create(identity, path, 0, 0, EditorRange(0, 2), proposals.map { IdeCompletionEntry(it, null, null) })
+            }) { _, _ -> IdeSemanticInteraction.None }
+        for (geometry in listOf(geometry(), IdeRenderGeometry.compute(600, 420, 180, 120, true, true, IdeCodeFontProfile.DEFAULT))) {
+            val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry)
+            val matched = model.text.filter { it.kind == IdeTextKind.CompletionMatch }
+            assertEquals(listOf("t", "f", "t", "f"), matched.map { it.value })
+            assertTrue(matched.all { it.color == IdeColors.COMPLETION_MATCH })
+            val cell = IdeCodeFontProfile.DEFAULT.cellWidth
+            assertEquals(5 * cell, matched[1].x - matched[0].x)
+            assertEquals(cell, matched[2].x - matched[0].x)
+            val results = model.text.filter { it.kind == IdeTextKind.CompletionReturnType }
+            assertEquals(1, results.map { requireNotNull(it.clip).right }.distinct().size)
+            assertTrue(matched.all { it.x >= requireNotNull(it.clip).left && it.x < requireNotNull(it.clip).right })
+        }
+    }
+
+    @Test
+    fun `hover documentation wraps unicode paragraphs and bounds long content`() {
+        val source = "val answer = sample"
+        val range = EditorRange(4, 10)
+        val documentation = "Readable KDoc 😀.\n\n@param value " + "Long explanation 😀 ".repeat(500)
+        val editor =
+            semanticEditor(source) { identity, path ->
+                IdeSemanticInteraction.Hover(
+                    IdeSemanticAnchor(identity, path, 0, 6, range),
+                    EditorExpressionInfo(path, range, "Int", "val answer: Int", DeclarationOrigin.Project, documentation),
+                )
+            }
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry())
+        val lines = model.text.filter { it.kind == IdeTextKind.Hover }
+        assertTrue(lines.any { it.value == "Readable KDoc 😀." })
+        assertTrue(lines.any { it.value.startsWith("@param value") })
+        assertTrue(lines.last().value.endsWith('…'))
+        assertTrue(lines.size <= 20)
+        assertTrue(lines.all { it.y < requireNotNull(it.clip).bottom })
+        for (line in lines) {
+            assertTrue(
+                line.value
+                    .codePoints()
+                    .toArray()
+                    .none { it in 0xD800..0xDFFF },
+            )
+            assertTrue(
+                line.value.codePointCount(0, line.value.length) * IdeCodeFontProfile.DEFAULT.cellWidth <= requireNotNull(line.clip).width,
+            )
+        }
+    }
+
+    @Test
     fun `completion separates colored kind badges from context and right aligned return types`() {
         val source = "box.re"
         val proposals =

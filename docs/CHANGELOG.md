@@ -204,6 +204,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   on literals and in generic call chains. Independent lambda-result types remain symbolic until known.
   Identifier completion supports case-insensitive contiguous word-fragment and CamelCase matching, including autoimports;
   direct prefixes rank first, without fuzzy typo correction or arbitrary letter skipping inside words.
+  Completion highlights the matching name fragments without changing aligned return types. Hover shows wrapped KDoc
+  from resolved project declarations and attached library sources beneath signatures and types, with bounded popup height.
   Diagnostic passes pause during completion while semantic analysis continues; existing unrelated problems remain
   visible and diagnostics resume for the current text when completion ends.
   Enter inside an empty lambda adds an indented body line and moves its closing brace to a separate line.

@@ -164,7 +164,7 @@ internal object CompletionQuery {
         }
 
         KeywordCompletion.candidates(context).forEach { keyword ->
-            val item = CompletionItem(keyword, keyword, CompletionKind.Keyword)
+            val item = CompletionItem(keyword, keyword, CompletionKind.Keyword, matchedNameRanges = matcher.ranges(keyword))
             ranked.offer(
                 RankedCompletion(
                     item,
@@ -213,6 +213,7 @@ internal object CompletionQuery {
                     fqName?.let { CompletionSymbol(it, null) },
                     callShape = if (context.allowsCall()) signature?.let { callShape(it) } else null,
                     callablePresentation = signature?.let { callablePresentation(it) },
+                    matchedNameRanges = matcher.ranges(name),
                 )
             ranked.offer(
                 RankedCompletion(
@@ -265,6 +266,7 @@ internal object CompletionQuery {
                         importPlan.additionalEdits,
                         if (context.allowsCall()) signature?.let { callShape(it) } else null,
                         signature?.let { callablePresentation(it) },
+                        matcher.ranges(declaration.shortName),
                     )
                 val locality =
                     when (declaration.origin) {

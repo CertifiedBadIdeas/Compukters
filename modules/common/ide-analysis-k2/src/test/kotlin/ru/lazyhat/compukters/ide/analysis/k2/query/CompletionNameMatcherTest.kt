@@ -18,11 +18,22 @@
 
 package ru.lazyhat.compukters.ide.analysis.k2.query
 
+import ru.lazyhat.compukters.ide.editor.EditorRange
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class CompletionNameMatcherTest {
+    @Test
+    fun `matched ranges follow the same deterministic contiguous unicode match`() {
+        assertEquals(listOf(EditorRange(0, 1), EditorRange(5, 6)), CompletionNameMatcher("tf").ranges("takeIf"))
+        assertEquals(listOf(EditorRange(1, 4)), CompletionNameMatcher("ake").ranges("takeIf"))
+        assertEquals(emptyList(), CompletionNameMatcher("tke").ranges("takeIf"))
+        assertEquals(listOf(EditorRange(0, 1), EditorRange(4, 5)), CompletionNameMatcher("tt").ranges("testTest"))
+        assertEquals(listOf(EditorRange(1, 4)), CompletionNameMatcher("𐐨m").ranges("a𐐀Map"))
+        assertEquals(emptyList(), CompletionNameMatcher("").ranges("takeIf"))
+    }
+
     @Test
     fun `camel matching consumes contiguous fragments of name words`() {
         for ((pattern, name) in listOf(
@@ -40,7 +51,10 @@ class CompletionNameMatcherTest {
             "map" to "emptyMap",
             "akf" to "takeIf",
         )) {
-            assertTrue(CompletionNameMatcher(pattern).quality(name) > 0, "$pattern -> $name")
+            val matcher = CompletionNameMatcher(pattern)
+            assertTrue(matcher.quality(name) > 0, "$pattern -> $name")
+            val matched = matcher.ranges(name).joinToString("") { name.substring(it.startUtf16, it.endUtf16) }
+            assertEquals(pattern.lowercase(), matched.lowercase(), "$pattern -> $name")
         }
         for ((pattern, name) in listOf(
             "emty" to "emptyList",

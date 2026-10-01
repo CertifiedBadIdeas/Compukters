@@ -31,6 +31,7 @@ object IdeColors {
     const val MUTED = 0xFF9FA2A8.toInt()
     const val LINE_NUMBER = 0xFF4B5059.toInt()
     const val ACCENT = 0xFF71A1FE.toInt()
+    const val COMPLETION_MATCH = 0xFFFFC66D.toInt()
     const val COMPUTER = 0xFF71A1FE.toInt()
     const val DISABLED = 0xFF4C4F56.toInt()
     const val SELECTION = 0xFF214283.toInt()

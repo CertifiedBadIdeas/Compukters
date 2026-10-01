@@ -855,6 +855,10 @@ object IdeRenderer {
             hover: IdeSemanticInteraction.Hover,
         ) {
             val anchor = sourceAnchor(editor, codeLeft, hover.anchor) ?: return
+            val availableHeight = maxOf(anchor.top - geometry.editor.top, geometry.editor.bottom - anchor.bottom)
+            val maximumRows = minOf(20, (availableHeight - POPUP_VERTICAL_PADDING) / font.cellHeight)
+            if (maximumRows <= 0) return
+            val maximumColumns = ((geometry.editor.width - POPUP_HORIZONTAL_PADDING) / font.cellWidth).coerceAtLeast(1)
             val lines =
                 buildList {
                     hover.info.signature?.let(::add)
@@ -867,7 +871,15 @@ object IdeRenderer {
                             },
                         )
                     }
-                }.map(::popupText)
+                }.map(::popupText).toMutableList()
+            hover.info.documentation?.let { documentation ->
+                lines += ""
+                lines += wrappedDocumentation(documentation, maximumColumns, maximumRows + 1)
+            }
+            if (lines.size > maximumRows) {
+                lines.subList(maximumRows, lines.size).clear()
+                lines[lines.lastIndex] = popupText(lines.last() + "…")
+            }
             if (lines.isEmpty()) return
             val requestedWidth =
                 maxOf(
@@ -1032,15 +1044,17 @@ object IdeRenderer {
                 completionBadge(visibleItems[index].proposal.kind)?.let { (letter, color) ->
                     code(IdeTextKind.CompletionBadge, letter, innerLeft, y, color, popup.bounds, z = Z_POPUP_TEXT)
                 }
-                code(
-                    IdeTextKind.Completion,
-                    completionText(row, leftClip.width),
-                    left,
-                    y,
-                    if (selected) IdeColors.ACCENT else IdeColors.TEXT,
-                    leftClip,
-                    z = Z_POPUP_TEXT,
-                )
+                val visible = completionText(row, leftClip.width)
+                var offset = 0
+                val nameLimit = if (visible != row && visible.endsWith('…')) visible.length - 1 else visible.length
+                for (range in visibleItems[index].proposal.matchedNameRanges) {
+                    if (range.startUtf16 >= nameLimit) break
+                    val end = minOf(range.endUtf16, nameLimit)
+                    completionFragment(visible, offset, range.startUtf16, left, y, selected, false, leftClip)
+                    completionFragment(visible, range.startUtf16, end, left, y, selected, true, leftClip)
+                    offset = end
+                }
+                completionFragment(visible, offset, visible.length, left, y, selected, false, leftClip)
                 if (results[index].isNotEmpty() && resultWidth > 0) {
                     val result = completionText(results[index], resultWidth)
                     code(
@@ -1054,6 +1068,55 @@ object IdeRenderer {
                     )
                 }
             }
+        }
+
+        private fun completionFragment(
+            value: String,
+            start: Int,
+            end: Int,
+            x: Int,
+            y: Int,
+            selected: Boolean,
+            matched: Boolean,
+            clip: IdeRect,
+        ) {
+            if (start >= end) return
+            code(
+                if (matched) IdeTextKind.CompletionMatch else IdeTextKind.Completion,
+                value.substring(start, end),
+                x + visualColumns(value.substring(0, start)) * font.cellWidth,
+                y,
+                if (matched) {
+                    IdeColors.COMPLETION_MATCH
+                } else if (selected) {
+                    IdeColors.ACCENT
+                } else {
+                    IdeColors.TEXT
+                },
+                clip,
+                z = Z_POPUP_TEXT,
+            )
+        }
+
+        private fun wrappedDocumentation(
+            value: String,
+            columns: Int,
+            maximumRows: Int,
+        ): List<String> {
+            val lines = mutableListOf<String>()
+            for (line in value.replace("\t", "    ").lines()) {
+                var remaining = line
+                while (visualColumns(remaining) > columns && lines.size < maximumRows) {
+                    val cutoff = remaining.offsetByCodePoints(0, columns)
+                    val space = remaining.lastIndexOf(' ', cutoff - 1)
+                    val end = if (space > 0) space else cutoff
+                    lines += remaining.substring(0, end)
+                    remaining = remaining.substring(end).trimStart()
+                }
+                if (lines.size >= maximumRows) break
+                lines += remaining
+            }
+            return lines
         }
 
         private fun completionText(

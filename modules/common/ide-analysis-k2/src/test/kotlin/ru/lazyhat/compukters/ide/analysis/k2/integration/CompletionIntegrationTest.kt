@@ -89,7 +89,8 @@ class CompletionIntegrationTest {
     @Test
     fun `forked worker returns semantic completion`() {
         val source =
-            "fun candidate() = Unit\nfun camelCandidateResult() = Unit\nfun <T> T.echoResult(): T = this\n" +
+            "/** Candidate documentation. */\nfun candidate() = Unit\nfun camelCandidateResult() = Unit\n" +
+                "fun <T> T.echoResult(): T = this\n" +
                 "fun main() { can; ccr; val text: String? = null; \"hello\".; text?. }"
         val path = VirtualSourcePath.kotlin("main.kt")
         val sources =
@@ -125,6 +126,13 @@ class CompletionIntegrationTest {
             val candidate = completion.items.single { it.insertText == "candidate" }
             assertEquals("candidate()", candidate.label)
             assertEquals("candidate", candidate.insertText)
+            assertEquals(
+                listOf(
+                    ru.lazyhat.compukters.ide.editor
+                        .EditorRange(0, 3),
+                ),
+                candidate.matchedNameRanges,
+            )
             assertEquals(
                 ru.lazyhat.compukters.ide.analysis
                     .CompletionCallablePresentation(null, null, "Unit"),
@@ -166,6 +174,26 @@ class CompletionIntegrationTest {
                         ).get(90, TimeUnit.SECONDS),
                 ).result as AnalysisResult.Completion
             assertEquals("camelCandidateResult()", camel.items.single { it.insertText == "camelCandidateResult" }.label)
+            assertEquals(
+                listOf(
+                    ru.lazyhat.compukters.ide.editor
+                        .EditorRange(0, 1),
+                    ru.lazyhat.compukters.ide.editor
+                        .EditorRange(5, 6),
+                    ru.lazyhat.compukters.ide.editor
+                        .EditorRange(14, 15),
+                ),
+                camel.items.single { it.insertText == "camelCandidateResult" }.matchedNameRanges,
+            )
+            val hover =
+                assertIs<AnalysisClientResult.Success>(
+                    controller
+                        .query(
+                            admitted,
+                            AnalysisQuery.ExpressionInfo(identity, path, source.indexOf("fun candidate") + 4),
+                        ).get(90, TimeUnit.SECONDS),
+                ).result
+            assertEquals("Candidate documentation.", assertIs<AnalysisResult.ExpressionInfo>(hover).value?.documentation)
         }
     }
 

@@ -1120,7 +1120,9 @@ links to their source files.
   libraries and autoimports, without typo correction or arbitrary skipped letters inside
   words. Exact names and direct prefixes rank before CamelCase matches. Global lookup
   retains its prefix fast path and supplements it through a character index with
-  bounded best-match selection. Function
+  bounded best-match selection. Identifier
+  name fragments matching the query are highlighted using worker-supplied Unicode-safe ranges,
+  including trimmed fragments and autoimports; parameter and return-type columns are not matched. Function
   labels use braces for a single non-null, non-vararg lambda argument, displaying
   its name and expanded function type without lambda-internal parameter names.
   The same presentation applies to resolved autoimport candidates. Function
@@ -1162,6 +1164,7 @@ links to their source files.
   and `completion fragment keeps lexical receivers shadowing and snapshot state`;
   `CompletionNameMatcherTest`, tests `camel matching consumes contiguous fragments of name words`
   and `match quality favors exact then direct then case insensitive then camel`;
+  `CompletionNameMatcherTest`, test `matched ranges follow the same deterministic contiguous unicode match`;
   `CompletionQueryTest`, tests `camel completion matches word prefixes but not arbitrary skipped letters`,
   `completion allows trimmed word fragments without gaps inside a word`,
   `camel completion also finds admitted stdlib declarations`, and
@@ -1186,11 +1189,26 @@ links to their source files.
 
 - [x] **Expression information and callable signatures** — hover-style
   queries render inferred local types, resolved signatures, and smart-cast
-  types. Evidence:
+  types. Hover also renders bounded plain-text KDoc from the exact resolved project declaration
+  or its attached platform source, including declaration-name hovers. Documentation wraps within
+  the editor and is truncated with an ellipsis when the bounded popup height is exhausted; it
+  does not execute HTML, fetch external content or synthesize inherited documentation. Evidence:
   [`ExpressionInfoQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/ExpressionInfoQueryTest.kt),
   tests `expression query renders an inferred local type`,
   `expression query renders a resolved callable signature`, and
-  `expression query reports a smart cast type`.
+  `expression query reports a smart cast type`,
+  `hover documentation follows resolved overload and declaration names`, and
+  `hover documentation comes from exact attached platform source`;
+  `AnalysisModelsTest`, tests `completion match ranges own immutable ordered unicode-safe label slices`
+  and `hover documentation respects utf8 detail budget`;
+  `AnalysisProtocolHostileInputTest`, tests
+  `completion decoder rejects malformed unicode match ranges and excessive range counts`
+  and `hover decoder bounds documentation independently`;
+  `CompletionIntegrationTest`, test `forked worker returns semantic completion`;
+  `IdeRendererStateTest`, tests
+  `completion highlights exact name fragments and preserves unicode positions and result alignment`
+  and `hover documentation wraps unicode paragraphs and bounds long content`.
+  Tracking: [#675](https://github.com/CertifiedBadIdeas/Compukters/issues/675).
 
 - [x] **Parameter information** — Ctrl+P opens a caret-anchored popup for the
   innermost call, lists bounded and deterministic K2-resolved overload
