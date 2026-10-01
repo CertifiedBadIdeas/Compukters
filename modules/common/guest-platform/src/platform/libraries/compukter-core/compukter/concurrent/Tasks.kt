@@ -8,7 +8,12 @@ package compukter.concurrent
 
 /** A bounded cooperative Guest task. */
 public value class Task internal constructor(internal val id: Int) {
-    /** Blocks the current task until this task completes. */
+    /**
+     * Blocks the current task until this task completes.
+     *
+     * If the task failed, every join throws its original exception object. An unjoined task failure does not
+     * terminate other tasks; the failure is retained until the process finishes.
+     */
     public external fun join()
 }
 

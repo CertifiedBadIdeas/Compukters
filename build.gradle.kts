@@ -322,6 +322,10 @@ registerKotlinVmConformance(
             project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.finally.cpkt"),
         "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_STDLIB" to
             project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.stdlib.cpkt"),
+        "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_TASKS" to
+            project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.tasks.cpkt"),
+        "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_SUSPEND" to
+            project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.suspend.cpkt"),
     ),
 )
 
