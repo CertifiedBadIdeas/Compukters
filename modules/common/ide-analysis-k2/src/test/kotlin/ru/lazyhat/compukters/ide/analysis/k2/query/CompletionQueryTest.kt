@@ -40,6 +40,47 @@ import kotlin.test.assertTrue
 
 class CompletionQueryTest {
     @Test
+    fun `automatic completion suppresses function declaration names`() {
+        val declarations =
+            listOf(
+                "fun pri",
+                "fun pri(value: Int) {}",
+                "class Host { fun pri() {} }",
+                "fun outer() { fun pri() {} }",
+                "fun Int.pri() {}",
+                "fun <T> T.pri(value: T) {}",
+                "fun `pri`() {}",
+            )
+        val sources = declarations.mapIndexed { index, declaration -> "case$index.kt" to declaration }
+        K2QueryFixture.source(*sources.toTypedArray()).use { fixture ->
+            for ((path, source) in sources) {
+                val start = source.indexOf("pri")
+                for (length in 1..3) {
+                    val result = fixture.complete(path, start + length)
+                    assertTrue(result.items.isEmpty(), "$source at $length: ${result.items}")
+                    assertEquals(EditorRange(start, start + length), result.replacement)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `function declarations retain completion in types bodies and explicit requests`() {
+        val source = "class PrefixType\nfun printTarget() {}\nfun pri(value: Pre): Pre { printT }\nfun Pre.extension() {}"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            for (start in listOf(source.indexOf("Pre)"), source.indexOf("Pre {"), source.indexOf("Pre.extension"))) {
+                assertTrue(fixture.complete("main.kt", start + 3).items.any { it.insertText == "PrefixType" })
+            }
+            assertTrue(fixture.complete("main.kt", source.indexOf("printT }") + 6).items.any { it.insertText == "printTarget" })
+            assertTrue(
+                fixture.complete("main.kt", source.indexOf("fun pri(") + 7, CompletionTrigger.Manual).items.any {
+                    it.insertText == "printTarget"
+                },
+            )
+        }
+    }
+
+    @Test
     fun `completion derives call shapes from resolved function parameters`() {
         val source =
             """
