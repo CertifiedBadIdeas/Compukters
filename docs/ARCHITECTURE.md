@@ -394,6 +394,10 @@ cleanup; a cleanup return or throw replaces the pending exit. Local loop/inline-
 for enclosing scopes they remain inside. Lowering shares the artifact's conservative exceptional-edge predicate
 with verification and liveness, omitting handlers for protected code that cannot throw. Native verifier
 dataflow owns reachability across both ordinary and exceptional edges; a catch-only continuation is valid.
+Ordinary Guest precondition functions use the same mechanism: `require` throws IllegalArgumentException;
+`check` and `error` throw IllegalStateException. Lazy String messages execute only on failure. Synthesized
+exhaustive-when branches allocate and throw NoWhenBranchMatchedException, including for reference-valued results;
+no fake result or trap fallback is emitted.
 
 Runtime ABI 1.7 adds an explicit optional superclass to nominal array records. Array header flag bit 0 indicates
 a non-null TypeRef appended after the element ValueType; flag-zero records remain unchanged. The parent must resolve

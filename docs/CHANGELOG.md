@@ -21,6 +21,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   rethrow the original object, and read nullable `message` and `cause`. `finally` runs on normal and exceptional
   exits, returns and supported loop/inline exits. Uncaught exceptions report their class,
   message and bounded source stack. Runtime libraries containing exception instructions need rebuilding for Runtime ABI 1.8.
+  `require`, `check` and `error` use catchable exceptions, with lazy String messages for the preconditions.
+  Exhaustive `when` can return references without an explicit `else`.
 
 - Reference identity comparisons (`===`/`!==`) compare supported arrays and nullable references directly,
   preserving aliases and distinguishing fresh copies without artificial casts to `Any`.

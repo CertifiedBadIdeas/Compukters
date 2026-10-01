@@ -50,6 +50,12 @@ public class IllegalArgumentException external constructor(message: String?) : R
     public external constructor(message: String?, cause: Throwable?) : this(message)
 }
 
+public open class IllegalStateException external constructor(message: String?) : RuntimeException(message) {
+    public external constructor(message: String?, cause: Throwable?) : this(message)
+}
+
+public class NoWhenBranchMatchedException external constructor() : RuntimeException(null)
+
 public abstract class Enum<E : Enum<E>> external constructor() : Comparable<E> {
     public external val name: String
 

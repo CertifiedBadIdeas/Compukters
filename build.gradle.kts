@@ -320,6 +320,8 @@ registerKotlinVmConformance(
             project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.caught.cpkt"),
         "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_FINALLY" to
             project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.finally.cpkt"),
+        "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_STDLIB" to
+            project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.stdlib.cpkt"),
     ),
 )
 

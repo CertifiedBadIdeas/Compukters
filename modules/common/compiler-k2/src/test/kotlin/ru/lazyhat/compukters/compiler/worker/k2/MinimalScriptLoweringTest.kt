@@ -4607,6 +4607,42 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `assertions and exhaustive reference when share exceptions for vm execution`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                enum class Choice { FIRST, SECOND }
+                fun text(value: Boolean): String = when (value) { true -> "yes"; false -> "no" }
+                fun text(value: Choice): String = when (value) { Choice.FIRST -> "first"; Choice.SECOND -> "second" }
+                fun main() {
+                    check(text(true) == "yes" && text(false) == "no")
+                    check(text(Choice.FIRST) == "first" && text(Choice.SECOND) == "second")
+                    var evaluated = false
+                    require(true) { evaluated = true; "unused" }
+                    check(!evaluated)
+                    check(true) { evaluated = true; "unused" }
+                    require(!evaluated)
+                    try { require(false) { "custom requirement" } }
+                    catch (caught: IllegalArgumentException) { check(caught.message == "custom requirement") }
+                    try { check(false) }
+                    catch (caught: IllegalStateException) { require(caught.message == "Check failed.") }
+                    try { check(false) { "custom check" } }
+                    catch (caught: IllegalStateException) { require(caught.message == "custom check") }
+                    try { error("boom") }
+                    catch (caught: IllegalStateException) { require(caught.message == "boom") }
+                    println("assertions ok")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
+                Path.of("$output.stdlib.cpkt").also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `bounded when lowers deterministically for vm execution`() =
         withAdapter { adapter ->
             val request =
