@@ -199,7 +199,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   Functions with a single lambda argument show a brace signature with the argument name and function type,
   omitting names of parameters inside the lambda type.
   Completion rows use colored F/M/V/C/I kind badges, show receiver and package context beside callable signatures,
-  and align receiver-specialized return types in a separate right-hand column.
+  and align receiver-specialized return types in a separate right-hand column, including scope functions
+  such as `also` and `apply` immediately after typing a receiver's dot.
   Diagnostic passes pause during completion while semantic analysis continues; existing unrelated problems remain
   visible and diagnostics resume for the current text when completion ends.
   Enter inside an empty lambda adds an indented body line and moves its closing brace to a separate line.

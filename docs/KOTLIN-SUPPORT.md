@@ -1121,7 +1121,9 @@ links to their source files.
   The same presentation applies to resolved autoimport candidates. Function
   parameters and result types retain type-scope specialization and K2 extension
   receiver inference, while independent presentation records declared receiver
-  notation and package context. Unknown generic arguments remain symbolic. Function
+  notation and package context. Unknown generic arguments remain symbolic. Empty
+  safe-call selectors and literal-only receivers without a name anchor currently
+  retain symbolic extension types. Function
   completion inserts parentheses or a final lambda block from resolved parameter
   types, keeping the caret inside required arguments or the lambda body. Existing
   delimiters are reused; autoimports and caret placement share an atomic undo/redo
@@ -1147,7 +1149,9 @@ links to their source files.
   `completion labels single lambda arguments with braces and unnamed function types`
   and `autoimported lambda function labels use the same brace presentation`;
   `CompletionQueryTest`, test
-  `completion preserves specialized member and extension signatures with declared receiver context`;
+  `completion preserves specialized member and extension signatures with declared receiver context`
+  and `scope functions specialize their result and lambda from the explicit receiver` (including an empty dot selector,
+  nullable receivers, generic receiver expressions and non-crashing empty safe-call completion);
   `DiagnosticQueryTest`, test `semantic-only presentation omits diagnostics and retains symbol highlighting`;
   [`IdeCompletionInsertionTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-client/src/test/kotlin/ru/lazyhat/compukters/ide/client/analysis/IdeCompletionInsertionTest.kt),
   tests `call completion with import preserves the caret through one undo and redo`
