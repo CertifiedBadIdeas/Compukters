@@ -405,14 +405,17 @@ Runtime ABI 1.9 adds a runtime-exception role tag in class header bits 3..7: 0 i
 once per artifact and must name a non-abstract, non-generic subclass of the verified Throwable root.
 The subclass and its intermediate ancestors have no own fields, methods, interfaces or initializer;
 only the root supplies message/cause storage. Role identity is preserved through library linking and
-specialization fingerprints; linking infers ABI 1.9 from retained role metadata. Integer `Div`/`Rem`
-retain role 1 as an implicit dependency even without a source catch. Both validators reject these operations
-below ABI 1.9 or without the role, with a rebuild requirement; floating division remains nonthrowing.
-The VM materializes `/ by zero` through budgeted compact-string construction, then allocates and initializes
+specialization fingerprints; linking infers ABI 1.9 from retained role metadata. Fallible integer arithmetic,
+array allocation/access/copy, string ranges, reference access/cast and channel operations retain their factory
+roles as implicit dependencies even without a source catch. Both validators reject these operations below
+ABI 1.9 or without the required roles, with a rebuild requirement; floating division remains nonthrowing.
+The VM materializes the bounded error message through budgeted compact-string construction, then allocates and initializes
 the ordinary managed exception through existing reservation/zeroing/collection machinery. Pending message
 and exception references are GC roots and pending storage is quota-accounted. Allocation failure remains
-noncatchable OOM. Handler lookup uses the original division/remainder instruction; no terminal-trap path is
-retained for arithmetic errors. Other operation and host factories are still being integrated.
+noncatchable OOM. Handler lookup uses the original failing instruction; no terminal-trap path is retained for
+these operation errors. Invalid channel arguments are catchable IllegalArgumentException; exhausting channel
+storage remains a noncatchable resource fault, as do stack overflow and other VM faults. Host factories are
+still being integrated.
 
 Runtime ABI 1.7 adds an explicit optional superclass to nominal array records. Array header flag bit 0 indicates
 a non-null TypeRef appended after the element ValueType; flag-zero records remain unchanged. The parent must resolve

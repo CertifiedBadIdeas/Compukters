@@ -96,7 +96,10 @@ class ArtifactReaderTest {
     @Test
     fun `runtime exception roles round trip and reject legacy duplicate and stateful classes`() {
         val source = languageRuntimeArtifact()
-        val module = source.modules.single()
+        val module =
+            source.modules.single().let { original ->
+                original.copy(types = original.types.map { if (it is NominalType.Class) it.copy(runtimeExceptionKind = null) else it })
+            }
         val roles =
             RuntimeExceptionKind.entries.map { kind ->
                 NominalType.Class(
@@ -129,7 +132,7 @@ class ArtifactReaderTest {
             roles.first().copy(superType = null),
         )) {
             assertIs<ArtifactWriteResult.Failure>(
-                ArtifactWriter.write(artifact.copy(modules = listOf(module.copy(types = module.types + invalid)))),
+                ArtifactWriter.write(artifact.copy(modules = listOf(module.copy(types = module.types + invalid + roles.drop(1))))),
             )
         }
         assertIs<ArtifactWriteResult.Failure>(
@@ -138,7 +141,9 @@ class ArtifactReaderTest {
         val statefulParent = roles.first().copy(runtimeExceptionKind = null, fieldCount = 1u)
         val child = roles.first().copy(superType = TypeRef.Local(TypeId.of(module.types.size.toUInt())))
         assertIs<ArtifactWriteResult.Failure>(
-            ArtifactWriter.write(artifact.copy(modules = listOf(module.copy(types = module.types + statefulParent + child)))),
+            ArtifactWriter.write(
+                artifact.copy(modules = listOf(module.copy(types = module.types + statefulParent + child + roles.drop(1)))),
+            ),
         )
     }
 
@@ -159,7 +164,7 @@ class ArtifactReaderTest {
                 types = listOf(root) + module.types.drop(1),
                 fields = fields,
             )
-        val artifact = source.copy(minimumRuntimeAbi = AbiVersion(1u, 8u), modules = listOf(typedModule))
+        val artifact = source.copy(minimumRuntimeAbi = AbiVersion(1u, 9u), modules = listOf(typedModule))
         val bytes = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(artifact)).bytes
         assertEquals(
             root,
@@ -214,7 +219,7 @@ class ArtifactReaderTest {
         val array = (module.types[1] as NominalType.Array).copy(superType = TypeRef.Local(TypeId.of(0u)))
         val artifact =
             source.copy(
-                minimumRuntimeAbi = AbiVersion(1u, 7u),
+                minimumRuntimeAbi = AbiVersion(1u, 9u),
                 modules = listOf(module.copy(types = module.types.toMutableList().also { it[1] = array })),
             )
         val written = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(artifact))
@@ -304,7 +309,7 @@ class ArtifactReaderTest {
                 }
             val artifact =
                 source.copy(
-                    minimumRuntimeAbi = AbiVersion(1u, 6u),
+                    minimumRuntimeAbi = AbiVersion(1u, 9u),
                     manifest = Manifest.minimal(maximumBlockCost = 20u),
                     modules = listOf(module.copy(blocks = blocks)),
                 )
@@ -331,7 +336,7 @@ class ArtifactReaderTest {
                     )
                 }
             assertIs<ArtifactWriteResult.Success>(
-                ArtifactWriter.write(artifact.copy(minimumRuntimeAbi = AbiVersion(1u, 0u), modules = listOf(module.copy(blocks = legacy)))),
+                ArtifactWriter.write(artifact.copy(minimumRuntimeAbi = AbiVersion(1u, 9u), modules = listOf(module.copy(blocks = legacy)))),
             )
         }
     }
@@ -347,7 +352,7 @@ class ArtifactReaderTest {
             }
         val artifact =
             source.copy(
-                minimumRuntimeAbi = AbiVersion(1u, 5u),
+                minimumRuntimeAbi = AbiVersion(1u, 9u),
                 semanticFeatures = source.semanticFeatures + SemanticFeature.ARRAY_COPY,
                 manifest = Manifest.minimal(maximumBlockCost = 20u),
                 modules = listOf(module.copy(blocks = blocks)),

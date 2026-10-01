@@ -627,7 +627,7 @@ class MinimalScriptLoweringTest {
                 ArtifactReader.read(
                     assertNotNull(consoleOnly.artifact, consoleOnly.diagnostics.joinToString()).toByteArray(),
                 )
-            assertEquals(AbiVersion(1u, 3u), consoleArtifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 9u), consoleArtifact.minimumRuntimeAbi)
 
             System.getProperty("compukter.vm.longArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
@@ -709,7 +709,7 @@ class MinimalScriptLoweringTest {
                 ArtifactReader.read(
                     assertNotNull(consoleOnly.artifact, consoleOnly.diagnostics.joinToString()).toByteArray(),
                 )
-            assertEquals(AbiVersion(1u, 4u), consoleArtifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 9u), consoleArtifact.minimumRuntimeAbi)
 
             System.getProperty("compukter.vm.floatArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
@@ -937,8 +937,8 @@ class MinimalScriptLoweringTest {
 
             assertTrue(0x50 in opcodes, "task launch must lower to task.spawn: $opcodes")
             assertTrue(0xe8 in opcodes, "task join must lower to task.join: $opcodes")
-            // Tasks.launch uses require; its exception contract requires ABI 1.8.
-            assertEquals(AbiVersion(1u, 8u), artifact.minimumRuntimeAbi)
+            // Tasks.launch retains IllegalArgumentException's verified factory role through require.
+            assertEquals(AbiVersion(1u, 9u), artifact.minimumRuntimeAbi)
             assertEquals(64u, artifact.manifest.maximumCoroutines)
             assertTrue(SemanticFeature.COROUTINES in artifact.semanticFeatures)
             assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
@@ -4483,7 +4483,7 @@ class MinimalScriptLoweringTest {
             val second = adapter.compile(request(source))
             val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 8u), ArtifactReader.read(artifact).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 9u), ArtifactReader.read(artifact).minimumRuntimeAbi)
             System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
             }
@@ -4721,6 +4721,54 @@ class MinimalScriptLoweringTest {
             assertEquals(AbiVersion(1u, 9u), ArtifactReader.read(bytes).minimumRuntimeAbi)
             System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of("$output.arithmetic.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `array string null and cast errors are catchable with cleanup for vm execution`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class Box(val value: Int)
+                fun read(values: IntArray, index: Int): Int = values[index]
+                fun allocate(size: Int): IntArray = IntArray(size)
+                fun cast(value: Any): Box = value as Box
+                fun nonnull(value: String?): String = value as String
+                fun main() {
+                    val values = intArrayOf(7)
+                    var cleanups = 0
+                    try { read(values, 1); error("bounds did not throw") }
+                    catch (caught: IndexOutOfBoundsException) {
+                        require(caught.message == "Index out of bounds")
+                        require(caught.cause == null)
+                    } finally { cleanups = cleanups + 1 }
+                    try { allocate(-1); error("size did not throw") }
+                    catch (caught: NegativeArraySizeException) { require(caught.message != null) }
+                    finally { cleanups = cleanups + 1 }
+                    try { cast("not a box"); error("cast did not throw") }
+                    catch (caught: ClassCastException) { require(caught.message == "Invalid cast") }
+                    finally { cleanups = cleanups + 1 }
+                    try { nonnull(null); error("null did not throw") }
+                    catch (caught: NullPointerException) { require(caught.message == "Null reference") }
+                    finally { cleanups = cleanups + 1 }
+                    try { "text"[4]; error("string bounds did not throw") }
+                    catch (caught: IndexOutOfBoundsException) { require(caught.cause == null) }
+                    finally { cleanups = cleanups + 1 }
+                    try { "text".substring(2, 1); error("substring bounds did not throw") }
+                    catch (caught: RuntimeException) { require(caught is IndexOutOfBoundsException) }
+                    finally { cleanups = cleanups + 1 }
+                    require(cleanups == 6)
+                    require(read(values, 0) == 7)
+                    println("operations ok")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val bytes = assertNotNull(first.artifact, first.diagnostics.toString()).toByteArray()
+            assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
+            assertEquals(AbiVersion(1u, 9u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
+                Path.of("$output.operations.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
             }
         }
 

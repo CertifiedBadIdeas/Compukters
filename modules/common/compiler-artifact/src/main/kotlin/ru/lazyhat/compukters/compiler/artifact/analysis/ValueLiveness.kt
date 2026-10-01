@@ -405,6 +405,25 @@ internal fun Instruction.successors(): List<BlockId> =
 
 /** Implicit managed factory dependencies of the instruction, retained even without an explicit catch. */
 fun Instruction.runtimeExceptionKinds(): Set<RuntimeExceptionKind> {
+    when (this) {
+        is Instruction.NewArray -> return setOf(RuntimeExceptionKind.NEGATIVE_ARRAY_SIZE)
+
+        is Instruction.ArrayLoad, is Instruction.ArrayStore, is Instruction.ArrayCopy,
+        is Instruction.StringGet, is Instruction.StringSubstring, is Instruction.StringFromCharArray,
+        -> return setOf(RuntimeExceptionKind.INDEX_OUT_OF_BOUNDS, RuntimeExceptionKind.NULL_POINTER)
+
+        is Instruction.CheckedCast -> return setOf(RuntimeExceptionKind.CLASS_CAST, RuntimeExceptionKind.NULL_POINTER)
+
+        is Instruction.ArrayLength, is Instruction.FieldGet, is Instruction.FieldSet,
+        is Instruction.StaticGet, is Instruction.StaticSet, is Instruction.CallVirtual, is Instruction.CallInterface,
+        is Instruction.StringLength, is Instruction.StringEquals, is Instruction.StringConcat,
+        -> return setOf(RuntimeExceptionKind.NULL_POINTER)
+
+        is Instruction.ChannelCreate, is Instruction.ChannelSend, is Instruction.ChannelReceive,
+        -> return setOf(RuntimeExceptionKind.ILLEGAL_ARGUMENT)
+
+        else -> Unit
+    }
     val scalar =
         when (this) {
             is Instruction.Divide -> type
@@ -448,6 +467,8 @@ fun Instruction.mayThrow(): Boolean =
         this is Instruction.CapabilityCallSync ||
         this is Instruction.CapabilityCallAsync ||
         this is Instruction.StringGet ||
+        this is Instruction.StringLength ||
+        this is Instruction.StringEquals ||
         this is Instruction.StringConcat ||
         this is Instruction.StringValueOf ||
         this is Instruction.StringSubstring ||

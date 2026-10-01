@@ -75,6 +75,7 @@ fn main() {
 }
 
 fn k2_explicit_exception_unwinds_across_guest_calls() {
+    k2_expected_prints_with_budget("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_OPERATIONS", ["operations ok\n"], 64);
     k2_expected_prints_with_budget("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_ARITHMETIC", ["arithmetic ok\n"], 64);
     let mut tasks = k2_stdio_session("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_TASKS", 64);
     k2_assert_prints(&mut tasks, ["tasks ok\n"], 64);
