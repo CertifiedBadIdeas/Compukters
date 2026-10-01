@@ -225,6 +225,37 @@ class ProgramRuntimeHostIntegrationTest {
                                 terminalText(requireNotNull(computer.terminalFullState())).endsWith("compiled editor loop\n>\n"),
                             )
 
+                            submit(computer, "edit oom.kt")
+                            pressEnter(computer)
+                            submit(computer, "fun main() { val memory = IntArray(1048576); println(memory.size) }")
+                            press(computer, TerminalKey.S, setOf(TerminalModifier.CONTROL))
+                            press(computer, TerminalKey.X, setOf(TerminalModifier.CONTROL))
+                            submit(computer, "clear")
+                            pressEnter(computer)
+                            submit(computer, "kotlinc oom.kt")
+                            pressEnter(computer)
+                            val oomCompilation = terminalText(requireNotNull(computer.terminalFullState()))
+                            assertTrue(
+                                oomCompilation.endsWith("compiled: /home/oom\n>\n"),
+                                oomCompilation,
+                            )
+                            repeat(3) {
+                                submit(computer, "oom")
+                                pressEnter(computer)
+                                val oomOutput = terminalText(requireNotNull(computer.terminalFullState()))
+                                assertTrue(oomOutput.contains("/home/oom: OutOfMemory"), oomOutput)
+                                assertTrue(oomOutput.contains("Heap limit: 256 KiB"), oomOutput)
+                                assertTrue(oomOutput.contains("Allocation: ") && oomOutput.contains("(array)"), oomOutput)
+                                val requestedBytes = oomOutput.substringAfter("Allocation: ").substringBefore(" bytes").toLong()
+                                assertTrue(requestedBytes >= 4L * 1048576, oomOutput)
+                                assertTrue(oomOutput.endsWith(">\n"), oomOutput)
+                                submit(computer, "echo shell survived")
+                                pressEnter(computer)
+                                assertTrue(
+                                    terminalText(requireNotNull(computer.terminalFullState())).endsWith("shell survived\n>\n"),
+                                )
+                            }
+
                             computer.shutdown()
                             assertEquals(ProgramStartResult.Started, computer.startBoot())
                             advanceUntil(computer) { it == ProgramRuntimeState.WaitingForInput }

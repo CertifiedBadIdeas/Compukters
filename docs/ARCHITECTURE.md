@@ -324,6 +324,14 @@ Guest Kotlin exposes this as transparent stackful blocking through ordinary func
 outside the supported source subset, while legacy suspend-call artifact instructions remain decodable and executable.
 The production execution profile reserves a 256 KiB managed heap for each active foreground process; child-process
 capacity is charged independently while its parent is suspended. Heap arenas are released with their owning machine.
+An OOM in a foreground child remains a bounded `LIMIT_EXCEEDED` process result, not a failure of its parent.
+Before releasing the child, the runtime formats its executable path, heap capacity, requested allocation, used/free
+bytes, largest free block and GC-attempt status. Child frames retain the immutable verified executable metadata,
+so diagnostics refer to the executed artifact even if the executable is replaced on disk. When DEBUG records are
+present, the allocation's execution-image block ID is translated to the module-local record and reported with its
+source path and UTF-16 offset; otherwise the function and bytecode coordinates are reported. No current source file
+is consulted to infer a potentially stale line number. The normal process-diagnostic UTF-16 bound still applies,
+and formatting does not allocate from the exhausted Guest heap.
 An explicit actor request can also compose one immutable resource snapshot from host lifecycle/configuration and the
 native machine's semantic work, Guest heap, admitted mutable execution-resident, and filesystem quota counters. The
 host counts Guest and maintenance budgets only when it actually invokes native advancement; both host and native
