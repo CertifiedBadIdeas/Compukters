@@ -1583,6 +1583,16 @@ fn k2_int_array_executes_specialized_storage_and_traps() {
         IntArrayOutcome::Crashed(GuestTrap::IndexOutOfBounds),
         execute_int_array_artifact(&bytes, 4).outcome
     );
+    assert_eq!(
+        IntArrayOutcome::Crashed(GuestTrap::NegativeArraySize),
+        execute_int_array_artifact(&bytes, 5).outcome
+    );
+    for mode in 6..=8 {
+        assert_eq!(
+            IntArrayOutcome::Crashed(GuestTrap::IndexOutOfBounds),
+            execute_int_array_artifact(&bytes, mode).outcome
+        );
+    }
 }
 
 fn execute_int_array_artifact(bytes: &[u8], mode: i32) -> IntArrayExecution {

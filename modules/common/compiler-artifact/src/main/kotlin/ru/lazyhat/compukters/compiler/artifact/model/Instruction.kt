@@ -225,6 +225,14 @@ sealed interface Instruction {
         val value: RegisterId,
     ) : Instruction
 
+    data class ArrayCopy(
+        val source: RegisterId,
+        val destination: RegisterId,
+        val sourceStart: RegisterId,
+        val destinationStart: RegisterId,
+        val length: RegisterId,
+    ) : Instruction
+
     data class FieldGet(
         val destination: RegisterId,
         val receiver: RegisterId,

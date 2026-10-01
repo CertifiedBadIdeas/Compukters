@@ -171,7 +171,9 @@ owners remain distinct even when their lowered signatures coincide. Fragment ass
 implementations and their dependencies; final application linking removes unreachable records. Tooling normalizes
 dependency module indexes into symbolic identities before linking so a shared library retains one owner across
 fragment containers. The final executable restores concrete indexes. Generic binary templates are not part of the
-platform bundle or VM artifact contract. Bundle format 7 and standalone module format 3 reject older representations.
+platform bundle or VM artifact contract. Bundle format 8 and standalone module format 4 reject older representations.
+Default-argument metadata includes an explicit array-receiver size expression, evaluated from the already computed
+receiver rather than re-evaluating its source expression. Private Kotlin metadata format 5 carries the same default.
 The standard library has one owner, `stdlib:core`: core helpers, inline scope functions, `repeat`, ranges and collections.
 Its generic and inline source bodies coexist with ordinary precompiled implementations.
 
@@ -363,6 +365,16 @@ Runtime ABI 1.3 adds exact decimal materialization for the existing `I64` scalar
 an `I64` value is converted to `String`, while purely numeric `Long` programs remain compatible with Runtime ABI 1.0.
 Runtime ABI 1.4 does the same for F32 using Kotlin/JVM-compatible spellings, including signed zero, infinities, NaN,
 and the smallest subnormal values; purely numeric `Float` programs likewise remain compatible with Runtime ABI 1.0.
+Runtime ABI 1.5 adds `ArrayCopy` (opcode `0x3b`, form 0), gated by semantic feature bit 5. Its five little-endian u16
+register operands are source array, destination array, source start, destination start and element count. Verification
+requires assignable element representations and Int range operands; runtime checks all ranges before any write.
+The fixed instruction cost is 2 and dynamic cost is 1 per copied element. Native memmove-style chunks contain at most
+256 elements and respect the remaining Guest budget, preserving overlap direction across slices. Pending operands
+remain managed roots and the instruction retires only once copying finishes. Public `copyOf` allocates and zeroes a
+fresh array through existing budgeted allocation, then uses `ArrayCopy`; `copyInto` allocates no temporary buffer.
+The native C ABI remains 17. Old executable artifacts remain accepted; older VMs reject artifacts requiring ABI 1.5.
+The K2 compiler infers its minimum runtime ABI again after final linking and specialization reuse, from retained
+instructions. General artifact linking preserves an explicitly declared minimum unless this inference is requested.
 
 The Minecraft carrier owns exactly one actor endpoint and submits at most one ordinary advance or host continuation
 for each server tick. Rust starts

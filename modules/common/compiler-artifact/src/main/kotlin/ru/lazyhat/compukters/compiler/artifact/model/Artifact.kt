@@ -31,6 +31,7 @@ enum class SemanticFeature {
     CAPABILITIES,
     MODULE_IMPORTS,
     CHANNELS,
+    ARRAY_COPY,
 }
 
 enum class EntryArguments(

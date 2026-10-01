@@ -204,6 +204,15 @@ internal fun encodeInstruction(
             operands.writeRegister(instruction.value)
         }
 
+        is Instruction.ArrayCopy -> {
+            opcode = 0x3bu
+            operands.writeRegister(instruction.source)
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.sourceStart)
+            operands.writeRegister(instruction.destinationStart)
+            operands.writeRegister(instruction.length)
+        }
+
         is Instruction.FieldGet -> {
             opcode = 0x35u
             operands.writeRegister(instruction.destination)
@@ -488,6 +497,7 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
 
         is Instruction.ArrayLoad,
         is Instruction.ArrayStore,
+        is Instruction.ArrayCopy,
         is Instruction.Convert,
         is Instruction.ArrayLength,
         is Instruction.FieldGet,

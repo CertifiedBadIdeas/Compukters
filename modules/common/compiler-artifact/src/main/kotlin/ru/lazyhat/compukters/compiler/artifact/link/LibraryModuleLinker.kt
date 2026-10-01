@@ -78,6 +78,7 @@ object LibraryModuleLinker {
         libraryArtifacts: List<Artifact>,
         preserveLibraryExports: Boolean = false,
         specializationNames: Set<String> = emptySet(),
+        inferMinimumRuntimeAbi: Boolean = false,
     ): Artifact {
         val canonical =
             LibrarySpecializations.reuse(
@@ -108,13 +109,14 @@ object LibraryModuleLinker {
                 if (seen.add(hash)) libraries[hash] = LibraryInput(module, capabilityIds)
             }
         }
-        return linkInputs(canonical, libraries, preserveLibraryExports)
+        return linkInputs(canonical, libraries, preserveLibraryExports, inferMinimumRuntimeAbi)
     }
 
     private fun linkInputs(
         application: Artifact,
         libraries: Map<String, LibraryInput>,
         preserveLibraryExports: Boolean = false,
+        inferMinimumRuntimeAbi: Boolean = false,
     ): Artifact {
         require(application.modules.count { it.kind == ModuleKind.APPLICATION } == 1) {
             "link input must contain exactly one application module"
@@ -232,7 +234,10 @@ object LibraryModuleLinker {
                 function = applicationRelocation.function(application.entry.function),
             )
         val features = semanticFeatures(modules, capabilities)
-        val minimumRuntimeAbi = minimumRuntimeAbi(application.minimumRuntimeAbi, modules)
+        // Compiler-generated requirements can shrink after specialization reuse
+        // and dead-code removal. Explicit caller-declared floors remain the default.
+        val minimumRuntimeAbi =
+            minimumRuntimeAbi(if (inferMinimumRuntimeAbi) AbiVersion(1u, 0u) else application.minimumRuntimeAbi, modules)
         val maximumBlockCost =
             modules
                 .asSequence()
@@ -301,6 +306,10 @@ private fun minimumRuntimeAbi(
     var required = declared
     modules.asSequence().flatMap { module -> module.blocks.asSequence() }.flatMap { block -> block.instructions.asSequence() }.forEach {
         when (it) {
+            is Instruction.ArrayCopy -> {
+                required = maxOf(required, AbiVersion(1u, 5u))
+            }
+
             is Instruction.StringValueOf -> {
                 when (it.type) {
                     StringValueType.F32 -> {
@@ -794,6 +803,14 @@ private fun semanticFeatures(
             add(SemanticFeature.COROUTINES)
         }
         if (modules.any { it.imports.isNotEmpty() }) add(SemanticFeature.MODULE_IMPORTS)
+        if (modules.any { module ->
+                module.blocks.any { block ->
+                    block.instructions.any { it is Instruction.ArrayCopy }
+                }
+            }
+        ) {
+            add(SemanticFeature.ARRAY_COPY)
+        }
         if (capabilities.isNotEmpty()) add(SemanticFeature.CAPABILITIES)
         if (modules.any { module ->
                 module.blocks.any { block ->

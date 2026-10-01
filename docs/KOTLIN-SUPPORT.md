@@ -638,6 +638,16 @@ supported.
   exercised by `testKotlinSubsetVmConformance` for the text helpers and integer parsing.
   Tracking: #676
 
+- [x] **Bulk array copying** — `IntArray`, `CharArray`, and admitted reference `Array<T>` support public
+  `copyOf()`, `copyOf(newSize)`, and `copyInto(destination, destinationOffset = 0, startIndex = 0, endIndex = size)`.
+  Copies preserve reference identity, overlap, empty ranges, truncation, and zero/null padding. Resized reference
+  copies return `Array<T?>`; `copyInto` admits assignable reference elements through an `Array<out T>` source.
+  Receivers and explicit arguments evaluate once. Native copying is bounded by the Guest budget without temporary
+  buffers; `ArrayList` growth uses these APIs. Negative sizes and invalid ranges retain Guest trap behavior.
+  Evidence: `testKotlinIntArrayVmConformance`, `bulk_array_copy_preserves_overlap_in_both_directions_across_tiny_budgets`,
+  and `bulk_array_instruction_resumes_with_exact_dynamic_cost_and_one_retirement`.
+  Tracking: [#679](https://github.com/CertifiedBadIdeas/Compukters/issues/679)
+
 - [ ] **Reference `Array<T>` operations — Partial** — entry `Array<String>`,
   `emptyArray<T>()`, direct `arrayOf` calls, `size`, and indexed get/set work for
   `String`, supported Guest class references, and `Any`, including their nullable forms and boxed `Int?`, with concrete

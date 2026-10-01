@@ -181,6 +181,17 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "arrayOfNulls", "fun(Int):Array<T?>")
             primitive("kotlin", "builtins", "kotlin", "intArrayOf", "fun(Int):IntArray")
             primitive("kotlin", "builtins", "kotlin", "toString", "fun(T?.):String")
+            listOf("IntArray", "CharArray", "Array<T>").forEach { array ->
+                primitive("kotlin", "builtins", "kotlin.collections", "copyOf", "fun($array.):$array")
+                primitive(
+                    "kotlin",
+                    "builtins",
+                    "kotlin.collections",
+                    "copyOf",
+                    "fun($array.Int):${if (array == "Array<T>") "Array<T?>" else array}",
+                )
+                primitive("kotlin", "builtins", "kotlin.collections", "copyInto", "fun($array.$array,Int,Int,Int):$array")
+            }
             primitive(
                 "kotlin",
                 "builtins",

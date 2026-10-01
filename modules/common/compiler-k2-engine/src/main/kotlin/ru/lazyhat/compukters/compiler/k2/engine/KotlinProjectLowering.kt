@@ -139,7 +139,9 @@ import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CapabilityOperationHandler
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.IntrinsicBlockingMode
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
+import ru.lazyhat.compukters.platform.bundle.PlatformDeclarationIdentity
 import ru.lazyhat.compukters.platform.bundle.PlatformDefaultArgument
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformScalarConstant
 import ru.lazyhat.compukters.platform.bundle.PlatformScalarRepresentation
 import ru.lazyhat.compukters.platform.bundle.PlatformScalarType
@@ -2839,6 +2841,7 @@ internal object KotlinProjectLowering {
             blocks.any { block ->
                 block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F32 }
             }
+        val usesArrayCopy = blocks.any { block -> block.instructions.any { it is Instruction.ArrayCopy } }
         val maximumChannels = topLevelProperties.count { it.initializer is TopLevelInitializer.Channel }.toUInt()
         val channelValueCount =
             topLevelProperties.fold(0uL) { total, property ->
@@ -2855,6 +2858,7 @@ internal object KotlinProjectLowering {
         return Artifact(
             minimumRuntimeAbi =
                 when {
+                    usesArrayCopy -> AbiVersion(1u, 5u)
                     usesF32StringConversion -> AbiVersion(1u, 4u)
                     usesI64StringConversion -> AbiVersion(1u, 3u)
                     usesChannels -> AbiVersion(1u, 2u)
@@ -2866,6 +2870,7 @@ internal object KotlinProjectLowering {
                     SemanticFeature.COROUTINES.takeIf { userFunctions.any { it.isSuspend } },
                     SemanticFeature.CAPABILITIES.takeIf { capabilityIdentities.isNotEmpty() },
                     SemanticFeature.CHANNELS.takeIf { usesChannels },
+                    SemanticFeature.ARRAY_COPY.takeIf { usesArrayCopy },
                     SemanticFeature.MODULE_IMPORTS,
                 ),
             manifest =
@@ -3451,10 +3456,16 @@ private fun linkedPlatformSymbols(
                 target.parameters.forEach { considerType(it.type) }
                 val targetSymbol = target.fqNameWhenAvailable?.asString()
                 val targetSignature = target.canonicalPlatformSignature()
-                session.platformFunctions
-                    .singleOrNull { link -> link.symbol == targetSymbol && link.signature == targetSignature }
-                    ?.defaultArguments
-                    ?.filterNotNull()
+                (
+                    session.platformDefaults[
+                        PlatformDeclarationIdentity(
+                            targetSymbol.orEmpty(),
+                            targetSignature,
+                        ),
+                    ] ?: session.platformFunctions
+                        .singleOrNull { link -> link.symbol == targetSymbol && link.signature == targetSignature }
+                        ?.defaultArguments
+                )?.filterNotNull()
                     ?.let(neededDefaultArguments::addAll)
                 val property = target.correspondingPropertySymbol?.owner ?: target.parent as? IrProperty
                 val owner = property?.parent as? IrClass
@@ -4585,10 +4596,10 @@ private class FunctionCompiler(
         }
         externalFunctions[target.symbol]?.let { external ->
             val argumentExpressions = resolveProjectCallArguments(call, target)
-            val arguments =
-                argumentExpressions.zip(loweredParameters(target, session)).map { (argument, parameter) ->
-                    compileCallArgument(argument, parameter.type)
-                }
+            val arguments = mutableListOf<RegisterId>()
+            argumentExpressions.zip(loweredParameters(target, session)).forEach { (argument, parameter) ->
+                arguments += compileCallArgument(argument, parameter.type, arguments)
+            }
             val destination = destinationFor(target.returnType, call)
             if (target.isSuspend) {
                 val resume = createBlock()
@@ -4603,6 +4614,7 @@ private class FunctionCompiler(
         compileCompareToPredicate(call, target)?.let { return it }
         val targetId = projectFunctionId(call, target)
         if (targetId == null) {
+            compileArrayCopyCall(call, target)?.let { return it }
             if (interfaceSuper) {
                 throw UnsupportedKotlinIr(call, "interface super target is outside the project subset")
             }
@@ -4652,11 +4664,11 @@ private class FunctionCompiler(
             resolveClassInstance(call.dispatchReceiver?.type)?.let { receiver ->
                 (target.parent as? IrClass)?.let { resolveMemberOwner(receiver, it) } ?: receiver
             }
-        val arguments =
-            resolveProjectCallArguments(call, target).zip(loweredParameters(target, session)).map { (argument, parameter) ->
-                val parameterType = specialization?.substitute(parameter.type) ?: receiverSpecialization?.substitute(parameter.type)
-                compileCallArgument(argument, parameterType ?: parameter.type)
-            }
+        val arguments = mutableListOf<RegisterId>()
+        resolveProjectCallArguments(call, target).zip(loweredParameters(target, session)).forEach { (argument, parameter) ->
+            val parameterType = specialization?.substitute(parameter.type) ?: receiverSpecialization?.substitute(parameter.type)
+            arguments += compileCallArgument(argument, parameterType ?: parameter.type, arguments)
+        }
         val destination = destinationFor(call.type, call)
         if (target.isSuspend) {
             val resume = createBlock()
@@ -4814,14 +4826,16 @@ private class FunctionCompiler(
     private fun resolveProjectCallArguments(
         call: IrCall,
         target: IrSimpleFunction,
+        signature: String = target.canonicalPlatformSignature(),
     ): List<ResolvedCallArgument> {
         val platformDefaults =
-            session.platformFunctions
-                .singleOrNull { link ->
-                    link.symbol == target.fqNameWhenAvailable?.asString() &&
-                        link.signature == target.canonicalPlatformSignature()
-                }?.defaultArguments
-                .orEmpty()
+            session.platformDefaults[PlatformDeclarationIdentity(target.fqNameWhenAvailable?.asString().orEmpty(), signature)]
+                ?: session.platformFunctions
+                    .singleOrNull { link ->
+                        link.symbol == target.fqNameWhenAvailable?.asString() &&
+                            link.signature == signature
+                    }?.defaultArguments
+                    .orEmpty()
         return loweredParameters(target, session).mapIndexed { loweredIndex, parameter ->
             val index = target.parameters.indexOf(parameter)
             call.arguments.getOrNull(index)?.let(ResolvedCallArgument::Expression)
@@ -4840,6 +4854,7 @@ private class FunctionCompiler(
     private fun compileCallArgument(
         argument: ResolvedCallArgument,
         expectedType: IrType,
+        evaluatedArguments: List<RegisterId> = emptyList(),
     ): RegisterId =
         when (argument) {
             is ResolvedCallArgument.Expression -> {
@@ -4849,6 +4864,12 @@ private class FunctionCompiler(
 
             is ResolvedCallArgument.PlatformDefault -> {
                 when (val value = argument.value) {
+                    PlatformDefaultArgument.ReceiverArraySize -> {
+                        val receiver =
+                            requireNotNull(evaluatedArguments.firstOrNull()) { "array receiver default requires an evaluated receiver" }
+                        allocate(ValueType.I32).also { emit(Instruction.ArrayLength(it, receiver)) }
+                    }
+
                     is PlatformDefaultArgument.IntValue -> {
                         val constantId =
                             constantIds[Constant.I32(value.value)]
@@ -5737,6 +5758,98 @@ private class FunctionCompiler(
         return destination
     }
 
+    private fun compileArrayCopyCall(
+        call: IrCall,
+        target: IrSimpleFunction,
+    ): RegisterId? {
+        val fqName = target.fqNameWhenAvailable?.asString()
+        if (fqName !in setOf("kotlin.collections.copyOf", "kotlin.collections.copyInto") || !target.isExternal) return null
+        val receiverExpression = call.arguments.firstOrNull() ?: return null
+        val receiverType = resolvedType(receiverExpression.type)
+        if (!receiverType.isExactClass(kotlinIntArrayClass) && !receiverType.isExactClass(kotlinCharArrayClass) &&
+            !isSupportedReferenceArray(receiverType)
+        ) {
+            return null
+        }
+        var owner = target.parent
+        while (owner is IrDeclaration && owner !is IrFile) owner = owner.parent
+        if (owner is IrFile && session.trustedPlatformModule(owner.fileEntry.name) == null) return null
+        // Kotlin's IR may substitute nullable array type arguments into an
+        // external generic target. Bind its canonical platform template by
+        // admitted storage shape and arity, not that substituted signature.
+        val arrayName =
+            when {
+                receiverType.isExactClass(kotlinIntArrayClass) -> "IntArray"
+                receiverType.isExactClass(kotlinCharArrayClass) -> "CharArray"
+                else -> "Array<T>"
+            }
+        val arity = target.parameters.count { it.kind == IrParameterKind.Regular }
+        val signature =
+            when {
+                fqName == "kotlin.collections.copyInto" && arity == 4 -> {
+                    "fun($arrayName.$arrayName,Int,Int,Int):$arrayName"
+                }
+
+                fqName == "kotlin.collections.copyOf" && arity == 0 -> {
+                    "fun($arrayName.):$arrayName"
+                }
+
+                fqName == "kotlin.collections.copyOf" && arity == 1 -> {
+                    val result = if (arrayName == "Array<T>") "Array<T?>" else arrayName
+                    "fun($arrayName.Int):$result"
+                }
+
+                else -> {
+                    return null
+                }
+            }
+        val registered =
+            session.canonicalIntrinsicRegistry?.handlers?.keys?.any {
+                it.module == PlatformModuleId("kotlin", "builtins") && it.callableId.asSingleFqName().asString() == fqName &&
+                    it.signature.value == signature
+            } == true
+        if (!registered) return null
+        val arguments = mutableListOf<RegisterId>()
+        resolveProjectCallArguments(call, target, signature).zip(loweredParameters(target, session)).forEach { (argument, parameter) ->
+            arguments +=
+                when (argument) {
+                    is ResolvedCallArgument.Expression -> compileExpression(argument.expression)
+                    else -> compileCallArgument(argument, parameter.type, arguments)
+                }
+        }
+        val source = arguments[0]
+        val zero = emitI32Constant(0, call)
+        if (fqName == "kotlin.collections.copyInto") {
+            val destination = arguments[1]
+            val destinationStart = arguments[2]
+            val sourceStart = arguments[3]
+            val end = arguments[4]
+            val length = allocate(ValueType.I32).also { emit(Instruction.Subtract(it, end, sourceStart)) }
+            emit(Instruction.ArrayCopy(source, destination, sourceStart, destinationStart, length))
+            return destination
+        }
+        val sourceSize = allocate(ValueType.I32).also { emit(Instruction.ArrayLength(it, source)) }
+        val newSize = arguments.getOrNull(1) ?: sourceSize
+        prepareAllocationBlock()
+        val destination = allocate(valueType(call.type, call))
+        emit(Instruction.NewArray(destination, (registerValueType(destination) as ValueType.Ref).type, newSize))
+        val length = allocate(ValueType.I32)
+        val smaller = allocate(ValueType.Bool).also { emit(Instruction.Less(OrderedScalarValueType.I32, it, newSize, sourceSize)) }
+        val truncated = createBlock()
+        val complete = createBlock()
+        val copy = createBlock()
+        emit(Instruction.Branch(smaller, blockId(truncated), blockId(complete)))
+        currentBlock = truncated
+        emit(Instruction.Move(length, newSize))
+        jumpTo(copy)
+        currentBlock = complete
+        emit(Instruction.Move(length, sourceSize))
+        jumpTo(copy)
+        currentBlock = copy
+        emit(Instruction.ArrayCopy(source, destination, zero, zero, length))
+        return destination
+    }
+
     private fun compileStringArrayCopyOfRange(
         call: IrCall,
         arguments: List<RegisterId>,
@@ -5750,34 +5863,8 @@ private class FunctionCompiler(
         val destination = allocate(stringArrayType)
         emit(Instruction.NewArray(destination, (stringArrayType as ValueType.Ref).type, length))
 
-        val sourceIndex = allocate(ValueType.I32)
-        emit(Instruction.Move(sourceIndex, start))
-        val destinationIndex = allocate(ValueType.I32)
-        emit(Instruction.Move(destinationIndex, emitI32Constant(0, call)))
-        val one = emitI32Constant(1, call)
-
-        val header = createBlock(loopHeader = true)
-        jumpTo(header)
-        currentBlock = header
-        val condition = allocate(ValueType.Bool)
-        emit(Instruction.Less(OrderedScalarValueType.I32, condition, destinationIndex, length))
-        val body = createBlock()
-        val exit = createBlock()
-        emit(Instruction.Branch(condition, blockId(body), blockId(exit)))
-
-        currentBlock = body
-        val value = allocate(stringType)
-        emit(Instruction.ArrayLoad(value, source, sourceIndex))
-        emit(Instruction.ArrayStore(destination, destinationIndex, value))
-        val nextSource = allocate(ValueType.I32)
-        emit(Instruction.Add(nextSource, sourceIndex, one))
-        emit(Instruction.Move(sourceIndex, nextSource))
-        val nextDestination = allocate(ValueType.I32)
-        emit(Instruction.Add(nextDestination, destinationIndex, one))
-        emit(Instruction.Move(destinationIndex, nextDestination))
-        jumpTo(header)
-
-        currentBlock = exit
+        val zero = emitI32Constant(0, call)
+        emit(Instruction.ArrayCopy(source, destination, start, zero, length))
         return destination
     }
 
@@ -7104,8 +7191,8 @@ private fun loweredParameters(
         function.parameters
     }
 } else if (
-    session.trustedPlatformModule(function.file.fileEntry.name) != null &&
-    (function.parent as? IrClass)?.kind == ClassKind.OBJECT
+    (function.parent as? IrClass)?.kind == ClassKind.OBJECT &&
+    session.trustedPlatformModule(function.file.fileEntry.name) != null
 ) {
     function.parameters.filter { it.kind != IrParameterKind.DispatchReceiver }
 } else {
@@ -7176,7 +7263,7 @@ private class LiteralCollector(
             } else if (fqName == "kotlin.collections.listOf") {
                 values += 0
             }
-        } else if (fqName == "kotlin.collections.copyOfRange") {
+        } else if (fqName in setOf("kotlin.collections.copyOfRange", "kotlin.collections.copyOf", "kotlin.collections.copyInto")) {
             values.addAll(listOf(0, 1))
         }
         super.visitCall(expression)

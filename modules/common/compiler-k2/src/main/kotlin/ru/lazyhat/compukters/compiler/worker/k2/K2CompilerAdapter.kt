@@ -238,6 +238,11 @@ class K2CompilerAdapter(
                             capabilityShapes = capabilityShapes(selection.addonBundles),
                             selectedPlatformModules = selected.mapTo(mutableSetOf(), PlatformModule::id),
                             platformFunctions = libraries.functions,
+                            platformDefaults =
+                                selected
+                                    .flatMap(
+                                        PlatformModule::declarations,
+                                    ).associate { it.identity to it.defaultArguments },
                             platformTypes = libraries.types,
                             platformFields = libraries.fields,
                             platformScalarTypes = selected.flatMap(PlatformModule::scalarTypes),
@@ -262,6 +267,7 @@ class K2CompilerAdapter(
                                 lowered,
                                 libraries.artifacts,
                                 specializationNames = session.materializedPlatformSpecializations,
+                                inferMinimumRuntimeAbi = true,
                             )
                         when (
                             val result =

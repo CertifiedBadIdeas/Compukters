@@ -17,6 +17,11 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- Programs can copy supported arrays with public `copyOf` and `copyInto`, including resizing, null/zero padding,
+  and overlapping ranges. Native bulk copying respects execution budgets without temporary buffers; `ArrayList`
+  growth uses the same APIs. Platform bundle/module formats now preserve receiver-dependent default arguments;
+  independently packaged Guest platform modules need rebuilding.
+
 - OOM, Guest traps and VM faults include bounded call stacks with source files, lines and columns in normal builds,
   preserving library frames and nested user callers. Older programs fall back to UTF-16 or bytecode positions; a
   foreground child failure returns control to the shell.

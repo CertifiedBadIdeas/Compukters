@@ -26,6 +26,46 @@ import kotlin.test.assertFailsWith
 
 class PlatformModuleCodecTest {
     @Test
+    fun `receiver array size defaults round trip and reject incompatible declarations`() {
+        val id = PlatformModuleId("fixture", "api")
+        val source = PlatformSource("fixture/api.kt", ImmutableBytes.of("external fun IntArray.copyInto()".encodeToByteArray()))
+        val declaration =
+            PlatformDeclaration(
+                "kotlin.collections.copyInto",
+                "fun(IntArray.IntArray,Int,Int,Int):IntArray",
+                id,
+                source.path,
+                0,
+                0,
+                true,
+                listOf(
+                    null,
+                    null,
+                    PlatformDefaultArgument.IntValue(0),
+                    PlatformDefaultArgument.IntValue(0),
+                    PlatformDefaultArgument.ReceiverArraySize,
+                ),
+            )
+        val module =
+            PlatformModule(
+                id,
+                "1.0.0",
+                emptyList(),
+                ImmutableBytes.of(byteArrayOf(1)),
+                null,
+                listOf(source),
+                listOf(declaration),
+                emptyList(),
+            )
+        assertEquals(module, PlatformBundleCodec.decodeModule(PlatformBundleCodec.encodeModule(module)))
+        listOf("fun(String.IntArray,Int,Int,Int):IntArray", "fun(IntArray.IntArray,Int,Int,String):IntArray").forEach { signature ->
+            assertFailsWith<IllegalArgumentException> {
+                PlatformBundleCodec.encodeModule(module.copy(declarations = listOf(declaration.copy(signature = signature))))
+            }
+        }
+    }
+
+    @Test
     fun `standalone module round trips canonically`() {
         val id = PlatformModuleId("fixture", "api")
         val module =

@@ -19,16 +19,20 @@
 package ru.lazyhat.compukters.compiler.artifact.read
 
 import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
+import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.DebugEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
+import ru.lazyhat.compukters.compiler.artifact.model.Manifest
 import ru.lazyhat.compukters.compiler.artifact.model.MetadataText
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.PhysicalAtom
 import ru.lazyhat.compukters.compiler.artifact.model.PhysicalShape
+import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
+import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
@@ -45,6 +49,34 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class ArtifactReaderTest {
+    @Test
+    fun `array copy round trips and requires valid operands feature and runtime ABI`() {
+        val source = languageRuntimeArtifact()
+        val module = source.modules.single()
+        val copy = Instruction.ArrayCopy(RegisterId.of(4u), RegisterId.of(4u), RegisterId.of(7u), RegisterId.of(7u), RegisterId.of(7u))
+        val blocks =
+            module.blocks.mapIndexed { index, block ->
+                if (index == 1) block.copy(instructions = block.instructions.dropLast(1) + copy + block.instructions.last()) else block
+            }
+        val artifact =
+            source.copy(
+                minimumRuntimeAbi = AbiVersion(1u, 5u),
+                semanticFeatures = source.semanticFeatures + SemanticFeature.ARRAY_COPY,
+                manifest = Manifest.minimal(maximumBlockCost = 20u),
+                modules = listOf(module.copy(blocks = blocks)),
+            )
+        val encoded = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(artifact)).bytes
+        assertContentEquals(encoded, assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(ArtifactReader.read(encoded))).bytes)
+        assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(artifact.copy(minimumRuntimeAbi = AbiVersion(1u, 4u))))
+        assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(artifact.copy(semanticFeatures = source.semanticFeatures)))
+        for (bad in listOf(copy.copy(source = RegisterId.of(3u)), copy.copy(length = RegisterId.of(4u)))) {
+            val invalidBlocks = blocks.map { block -> block.copy(instructions = block.instructions.map { if (it == copy) bad else it }) }
+            assertIs<ArtifactWriteResult.Failure>(
+                ArtifactWriter.write(artifact.copy(modules = listOf(module.copy(blocks = invalidBlocks)))),
+            )
+        }
+    }
+
     @Test
     fun `reader rejects malformed source position indices and coordinates`() {
         val source = languageRuntimeArtifact()

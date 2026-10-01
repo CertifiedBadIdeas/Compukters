@@ -32,6 +32,47 @@ import kotlin.test.assertTrue
 
 class PlatformMetadataCompilerTest {
     @Test
+    fun `array size defaults preserve the receiver and canonical projected signature`() {
+        val metadata =
+            PlatformMetadataCompiler().compile(
+                PlatformModuleId("sample", "defaults"),
+                listOf(
+                    PlatformSource(
+                        "Defaults.kt",
+                        ImmutableBytes.of(
+                            """
+                            package sample
+                            external fun <T> Array<out T>.copyInto(destination: Array<T>, offset: Int = 0, start: Int = 0, end: Int = size): Array<T>
+                            """.trimIndent().encodeToByteArray(),
+                        ),
+                    ),
+                ),
+            )
+        val declaration = metadata.declarations.single { it.symbol == "sample.copyInto" }
+        assertEquals("fun(Array<T>.Array<T>,Int,Int,Int):Array<T>", declaration.signature)
+        assertEquals(
+            listOf(
+                null,
+                null,
+                PlatformDefaultArgument.IntValue(0),
+                PlatformDefaultArgument.IntValue(0),
+                PlatformDefaultArgument.ReceiverArraySize,
+            ),
+            declaration.defaultArguments,
+        )
+        assertEquals(
+            declaration.defaultArguments,
+            PlatformMetadataCodec
+                .decode(metadata.metadata)
+                .declarations
+                .single {
+                    it.symbol ==
+                        declaration.symbol
+                }.defaultArguments,
+        )
+    }
+
+    @Test
     fun `enum defaults retain their qualified entry and hidden receiver position`() {
         val metadata =
             PlatformMetadataCompiler().compile(
