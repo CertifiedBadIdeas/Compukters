@@ -597,6 +597,9 @@ supported.
   source catch evidence: `caught exception preserves identity hierarchy cause and expression result for vm execution`;
   finally evidence: `finally preserves normal exceptional and nonlocal exits for vm execution` in the same
   Kotlin-to-VM conformance task, including nested cleanup, local versus nonlocal inline returns and return snapshots;
+  task/suspension evidence: `exceptions preserve failed task joins and cleanup across suspension for vm execution`
+  checks repeated joins preserve exception identity, an unjoined failed child does not stop healthy tasks,
+  and cleanup runs after resuming host input;
   native tests `explicit_exceptions_preserve_identity_across_calls_and_repeated_task_joins` and
   `exception_handlers_choose_innermost_region_and_source_order_and_rethrow_to_outer`.
   Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)
@@ -824,7 +827,9 @@ supported.
   and `Tasks.sleepTicks(n)` suspends the current task until a deterministic
   server-tick boundary without consuming Guest instructions. Tasks share one VM and execute
   one at a time, but a task suspended on host I/O does not stop another runnable
-  task. Scheduling and host-request ownership are deterministic. Public
+  task. Scheduling and host-request ownership are deterministic. Failed-task joins rethrow
+  the original exception on every join; an unjoined child failure does not terminate
+  the process. Failure retention ends with the process. Public
   cancellation, explicit same-turn yield, wall-clock delay, scopes, and `kotlinx.coroutines` remain
   unsupported. Evidence: `MinimalScriptLoweringTest`, test
   `task tick sleep lowers to one asynchronous timer request`, the

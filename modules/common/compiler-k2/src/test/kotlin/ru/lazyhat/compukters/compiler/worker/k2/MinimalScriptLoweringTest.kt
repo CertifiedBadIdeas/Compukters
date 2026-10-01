@@ -4643,6 +4643,56 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `exceptions preserve failed task joins and cleanup across suspension for vm execution`() =
+        withAdapter { adapter ->
+            val sources =
+                mapOf(
+                    "tasks" to
+                        """
+                        import compukter.concurrent.Tasks
+                        fun fail() { throw RuntimeException("task failure") }
+                        fun main() {
+                            val task = Tasks.launch(::fail)
+                            var original: Throwable? = null
+                            var cleanups = 0
+                            try { task.join() }
+                            catch (caught: RuntimeException) {
+                                require(caught.message == "task failure")
+                                original = caught
+                            } finally { cleanups = cleanups + 1 }
+                            require(original != null)
+                            try { task.join() }
+                            catch (caught: RuntimeException) { require(caught === original) }
+                            finally { cleanups = cleanups + 1 }
+                            require(cleanups == 2)
+                            Tasks.launch(::fail)
+                            val healthy = Tasks.launch { }
+                            healthy.join()
+                            println("tasks ok")
+                        }
+                        """.trimIndent(),
+                    "suspend" to
+                        """
+                        fun main() {
+                            try {
+                                require(readln() == "resume")
+                                println("resumed")
+                            } finally { println("finally") }
+                        }
+                        """.trimIndent(),
+                )
+            for ((name, source) in sources) {
+                val first = adapter.compile(request(source))
+                val second = adapter.compile(request(source))
+                val artifact = assertNotNull(first.artifact, "$name: ${first.diagnostics}").toByteArray()
+                assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+                System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
+                    Path.of("$output.$name.cpkt").also { it.parent.createDirectories() }.writeBytes(artifact)
+                }
+            }
+        }
+
+    @Test
     fun `bounded when lowers deterministically for vm execution`() =
         withAdapter { adapter ->
             val request =

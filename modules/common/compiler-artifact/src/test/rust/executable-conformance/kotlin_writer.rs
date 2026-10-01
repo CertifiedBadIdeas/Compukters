@@ -75,6 +75,13 @@ fn main() {
 }
 
 fn k2_explicit_exception_unwinds_across_guest_calls() {
+    let mut tasks = k2_stdio_session("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_TASKS", 64);
+    k2_assert_prints(&mut tasks, ["tasks ok\n"], 64);
+    let mut suspended = k2_stdio_session("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_SUSPEND", 1);
+    let read = next_host_request_identity_with_budget(&mut suspended, "readln", 0, None, 64).1;
+    let line = utf16("resume");
+    suspended.resume(read, HostResponse::Success(HostValueInput::String(&line))).expect("readln must resume");
+    k2_assert_prints(&mut suspended, ["resumed\n", "finally\n"], 64);
     k2_expected_prints_with_budget(
         "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_STDLIB",
         ["assertions ok\n"],
@@ -1354,6 +1361,11 @@ fn k2_expected_prints_with_budget<const N: usize>(
     expected_output: [&str; N],
     slice_budget: u32,
 ) {
+    let mut session = k2_stdio_session(artifact_variable, 1);
+    k2_assert_prints(&mut session, expected_output, slice_budget);
+}
+
+fn k2_stdio_session(artifact_variable: &str, maximum_coroutines: u32) -> Session {
     let path = std::env::var(artifact_variable).expect("K2 artifact path must be set");
     let bytes = fs::read(path).expect("K2 artifact must exist");
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
@@ -1369,7 +1381,7 @@ fn k2_expected_prints_with_budget<const N: usize>(
         heap_bytes: 1024 * 1024,
         frame_storage_bytes: 1024 * 1024,
         maximum_call_depth: 64,
-        maximum_coroutines: 1,
+        maximum_coroutines,
         maximum_channels: 0,
         maximum_channel_values: 0,
         maximum_host_requests: 64,
@@ -1385,10 +1397,14 @@ fn k2_expected_prints_with_budget<const N: usize>(
     };
     let mut session = Session::admit(verified, profile, &[stdio]).expect("K2 program must admit");
     session.start(&[]).expect("K2 program must start");
+    session
+}
+
+fn k2_assert_prints<const N: usize>(session: &mut Session, expected_output: [&str; N], slice_budget: u32) {
     for expected in expected_output {
         let value = utf16(expected);
         let write = next_host_request_identity_with_budget(
-            &mut session,
+            session,
             expected,
             1,
             Some(&value),
