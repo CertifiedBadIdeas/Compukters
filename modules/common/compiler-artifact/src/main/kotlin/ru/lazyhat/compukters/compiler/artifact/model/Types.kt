@@ -160,6 +160,20 @@ enum class StringValueType(
     CHAR(6u, ValueType.Char),
 }
 
+/** Verified zero-state Throwable subclasses allocated by intrinsic and host failures in Runtime ABI 1.9. */
+enum class RuntimeExceptionKind(
+    internal val artifactTag: UInt,
+) {
+    ARITHMETIC(1u),
+    INDEX_OUT_OF_BOUNDS(2u),
+    NEGATIVE_ARRAY_SIZE(3u),
+    NULL_POINTER(4u),
+    CLASS_CAST(5u),
+    ILLEGAL_ARGUMENT(6u),
+    ILLEGAL_STATE(7u),
+    IO(8u),
+}
+
 sealed interface NominalType {
     val name: StringId
 
@@ -176,6 +190,7 @@ sealed interface NominalType {
         val methodCount: UInt = 0u,
         val initializer: FunctionId? = null,
         val throwableRoot: Boolean = false,
+        val runtimeExceptionKind: RuntimeExceptionKind? = null,
     ) : NominalType
 
     data class Interface(

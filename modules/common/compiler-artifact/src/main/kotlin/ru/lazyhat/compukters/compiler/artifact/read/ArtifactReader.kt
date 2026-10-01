@@ -234,7 +234,9 @@ private fun decodeType(bytes: ByteArray): NominalType {
                 if (tag ==
                     0u
                 ) {
-                    require(flags and 7u.inv() == 0u) { "invalid class flags" }
+                    val exceptionTag = flags shr 3
+                    val exceptionKind = RuntimeExceptionKind.entries.singleOrNull { it.artifactTag == exceptionTag }
+                    require(exceptionTag == 0u || exceptionKind != null) { "invalid runtime exception role" }
                     NominalType.Class(
                         name,
                         flags and 1u != 0u,
@@ -248,6 +250,7 @@ private fun decodeType(bytes: ByteArray): NominalType {
                         methodCount,
                         if (c.done()) null else FunctionId.of(c.u32()),
                         throwableRoot = flags and 4u != 0u,
+                        runtimeExceptionKind = exceptionKind,
                     )
                 } else {
                     NominalType.Interface(name, flags and 1u != 0u, arity, superType, parents, methodStart, methodCount)

@@ -549,6 +549,41 @@ internal fun validateArtifact(
     if (throwableRoots.size > 1) {
         add(ArtifactWriteErrorCode.BAD_REFERENCE, "multiple Throwable roots", ArtifactWriteLocation(table = "TYPES"))
     }
+    val exceptionRoles = mutableSetOf<ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind>()
+    artifact.modules.forEachIndexed { moduleIndex, module ->
+        module.types.forEachIndexed role@{ typeIndex, type ->
+            val nominal = type as? NominalType.Class ?: return@role
+            val kind = nominal.runtimeExceptionKind ?: return@role
+            val location = ArtifactWriteLocation(moduleIndex.toUInt(), "TYPES", typeIndex.toUInt())
+            if (artifact.minimumRuntimeAbi < AbiVersion(1u, 9u)) {
+                add(ArtifactWriteErrorCode.INCOMPATIBLE_FEATURE_SET, "runtime exception role requires Runtime ABI 1.9", location)
+            }
+            if (!exceptionRoles.add(kind)) {
+                add(ArtifactWriteErrorCode.BAD_REFERENCE, "duplicate runtime exception role", location)
+            }
+            var identity: TypeIdentity? = TypeIdentity(moduleIndex, typeIndex)
+            val visited = mutableSetOf<TypeIdentity>()
+            var valid = throwableRoot != null
+            while (identity != null && (identity.module to identity.type) != throwableRoot && visited.add(identity)) {
+                val current =
+                    artifact.modules
+                        .getOrNull(identity.module)
+                        ?.types
+                        ?.getOrNull(identity.type) as? NominalType.Class
+                if (current == null || current.throwableRoot || current.abstract || current.genericArity != 0.toUShort() ||
+                    current.interfaces.isNotEmpty() || current.fieldCount != 0u || current.methodCount != 0u || current.initializer != null
+                ) {
+                    valid = false
+                    break
+                }
+                val owner = identity.module
+                identity = current.superType?.let { resolveType(owner, it) }
+            }
+            if (!valid || identity == null || (identity.module to identity.type) != throwableRoot || nominal.throwableRoot) {
+                add(ArtifactWriteErrorCode.BAD_REFERENCE, "runtime exception role requires a zero-state Throwable subclass", location)
+            }
+        }
+    }
     artifact.modules.forEachIndexed { moduleIndex, module ->
         val moduleLocation = moduleIndex.toUInt()
         if (module.blocks.size > limits.blocks) {
@@ -599,7 +634,7 @@ internal fun validateArtifact(
                 }
                 if (parent == null || parent.abstract || parent.final || parent.genericArity != 0.toUShort() ||
                     parent.superType != null || parent.interfaces.isNotEmpty() || parent.fieldCount != 0u ||
-                    parent.methodCount != 0u || parent.initializer != null || parent.throwableRoot
+                    parent.methodCount != 0u || parent.initializer != null || parent.throwableRoot || parent.runtimeExceptionKind != null
                 ) {
                     add(ArtifactWriteErrorCode.BAD_REFERENCE, "array superclass must be a stateless root class", location)
                 }
@@ -622,14 +657,16 @@ internal fun validateArtifact(
                 if (artifact.minimumRuntimeAbi < AbiVersion(1u, 8u)) {
                     add(ArtifactWriteErrorCode.INCOMPATIBLE_FEATURE_SET, "Throwable root requires Runtime ABI 1.8", location)
                 }
-                if (nominal.abstract || nominal.final || nominal.genericArity != 0.toUShort() || nominal.interfaces.isNotEmpty() ||
+                if (nominal.abstract || nominal.final || nominal.runtimeExceptionKind != null || nominal.genericArity != 0.toUShort() ||
+                    nominal.interfaces.isNotEmpty() ||
                     nominal.fieldCount != 2u || nominal.methodCount != 0u || nominal.initializer != null ||
                     fields.size != 2 || fields.any { it.static || resolveType(moduleIndex, it.owner) != root } ||
                     message?.nullable != true || messageName?.toString() != "kotlin.String" ||
                     cause?.nullable != true || cause?.let { resolveType(moduleIndex, it.type) } != root ||
                     (
                         nominal.superType != null && (
-                            parent == null || parent.throwableRoot || parent.abstract || parent.final ||
+                            parent == null || parent.throwableRoot || parent.runtimeExceptionKind != null ||
+                                parent.abstract || parent.final ||
                                 parent.genericArity != 0.toUShort() || parent.superType != null || parent.interfaces.isNotEmpty() ||
                                 parent.fieldCount != 0u || parent.methodCount != 0u || parent.initializer != null
                         )

@@ -33,6 +33,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.PhysicalAtom
 import ru.lazyhat.compukters.compiler.artifact.model.PhysicalShape
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
+import ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
@@ -53,6 +54,55 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class ArtifactReaderTest {
+    @Test
+    fun `runtime exception roles round trip and reject legacy duplicate and stateful classes`() {
+        val source = languageRuntimeArtifact()
+        val module = source.modules.single()
+        val roles =
+            RuntimeExceptionKind.entries.map { kind ->
+                NominalType.Class(
+                    name = StringId.of(0u),
+                    superType = TypeRef.Local(TypeId.of(0u)),
+                    runtimeExceptionKind = kind,
+                )
+            }
+        val artifact = source.copy(minimumRuntimeAbi = AbiVersion(1u, 9u), modules = listOf(module.copy(types = module.types + roles)))
+        val bytes = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(artifact)).bytes
+        assertEquals(
+            roles,
+            ArtifactReader
+                .read(bytes)
+                .modules
+                .single()
+                .types
+                .takeLast(roles.size),
+        )
+        assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(artifact.copy(minimumRuntimeAbi = AbiVersion(1u, 8u))))
+        for (invalid in listOf(
+            roles.first().copy(abstract = true),
+            roles.first().copy(throwableRoot = true),
+            roles.first().copy(genericArity = 1u),
+            roles.first().copy(fieldCount = 1u),
+            roles.first().copy(methodCount = 1u),
+            roles.first().copy(initializer = FunctionId.of(0u)),
+            roles.first().copy(superType = TypeRef.Local(TypeId.of(3u))),
+            roles.first().copy(superType = TypeRef.Local(TypeId.of(module.types.size.toUInt()))),
+            roles.first().copy(superType = null),
+        )) {
+            assertIs<ArtifactWriteResult.Failure>(
+                ArtifactWriter.write(artifact.copy(modules = listOf(module.copy(types = module.types + invalid)))),
+            )
+        }
+        assertIs<ArtifactWriteResult.Failure>(
+            ArtifactWriter.write(artifact.copy(modules = listOf(module.copy(types = module.types + roles + roles.first())))),
+        )
+        val statefulParent = roles.first().copy(runtimeExceptionKind = null, fieldCount = 1u)
+        val child = roles.first().copy(superType = TypeRef.Local(TypeId.of(module.types.size.toUInt())))
+        assertIs<ArtifactWriteResult.Failure>(
+            ArtifactWriter.write(artifact.copy(modules = listOf(module.copy(types = module.types + statefulParent + child)))),
+        )
+    }
+
     @Test
     fun `Throwable root role round trips only with its checked payload and runtime ABI`() {
         val source = languageRuntimeArtifact()
