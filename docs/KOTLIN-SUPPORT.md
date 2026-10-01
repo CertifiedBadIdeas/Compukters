@@ -1116,6 +1116,9 @@ links to their source files.
 - [x] **Semantic completion with overloads** — completion uses inferred
   receivers, applicable extensions, visibility, distinct overload entries,
   argument labels, deterministic ranking, and bounded result counts. Function
+  labels use braces for a single non-null, non-vararg lambda argument, displaying
+  its name and expanded function type without lambda-internal parameter names.
+  The same presentation applies to resolved autoimport candidates. Function
   completion inserts parentheses or a final lambda block from resolved parameter
   types, keeping the caret inside required arguments or the lambda body. Existing
   delimiters are reused; autoimports and caret placement share an atomic undo/redo
@@ -1137,6 +1140,9 @@ links to their source files.
   `block interpolation permits calls but an empty shorthand template does not`,
   `automatic completion suppresses function declaration names`, and
   `function declarations retain completion in types bodies and explicit requests`;
+  `CompletionQueryTest`, tests
+  `completion labels single lambda arguments with braces and unnamed function types`
+  and `autoimported lambda function labels use the same brace presentation`;
   [`IdeCompletionInsertionTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-client/src/test/kotlin/ru/lazyhat/compukters/ide/client/analysis/IdeCompletionInsertionTest.kt),
   tests `call completion with import preserves the caret through one undo and redo`
   and `completed lambda enters an indented block and generated closers are skipped`;

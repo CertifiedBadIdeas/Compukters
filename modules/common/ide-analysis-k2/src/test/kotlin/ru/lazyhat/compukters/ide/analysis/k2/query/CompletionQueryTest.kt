@@ -40,6 +40,55 @@ import kotlin.test.assertTrue
 
 class CompletionQueryTest {
     @Test
+    fun `completion labels single lambda arguments with braces and unnamed function types`() {
+        val source =
+            """
+            typealias Action = (entry: Int) -> Unit
+            fun dslEmpty(block: () -> Unit) {}
+            fun dslNamed(block: (entry: Int, text: String) -> Unit) {}
+            fun dslAlias(block: Action) {}
+            fun dslReceiver(block: String.(entry: Int) -> Unit) {}
+            fun dslNested(block: (next: (entry: Int) -> Unit) -> String) {}
+            fun dslNullable(block: ((entry: Int) -> Unit)?) {}
+            fun dslVararg(vararg blocks: (entry: Int) -> Unit) {}
+            fun dslMultiple(value: Int, block: (entry: Int) -> Unit) {}
+            fun main() { dsl }
+            """.trimIndent()
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val items = fixture.complete("main.kt", source.lastIndexOf("dsl") + 3).items.associateBy { it.insertText }
+            for ((name, type) in mapOf(
+                "dslEmpty" to "() -> Unit",
+                "dslNamed" to "(Int, String) -> Unit",
+                "dslAlias" to "(Int) -> Unit",
+                "dslReceiver" to "String.(Int) -> Unit",
+                "dslNested" to "((Int) -> Unit) -> String",
+            )) {
+                val item = requireNotNull(items[name])
+                assertEquals("$name { block: $type }", item.label)
+                assertEquals(CompletionCallShape(true, false, true), item.callShape)
+            }
+            for (name in listOf("dslNullable", "dslVararg", "dslMultiple")) {
+                assertTrue(requireNotNull(items[name]).label.startsWith("$name("))
+            }
+        }
+    }
+
+    @Test
+    fun `autoimported lambda function labels use the same brace presentation`() {
+        val source = "package app\nfun main() { remote }"
+        K2QueryFixture
+            .source(
+                "main.kt" to source,
+                "lib.kt" to "package library\nfun remoteCall(block: (entry: Int) -> Unit) {}",
+            ).use { fixture ->
+                val item = fixture.complete("main.kt", source.indexOf("remote") + 6).items.single { it.insertText == "remoteCall" }
+                assertEquals("remoteCall { block: (Int) -> Unit }", item.label)
+                assertTrue(item.additionalEdits.isNotEmpty())
+                assertEquals(CompletionCallShape(true, false, true), item.callShape)
+            }
+    }
+
+    @Test
     fun `automatic completion suppresses function declaration names`() {
         val declarations =
             listOf(

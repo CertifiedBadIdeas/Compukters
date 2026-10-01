@@ -196,6 +196,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - Member completion includes the supported operations of built-in Guest Kotlin numeric types.
 - Function completion inserts call parentheses or a trailing lambda block and places the caret at the first
   required input. Existing delimiters are reused; autoimports and caret placement undo and redo together.
+  Functions with a single lambda argument show a brace signature with the argument name and function type,
+  omitting names of parameters inside the lambda type.
   Enter inside an empty lambda adds an indented body line and moves its closing brace to a separate line.
   Typing a function declaration name does not open automatic completion; explicit completion remains available.
 - Completion suggests visible variables in string interpolation immediately after `$` and while typing the name.
