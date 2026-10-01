@@ -99,6 +99,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Capability
 import ru.lazyhat.compukters.compiler.artifact.model.CapabilityId
 import ru.lazyhat.compukters.compiler.artifact.model.Constant
 import ru.lazyhat.compukters.compiler.artifact.model.ConstantId
+import ru.lazyhat.compukters.compiler.artifact.model.DebugEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.EntryArguments
 import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
@@ -1789,6 +1790,7 @@ internal object KotlinProjectLowering {
         val topLevelFieldsByGetter =
             topLevelFields.associateBy { requireNotNull(it.property.declaration.getter).symbol }
         val blocks = mutableListOf<Block>()
+        val debug = mutableListOf<DebugEntry>()
         val loweredFunctions = mutableListOf<Function>()
 
         functionInstances.forEach { instance ->
@@ -1863,6 +1865,7 @@ internal object KotlinProjectLowering {
                     }
                 }
             blocks += compiled.blocks
+            debug += compiled.debug
             val resultType =
                 valueType(
                     function.returnType,
@@ -2113,6 +2116,7 @@ internal object KotlinProjectLowering {
                     ).compile()
                 }
             blocks += compiled.blocks
+            debug += compiled.debug
             loweredFunctions +=
                 Function(
                     owner = closureType,
@@ -2243,6 +2247,7 @@ internal object KotlinProjectLowering {
                     constructorOwner = layout,
                 ).compile()
             blocks += compiled.blocks
+            debug += compiled.debug
             loweredFunctions +=
                 Function(
                     owner = null,
@@ -2805,6 +2810,7 @@ internal object KotlinProjectLowering {
                             },
                 functions = loweredFunctions,
                 blocks = blocks,
+                debug = debug.sortedWith(compareBy({ it.function.value }, { it.block.value }, { it.instruction })),
                 exports =
                     platformFunctionExports.map { (instance, name) ->
                         Export(
@@ -3349,6 +3355,7 @@ private fun captureCellName(ordinal: Int): String = "app.<capture-cell-$ordinal>
 private data class CompiledFunction(
     val localTypes: List<ValueType>,
     val blocks: List<Block>,
+    val debug: List<DebugEntry> = emptyList(),
 )
 
 private sealed interface ResolvedCallArgument {
@@ -3599,6 +3606,8 @@ private class FunctionCompiler(
     private val localTypes = mutableListOf<ValueType>()
     private val values = mutableMapOf<IrValueSymbol, RegisterId>()
     private val blocks = mutableListOf(MutableBlock())
+    private val debug = mutableListOf<DebugEntry>()
+    private var activeSource: IrElement = function
     private val loopContexts = ArrayDeque<LoopContext>()
     private val returnableContexts = mutableMapOf<IrReturnTargetSymbol, ReturnableContext>()
     private var currentBlock = 0
@@ -3622,10 +3631,28 @@ private class FunctionCompiler(
         return CompiledFunction(
             localTypes.toList(),
             blocks.map { Block(functionId, it.loopHeaderSafepoint, it.instructions.toList()) },
+            debug.toList(),
         )
     }
 
     private fun compileStatement(statement: IrElement) {
+        withSource(statement) { compileStatementBody(statement) }
+    }
+
+    private inline fun <T> withSource(
+        element: IrElement,
+        action: () -> T,
+    ): T {
+        val previous = activeSource
+        if (element.startOffset >= 0 && element.endOffset >= element.startOffset) activeSource = element
+        return try {
+            action()
+        } finally {
+            activeSource = previous
+        }
+    }
+
+    private fun compileStatementBody(statement: IrElement) {
         if (isTerminated()) return
         when (statement) {
             is IrVariable -> {
@@ -3822,6 +3849,11 @@ private class FunctionCompiler(
     private fun compileExpression(expression: IrExpression): RegisterId = compileExpression(expression, null)
 
     private fun compileExpression(
+        expression: IrExpression,
+        expectedType: IrType?,
+    ): RegisterId = withSource(expression) { compileExpressionBody(expression, expectedType) }
+
+    private fun compileExpressionBody(
         expression: IrExpression,
         expectedType: IrType?,
     ): RegisterId {
@@ -6654,6 +6686,29 @@ private class FunctionCompiler(
     private fun emit(instruction: Instruction) {
         // A nested Nothing expression can transfer control before its caller writes a result.
         if (isTerminated()) return
+        val source = activeSource
+        val path = session.originalSourcePath(source) ?: session.virtualSourcePath(function.file.fileEntry.name)
+        if (path != null && source.startOffset >= 0 && source.endOffset >= source.startOffset) {
+            val position = session.sourcePosition(path, source.startOffset)
+            val entry =
+                DebugEntry(
+                    functionId,
+                    blockId(currentBlock),
+                    blocks[currentBlock].instructions.size.toUInt(),
+                    source.startOffset.toUInt(),
+                    source.endOffset.toUInt(),
+                    null,
+                    MetadataText.of(path.value),
+                    position?.first,
+                    position?.second,
+                )
+            val previous = debug.lastOrNull()
+            if (previous == null || previous.block != entry.block || previous.sourcePath != entry.sourcePath ||
+                previous.startUtf16 != entry.startUtf16 || previous.endUtf16 != entry.endUtf16
+            ) {
+                debug += entry
+            }
+        }
         blocks[currentBlock].instructions += instruction
     }
 

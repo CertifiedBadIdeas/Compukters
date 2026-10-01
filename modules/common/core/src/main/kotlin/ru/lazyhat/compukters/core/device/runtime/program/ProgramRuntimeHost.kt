@@ -245,7 +245,7 @@ class ProgramRuntimeHost internal constructor(
 
                 is VmOutcome.AllocationExhausted -> {
                     finish(
-                        ProgramRuntimeState.Failed(ProgramFailure.Allocation(outcome.collectionAttempted)),
+                        ProgramRuntimeState.Failed(ProgramFailure.Allocation(outcome.collectionAttempted, outcome.diagnostic)),
                     )
                     return
                 }
@@ -260,12 +260,12 @@ class ProgramRuntimeHost internal constructor(
                 }
 
                 is VmOutcome.Crashed -> {
-                    finish(ProgramRuntimeState.Failed(ProgramFailure.Trap(outcome.trap)))
+                    finish(ProgramRuntimeState.Failed(ProgramFailure.Trap(outcome.trap, outcome.diagnostic)))
                     return
                 }
 
                 is VmOutcome.Faulted -> {
-                    finish(ProgramRuntimeState.Failed(ProgramFailure.Fault(outcome.fault)))
+                    finish(ProgramRuntimeState.Failed(ProgramFailure.Fault(outcome.fault, outcome.diagnostic)))
                     return
                 }
 

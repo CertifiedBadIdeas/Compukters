@@ -327,11 +327,25 @@ capacity is charged independently while its parent is suspended. Heap arenas are
 An OOM in a foreground child remains a bounded `LIMIT_EXCEEDED` process result, not a failure of its parent.
 Before releasing the child, the runtime formats its executable path, heap capacity, requested allocation, used/free
 bytes, largest free block and GC-attempt status. Child frames retain the immutable verified executable metadata,
-so diagnostics refer to the executed artifact even if the executable is replaced on disk. When DEBUG records are
-present, the allocation's execution-image block ID is translated to the module-local record and reported with its
-source path and UTF-16 offset; otherwise the function and bytecode coordinates are reported. No current source file
-is consulted to infer a potentially stale line number. The normal process-diagnostic UTF-16 bound still applies,
-and formatting does not allocate from the exhausted Guest heap.
+so diagnostics refer to the executed artifact even if the executable is replaced on disk. OOM, Guest traps and VM
+faults retain up to 32 active frames, innermost first, without allocating from the Guest heap. Caller positions are
+the actual call instructions, not return continuations. The trace includes library and user frames; a VM fault trace
+identifies its detection site rather than asserting the origin of corruption. Text and frame limits report omitted
+frames explicitly. The normal process-diagnostic UTF-16 bound still applies.
+
+Normal compiler output carries instruction DEBUG boundaries with original source provenance, including across
+inline normalization and linked libraries. Optional module section `DEBUG_SOURCE_POSITIONS` (`0x8001`, flags zero)
+uses the standard indexed envelope; every record is exactly three little-endian `u32` fields: DEBUG record index,
+one-based source line, and one-based UTF-16 column. Indices strictly increase and must address the module's DEBUG
+table; line and column must be positive. Both debug sections count against metadata limits and are excluded from
+module semantic hashes. Existing DEBUG bytes and executable/runtime ABI are unchanged. Older Rust readers skip this
+optional extension; older Kotlin artifact readers may require an update. Old artifacts use source path plus UTF-16
+offset when present, otherwise function and bytecode coordinates. Runtime formatting never reads current source files.
+
+Native C ABI 17 appends a length-prefixed, bounded UTF-8 trace to terminal outcome tags 2 (OOM), 5 (Guest trap), and
+6 (VM fault), after their existing scalar payload. Empty text means unavailable diagnostic text. FFM and JNI validate
+ABI 17 before decoding; both retain typed failures and carry the trace through the runtime host. Other wire tags and
+guest capability schemas are unchanged.
 An explicit actor request can also compose one immutable resource snapshot from host lifecycle/configuration and the
 native machine's semantic work, Guest heap, admitted mutable execution-resident, and filesystem quota counters. The
 host counts Guest and maintenance budgets only when it actually invokes native advancement; both host and native

@@ -32,11 +32,13 @@ import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.compiler.ServerComputerCompiler
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramFailure
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
@@ -51,6 +53,7 @@ import ru.lazyhat.compukters.platform.bundle.PackagedPlatformBundleLoader
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.worker.payload.PackagedToolingBundle
 import ru.lazyhat.compukters.worker.value.Sha256
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Files
@@ -61,6 +64,7 @@ import java.util.concurrent.Executors
 import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ProgramRuntimeHostIntegrationTest {
@@ -227,7 +231,10 @@ class ProgramRuntimeHostIntegrationTest {
 
                             submit(computer, "edit oom.kt")
                             pressEnter(computer)
-                            submit(computer, "fun main() { val memory = IntArray(1048576); println(memory.size) }")
+                            submit(
+                                computer,
+                                "fun main() { outer() }\nfun outer() { Worker().allocate() }\nclass Worker { fun allocate() { val memory = ArrayList<Int>(1048576); println(memory.size) } }",
+                            )
                             press(computer, TerminalKey.S, setOf(TerminalModifier.CONTROL))
                             press(computer, TerminalKey.X, setOf(TerminalModifier.CONTROL))
                             submit(computer, "clear")
@@ -239,6 +246,22 @@ class ProgramRuntimeHostIntegrationTest {
                                 oomCompilation.endsWith("compiled: /home/oom\n>\n"),
                                 oomCompilation,
                             )
+                            val executable = ByteArrayOutputStream()
+                            val generation = requireNotNull(computer.filesystemGeneration())
+                            var offset = 0L
+                            do {
+                                val chunk = requireNotNull(computer.fileRead(VmVirtualPath.of("/home/oom"), offset, 32768, generation))
+                                executable.write(chunk.bytes)
+                                offset = chunk.nextOffset
+                            } while (!chunk.eof)
+                            ProgramRuntimeHost().use { rootFailureHost ->
+                                assertEquals(ProgramStartResult.Started, rootFailureHost.start(executable.toByteArray()))
+                                advanceUntil(rootFailureHost) { it is ProgramRuntimeState.Failed }
+                                val failure =
+                                    assertIs<ProgramFailure.Allocation>(assertIs<ProgramRuntimeState.Failed>(rootFailureHost.state).failure)
+                                val trace = requireNotNull(failure.diagnostic)
+                                assertTrue(trace.contains("oom.kt:1:") && trace.contains("oom.kt:2:") && trace.contains("oom.kt:3:"), trace)
+                            }
                             repeat(3) {
                                 submit(computer, "oom")
                                 pressEnter(computer)
@@ -248,6 +271,9 @@ class ProgramRuntimeHostIntegrationTest {
                                 assertTrue(oomOutput.contains("Allocation: ") && oomOutput.contains("(array)"), oomOutput)
                                 val requestedBytes = oomOutput.substringAfter("Allocation: ").substringBefore(" bytes").toLong()
                                 assertTrue(requestedBytes >= 4L * 1048576, oomOutput)
+                                assertTrue(oomOutput.contains("oom.kt:1:"), oomOutput)
+                                assertTrue(oomOutput.contains("oom.kt:2:"), oomOutput)
+                                assertTrue(oomOutput.contains("oom.kt:3:"), oomOutput)
                                 assertTrue(oomOutput.endsWith(">\n"), oomOutput)
                                 submit(computer, "echo shell survived")
                                 pressEnter(computer)

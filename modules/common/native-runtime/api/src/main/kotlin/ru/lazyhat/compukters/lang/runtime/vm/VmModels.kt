@@ -243,6 +243,7 @@ sealed interface VmOutcome {
 
     data class AllocationExhausted(
         val collectionAttempted: Boolean,
+        val diagnostic: String? = null,
     ) : VmOutcome
 
     data class QuotaExhausted(
@@ -257,10 +258,12 @@ sealed interface VmOutcome {
 
     data class Crashed(
         val trap: GuestTrap,
+        val diagnostic: String? = null,
     ) : VmOutcome
 
     data class Faulted(
         val fault: VmFault,
+        val diagnostic: String? = null,
     ) : VmOutcome
 
     data class HostFailed(

@@ -21,9 +21,11 @@ package ru.lazyhat.compukters.compiler.artifact.read
 import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
+import ru.lazyhat.compukters.compiler.artifact.model.DebugEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
+import ru.lazyhat.compukters.compiler.artifact.model.MetadataText
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.PhysicalAtom
 import ru.lazyhat.compukters.compiler.artifact.model.PhysicalShape
@@ -33,6 +35,9 @@ import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.artifact.write.channelArtifact
 import ru.lazyhat.compukters.compiler.artifact.write.languageRuntimeArtifact
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -40,6 +45,61 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class ArtifactReaderTest {
+    @Test
+    fun `reader rejects malformed source position indices and coordinates`() {
+        val source = languageRuntimeArtifact()
+        val module = source.modules.single()
+        val entry = DebugEntry(FunctionId.of(0u), BlockId.of(0u), 0u, 12u, 19u, null, MetadataText.of("src/main.kt"), 2u, 4u)
+        val encoded =
+            assertIs<ArtifactWriteResult.Success>(
+                ArtifactWriter.write(source.copy(modules = listOf(module.copy(debug = listOf(entry))))),
+            ).bytes
+        val buffer = ByteBuffer.wrap(encoded).order(ByteOrder.LITTLE_ENDIAN)
+        val directory = (0 until buffer.getInt(16)).map { 64 + it * 32 }.single { buffer.getShort(it).toInt() and 0xffff == 0x8001 }
+        val payload = buffer.getLong(directory + 8).toInt()
+        // One indexed record: 16-byte envelope, two offsets; then its 12-byte payload.
+        val record = payload + 24
+        for ((offset, value) in listOf(record to 1, record + 4 to 0, record + 8 to 0, directory + 4 to 0)) {
+            val malformed = encoded.copyOf()
+            ByteBuffer.wrap(malformed).order(ByteOrder.LITTLE_ENDIAN).putInt(offset, value)
+            val digest = MessageDigest.getInstance("SHA-256").digest(malformed.copyOfRange(0, malformed.size - 32))
+            digest.copyInto(malformed, malformed.size - 32)
+            assertFailsWith<IllegalArgumentException> { ArtifactReader.read(malformed) }
+        }
+    }
+
+    @Test
+    fun `source positions round trip without changing semantic identity`() {
+        val source = languageRuntimeArtifact()
+        val module = source.modules.single()
+        val entry = DebugEntry(FunctionId.of(0u), BlockId.of(0u), 0u, 12u, 19u, null, MetadataText.of("src/main.kt"), 2u, 4u)
+        val mapped = module.copy(debug = listOf(entry))
+        assertContentEquals(ArtifactWriter.moduleSemanticHash(module), ArtifactWriter.moduleSemanticHash(mapped))
+        val bytes = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(source.copy(modules = listOf(mapped)))).bytes
+        assertEquals(
+            listOf(entry),
+            ArtifactReader
+                .read(bytes)
+                .modules
+                .single()
+                .debug,
+        )
+        assertContentEquals(bytes, assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(ArtifactReader.read(bytes))).bytes)
+        val withoutPosition = mapped.copy(debug = listOf(entry.copy(sourceLine = null, sourceColumn = null)))
+        val oldBytes = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(source.copy(modules = listOf(withoutPosition)))).bytes
+        assertEquals(
+            withoutPosition.debug,
+            ArtifactReader
+                .read(oldBytes)
+                .modules
+                .single()
+                .debug,
+        )
+        for (invalid in listOf(entry.copy(sourceLine = 0u), entry.copy(sourceColumn = null))) {
+            assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(source.copy(modules = listOf(mapped.copy(debug = listOf(invalid))))))
+        }
+    }
+
     @Test
     fun `round trip preserves physical shapes and exact roots`() {
         val source = languageRuntimeArtifact()

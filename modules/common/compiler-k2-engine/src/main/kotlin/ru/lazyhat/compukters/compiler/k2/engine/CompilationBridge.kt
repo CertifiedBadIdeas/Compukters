@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.compiler.k2.engine
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.IrFileEntry
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
@@ -68,6 +69,25 @@ class CompilationSession(
     }
 
     private val originalSourcePaths = IdentityHashMap<IrElement, VirtualSourcePath>()
+    private val originalSourceFiles = mutableMapOf<VirtualSourcePath, IrFileEntry>()
+
+    internal fun recordSourceFile(
+        path: VirtualSourcePath,
+        entry: IrFileEntry,
+    ) {
+        originalSourceFiles[path] = entry
+    }
+
+    internal fun sourcePosition(
+        path: VirtualSourcePath,
+        offset: Int,
+    ): Pair<UInt, UInt>? {
+        val entry = originalSourceFiles[path] ?: return null
+        if (offset < 0 || offset > entry.maxOffset) return null
+        val line = entry.getLineNumber(offset)
+        val column = entry.getColumnNumber(offset)
+        return if (line >= 0 && column >= 0) (line + 1).toUInt() to (column + 1).toUInt() else null
+    }
 
     internal fun recordSource(
         element: IrElement,

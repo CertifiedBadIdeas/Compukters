@@ -69,13 +69,16 @@ object ArtifactReader {
                 val length = directory.u64().checkedInt("section length")
                 val count = directory.u32().checkedInt("section record count")
                 require(directory.u32() == 0u) { "non-zero section reserved field" }
-                require(flags == 3u || (flags == 0u && kind == DEBUG)) { "invalid section flags" }
+                require(flags == if (kind == DEBUG || kind >= 0x8000) 0u else 3u) { "invalid section flags" }
                 require(offset >= align8(directoryEnd.toInt()) && offset.toLong() + length <= payloadEnd) { "section is outside artifact" }
                 Section(kind, scope, count, bytes.copyOfRange(offset, offset + length))
             }
         require(sections.map { it.scope to it.kind }.toSet().size == sections.size) { "duplicate artifact section" }
         val manifest = decodeManifest(sections.singleSection(MANIFEST, 0).payload)
         val moduleRecords = indexed(sections.singleSection(MODULES, 0)).map(::decodeModuleRecord)
+        require(sections.filter { it.kind == DEBUG_SOURCE_POSITIONS }.all { it.scope in 1..moduleRecords.size }) {
+            "debug source positions must have module scope"
+        }
         val capabilities = indexed(sections.singleSection(CAPABILITIES, 0)).map(::decodeCapability)
         val modules = moduleRecords.indices.map { index -> decodeModule(moduleRecords[index], sections, index + 1) }
         return Artifact(runtimeAbi, features, manifest, EntryPoint(entryModule, entryFunction, entryArguments), modules, capabilities)
@@ -168,6 +171,25 @@ private fun decodeModule(
     val decodedFunctions = records(FUNCTIONS).map(::decodeFunction)
     val rootsByFunction = records(SAFEPOINT_ROOTS).map(::decodeSafepointRoots).groupBy { it.function }
     require(rootsByFunction.keys.all { it.value.toInt() in decodedFunctions.indices }) { "root map owner is outside function table" }
+    val debug =
+        sections
+            .singleOrNull { it.kind == DEBUG && it.scope == scope }
+            ?.let(::indexed)
+            .orEmpty()
+            .map(::decodeDebug)
+            .toMutableList()
+    var previousPosition = -1
+    sections.singleOrNull { it.kind == DEBUG_SOURCE_POSITIONS && it.scope == scope }?.let(::indexed).orEmpty().forEach { bytes ->
+        val cursor = Cursor(bytes)
+        val index = cursor.u32().checkedInt("debug position index")
+        val line = cursor.u32()
+        val column = cursor.u32()
+        require(cursor.done() && index > previousPosition && index in debug.indices && line > 0u && column > 0u) {
+            "invalid debug source position"
+        }
+        debug[index] = debug[index].copy(sourceLine = line, sourceColumn = column)
+        previousPosition = index
+    }
     return Module(
         name = record.name,
         kind = record.kind,
@@ -189,12 +211,7 @@ private fun decodeModule(
             },
         blocks = blockRecords.indices.map { decodeBlock(blockRecords[it], code[it]) },
         exceptions = records(EXCEPTIONS).map(::decodeException),
-        debug =
-            sections
-                .singleOrNull { it.kind == DEBUG && it.scope == scope }
-                ?.let(::indexed)
-                .orEmpty()
-                .map(::decodeDebug),
+        debug = debug,
     )
 }
 
@@ -1022,3 +1039,4 @@ private const val EXCEPTIONS = 0x0109
 private const val UTF16_LITERALS = 0x010a
 private const val SAFEPOINT_ROOTS = 0x010b
 private const val DEBUG = 0x0110
+private const val DEBUG_SOURCE_POSITIONS = 0x8001

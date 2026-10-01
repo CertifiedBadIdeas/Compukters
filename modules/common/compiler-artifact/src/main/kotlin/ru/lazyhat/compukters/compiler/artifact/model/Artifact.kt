@@ -200,4 +200,6 @@ data class DebugEntry(
     val endUtf16: UInt,
     val inlineParent: DebugEntryId?,
     val sourcePath: MetadataText,
+    val sourceLine: UInt? = null,
+    val sourceColumn: UInt? = null,
 )

@@ -66,6 +66,48 @@ import kotlin.test.assertTrue
 @OptIn(UnsafeDuringIrConstructionAPI::class, CompilerConfiguration.Internals::class)
 class GuestInlineIntegrationTest {
     @Test
+    fun `source maps distinguish user callers across project files`() {
+        probe(
+            source = "fun main() { outer() }\nfun outer() { Worker().allocate() }",
+            additionalSource = "class Worker {\n    fun allocate() { val values = IntArray(100000) }\n}",
+        ) { _, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            val entries = assertNotNull(artifact).modules.flatMap { it.debug }
+            assertTrue(entries.any { it.sourcePath.toString() == "project/Main.kt" && it.sourceLine == 1u })
+            assertTrue(entries.any { it.sourcePath.toString() == "project/Main.kt" && it.sourceLine == 2u })
+            assertTrue(entries.any { it.sourcePath.toString() == "project/Other.kt" && it.sourceLine == 2u })
+        }
+    }
+
+    @Test
+    fun `debug boundaries preserve nested call sites and source library coordinates`() {
+        probe(
+            source = "import probe.helper\nfun main() { helper(1 + 2) }",
+            librarySource = "package probe\nfun helper(value: Int): Int { return value + 1 }",
+        ) { _, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            val mapped =
+                assertNotNull(artifact).modules.flatMap { module ->
+                    module.debug.map { entry -> module to entry }
+                }
+            val call =
+                mapped
+                    .single { (module, entry) ->
+                        entry.sourcePath.toString() == "project/Main.kt" &&
+                            module.blocks[entry.block.value.toInt()].instructions[entry.instruction.toInt()] is Instruction.Call
+                    }.second
+            assertEquals(2u, call.sourceLine)
+            assertEquals(14u, call.sourceColumn)
+            assertTrue(
+                mapped.any { (_, entry) ->
+                    entry.sourcePath.toString() == "platform/probe/library/Library.kt" &&
+                        entry.sourceLine == 2u
+                },
+            )
+        }
+    }
+
+    @Test
     fun `common inliner expands direct and generic callbacks using Guest builtins`() {
         probe(
             """
@@ -582,6 +624,7 @@ class GuestInlineIntegrationTest {
     private fun probe(
         source: String,
         librarySource: String? = null,
+        additionalSource: String? = null,
         invalidReturnTarget: Boolean = false,
         throughSharedEntry: Boolean = false,
         libraryAdmission: Boolean = true,
@@ -618,7 +661,10 @@ class GuestInlineIntegrationTest {
             val project =
                 environment.compile(
                     PlatformModuleId("probe", "inline"),
-                    listOf(PlatformSource("Main.kt", ImmutableBytes.of(source.encodeToByteArray()))),
+                    listOfNotNull(
+                        PlatformSource("Main.kt", ImmutableBytes.of(source.encodeToByteArray())),
+                        additionalSource?.let { PlatformSource("Other.kt", ImmutableBytes.of(it.encodeToByteArray())) },
+                    ),
                     dependencies,
                 )
             val converted = CompuktersFir2IrPipeline.convert(dependencies + project)
@@ -652,11 +698,16 @@ class GuestInlineIntegrationTest {
                     sourcePaths =
                         converted.irModuleFragment.files
                             .filter {
-                                it.fileEntry.name.endsWith("Main.kt") || (libraryAdmission && it.fileEntry.name.endsWith("Library.kt"))
+                                it.fileEntry.name.endsWith("Main.kt") || it.fileEntry.name.endsWith("Other.kt") ||
+                                    (libraryAdmission && it.fileEntry.name.endsWith("Library.kt"))
                             }.associate {
                                 it.fileEntry.name to
                                     VirtualSourcePath.of(
-                                        if (it === file) "project/Main.kt" else "platform/probe/library/Library.kt",
+                                        when {
+                                            it === file -> "project/Main.kt"
+                                            it.fileEntry.name.endsWith("Other.kt") -> "project/Other.kt"
+                                            else -> "platform/probe/library/Library.kt"
+                                        },
                                     )
                             },
                     trustedPlatformSourceModules =
@@ -675,7 +726,7 @@ class GuestInlineIntegrationTest {
             converted.irModuleFragment.files.removeAll {
                 !it.fileEntry.name.endsWith(
                     "Main.kt",
-                ) && !it.fileEntry.name.endsWith("Library.kt")
+                ) && !it.fileEntry.name.endsWith("Library.kt") && !it.fileEntry.name.endsWith("Other.kt")
             }
             if (bodyUnavailable) {
                 file.declarations

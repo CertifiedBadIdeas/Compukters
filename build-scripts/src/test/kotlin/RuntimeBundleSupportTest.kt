@@ -46,7 +46,7 @@ class RuntimeBundleSupportTest {
 
         assertEquals("0.16.0", contract.runtimeVersion)
         assertEquals("v0.16.0", contract.releaseTag)
-        assertEquals(16, contract.ffiAbi)
+        assertEquals(17, contract.ffiAbi)
         assertEquals(2, contract.formats["resource-snapshot"])
     }
 

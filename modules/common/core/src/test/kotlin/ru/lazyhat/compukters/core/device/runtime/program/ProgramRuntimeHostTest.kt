@@ -927,6 +927,23 @@ class ProgramRuntimeHostTest {
             listOf(
                 Triple(VmOutcome.Halted(VmValue.I32(42)), ProgramRuntimeState.Halted(VmValue.I32(42)), 0),
                 Triple(
+                    VmOutcome.AllocationExhausted(true, "at allocate (src/Other.kt:2:5)"),
+                    ProgramRuntimeState.Failed(ProgramFailure.Allocation(true, "at allocate (src/Other.kt:2:5)")),
+                    1,
+                ),
+                Triple(
+                    VmOutcome.Crashed(GuestTrap.DIVISION_BY_ZERO, "at divide (src/Other.kt:3:9)"),
+                    ProgramRuntimeState.Failed(ProgramFailure.Trap(GuestTrap.DIVISION_BY_ZERO, "at divide (src/Other.kt:3:9)")),
+                    1,
+                ),
+                Triple(
+                    VmOutcome.Faulted(VmFault.CORRUPT_LIFECYCLE, "Detected while executing:\nat main (src/main.kt:1:1)"),
+                    ProgramRuntimeState.Failed(
+                        ProgramFailure.Fault(VmFault.CORRUPT_LIFECYCLE, "Detected while executing:\nat main (src/main.kt:1:1)"),
+                    ),
+                    1,
+                ),
+                Triple(
                     VmOutcome.AllocationExhausted(true),
                     ProgramRuntimeState.Failed(ProgramFailure.Allocation(collectionAttempted = true)),
                     1,

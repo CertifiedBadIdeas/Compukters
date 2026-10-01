@@ -17,6 +17,10 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- OOM, Guest traps and VM faults include bounded call stacks with source files, lines and columns in normal builds,
+  preserving library frames and nested user callers. Older programs fall back to UTF-16 or bytecode positions; a
+  foreground child failure returns control to the shell.
+
 - Guest libraries can combine precompiled ordinary implementations with generic and inline source bodies in one
   module, preserving private and internal visibility and avoiding duplicate ordinary implementations. Core helpers,
   scope functions, `repeat`, ranges and collections share one `stdlib:core` module without making its ordinary
