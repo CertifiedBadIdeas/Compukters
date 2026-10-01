@@ -491,8 +491,10 @@ supported.
   admitted fixture lowers sealed result types, immutable data values, enum
   identity, exhaustive type branches, and smart-cast property reads, then
   executes those branches in the pinned VM. This does not imply support for
-  all generated data or enum methods. A value-producing exhaustive `when` returning `String` still requires an
-  explicit `else`; the synthetic impossible fallback does not admit reference results. The bundled `boot` keeps its
+  all generated data or enum methods. Value-producing exhaustive `when` supports reference results without a
+  source `else`; its synthesized impossible branch throws `NoWhenBranchMatchedException`, never a dummy value.
+  Evidence: `assertions and exhaustive reference when share exceptions for vm execution`, executed by
+  `testKotlinExceptionsVmConformance` for Boolean and enum subjects returning String. The bundled `boot` keeps its
   explicit diagnostic fallback, exercised by `checked in boot compiles deterministically with process intrinsic`
   and `:core:programRuntimeIntegrationTest`. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
@@ -599,14 +601,22 @@ supported.
   `exception_handlers_choose_innermost_region_and_source_order_and_rethrow_to_outer`.
   Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)
 
-- [ ] **Standard exception classes — Partial** — Guest `Throwable`, `Exception`, `RuntimeException` and
-  `IllegalArgumentException` have distinct nominal identities, nullable message/cause constructors and read-only
+- [ ] **Standard exception classes — Partial** — Guest `Throwable`, `Exception`, `RuntimeException`,
+  `IllegalArgumentException`, `IllegalStateException` and `NoWhenBranchMatchedException` have distinct nominal
+  identities. Message/cause constructors and read-only
   properties. User exception constructors initialize inherited payload through ordinary super calls. Uncaught
   exceptions report class, message and bounded source stack through both FFM and JNI.
   Catchable operation/host errors remain pending; OOM, quotas and VM faults
   remain noncatchable. Evidence: real native transport tests `FFM preserves uncaught exception class message
   and source stack` and `JNI preserves uncaught exception class message and source stack`.
   Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)
+
+- [x] **Preconditions and explicit failure** — `require` throws `IllegalArgumentException`; `check` and
+  `error(String): Nothing` throw `IllegalStateException`. Both Boolean preconditions accept inline lazy
+  `() -> String` messages, evaluated only on failure. These are ordinary catchable Guest exceptions.
+  Arbitrary `Any` lazy messages are outside the current object-to-string subset. Evidence:
+  `assertions and exhaustive reference when share exceptions for vm execution` and
+  `testKotlinExceptionsVmConformance`. Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)
 
 - [x] **Compiler diagnostic source coordinates** — syntax and type diagnostics
   preserve virtual paths and UTF-16 offsets while bounding count and text.

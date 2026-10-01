@@ -760,9 +760,9 @@ private class InlineValueClassRegistry private constructor(
 
 private const val ANY_RUNTIME_TYPE = 5u
 private const val INT_BOX_RUNTIME_TYPE = 6u
-private const val INT_BOX_VALUE_IMPORT = 9u
-private const val THROWABLE_MESSAGE_IMPORT = 10u
-private const val THROWABLE_CAUSE_IMPORT = 11u
+private const val INT_BOX_VALUE_IMPORT = 11u
+private const val THROWABLE_MESSAGE_IMPORT = 12u
+private const val THROWABLE_CAUSE_IMPORT = 13u
 private const val INT_ARRAY_RUNTIME_TYPE = 4u
 private const val INT_BOX_VALUE_NAME = "kotlin.Int.<boxed-value>"
 private const val THROWABLE_MESSAGE_NAME = "kotlin.Throwable.message"
@@ -774,6 +774,8 @@ private fun IrClass.runtimeExceptionType(): UInt? =
         "kotlin.IllegalArgumentException" -> 3u
         "kotlin.Exception" -> 7u
         "kotlin.RuntimeException" -> 8u
+        "kotlin.IllegalStateException" -> 9u
+        "kotlin.NoWhenBranchMatchedException" -> 10u
         else -> null
     }
 
@@ -955,6 +957,8 @@ internal object KotlinProjectLowering {
             "kotlin.Int",
             "kotlin.Exception",
             "kotlin.RuntimeException",
+            "kotlin.IllegalStateException",
+            "kotlin.NoWhenBranchMatchedException",
         )
 
     fun lower(
@@ -3316,6 +3320,12 @@ internal object KotlinProjectLowering {
                     ),
                     NominalType.Class(name = requireNotNull(ids["kotlin.Exception"]), superType = TypeRef.Local(TypeId.of(2u))),
                     NominalType.Class(name = requireNotNull(ids["kotlin.RuntimeException"]), superType = TypeRef.Local(TypeId.of(7u))),
+                    NominalType.Class(name = requireNotNull(ids["kotlin.IllegalStateException"]), superType = TypeRef.Local(TypeId.of(8u))),
+                    NominalType.Class(
+                        name = requireNotNull(ids["kotlin.NoWhenBranchMatchedException"]),
+                        final = true,
+                        superType = TypeRef.Local(TypeId.of(8u)),
+                    ),
                 ),
             fields =
                 listOf(
@@ -3920,6 +3930,11 @@ private class FunctionCompiler(
         element: IrElement,
     ): Pair<RegisterId, RegisterId?> {
         val parameters = target.parameters.filter { it.kind == IrParameterKind.Regular }
+        if (parameters.isEmpty()) {
+            val message = allocate(ValueType.Ref(true, TypeRef.Imported(ImportId.of(1u))))
+            emit(Instruction.Null(message))
+            return message to null
+        }
         if (parameters.size !in 1..2) throw UnsupportedKotlinIr(element, "unsupported exception constructor signature")
         val compiled =
             target.parameters.mapIndexedNotNull { index, parameter ->
@@ -6772,8 +6787,8 @@ private class FunctionCompiler(
         for ((index, branch) in expression.branches.withIndex()) {
             val isElse = index == expression.branches.lastIndex && branch.condition.isTrueConstant()
             if (isElse) {
-                if (branch.result.isNoWhenBranchMatchedCall() && function.returnType == unitType) {
-                    emit(Instruction.Return(Destination.Unit))
+                if (branch.result.isNoWhenBranchMatchedCall()) {
+                    emitNoWhenBranchMatched()
                 } else {
                     compileStatement(branch.result)
                 }
@@ -6807,7 +6822,7 @@ private class FunctionCompiler(
             val isElse = index == expression.branches.lastIndex && branch.condition.isTrueConstant()
             if (isElse) {
                 if (branch.result.isNoWhenBranchMatchedCall()) {
-                    emitImpossibleWhenDefault(destination, resultType, branch.result)
+                    emitNoWhenBranchMatched()
                 } else if (branch.result.type.isNothing()) {
                     compileStatement(branch.result)
                 } else {
@@ -6851,20 +6866,12 @@ private class FunctionCompiler(
             ?.asString() ==
             "kotlin.internal.ir.noWhenBranchMatchedException"
 
-    private fun emitImpossibleWhenDefault(
-        destination: RegisterId,
-        type: ValueType,
-        element: IrElement,
-    ) {
-        val constant =
-            when (type) {
-                ValueType.I32 -> Constant.I32(0)
-                ValueType.I64 -> Constant.I64(0)
-                ValueType.F32 -> Constant.F32(0u)
-                ValueType.Bool -> Constant.Bool(false)
-                else -> throw UnsupportedKotlinIr(element, "exhaustive when fallback has an unsupported result type")
-            }
-        emit(Instruction.Const(destination, requireNotNull(constantIds[constant])))
+    private fun emitNoWhenBranchMatched() {
+        val type = TypeRef.Imported(ImportId.of(10u))
+        prepareAllocationBlock()
+        val exception = allocate(ValueType.Ref(false, type))
+        emit(Instruction.NewObject(exception, type))
+        emit(Instruction.Throw(exception))
     }
 
     private fun compileReturn(statement: IrReturn) {
