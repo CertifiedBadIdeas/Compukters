@@ -91,6 +91,7 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.types.Variance
 import ru.lazyhat.compukters.compiler.artifact.analysis.ExecutionStorage
+import ru.lazyhat.compukters.compiler.artifact.analysis.hasHeterogeneousReferenceComparison
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
@@ -2858,6 +2859,7 @@ internal object KotlinProjectLowering {
         return Artifact(
             minimumRuntimeAbi =
                 when {
+                    modules.any { it.hasHeterogeneousReferenceComparison() } -> AbiVersion(1u, 6u)
                     usesArrayCopy -> AbiVersion(1u, 5u)
                     usesF32StringConversion -> AbiVersion(1u, 4u)
                     usesI64StringConversion -> AbiVersion(1u, 3u)
@@ -4407,16 +4409,20 @@ private class FunctionCompiler(
             if (operands.size != 2 || operands.any { !(it is IrConst && it.value == null) && valueType(it.type, it) !is ValueType.Ref }) {
                 throw UnsupportedKotlinIr(call, "reference identity requires two reference operands")
             }
-            val anyType = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))
+            val nullType =
+                operands
+                    .firstOrNull { !(it is IrConst && it.value == null) }
+                    ?.let { valueType(it.type, it) as ValueType.Ref }
+                    ?.copy(nullable = true)
+                    ?: ValueType.Ref(nullable = true, type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))
             val references =
                 operands.map { operand ->
-                    allocate(ValueType.Ref(nullable = true, type = anyType)).also { destination ->
-                        if (operand is IrConst && operand.value == null) {
+                    if (operand is IrConst && operand.value == null) {
+                        allocate(nullType).also { destination ->
                             emit(Instruction.Null(destination))
-                        } else {
-                            val source = compileExpression(operand)
-                            emit(Instruction.CheckedCast(destination, source, anyType))
                         }
+                    } else {
+                        compileExpression(operand)
                     }
                 }
             return allocate(ValueType.Bool).also { destination -> emit(Instruction.RefEqual(destination, references[0], references[1])) }

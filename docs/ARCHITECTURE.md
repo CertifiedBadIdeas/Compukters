@@ -375,6 +375,12 @@ fresh array through existing budgeted allocation, then uses `ArrayCopy`; `copyIn
 The native C ABI remains 17. Old executable artifacts remain accepted; older VMs reject artifacts requiring ABI 1.5.
 The K2 compiler infers its minimum runtime ABI again after final linking and specialization reuse, from retained
 instructions. General artifact linking preserves an explicitly declared minimum unless this inference is requested.
+Runtime ABI 1.6 admits distinct nominal operand types for the existing `RefEqual` and `RefNotEqual` instructions.
+Both operands must still be references and the result Bool. Comparison only examines reference identity, including
+null; it does not dereference values or coerce them to `Any`. Same-nominal comparisons remain valid under older ABI.
+Instruction encodings, fixed costs, semantic feature bits and C ABI 17 are unchanged. K2 lowers `===`/`!==` directly,
+and producer/linker inference conservatively requires ABI 1.6 when operand type references differ. This does not add
+general array covariance or array-to-`Any` conversions.
 
 The Minecraft carrier owns exactly one actor endpoint and submits at most one ordinary advance or host continuation
 for each server tick. Rust starts

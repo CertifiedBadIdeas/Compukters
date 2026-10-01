@@ -4214,6 +4214,25 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `same nominal identity and null comparison retain baseline runtime ABI`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class Box
+                fun main() {
+                    val value = Box()
+                    val missing: Box? = null
+                    require(value === value)
+                    require(value !== missing)
+                    require(missing === null)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            assertEquals(AbiVersion(1u, 0u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+        }
+
+    @Test
     fun `specialized IntArray lowers deterministically for vm conformance`() =
         withAdapter { adapter ->
             val source =
@@ -4226,11 +4245,22 @@ class MinimalScriptLoweringTest {
                     return intArrayOf(5, 6, 7)
                 }
                 fun <T> copyGeneric(values: Array<T>): Array<T> = values.copyOf()
+                fun identityOperand(values: IntArray, steps: IntArray, expected: Int): IntArray {
+                    require(steps[0] == expected)
+                    steps[0] += 1
+                    return values
+                }
                 fun verifyBulkCopy() {
                     val original = IntArray(700)
                     var index = 0
                     while (index < original.size) { original[index] = index; index += 1 }
                     val grown = original.copyOf(710)
+                    require(grown !== original && original === original)
+                    val originalAlias = original
+                    require(originalAlias === original && originalAlias !== original.copyOf())
+                    val identitySteps = intArrayOf(0)
+                    require(identityOperand(original, identitySteps, 0) === identityOperand(originalAlias, identitySteps, 1))
+                    require(identitySteps[0] == 2)
                     require(grown[699] == 699 && grown[700] == 0)
                     grown[0] = -1
                     require(original[0] == 0)
@@ -4238,6 +4268,7 @@ class MinimalScriptLoweringTest {
                     require(original.copyOf()[699] == 699 && original.copyOf(2)[1] == 1)
                     require(original.copyOf(0).size == 0)
                     val returned = grown.copyInto(grown, destinationOffset = 1, endIndex = 700)
+                    require(returned === grown)
                     returned[0] = -1
                     require(grown[0] == -1)
                     grown[0] = 0
@@ -4253,15 +4284,20 @@ class MinimalScriptLoweringTest {
                     val chars = CharArray(2)
                     chars[0] = 'A'; chars[1] = '\uD800'
                     val moreChars = chars.copyOf(3)
+                    require(moreChars !== chars && chars === chars)
                     require(moreChars[0] == 'A' && moreChars[1] == '\uD800' && moreChars[2] == '\u0000')
                     chars.copyInto(moreChars, 1)
                     require(moreChars[2] == '\uD800' && chars.copyOf()[0] == 'A')
 
                     val first = CopyItem(1)
+                    val nullableItem: CopyItem? = first
+                    val missingItem: CopyItem? = null
+                    require(nullableItem === first && nullableItem !== missingItem && missingItem === null)
                     val second = CopyItem(2)
                     val objects = arrayOf(first, second)
                     require(copyGeneric(objects)[0] === first)
                     val nullable = objects.copyOf(3)
+                    require(nullable !== objects && objects === objects)
                     require(nullable[0] === first && nullable[2] == null)
                     objects.copyInto(nullable, 1)
                     require(nullable[1] === first && nullable[2] === second)
@@ -4370,7 +4406,7 @@ class MinimalScriptLoweringTest {
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             val decoded = ArtifactReader.read(artifact)
-            assertEquals(AbiVersion(1u, 5u), decoded.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 6u), decoded.minimumRuntimeAbi)
             assertTrue(SemanticFeature.ARRAY_COPY in decoded.semanticFeatures)
             System.getProperty("compukter.vm.intArrayArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)

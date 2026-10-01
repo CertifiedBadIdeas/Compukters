@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.compiler.artifact.link
 import ru.lazyhat.compukters.compiler.artifact.analysis.ExecutionStorage
 import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
 import ru.lazyhat.compukters.compiler.artifact.analysis.TemporaryRegisters
+import ru.lazyhat.compukters.compiler.artifact.analysis.hasHeterogeneousReferenceComparison
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
@@ -304,6 +305,7 @@ private fun minimumRuntimeAbi(
     modules: List<Module>,
 ): AbiVersion {
     var required = declared
+    if (modules.any { it.hasHeterogeneousReferenceComparison() }) required = maxOf(required, AbiVersion(1u, 6u))
     modules.asSequence().flatMap { module -> module.blocks.asSequence() }.flatMap { block -> block.instructions.asSequence() }.forEach {
         when (it) {
             is Instruction.ArrayCopy -> {
