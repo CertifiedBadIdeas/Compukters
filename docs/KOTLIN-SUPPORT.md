@@ -585,7 +585,8 @@ supported.
 
 - [ ] **`throw`, `try`, `catch`, and `finally` — Unsupported** — the artifact
   and VM have verified exception tables, but the K2 backend does not lower
-  `IrThrow` or `IrTry` from Guest source. Tracking: not scheduled
+  general `IrThrow` or `IrTry` from Guest source. An internal `IllegalArgumentException` throw still uses the
+  legacy terminal-trap mechanism pending replacement. Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)
 
 - [ ] **Standard exception classes — Unsupported** — Kotlin/JVM exception
   classes are not a Guest standard-library surface. VM traps and bounded host

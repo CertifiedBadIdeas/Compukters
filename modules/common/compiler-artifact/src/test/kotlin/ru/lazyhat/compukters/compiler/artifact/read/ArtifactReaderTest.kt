@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.DebugEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
+import ru.lazyhat.compukters.compiler.artifact.model.Field
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.Manifest
@@ -33,8 +34,10 @@ import ru.lazyhat.compukters.compiler.artifact.model.PhysicalAtom
 import ru.lazyhat.compukters.compiler.artifact.model.PhysicalShape
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
+import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
+import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.artifact.write.channelArtifact
@@ -49,6 +52,72 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class ArtifactReaderTest {
+    @Test
+    fun `Throwable root role round trips only with its checked payload and runtime ABI`() {
+        val source = languageRuntimeArtifact()
+        val module = source.modules.single()
+        val root = (module.types[0] as NominalType.Class).copy(throwableRoot = true, fieldCount = 2u)
+        val rootRef = TypeRef.Local(TypeId.of(0u))
+        val stringRef = TypeRef.Local(TypeId.of(3u))
+        val fields =
+            listOf(
+                Field(rootRef, StringId.of(0u), ValueType.Ref(true, stringRef), mutable = false, static = false),
+                Field(rootRef, StringId.of(2u), ValueType.Ref(true, rootRef), mutable = false, static = false),
+            )
+        val typedModule =
+            module.copy(
+                strings = module.strings + MetadataText.of("kotlin.String"),
+                types = listOf(root) + module.types.drop(1) + NominalType.Class(StringId.of(4u), final = true),
+                fields = fields,
+            )
+        val artifact = source.copy(minimumRuntimeAbi = AbiVersion(1u, 8u), modules = listOf(typedModule))
+        val bytes = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(artifact)).bytes
+        assertEquals(
+            root,
+            ArtifactReader
+                .read(bytes)
+                .modules
+                .single()
+                .types[0],
+        )
+        assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(artifact.copy(minimumRuntimeAbi = AbiVersion(1u, 7u))))
+        for (invalid in listOf(
+            root.copy(abstract = true),
+            root.copy(final = true),
+            root.copy(genericArity = 1u),
+            root.copy(fieldCount = 1u),
+            root.copy(fieldStart = UInt.MAX_VALUE),
+            root.copy(methodCount = 1u),
+            root.copy(initializer = FunctionId.of(0u)),
+            root.copy(superType = rootRef),
+        )) {
+            assertIs<ArtifactWriteResult.Failure>(
+                ArtifactWriter.write(
+                    artifact.copy(
+                        modules = listOf(typedModule.copy(types = listOf(invalid) + typedModule.types.drop(1))),
+                    ),
+                ),
+            )
+        }
+        for (invalidFields in listOf(
+            fields.toMutableList().also { it[0] = it[0].copy(type = ValueType.I32) },
+            fields.toMutableList().also { it[0] = it[0].copy(type = ValueType.Ref(false, stringRef)) },
+            fields.toMutableList().also { it[1] = it[1].copy(type = ValueType.Ref(true, stringRef)) },
+            fields.toMutableList().also { it[1] = it[1].copy(static = true) },
+        )) {
+            assertIs<ArtifactWriteResult.Failure>(
+                ArtifactWriter.write(artifact.copy(modules = listOf(typedModule.copy(fields = invalidFields)))),
+            )
+        }
+        assertIs<ArtifactWriteResult.Failure>(
+            ArtifactWriter.write(
+                artifact.copy(
+                    modules = listOf(typedModule.copy(types = typedModule.types + root)),
+                ),
+            ),
+        )
+    }
+
     @Test
     fun `array superclass round trips and requires ABI 1_7 and stateless root`() {
         val source = languageRuntimeArtifact()

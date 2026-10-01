@@ -375,6 +375,13 @@ fresh array through existing budgeted allocation, then uses `ArrayCopy`; `copyIn
 The native C ABI remains 17. Old executable artifacts remain accepted; older VMs reject artifacts requiring ABI 1.5.
 The K2 compiler infers its minimum runtime ABI again after final linking and specialization reuse, from retained
 instructions. General artifact linking preserves an explicitly declared minimum unless this inference is requested.
+Runtime ABI 1.8 reserves class header flag bit 2 for one explicit Throwable root per artifact. This open,
+non-generic class has two instance fields in declared order: nullable `kotlin.String` message and nullable
+self-typed cause. It has no methods, interfaces or initializer and may inherit only a stateless root class.
+JVM and Rust validation reject invalid payloads, duplicate roots and role metadata below ABI 1.8. Exception class
+identity is not inferred from its name. The role metadata is a foundation for the executable exception mechanism;
+its presence alone does not establish Guest `try`/`catch`/`finally` support.
+
 Runtime ABI 1.7 adds an explicit optional superclass to nominal array records. Array header flag bit 0 indicates
 a non-null TypeRef appended after the element ValueType; flag-zero records remain unchanged. The parent must resolve
 to a non-abstract, non-final, zero-arity root class with no superclass, interfaces, fields, methods or initializer.
