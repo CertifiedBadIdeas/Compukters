@@ -583,14 +583,18 @@ supported.
   paired with [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs), scenario `nullable-references`.
   Tracking: [#654](https://github.com/CertifiedBadIdeas/Compukters/issues/654)
 
-- [ ] **`throw`, `try`, `catch`, and `finally` — Partial** — explicit statement `throw`, typed `try/catch` statements
+- [x] **Explicit `throw`, `try`, `catch`, and `finally`** — explicit statement `throw`, typed `try/catch` statements
   and expressions, nested handlers and rethrow preserve managed exception identity through Guest calls.
   Catch matches the real class hierarchy, including user subclasses. The VM retains child-task failures for
-  repeated joins and roots exceptions through GC. `finally` is not implemented yet.
+  repeated joins and roots exceptions through GC. `finally` runs on normal and exceptional exits, return,
+  supported break/continue and inline returns, and can replace a pending return or exception. Return values
+  are evaluated before cleanup. Cleanup throws are outside the handlers of the try being exited.
   Legacy exception artifacts must be rebuilt for Runtime ABI 1.8;
   there is no terminal-trap fallback. Evidence: `MinimalScriptLoweringTest`, test
   `explicit exception preserves class and message for vm execution`, and `testKotlinExceptionsVmConformance`;
   source catch evidence: `caught exception preserves identity hierarchy cause and expression result for vm execution`;
+  finally evidence: `finally preserves normal exceptional and nonlocal exits for vm execution` in the same
+  Kotlin-to-VM conformance task, including nested cleanup, local versus nonlocal inline returns and return snapshots;
   native tests `explicit_exceptions_preserve_identity_across_calls_and_repeated_task_joins` and
   `exception_handlers_choose_innermost_region_and_source_order_and_rethrow_to_outer`.
   Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)

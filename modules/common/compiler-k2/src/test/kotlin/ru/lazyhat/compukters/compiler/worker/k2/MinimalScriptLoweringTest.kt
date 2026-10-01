@@ -4532,6 +4532,81 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `finally preserves normal exceptional and nonlocal exits for vm execution`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class State { var log: Int = 0 }
+                fun mark(state: State, digit: Int) { state.log = state.log * 10 + digit }
+                fun nestedReturn(state: State): Int {
+                    try { try { return 7 } finally { mark(state, 1) } }
+                    finally { mark(state, 2) }
+                }
+                fun replaceReturn(): Int { try { return 1 } finally { return 2 } }
+                fun snapshotReturn(): Int {
+                    var value = 1
+                    try { return value } finally { value = 2 }
+                }
+                inline fun invoke(block: () -> Int): Int = block()
+                fun inlineReturn(state: State): Int {
+                    try { invoke { return 3 } } finally { mark(state, 4) }
+                    return 0
+                }
+                fun main() {
+                    val state = State()
+                    require(nestedReturn(state) == 7 && state.log == 12)
+                    require(replaceReturn() == 2)
+                    require(snapshotReturn() == 1)
+                    state.log = 0
+                    require(inlineReturn(state) == 3 && state.log == 4)
+                    state.log = 0
+                    val value = try { 42 } finally { mark(state, 1) }
+                    require(value == 42 && state.log == 1)
+                    require((try { 1 } catch (ignored: Throwable) { 2 }) == 1)
+                    state.log = 0
+                    var index = 0
+                    while (index < 3) {
+                        index = index + 1
+                        try {
+                            if (index == 1) continue
+                            if (index == 2) break
+                        } finally { mark(state, index) }
+                    }
+                    require(state.log == 12)
+                    state.log = 0
+                    try {
+                        while (true) { break }
+                        val local = invoke { return@invoke 5 }
+                        require(local == 5)
+                        mark(state, 1)
+                    } finally { mark(state, 2) }
+                    require(state.log == 12)
+                    val original = RuntimeException(null, null)
+                    val replacement = Exception("replacement", original)
+                    state.log = 0
+                    try {
+                        try { throw original }
+                        catch (caught: RuntimeException) { mark(state, 1); throw caught }
+                        finally { mark(state, 2) }
+                    } catch (caught: Throwable) {
+                        require(caught === original && state.log == 12)
+                    }
+                    try {
+                        try { throw original } finally { throw replacement }
+                    } catch (caught: Throwable) { require(caught === replacement) }
+                    println("finally ok")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
+                Path.of("$output.finally.cpkt").also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `bounded when lowers deterministically for vm execution`() =
         withAdapter { adapter ->
             val request =

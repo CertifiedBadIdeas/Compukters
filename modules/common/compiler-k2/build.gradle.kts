@@ -651,9 +651,11 @@ val generateExceptionsConformanceArtifact = tasks.register<Test>("generateExcept
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("*explicit exception preserves class and message for vm execution*")
     filter.includeTestsMatching("*caught exception preserves identity hierarchy cause and expression result for vm execution*")
+    filter.includeTestsMatching("*finally preserves normal exceptional and nonlocal exits for vm execution*")
     inputs.file(workerJar)
     outputs.file(exceptionsConformanceArtifact)
     outputs.file(exceptionsConformanceArtifact.map { file -> File(file.asFile.absolutePath + ".caught.cpkt") })
+    outputs.file(exceptionsConformanceArtifact.map { file -> File(file.asFile.absolutePath + ".finally.cpkt") })
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.exceptionsArtifact", exceptionsConformanceArtifact.get().asFile.absolutePath)

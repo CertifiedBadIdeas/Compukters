@@ -93,6 +93,7 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.types.Variance
 import ru.lazyhat.compukters.compiler.artifact.analysis.ExecutionStorage
 import ru.lazyhat.compukters.compiler.artifact.analysis.hasHeterogeneousReferenceComparison
+import ru.lazyhat.compukters.compiler.artifact.analysis.mayThrow
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
@@ -3715,6 +3716,7 @@ private class FunctionCompiler(
     private var activeSource: IrElement = function
     private val loopContexts = ArrayDeque<LoopContext>()
     private val returnableContexts = mutableMapOf<IrReturnTargetSymbol, ReturnableContext>()
+    private val finallyContexts = ArrayDeque<FinallyContext>()
     private var currentBlock = 0
     private val sourceParameters =
         when (function) {
@@ -3932,7 +3934,7 @@ private class FunctionCompiler(
         expression: IrTry,
         asValue: Boolean,
     ): RegisterId? {
-        if (expression.finallyExpression != null) throw UnsupportedKotlinIr(expression, "finally lowering is not implemented yet")
+        val cleanup = expression.finallyExpression?.let { FinallyContext(it) }
         val destination =
             if (asValue && expression.type != unitType && !expression.type.isNothing()) {
                 allocate(valueType(expression.type, expression))
@@ -3956,9 +3958,11 @@ private class FunctionCompiler(
         val protectedStart = createBlock()
         jumpTo(protectedStart)
         currentBlock = protectedStart
+        cleanup?.let(finallyContexts::addLast)
         compileBranch(expression.tryResult)
         val protectedCount = blocks.size - protectedStart
-        for (handler in expression.catches) {
+        val bodyMayThrow = blocks.subList(protectedStart, blocks.size).any { block -> block.instructions.any { it.mayThrow() } }
+        for (handler in if (bodyMayThrow) expression.catches else emptyList()) {
             val type =
                 valueType(handler.catchParameter.type, handler) as? ValueType.Ref
                     ?: throw UnsupportedKotlinIr(handler, "catch parameter must be a Throwable reference")
@@ -3971,12 +3975,65 @@ private class FunctionCompiler(
             exceptions +=
                 ExceptionEntry(functionId, blockId(protectedStart), protectedCount.toUInt(), type.type, blockId(handlerBlock), exception)
         }
+        val cleanupProtectedEnd = blocks.size
+        if (cleanup != null) {
+            check(finallyContexts.removeLast() === cleanup)
+            if (exits.isNotEmpty()) {
+                val normalCleanup = createBlock()
+                exits.forEach { patchJumpTarget(it, normalCleanup) }
+                exits.clear()
+                currentBlock = normalCleanup
+                compileStatement(cleanup.expression)
+                if (!isTerminated()) {
+                    exits += currentBlock
+                    jumpTo(0)
+                }
+            }
+            for (exit in cleanup.exits) {
+                val exitCleanup = createBlock()
+                patchJumpTarget(exit.block, exitCleanup)
+                currentBlock = exitCleanup
+                compileStatement(cleanup.expression)
+                if (!isTerminated()) emitNonlocalExit(exit.targetDepth, exit.source, exit.action)
+            }
+            if (blocks.subList(protectedStart, cleanupProtectedEnd).any { block -> block.instructions.any { it.mayThrow() } }) {
+                val exception = allocate(ValueType.Ref(false, TypeRef.Imported(ImportId.of(2u))))
+                val handlerBlock = createBlock()
+                currentBlock = handlerBlock
+                compileStatement(cleanup.expression)
+                if (!isTerminated()) emit(Instruction.Throw(exception))
+                exceptions +=
+                    ExceptionEntry(
+                        functionId,
+                        blockId(protectedStart),
+                        (cleanupProtectedEnd - protectedStart).toUInt(),
+                        null,
+                        blockId(handlerBlock),
+                        exception,
+                    )
+            }
+        }
         if (exits.isNotEmpty()) {
             val continuation = createBlock()
             exits.forEach { patchJumpTarget(it, continuation) }
             currentBlock = continuation
         }
         return destination
+    }
+
+    private fun emitNonlocalExit(
+        targetDepth: Int,
+        source: IrElement,
+        action: () -> Unit,
+    ) {
+        withSource(source) {
+            if (finallyContexts.size > targetDepth) {
+                finallyContexts.last().exits += FinallyExit(currentBlock, targetDepth, source, action)
+                jumpTo(0)
+            } else {
+                action()
+            }
+        }
     }
 
     private fun compileDelegatingConstructorCall(call: IrDelegatingConstructorCall) {
@@ -6344,7 +6401,7 @@ private class FunctionCompiler(
         val branchIndex = blocks[branchBlock].instructions.size
         emit(Instruction.Branch(condition, blockId(body), blockId(header)))
         currentBlock = body
-        val context = LoopContext(loop, continueTarget = header)
+        val context = LoopContext(loop, continueTarget = header, finallyDepth = finallyContexts.size)
         withLoopContext(context) {
             loop.body?.let(::compileStatement)
         }
@@ -6393,7 +6450,7 @@ private class FunctionCompiler(
         val loopValue = allocate(ValueType.I32)
         values[plan.canonical.loopVariable.symbol] = loopValue
         emit(Instruction.ArrayLoad(loopValue, array, index))
-        val context = LoopContext(plan.canonical.loop, continueTarget = null, placeholderTarget = body)
+        val context = LoopContext(plan.canonical.loop, continueTarget = null, placeholderTarget = body, finallyDepth = finallyContexts.size)
         withLoopContext(context) {
             compileStatement(plan.canonical.body)
         }
@@ -6446,7 +6503,7 @@ private class FunctionCompiler(
         val loopValue = allocate(ValueType.I32)
         values[plan.loopVariable.symbol] = loopValue
         emit(Instruction.Move(loopValue, index))
-        val context = LoopContext(plan.loop, continueTarget = null, placeholderTarget = body)
+        val context = LoopContext(plan.loop, continueTarget = null, placeholderTarget = body, finallyDepth = finallyContexts.size)
         withLoopContext(context) {
             compileStatement(plan.body)
         }
@@ -6576,16 +6633,18 @@ private class FunctionCompiler(
         if (context == null || jump.loop !== context.loop) {
             throw UnsupportedKotlinIr(jump, "outer loop jump is not supported")
         }
-        if (breakJump) {
-            context.breakBlocks += currentBlock
-            jumpTo(context.placeholderTarget)
-        } else {
-            val target = context.continueTarget
-            if (target == null) {
-                context.continueBlocks += currentBlock
+        emitNonlocalExit(context.finallyDepth, jump) {
+            if (breakJump) {
+                context.breakBlocks += currentBlock
                 jumpTo(context.placeholderTarget)
             } else {
-                jumpTo(target)
+                val target = context.continueTarget
+                if (target == null) {
+                    context.continueBlocks += currentBlock
+                    jumpTo(context.placeholderTarget)
+                } else {
+                    jumpTo(target)
+                }
             }
         }
     }
@@ -6829,18 +6888,27 @@ private class FunctionCompiler(
                 coerceLocalValue(compileExpression(statement.value, type), type, statement.value)
             }
         if (isTerminated()) return
-        if (context != null) {
-            context.destination?.let { emit(Instruction.Move(it, requireNotNull(value))) }
-            context.exits += currentBlock
-            jumpTo(0) // Patched when the block's continuation is known.
-        } else {
-            emit(Instruction.Return(value?.let { Destination.Register(it) } ?: Destination.Unit))
+        val targetDepth = context?.finallyDepth ?: 0
+        val exitValue =
+            if (value != null && finallyContexts.size > targetDepth) {
+                allocate(registerValueType(value)).also { emit(Instruction.Move(it, value)) }
+            } else {
+                value
+            }
+        emitNonlocalExit(targetDepth, statement) {
+            if (context != null) {
+                context.destination?.let { emit(Instruction.Move(it, requireNotNull(exitValue))) }
+                context.exits += currentBlock
+                jumpTo(0) // Patched when the block's continuation is known.
+            } else {
+                emit(Instruction.Return(exitValue?.let { Destination.Register(it) } ?: Destination.Unit))
+            }
         }
     }
 
     private fun compileReturnableBlock(block: IrReturnableBlock): RegisterId? {
         val destination = if (block.type == unitType || block.type.isNothing()) null else allocate(valueType(block.type, block))
-        val context = ReturnableContext(block.type, destination)
+        val context = ReturnableContext(block.type, destination, finallyDepth = finallyContexts.size)
         check(returnableContexts.put(block.symbol, context) == null)
         try {
             if (destination == null) {
@@ -7027,6 +7095,7 @@ private class FunctionCompiler(
     private data class ReturnableContext(
         val type: IrType,
         val destination: RegisterId?,
+        val finallyDepth: Int,
         val exits: MutableList<Int> = mutableListOf(),
     )
 
@@ -7034,8 +7103,21 @@ private class FunctionCompiler(
         val loop: IrLoop,
         val continueTarget: Int?,
         val placeholderTarget: Int = requireNotNull(continueTarget),
+        val finallyDepth: Int,
         val breakBlocks: MutableList<Int> = mutableListOf(),
         val continueBlocks: MutableList<Int> = mutableListOf(),
+    )
+
+    private data class FinallyContext(
+        val expression: IrExpression,
+        val exits: MutableList<FinallyExit> = mutableListOf(),
+    )
+
+    private data class FinallyExit(
+        val block: Int,
+        val targetDepth: Int,
+        val source: IrElement,
+        val action: () -> Unit,
     )
 
     private data class IntForLoopPlan(
