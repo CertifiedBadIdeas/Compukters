@@ -27,6 +27,7 @@ import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload
 import net.neoforged.neoforge.network.PacketDistributor
 import org.lwjgl.glfw.GLFW
+import ru.lazyhat.compukters.impl.font.JetBrainsMonoRendering
 import ru.lazyhat.compukters.impl.ide.ChildScreenParent
 import ru.lazyhat.compukters.impl.ide.IdeClientBootstrap
 import ru.lazyhat.compukters.impl.ui.CompuktersUiViewport
@@ -205,13 +206,13 @@ internal class TerminalScreen(
                 Component
                     .literal(TerminalResourceText.format(resourceReplica.gauges))
                     .withStyle { it.withFont(TerminalFontProfile.fontDescription) }
-            graphics.drawString(
+            JetBrainsMonoRendering.drawString(
+                graphics,
                 font,
                 resources,
                 geometry.footer.left,
                 geometry.footer.top + TerminalFontProfile.glyphDrawOffsetY,
                 TerminalScreenStyle.RESOURCE_COLOR,
-                false,
             )
             super.render(
                 graphics,
