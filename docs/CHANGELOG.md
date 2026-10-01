@@ -17,8 +17,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
-- Explicit thrown exceptions preserve their class and message through nested calls and report a bounded source
-  stack when uncaught. Runtime libraries containing exception instructions need rebuilding for Runtime ABI 1.8.
+- Programs can throw and catch exceptions through nested calls, match user-defined exception subclasses,
+  rethrow the original object, and read nullable `message` and `cause`. Uncaught exceptions report their class,
+  message and bounded source stack. Runtime libraries containing exception instructions need rebuilding for Runtime ABI 1.8.
 
 - Reference identity comparisons (`===`/`!==`) compare supported arrays and nullable references directly,
   preserving aliases and distinguishing fresh copies without artificial casts to `Any`.

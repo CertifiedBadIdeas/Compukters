@@ -583,20 +583,23 @@ supported.
   paired with [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs), scenario `nullable-references`.
   Tracking: [#654](https://github.com/CertifiedBadIdeas/Compukters/issues/654)
 
-- [ ] **`throw`, `try`, `catch`, and `finally` — Partial** — explicit statement `throw` constructs a managed
-  exception and unwinds Guest calls. The VM executes typed handler tables, preserves exception identity through
-  GC and rethrow, and retains child-task failures for repeated joins. Source `IrTry` lowering, finally and
-  non-local exits are not implemented yet. Legacy exception artifacts must be rebuilt for Runtime ABI 1.8;
+- [ ] **`throw`, `try`, `catch`, and `finally` — Partial** — explicit statement `throw`, typed `try/catch` statements
+  and expressions, nested handlers and rethrow preserve managed exception identity through Guest calls.
+  Catch matches the real class hierarchy, including user subclasses. The VM retains child-task failures for
+  repeated joins and roots exceptions through GC. `finally` is not implemented yet.
+  Legacy exception artifacts must be rebuilt for Runtime ABI 1.8;
   there is no terminal-trap fallback. Evidence: `MinimalScriptLoweringTest`, test
   `explicit exception preserves class and message for vm execution`, and `testKotlinExceptionsVmConformance`;
+  source catch evidence: `caught exception preserves identity hierarchy cause and expression result for vm execution`;
   native tests `explicit_exceptions_preserve_identity_across_calls_and_repeated_task_joins` and
   `exception_handlers_choose_innermost_region_and_source_order_and_rethrow_to_outer`.
   Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)
 
 - [ ] **Standard exception classes — Partial** — Guest `Throwable`, `Exception`, `RuntimeException` and
-  `IllegalArgumentException` have distinct nominal identities and nullable message storage. Uncaught exceptions
-  report class, message and bounded source stack through both FFM and JNI. Source message/cause access,
-  user exception constructors and catchable operation/host errors remain pending; OOM, quotas and VM faults
+  `IllegalArgumentException` have distinct nominal identities, nullable message/cause constructors and read-only
+  properties. User exception constructors initialize inherited payload through ordinary super calls. Uncaught
+  exceptions report class, message and bounded source stack through both FFM and JNI.
+  Catchable operation/host errors remain pending; OOM, quotas and VM faults
   remain noncatchable. Evidence: real native transport tests `FFM preserves uncaught exception class message
   and source stack` and `JNI preserves uncaught exception class message and source stack`.
   Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)

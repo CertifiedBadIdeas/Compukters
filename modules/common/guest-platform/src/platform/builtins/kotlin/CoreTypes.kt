@@ -30,13 +30,25 @@ public interface CharSequence {
     public external operator fun get(index: Int): Char
 }
 
-public open class Throwable external constructor(message: String?)
+public open class Throwable external constructor(message: String?) {
+    public external constructor(message: String?, cause: Throwable?) : this(message)
 
-public open class Exception external constructor(message: String?) : Throwable(message)
+    public external val message: String?
 
-public open class RuntimeException external constructor(message: String?) : Exception(message)
+    public external val cause: Throwable?
+}
 
-public class IllegalArgumentException external constructor(message: String?) : RuntimeException(message)
+public open class Exception external constructor(message: String?) : Throwable(message) {
+    public external constructor(message: String?, cause: Throwable?) : this(message)
+}
+
+public open class RuntimeException external constructor(message: String?) : Exception(message) {
+    public external constructor(message: String?, cause: Throwable?) : this(message)
+}
+
+public class IllegalArgumentException external constructor(message: String?) : RuntimeException(message) {
+    public external constructor(message: String?, cause: Throwable?) : this(message)
+}
 
 public abstract class Enum<E : Enum<E>> external constructor() : Comparable<E> {
     public external val name: String

@@ -75,6 +75,11 @@ fn main() {
 }
 
 fn k2_explicit_exception_unwinds_across_guest_calls() {
+    k2_expected_prints_with_budget(
+        "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_CAUGHT",
+        ["exceptions ok\n"],
+        64,
+    );
     let path = std::env::var("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT")
         .expect("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT must be set");
     let verified = verify_artifact(Arc::from(fs::read(path).expect("exception artifact must exist")), ArtifactLimits::default())
