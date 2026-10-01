@@ -123,12 +123,6 @@ internal class ReachabilityGraph(
         artifact.modules.forEachIndexed { index, module -> markString(index, module.name.value.toInt()) }
         if (preserveLibraryExports) {
             artifact.modules.forEachIndexed { index, module ->
-                module.strings.indices.forEach { markString(index, it) }
-                module.utf16Literals.indices.forEach { markLiteral(index, it) }
-                module.types.indices.forEach { markType(index, it) }
-                module.constants.indices.forEach { markConstant(index, it) }
-                module.fields.indices.forEach { markField(index, it) }
-                module.functions.indices.forEach { markFunction(index, it) }
                 module.exports.forEachIndexed { exportIndex, export ->
                     reachable[index].exports += exportIndex
                     markString(index, export.name.value.toInt())

@@ -175,6 +175,20 @@ platform bundle or VM artifact contract. Bundle format 7 and standalone module f
 The standard library has one owner, `stdlib:core`: core helpers, inline scope functions, `repeat`, ranges and collections.
 Its generic and inline source bodies coexist with ordinary precompiled implementations.
 
+Ordinary library implementations may materialize concrete generic classes and structural collection interfaces,
+including `ArrayList<String>` and `List<String>`. These variants have canonical internal type, constructor, method
+and field exports in the owning library artifact. Linking redirects matching trusted template materializations to
+that owner and removes the superseded local records; variants absent from dependencies continue to specialize from
+source. Source provenance, rather than a user class's spelling, controls eligibility. Ambiguous owners, incompatible
+layouts and missing members are rejected. Internal linking exports do not change Kotlin source visibility. The
+representation uses the existing artifact import/export format, without new VM instructions or binary generic
+templates. Only concrete variants are shared; inline and generic top-level source bodies retain their normal
+consumer specialization behavior. K2 still materializes a consumer variant transiently for type and layout checking;
+this linking contract does not yet skip that lowering work. Trusted collection variants include their supported
+read-view interfaces regardless of consumer usage, so covariance cannot change a specialization's nominal layout.
+User-defined concrete type arguments retain their qualified identity, with a separate root-package namespace, rather than
+Kotlin metadata's short display names. User classes named `String` therefore cannot reuse a built-in String variant.
+
 The complete built-in graph is `kotlin:builtins` → `stdlib:core` → `compukter:core`. Compukter core owns environment
 and VM-runtime APIs: compiler, child processes, redstone, sound, text displays, terminal, filesystem, and cooperative
 tasks/channels. This includes the environment-dependent `kotlin.io` facade without changing its package or default

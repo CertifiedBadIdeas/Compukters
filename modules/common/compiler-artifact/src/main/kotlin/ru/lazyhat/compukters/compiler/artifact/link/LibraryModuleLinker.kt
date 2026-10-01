@@ -77,15 +77,23 @@ object LibraryModuleLinker {
         application: Artifact,
         libraryArtifacts: List<Artifact>,
         preserveLibraryExports: Boolean = false,
+        specializationNames: Set<String> = emptySet(),
     ): Artifact {
-        val applicationModule = application.modules.single { it.kind == ModuleKind.APPLICATION }
+        val canonical =
+            LibrarySpecializations.reuse(
+                application,
+                libraryArtifacts,
+                specializationNames,
+                definitionModule = if (preserveLibraryExports) application.modules.indexOfFirst { it.kind == ModuleKind.LIBRARY } else 0,
+            )
+        val applicationModule = canonical.modules.single { it.kind == ModuleKind.APPLICATION }
         val applicationCapabilities =
-            application.capabilities
+            canonical.capabilities
                 .map { capability -> capabilityIdentity(capability, applicationModule) }
                 .withIndex()
                 .associate { (index, identity) -> identity to index }
         require(applicationCapabilities.size == application.capabilities.size) { "application contains duplicate capability descriptors" }
-        val seen = application.modules.mapTo(mutableSetOf()) { ArtifactWriter.moduleSemanticHash(it).hex() }
+        val seen = canonical.modules.mapTo(mutableSetOf()) { ArtifactWriter.moduleSemanticHash(it).hex() }
         val libraries = linkedMapOf<String, LibraryInput>()
         libraryArtifacts.forEach { artifact ->
             val descriptorModule = artifact.modules.single { it.kind == ModuleKind.APPLICATION }
@@ -100,7 +108,7 @@ object LibraryModuleLinker {
                 if (seen.add(hash)) libraries[hash] = LibraryInput(module, capabilityIds)
             }
         }
-        return linkInputs(application, libraries, preserveLibraryExports)
+        return linkInputs(canonical, libraries, preserveLibraryExports)
     }
 
     private fun linkInputs(
@@ -535,7 +543,7 @@ private fun relocateType(
             type.copy(
                 name = ids.string(type.name),
                 superType = type.superType?.let(ids::type),
-                interfaces = type.interfaces.map(ids::type),
+                interfaces = type.interfaces.map(ids::type).sortedBy(::encodeTypeRef),
                 fieldStart = relocateStart(type.fieldStart, type.fieldCount, ids.fields, "field"),
                 methodStart = relocateStart(type.methodStart, type.methodCount, ids.functions, "method"),
                 initializer = type.initializer?.let(ids::function),
@@ -546,7 +554,7 @@ private fun relocateType(
             type.copy(
                 name = ids.string(type.name),
                 superType = type.superType?.let(ids::type),
-                interfaces = type.interfaces.map(ids::type),
+                interfaces = type.interfaces.map(ids::type).sortedBy(::encodeTypeRef),
                 methodStart = relocateStart(type.methodStart, type.methodCount, ids.functions, "method"),
             )
         }

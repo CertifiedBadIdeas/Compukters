@@ -284,6 +284,10 @@ supported.
   generic class instances; class and function dependencies are collected until specialization is complete.
   Mixed modules retain precompiled ordinary functions alongside generic/inline bodies; specialization can call a
   shared compiled private helper without publishing it as Kotlin API or duplicating its implementation.
+  Ordinary library bodies may materialize concrete generic classes and interfaces, including those in return and
+  parameter types. Consumers and dependent libraries reuse an available trusted specialization, including its
+  constructors, fields and methods, with one nominal owner. Variants absent from dependencies remain source-specialized;
+  inconsistent layouts, missing member exports and ambiguous owners are rejected.
   Function-valued parameters of source-compiled
   generic functions use the specialized element type, as exercised by the
   `Iterable<T>` predicate helpers.
@@ -304,7 +308,10 @@ supported.
   test `source library generic functions and classes specialize in consumer`; VM
   conformance tasks `testKotlinGenericFunctionsVmConformance`,
   `testKotlinGenericCellVmConformance`, and
-  `testKotlinGenericLibraryVmConformance`. Tracking: #652, #656, #670
+  `testKotlinGenericLibraryVmConformance`. Concrete library reuse is covered by
+  [`LibrarySpecializationsTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/kotlin/ru/lazyhat/compukters/compiler/artifact/link/LibrarySpecializationsTest.kt)
+  and [`CompuktersFir2IrPipelineTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2-engine/src/test/kotlin/ru/lazyhat/compukters/compiler/k2/engine/CompuktersFir2IrPipelineTest.kt).
+  Tracking: #652, #656, #670, #676
 
 - [ ] **Lambdas, local functions, and function references — Partial** —
   Non-null function values using supported Guest parameter and result types

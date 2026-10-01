@@ -257,7 +257,12 @@ class K2CompilerAdapter(
                             limits = request.limits,
                         )
                     CompuktersFir2IrPipeline.lowerGuest(output, session, sourceOutputs.values.toList())?.let { lowered ->
-                        val linked = linkLibraries(lowered, libraries.artifacts)
+                        val linked =
+                            LibraryModuleLinker.link(
+                                lowered,
+                                libraries.artifacts,
+                                specializationNames = session.materializedPlatformSpecializations,
+                            )
                         when (
                             val result =
                                 ArtifactWriter.write(
@@ -360,11 +365,6 @@ class K2CompilerAdapter(
             PlatformCapabilityId(schema.identity.namespace, schema.identity.name, schema.identity.abiMajor) to
                 PlatformCapabilityShape(schema.identity.abiMinor, schema.operations.size.toUInt())
         }
-
-    private fun linkLibraries(
-        application: Artifact,
-        libraryArtifacts: List<Artifact>,
-    ): Artifact = LibraryModuleLinker.link(application, libraryArtifacts)
 
     private fun sourceFootprint(request: CompileRequest): TemporaryUsage {
         val directories = mutableSetOf("source")

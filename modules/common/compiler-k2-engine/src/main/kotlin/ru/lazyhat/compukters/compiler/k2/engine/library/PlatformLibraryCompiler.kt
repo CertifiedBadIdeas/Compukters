@@ -28,6 +28,7 @@ import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import ru.lazyhat.compukters.compiler.artifact.link.LibraryModuleLinker
+import ru.lazyhat.compukters.compiler.artifact.link.LibrarySpecializations
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
@@ -88,6 +89,22 @@ class PlatformLibraryCompiler {
         val currentFiles = currentSourcePaths.mapNotNull(filesByPath::get).toSet()
         require(currentFiles.isNotEmpty()) { "FIR-to-IR produced no files for platform module $module" }
         val collected = LibraryDeclarationCollector(currentFiles).also { ir.accept(it, null) }
+        val dependencyIds = dependencies.mapTo(mutableSetOf(), PlatformModule::id)
+        val dependencyFiles = filesByPath.filterKeys { sourceModules[it] in dependencyIds }.values.toSet()
+        val dependencyDeclarations = LibraryDeclarationCollector(dependencyFiles).also { ir.accept(it, null) }
+        val dependencyTemplateSymbols = dependencies.flatMap { it.sourceDeclarations }.mapTo(mutableSetOf()) { it.symbol }
+        val dependencyTemplateClasses =
+            dependencyDeclarations.classes.filter {
+                it.fqNameWhenAvailable?.asString() in
+                    dependencyTemplateSymbols
+            }
+        val dependencyTemplateFunctions =
+            dependencyDeclarations.functions.filter { function ->
+                !function.isInline && (
+                    function.fqNameWhenAvailable?.asString() in dependencyTemplateSymbols ||
+                        (function.parent as? IrClass) in dependencyTemplateClasses
+                )
+            }
         val ordinarySymbols =
             declarations.filter { it.kind == PlatformLibraryDeclarationKind.FUNCTION }.mapTo(mutableSetOf()) { it.symbol }
         val ordinaryFunctions =
@@ -100,6 +117,11 @@ class PlatformLibraryCompiler {
                 .sortedWith(compareBy({ it.file.fileEntry.name }, IrSimpleFunction::startOffset, { it.name.asString() }))
                 .firstOrNull()
                 ?: return null
+        val templateFunctions =
+            collected.functions.filter { function ->
+                !function.isInline &&
+                    (function.typeParameters.isNotEmpty() || (function.parent as? IrClass)?.typeParameters?.isNotEmpty() == true)
+            }
         val physicalModules =
             filesByPath.entries.associate { (path, file) -> file.fileEntry.name to sourceModules.getValue(path) }
         val libraries = loadPlatformLibraries(dependencies)
@@ -116,9 +138,9 @@ class PlatformLibraryCompiler {
         val artifact =
             try {
                 KotlinProjectLowering.lower(
-                    ordinaryFunctions,
+                    (ordinaryFunctions + templateFunctions + dependencyTemplateFunctions).distinctBy { it.symbol },
                     emptyList(),
-                    collected.classes,
+                    (collected.classes + dependencyTemplateClasses).distinctBy { it.symbol },
                     entry,
                     pluginContext,
                     session,
@@ -132,9 +154,10 @@ class PlatformLibraryCompiler {
             }
         val wrapper =
             LibraryModuleLinker.link(
-                artifact.withLibraryFragmentEntry(declarations),
+                artifact.withLibraryFragmentEntry(declarations, session.materializedPlatformSpecializations),
                 libraries.artifacts,
                 preserveLibraryExports = true,
+                specializationNames = session.materializedPlatformSpecializations,
             )
         val bytes =
             when (val result = ArtifactWriter.write(wrapper)) {
@@ -183,6 +206,7 @@ class PlatformLibraryCompiler {
 
 private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFragmentEntry(
     declarations: List<PlatformLibraryDeclaration>,
+    specializationNames: Set<String>,
 ): ru.lazyhat.compukters.compiler.artifact.model.Artifact {
     val lowered = modules.first()
     val typeDeclarations =
@@ -230,7 +254,11 @@ private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFr
     val functionExports =
         lowered.exports +
             lowered.functions.mapIndexedNotNull { index, function ->
-                if (index.toUInt() in initializerFunctions || index.toUInt() in namedFunctions) return@mapIndexedNotNull null
+                if (index.toUInt() in initializerFunctions || index.toUInt() in namedFunctions ||
+                    LibrarySpecializations.ownsFunction(lowered, function, specializationNames)
+                ) {
+                    return@mapIndexedNotNull null
+                }
                 Export(
                     SymbolKind.FUNCTION,
                     ExportVisibility.PUBLIC_LIBRARY,
@@ -251,14 +279,17 @@ private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFr
             )
         }
     val library =
-        lowered.copy(
-            kind = ru.lazyhat.compukters.compiler.artifact.model.ModuleKind.LIBRARY,
-            strings = libraryStrings,
-            imports =
-                lowered.imports.map { value ->
-                    value.copy(targetModule = ModuleId.of(value.targetModule.value + 1u))
-                },
-            exports = typeExports + functionExports + fieldExports,
+        LibrarySpecializations.export(
+            lowered.copy(
+                kind = ru.lazyhat.compukters.compiler.artifact.model.ModuleKind.LIBRARY,
+                strings = libraryStrings,
+                imports =
+                    lowered.imports.map { value ->
+                        value.copy(targetModule = ModuleId.of(value.targetModule.value + 1u))
+                    },
+                exports = typeExports + functionExports + fieldExports,
+            ),
+            specializationNames,
         )
     val functionId = FunctionId.of(0u)
     val typeId = TypeId.of(0u)
@@ -266,7 +297,7 @@ private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFr
     val anchor =
         Function(
             owner = null,
-            name = library.name,
+            name = lowered.name,
             signature = TypeRef.Local(typeId),
             flags = setOf(FunctionFlag.STATIC),
             values = emptyList(),
@@ -278,10 +309,10 @@ private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFr
         )
     val wrapperApplication =
         ru.lazyhat.compukters.compiler.artifact.model.Module(
-            name = library.name,
+            name = lowered.name,
             kind = ru.lazyhat.compukters.compiler.artifact.model.ModuleKind.APPLICATION,
-            strings = library.strings,
-            types = listOf(NominalType.Function(library.name, suspending = false, result = ValueType.Unit, parameters = emptyList())),
+            strings = lowered.strings,
+            types = listOf(NominalType.Function(lowered.name, suspending = false, result = ValueType.Unit, parameters = emptyList())),
             functions = listOf(anchor),
             blocks = listOf(Block(functionId, false, listOf(Instruction.Return(Destination.Unit)))),
         )

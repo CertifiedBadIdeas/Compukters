@@ -53,10 +53,11 @@ internal object CollectionReadBridges {
         return views[owner.fqNameWhenAvailable?.asString()]?.methods?.get(function.name.asString())
     }
 
-    fun interfaceNames(
+    fun interfaces(
         declaration: IrClass,
         arguments: List<IrType>,
-    ): List<String> {
+        anyType: IrType,
+    ): List<Pair<String, IrType>> {
         val view = views[declaration.fqNameWhenAvailable?.asString()] ?: return emptyList()
         val root = "kotlin.collections.${view.root}"
         val nullableElement =
@@ -68,8 +69,8 @@ internal object CollectionReadBridges {
                 listOf(root)
             }
         return listOfNotNull(
-            "$root<Any?>",
-            "$root<Any>".takeIf { arguments.none { it.isNullable() } },
-        ) + nullableRoots.mapNotNull { name -> nullableElement?.let { "$name<${it.canonicalPlatformType()}>" } }
+            root to anyType.makeNullable(),
+            (root to anyType).takeIf { arguments.none { it.isNullable() } },
+        ) + nullableRoots.mapNotNull { name -> nullableElement?.let { name to it } }
     }
 }
