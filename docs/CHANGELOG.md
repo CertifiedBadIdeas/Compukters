@@ -24,7 +24,12 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   `require`, `check` and `error` use catchable exceptions, with lazy String messages for the preconditions.
   Integer division/remainder, array and string bounds, negative array sizes, null references and checked casts
   throw typed catchable exceptions. Invalid channel arguments are catchable; resource exhaustion remains terminal.
+  Ordinary host EOF/I/O and unavailable-operation failures are catchable as IOException and IllegalStateException,
+  including across task suspension and filesystem reads; cancellation and VM resource failures remain terminal.
   Programs and libraries containing these fallible operations need rebuilding for Runtime ABI 1.9.
+  Standard exception descendants and `compukter.io.IOException` use ordinary library constructors,
+  preserving nullable causes through superclass calls. Platform bundles and standalone modules need rebuilding
+  for bundle format 9 / module format 5.
   Exhaustive `when` can return references without an explicit `else`.
 
 - Reference identity comparisons (`===`/`!==`) compare supported arrays and nullable references directly,

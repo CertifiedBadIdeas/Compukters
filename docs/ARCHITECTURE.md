@@ -171,9 +171,13 @@ owners remain distinct even when their lowered signatures coincide. Fragment ass
 implementations and their dependencies; final application linking removes unreachable records. Tooling normalizes
 dependency module indexes into symbolic identities before linking so a shared library retains one owner across
 fragment containers. The final executable restores concrete indexes. Generic binary templates are not part of the
-platform bundle or VM artifact contract. Bundle format 8 and standalone module format 4 reject older representations.
+platform bundle or VM artifact contract. Bundle format 9 and standalone module format 5 reject older representations.
 Default-argument metadata includes an explicit array-receiver size expression, evaluated from the already computed
-receiver rather than re-evaluating its source expression. Private Kotlin metadata format 5 carries the same default.
+receiver rather than re-evaluating its source expression, and an explicit null value distinct from an absent default.
+Private Kotlin metadata format 6 carries the same defaults, including primary-constructor defaults without a receiver slot.
+Ordinary public library constructors are linked as static functions receiving the already allocated object;
+direct construction and superclass calls share argument/default evaluation. Their Kotlin bodies are compiled in
+the owning library, not regenerated or bypassed by the consumer.
 The standard library has one owner, `stdlib:core`: core helpers, inline scope functions, `repeat`, ranges and collections.
 Its generic and inline source bodies coexist with ordinary precompiled implementations.
 
@@ -404,9 +408,13 @@ Runtime ABI 1.9 adds a runtime-exception role tag in class header bits 3..7: 0 i
 6 illegal argument, 7 illegal state, and 8 I/O. Tags 9..31 are invalid. Each role may occur at most
 once per artifact and must name a non-abstract, non-generic subclass of the verified Throwable root.
 The subclass and its intermediate ancestors have no own fields, methods, interfaces or initializer;
-only the root supplies message/cause storage. Role identity is preserved through library linking and
+only the root supplies message/cause storage. Only `Throwable` has trusted external payload constructors.
+Standard descendants in `stdlib:core` and `compukter.io.IOException` in `compukter:core` use ordinary Kotlin
+constructors and real superclass calls. Their constructor functions receive the canonical runtime class;
+library fragment assembly retains that class's single exported owner rather than declaring another nominal type.
+Role identity is preserved through library linking and
 specialization fingerprints; linking infers ABI 1.9 from retained role metadata. Fallible integer arithmetic,
-array allocation/access/copy, string ranges, reference access/cast and channel operations retain their factory
+array allocation/access/copy, string ranges, reference access/cast, channel and host capability operations retain their factory
 roles as implicit dependencies even without a source catch. Both validators reject these operations below
 ABI 1.9 or without the required roles, with a rebuild requirement; floating division remains nonthrowing.
 The VM materializes the bounded error message through budgeted compact-string construction, then allocates and initializes
@@ -414,8 +422,11 @@ the ordinary managed exception through existing reservation/zeroing/collection m
 and exception references are GC roots and pending storage is quota-accounted. Allocation failure remains
 noncatchable OOM. Handler lookup uses the original failing instruction; no terminal-trap path is retained for
 these operation errors. Invalid channel arguments are catchable IllegalArgumentException; exhausting channel
-storage remains a noncatchable resource fault, as do stack overflow and other VM faults. Host factories are
-still being integrated.
+storage remains a noncatchable resource fault, as do stack overflow and other VM faults.
+Host EOF/I/O failures raise IOException; unavailable/other failures raise IllegalStateException. Cancellation
+remains terminal. Accepted failures retain bounded owned details per waiting task and materialize only after
+that task's frames are restored, at the original host-call instruction. Admission accounts this storage;
+factory allocation and unwinding remain sliceable and do not retire the published call a second time.
 
 Runtime ABI 1.7 adds an explicit optional superclass to nominal array records. Array header flag bit 0 indicates
 a non-null TypeRef appended after the element ValueType; flag-zero records remain unchanged. The parent must resolve

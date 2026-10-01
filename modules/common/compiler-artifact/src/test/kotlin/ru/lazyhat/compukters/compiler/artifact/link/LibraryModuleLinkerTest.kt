@@ -316,7 +316,8 @@ class LibraryModuleLinkerTest {
                     ),
             )
 
-        val linked = LibraryModuleLinker.link(input, mapOf("sample" to library))
+        val prepared = input.copy(modules = input.modules + library).withRuntimeExceptionDependencies()
+        val linked = LibraryModuleLinker.link(prepared, emptyMap())
 
         assertEquals(1, linked.capabilities.size)
         val linkedApp = linked.modules.first()
@@ -364,6 +365,7 @@ class LibraryModuleLinkerTest {
             )
         val application =
             applicationSource.copy(
+                minimumRuntimeAbi = AbiVersion(1u, 9u),
                 semanticFeatures = applicationSource.semanticFeatures + SemanticFeature.CAPABILITIES,
                 modules = listOf(applicationModule),
                 capabilities =
@@ -386,7 +388,7 @@ class LibraryModuleLinkerTest {
                     ),
             )
 
-        val linked = LibraryModuleLinker.link(application, listOf(fragment))
+        val linked = LibraryModuleLinker.link(application, listOf(fragment.withRuntimeExceptionDependencies()))
 
         assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(linked))
         assertEquals(1, linked.capabilities.size)
@@ -399,8 +401,7 @@ class LibraryModuleLinkerTest {
         assertEquals("zzfixture", linkedApplication.strings[capabilityName].toString())
         val call =
             linked.modules
-                .single { it.kind == ModuleKind.LIBRARY }
-                .blocks
+                .flatMap(Module::blocks)
                 .flatMap(Block::instructions)
                 .filterIsInstance<Instruction.CapabilityCallSync>()
                 .single()

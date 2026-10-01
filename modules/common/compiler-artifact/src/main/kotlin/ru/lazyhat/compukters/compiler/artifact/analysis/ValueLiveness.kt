@@ -406,6 +406,9 @@ internal fun Instruction.successors(): List<BlockId> =
 /** Implicit managed factory dependencies of the instruction, retained even without an explicit catch. */
 fun Instruction.runtimeExceptionKinds(): Set<RuntimeExceptionKind> {
     when (this) {
+        is Instruction.CapabilityCallSync, is Instruction.CapabilityCallAsync,
+        -> return setOf(RuntimeExceptionKind.ILLEGAL_STATE, RuntimeExceptionKind.IO)
+
         is Instruction.NewArray -> return setOf(RuntimeExceptionKind.NEGATIVE_ARRAY_SIZE)
 
         is Instruction.ArrayLoad, is Instruction.ArrayStore, is Instruction.ArrayCopy,
