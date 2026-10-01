@@ -31,7 +31,9 @@ import org.jetbrains.kotlin.analysis.api.components.resolveSymbol
 import org.jetbrains.kotlin.analysis.api.components.scopeContext
 import org.jetbrains.kotlin.analysis.api.components.staticMemberScope
 import org.jetbrains.kotlin.analysis.api.renderer.declarations.impl.KaDeclarationRendererForSource
+import org.jetbrains.kotlin.analysis.api.renderer.types.KaExpandedTypeRenderingMode
 import org.jetbrains.kotlin.analysis.api.renderer.types.impl.KaTypeRendererForSource
+import org.jetbrains.kotlin.analysis.api.renderer.types.renderers.KaFunctionalTypeRenderer
 import org.jetbrains.kotlin.analysis.api.scopes.KaScope
 import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassKind
@@ -74,6 +76,13 @@ import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 
 internal object CompletionQuery {
+    @OptIn(KaExperimentalApi::class)
+    private val lambdaLabelTypeRenderer =
+        KaTypeRendererForSource.WITH_SHORT_NAMES.with {
+            expandedTypeRenderingMode = KaExpandedTypeRenderingMode.RENDER_EXPANDED_TYPE
+            functionalTypeRenderer = KaFunctionalTypeRenderer.AS_FUNCTIONAL_TYPE
+        }
+
     @OptIn(KaExperimentalApi::class)
     fun execute(
         query: AnalysisQuery.Completion,
@@ -203,16 +212,17 @@ internal object CompletionQuery {
                         declaration,
                         exactCandidates.filter { it.shortName == declaration.shortName },
                     )
+                val function = indexedFunction(declaration, snapshot)
                 val item =
                     CompletionItem(
-                        declaration.shortName,
+                        function?.let { completionLabel(it, declaration.shortName) } ?: declaration.shortName,
                         importPlan.insertText,
                         declaration.kind,
                         declaration.signature,
                         declaration.origin,
                         importPlan.symbol,
                         importPlan.additionalEdits,
-                        if (context.allowsCall()) indexedFunction(declaration, snapshot)?.let { callShape(it) } else null,
+                        if (context.allowsCall()) function?.let { callShape(it) } else null,
                     )
                 val locality =
                     when (declaration.origin) {
@@ -305,10 +315,16 @@ internal object CompletionQuery {
     private fun KaSession.callShape(symbol: KaFunctionSymbol): CompletionCallShape {
         val parameters = symbol.valueParameters
         val last = parameters.lastOrNull()
-        val type = last?.returnType?.fullyExpandedType
-        val trailingLambda = last?.isVararg == false && type is KaFunctionType && type.nullability == KaTypeNullability.NON_NULLABLE
+        val trailingLambda = trailingLambdaType(last) != null
         val ordinary = if (trailingLambda) parameters.dropLast(1) else parameters
         return CompletionCallShape(parameters.isNotEmpty(), ordinary.any { !it.hasDefaultValue && !it.isVararg }, trailingLambda)
+    }
+
+    @OptIn(KaExperimentalApi::class)
+    private fun KaSession.trailingLambdaType(parameter: KaValueParameterSymbol?): KaFunctionType? {
+        if (parameter == null || parameter.isVararg) return null
+        val type = parameter.returnType.fullyExpandedType as? KaFunctionType ?: return null
+        return type.takeIf { it.nullability == KaTypeNullability.NON_NULLABLE }
     }
 
     @OptIn(KaExperimentalApi::class)
@@ -317,13 +333,27 @@ internal object CompletionQuery {
         name: String,
     ): String =
         if (symbol is KaFunctionSymbol) {
-            symbol.valueParameters.joinToString(prefix = "$name(", postfix = ")") { parameter ->
+            val single = symbol.valueParameters.singleOrNull()
+            val lambdaType = trailingLambdaType(single)
+            if (lambdaType != null) {
                 buildString {
-                    if (parameter.isVararg) append("vararg ")
-                    append(parameter.name.asString())
+                    append(name)
+                    append(" { ")
+                    append(requireNotNull(single).name.asString())
                     append(": ")
-                    append(parameter.returnType.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT))
-                    if (parameter.hasDefaultValue) append(" = …")
+                    append(lambdaType.render(lambdaLabelTypeRenderer, Variance.INVARIANT))
+                    if (single.hasDefaultValue) append(" = …")
+                    append(" }")
+                }
+            } else {
+                symbol.valueParameters.joinToString(prefix = "$name(", postfix = ")") { parameter ->
+                    buildString {
+                        if (parameter.isVararg) append("vararg ")
+                        append(parameter.name.asString())
+                        append(": ")
+                        append(parameter.returnType.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT))
+                        if (parameter.hasDefaultValue) append(" = …")
+                    }
                 }
             }
         } else {
