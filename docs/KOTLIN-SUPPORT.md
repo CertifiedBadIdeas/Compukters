@@ -529,6 +529,13 @@ supported.
   `specialized IntArray lowers deterministically for vm conformance`, and native test
   `reference_identity_compares_typed_arrays_and_null_without_casts`.
   Array identity tracking: [#680](https://github.com/CertifiedBadIdeas/Compukters/issues/680).
+  Supported arrays can pass through `Any`/`Any?`, fields, function parameters and concrete generic calls without
+  boxing or copying; reverse checked casts and type tests retain the dynamic array type. Explicit array root
+  metadata requires Runtime ABI 1.7. Evidence: `testKotlinIntArrayVmConformance`, test
+  `specialized IntArray lowers deterministically for vm conformance`, native test
+  `array_root_casts_preserve_identity_and_dynamic_type`, and artifact test
+  `array superclass round trips and requires ABI 1_7 and stateless root`.
+  Tracking: [#681](https://github.com/CertifiedBadIdeas/Compukters/issues/681).
   Remaining type-test/cast support: not scheduled.
 
 - [ ] **Primitive `value class` declarations — Partial** — a value class with

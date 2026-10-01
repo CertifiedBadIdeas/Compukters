@@ -50,6 +50,83 @@ import kotlin.test.assertIs
 
 class ArtifactReaderTest {
     @Test
+    fun `array superclass round trips and requires ABI 1_7 and stateless root`() {
+        val source = languageRuntimeArtifact()
+        val module = source.modules.single()
+        val array = (module.types[1] as NominalType.Array).copy(superType = TypeRef.Local(TypeId.of(0u)))
+        val artifact =
+            source.copy(
+                minimumRuntimeAbi = AbiVersion(1u, 7u),
+                modules = listOf(module.copy(types = module.types.toMutableList().also { it[1] = array })),
+            )
+        val written = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(artifact))
+        assertEquals(
+            array,
+            ArtifactReader
+                .read(written.bytes)
+                .modules
+                .single()
+                .types[1],
+        )
+        assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(artifact.copy(minimumRuntimeAbi = AbiVersion(1u, 6u))))
+        val root = module.types[0] as NominalType.Class
+        for (invalid in listOf(
+            root.copy(abstract = true),
+            root.copy(final = true),
+            root.copy(genericArity = 1u),
+            root.copy(superType = TypeRef.Local(TypeId.of(0u))),
+            root.copy(interfaces = listOf(TypeRef.Local(TypeId.of(0u)))),
+            root.copy(fieldCount = 1u),
+            root.copy(methodCount = 1u),
+            root.copy(initializer = FunctionId.of(0u)),
+        )) {
+            assertIs<ArtifactWriteResult.Failure>(
+                ArtifactWriter.write(
+                    artifact.copy(
+                        modules =
+                            listOf(
+                                artifact.modules.single().copy(
+                                    types =
+                                        artifact.modules.single().types.toMutableList().also {
+                                            it[0] =
+                                                invalid
+                                        },
+                                ),
+                            ),
+                    ),
+                ),
+            )
+        }
+        assertIs<ArtifactWriteResult.Failure>(
+            ArtifactWriter.write(
+                artifact.copy(
+                    modules =
+                        listOf(
+                            module.copy(
+                                types =
+                                    module.types.toMutableList().also {
+                                        it[1] =
+                                            array.copy(superType = TypeRef.Local(TypeId.of(2u)))
+                                    },
+                            ),
+                        ),
+                ),
+            ),
+        )
+        val legacy = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(source))
+        assertEquals(
+            null,
+            (
+                ArtifactReader
+                    .read(legacy.bytes)
+                    .modules
+                    .single()
+                    .types[1] as NominalType.Array
+            ).superType,
+        )
+    }
+
+    @Test
     fun `heterogeneous reference comparisons round trip with ABI gate and typed operands`() {
         val source = languageRuntimeArtifact()
         val module = source.modules.single()

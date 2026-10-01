@@ -198,10 +198,11 @@ private fun encodeType(
 
                 is NominalType.Array -> {
                     writeU8(2u)
-                    writeU8(0u)
+                    writeU8(if (type.superType == null) 0u else 1u)
                     writeU16(0u)
                     writeU32(type.name.value)
                     writeValueType(type.element)
+                    type.superType?.let { writeU32(encodeTypeRef(it)) }
                 }
 
                 is NominalType.Function -> {

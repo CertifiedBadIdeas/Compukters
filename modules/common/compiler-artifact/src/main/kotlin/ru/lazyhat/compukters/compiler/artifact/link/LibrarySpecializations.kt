@@ -345,7 +345,7 @@ private fun Module.rewrite(
                     }
 
                     is NominalType.Array -> {
-                        it.copy(name = string(it.name), element = value(it.element))
+                        it.copy(name = string(it.name), element = value(it.element), superType = it.superType?.let(type))
                     }
                 }
             },

@@ -136,7 +136,10 @@ internal fun validateArtifact(
                     nominal.interfaces.mapNotNull { resolveType(current.module, it) }.forEach(pending::add)
                 }
 
-                is NominalType.Array,
+                is NominalType.Array -> {
+                    nominal.superType?.let { resolveType(current.module, it) }?.let(pending::add)
+                }
+
                 is NominalType.Function,
                 -> {}
             }
@@ -563,6 +566,20 @@ internal fun validateArtifact(
             }
         }
         module.types.forEachIndexed { typeIndex, nominal ->
+            if (nominal is NominalType.Array && nominal.superType != null) {
+                val location = ArtifactWriteLocation(moduleLocation, "TYPES", typeIndex.toUInt())
+                val identity = resolveType(moduleIndex, nominal.superType)
+                val parent = identity?.let { artifact.modules[it.module].types[it.type] } as? NominalType.Class
+                if (artifact.minimumRuntimeAbi < AbiVersion(1u, 7u)) {
+                    add(ArtifactWriteErrorCode.INCOMPATIBLE_FEATURE_SET, "array superclass requires Runtime ABI 1.7", location)
+                }
+                if (parent == null || parent.abstract || parent.final || parent.genericArity != 0.toUShort() ||
+                    parent.superType != null || parent.interfaces.isNotEmpty() || parent.fieldCount != 0u ||
+                    parent.methodCount != 0u || parent.initializer != null
+                ) {
+                    add(ArtifactWriteErrorCode.BAD_REFERENCE, "array superclass must be a stateless root class", location)
+                }
+            }
             val methodRange =
                 when (nominal) {
                     is NominalType.Class -> nominal.methodStart to nominal.methodCount

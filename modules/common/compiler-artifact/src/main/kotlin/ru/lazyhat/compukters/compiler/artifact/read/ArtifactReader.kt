@@ -253,8 +253,8 @@ private fun decodeType(bytes: ByteArray): NominalType {
             }
 
             2u -> {
-                require(flags == 0u && arity == 0.toUShort())
-                NominalType.Array(name, c.valueType())
+                require(flags and 1u.inv() == 0u && arity == 0.toUShort())
+                NominalType.Array(name, c.valueType(), if (flags and 1u == 0u) null else c.u32().typeRef())
             }
 
             3u -> {

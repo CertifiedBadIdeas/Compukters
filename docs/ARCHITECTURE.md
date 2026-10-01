@@ -375,6 +375,17 @@ fresh array through existing budgeted allocation, then uses `ArrayCopy`; `copyIn
 The native C ABI remains 17. Old executable artifacts remain accepted; older VMs reject artifacts requiring ABI 1.5.
 The K2 compiler infers its minimum runtime ABI again after final linking and specialization reuse, from retained
 instructions. General artifact linking preserves an explicitly declared minimum unless this inference is requested.
+Runtime ABI 1.7 adds an explicit optional superclass to nominal array records. Array header flag bit 0 indicates
+a non-null TypeRef appended after the element ValueType; flag-zero records remain unchanged. The parent must resolve
+to a non-abstract, non-final, zero-arity root class with no superclass, interfaces, fields, methods or initializer.
+The compiler emits the existing `kotlin.Any` identity, and linkers preserve and relocate this edge. JVM validation,
+Rust verification and runtime assignability follow the same explicit relationship; no name-based universal type
+rule is introduced. Arrays assigned to `Any` or `Any?` retain their managed reference and dynamic type without
+boxing or copying. Reverse casts and type tests inspect that dynamic type. Legacy arrays without a parent remain
+accepted with their previous assignability behavior; newly compiled arrays require ABI 1.7. Precompiled Guest
+libraries containing legacy array types need rebuilding to expose the new array-to-Any relationship. The native C ABI and
+semantic feature bits are unchanged. Function types and array covariance are not expanded by this contract.
+
 Runtime ABI 1.6 admits distinct nominal operand types for the existing `RefEqual` and `RefNotEqual` instructions.
 Both operands must still be references and the result Bool. Comparison only examines reference identity, including
 null; it does not dereference values or coerce them to `Any`. Same-nominal comparisons remain valid under older ABI.

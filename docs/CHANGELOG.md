@@ -19,6 +19,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 - Reference identity comparisons (`===`/`!==`) compare supported arrays and nullable references directly,
   preserving aliases and distinguishing fresh copies without artificial casts to `Any`.
+  Supported arrays can also pass through `Any` and `Any?` without copying or boxing, preserving their runtime
+  type for type tests and reverse casts. Previously compiled libraries containing arrays need rebuilding for
+  these conversions.
 
 - Programs can copy supported arrays with public `copyOf` and `copyInto`, including resizing, null/zero padding,
   and overlapping ranges. Native bulk copying respects execution budgets without temporary buffers; `ArrayList`
