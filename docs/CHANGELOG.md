@@ -190,8 +190,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   scaling is one step smaller (minimum 2), leaving more space for code without changing terminal scaling.
 - The code editor, completion list, hover information, terminal windows and in-world text displays use
   bundled JetBrains Mono without ligatures. The terminal keeps its 51x19 grid; bitmap fonts and the font
-  selector are removed, and old font preferences no longer affect rendering. Minecraft 1.21.1 uses linear
-  texture filtering for this font without changing its cell geometry or the standard Minecraft UI font.
+  selector are removed, and old font preferences no longer affect rendering. Editor line spacing is 1.2;
+  terminal cells retain their dimensions. Both Minecraft targets use linear texture filtering for this font
+  without changing the standard Minecraft UI font.
 - Member completion includes the supported operations of built-in Guest Kotlin numeric types.
 - Completion suggests visible variables in string interpolation immediately after `$` and while typing the name.
 - Completion, automatic imports, parameter information, and source navigation include compatible APIs supplied by

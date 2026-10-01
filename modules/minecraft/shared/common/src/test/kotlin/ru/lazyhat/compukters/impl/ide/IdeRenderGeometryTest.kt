@@ -52,7 +52,7 @@ class IdeRenderGeometryTest {
         assertEquals(IdeRect(185, 397, 940, 402), geometry.diagnosticsSplitter)
         assertEquals(IdeRect(185, 402, 940, 522), geometry.diagnostics)
         assertEquals(125, geometry.codeColumns)
-        assertEquals(27, geometry.codeRows)
+        assertEquals(29, geometry.codeRows)
         assertEquals(0, geometry.panel.left % 2, "1920 physical pixels at GUI scale 2 maps deterministically to 960 GUI pixels")
     }
 

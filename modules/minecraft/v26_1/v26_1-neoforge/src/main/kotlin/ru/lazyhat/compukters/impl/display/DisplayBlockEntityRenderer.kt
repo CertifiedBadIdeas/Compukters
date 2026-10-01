@@ -8,7 +8,7 @@ package ru.lazyhat.compukters.impl.display
 
 import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.math.Axis
-import net.minecraft.client.gui.Font
+import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.SubmitNodeCollector
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider
@@ -18,6 +18,7 @@ import net.minecraft.client.renderer.state.level.CameraRenderState
 import net.minecraft.core.Direction
 import net.minecraft.network.chat.Component
 import net.minecraft.world.phys.Vec3
+import ru.lazyhat.compukters.impl.font.JetBrainsMonoRendering
 import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import ru.lazyhat.compukters.impl.terminal.fontDescription
 import ru.lazyhat.compukters.minecraft.display.DisplayBlock
@@ -57,17 +58,15 @@ class DisplayBlockEntityRenderer(
         DisplayTextLayout.forEachGlyph(state.rows) { x, y, codePoint ->
             val text =
                 Component.literal(String(Character.toChars(codePoint))).withStyle { style -> style.withFont(profile.fontDescription) }
-            collector.submitText(
+            JetBrainsMonoRendering.submitText(
+                collector,
                 pose,
+                Minecraft.getInstance().font,
+                text,
                 x.toFloat(),
                 y.toFloat(),
-                text.visualOrderText,
-                false,
-                Font.DisplayMode.POLYGON_OFFSET,
-                FULL_BRIGHT,
                 TEXT_COLOR,
-                0,
-                0,
+                FULL_BRIGHT,
             )
         }
         pose.popPose()

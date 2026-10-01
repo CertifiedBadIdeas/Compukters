@@ -232,6 +232,21 @@ class IdeInputAdapterTest {
     }
 
     @Test
+    fun `pointer follows twelve pixel editor rows at their boundary`() {
+        val fixture = fixture()
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
+        val editor = textEditor("first\nsecond")
+        val codeLeft = geometry.editor.left + 4 * geometry.font.cellWidth
+        val context = IdePointerContext(geometry, editor)
+
+        fixture.adapter.pointerClicked(codeLeft.toDouble(), geometry.editor.top + 11.0, 0, context)
+        fixture.adapter.pointerClicked(codeLeft.toDouble(), geometry.editor.top + 12.0, 0, context)
+
+        val carets = fixture.commands.filterIsInstance<IdeCommand.Edit>().map { it.input }
+        assertEquals(listOf(IdeEditorInput.SetCaret(0, false), IdeEditorInput.SetCaret(6, false)), carets)
+    }
+
+    @Test
     fun `double click selects the token under the pointer`() {
         val fixture = fixture()
         val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
@@ -643,11 +658,11 @@ class IdeInputAdapterTest {
     private fun textEditor(text: String) =
         IdeEditorView.Text(
             ProjectPath.file("src/main.kt"),
-            listOf(text),
-            listOf(0),
+            text.lines(),
+            text.lines().runningFold(0) { offset, line -> offset + line.length + 1 }.dropLast(1),
             0,
             0,
-            1,
+            text.lines().size,
             0,
             null,
             null,

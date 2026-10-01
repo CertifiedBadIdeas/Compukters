@@ -36,7 +36,7 @@ class TerminalFontProfileTest {
         assertEquals(3, profile.glyphDrawOffsetY)
         assertEquals(0xFFFD, profile.replacementCodePoint)
         assertEquals(IdeCodeFontProfile.DEFAULT.cellWidth, profile.cellWidth)
-        assertEquals(IdeCodeFontProfile.DEFAULT.cellHeight, profile.cellHeight)
+        assertEquals(12, IdeCodeFontProfile.DEFAULT.cellHeight)
         assertEquals(IdeCodeFontProfile.DEFAULT.baseline, profile.ascent)
     }
 
