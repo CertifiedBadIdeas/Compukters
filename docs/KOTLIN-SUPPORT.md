@@ -599,12 +599,20 @@ supported.
   `toIntOrNull()` accepts optional `+` or `-` followed by ASCII decimal digits and returns null for invalid input or
   values outside the `Int` range. Search uses UTF-16 code units;
   a negative start index begins at zero, and an empty search string returns the
-  start index clamped to the string length. Other Kotlin text functions are not
-  available. Evidence:
+  start index clamped to the string length. Case-sensitive Char search and backward
+  `lastIndexOf` searches are also available, along with emptiness/blank checks,
+  Unicode-whitespace `trim`, `trimStart`, `trimEnd`, Char/String
+  `substringBefore`, `substringAfter` and their `Last` variants, and
+  `removePrefix`/`removeSuffix`. Extraction overloads accept an explicit missing-delimiter
+  fallback; otherwise they return the input. Reverse search defaults to the last
+  character index (including for an empty needle); explicit starts clamp to the last
+  possible match. Regex and case-insensitive search remain unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `shell language subset lowers control flow scalars strings and raw terminal calls`
   and `String compareTo and ordering operators lower UTF-16 order for vm conformance`, with VM
-  scenario `testKotlinStringCompareVmConformance`; also
+  scenario `testKotlinStringCompareVmConformance`; test
+  `text stdlib preserves UTF16 cleanup search extraction and transformations`
+  with VM scenario `testKotlinTextStdlibVmConformance`; also
   [`text_tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/text_tests.rs),
   tests `string_content_operations_use_kotlin_utf16_semantics`,
   `string_concat_selects_utf16_for_bmp_and_surrogate_code_units`, and

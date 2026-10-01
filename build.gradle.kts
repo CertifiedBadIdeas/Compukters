@@ -302,6 +302,16 @@ fun registerKotlinVmConformance(
 }
 
 registerKotlinVmConformance(
+    taskName = "testKotlinTextStdlibVmConformance",
+    taskDescription = "Executes guest text helpers under sliced VM budgets.",
+    artifactTask = ":compiler-k2:generateTextStdlibConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-text-stdlib.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-text-stdlib-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_TEXT_STDLIB_ARTIFACT",
+    conformanceScenario = "text-stdlib",
+)
+
+registerKotlinVmConformance(
     taskName = "testCompilerArtifactVmConformance",
     taskDescription = "Verifies Kotlin executable Artifact v1 output with the pinned Compukter VM.",
     artifactTask = ":compiler-artifact:test",

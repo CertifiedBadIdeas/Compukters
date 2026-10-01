@@ -44,6 +44,7 @@ fn main() {
         "reference-array" => k2_reference_arrays_retain_typed_guest_objects(),
         "float" => k2_float_executes_arithmetic_conversions_comparisons_and_text(),
         "string-compare" => k2_string_compare_uses_utf16_code_units(),
+        "text-stdlib" => k2_text_stdlib_preserves_utf16_helpers(),
         "scalar-compare" => k2_char_and_boolean_compare_preserve_ordering(),
         "platform-scalar" => k2_platform_scalar_precondition_traps_before_publishing_a_value(),
         "argv" => k2_string_array_entry_executes_exact_utf16_arguments(),
@@ -974,6 +975,14 @@ fn k2_same_named_guest_calls_preserve_resolved_targets() {
             "true\n",
         ],
         128,
+    );
+}
+
+fn k2_text_stdlib_preserves_utf16_helpers() {
+    k2_expected_prints_with_budget(
+        "COMPUKTER_KOTLIN_TEXT_STDLIB_ARTIFACT",
+        ["text stdlib ok\n"],
+        256,
     );
 }
 
