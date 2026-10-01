@@ -167,6 +167,7 @@ internal fun Artifact.withRuntimeExceptionDependencies(): Artifact {
                         NominalType.Class(name = module.name, superType = root, runtimeExceptionKind = it)
                     },
         )
+    val originalHashes = modules.map { ArtifactWriter.moduleSemanticHash(it) }
     val hashes = updated.map { ArtifactWriter.moduleSemanticHash(it) }
     return copy(
         minimumRuntimeAbi = AbiVersion(1u, 9u),
@@ -175,7 +176,9 @@ internal fun Artifact.withRuntimeExceptionDependencies(): Artifact {
                 it.copy(
                     imports =
                         it.imports.map { import ->
-                            import.copy(targetModuleHash = hashes[import.targetModule.value.toInt()])
+                            val target = originalHashes.indexOfFirst { hash -> hash.contentEquals(import.targetModuleHash) }
+                            require(target >= 0) { "fixture import has no supplied module owner" }
+                            import.copy(targetModuleHash = hashes[target])
                         },
                 )
             },

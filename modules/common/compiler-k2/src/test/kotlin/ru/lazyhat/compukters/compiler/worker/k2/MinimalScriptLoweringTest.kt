@@ -4794,6 +4794,75 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `host failures preserve task identity call sites and cleanup for vm execution`() =
+        withAdapter { adapter ->
+            val sources =
+                mapOf(
+                    "host-tasks" to
+                        """
+                        import compukter.concurrent.Tasks
+                        import compukter.io.IOException
+                        class State(var completed: Int)
+                        fun readTask(name: String, state: State) {
+                            try { readln(); error("read must fail") }
+                            catch (caught: IOException) {
+                                require(caught.message == name)
+                                require(caught.cause == null)
+                                state.completed = state.completed + 1
+                            } finally { state.completed = state.completed + 10 }
+                        }
+                        fun main() {
+                            val state = State(0)
+                            val first = Tasks.launch { readTask("first", state) }
+                            val second = Tasks.launch { readTask("second", state) }
+                            first.join()
+                            second.join()
+                            require(state.completed == 22)
+                            println("host ok")
+                        }
+                        """.trimIndent(),
+                    "host-state" to
+                        """
+                        fun write() { println("request") }
+                        fun main() {
+                            var cleanup = false
+                            try { write(); error("write must fail") }
+                            catch (caught: IllegalStateException) { require(caught.message == "unavailable") }
+                            finally { cleanup = true }
+                            require(cleanup)
+                            println("state ok")
+                        }
+                        """.trimIndent(),
+                    "host-filesystem" to
+                        """
+                        import compukter.filesystem.FileSystem
+                        import compukter.io.IOException
+                        fun readFile(): String = FileSystem.readText("/home/missing")
+                        fun main() {
+                            var cleanup = false
+                            try { readFile(); error("read must fail") }
+                            catch (caught: IOException) {
+                                require(caught.message == "Filesystem entry was not found")
+                                require(caught.cause == null)
+                            } finally { cleanup = true }
+                            require(cleanup)
+                            println("filesystem ok")
+                        }
+                        """.trimIndent(),
+                )
+            for ((name, source) in sources) {
+                val first = adapter.compile(request(source))
+                val second = adapter.compile(request(source))
+                val bytes = assertNotNull(first.artifact, "$name: ${first.diagnostics}").toByteArray()
+                assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
+                assertEquals(AbiVersion(1u, 9u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+                System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
+                    Path.of("$output.$name.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
+                }
+            }
+        }
+
+    @Test
     fun `bounded when lowers deterministically for vm execution`() =
         withAdapter { adapter ->
             val request =

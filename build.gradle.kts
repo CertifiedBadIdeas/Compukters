@@ -330,6 +330,12 @@ registerKotlinVmConformance(
             project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.arithmetic.cpkt"),
         "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_OPERATIONS" to
             project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.operations.cpkt"),
+        "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_HOST_TASKS" to
+            project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.host-tasks.cpkt"),
+        "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_HOST_STATE" to
+            project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.host-state.cpkt"),
+        "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_HOST_FILESYSTEM" to
+            project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.host-filesystem.cpkt"),
     ),
 )
 

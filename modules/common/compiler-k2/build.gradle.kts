@@ -656,6 +656,7 @@ val generateExceptionsConformanceArtifact = tasks.register<Test>("generateExcept
     filter.includeTestsMatching("*exceptions preserve failed task joins and cleanup across suspension for vm execution*")
     filter.includeTestsMatching("*integer arithmetic errors are catchable across calls and preserve finally for vm execution*")
     filter.includeTestsMatching("*array string null and cast errors are catchable with cleanup for vm execution*")
+    filter.includeTestsMatching("*host failures preserve task identity call sites and cleanup for vm execution*")
     inputs.file(workerJar)
     outputs.file(exceptionsConformanceArtifact)
     outputs.file(exceptionsConformanceArtifact.map { file -> File(file.asFile.absolutePath + ".caught.cpkt") })
@@ -665,6 +666,9 @@ val generateExceptionsConformanceArtifact = tasks.register<Test>("generateExcept
     outputs.file(exceptionsConformanceArtifact.map { file -> File(file.asFile.absolutePath + ".suspend.cpkt") })
     outputs.file(exceptionsConformanceArtifact.map { file -> File(file.asFile.absolutePath + ".arithmetic.cpkt") })
     outputs.file(exceptionsConformanceArtifact.map { file -> File(file.asFile.absolutePath + ".operations.cpkt") })
+    for (name in listOf("host-tasks", "host-state", "host-filesystem")) {
+        outputs.file(exceptionsConformanceArtifact.map { file -> File(file.asFile.absolutePath + ".$name.cpkt") })
+    }
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.exceptionsArtifact", exceptionsConformanceArtifact.get().asFile.absolutePath)

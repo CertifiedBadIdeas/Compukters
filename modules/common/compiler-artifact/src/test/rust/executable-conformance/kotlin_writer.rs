@@ -2,7 +2,7 @@ use std::{fs, sync::Arc};
 
 use compukter_vm::{
     verify_artifact, AdvanceOutcome, ArtifactLimits, CapabilityBinding, EntryArgumentLimits,
-    EntryValue, ExecutionProfile, GuestTrap, HostResponse, HostValueInput, HostValueType,
+    ComputerAdvanceOutcome, ComputerMachine, EntryValue, ExecutionProfile, HostFailure, HostFailureKind, HostResponse, HostValueInput, HostValueType,
     HostValueView, OperationSchema, RequestId, Session, TaskId,
 };
 
@@ -75,6 +75,7 @@ fn main() {
 }
 
 fn k2_explicit_exception_unwinds_across_guest_calls() {
+    k2_host_failures_preserve_tasks_and_call_sites();
     k2_expected_prints_with_budget("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_OPERATIONS", ["operations ok\n"], 64);
     k2_expected_prints_with_budget("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_ARITHMETIC", ["arithmetic ok\n"], 64);
     let mut tasks = k2_stdio_session("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_TASKS", 64);
@@ -116,6 +117,53 @@ fn k2_explicit_exception_unwinds_across_guest_calls() {
         }
     }
     panic!("exception program must terminate under bounded slices");
+}
+
+fn k2_host_failures_preserve_tasks_and_call_sites() {
+    let mut tasks = k2_stdio_session("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_HOST_TASKS", 64);
+    let requests = loop {
+        match tasks.advance(64, 64).expect("tasks must advance") {
+            AdvanceOutcome::SliceExhausted => {}
+            AdvanceOutcome::HostRequestBatch(batch) if batch.len() == 2 => {
+                break (0..2).map(|index| {
+                    let request = batch.get(index).unwrap();
+                    assert_eq!(0, request.operation());
+                    (request.task_id(), request.id())
+                }).collect::<Vec<_>>();
+            }
+            AdvanceOutcome::HostRequestBatch(batch) => assert_eq!(1, batch.len()),
+            outcome => panic!("expected two failed reads: {outcome:?}"),
+        }
+    };
+    for (index, detail) in [(1, "second"), (0, "first")] {
+        tasks.resume_for(requests[index].0, requests[index].1,
+            HostResponse::Failure(HostFailure::new(HostFailureKind::InputOutput, detail))).expect("failed read must resume its own task");
+    }
+    k2_assert_prints(&mut tasks, ["host ok\n"], 64);
+    let accounting = tasks.accounting();
+    assert!(accounting.retired_instructions <= accounting.executed_instructions);
+
+    let mut state = k2_stdio_session("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_HOST_STATE", 1);
+    let value = utf16("request\n");
+    let id = next_host_request_identity_with_budget(&mut state, "failed write", 1, Some(&value), 64);
+    state.resume_for(id.0, id.1, HostResponse::Failure(HostFailure::new(HostFailureKind::Unavailable, "unavailable"))).unwrap();
+    k2_assert_prints(&mut state, ["state ok\n"], 64);
+
+    let path = std::env::var("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_HOST_FILESYSTEM").expect("filesystem exception artifact is required");
+    let verified = verify_artifact(Arc::from(fs::read(path).unwrap()), ArtifactLimits::default()).unwrap();
+    let mut computer = ComputerMachine::start(verified, list_no_io_profile(), &[], &[]).unwrap();
+    for attempt in 0..10_000 {
+        match computer.advance(64, 64, u32::MAX).unwrap() {
+            ComputerAdvanceOutcome::SliceExhausted => assert!(attempt < 9999),
+            ComputerAdvanceOutcome::Halted(None) => {
+                for (x, character) in "filesystem ok".chars().enumerate() {
+                    assert_eq!(character as u32, computer.terminal().cell(x as u16, 0).unwrap().code_point());
+                }
+                return;
+            }
+            outcome => panic!("filesystem failure was not caught: {outcome:?}"),
+        }
+    }
 }
 
 fn k2_abstract_properties_dispatch_through_base_and_interface() {
@@ -1172,8 +1220,12 @@ fn k2_mutable_list_preserves_growth_mutation_and_views() {
                 .expect("mutable list failure must execute")
             {
                 AdvanceOutcome::SliceExhausted => {}
-                AdvanceOutcome::Crashed(GuestTrap::NegativeArraySize) if mode == "negative-array" => break,
-                AdvanceOutcome::UncaughtException if mode != "negative-array" => break,
+                AdvanceOutcome::UncaughtException => {
+                    let diagnostic = session.uncaught_exception_diagnostic(&verified).expect("diagnostic must use the admitted artifact");
+                    let expected = if mode == "negative-array" { "NegativeArraySizeException" } else { "Exception" };
+                    assert!(diagnostic.contains(expected), "{diagnostic}");
+                    break;
+                }
                 outcome => panic!("unexpected mutable list outcome for {mode}: {outcome:?}"),
             }
         }
@@ -1588,7 +1640,7 @@ fn k2_int_loops_execute_across_quota_slices_without_host_io() {
 #[derive(Debug, Eq, PartialEq)]
 enum IntArrayOutcome {
     Halted,
-    Crashed(GuestTrap),
+    Exception(String),
     AllocationExhausted,
 }
 
@@ -1612,7 +1664,7 @@ fn k2_int_array_executes_specialized_storage_and_traps() {
         "IntArray fill must resume after exhausting a slice"
     );
     assert_eq!(
-        IntArrayOutcome::Crashed(GuestTrap::NegativeArraySize),
+        IntArrayOutcome::Exception("kotlin.NegativeArraySizeException".into()),
         execute_int_array_artifact(&bytes, 1).outcome
     );
     assert_eq!(
@@ -1620,20 +1672,20 @@ fn k2_int_array_executes_specialized_storage_and_traps() {
         execute_int_array_artifact(&bytes, 2).outcome
     );
     assert_eq!(
-        IntArrayOutcome::Crashed(GuestTrap::IndexOutOfBounds),
+        IntArrayOutcome::Exception("kotlin.IndexOutOfBoundsException".into()),
         execute_int_array_artifact(&bytes, 3).outcome
     );
     assert_eq!(
-        IntArrayOutcome::Crashed(GuestTrap::IndexOutOfBounds),
+        IntArrayOutcome::Exception("kotlin.IndexOutOfBoundsException".into()),
         execute_int_array_artifact(&bytes, 4).outcome
     );
     assert_eq!(
-        IntArrayOutcome::Crashed(GuestTrap::NegativeArraySize),
+        IntArrayOutcome::Exception("kotlin.NegativeArraySizeException".into()),
         execute_int_array_artifact(&bytes, 5).outcome
     );
     for mode in 6..=8 {
         assert_eq!(
-            IntArrayOutcome::Crashed(GuestTrap::IndexOutOfBounds),
+            IntArrayOutcome::Exception("kotlin.IndexOutOfBoundsException".into()),
             execute_int_array_artifact(&bytes, mode).outcome
         );
     }
@@ -1702,7 +1754,7 @@ fn execute_int_array_artifact(bytes: &[u8], mode: i32) -> IntArrayExecution {
         entry_argument_limits: entry_argument_limits(),
     };
     let mut session =
-        Session::admit(verified, profile, &[binding]).expect("K2 IntArray program must admit");
+        Session::admit(verified.clone(), profile, &[binding]).expect("K2 IntArray program must admit");
     session.start(&[]).expect("K2 IntArray program must start");
     let mode_request = next_host_request(&mut session, "eventKey", 5, None);
     session
@@ -1734,7 +1786,11 @@ fn execute_int_array_artifact(bytes: &[u8], mode: i32) -> IntArrayExecution {
                     .expect("IntArray marker write must resume");
             }
             AdvanceOutcome::Halted(None) => break IntArrayOutcome::Halted,
-            AdvanceOutcome::Crashed(trap) => break IntArrayOutcome::Crashed(trap),
+            AdvanceOutcome::UncaughtException => {
+                let diagnostic = session.uncaught_exception_diagnostic(&verified).expect("diagnostic must use the admitted artifact");
+                let class = diagnostic.strip_prefix("Uncaught exception: ").unwrap().split(':').next().unwrap();
+                break IntArrayOutcome::Exception(class.into());
+            }
             AdvanceOutcome::AllocationExhausted(_) => break IntArrayOutcome::AllocationExhausted,
             outcome => panic!("unexpected K2 IntArray outcome: {outcome:?}"),
         }
@@ -2321,7 +2377,7 @@ fn k2_inline_blocks_preserve_returns_results_and_effects() {
         maximum_accepted_responses: 64,
         entry_argument_limits: entry_argument_limits(),
     };
-    let mut session = Session::admit(verified, profile, &[]).expect("inline-blocks must admit");
+    let mut session = Session::admit(verified.clone(), profile, &[]).expect("inline-blocks must admit");
     session.start(&[]).expect("inline-blocks must start");
     let mut exhausted = 0;
     for _ in 0..10_000 {
@@ -2330,7 +2386,8 @@ fn k2_inline_blocks_preserve_returns_results_and_effects() {
             .expect("inline-blocks must advance")
         {
             AdvanceOutcome::SliceExhausted => exhausted += 1,
-            AdvanceOutcome::Crashed(GuestTrap::NegativeArraySize) => {
+            AdvanceOutcome::UncaughtException => {
+                assert!(session.uncaught_exception_diagnostic(&verified).expect("diagnostic must use the admitted artifact").contains("NegativeArraySizeException"));
                 assert!(exhausted > 0, "inline control flow must cross quota slices");
                 return;
             }
