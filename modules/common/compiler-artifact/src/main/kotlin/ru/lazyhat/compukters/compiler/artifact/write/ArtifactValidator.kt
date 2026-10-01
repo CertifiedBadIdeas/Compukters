@@ -1756,9 +1756,7 @@ internal fun validateArtifact(
                             )
                         } else if (registerType is ValueType.Ref && !registerType.nullable) {
                             val catchValue = ValueType.Ref(nullable = false, type = catchType)
-                            if (!valueAssignable(moduleIndex, registerType, moduleIndex, catchValue) &&
-                                !valueAssignable(moduleIndex, catchValue, moduleIndex, registerType)
-                            ) {
+                            if (!valueAssignable(moduleIndex, catchValue, moduleIndex, registerType)) {
                                 add(
                                     ArtifactWriteErrorCode.INVALID_RANGE,
                                     "exception register and catch type are incompatible",
