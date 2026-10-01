@@ -399,6 +399,15 @@ Ordinary Guest precondition functions use the same mechanism: `require` throws I
 exhaustive-when branches allocate and throw NoWhenBranchMatchedException, including for reference-valued results;
 no fake result or trap fallback is emitted.
 
+Runtime ABI 1.9 adds a runtime-exception role tag in class header bits 3..7: 0 is ordinary;
+1 arithmetic, 2 index bounds, 3 negative array size, 4 null pointer, 5 class cast,
+6 illegal argument, 7 illegal state, and 8 I/O. Tags 9..31 are invalid. Each role may occur at most
+once per artifact and must name a non-abstract, non-generic subclass of the verified Throwable root.
+The subclass and its intermediate ancestors have no own fields, methods, interfaces or initializer;
+only the root supplies message/cause storage. Role identity is preserved through library linking and
+specialization fingerprints; linking infers ABI 1.9 from retained role metadata. Native factories are
+being integrated separately; metadata support alone does not make operation or host failures catchable.
+
 Runtime ABI 1.7 adds an explicit optional superclass to nominal array records. Array header flag bit 0 indicates
 a non-null TypeRef appended after the element ValueType; flag-zero records remain unchanged. The parent must resolve
 to a non-abstract, non-final, zero-arity root class with no superclass, interfaces, fields, methods or initializer.

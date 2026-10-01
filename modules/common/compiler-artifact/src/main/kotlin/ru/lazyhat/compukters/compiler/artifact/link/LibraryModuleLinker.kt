@@ -305,6 +305,9 @@ private fun minimumRuntimeAbi(
     modules: List<Module>,
 ): AbiVersion {
     var required = declared
+    if (modules.any { module -> module.types.any { it is NominalType.Class && it.runtimeExceptionKind != null } }) {
+        required = maxOf(required, AbiVersion(1u, 9u))
+    }
     if (modules.any { it.hasHeterogeneousReferenceComparison() }) required = maxOf(required, AbiVersion(1u, 6u))
     if (modules.any { module -> module.types.any { it is NominalType.Class && it.throwableRoot } }) {
         required = maxOf(required, AbiVersion(1u, 8u))

@@ -280,7 +280,7 @@ object LibrarySpecializations {
             }.map { referenceName(it) }.sorted()
         return when (type) {
             is NominalType.Class -> {
-                "class:${type.abstract}:${type.final}:${type.throwableRoot}:$parents:" +
+                "class:${type.abstract}:${type.final}:${type.throwableRoot}:${type.runtimeExceptionKind}:$parents:" +
                     (type.fieldStart.toInt() until (type.fieldStart + type.fieldCount).toInt()).joinToString(",") {
                         val field = fields[it]
                         "${text(field.name)}:${valueName(field.type)}:${field.mutable}:${field.static}"
