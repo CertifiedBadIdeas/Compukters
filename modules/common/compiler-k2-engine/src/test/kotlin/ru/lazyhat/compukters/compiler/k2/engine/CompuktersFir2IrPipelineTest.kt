@@ -29,6 +29,8 @@ import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalTrustedIntrinsics
 import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryCompiler
 import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryFragmentCodec
+import ru.lazyhat.compukters.platform.bundle.PlatformDeclarationIdentity
+import ru.lazyhat.compukters.platform.bundle.PlatformModule
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.platform.k2.build.CompuktersFirBuildEnvironment
@@ -39,6 +41,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 class CompuktersFir2IrPipelineTest {
@@ -171,13 +174,26 @@ class CompuktersFir2IrPipelineTest {
                             }
 
                             fun answer(): Int = 42
+                            class Box<T>(val value: T)
+                            fun boxed(): Box<Int> = Box(42)
                             """.trimIndent(),
                         ),
                     ),
                     listOf(builtins),
                 )
 
-            val result = CompuktersFir2IrPipeline.convert(listOf(builtins, library))
+            val dependent =
+                environment.compile(
+                    PlatformModuleId("sample", "dependent"),
+                    listOf(
+                        source(
+                            "Dependent.kt",
+                            "package dependent\nimport sample.Box\nfun create(): Box<Int> = Box(7)\nfun read(box: Box<Int>): Int = box.value",
+                        ),
+                    ),
+                    listOf(builtins, library),
+                )
+            val result = CompuktersFir2IrPipeline.convert(listOf(builtins, library, dependent))
             val answer =
                 result.irModuleFragment.files
                     .flatMap { it.declarations }
@@ -196,6 +212,14 @@ class CompuktersFir2IrPipelineTest {
                                 "Answer.kt",
                                 0,
                                 39,
+                                PlatformLibraryDeclarationKind.FUNCTION,
+                            ),
+                            PlatformLibraryDeclaration(
+                                "sample.boxed",
+                                "fun():Box<Int>",
+                                "Answer.kt",
+                                0,
+                                1,
                                 PlatformLibraryDeclarationKind.FUNCTION,
                             ),
                             PlatformLibraryDeclaration(
@@ -247,6 +271,7 @@ class CompuktersFir2IrPipelineTest {
                             "Collections.kt" to PlatformModuleId("kotlin", "builtins"),
                             "Reflection.kt" to PlatformModuleId("kotlin", "builtins"),
                             "Answer.kt" to PlatformModuleId("stdlib", "core"),
+                            "Dependent.kt" to PlatformModuleId("sample", "dependent"),
                         ),
                         CanonicalTrustedIntrinsics.registry,
                     ),
@@ -280,6 +305,64 @@ class CompuktersFir2IrPipelineTest {
             assertEquals(SymbolKind.FIELD, exports.getValue("sample.Reason.MISSING").kind)
             assertEquals(1, initializerInstructions.count { it is Instruction.StaticSet })
             assertFalse(exports.containsKey("code"))
+            assertTrue(exports.keys.any { it == "@specialization:type:sample.Box<Int>" })
+            val dependentIr = result
+            val dependency =
+                PlatformModule(
+                    PlatformModuleId("stdlib", "core"),
+                    "1",
+                    emptyList(),
+                    ImmutableBytes.of(byteArrayOf()),
+                    fragment,
+                    emptyList(),
+                    emptyList(),
+                    emptyList(),
+                    sourceDeclarations = listOf(PlatformDeclarationIdentity("sample.Box", "class()")),
+                )
+            val dependentFragment =
+                assertNotNull(
+                    PlatformLibraryCompiler().compile(
+                        PlatformModuleId("sample", "dependent"),
+                        listOf(
+                            PlatformLibraryDeclaration(
+                                "dependent.create",
+                                "fun():Box<Int>",
+                                "Dependent.kt",
+                                0,
+                                1,
+                                PlatformLibraryDeclarationKind.FUNCTION,
+                            ),
+                            PlatformLibraryDeclaration(
+                                "dependent.read",
+                                "fun(Box<Int>):Int",
+                                "Dependent.kt",
+                                0,
+                                1,
+                                PlatformLibraryDeclarationKind.FUNCTION,
+                            ),
+                        ),
+                        dependentIr.irModuleFragment,
+                        dependentIr.pluginContext,
+                        setOf("Dependent.kt"),
+                        mapOf(
+                            "Builtins.kt" to PlatformModuleId("kotlin", "builtins"),
+                            "Collections.kt" to PlatformModuleId("kotlin", "builtins"),
+                            "Reflection.kt" to PlatformModuleId("kotlin", "builtins"),
+                            "Answer.kt" to PlatformModuleId("stdlib", "core"),
+                            "Dependent.kt" to PlatformModuleId("sample", "dependent"),
+                        ),
+                        CanonicalTrustedIntrinsics.registry,
+                        dependencies = listOf(dependency),
+                    ),
+                )
+            val dependentArtifact = ArtifactReader.read(PlatformLibraryFragmentCodec.decode(dependentFragment).artifact.toByteArray())
+            assertEquals(
+                1,
+                dependentArtifact.modules.sumOf { module ->
+                    module.types.count { module.strings[it.name.value.toInt()].toString() == "sample.Box<Int>" }
+                },
+                "dependent ordinary factories and parameters must reuse the original specialization",
+            )
             val largestFrameBytes =
                 decoded.modules
                     .flatMap { it.functions }

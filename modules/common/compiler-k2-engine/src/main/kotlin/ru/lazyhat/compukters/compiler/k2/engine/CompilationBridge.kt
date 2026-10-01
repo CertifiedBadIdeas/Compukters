@@ -60,6 +60,13 @@ class CompilationSession(
     val limits: WorkerLimits = WorkerLimits(),
 ) {
     internal val normalizedGuestModules = java.util.Collections.newSetFromMap(IdentityHashMap<IrModuleFragment, Boolean>())
+    private val specializationNames = linkedSetOf<String>()
+    val materializedPlatformSpecializations: Set<String> get() = specializationNames.toSet()
+
+    internal fun recordPlatformSpecializations(names: Collection<String>) {
+        specializationNames += names
+    }
+
     private val originalSourcePaths = IdentityHashMap<IrElement, VirtualSourcePath>()
 
     internal fun recordSource(

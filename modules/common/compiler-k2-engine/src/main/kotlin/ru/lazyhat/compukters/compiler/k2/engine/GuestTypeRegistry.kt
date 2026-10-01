@@ -43,7 +43,7 @@ internal class GuestTypeRegistry(
         referenceArrays = types
     }
 
-    fun referenceArrayType(type: IrType): ValueType.Ref? = referenceArrays[type.canonicalPlatformType()]
+    fun referenceArrayType(type: IrType): ValueType.Ref? = referenceArrays[type.specializationTypeIdentity()]
 
     fun isStringArray(type: IrType): Boolean {
         val simple = type as? IrSimpleType ?: return false

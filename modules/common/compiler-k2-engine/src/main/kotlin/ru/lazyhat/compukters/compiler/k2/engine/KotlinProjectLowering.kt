@@ -210,7 +210,7 @@ private data class GuestClassInstance(
     val name: String
         get() {
             val base = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
-            return if (arguments.isEmpty()) base else "$base<${arguments.joinToString(",") { it.canonicalPlatformType() }}>"
+            return if (arguments.isEmpty()) base else "$base<${arguments.joinToString(",") { it.specializationTypeIdentity() }}>"
         }
 }
 
@@ -226,6 +226,7 @@ private fun collectGuestClassInstances(
     classes: List<IrClass>,
     functions: List<GuestFunctionInstance>,
     properties: List<TopLevelProperty>,
+    anyType: IrType,
 ): List<GuestClassInstance> {
     val bySymbol = classes.associateBy { it.symbol }
     val byName = classes.associateBy { it.fqNameWhenAvailable?.asString() }
@@ -273,7 +274,7 @@ private fun collectGuestClassInstances(
                             ?.asString() == "kotlin.collections.mutableListStorage"
                     ) {
                         val elementType = expression.typeArguments.singleOrNull()?.let(substitution)
-                        if (elementType != null && elementType.canonicalPlatformType() != "Int") {
+                        if (elementType != null && elementType.specializationTypeIdentity() != "Int") {
                             byName["kotlin.collections.ReferenceMutableListStorage"]?.let {
                                 add(GuestClassInstance(it, listOf(elementType)))
                             }
@@ -298,6 +299,10 @@ private fun collectGuestClassInstances(
     properties.forEach { property -> scan(property.declaration, { it }) }
     while (pending.isNotEmpty()) {
         val instance = pending.removeFirst()
+        // Concrete collection ownership must not depend on which read views a consumer happens to use.
+        CollectionReadBridges.interfaces(instance.declaration, instance.arguments, anyType).forEach { (name, argument) ->
+            byName[name]?.let { add(GuestClassInstance(it, listOf(argument))) }
+        }
         instance.declaration.superTypes.forEach { consider(it, instance::substitute) }
         instance.declaration.declarations.forEach { declaration -> scan(declaration, instance::substitute) }
     }
@@ -961,12 +966,8 @@ internal object KotlinProjectLowering {
             }
         (functions + properties).filterNot(::isCollectionSource).forEach { it.accept(collectionUsage, null) }
         val collectionInterfaceClasses =
-            if (includeTrustedPlatformBodies) {
-                emptyList()
-            } else {
-                specializedCollectionInterfaces.mapNotNull { name ->
-                    pluginContext.referenceClass(ClassId.topLevel(FqName(name)))?.owner
-                }
+            specializedCollectionInterfaces.mapNotNull { name ->
+                pluginContext.referenceClass(ClassId.topLevel(FqName(name)))?.owner
             }
         val sourceClasses =
             (classes + collectionInterfaceClasses)
@@ -1104,7 +1105,8 @@ internal object KotlinProjectLowering {
                     declaration.constructors.any { it.isPrimary }
             }
         var functionInstances = collectGuestFunctionInstances(userFunctions, constructorClasses)
-        var classInstances = collectGuestClassInstances(userClasses, functionInstances, topLevelProperties)
+        var classInstances =
+            collectGuestClassInstances(userClasses, functionInstances, topLevelProperties, pluginContext.irBuiltIns.anyType)
         // Generic member bodies can call helpers whose signatures/body introduce further class instances.
         // Discover functions and classes together until their dependencies stop adding specializations.
         while (true) {
@@ -1122,10 +1124,22 @@ internal object KotlinProjectLowering {
                         }
                     },
                 )
-            val discoveredClasses = collectGuestClassInstances(userClasses, functionInstances, topLevelProperties)
+            val discoveredClasses =
+                collectGuestClassInstances(userClasses, functionInstances, topLevelProperties, pluginContext.irBuiltIns.anyType)
             if (discoveredClasses.toSet() == classInstances.toSet()) break
             classInstances = discoveredClasses
         }
+        session.recordPlatformSpecializations(
+            classInstances
+                .filter { instance ->
+                    instance.arguments.isNotEmpty() &&
+                        (
+                            instance.declaration.fqNameWhenAvailable?.asString() in specializedCollectionInterfaces ||
+                                session.trustedPlatformModule(instance.declaration.file.fileEntry.name) != null ||
+                                session.virtualSourcePath(instance.declaration.file.fileEntry.name) in session.sourcePlatformPaths
+                        )
+                }.map(GuestClassInstance::name),
+        )
         val functionShapes =
             buildList {
                 fun include(shape: GuestFunctionShape) {
@@ -1214,7 +1228,7 @@ internal object KotlinProjectLowering {
                 } else if (instance.arguments.isEmpty()) {
                     artifactFunctionName(function, pluginContext, inlineValueClasses, session)
                 } else {
-                    val arguments = instance.arguments.joinToString(",") { it.canonicalPlatformType() }
+                    val arguments = instance.arguments.joinToString(",") { it.specializationTypeIdentity() }
                     "${function.fqNameWhenAvailable?.asString() ?: function.name.asString()}<$arguments>"
                 }
             }
@@ -2507,8 +2521,9 @@ internal object KotlinProjectLowering {
                     }
                 val bridgeInterfaces =
                     CollectionReadBridges
-                        .interfaceNames(declaration, layout.instance.arguments)
-                        .mapNotNull { name ->
+                        .interfaces(declaration, layout.instance.arguments, pluginContext.irBuiltIns.anyType)
+                        .mapNotNull { (root, argument) ->
+                            val name = "$root<${argument.specializationTypeIdentity()}>"
                             classInstanceTypeIds.entries
                                 .singleOrNull { it.key.name == name }
                                 ?.value
@@ -2680,6 +2695,7 @@ internal object KotlinProjectLowering {
                                 inlineValueClasses,
                                 platformScalars,
                                 function,
+                                classInstanceTypeIds = classInstanceTypeIds,
                             ),
                         parameters =
                             loweredParameters(function, session).map { parameter ->
@@ -2695,6 +2711,7 @@ internal object KotlinProjectLowering {
                                     inlineValueClasses,
                                     platformScalars,
                                     parameter,
+                                    classInstanceTypeIds = classInstanceTypeIds,
                                 )
                             },
                     )
@@ -7179,12 +7196,12 @@ private class ReferenceArrayUsageCollector(
                 else -> null
             }
         if (runtimeType != null) {
-            arrays[resolved.canonicalPlatformType()] = ReferenceArrayElement.Runtime(runtimeType, element.isNullable())
+            arrays[resolved.specializationTypeIdentity()] = ReferenceArrayElement.Runtime(runtimeType, element.isNullable())
             return
         }
         val instance = element.classInstance(classes) ?: return
         if (instance in instances) {
-            arrays[resolved.canonicalPlatformType()] = ReferenceArrayElement.GuestClass(instance, element.isNullable())
+            arrays[resolved.specializationTypeIdentity()] = ReferenceArrayElement.GuestClass(instance, element.isNullable())
         }
     }
 
@@ -7261,6 +7278,35 @@ private fun resolveTrustedIntrinsic(
 }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
+internal fun IrType.specializationTypeIdentity(): String {
+    val simple = this as? IrSimpleType ?: return toString()
+    val name =
+        when (val classifier = simple.classifier) {
+            is IrClassSymbol -> {
+                val qualified = classifier.owner.fqNameWhenAvailable?.asString() ?: classifier.owner.relativeClassName()
+                // Built-in scalar names retain their established spelling; all other arguments retain their package.
+                if (qualified.startsWith("kotlin.") && '.' !in qualified.removePrefix("kotlin.")) {
+                    qualified.removePrefix("kotlin.")
+                } else if ('.' !in qualified) {
+                    "<root>.$qualified"
+                } else {
+                    qualified
+                }
+            }
+
+            is IrTypeParameterSymbol -> {
+                classifier.owner.name.asString()
+            }
+
+            else -> {
+                classifier.toString()
+            }
+        }
+    val arguments = simple.arguments.mapNotNull { (it as? IrTypeProjection)?.type?.specializationTypeIdentity() }
+    return name + arguments.takeIf { it.isNotEmpty() }?.joinToString(prefix = "<", postfix = ">", separator = ",").orEmpty() +
+        if (simple.isNullable()) "?" else ""
+}
+
 internal fun IrType.canonicalPlatformType(): String {
     val simple = this as? IrSimpleType ?: return toString()
     val classifier = simple.classifier

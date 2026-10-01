@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.compiler.k2.engine.library
 
+import ru.lazyhat.compukters.compiler.artifact.link.LibrarySpecializations
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
@@ -105,29 +106,37 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
                         declaration.defaultArguments,
                     )
                 }
-        library.exports.filter { it.kind == SymbolKind.TYPE }.forEach { export ->
-            val exportName = library.strings[export.name.value.toInt()].toString()
-            types += PlatformTypeLink(exportName, exportName, moduleHash.copyOf())
-        }
-        library.exports.filter { it.kind == SymbolKind.FIELD }.forEach { export ->
-            val exportName = library.strings[export.name.value.toInt()].toString()
-            val field = library.fields[export.localSymbol.toInt()]
-            val owner = field.owner as? TypeRef.Local ?: error("platform field $exportName has an imported owner")
-            val ownerSymbol =
-                library.strings[
-                    library.types[owner.id.value.toInt()]
-                        .name.value
-                        .toInt(),
-                ].toString()
-            fields +=
-                PlatformFieldLink(
-                    exportName,
-                    ownerSymbol,
-                    exportName,
-                    field.static,
-                    moduleHash.copyOf(),
-                )
-        }
+        library.exports
+            .filter {
+                it.kind == SymbolKind.TYPE &&
+                    !LibrarySpecializations.isSpecializationExport(library.strings[it.name.value.toInt()].toString())
+            }.forEach { export ->
+                val exportName = library.strings[export.name.value.toInt()].toString()
+                types += PlatformTypeLink(exportName, exportName, moduleHash.copyOf())
+            }
+        library.exports
+            .filter {
+                it.kind == SymbolKind.FIELD &&
+                    !LibrarySpecializations.isSpecializationExport(library.strings[it.name.value.toInt()].toString())
+            }.forEach { export ->
+                val exportName = library.strings[export.name.value.toInt()].toString()
+                val field = library.fields[export.localSymbol.toInt()]
+                val owner = field.owner as? TypeRef.Local ?: error("platform field $exportName has an imported owner")
+                val ownerSymbol =
+                    library.strings[
+                        library.types[owner.id.value.toInt()]
+                            .name.value
+                            .toInt(),
+                    ].toString()
+                fields +=
+                    PlatformFieldLink(
+                        exportName,
+                        ownerSymbol,
+                        exportName,
+                        field.static,
+                        moduleHash.copyOf(),
+                    )
+            }
     }
     val linkOrder =
         compareBy<PlatformFunctionLink>({ it.moduleHash.toHex() }, PlatformFunctionLink::exportName, PlatformFunctionLink::symbol)
