@@ -527,13 +527,27 @@ class PlatformMetadataCompiler {
         ownerHasDispatchReceiver: Boolean,
         declaration: KtDeclaration,
     ): List<PlatformDefaultArgument?> {
-        val function = declaration as? KtNamedFunction ?: return emptyList()
+        val parameters =
+            when (declaration) {
+                is KtNamedFunction -> declaration.valueParameters
+                is KtConstructor<*> -> declaration.valueParameters
+                else -> return emptyList()
+            }
+        val function = declaration as? KtNamedFunction
         val values =
-            function.valueParameters.map { parameter ->
+            parameters.map { parameter ->
                 parameter.defaultValue?.let { expression ->
                     val reference = expression.text
                     val intValue = parseDefaultIntLiteral(reference)
-                    if (reference == "size" && !ownerHasDispatchReceiver && function.receiverTypeReference?.text?.let {
+                    if (reference == "null") {
+                        require(
+                            parameter.typeReference
+                                ?.text
+                                ?.trim()
+                                ?.endsWith('?') == true,
+                        ) { "null default requires a nullable parameter" }
+                        PlatformDefaultArgument.NullValue
+                    } else if (reference == "size" && !ownerHasDispatchReceiver && function?.receiverTypeReference?.text?.let {
                             it == "IntArray" || it == "CharArray" || it.startsWith("Array<")
                         } == true
                     ) {
@@ -551,7 +565,9 @@ class PlatformMetadataCompiler {
                 }
             }
         if (values.none { it != null }) return emptyList()
-        val implicitParameters = (if (ownerHasDispatchReceiver) 1 else 0) + (if (function.receiverTypeReference == null) 0 else 1)
+        val implicitParameters =
+            (if (ownerHasDispatchReceiver && declaration !is KtConstructor<*>) 1 else 0) +
+                (if (function?.receiverTypeReference == null) 0 else 1)
         return List(implicitParameters) { null } + values
     }
 
@@ -666,7 +682,7 @@ class PlatformMetadataCompiler {
 }
 
 object PlatformMetadataCodec {
-    private const val FORMAT = 5
+    private const val FORMAT = 6
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'M'.code.toByte(), 'D'.code.toByte())
 
     fun encode(metadata: DecodedPlatformMetadata): ImmutableBytes {
@@ -704,6 +720,10 @@ object PlatformMetadataCodec {
                                 is PlatformDefaultArgument.IntValue -> {
                                     sink.writeByte(2)
                                     sink.writeInt(argument.value)
+                                }
+
+                                PlatformDefaultArgument.NullValue -> {
+                                    sink.writeByte(4)
                                 }
                             }
                         }
@@ -745,6 +765,7 @@ object PlatformMetadataCodec {
                                     1 -> PlatformDefaultArgument.EnumEntry(source.string())
                                     2 -> PlatformDefaultArgument.IntValue(source.readInt())
                                     3 -> PlatformDefaultArgument.ReceiverArraySize
+                                    4 -> PlatformDefaultArgument.NullValue
                                     else -> throw IllegalArgumentException("invalid platform default argument tag: $tag")
                                 }
                             },

@@ -31,7 +31,7 @@ import java.security.MessageDigest
 object PlatformBundleCodec {
     const val SUPPORTED_PLATFORM_ABI = 3
 
-    private const val FORMAT_VERSION = 8
+    private const val FORMAT_VERSION = 9
     private const val MAX_BUNDLE_BYTES = 128 * 1024 * 1024
     private const val MAX_BINARY_BYTES = 64 * 1024 * 1024
     private const val MAX_TEXT_BYTES = 1024 * 1024
@@ -45,7 +45,7 @@ object PlatformBundleCodec {
     private const val MAX_SCALAR_CONSTANTS = 262_144
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'B'.code.toByte(), 'F'.code.toByte())
     private val MODULE_MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'M'.code.toByte(), 'D'.code.toByte())
-    private const val MODULE_FORMAT_VERSION = 4
+    private const val MODULE_FORMAT_VERSION = 5
 
     fun assemble(
         languageVersion: String,
@@ -265,7 +265,7 @@ object PlatformBundleCodec {
                     when (argument) {
                         null -> {}
 
-                        is PlatformDefaultArgument.IntValue -> {}
+                        is PlatformDefaultArgument.IntValue, PlatformDefaultArgument.NullValue -> {}
 
                         PlatformDefaultArgument.ReceiverArraySize -> {
                             validateReceiverDefaults(declaration)
@@ -449,6 +449,10 @@ object PlatformBundleCodec {
                             output.write(2)
                             i32(argument.value)
                         }
+
+                        PlatformDefaultArgument.NullValue -> {
+                            output.write(4)
+                        }
                     }
                 }
             }
@@ -602,6 +606,7 @@ object PlatformBundleCodec {
                                     1 -> PlatformDefaultArgument.EnumEntry(string("platform enum default argument"))
                                     2 -> PlatformDefaultArgument.IntValue(i32())
                                     3 -> PlatformDefaultArgument.ReceiverArraySize
+                                    4 -> PlatformDefaultArgument.NullValue
                                     else -> throw IllegalArgumentException("invalid platform default argument tag: $tag")
                                 }
                             },

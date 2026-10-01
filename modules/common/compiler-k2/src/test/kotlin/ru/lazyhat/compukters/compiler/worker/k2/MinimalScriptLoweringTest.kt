@@ -4494,7 +4494,16 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val source =
                 """
+                import compukter.io.IOException
                 class Problem(message: String?, cause: Throwable?) : RuntimeException(message, cause)
+                class State { var order: Int = 0 }
+                open class InputProblem(message: String?, cause: Throwable? = null) : IOException(message, cause)
+                class DetailedProblem(state: State, message: String?, cause: Throwable?) : InputProblem(message, cause) {
+                    val detail: String? = message
+                    init { state.order = state.order * 10 + 3 }
+                }
+                fun message(state: State): String { state.order = state.order * 10 + 2; return "input" }
+                fun cause(state: State, error: Throwable): Throwable { state.order = state.order * 10 + 1; return error }
                 fun fail(error: Throwable) { throw error }
                 fun main() {
                     val cause = IllegalArgumentException("root")
@@ -4518,6 +4527,18 @@ class MinimalScriptLoweringTest {
                     } catch (caught: Throwable) {
                         require(caught === error)
                     }
+                    val state = State()
+                    val input = DetailedProblem(cause = cause(state, cause), message = message(state), state = state)
+                    require(state.order == 123 && input.detail == "input")
+                    try { fail(input) } catch (caught: IOException) {
+                        require(caught === input && caught.message == "input" && caught.cause === cause)
+                    }
+                    val plain = InputProblem("plain")
+                    require(plain.message == "plain" && plain.cause == null)
+                    val direct = IOException(cause = cause, message = "direct")
+                    require(direct.message == "direct" && direct.cause === cause)
+                    require(IOException("no cause").cause == null)
+                    require(NoWhenBranchMatchedException().message == null)
                     println("exceptions ok")
                 }
                 """.trimIndent()

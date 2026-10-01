@@ -45,6 +45,21 @@ class PlatformMetadataCompilerTest {
     private val module = PlatformModuleId("test", "library")
 
     @Test
+    fun `constructor null defaults round trip without a dispatch receiver slot`() {
+        val result =
+            compiler.compile(
+                module,
+                listOf(source("Token.kt", "package sample\nclass Token public constructor(message: String?, cause: String? = null)")),
+            )
+        val constructor = result.declarations.single { it.symbol == "sample.Token.<init>" }
+        assertEquals(listOf(null, PlatformDefaultArgument.NullValue), constructor.defaultArguments)
+        assertEquals(constructor, PlatformMetadataCodec.decode(result.metadata).declarations.single { it.symbol == constructor.symbol })
+        assertFailsWith<IllegalArgumentException> {
+            compiler.compile(module, listOf(source("Wrong.kt", "package sample\nclass Wrong public constructor(value: String = null)")))
+        }
+    }
+
+    @Test
     fun `source implementation identities distinguish overloads inline bodies and generic owners`() {
         val result =
             compiler.compile(

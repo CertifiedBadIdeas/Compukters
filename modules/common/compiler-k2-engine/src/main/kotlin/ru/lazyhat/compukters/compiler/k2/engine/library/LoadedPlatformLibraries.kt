@@ -33,6 +33,7 @@ import ru.lazyhat.compukters.compiler.k2.engine.PlatformFieldLink
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformFunctionLink
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformTypeLink
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
+import ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCodec
 
 fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibraries {
     val artifacts =
@@ -52,6 +53,39 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
                 module.kind == ModuleKind.LIBRARY && module.exports.any { it.kind == SymbolKind.FUNCTION }
             }
         val moduleHash = ArtifactWriter.moduleSemanticHash(library)
+        val constructors = platformModule.declarations.filter { it.signature.startsWith("constructor(") }
+        val exportedDeclarations =
+            if (constructors.isEmpty()) {
+                emptySet()
+            } else {
+                PlatformMetadataCodec
+                    .decode(
+                        platformModule.metadata,
+                    ).exportedSymbols
+                    .toSet()
+            }
+        functions +=
+            constructors
+                .filter { declaration ->
+                    !declaration.trustedExternal && declaration.signature.startsWith("constructor(") &&
+                        declaration.identity !in platformModule.sourceDeclarations && declaration.symbol in exportedDeclarations &&
+                        platformModule.scalarTypes.none { it.symbol == declaration.symbol.removeSuffix(".<init>") }
+                }.map { declaration ->
+                    val owner = declaration.symbol.removeSuffix(".<init>")
+                    val exportName = "<init:$owner>"
+                    require(
+                        library.exports.count { export ->
+                            export.kind == SymbolKind.FUNCTION && library.strings[export.name.value.toInt()].toString() == exportName
+                        } == 1,
+                    ) { "cannot uniquely match platform constructor ${declaration.symbol}" }
+                    PlatformFunctionLink(
+                        declaration.symbol,
+                        declaration.signature,
+                        exportName,
+                        moduleHash.copyOf(),
+                        declaration.defaultArguments,
+                    )
+                }
         functions +=
             platformModule.declarations
                 .filter { declaration ->
