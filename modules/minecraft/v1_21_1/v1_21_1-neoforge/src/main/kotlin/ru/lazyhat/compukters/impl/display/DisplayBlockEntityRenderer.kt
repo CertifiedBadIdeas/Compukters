@@ -14,6 +14,7 @@ import net.minecraft.client.renderer.MultiBufferSource
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider
 import net.minecraft.network.chat.Component
+import ru.lazyhat.compukters.impl.font.JetBrainsMonoRendering
 import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import ru.lazyhat.compukters.impl.terminal.fontDescription
 import ru.lazyhat.compukters.minecraft.display.DisplayBlock
@@ -40,6 +41,7 @@ class DisplayBlockEntityRenderer(
         pose.mulPose(Axis.YP.rotationDegrees(-entity.blockState.getValue(DisplayBlock.FACING).toYRot()))
         pose.translate(0.0, 0.0, 0.503)
         pose.scale(SCALE, -SCALE, SCALE)
+        val fontBuffers = JetBrainsMonoRendering.buffers(buffers)
         DisplayTextLayout.forEachGlyph(rows) { x, y, codePoint ->
             val text =
                 Component.literal(String(Character.toChars(codePoint))).withStyle { style -> style.withFont(profile.fontDescription) }
@@ -50,7 +52,7 @@ class DisplayBlockEntityRenderer(
                 TEXT_COLOR,
                 false,
                 pose.last().pose(),
-                buffers,
+                fontBuffers,
                 Font.DisplayMode.POLYGON_OFFSET,
                 0,
                 LightTexture.FULL_BRIGHT,

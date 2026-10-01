@@ -36,6 +36,7 @@ import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
+import ru.lazyhat.compukters.impl.font.JetBrainsMonoRendering
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetReference
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState
 import ru.lazyhat.compukters.impl.terminal.TerminalGridGeometry
@@ -485,8 +486,9 @@ internal class IdeScreen(
                                     Component
                                         .literal(glyph.value)
                                         .withStyle { style -> style.withFont(codeFont.fontDescription) }
-                                graphics.drawString(font, value, glyph.x, textY, draw.color, false)
+                                JetBrainsMonoRendering.drawString(graphics, font, value, glyph.x, textY, draw.color, flush = false)
                             }
+                            graphics.flush()
                         }
                     }
                     if (draw.clip != null) graphics.disableScissor()
