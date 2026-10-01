@@ -760,9 +760,9 @@ private class InlineValueClassRegistry private constructor(
 
 private const val ANY_RUNTIME_TYPE = 5u
 private const val INT_BOX_RUNTIME_TYPE = 6u
-private const val INT_BOX_VALUE_IMPORT = 12u
-private const val THROWABLE_MESSAGE_IMPORT = 13u
-private const val THROWABLE_CAUSE_IMPORT = 14u
+private const val INT_BOX_VALUE_IMPORT = 16u
+private const val THROWABLE_MESSAGE_IMPORT = 17u
+private const val THROWABLE_CAUSE_IMPORT = 18u
 private const val INT_ARRAY_RUNTIME_TYPE = 4u
 private const val INT_BOX_VALUE_NAME = "kotlin.Int.<boxed-value>"
 private const val THROWABLE_MESSAGE_NAME = "kotlin.Throwable.message"
@@ -777,6 +777,10 @@ private fun IrClass.runtimeExceptionType(): UInt? =
         "kotlin.IllegalStateException" -> 9u
         "kotlin.NoWhenBranchMatchedException" -> 10u
         "kotlin.ArithmeticException" -> 11u
+        "kotlin.IndexOutOfBoundsException" -> 12u
+        "kotlin.NegativeArraySizeException" -> 13u
+        "kotlin.NullPointerException" -> 14u
+        "kotlin.ClassCastException" -> 15u
         else -> null
     }
 
@@ -961,6 +965,10 @@ internal object KotlinProjectLowering {
             "kotlin.IllegalStateException",
             "kotlin.NoWhenBranchMatchedException",
             "kotlin.ArithmeticException",
+            "kotlin.IndexOutOfBoundsException",
+            "kotlin.NegativeArraySizeException",
+            "kotlin.NullPointerException",
+            "kotlin.ClassCastException",
         )
 
     fun lower(
@@ -3322,6 +3330,7 @@ internal object KotlinProjectLowering {
                         name = requireNotNull(ids["kotlin.IllegalArgumentException"]),
                         final = true,
                         superType = TypeRef.Local(TypeId.of(8u)),
+                        runtimeExceptionKind = ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind.ILLEGAL_ARGUMENT,
                     ),
                     NominalType.Array(name = requireNotNull(ids["kotlin.IntArray"]), element = ValueType.I32, superType = anyType),
                     NominalType.Class(name = requireNotNull(ids["kotlin.Any"])),
@@ -3334,7 +3343,11 @@ internal object KotlinProjectLowering {
                     ),
                     NominalType.Class(name = requireNotNull(ids["kotlin.Exception"]), superType = TypeRef.Local(TypeId.of(2u))),
                     NominalType.Class(name = requireNotNull(ids["kotlin.RuntimeException"]), superType = TypeRef.Local(TypeId.of(7u))),
-                    NominalType.Class(name = requireNotNull(ids["kotlin.IllegalStateException"]), superType = TypeRef.Local(TypeId.of(8u))),
+                    NominalType.Class(
+                        name = requireNotNull(ids["kotlin.IllegalStateException"]),
+                        superType = TypeRef.Local(TypeId.of(8u)),
+                        runtimeExceptionKind = ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind.ILLEGAL_STATE,
+                    ),
                     NominalType.Class(
                         name = requireNotNull(ids["kotlin.NoWhenBranchMatchedException"]),
                         final = true,
@@ -3345,6 +3358,29 @@ internal object KotlinProjectLowering {
                         final = true,
                         superType = TypeRef.Local(TypeId.of(8u)),
                         runtimeExceptionKind = ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind.ARITHMETIC,
+                    ),
+                    NominalType.Class(
+                        name = requireNotNull(ids["kotlin.IndexOutOfBoundsException"]),
+                        superType = TypeRef.Local(TypeId.of(8u)),
+                        runtimeExceptionKind = ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind.INDEX_OUT_OF_BOUNDS,
+                    ),
+                    NominalType.Class(
+                        name = requireNotNull(ids["kotlin.NegativeArraySizeException"]),
+                        final = true,
+                        superType = TypeRef.Local(TypeId.of(8u)),
+                        runtimeExceptionKind = ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind.NEGATIVE_ARRAY_SIZE,
+                    ),
+                    NominalType.Class(
+                        name = requireNotNull(ids["kotlin.NullPointerException"]),
+                        final = true,
+                        superType = TypeRef.Local(TypeId.of(8u)),
+                        runtimeExceptionKind = ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind.NULL_POINTER,
+                    ),
+                    NominalType.Class(
+                        name = requireNotNull(ids["kotlin.ClassCastException"]),
+                        final = true,
+                        superType = TypeRef.Local(TypeId.of(8u)),
+                        runtimeExceptionKind = ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind.CLASS_CAST,
                     ),
                 ),
             fields =

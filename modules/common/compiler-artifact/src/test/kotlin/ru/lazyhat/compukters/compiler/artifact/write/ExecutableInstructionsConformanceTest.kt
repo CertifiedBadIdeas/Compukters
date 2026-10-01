@@ -63,7 +63,8 @@ import kotlin.test.assertIs
 class ExecutableInstructionsConformanceTest {
     @Test
     fun `writes representative executable artifact for the pinned Rust verifier`() {
-        val result = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(executableInstructionsArtifact()))
+        val result =
+            assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(executableInstructionsArtifact().withRuntimeExceptionDependencies()))
         val output = Path.of(requireNotNull(System.getProperty("compukter.vm.executableArtifact")))
         output.parent.createDirectories()
         output.writeBytes(result.bytes)

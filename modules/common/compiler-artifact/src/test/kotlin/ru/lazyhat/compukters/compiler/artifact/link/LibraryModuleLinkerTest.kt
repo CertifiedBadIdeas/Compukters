@@ -57,6 +57,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
+import ru.lazyhat.compukters.compiler.artifact.write.withRuntimeExceptionDependencies
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -100,8 +101,9 @@ class LibraryModuleLinkerTest {
     fun `reachable library class retains and relocates its initializer`() {
         val (application, library) = applicationWithInitializedLibraryClass()
 
-        val linked = LibraryModuleLinker.link(application, mapOf("initialized" to library))
-        val linkedLibrary = linked.modules.single { it.kind == ModuleKind.LIBRARY }
+        val input = application.copy(modules = application.modules + library).withRuntimeExceptionDependencies()
+        val linked = LibraryModuleLinker.link(input, emptyList())
+        val linkedLibrary = linked.modules.single { module -> module.types.any { it is NominalType.Class && it.initializer != null } }
         val linkedClass = assertIs<NominalType.Class>(linkedLibrary.types.single { it is NominalType.Class })
 
         assertEquals(1, linkedLibrary.functions.size)

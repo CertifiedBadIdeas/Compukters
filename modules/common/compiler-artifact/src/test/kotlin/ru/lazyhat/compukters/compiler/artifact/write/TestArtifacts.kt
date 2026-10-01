@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.compiler.artifact.write
 
 import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
+import ru.lazyhat.compukters.compiler.artifact.analysis.runtimeExceptionKinds
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
@@ -40,6 +41,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
+import ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
@@ -92,12 +94,100 @@ internal fun minimalArtifact(instructions: List<Instruction> = listOf(Instructio
             ),
     )
 
+/** Fixture production mirrors implicit linking dependencies; admission never repairs an artifact. */
+internal fun Artifact.withRuntimeExceptionDependencies(): Artifact {
+    val required =
+        modules
+            .flatMap { it.blocks }
+            .flatMap { it.instructions }
+            .flatMap { it.runtimeExceptionKinds() }
+            .toSet()
+    if (required.isEmpty()) return this
+    val updated = modules.toMutableList()
+    var owner = updated.indexOfFirst { module -> module.types.any { it is NominalType.Class && it.throwableRoot } }
+    if (owner < 0) {
+        owner =
+            updated.indexOfFirst { module ->
+                module.types.any { it is NominalType.Class && module.strings[it.name.value.toInt()].toString() == "kotlin.String" }
+            }
+        if (owner < 0) {
+            owner = updated.size
+            updated +=
+                ru.lazyhat.compukters.compiler.artifact.model.Module(
+                    name = StringId.of(1u),
+                    kind = ModuleKind.LIBRARY,
+                    strings = listOf("kotlin.String", "test.runtime").map(MetadataText::of),
+                    types = listOf(NominalType.Class(name = StringId.of(0u), final = true)),
+                )
+        }
+        val module = updated[owner]
+        val root = TypeRef.Local(TypeId.of(module.types.size.toUInt()))
+        val string =
+            TypeRef.Local(
+                TypeId.of(
+                    module.types
+                        .indexOfFirst {
+                            it is NominalType.Class && module.strings[it.name.value.toInt()].toString() == "kotlin.String"
+                        }.toUInt(),
+                ),
+            )
+        updated[owner] =
+            module.copy(
+                types =
+                    module.types +
+                        NominalType.Class(
+                            name = module.name,
+                            throwableRoot = true,
+                            fieldStart = module.fields.size.toUInt(),
+                            fieldCount = 2u,
+                        ),
+                fields =
+                    module.fields +
+                        listOf(
+                            ru.lazyhat.compukters.compiler.artifact.model
+                                .Field(root, StringId.of(0u), ValueType.Ref(true, string), false, false),
+                            ru.lazyhat.compukters.compiler.artifact.model
+                                .Field(root, module.name, ValueType.Ref(true, root), false, false),
+                        ),
+            )
+    }
+    val present =
+        updated
+            .flatMap { it.types }
+            .filterIsInstance<NominalType.Class>()
+            .mapNotNull { it.runtimeExceptionKind }
+            .toSet()
+    val module = updated[owner]
+    val root = TypeRef.Local(TypeId.of(module.types.indexOfFirst { it is NominalType.Class && it.throwableRoot }.toUInt()))
+    updated[owner] =
+        module.copy(
+            types =
+                module.types +
+                    (required - present).sortedBy { it.artifactTag }.map {
+                        NominalType.Class(name = module.name, superType = root, runtimeExceptionKind = it)
+                    },
+        )
+    val hashes = updated.map { ArtifactWriter.moduleSemanticHash(it) }
+    return copy(
+        minimumRuntimeAbi = AbiVersion(1u, 9u),
+        modules =
+            updated.map {
+                it.copy(
+                    imports =
+                        it.imports.map { import ->
+                            import.copy(targetModuleHash = hashes[import.targetModule.value.toInt()])
+                        },
+                )
+            },
+    )
+}
+
 internal fun channelArtifact(): Artifact {
     val source = minimalArtifact()
     val module = source.modules.single()
     return ReferenceLiveness.derive(
         source.copy(
-            minimumRuntimeAbi = AbiVersion(1u, 2u),
+            minimumRuntimeAbi = AbiVersion(1u, 9u),
             semanticFeatures = setOf(SemanticFeature.COROUTINES, SemanticFeature.CHANNELS),
             manifest =
                 Manifest(
@@ -117,9 +207,34 @@ internal fun channelArtifact(): Artifact {
             modules =
                 listOf(
                     module.copy(
+                        strings = module.strings + MetadataText.of("kotlin.String"),
                         types =
                             listOf(
                                 (module.types.single() as NominalType.Function).copy(suspending = true),
+                                NominalType.Class(name = StringId.of(0u), throwableRoot = true, fieldCount = 2u),
+                                NominalType.Class(name = StringId.of(2u), final = true),
+                                NominalType.Class(
+                                    name = StringId.of(1u),
+                                    superType = TypeRef.Local(TypeId.of(1u)),
+                                    runtimeExceptionKind = RuntimeExceptionKind.ILLEGAL_ARGUMENT,
+                                ),
+                            ),
+                        fields =
+                            listOf(
+                                ru.lazyhat.compukters.compiler.artifact.model.Field(
+                                    TypeRef.Local(TypeId.of(1u)),
+                                    StringId.of(0u),
+                                    ValueType.Ref(true, TypeRef.Local(TypeId.of(2u))),
+                                    false,
+                                    false,
+                                ),
+                                ru.lazyhat.compukters.compiler.artifact.model.Field(
+                                    TypeRef.Local(TypeId.of(1u)),
+                                    StringId.of(1u),
+                                    ValueType.Ref(true, TypeRef.Local(TypeId.of(1u))),
+                                    false,
+                                    false,
+                                ),
                             ),
                         constants = listOf(Constant.I32(1)),
                         functions =
@@ -160,7 +275,7 @@ internal fun scalarLanguageRuntimeArtifact(): Artifact {
     return source.copy(
         minimumRuntimeAbi =
             ru.lazyhat.compukters.compiler.artifact.model
-                .AbiVersion(1u, 0u),
+                .AbiVersion(1u, 9u),
         semanticFeatures = emptySet(),
         modules =
             listOf(
@@ -169,8 +284,23 @@ internal fun scalarLanguageRuntimeArtifact(): Artifact {
                         module.types.toMutableList().also {
                             it[0] =
                                 (it[0] as NominalType.Class).copy(throwableRoot = false, fieldCount = 0u)
+                            for (index in 4..6) {
+                                it[index] = (it[index] as NominalType.Class).copy(superType = TypeRef.Local(TypeId.of(7u)))
+                            }
+                            it += NominalType.Class(name = StringId.of(0u), throwableRoot = true, fieldCount = 2u)
                         },
-                    fields = emptyList(),
+                    fields =
+                        module.fields.map { field ->
+                            field.copy(
+                                owner = TypeRef.Local(TypeId.of(7u)),
+                                type =
+                                    if (field.type == ValueType.Ref(true, TypeRef.Local(TypeId.of(0u)))) {
+                                        ValueType.Ref(true, TypeRef.Local(TypeId.of(7u)))
+                                    } else {
+                                        field.type
+                                    },
+                            )
+                        },
                     exceptions = emptyList(),
                     functions = listOf(module.functions.single().copy(exceptionCount = 0u)),
                     blocks =
@@ -197,7 +327,7 @@ internal fun languageRuntimeArtifact(): Artifact =
     Artifact(
         minimumRuntimeAbi =
             ru.lazyhat.compukters.compiler.artifact.model
-                .AbiVersion(1u, 8u),
+                .AbiVersion(1u, 9u),
         semanticFeatures = setOf(SemanticFeature.EXCEPTIONS),
         manifest = Manifest.minimal(maximumBlockCost = 10u),
         entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
@@ -225,6 +355,21 @@ internal fun languageRuntimeArtifact(): Artifact =
                                 parameters = emptyList(),
                             ),
                             NominalType.Class(name = StringId.of(4u), final = true),
+                            NominalType.Class(
+                                name = StringId.of(0u),
+                                superType = TypeRef.Local(TypeId.of(0u)),
+                                runtimeExceptionKind = RuntimeExceptionKind.INDEX_OUT_OF_BOUNDS,
+                            ),
+                            NominalType.Class(
+                                name = StringId.of(0u),
+                                superType = TypeRef.Local(TypeId.of(0u)),
+                                runtimeExceptionKind = RuntimeExceptionKind.NEGATIVE_ARRAY_SIZE,
+                            ),
+                            NominalType.Class(
+                                name = StringId.of(0u),
+                                superType = TypeRef.Local(TypeId.of(0u)),
+                                runtimeExceptionKind = RuntimeExceptionKind.NULL_POINTER,
+                            ),
                         ),
                     constants = listOf(Constant.I32(0), Constant.I32(1)),
                     fields =

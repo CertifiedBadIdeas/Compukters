@@ -22,8 +22,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   exits, returns and supported loop/inline exits. Uncaught exceptions report their class,
   message and bounded source stack. Runtime libraries containing exception instructions need rebuilding for Runtime ABI 1.8.
   `require`, `check` and `error` use catchable exceptions, with lazy String messages for the preconditions.
-  Integer division and remainder by zero throw catchable `ArithmeticException`; programs and libraries
-  containing these operations need rebuilding for Runtime ABI 1.9.
+  Integer division/remainder, array and string bounds, negative array sizes, null references and checked casts
+  throw typed catchable exceptions. Invalid channel arguments are catchable; resource exhaustion remains terminal.
+  Programs and libraries containing these fallible operations need rebuilding for Runtime ABI 1.9.
   Exhaustive `when` can return references without an explicit `else`.
 
 - Reference identity comparisons (`===`/`!==`) compare supported arrays and nullable references directly,

@@ -64,7 +64,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-private fun exactRoots(artifact: Artifact): Artifact = ReferenceLiveness.derive(artifact)
+private fun exactRoots(artifact: Artifact): Artifact = ReferenceLiveness.derive(artifact.withRuntimeExceptionDependencies())
 
 class ArtifactValidatorTest {
     @Test

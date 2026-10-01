@@ -60,6 +60,22 @@ public class ArithmeticException external constructor(message: String?) : Runtim
     public external constructor(message: String?, cause: Throwable?) : this(message)
 }
 
+public open class IndexOutOfBoundsException external constructor(message: String?) : RuntimeException(message) {
+    public external constructor(message: String?, cause: Throwable?) : this(message)
+}
+
+public class NegativeArraySizeException external constructor(message: String?) : RuntimeException(message) {
+    public external constructor(message: String?, cause: Throwable?) : this(message)
+}
+
+public class NullPointerException external constructor(message: String?) : RuntimeException(message) {
+    public external constructor(message: String?, cause: Throwable?) : this(message)
+}
+
+public class ClassCastException external constructor(message: String?) : RuntimeException(message) {
+    public external constructor(message: String?, cause: Throwable?) : this(message)
+}
+
 public abstract class Enum<E : Enum<E>> external constructor() : Comparable<E> {
     public external val name: String
 
