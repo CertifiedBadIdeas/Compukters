@@ -41,6 +41,40 @@ import kotlin.test.assertTrue
 
 class CompletionQueryTest {
     @Test
+    fun `scope functions specialize their result and lambda from the explicit receiver`() {
+        val source = "fun main() { val text = \"hello\"; text.also; text.apply }"
+        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+            for (name in listOf("also", "apply")) {
+                for (prefixLength in listOf(0, 1, name.length)) {
+                    val offset = source.indexOf("text.$name") + "text.".length + prefixLength
+                    val item = fixture.complete("main.kt", offset).items.single { it.insertText == name }
+                    assertEquals("String", item.callablePresentation?.returnType, "$name prefix=$prefixLength")
+                    assertTrue(item.label.contains("String"), item.label)
+                }
+            }
+            for ((incomplete, marker, expected) in listOf(
+                Triple("fun main() { val text = \"hello\"; text. }", "text.", "String"),
+                Triple("fun main() { val text: String? = null; text. }", "text.", "String?"),
+                Triple("class Box<T>(val value: T)\nfun make() = Box(1)\nfun main() { make(). }", "make().", "Box<Int>"),
+            )) {
+                fixture.update("main.kt" to incomplete)
+                val items = fixture.complete("main.kt", incomplete.indexOf(marker) + marker.length).items
+                for (name in listOf("also", "apply")) {
+                    val item = items.single { it.insertText == name }
+                    assertEquals(expected, item.callablePresentation?.returnType, "$name after $marker")
+                    assertTrue(item.label.contains(expected), item.label)
+                }
+            }
+            val safeCall = "fun main() { val text: String? = null; text?. }"
+            fixture.update("main.kt" to safeCall)
+            val safeItems = fixture.complete("main.kt", safeCall.indexOf("text?.") + 6).items
+            // An incomplete safe-call must not crash the worker's completion query.
+            assertTrue(safeItems.any { it.insertText == "also" })
+            assertTrue(safeItems.any { it.insertText == "apply" })
+        }
+    }
+
+    @Test
     fun `completion preserves specialized member and extension signatures with declared receiver context`() {
         val source =
             """
