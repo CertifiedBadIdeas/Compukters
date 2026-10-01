@@ -19,7 +19,6 @@
 package ru.lazyhat.compukters.ide.analysis.k2.query
 
 import com.intellij.psi.PsiComment
-import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
 import org.jetbrains.kotlin.analysis.api.KaIdeApi
 import org.jetbrains.kotlin.analysis.api.KaSession
@@ -35,6 +34,7 @@ import org.jetbrains.kotlin.analysis.api.components.render
 import org.jetbrains.kotlin.analysis.api.components.resolveSymbol
 import org.jetbrains.kotlin.analysis.api.components.scopeContext
 import org.jetbrains.kotlin.analysis.api.components.staticMemberScope
+import org.jetbrains.kotlin.analysis.api.components.withNullability
 import org.jetbrains.kotlin.analysis.api.renderer.declarations.impl.KaDeclarationRendererForSource
 import org.jetbrains.kotlin.analysis.api.renderer.types.KaExpandedTypeRenderingMode
 import org.jetbrains.kotlin.analysis.api.renderer.types.impl.KaTypeRendererForSource
@@ -135,26 +135,31 @@ internal object CompletionQuery {
             name.asString().startsWith(context.prefix)
         }
         val scopeContext = file.scopeContext(context.position)
-        val receiverType = context.receiver?.expressionType
-        // Pinned K2 requires a completed FIR safe-call for its extension checker.
-        // Do not introduce that checker for an empty safe-call selector.
-        val anchorReceiver = context.receiver?.takeUnless { it.parent is KtSafeQualifiedExpression }
+        val receiverType =
+            context.receiver?.expressionType?.let { type ->
+                if (context.receiver.parent is KtSafeQualifiedExpression) type.withNullability(false) else type
+            }
+        val explicitReceiver =
+            context.receiver?.let {
+                ExplicitReceiverCompletion(file, context.position, it.text, it.parent is KtSafeQualifiedExpression)
+            }
         val nameExpression =
             generateSequence(context.position as com.intellij.psi.PsiElement?) { it.parent }
                 .filterIsInstance<KtSimpleNameExpression>()
                 .firstOrNull()
-                // Immediately after a dot there is no selector name. The checker uses this
-                // node as a lexical-context anchor; the explicit receiver is passed separately.
-                ?: (anchorReceiver as? KtSimpleNameExpression)
-                ?: anchorReceiver?.let { PsiTreeUtil.findChildOfType(it, KtSimpleNameExpression::class.java) }
-        val extensionChecker = nameExpression?.let { createExtensionCandidateChecker(file, it, context.receiver) }
+        val extensionChecker =
+            nameExpression?.takeIf { explicitReceiver == null }?.let { createExtensionCandidateChecker(file, it, context.receiver) }
 
         fun functionSignature(function: KaFunctionSymbol): KaFunctionSignature<*> {
             val signature = function.asSignature()
             if (!function.isExtension) return signature
-            val applicable =
-                extensionChecker?.computeApplicability(function) as? KaExtensionApplicabilityResult.Applicable ?: return signature
-            return signature.substitute(applicable.substitutor)
+            val substitutor =
+                if (explicitReceiver != null) {
+                    explicitReceiver.substitutor(function)
+                } else {
+                    (extensionChecker?.computeApplicability(function) as? KaExtensionApplicabilityResult.Applicable)?.substitutor
+                } ?: return signature
+            return signature.substitute(substitutor)
         }
 
         KeywordCompletion.candidates(context).forEach { keyword ->

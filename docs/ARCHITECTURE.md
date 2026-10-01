@@ -89,7 +89,10 @@ and result contracts.
 Analysis protocol v13 also carries explicit Kotlin format, rename-admission, and parameter-information requests.
 Callable completions carry bounded independent presentation fields for the declared extension receiver, package and
 specialized return type. Type-scope member signatures retain K2 substitutions; extension applicability supplies
-receiver substitutions through the pinned K2 completion checker. Unknown callable type parameters remain symbolic.
+receiver substitutions through the pinned K2 completion checker. Explicit receiver checks use a query-only contextual
+Kotlin expression fragment with a synthetic selector, so literals and incomplete safe-calls still receive K2 inference
+without mutating admitted source PSI or changing diagnostic scheduling. Safe-call lookup uses the non-null receiver
+type; unknown callable type parameters remain symbolic.
 Member functions have a distinct completion kind. Presentation and insertion metadata share the same resolved
 signature without making the client parse rendered Kotlin declarations.
 Presentation requests explicitly choose whether to include diagnostics. During an automatic or manual completion
