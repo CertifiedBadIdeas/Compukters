@@ -53,6 +53,7 @@ internal class GlobalCompletionIndex private constructor(
     declarations: List<GlobalCompletionDeclaration>,
 ) {
     private var ordered = declarations.sortedWith(ORDER)
+    private var byInitial = initialBuckets(ordered)
 
     fun lookup(
         prefix: String,
@@ -73,7 +74,25 @@ internal class GlobalCompletionIndex private constructor(
             if (!declaration.shortName.startsWith(prefix)) break
             result += declaration
         }
-        return result
+        if (result.size == limit || prefix.isEmpty()) return result
+        val matcher = CompletionNameMatcher(prefix)
+        val ranked =
+            BoundedUniqueBest<GlobalCompletionDeclaration, NameMatch>(
+                limit,
+                compareByDescending<NameMatch> { it.quality }.thenComparator {
+                    left,
+                    right,
+                    ->
+                    ORDER.compare(left.declaration, right.declaration)
+                },
+                NameMatch::declaration,
+            )
+        for (declaration in result) ranked.offer(NameMatch(declaration, matcher.quality(declaration.shortName)))
+        for (declaration in byInitial[matcher.initial].orEmpty()) {
+            val quality = matcher.quality(declaration.shortName)
+            if (quality > 0) ranked.offer(NameMatch(declaration, quality))
+        }
+        return ranked.sorted().map(NameMatch::declaration)
     }
 
     fun updateProjectFile(
@@ -83,9 +102,18 @@ internal class GlobalCompletionIndex private constructor(
         require(path in declarationsByPath) { "completion index does not contain ${path.value}" }
         declarationsByPath[path] = projectDeclarations(path, file)
         ordered = declarationsByPath.values.flatten().sortedWith(ORDER)
+        byInitial = initialBuckets(ordered)
     }
 
+    private data class NameMatch(
+        val declaration: GlobalCompletionDeclaration,
+        val quality: Int,
+    )
+
     companion object {
+        private fun initialBuckets(declarations: List<GlobalCompletionDeclaration>) =
+            declarations.groupBy { it.shortName.takeIf(String::isNotEmpty)?.let { name -> Character.toLowerCase(name.codePointAt(0)) } }
+
         fun project(files: Map<VirtualSourcePath, org.jetbrains.kotlin.psi.KtFile>): GlobalCompletionIndex {
             val byPath = files.mapValuesTo(linkedMapOf()) { (path, file) -> projectDeclarations(path, file) }
             return GlobalCompletionIndex(byPath, byPath.values.flatten())

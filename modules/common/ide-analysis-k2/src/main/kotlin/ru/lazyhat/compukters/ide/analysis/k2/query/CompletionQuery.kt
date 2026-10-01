@@ -131,8 +131,9 @@ internal object CompletionQuery {
         val rankedComparator = Comparator<RankedCompletion> { left, right -> completionRankComparator.compare(left.rank, right.rank) }
         val ranked = BoundedUniqueBest(limits.completionItems, rankedComparator, RankedCompletion::identity)
         val scopedFqNames = mutableSetOf<String>()
+        val matcher = CompletionNameMatcher(context.prefix)
         val nameMatches: (org.jetbrains.kotlin.name.Name) -> Boolean = { name ->
-            name.asString().startsWith(context.prefix)
+            matcher.quality(name.asString()) > 0
         }
         val scopeContext = file.scopeContext(context.position)
         val receiverType =
@@ -170,7 +171,7 @@ internal object CompletionQuery {
                     "keyword\u0000$keyword",
                     CompletionRank(
                         applicability = 2,
-                        prefixQuality = if (keyword == context.prefix) 2 else 1,
+                        prefixQuality = matcher.quality(keyword),
                         locality = Int.MAX_VALUE,
                         nameUtf8 = keyword.encodeToByteArray(),
                         signatureUtf8 = ByteArray(0),
@@ -219,7 +220,7 @@ internal object CompletionQuery {
                     fqName?.let { "$it\u0000$detail" } ?: "scope\u0000$name\u0000$detail",
                     CompletionRank(
                         applicability = 1,
-                        prefixQuality = if (name == context.prefix) 2 else 1,
+                        prefixQuality = matcher.quality(name),
                         locality = locality,
                         nameUtf8 = name.encodeToByteArray(),
                         signatureUtf8 = detail.encodeToByteArray(),
@@ -276,7 +277,7 @@ internal object CompletionQuery {
                         "${declaration.fqName}\u0000${declaration.signature}",
                         CompletionRank(
                             applicability = 1,
-                            prefixQuality = if (declaration.shortName == context.prefix) 2 else 1,
+                            prefixQuality = matcher.quality(declaration.shortName),
                             locality = locality,
                             nameUtf8 = declaration.shortName.encodeToByteArray(),
                             signatureUtf8 = declaration.signature.encodeToByteArray(),
