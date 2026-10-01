@@ -38,6 +38,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 - Newly compiled programs reuse memory for temporary values with nonoverlapping lifetimes, reducing execution frame
   requirements while preserving types, GC roots and suspended calls.
+- Managed allocations can reuse fitting contiguous free blocks even within partial allocator size classes;
+  post-GC retries retain bounded execution without rejecting a block solely because of size-class rounding.
 
 - Programs can declare supported top-level and extension `inline` functions, including concrete generic callbacks
   and non-local returns. Direct callbacks can avoid closure allocation; stored or escaping callbacks retain managed
