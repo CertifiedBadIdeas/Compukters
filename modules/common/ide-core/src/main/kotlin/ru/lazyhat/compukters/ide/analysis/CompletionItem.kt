@@ -60,6 +60,17 @@ data class CompletionSymbol(
     }
 }
 
+/** Semantic call shape; required arguments exclude the trailing lambda itself. */
+data class CompletionCallShape(
+    val hasParameters: Boolean,
+    val hasRequiredArguments: Boolean,
+    val trailingLambda: Boolean,
+) {
+    init {
+        require(hasParameters || (!hasRequiredArguments && !trailingLambda)) { "parameterless call cannot require arguments or a lambda" }
+    }
+}
+
 @ConsistentCopyVisibility
 data class CompletionItem private constructor(
     val label: String,
@@ -69,6 +80,7 @@ data class CompletionItem private constructor(
     val origin: DeclarationOrigin? = null,
     val symbol: CompletionSymbol? = null,
     val additionalEdits: List<CompletionTextEdit> = emptyList(),
+    val callShape: CompletionCallShape? = null,
 ) {
     constructor(
         label: String,
@@ -78,11 +90,15 @@ data class CompletionItem private constructor(
         origin: DeclarationOrigin? = null,
         symbol: CompletionSymbol? = null,
         additionalEdits: Collection<CompletionTextEdit> = emptyList(),
-    ) : this(label, insertText, kind, detail, origin, symbol, Collections.unmodifiableList(additionalEdits.toList()))
+        callShape: CompletionCallShape? = null,
+    ) : this(label, insertText, kind, detail, origin, symbol, Collections.unmodifiableList(additionalEdits.toList()), callShape)
 
     init {
         require(label.isNotEmpty()) { "completion label must not be empty" }
         require(insertText.isNotEmpty()) { "completion insert text must not be empty" }
+        require(callShape == null || kind == CompletionKind.Function || kind == CompletionKind.ExtensionFunction) {
+            "only function completions carry a call shape"
+        }
         strictUtf8Size(label)
         strictUtf8Size(insertText)
         detail?.let(::strictUtf8Size)

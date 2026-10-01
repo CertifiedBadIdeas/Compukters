@@ -123,6 +123,11 @@ class CompletionIntegrationTest {
             val candidate = completion.items.single { it.insertText == "candidate" }
             assertEquals("candidate()", candidate.label)
             assertEquals("candidate", candidate.insertText)
+            assertEquals(
+                ru.lazyhat.compukters.ide.analysis
+                    .CompletionCallShape(false, false, false),
+                candidate.callShape,
+            )
         }
     }
 

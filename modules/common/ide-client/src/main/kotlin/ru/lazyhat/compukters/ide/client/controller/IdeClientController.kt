@@ -26,6 +26,7 @@ import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFailureKind
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
+import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionInsertion
 import ru.lazyhat.compukters.ide.client.analysis.IdeCompletionSelection
 import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationOutcome
 import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationTarget
@@ -1099,17 +1100,34 @@ class IdeClientController(
 
     private fun applyCompletionSelection(selection: IdeCompletionSelection): Boolean {
         val active = editor ?: return false
+        val insertion =
+            IdeCompletionInsertion.plan(
+                selection.entry.proposal,
+                selection.replacement,
+                active.document.copyRange(
+                    EditorRange(
+                        selection.replacement.endUtf16,
+                        minOf(
+                            active.document.length,
+                            selection.replacement.endUtf16 + IdeCompletionInsertion.SUFFIX_LIMIT,
+                        ),
+                    ),
+                ),
+            )
         val result =
             active.document.replaceRanges(
-                selection.replacement,
-                selection.entry.proposal.insertText,
+                insertion.replacement,
+                insertion.text,
                 selection.entry.proposal.additionalEdits
                     .map { EditorTextEdit(it.range, it.text) },
+                insertion.caretUtf16,
             )
         if (result !is EditorEditResult.Applied) {
             publishStatus("Completion edit was rejected", IdeProblemSeverity.Warning)
             return false
         }
+        val insertedStart = active.document.caretOffset - insertion.caretUtf16
+        insertion.automaticClosers.forEach { active.smartTyping.rememberAutomaticCloser(insertedStart + it) }
         active.lastEditMillis = clock.nowMillis()
         visibleLatency.editApplied(active.document.revision)
         updateAnalysis(active, null, result.change)

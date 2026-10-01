@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
+import ru.lazyhat.compukters.ide.analysis.CompletionCallShape
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
 import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
@@ -38,6 +39,102 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class CompletionQueryTest {
+    @Test
+    fun `completion derives call shapes from resolved function parameters`() {
+        val source =
+            """
+            typealias Block = () -> Unit
+            fun testEmpty() {}
+            fun testValue(value: Int) {}
+            fun testLambda(block: Block) {}
+            fun testDefault(value: Int = 1, block: Block) {}
+            fun testVararg(vararg values: Int, block: Block) {}
+            fun testRequired(value: Int, block: Block) {}
+            val testProperty = 1
+            fun main() { test }
+            """.trimIndent()
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val items = fixture.complete("main.kt", source.lastIndexOf("test") + 4).items.associateBy { it.insertText }
+
+            fun shape(name: String) = requireNotNull(items[name]).callShape
+            assertEquals(
+                CompletionCallShape(false, false, false),
+                shape("testEmpty"),
+            )
+            assertEquals(
+                CompletionCallShape(true, true, false),
+                shape("testValue"),
+            )
+            assertEquals(
+                CompletionCallShape(true, false, true),
+                shape("testLambda"),
+            )
+            assertEquals(shape("testLambda"), shape("testDefault"))
+            assertEquals(shape("testLambda"), shape("testVararg"))
+            assertEquals(
+                CompletionCallShape(true, true, true),
+                shape("testRequired"),
+            )
+            assertEquals(null, shape("testProperty"))
+        }
+    }
+
+    @Test
+    fun `autoimported project functions retain semantic call shapes`() {
+        val source = "package app\nfun main() { remote }"
+        K2QueryFixture
+            .source(
+                "main.kt" to source,
+                "lib.kt" to "package library\nfun remoteCall(value: Int = 1, block: () -> Unit) {}",
+            ).use { fixture ->
+                val item = fixture.complete("main.kt", source.indexOf("remote") + 6).items.single { it.insertText == "remoteCall" }
+                assertEquals(
+                    CompletionCallShape(true, false, true),
+                    item.callShape,
+                )
+                assertTrue(item.additionalEdits.isNotEmpty())
+            }
+    }
+
+    @Test
+    fun `call references imports and shorthand interpolation complete names without call shapes`() {
+        val source = "import referenceT\nfun referenceTarget() {}\nfun main() { val ref = ::referenceT; val text = \"\$referenceT\" }"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            for (offset in listOf(
+                source.indexOf("::referenceT") + "::referenceT".length,
+                source.indexOf("\$referenceT") + "\$referenceT".length,
+                source.indexOf("import referenceT") + "import referenceT".length,
+            )) {
+                assertEquals(
+                    null,
+                    fixture
+                        .complete("main.kt", offset)
+                        .items
+                        .first { it.insertText == "referenceTarget" }
+                        .callShape,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `block interpolation permits calls but an empty shorthand template does not`() {
+        for ((template, expected) in listOf("\${referenceT}" to CompletionCallShape(false, false, false), "\$" to null)) {
+            val source = "fun referenceTarget() {}\nfun main() { val text = \"$template\" }"
+            val offset = source.indexOf(template) + template.length - if (template.endsWith('}')) 1 else 0
+            K2QueryFixture.source("main.kt" to source).use { fixture ->
+                assertEquals(
+                    expected,
+                    fixture
+                        .complete("main.kt", offset)
+                        .items
+                        .first { it.insertText == "referenceTarget" }
+                        .callShape,
+                )
+            }
+        }
+    }
+
     @Test
     fun `completion finds a reference member through a nullable safe call`() {
         val source = "class Node(val name: String)\nfun main() { val node: Node? = null; node?.na }"
@@ -359,6 +456,8 @@ class CompletionQueryTest {
             assertTrue(printlnItems.any { it.label == "println()" }, printlnItems.toString())
             assertTrue(printlnItems.any { it.label == "println(value: Int)" }, printlnItems.toString())
             assertTrue(printlnItems.all { it.insertText == "println" }, printlnItems.toString())
+            assertEquals(CompletionCallShape(false, false, false), printlnItems.single { it.label == "println()" }.callShape)
+            assertEquals(CompletionCallShape(true, true, false), printlnItems.single { it.label == "println(value: Int)" }.callShape)
         }
     }
 

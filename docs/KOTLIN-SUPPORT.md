@@ -1115,7 +1115,13 @@ links to their source files.
 
 - [x] **Semantic completion with overloads** — completion uses inferred
   receivers, applicable extensions, visibility, distinct overload entries,
-  argument labels, deterministic ranking, and bounded result counts. Evidence:
+  argument labels, deterministic ranking, and bounded result counts. Function
+  completion inserts parentheses or a final lambda block from resolved parameter
+  types, keeping the caret inside required arguments or the lambda body. Existing
+  delimiters are reused; autoimports and caret placement share an atomic undo/redo
+  entry. Enter expands an empty lambda into an indented block while preserving
+  LF/CRLF and leading indentation. Imports, callable references, type positions
+  and shorthand string interpolation still insert only names. Evidence:
   [`CompletionQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/CompletionQueryTest.kt),
   tests `qualified completion uses inferred receiver members and applicable extensions`,
   `completion preserves overloads and orders them deterministically`, and
@@ -1123,7 +1129,16 @@ links to their source files.
   `completion tolerates synthetic function interfaces from platform libraries`,
   plus
   [`CompletionIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/integration/CompletionIntegrationTest.kt),
-  test `forked worker returns semantic completion`.
+  test `forked worker returns semantic completion`; `CompletionQueryTest`, tests
+  `completion derives call shapes from resolved function parameters`,
+  `autoimported project functions retain semantic call shapes`, and
+  `block interpolation permits calls but an empty shorthand template does not`;
+  [`IdeCompletionInsertionTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-client/src/test/kotlin/ru/lazyhat/compukters/ide/client/analysis/IdeCompletionInsertionTest.kt),
+  tests `call completion with import preserves the caret through one undo and redo`
+  and `completed lambda enters an indented block and generated closers are skipped`;
+  [`KotlinSmartTypingTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-core/src/test/kotlin/ru/lazyhat/compukters/ide/editor/KotlinSmartTypingTest.kt),
+  test `enter splits existing spaced lambda braces and preserves endings indentation and caret history`.
+  Tracking: [#673](https://github.com/CertifiedBadIdeas/Compukters/issues/673).
 
 - [x] **Context-aware keyword completion** — declaration, modifier, statement,
   and expression keywords are ranked with semantic symbols for valid file,

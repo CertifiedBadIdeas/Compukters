@@ -18,12 +18,14 @@
 
 package ru.lazyhat.compukters.ide.analysis.k2.query
 
+import com.intellij.psi.PsiComment
 import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
 import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.components.canBeCalledAsExtensionOn
 import org.jetbrains.kotlin.analysis.api.components.createUseSiteVisibilityChecker
 import org.jetbrains.kotlin.analysis.api.components.expressionType
+import org.jetbrains.kotlin.analysis.api.components.fullyExpandedType
 import org.jetbrains.kotlin.analysis.api.components.render
 import org.jetbrains.kotlin.analysis.api.components.resolveSymbol
 import org.jetbrains.kotlin.analysis.api.components.scopeContext
@@ -41,14 +43,28 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaNamedClassSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaPropertySymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaTypeParameterSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.findTopLevelCallables
 import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.symbol
+import org.jetbrains.kotlin.analysis.api.types.KaFunctionType
+import org.jetbrains.kotlin.analysis.api.types.KaTypeNullability
+import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry
+import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
+import org.jetbrains.kotlin.psi.KtImportDirective
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtPackageDirective
+import org.jetbrains.kotlin.psi.KtSimpleNameStringTemplateEntry
+import org.jetbrains.kotlin.psi.KtStringTemplateExpression
+import org.jetbrains.kotlin.psi.KtTypeReference
 import org.jetbrains.kotlin.types.Variance
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisResultLimits
+import ru.lazyhat.compukters.ide.analysis.CompletionCallShape
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
 import ru.lazyhat.compukters.ide.analysis.CompletionSymbol
@@ -139,6 +155,7 @@ internal object CompletionQuery {
                     detail,
                     origin,
                     fqName?.let { CompletionSymbol(it, null) },
+                    callShape = if (context.allowsCall()) (symbol as? KaFunctionSymbol)?.let { callShape(it) } else null,
                 )
             ranked.offer(
                 RankedCompletion(
@@ -189,6 +206,7 @@ internal object CompletionQuery {
                         declaration.origin,
                         importPlan.symbol,
                         importPlan.additionalEdits,
+                        if (context.allowsCall()) indexedFunction(declaration, snapshot)?.let { callShape(it) } else null,
                     )
                 val locality =
                     when (declaration.origin) {
@@ -243,6 +261,48 @@ internal object CompletionQuery {
         return ranked
             .sorted()
             .map { it.item }
+    }
+
+    private fun CompletionContext.allowsCall(): Boolean {
+        val ancestors = generateSequence(position as com.intellij.psi.PsiElement?) { it.parent }.toList()
+        if (ancestors.any { it is KtStringTemplateExpression } && ancestors.none { it is KtBlockStringTemplateEntry }) return false
+        return ancestors.none {
+            it is KtImportDirective || it is KtPackageDirective || it is KtCallableReferenceExpression ||
+                it is KtTypeReference || it is KtSimpleNameStringTemplateEntry || it is PsiComment
+        }
+    }
+
+    @OptIn(KaExperimentalApi::class)
+    private fun KaSession.indexedFunction(
+        declaration: GlobalCompletionDeclaration,
+        snapshot: AdmittedK2Snapshot,
+    ): KaFunctionSymbol? {
+        if (declaration.kind != CompletionKind.Function && declaration.kind != CompletionKind.ExtensionFunction) return null
+        if (declaration.origin == DeclarationOrigin.Project) {
+            val file = snapshot.files[declaration.sourcePath] ?: return null
+            return generateSequence(file.findElementAt(declaration.sourceRange.startUtf16)) { it.parent }
+                .filterIsInstance<KtNamedFunction>()
+                .firstOrNull { it.textRange.startOffset == declaration.sourceRange.startUtf16 }
+                ?.symbol
+        }
+        val fqName = FqName(declaration.fqName)
+        val candidates =
+            findTopLevelCallables(
+                fqName.parent(),
+                Name.identifier(declaration.shortName),
+            ).filterIsInstance<KaFunctionSymbol>().toList()
+        return candidates.singleOrNull()
+            ?: candidates.singleOrNull { canonicalPlatformSignature(it) == declaration.signature }
+    }
+
+    @OptIn(KaExperimentalApi::class)
+    private fun KaSession.callShape(symbol: KaFunctionSymbol): CompletionCallShape {
+        val parameters = symbol.valueParameters
+        val last = parameters.lastOrNull()
+        val type = last?.returnType?.fullyExpandedType
+        val trailingLambda = last?.isVararg == false && type is KaFunctionType && type.nullability == KaTypeNullability.NON_NULLABLE
+        val ordinary = if (trailingLambda) parameters.dropLast(1) else parameters
+        return CompletionCallShape(parameters.isNotEmpty(), ordinary.any { !it.hasDefaultValue && !it.isVararg }, trailingLambda)
     }
 
     @OptIn(KaExperimentalApi::class)

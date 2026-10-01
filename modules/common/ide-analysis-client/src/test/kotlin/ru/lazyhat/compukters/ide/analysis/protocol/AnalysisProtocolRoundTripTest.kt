@@ -225,6 +225,14 @@ class AnalysisProtocolRoundTripTest {
                                 CompletionSymbol("sample.answer", "sample.answer"),
                                 listOf(CompletionTextEdit(EditorRange(0, 0), "import sample.answer\n\n")),
                             ),
+                            CompletionItem(
+                                "run",
+                                "run",
+                                CompletionKind.Function,
+                                callShape =
+                                    ru.lazyhat.compukters.ide.analysis
+                                        .CompletionCallShape(true, false, true),
+                            ),
                         ),
                         sourceLengths().getValue(path()),
                     ),
