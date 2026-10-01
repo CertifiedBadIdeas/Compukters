@@ -31,6 +31,9 @@ class GlobalCompletionIndexTest {
             assertEquals(listOf("abDirect", "AbacusBear", "AlphaBeta"), index.lookup("ab", 3).map { it.shortName })
             fixture.update("api.kt" to "class AnotherBoat")
             assertEquals(listOf("AnotherBoat"), index.lookup("ab", 3).map { it.shortName })
+            assertEquals(listOf("AnotherBoat"), index.lookup("nob", 3).map { it.shortName })
+            assertEquals(listOf("AnotherBoat"), index.lookup("oat", 3).map { it.shortName })
+            assertTrue(index.lookup("batr", 3).isEmpty())
             assertTrue(index.lookup("aty", 3).isEmpty())
         }
     }
