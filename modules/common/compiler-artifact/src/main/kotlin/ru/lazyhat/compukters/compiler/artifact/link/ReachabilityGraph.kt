@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.compiler.artifact.link
 
+import ru.lazyhat.compukters.compiler.artifact.analysis.runtimeExceptionKinds
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Constant
 import ru.lazyhat.compukters.compiler.artifact.model.FieldRef
@@ -288,6 +289,23 @@ internal class ReachabilityGraph(
         module: Int,
         instruction: Instruction,
     ) {
+        instruction.runtimeExceptionKinds().forEach { kind ->
+            artifact.modules.forEachIndexed { owner, source ->
+                source.types.forEachIndexed { index, type ->
+                    if (type is NominalType.Class &&
+                        type.runtimeExceptionKind == kind
+                    ) {
+                        markType(
+                            owner,
+                            TypeRef.Local(
+                                ru.lazyhat.compukters.compiler.artifact.model.TypeId
+                                    .of(index.toUInt()),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
         when (instruction) {
             is Instruction.Const -> markConstant(module, instruction.constant.value.toInt())
             is Instruction.NewObject -> markType(module, instruction.type)

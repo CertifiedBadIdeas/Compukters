@@ -605,13 +605,19 @@ supported.
   Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)
 
 - [ ] **Standard exception classes — Partial** — Guest `Throwable`, `Exception`, `RuntimeException`,
-  `IllegalArgumentException`, `IllegalStateException` and `NoWhenBranchMatchedException` have distinct nominal
+  `IllegalArgumentException`, `IllegalStateException`, `ArithmeticException` and `NoWhenBranchMatchedException` have distinct nominal
   identities. Message/cause constructors and read-only
   properties. User exception constructors initialize inherited payload through ordinary super calls. Uncaught
   exceptions report class, message and bounded source stack through both FFM and JNI.
-  Catchable operation/host errors remain pending; OOM, quotas and VM faults
+  Int/Long division and remainder by zero throw catchable `ArithmeticException` through ordinary calls and finally,
+  with nullable cause and the message `/ by zero`. Runtime ABI 1.9 retains its verified factory type even without
+  a source catch; legacy integer-division artifacts require rebuilding. Other operation/host errors remain pending; OOM, quotas and VM faults
   remain noncatchable. Evidence: real native transport tests `FFM preserves uncaught exception class message
   and source stack` and `JNI preserves uncaught exception class message and source stack`.
+  Arithmetic evidence: `integer arithmetic errors are catchable across calls and preserve finally for vm execution`
+  in `testKotlinExceptionsVmConformance`; native tests
+  `arithmetic_factory_respects_single_unit_slices_and_roots_its_unpublished_payload` and
+  `arithmetic_factory_allocation_failure_remains_noncatchable`.
   Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)
 
 - [x] **Preconditions and explicit failure** — `require` throws `IllegalArgumentException`; `check` and

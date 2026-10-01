@@ -760,9 +760,9 @@ private class InlineValueClassRegistry private constructor(
 
 private const val ANY_RUNTIME_TYPE = 5u
 private const val INT_BOX_RUNTIME_TYPE = 6u
-private const val INT_BOX_VALUE_IMPORT = 11u
-private const val THROWABLE_MESSAGE_IMPORT = 12u
-private const val THROWABLE_CAUSE_IMPORT = 13u
+private const val INT_BOX_VALUE_IMPORT = 12u
+private const val THROWABLE_MESSAGE_IMPORT = 13u
+private const val THROWABLE_CAUSE_IMPORT = 14u
 private const val INT_ARRAY_RUNTIME_TYPE = 4u
 private const val INT_BOX_VALUE_NAME = "kotlin.Int.<boxed-value>"
 private const val THROWABLE_MESSAGE_NAME = "kotlin.Throwable.message"
@@ -776,6 +776,7 @@ private fun IrClass.runtimeExceptionType(): UInt? =
         "kotlin.RuntimeException" -> 8u
         "kotlin.IllegalStateException" -> 9u
         "kotlin.NoWhenBranchMatchedException" -> 10u
+        "kotlin.ArithmeticException" -> 11u
         else -> null
     }
 
@@ -959,6 +960,7 @@ internal object KotlinProjectLowering {
             "kotlin.RuntimeException",
             "kotlin.IllegalStateException",
             "kotlin.NoWhenBranchMatchedException",
+            "kotlin.ArithmeticException",
         )
 
     fun lower(
@@ -2917,14 +2919,26 @@ internal object KotlinProjectLowering {
         return Artifact(
             minimumRuntimeAbi =
                 when {
+                    modules.any { module ->
+                        module.types.any { it is NominalType.Class && it.runtimeExceptionKind != null }
+                    } -> AbiVersion(1u, 9u)
+
                     modules.any { module -> module.types.any { it is NominalType.Class && it.throwableRoot } } -> AbiVersion(1u, 8u)
+
                     modules.any { module -> module.types.any { it is NominalType.Array && it.superType != null } } -> AbiVersion(1u, 7u)
+
                     modules.any { it.hasHeterogeneousReferenceComparison() } -> AbiVersion(1u, 6u)
+
                     usesArrayCopy -> AbiVersion(1u, 5u)
+
                     usesF32StringConversion -> AbiVersion(1u, 4u)
+
                     usesI64StringConversion -> AbiVersion(1u, 3u)
+
                     usesChannels -> AbiVersion(1u, 2u)
+
                     usesTasks -> AbiVersion(1u, 1u)
+
                     else -> AbiVersion(1u, 0u)
                 },
             semanticFeatures =
@@ -3325,6 +3339,12 @@ internal object KotlinProjectLowering {
                         name = requireNotNull(ids["kotlin.NoWhenBranchMatchedException"]),
                         final = true,
                         superType = TypeRef.Local(TypeId.of(8u)),
+                    ),
+                    NominalType.Class(
+                        name = requireNotNull(ids["kotlin.ArithmeticException"]),
+                        final = true,
+                        superType = TypeRef.Local(TypeId.of(8u)),
+                        runtimeExceptionKind = ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind.ARITHMETIC,
                     ),
                 ),
             fields =

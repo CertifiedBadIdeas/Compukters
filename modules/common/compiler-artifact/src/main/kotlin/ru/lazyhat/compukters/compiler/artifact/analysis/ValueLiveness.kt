@@ -24,6 +24,8 @@ import ru.lazyhat.compukters.compiler.artifact.model.Function
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
+import ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind
+import ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType
 
 internal data class LiveBoundary(
     val block: BlockId,
@@ -401,9 +403,29 @@ internal fun Instruction.successors(): List<BlockId> =
         else -> emptyList()
     }
 
+/** Implicit managed factory dependencies of the instruction, retained even without an explicit catch. */
+fun Instruction.runtimeExceptionKinds(): Set<RuntimeExceptionKind> {
+    val scalar =
+        when (this) {
+            is Instruction.Divide -> type
+            is Instruction.Remainder -> type
+            else -> null
+        }
+    return if (scalar == ScalarValueType.I32 ||
+        scalar == ScalarValueType.I64
+    ) {
+        setOf(RuntimeExceptionKind.ARITHMETIC)
+    } else {
+        emptySet()
+    }
+}
+
 /** Conservative exceptional-edge contract shared by lowering, verification and liveness. */
 fun Instruction.mayThrow(): Boolean =
-    this is Instruction.NewObject ||
+    this is Instruction.Convert ||
+        this is Instruction.Divide ||
+        this is Instruction.Remainder ||
+        this is Instruction.NewObject ||
         this is Instruction.NewArray ||
         this is Instruction.ArrayLength ||
         this is Instruction.ArrayLoad ||

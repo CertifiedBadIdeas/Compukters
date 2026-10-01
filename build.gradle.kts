@@ -326,6 +326,8 @@ registerKotlinVmConformance(
             project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.tasks.cpkt"),
         "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_SUSPEND" to
             project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.suspend.cpkt"),
+        "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_ARITHMETIC" to
+            project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.arithmetic.cpkt"),
     ),
 )
 
