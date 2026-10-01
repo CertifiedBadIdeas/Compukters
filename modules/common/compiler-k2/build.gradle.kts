@@ -296,6 +296,7 @@ tasks.test {
 }
 
 val kotlinSubsetConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")
+val textStdlibConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-text-stdlib.cpkt")
 val namedCallsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-named-calls.cpkt")
 val blockingCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/blocking-call.cpkt")
 val transparentCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/transparent-call.cpkt")
@@ -1036,6 +1037,22 @@ val generateFilterNotNullConformanceArtifact = tasks.register<Test>("generateFil
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.filterNotNullArtifact", filterNotNullConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateTextStdlibConformanceArtifact = tasks.register<Test>("generateTextStdlibConformanceArtifact") {
+    description = "Compiles guest text helpers for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*text stdlib preserves UTF16 cleanup search extraction and transformations*")
+    inputs.file(workerJar)
+    outputs.file(textStdlibConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.textStdlibArtifact", textStdlibConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

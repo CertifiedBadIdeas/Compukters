@@ -67,6 +67,64 @@ import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
     @Test
+    fun `text stdlib preserves UTF16 cleanup search extraction and transformations`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                fun checkText(text: String) {
+                    require(text.trim() == "alpha::beta::")
+                    require(text.trimStart() == "alpha::beta:: \n")
+                    require(text.trimEnd() == "\t alpha::beta::")
+                    val clean = text.trim()
+                    require(clean.isNotEmpty() && clean.isNotBlank())
+                    require(clean.indexOf(':', -10) == 5 && clean.indexOf(':', 99) == -1)
+                    require(clean.contains(':') && !clean.contains('z'))
+                    require(clean.lastIndexOf(':') == 12 && clean.lastIndexOf(':', 6) == 6)
+                    require(clean.lastIndexOf("::") == 11 && clean.lastIndexOf("::", 10) == 5)
+                    require(clean.lastIndexOf("::", -1) == -1)
+                    require(clean.substringBefore("::") == "alpha")
+                    require(clean.substringAfter("::") == "beta::")
+                    require(clean.substringBeforeLast("::") == "alpha::beta")
+                    require(clean.substringAfterLast("::").isEmpty())
+                    require(clean.substringBefore(':') == "alpha")
+                    require(clean.substringAfter(':') == ":beta::")
+                    require(clean.substringBeforeLast(':') == "alpha::beta:")
+                    require(clean.substringAfterLast(':').isEmpty())
+                    require(clean.substringBefore("!") == clean && clean.substringAfter('!') == clean)
+                    require(clean.substringBefore('!', "fallback") == "fallback")
+                    require(clean.substringAfterLast("!", "fallback") == "fallback")
+                    require(clean.removePrefix("alpha") == "::beta::")
+                    require(clean.removeSuffix("::") == "alpha::beta")
+                    require(clean.removePrefix("!") == clean && clean.removeSuffix("") == clean)
+                }
+                fun main() {
+                    checkText("\t alpha::beta:: \n")
+                    require("".isEmpty() && "".isBlank() && !"".isNotBlank())
+                    require(" \t\r\n\u00a0\u1680\u2000\u200a\u2028\u2029\u202f\u205f\u3000".isBlank())
+                    require(!'\u0085'.isWhitespace() && !'\u180e'.isWhitespace())
+                    require(!'\u200b'.isWhitespace() && !'\ufeff'.isWhitespace())
+                    require(" \t".trim().isEmpty())
+                    require("abc".lastIndexOf("") == 2)
+                    require("abc".lastIndexOf("", 99) == 3)
+                    require("".lastIndexOf("") == -1 && "".lastIndexOf("", 0) == 0)
+                    require("abc".substringBefore("").isEmpty())
+                    require("abc".substringAfter("") == "abc")
+                    require("abc".substringBeforeLast("") == "ab")
+                    require("abc".substringAfterLast("") == "c")
+                    val utf16 = "a\uD83D\uDE00a"
+                    require(utf16.indexOf('\uDE00') == 2 && utf16.lastIndexOf('a') == 3)
+                    require(utf16.lastIndexOf("\uD83D\uDE00") == 1)
+                    println("text stdlib ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.textStdlibArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `stdlib scope functions execute with inline receiver and nullable semantics`() =
         withAdapter { adapter ->
             val source =
