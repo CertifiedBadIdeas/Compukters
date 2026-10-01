@@ -41,6 +41,59 @@ import kotlin.test.assertTrue
 
 class CompletionQueryTest {
     @Test
+    fun `camel completion matches word prefixes but not arbitrary skipped letters`() {
+        fun sourceFor(prefix: String) = "fun emptyList() = Unit\nfun emptyMap() = Unit\nfun main() { $prefix }"
+        var source = sourceFor("em")
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val prefix = fixture.complete("main.kt", source.lastIndexOf("em") + 2).items.map { it.insertText }
+            assertTrue(prefix.indexOf("emptyList") >= 0)
+            assertTrue(prefix.indexOf("emptyList") < prefix.indexOf("emptyMap"))
+            source = sourceFor("emm")
+            fixture.update("main.kt" to source)
+            val camel = fixture.complete("main.kt", source.indexOf("emm") + 3).items.map { it.insertText }
+            assertTrue("emptyMap" in camel)
+            assertTrue("emptyList" !in camel)
+            source = sourceFor("emty")
+            fixture.update("main.kt" to source)
+            assertTrue(fixture.complete("main.kt", source.indexOf("emty") + 4).items.isEmpty())
+        }
+    }
+
+    @Test
+    fun `camel completion also finds admitted stdlib declarations`() {
+        val source = "fun main() { el }"
+        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+            assertTrue(fixture.complete("main.kt", source.indexOf("el") + 2).items.any { it.insertText == "emptyList" })
+        }
+    }
+
+    @Test
+    fun `camel completion covers members locals and autoimports with direct prefixes first`() {
+        val source =
+            """
+            class Holder {
+                fun emptyZoo() = Unit
+                fun emzDirect() = Unit
+            }
+            fun main() {
+                val emptyLocalMap = 1
+                elm
+                val holder = Holder()
+                holder.emz
+                abz
+            }
+            """.trimIndent()
+        K2QueryFixture.source("main.kt" to source, "lib.kt" to "package library\nclass AlphaBetaZoo").use { fixture ->
+            val local = fixture.complete("main.kt", source.indexOf("elm") + 3).items
+            assertTrue(local.any { it.insertText == "emptyLocalMap" })
+            val members = fixture.complete("main.kt", source.indexOf("holder.emz") + "holder.emz".length).items.map { it.insertText }
+            assertEquals(listOf("emzDirect", "emptyZoo"), members)
+            val imported = fixture.complete("main.kt", source.indexOf("abz") + 3).items.single { it.insertText == "AlphaBetaZoo" }
+            assertTrue(imported.additionalEdits.any { it.text.contains("import library.AlphaBetaZoo") })
+        }
+    }
+
+    @Test
     fun `scope functions specialize their result and lambda from the explicit receiver`() {
         val source = "fun main() { val text = \"hello\"; text.also; text.apply }"
         K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
@@ -683,9 +736,10 @@ class CompletionQueryTest {
             val second = fixture.complete("main.kt", source.lastIndexOf("cho") + 3).items
 
             assertEquals(2, first.count { it.insertText == "choose" })
-            assertEquals(setOf("choose(value: Int)", "choose(value: String)"), first.map { it.label }.toSet())
+            assertEquals(setOf("choose(value: Int)", "choose(value: String)"), first.take(2).map { it.label }.toSet())
+            assertTrue(first.any { it.insertText == "charArrayOf" })
             assertEquals(first, second)
-            val details = first.map { requireNotNull(it.detail) }
+            val details = first.filter { it.insertText == "choose" }.map { requireNotNull(it.detail) }
             assertEquals(details.sorted(), details)
         }
     }

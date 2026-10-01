@@ -24,6 +24,18 @@ import kotlin.test.assertTrue
 
 class GlobalCompletionIndexTest {
     @Test
+    fun `bounded lookup ranks direct prefixes before case insensitive and camel matches`() {
+        K2QueryFixture.source("api.kt" to "class AlphaBeta\nclass AbacusBear\nclass abDirect").use { fixture ->
+            val index = fixture.snapshot.projectCompletionIndex
+            assertEquals(listOf("abDirect"), index.lookup("ab", 1).map { it.shortName })
+            assertEquals(listOf("abDirect", "AbacusBear", "AlphaBeta"), index.lookup("ab", 3).map { it.shortName })
+            fixture.update("api.kt" to "class AnotherBoat")
+            assertEquals(listOf("AnotherBoat"), index.lookup("ab", 3).map { it.shortName })
+            assertTrue(index.lookup("aty", 3).isEmpty())
+        }
+    }
+
+    @Test
     fun `project index contains public importable top level declarations and preserves overloads`() {
         val declarations =
             """

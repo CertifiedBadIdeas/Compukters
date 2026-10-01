@@ -89,7 +89,8 @@ class CompletionIntegrationTest {
     @Test
     fun `forked worker returns semantic completion`() {
         val source =
-            "fun candidate() = Unit\nfun <T> T.echoResult(): T = this\nfun main() { can; val text: String? = null; \"hello\".; text?. }"
+            "fun candidate() = Unit\nfun camelCandidateResult() = Unit\nfun <T> T.echoResult(): T = this\n" +
+                "fun main() { can; ccr; val text: String? = null; \"hello\".; text?. }"
         val path = VirtualSourcePath.kotlin("main.kt")
         val sources =
             ProjectSnapshot.of(
@@ -156,6 +157,15 @@ class CompletionIntegrationTest {
                         ?.returnType,
                 )
             }
+            val camel =
+                assertIs<AnalysisClientResult.Success>(
+                    controller
+                        .query(
+                            admitted,
+                            AnalysisQuery.Completion(identity, path, source.indexOf("ccr") + 3, CompletionTrigger.Automatic),
+                        ).get(90, TimeUnit.SECONDS),
+                ).result as AnalysisResult.Completion
+            assertEquals("camelCandidateResult()", camel.items.single { it.insertText == "camelCandidateResult" }.label)
         }
     }
 

@@ -202,6 +202,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   and align receiver-specialized return types in a separate right-hand column, including scope functions
   such as `also` and `apply` immediately after typing a receiver's dot or safe-call operator,
   on literals and in generic call chains. Independent lambda-result types remain symbolic until known.
+  Identifier completion supports case-insensitive CamelCase word-prefix matching, including autoimports;
+  direct prefixes rank first, without fuzzy typo correction or arbitrary letter skipping inside words.
   Diagnostic passes pause during completion while semantic analysis continues; existing unrelated problems remain
   visible and diagnostics resume for the current text when completion ends.
   Enter inside an empty lambda adds an indented body line and moves its closing brace to a separate line.
