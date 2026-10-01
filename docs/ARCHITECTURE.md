@@ -461,6 +461,12 @@ holds the intrusive gray link while Guest execution and allocation are paused. T
 predecessor sizes before coalescing. No per-object side table or extra heap scan is required.
 Arena backing and admitted heap budgets retain their existing 16-byte granularity. See the
 [object-array heap measurements](OBJECT-ARRAY-BENCHMARK.md) for construction and transformation budgets.
+Allocation checks the head of the request's partial size-class bucket before the rounded-up bitmap search.
+A constant-space free-block hint covers fitting blocks hidden behind smaller list heads. Removing its block
+invalidates the hint; insertions retain the larger candidate. The existing budgeted sweep observes surviving
+free blocks and coalesced insertions, restoring an exact largest-block candidate before an allocation retry.
+Consequently, size-class rounding cannot cause a post-collection OOM when a contiguous block fits, without
+adding an unbudgeted free-list or arena scan to allocation.
 
 ## Filesystem and machine lifetime
 
