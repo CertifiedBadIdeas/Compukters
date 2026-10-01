@@ -387,7 +387,12 @@ terminate its siblings: each join rethrows the retained exception at that join s
 terminates the process. Native C ABI 18 adds outcome tag 12 containing a length-prefixed bounded UTF-8 diagnostic
 (class, message, at most four causes and 32 stack frames); no Guest pointer crosses the boundary. Kotlin transports
 expose `VmOutcome.UncaughtException`. K2 lowers typed `try/catch` statements and expressions to the same handler
-tables, preserving source catch order and result registers. `finally` lowering remains pending. Native verifier
+tables, preserving source catch order and result registers. `finally` uses out-of-line cleanup blocks outside
+the protected range being exited: normal exits share cleanup, exceptional exits use a catch-all, and deferred
+return/break/continue paths run inner-to-outer cleanup before their target. Return values are snapshotted before
+cleanup; a cleanup return or throw replaces the pending exit. Local loop/inline-block exits do not run cleanup
+for enclosing scopes they remain inside. Lowering shares the artifact's conservative exceptional-edge predicate
+with verification and liveness, omitting handlers for protected code that cannot throw. Native verifier
 dataflow owns reachability across both ordinary and exceptional edges; a catch-only continuation is valid.
 
 Runtime ABI 1.7 adds an explicit optional superclass to nominal array records. Array header flag bit 0 indicates

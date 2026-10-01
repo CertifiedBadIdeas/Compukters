@@ -18,7 +18,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 ### Guest Kotlin
 
 - Programs can throw and catch exceptions through nested calls, match user-defined exception subclasses,
-  rethrow the original object, and read nullable `message` and `cause`. Uncaught exceptions report their class,
+  rethrow the original object, and read nullable `message` and `cause`. `finally` runs on normal and exceptional
+  exits, returns and supported loop/inline exits. Uncaught exceptions report their class,
   message and bounded source stack. Runtime libraries containing exception instructions need rebuilding for Runtime ABI 1.8.
 
 - Reference identity comparisons (`===`/`!==`) compare supported arrays and nullable references directly,

@@ -401,7 +401,8 @@ internal fun Instruction.successors(): List<BlockId> =
         else -> emptyList()
     }
 
-internal fun Instruction.mayThrow(): Boolean =
+/** Conservative exceptional-edge contract shared by lowering, verification and liveness. */
+fun Instruction.mayThrow(): Boolean =
     this is Instruction.NewObject ||
         this is Instruction.NewArray ||
         this is Instruction.ArrayLength ||
