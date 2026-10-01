@@ -337,6 +337,9 @@ tasks.test {
             addonGuestApiFixtureBundle.singleFile.absolutePath,
         )
     }
+    // Each class owns independent standalone K2 environments and compiler-global caches.
+    // Keep those discarded environments from accumulating across the entire unit suite.
+    forkEvery = 1
     filter.excludeTestsMatching("ru.lazyhat.compukters.ide.analysis.k2.integration.*")
 }
 

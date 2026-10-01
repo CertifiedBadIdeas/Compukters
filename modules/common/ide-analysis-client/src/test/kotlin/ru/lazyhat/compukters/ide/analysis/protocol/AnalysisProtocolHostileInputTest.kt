@@ -45,6 +45,61 @@ import kotlin.test.assertFailsWith
 
 class AnalysisProtocolHostileInputTest {
     @Test
+    fun `callable presentation decoder rejects malformed metadata and bounded text`() {
+        val path = VirtualSourcePath.kotlin("main.kt")
+        val query = AnalysisQuery.Completion(identity, path, 3, CompletionTrigger.Manual)
+        val correlated = context.forQuery(query)
+
+        fun frame(presentation: ru.lazyhat.compukters.ide.analysis.CompletionCallablePresentation): AnalysisFrame =
+            AnalysisMessageCodec.encode(
+                AnalysisQuerySuccess(
+                    RequestId.of(1uL),
+                    AnalysisResult.Completion.create(
+                        identity,
+                        EditorRange(0, 3),
+                        listOf(
+                            ru.lazyhat.compukters.ide.analysis.CompletionItem(
+                                "f",
+                                "f",
+                                ru.lazyhat.compukters.ide.analysis.CompletionKind.Function,
+                                callablePresentation = presentation,
+                            ),
+                        ),
+                        3,
+                    ),
+                ),
+                AnalysisProtocolContext.unchecked(),
+            )
+        val encoded =
+            frame(
+                ru.lazyhat.compukters.ide.analysis
+                    .CompletionCallablePresentation(null, null, "Int"),
+            )
+        // Optional marker, two absent strings, then the final length-prefixed return type.
+        val metadataStart = encoded.payload.size - 10
+        val invalidFlag = encoded.copy(payload = encoded.payload.copyOf().also { it[metadataStart] = 2 })
+        assertEquals(AnalysisProtocolError.InvalidMessageValue, messageFailure(invalidFlag, correlated).error)
+        val emptyType = encoded.copy(payload = encoded.payload.copyOf(encoded.payload.size - 3).also { it[it.lastIndex - 3] = 0 })
+        assertEquals(AnalysisProtocolError.InvalidMessageValue, messageFailure(emptyType, correlated).error)
+        val invalidUtf8 = encoded.copy(payload = encoded.payload.copyOf().also { it[it.lastIndex] = 0x80.toByte() })
+        assertEquals(AnalysisProtocolError.InvalidUtf8, messageFailure(invalidUtf8, correlated).error)
+        val limits = AnalysisLimits(detailTextBytes = 3)
+        for (value in listOf(
+            ru.lazyhat.compukters.ide.analysis
+                .CompletionCallablePresentation("😀", null, "Int"),
+            ru.lazyhat.compukters.ide.analysis
+                .CompletionCallablePresentation(null, "😀", "Int"),
+            ru.lazyhat.compukters.ide.analysis
+                .CompletionCallablePresentation(null, null, "😀"),
+        )) {
+            assertEquals(
+                AnalysisProtocolError.CountLimit,
+                messageFailure(frame(value), AnalysisProtocolContext.of(snapshot, limits).forQuery(query)).error,
+            )
+        }
+    }
+
+    @Test
     fun `completion decoder rejects impossible call shapes and non-canonical shape flags`() {
         val path = VirtualSourcePath.kotlin("main.kt")
         val query = AnalysisQuery.Completion(identity, path, 3, CompletionTrigger.Manual)
@@ -73,7 +128,7 @@ class AnalysisProtocolHostileInputTest {
                 .toList()
                 .windowed(labelBytes.size)
                 .indexOf(labelBytes)
-        // Optional marker and three canonical booleans precede the length-prefixed label in protocol v12.
+        // Optional marker and three canonical booleans precede the length-prefixed label in protocol v13.
         val shapeStart = labelStart - 8
         for ((offset, value) in listOf(0 to 2, 1 to 2, 1 to 0)) {
             val hostile = frame.copy(payload = frame.payload.copyOf().also { it[shapeStart + offset] = value.toByte() })
@@ -173,7 +228,7 @@ class AnalysisProtocolHostileInputTest {
                 ),
                 context,
             )
-        val wrongProtocol = handshake.copy(payload = handshake.payload.copyOf().also { it[0] = 11 })
+        val wrongProtocol = handshake.copy(payload = handshake.payload.copyOf().also { it[0] = 12 })
         assertEquals(AnalysisProtocolError.WrongVersion, messageFailure(wrongProtocol).error)
     }
 

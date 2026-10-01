@@ -33,6 +33,7 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisResultLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.CompletionCallShape
+import ru.lazyhat.compukters.ide.analysis.CompletionCallablePresentation
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
 import ru.lazyhat.compukters.ide.analysis.CompletionSymbol
@@ -447,8 +448,10 @@ private fun validateResult(
     when (result) {
         is AnalysisResult.Presentation -> {
             require(query is AnalysisQuery.Presentation) { "analysis result kind does not match its query" }
+            require(result.diagnosticsIncluded == query.includeDiagnostics) { "presentation diagnostics policy does not match its query" }
             val active = result.value.accept(result.identity)
             require(active is SnapshotPresentationAcceptance.Active) { "presentation result is stale" }
+            require(result.diagnosticsIncluded || active.diagnostics.isEmpty()) { "diagnostics-disabled presentation contains diagnostics" }
             require(active.diagnostics.all { it.path == null || it.path == query.path }) {
                 "presentation diagnostic does not belong to the active source"
             }
@@ -643,6 +646,7 @@ private class MessageSink {
         when (value) {
             is AnalysisQuery.Presentation -> {
                 string(value.path.value)
+                boolean(value.includeDiagnostics)
             }
 
             is AnalysisQuery.Completion -> {
@@ -695,6 +699,7 @@ private class MessageSink {
         identity(value.identity)
         when (value) {
             is AnalysisResult.Presentation -> {
+                boolean(value.diagnosticsIncluded)
                 presentation(value.value, value.identity)
             }
 
@@ -782,6 +787,12 @@ private class MessageSink {
         value.additionalEdits.forEach { edit ->
             range(edit.range)
             string(edit.text)
+        }
+        u8(if (value.callablePresentation == null) 0 else 1)
+        value.callablePresentation?.let {
+            nullableString(it.receiverType)
+            nullableString(it.packageName)
+            string(it.returnType)
         }
     }
 
@@ -1065,7 +1076,7 @@ private class MessageSource(
         val identity = identity()
         return when (kind) {
             QueryKind.Presentation -> {
-                AnalysisQuery.Presentation(identity, kotlinPath())
+                AnalysisQuery.Presentation(identity, kotlinPath(), boolean())
             }
 
             QueryKind.Completion -> {
@@ -1162,6 +1173,7 @@ private class MessageSource(
         identity: AnalysisSnapshotIdentity,
         sourceLengths: Map<VirtualSourcePath, Int>,
     ): AnalysisResult.Presentation {
+        val diagnosticsIncluded = boolean()
         val diagnostics = List(boundedCount(context.limits.diagnostics, "diagnostic")) { diagnostic() }
         val tokens =
             List(boundedCount(context.limits.semanticTokens, "semantic token")) {
@@ -1185,7 +1197,7 @@ private class MessageSource(
                 context.limits.presentationLimits(),
                 methodUsages,
             )
-        return AnalysisResult.Presentation(identity, value)
+        return AnalysisResult.Presentation(identity, value, diagnosticsIncluded)
     }
 
     fun diagnostic(): EditorDiagnostic =
@@ -1209,6 +1221,13 @@ private class MessageSource(
                 CompletionTextEdit(range(), string(context.limits.detailTextBytes))
             },
             callShape,
+            optional {
+                CompletionCallablePresentation(
+                    nullableString(context.limits.detailTextBytes),
+                    nullableString(context.limits.detailTextBytes),
+                    string(context.limits.detailTextBytes),
+                )
+            },
         )
     }
 

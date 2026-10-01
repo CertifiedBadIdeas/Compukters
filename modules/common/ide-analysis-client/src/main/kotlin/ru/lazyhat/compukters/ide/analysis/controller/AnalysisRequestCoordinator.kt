@@ -25,6 +25,14 @@ import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
 import java.util.concurrent.CompletableFuture
 
 interface AnalysisRequestCoordinator : AutoCloseable {
+    fun cancelCompletion() = Unit
+
+    /** Cancel any diagnostic pass and control the next presentation's diagnostics, retaining semantic work. */
+    fun setDiagnosticsEnabled(
+        enabled: Boolean,
+        activePath: VirtualSourcePath,
+    ) = Unit
+
     fun sourceChanged(
         snapshot: AdmittedAnalysisSnapshot,
         activePath: VirtualSourcePath,
@@ -118,6 +126,38 @@ class DefaultAnalysisRequestCoordinator(
     private var occurrencesFutures = emptyList<CompletableFuture<AnalysisClientResult>>()
     private var occurrencesResult: CompletableFuture<List<AnalysisClientResult>>? = null
     private var closed = false
+    private var diagnosticsEnabled = true
+
+    override fun cancelCompletion() {
+        val previous: CompletableFuture<AnalysisClientResult>?
+        synchronized(lock) {
+            completionTask?.cancel()
+            completionTask = null
+            previous = completionFuture
+            completionFuture = null
+            completionTrigger = null
+        }
+        previous?.let(client::cancel)
+    }
+
+    override fun setDiagnosticsEnabled(
+        enabled: Boolean,
+        activePath: VirtualSourcePath,
+    ) {
+        val previous: CompletableFuture<AnalysisClientResult>?
+        synchronized(lock) {
+            if (closed || diagnosticsEnabled == enabled) return
+            diagnosticsEnabled = enabled
+            presentationTask?.cancel()
+            previous = presentationFuture
+            presentationFuture = null
+            presentationTask =
+                snapshot?.let { current ->
+                    scheduler.schedule(presentationDebounceNanos) { dispatchPresentation(current, activePath) }
+                }
+        }
+        previous?.let(client::cancel)
+    }
 
     init {
         require(presentationDebounceNanos >= 0) { "presentation debounce must not be negative" }
@@ -551,7 +591,10 @@ class DefaultAnalysisRequestCoordinator(
             synchronized(lock) {
                 if (closed || snapshot !== expected) return
                 presentationTask = null
-                client.query(expected, AnalysisQuery.Presentation(expected.identity, activePath)).also { presentationFuture = it }
+                client.query(expected, AnalysisQuery.Presentation(expected.identity, activePath, diagnosticsEnabled)).also {
+                    presentationFuture =
+                        it
+                }
             }
         future.whenComplete { result, failure ->
             if (failure == null && result != null && admitPresentation(expected, future)) resultSink.publish(result)

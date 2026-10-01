@@ -62,6 +62,7 @@ sealed interface AnalysisResult {
     data class Presentation(
         override val identity: AnalysisSnapshotIdentity,
         val value: SnapshotPresentation,
+        val diagnosticsIncluded: Boolean = true,
     ) : AnalysisResult {
         init {
             require(value.identity == identity) { "presentation identity does not match its result" }
@@ -90,6 +91,11 @@ sealed interface AnalysisResult {
                     require(strictUtf8Size(item.insertText) <= limits.maxDetailUtf8Bytes) { "completion insert text exceeds limit" }
                     item.detail?.let { detail ->
                         require(strictUtf8Size(detail) <= limits.maxDetailUtf8Bytes) { "completion detail exceeds limit" }
+                    }
+                    item.callablePresentation?.let { presentation ->
+                        listOfNotNull(presentation.receiverType, presentation.packageName, presentation.returnType).forEach {
+                            require(strictUtf8Size(it) <= limits.maxDetailUtf8Bytes) { "completion callable presentation exceeds limit" }
+                        }
                     }
                     item.symbol?.let { symbol ->
                         require(strictUtf8Size(symbol.fqName) <= limits.maxDetailUtf8Bytes) { "completion symbol name exceeds limit" }

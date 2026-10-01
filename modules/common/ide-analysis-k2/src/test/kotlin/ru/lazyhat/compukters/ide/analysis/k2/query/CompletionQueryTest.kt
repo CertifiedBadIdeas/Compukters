@@ -23,6 +23,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.CompletionCallShape
+import ru.lazyhat.compukters.ide.analysis.CompletionCallablePresentation
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
 import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
@@ -39,6 +40,61 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class CompletionQueryTest {
+    @Test
+    fun `completion preserves specialized member and extension signatures with declared receiver context`() {
+        val source =
+            """
+            package sample
+            open class Box<T>(val value: T) {
+                fun result(): T = value
+                fun consume(value: T) {}
+            }
+            class IntBox: Box<Int>(1) {
+                fun inside() { extensionR }
+            }
+            fun <T> Box<T>.extensionResult(): T = value
+            fun <T> Box<T>.lambdaResult(block: (entry: T) -> T): T = block(value)
+            fun <T> T.identityResult(): T = this
+            fun <R> unresolvedResult(value: R): R = value
+            fun main() {
+                val box = Box(1)
+                val inherited = IntBox()
+                box.resu
+                box.cons
+                inherited.resu
+                box.extensionR
+                box.lambdaR
+                1.identityR
+                unresolvedR
+            }
+            """.trimIndent()
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            fun item(
+                marker: String,
+                name: String,
+            ) = fixture.complete("main.kt", source.indexOf(marker) + marker.length).items.single { it.insertText == name }
+            for (marker in listOf("box.resu", "inherited.resu")) {
+                assertEquals(CompletionCallablePresentation(null, "sample", "Int"), item(marker, "result").callablePresentation)
+            }
+            assertEquals("consume(value: Int)", item("box.cons", "consume").label)
+            assertEquals(CompletionKind.MemberFunction, item("box.cons", "consume").kind)
+            assertEquals(
+                CompletionCallablePresentation("Box<T>", "sample", "Int"),
+                item("box.extensionR", "extensionResult").callablePresentation,
+            )
+            assertEquals(
+                CompletionCallablePresentation("Box<T>", "sample", "Int"),
+                item("inside() { extensionR", "extensionResult").callablePresentation,
+            )
+            assertEquals("lambdaResult { block: (Int) -> Int }", item("box.lambdaR", "lambdaResult").label)
+            assertEquals(CompletionCallablePresentation("T", "sample", "Int"), item("1.identityR", "identityResult").callablePresentation)
+            assertEquals(
+                CompletionCallablePresentation(null, "sample", "R"),
+                item("unresolvedR\n", "unresolvedResult").callablePresentation,
+            )
+        }
+    }
+
     @Test
     fun `completion labels single lambda arguments with braces and unnamed function types`() {
         val source =

@@ -38,6 +38,7 @@ sealed interface AnalysisQuery {
     data class Presentation(
         override val identity: AnalysisSnapshotIdentity,
         val path: VirtualSourcePath,
+        val includeDiagnostics: Boolean = true,
     ) : AnalysisQuery {
         init {
             VirtualSourcePath.kotlin(path.value)
