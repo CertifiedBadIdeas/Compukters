@@ -28,6 +28,7 @@ import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtImportDirective
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtPackageDirective
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
@@ -46,6 +47,7 @@ internal data class CompletionContext(
     val position: KtElement,
     val receiver: org.jetbrains.kotlin.psi.KtExpression?,
     val keywordContext: KeywordContext,
+    val isFunctionDeclarationName: Boolean,
 ) {
     companion object {
         fun parse(
@@ -78,7 +80,11 @@ internal data class CompletionContext(
                     }
             val receiver = qualified?.receiverExpression
             val keywordContext = keywordContext(leaf, receiver)
-            return CompletionContext(prefix, EditorRange(start, offsetUtf16), position, receiver, keywordContext)
+            val isFunctionDeclarationName =
+                generateSequence(leaf) { it.parent }
+                    .filterIsInstance<KtNamedFunction>()
+                    .any { it.nameIdentifier == leaf }
+            return CompletionContext(prefix, EditorRange(start, offsetUtf16), position, receiver, keywordContext, isFunctionDeclarationName)
         }
 
         private fun keywordContext(

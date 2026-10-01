@@ -68,6 +68,7 @@ import ru.lazyhat.compukters.ide.analysis.CompletionCallShape
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
 import ru.lazyhat.compukters.ide.analysis.CompletionSymbol
+import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
@@ -83,7 +84,12 @@ internal object CompletionQuery {
         val source = file.text
         require(query.offsetUtf16 <= source.length) { "analysis cursor exceeds source" }
         val context = CompletionContext.parse(file, source, query.offsetUtf16)
-        val items = analyze(file) { collect(context, file, snapshot, limits) }
+        val items =
+            if (query.trigger == CompletionTrigger.Automatic && context.isFunctionDeclarationName) {
+                emptyList()
+            } else {
+                analyze(file) { collect(context, file, snapshot, limits) }
+            }
         return AnalysisResult.Completion.create(
             query.identity,
             context.replacement,

@@ -197,6 +197,7 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - Function completion inserts call parentheses or a trailing lambda block and places the caret at the first
   required input. Existing delimiters are reused; autoimports and caret placement undo and redo together.
   Enter inside an empty lambda adds an indented body line and moves its closing brace to a separate line.
+  Typing a function declaration name does not open automatic completion; explicit completion remains available.
 - Completion suggests visible variables in string interpolation immediately after `$` and while typing the name.
 - Completion, automatic imports, parameter information, and source navigation include compatible APIs supplied by
   installed addons. Selecting `Kinetics` or `Logistics` also enables the `create` addon for the project.
