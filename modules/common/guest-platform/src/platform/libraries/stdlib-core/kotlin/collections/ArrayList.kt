@@ -111,6 +111,25 @@ public class ArrayList<T>(initialCapacity: Int = 10) : MutableList<T> {
     internal fun iteratorAnyNullable(): Iterator<Any?> = ArrayListIterator(this)
 }
 
+// Specialize to the receiver's read view: Int remains unboxed, while Any/Int? reads use bridges.
+internal fun <T> List<T>.listIndexOf(element: T): Int {
+    var index = 0
+    while (index < size) {
+        if (element == this[index]) return index
+        index += 1
+    }
+    return -1
+}
+
+internal fun <T> List<T>.listLastIndexOf(element: T): Int {
+    var index = size - 1
+    while (index >= 0) {
+        if (element == this[index]) return index
+        index -= 1
+    }
+    return -1
+}
+
 internal class ArrayListIterator<T>(private val list: ArrayList<T>) : MutableIterator<T> {
     private var index: Int = 0
     private var lastReturned: Int = -1

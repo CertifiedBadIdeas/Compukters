@@ -203,7 +203,8 @@ reference storage at its trusted factory call. Growth, shifting, searches, slot 
 ordinary Guest bodies; all allocations use the VM's existing metered array instructions. Read-only aliases share
 the same list. Iterator bridges expose both read-only and mutable result signatures, and a modification counter
 rejects stale iterator `next`/`remove` calls after structural mutations.
-`ArrayList` is the sole library list implementation. Typed indexed search functions operate over `List<T>`;
+`ArrayList` is the sole library list implementation. Its indexed-search read-view helpers live alongside it in
+`ArrayList.kt` and operate over `List<T>` to preserve specialization for typed, nullable and universal reads;
 read-only and mutable views share the same iterator implementation with mutation checks and removal state. The compiler
 uses one trusted collection read-view registry for bridge method names and additional interface types.
 Library lists also publish nullable element read bridges for read-only views such as `List<Int?>` over `List<Int>`.
