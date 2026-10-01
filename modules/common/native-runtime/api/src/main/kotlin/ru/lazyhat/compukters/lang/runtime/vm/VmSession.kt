@@ -639,11 +639,11 @@ private class WireDecoder(
         when (u8()) {
             0 -> VmOutcome.SliceExhausted
             1 -> hostRequestBatch()
-            2 -> VmOutcome.AllocationExhausted(boolean())
+            2 -> VmOutcome.AllocationExhausted(boolean(), text().takeIf { it.isNotEmpty() })
             3 -> VmOutcome.QuotaExhausted(quotaKind(u8()), i64(), i64())
             4 -> VmOutcome.Halted(optionalValue())
-            5 -> VmOutcome.Crashed(guestTrap(u8()))
-            6 -> VmOutcome.Faulted(vmFault(u8()))
+            5 -> VmOutcome.Crashed(guestTrap(u8()), text().takeIf { it.isNotEmpty() })
+            6 -> VmOutcome.Faulted(vmFault(u8()), text().takeIf { it.isNotEmpty() })
             7 -> VmOutcome.HostFailed(hostFailureKind(u8()), text())
             9 -> VmOutcome.WaitingForTerminalEvent
             10 -> compilation(i64().also { require(it > 0) { "invalid native compilation token" } })

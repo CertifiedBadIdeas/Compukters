@@ -46,6 +46,20 @@ internal object GuestInlineNormalization {
         maximumDepth: Int = 64,
     ) {
         if (module in session.normalizedGuestModules) return
+        module.files.forEach { file ->
+            session.virtualSourcePath(file.fileEntry.name)?.let { path ->
+                session.recordSourceFile(path, file.fileEntry)
+                file.accept(
+                    object : IrVisitorVoid() {
+                        override fun visitElement(element: IrElement) {
+                            session.recordSource(element, path)
+                            element.acceptChildren(this, null)
+                        }
+                    },
+                    null,
+                )
+            }
+        }
         val files =
             module.files.filter {
                 session.virtualSourcePath(it.fileEntry.name) != null &&
@@ -75,18 +89,6 @@ internal object GuestInlineNormalization {
         if (!needed) {
             session.normalizedGuestModules += module
             return
-        }
-        files.forEach { file ->
-            val path = requireNotNull(session.virtualSourcePath(file.fileEntry.name))
-            file.accept(
-                object : IrVisitorVoid() {
-                    override fun visitElement(element: IrElement) {
-                        session.recordSource(element, path)
-                        element.acceptChildren(this, null)
-                    }
-                },
-                null,
-            )
         }
         val admitted = files.toSet()
 

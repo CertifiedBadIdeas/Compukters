@@ -155,6 +155,7 @@ sealed interface ProgramFailure {
 
     data class Allocation(
         val collectionAttempted: Boolean,
+        val diagnostic: String? = null,
     ) : ProgramFailure
 
     data class Quota(
@@ -165,10 +166,12 @@ sealed interface ProgramFailure {
 
     data class Trap(
         val trap: GuestTrap,
+        val diagnostic: String? = null,
     ) : ProgramFailure
 
     data class Fault(
         val fault: VmFault,
+        val diagnostic: String? = null,
     ) : ProgramFailure
 
     data class Host(

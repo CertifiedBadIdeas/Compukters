@@ -45,6 +45,7 @@ internal const val EXCEPTIONS = 0x0109
 internal const val UTF16_LITERALS = 0x010a
 internal const val SAFEPOINT_ROOTS = 0x010b
 internal const val DEBUG = 0x0110
+internal const val DEBUG_SOURCE_POSITIONS = 0x8001
 
 internal data class EncodedSection(
     val kind: Int,
@@ -55,6 +56,7 @@ internal data class EncodedSection(
 internal class EncodedModuleSections(
     val semantic: List<EncodedSection>,
     val debug: EncodedSection?,
+    val debugPositions: EncodedSection?,
     semanticHash: ByteArray,
 ) {
     val semanticHash: ByteArray = semanticHash.copyOf()
@@ -150,7 +152,24 @@ internal fun encodeModuleSections(
         module.debug.takeIf(List<DebugEntry>::isNotEmpty)?.let { records ->
             EncodedSection(DEBUG, encodeIndexed(records.map { encodeDebug(it, maximum) }, maximum), records.size.toUInt())
         }
-    return EncodedModuleSections(semantic, debug, semanticHash(semantic))
+    val positions =
+        module.debug.mapIndexedNotNull { index, entry ->
+            require((entry.sourceLine == null) == (entry.sourceColumn == null)) { "source line and column must be paired" }
+            entry.sourceLine?.let { line ->
+                require(line > 0u && requireNotNull(entry.sourceColumn) > 0u) { "source positions must be one-based" }
+                BinarySink(maximum)
+                    .apply {
+                        writeU32(index.toUInt())
+                        writeU32(line)
+                        writeU32(requireNotNull(entry.sourceColumn))
+                    }.toByteArray()
+            }
+        }
+    val debugPositions =
+        positions.takeIf { it.isNotEmpty() }?.let {
+            EncodedSection(DEBUG_SOURCE_POSITIONS, encodeIndexed(it, maximum), it.size.toUInt())
+        }
+    return EncodedModuleSections(semantic, debug, debugPositions, semanticHash(semantic))
 }
 
 private fun encodeType(
