@@ -69,6 +69,8 @@ data class PlatformDeclarationIdentity(
 )
 
 sealed interface PlatformDefaultArgument {
+    data object NullValue : PlatformDefaultArgument
+
     data object ReceiverArraySize : PlatformDefaultArgument
 
     data class IntValue(

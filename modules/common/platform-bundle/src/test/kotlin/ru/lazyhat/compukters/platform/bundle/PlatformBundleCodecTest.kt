@@ -28,6 +28,18 @@ import kotlin.test.assertTrue
 
 class PlatformBundleCodecTest {
     @Test
+    fun `null defaults differ from omitted defaults and survive bundle and module encoding`() {
+        val base = terminal()
+        val declaration = base.declarations.first().copy(defaultArguments = listOf(null, PlatformDefaultArgument.NullValue))
+        val changed = base.copy(declarations = listOf(declaration) + base.declarations.drop(1))
+        val bundle = PlatformBundleCodec.assemble("2.4", PlatformBundleCodec.SUPPORTED_PLATFORM_ABI, builtins(), listOf(ranges(), changed))
+        val decoded = PlatformBundleCodec.decode(PlatformBundleCodec.encode(bundle)).modules.single { it.id == changed.id }
+        assertEquals(changed.declarations, decoded.declarations)
+        assertEquals(changed.declarations, PlatformBundleCodec.decodeModule(PlatformBundleCodec.encodeModule(changed)).declarations)
+        assertNotEquals(PlatformBundleCodec.moduleContentHash(base), PlatformBundleCodec.moduleContentHash(changed))
+    }
+
+    @Test
     fun `enum default arguments round trip and affect module identity`() {
         val base = terminal()
         val declaration =

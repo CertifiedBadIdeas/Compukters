@@ -236,11 +236,23 @@ private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFr
     val missingFieldNames = fieldDeclarations.keys.filterNot(stringIds::containsKey)
     require(missingFieldNames.isEmpty()) { "platform field ABI names are absent from canonical metadata: $missingFieldNames" }
     val typeExports =
-        typeDeclarations.keys.sorted().map { symbol ->
+        typeDeclarations.keys.sorted().mapNotNull { symbol ->
             val matches =
                 lowered.types.withIndex().filter { (_, type) ->
                     lowered.strings[type.name.value.toInt()].toString() == symbol
                 }
+            if (matches.isEmpty()) {
+                // Runtime-owned nominal types are already exported by their canonical dependency.
+                // Their ordinary Kotlin constructors must not introduce a second class identity.
+                val dependencies =
+                    modules.drop(1).flatMap { module ->
+                        module.exports.filter { export ->
+                            export.kind == SymbolKind.TYPE && module.strings[export.name.value.toInt()].toString() == symbol
+                        }
+                    }
+                require(dependencies.size == 1) { "cannot uniquely match platform dependency type $symbol: $dependencies" }
+                return@mapNotNull null
+            }
             val match = matches.singleOrNull() ?: error("cannot uniquely match platform type $symbol: $matches")
             Export(
                 SymbolKind.TYPE,

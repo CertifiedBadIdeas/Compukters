@@ -38,44 +38,6 @@ public open class Throwable external constructor(message: String?) {
     public external val cause: Throwable?
 }
 
-public open class Exception external constructor(message: String?) : Throwable(message) {
-    public external constructor(message: String?, cause: Throwable?) : this(message)
-}
-
-public open class RuntimeException external constructor(message: String?) : Exception(message) {
-    public external constructor(message: String?, cause: Throwable?) : this(message)
-}
-
-public class IllegalArgumentException external constructor(message: String?) : RuntimeException(message) {
-    public external constructor(message: String?, cause: Throwable?) : this(message)
-}
-
-public open class IllegalStateException external constructor(message: String?) : RuntimeException(message) {
-    public external constructor(message: String?, cause: Throwable?) : this(message)
-}
-
-public class NoWhenBranchMatchedException external constructor() : RuntimeException(null)
-
-public class ArithmeticException external constructor(message: String?) : RuntimeException(message) {
-    public external constructor(message: String?, cause: Throwable?) : this(message)
-}
-
-public open class IndexOutOfBoundsException external constructor(message: String?) : RuntimeException(message) {
-    public external constructor(message: String?, cause: Throwable?) : this(message)
-}
-
-public class NegativeArraySizeException external constructor(message: String?) : RuntimeException(message) {
-    public external constructor(message: String?, cause: Throwable?) : this(message)
-}
-
-public class NullPointerException external constructor(message: String?) : RuntimeException(message) {
-    public external constructor(message: String?, cause: Throwable?) : this(message)
-}
-
-public class ClassCastException external constructor(message: String?) : RuntimeException(message) {
-    public external constructor(message: String?, cause: Throwable?) : this(message)
-}
-
 public abstract class Enum<E : Enum<E>> external constructor() : Comparable<E> {
     public external val name: String
 
