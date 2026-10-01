@@ -583,15 +583,23 @@ supported.
   paired with [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs), scenario `nullable-references`.
   Tracking: [#654](https://github.com/CertifiedBadIdeas/Compukters/issues/654)
 
-- [ ] **`throw`, `try`, `catch`, and `finally` — Unsupported** — the artifact
-  and VM have verified exception tables, but the K2 backend does not lower
-  general `IrThrow` or `IrTry` from Guest source. An internal `IllegalArgumentException` throw still uses the
-  legacy terminal-trap mechanism pending replacement. Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)
+- [ ] **`throw`, `try`, `catch`, and `finally` — Partial** — explicit statement `throw` constructs a managed
+  exception and unwinds Guest calls. The VM executes typed handler tables, preserves exception identity through
+  GC and rethrow, and retains child-task failures for repeated joins. Source `IrTry` lowering, finally and
+  non-local exits are not implemented yet. Legacy exception artifacts must be rebuilt for Runtime ABI 1.8;
+  there is no terminal-trap fallback. Evidence: `MinimalScriptLoweringTest`, test
+  `explicit exception preserves class and message for vm execution`, and `testKotlinExceptionsVmConformance`;
+  native tests `explicit_exceptions_preserve_identity_across_calls_and_repeated_task_joins` and
+  `exception_handlers_choose_innermost_region_and_source_order_and_rethrow_to_outer`.
+  Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)
 
-- [ ] **Standard exception classes — Unsupported** — Kotlin/JVM exception
-  classes are not a Guest standard-library surface. VM traps and bounded host
-  failures remain typed runtime outcomes rather than catchable Kotlin
-  exceptions. Tracking: not scheduled
+- [ ] **Standard exception classes — Partial** — Guest `Throwable`, `Exception`, `RuntimeException` and
+  `IllegalArgumentException` have distinct nominal identities and nullable message storage. Uncaught exceptions
+  report class, message and bounded source stack through both FFM and JNI. Source message/cause access,
+  user exception constructors and catchable operation/host errors remain pending; OOM, quotas and VM faults
+  remain noncatchable. Evidence: real native transport tests `FFM preserves uncaught exception class message
+  and source stack` and `JNI preserves uncaught exception class message and source stack`.
+  Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)
 
 - [x] **Compiler diagnostic source coordinates** — syntax and type diagnostics
   preserve virtual paths and UTF-16 offsets while bounding count and text.

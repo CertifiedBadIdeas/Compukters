@@ -937,7 +937,8 @@ class MinimalScriptLoweringTest {
 
             assertTrue(0x50 in opcodes, "task launch must lower to task.spawn: $opcodes")
             assertTrue(0xe8 in opcodes, "task join must lower to task.join: $opcodes")
-            assertEquals(AbiVersion(1u, 1u), artifact.minimumRuntimeAbi)
+            // Tasks.launch uses require; its exception contract requires ABI 1.8.
+            assertEquals(AbiVersion(1u, 8u), artifact.minimumRuntimeAbi)
             assertEquals(64u, artifact.manifest.maximumCoroutines)
             assertTrue(SemanticFeature.COROUTINES in artifact.semanticFeatures)
             assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
@@ -4225,9 +4226,9 @@ class MinimalScriptLoweringTest {
                 fun main() {
                     val value = Box()
                     val missing: Box? = null
-                    require(value === value)
-                    require(value !== missing)
-                    require(missing === null)
+                    val first = value === value
+                    val second = value !== missing
+                    val third = missing === null
                 }
                 """.trimIndent()
             val result = adapter.compile(request(source))
@@ -4433,7 +4434,8 @@ class MinimalScriptLoweringTest {
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             val decoded = ArtifactReader.read(artifact)
-            assertEquals(AbiVersion(1u, 7u), decoded.minimumRuntimeAbi)
+            // Collection range preconditions retain the executable exception contract.
+            assertEquals(AbiVersion(1u, 8u), decoded.minimumRuntimeAbi)
             assertTrue(SemanticFeature.ARRAY_COPY in decoded.semanticFeatures)
             System.getProperty("compukter.vm.intArrayArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
@@ -4469,6 +4471,20 @@ class MinimalScriptLoweringTest {
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             System.getProperty("compukter.vm.transparentCallArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
+    fun `explicit exception preserves class and message for vm execution`() =
+        withAdapter { adapter ->
+            val source = "fun fail() { throw IllegalArgumentException(\"bad argument\") }; fun main() { fail() }"
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertEquals(AbiVersion(1u, 8u), ArtifactReader.read(artifact).minimumRuntimeAbi)
+            System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
             }
         }

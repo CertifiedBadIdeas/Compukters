@@ -117,6 +117,7 @@ class PlaygroundApplicationTest {
                     PlaygroundExecution.AdmissionFailure(7) to PlaygroundExit.VM_START,
                     PlaygroundExecution.StartFailure(8) to PlaygroundExit.VM_START,
                     PlaygroundExecution.Trap(GuestTrap.DIVISION_BY_ZERO) to PlaygroundExit.GUEST_TRAP,
+                    PlaygroundExecution.UncaughtException("Uncaught exception: CustomFailure") to PlaygroundExit.GUEST_TRAP,
                     PlaygroundExecution.Fault(VmFault.CORRUPT_HEAP) to PlaygroundExit.VM_FAULT,
                     PlaygroundExecution.HostFailure(HostFailureKind.END_OF_FILE, "Terminal input reached end of file") to
                         PlaygroundExit.HOST_FAILURE,

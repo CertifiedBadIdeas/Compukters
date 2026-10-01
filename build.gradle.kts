@@ -302,6 +302,16 @@ fun registerKotlinVmConformance(
 }
 
 registerKotlinVmConformance(
+    taskName = "testKotlinExceptionsVmConformance",
+    taskDescription = "Executes explicit managed exceptions across Guest calls.",
+    artifactTask = ":compiler-k2:generateExceptionsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-exceptions-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT",
+    conformanceScenario = "exceptions",
+)
+
+registerKotlinVmConformance(
     taskName = "testKotlinTextStdlibVmConformance",
     taskDescription = "Executes guest text helpers under sliced VM budgets.",
     artifactTask = ":compiler-k2:generateTextStdlibConformanceArtifact",

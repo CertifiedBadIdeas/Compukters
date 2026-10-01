@@ -18,6 +18,7 @@ fn main() {
 
     match scenario.as_str() {
         "executable" => pinned_vm_verifies_kotlin_executable_instruction_artifact(),
+        "exceptions" => k2_explicit_exception_unwinds_across_guest_calls(),
         "int-array" => k2_int_array_executes_specialized_storage_and_traps(),
         "nullable-references" => k2_nullable_references_preserve_branch_and_call_semantics(),
         "int-loops" => k2_int_loops_execute_across_quota_slices_without_host_io(),
@@ -71,6 +72,26 @@ fn main() {
     }
 
     println!("Kotlin-to-VM conformance scenario passed: {scenario}");
+}
+
+fn k2_explicit_exception_unwinds_across_guest_calls() {
+    let path = std::env::var("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT must be set");
+    let verified = verify_artifact(Arc::from(fs::read(path).expect("exception artifact must exist")), ArtifactLimits::default())
+        .expect("pinned VM must verify explicit exceptions");
+    let mut session = Session::admit(verified, list_no_io_profile(), &[]).expect("exception program must admit");
+    session.start(&[]).expect("exception program must start");
+    for _ in 0..10000 {
+        match session.advance(64, 1).expect("exception program must advance") {
+            AdvanceOutcome::SliceExhausted => {}
+            AdvanceOutcome::UncaughtException => {
+                assert!(matches!(session.advance(64, 1).unwrap(), AdvanceOutcome::UncaughtException));
+                return;
+            }
+            outcome => panic!("unexpected explicit exception outcome: {outcome:?}"),
+        }
+    }
+    panic!("exception program must terminate under bounded slices");
 }
 
 fn k2_abstract_properties_dispatch_through_base_and_interface() {
@@ -1018,10 +1039,7 @@ fn k2_text_stdlib_preserves_utf16_helpers() {
                     slices += 1;
                     assert!(slices < 100000, "text failure must terminate: {mode}");
                 }
-                AdvanceOutcome::Crashed(trap) if !quota => {
-                    assert_eq!(trap, GuestTrap::InvalidArgument, "{mode}");
-                    break;
-                }
+                AdvanceOutcome::UncaughtException if !quota => break,
                 AdvanceOutcome::AllocationExhausted(_) if quota => break,
                 outcome => panic!("unexpected text failure outcome for {mode}: {outcome:?}"),
             }
@@ -1124,21 +1142,14 @@ fn k2_mutable_list_preserves_growth_mutation_and_views() {
         session
             .start(&[EntryValue::StringArray(&arguments)])
             .expect("mutable list failure must start");
-        let expected = if mode == "negative-array" {
-            GuestTrap::NegativeArraySize
-        } else {
-            GuestTrap::InvalidArgument
-        };
         loop {
             match session
                 .advance(256, 256)
                 .expect("mutable list failure must execute")
             {
                 AdvanceOutcome::SliceExhausted => {}
-                AdvanceOutcome::Crashed(trap) => {
-                    assert_eq!(expected, trap, "{mode}");
-                    break;
-                }
+                AdvanceOutcome::Crashed(GuestTrap::NegativeArraySize) if mode == "negative-array" => break,
+                AdvanceOutcome::UncaughtException if mode != "negative-array" => break,
                 outcome => panic!("unexpected mutable list outcome for {mode}: {outcome:?}"),
             }
         }
@@ -1253,7 +1264,7 @@ fn k2_list_index_outside_bounds_traps() {
     loop {
         match session.advance(64, 64).expect("list bounds program must execute") {
             AdvanceOutcome::SliceExhausted => {}
-            AdvanceOutcome::Crashed(GuestTrap::InvalidArgument) => break,
+            AdvanceOutcome::UncaughtException => break,
             outcome => panic!("unexpected list bounds outcome: {outcome:?}"),
         }
     }
@@ -1535,7 +1546,7 @@ fn k2_int_loops_execute_across_quota_slices_without_host_io() {
             .expect("invalid-step program must advance")
         {
             AdvanceOutcome::SliceExhausted => {}
-            AdvanceOutcome::Crashed(GuestTrap::InvalidArgument) => break,
+            AdvanceOutcome::UncaughtException => break,
             outcome => panic!("unexpected invalid-step outcome: {outcome:?}"),
         }
     }
@@ -1751,7 +1762,7 @@ fn k2_platform_scalar_precondition_traps_before_publishing_a_value() {
             .expect("platform-scalar artifact must advance")
         {
             AdvanceOutcome::SliceExhausted => {}
-            AdvanceOutcome::Crashed(GuestTrap::InvalidArgument) => break,
+            AdvanceOutcome::UncaughtException => break,
             AdvanceOutcome::HostRequestBatch(_) => {
                 panic!("invalid platform scalar construction must trap before a host request")
             }

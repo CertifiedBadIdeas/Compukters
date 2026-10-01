@@ -69,6 +69,7 @@ val downloadedRuntimeBundleDirectory =
     }
 val selectedReleaseRuntimeBundleDirectory = runtimeBundleDirectory.orElse(downloadedRuntimeBundleDirectory)
 val shellArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/shell.cpkt")
+val exceptionsArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt")
 
 val preparePackagedCompukterJni =
     tasks.register<Sync>("preparePackagedCompukterJni") {
@@ -134,9 +135,12 @@ val nativeIntegrationTest =
         filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.vm.JniNativeEntryPointIntegrationTest")
         inputs.file(compukterJniLibrary)
         inputs.file(shellArtifact)
+        dependsOn(":compiler-k2:generateExceptionsConformanceArtifact")
+        inputs.file(exceptionsArtifact)
         doFirst {
             systemProperty("compukter.jni.library", compukterJniLibrary.absolutePath)
             systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
+            systemProperty("compukters.exceptions.artifact", exceptionsArtifact.get().asFile.absolutePath)
         }
     }
 

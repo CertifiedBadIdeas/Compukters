@@ -346,7 +346,7 @@ offset when present, otherwise function and bytecode coordinates. Runtime format
 
 Native C ABI 17 appends a length-prefixed, bounded UTF-8 trace to terminal outcome tags 2 (OOM), 5 (Guest trap), and
 6 (VM fault), after their existing scalar payload. Empty text means unavailable diagnostic text. FFM and JNI validate
-ABI 17 before decoding; both retain typed failures and carry the trace through the runtime host. Other wire tags and
+ABI 18 before decoding; both retain typed failures and carry the trace through the runtime host. Other wire tags and
 guest capability schemas are unchanged.
 An explicit actor request can also compose one immutable resource snapshot from host lifecycle/configuration and the
 native machine's semantic work, Guest heap, admitted mutable execution-resident, and filesystem quota counters. The
@@ -379,8 +379,14 @@ Runtime ABI 1.8 reserves class header flag bit 2 for one explicit Throwable root
 non-generic class has two instance fields in declared order: nullable `kotlin.String` message and nullable
 self-typed cause. It has no methods, interfaces or initializer and may inherit only a stateless root class.
 JVM and Rust validation reject invalid payloads, duplicate roots and role metadata below ABI 1.8. Exception class
-identity is not inferred from its name. The role metadata is a foundation for the executable exception mechanism;
-its presence alone does not establish Guest `try`/`catch`/`finally` support.
+identity is not inferred from its name. `Throw` and handler tables require this verified root and ABI 1.8;
+legacy exception artifacts must be rebuilt, with no trap fallback. Admission resolves handlers once, innermost
+region first and then in source order. Handler inspection and frame unwinding are budgeted. Catch receives the
+original managed reference; pending exceptions and failed-task slots remain GC roots. A failed child task does not
+terminate its siblings: each join rethrows the retained exception at that join site. An uncaught root exception
+terminates the process. Native C ABI 18 adds outcome tag 12 containing a length-prefixed bounded UTF-8 diagnostic
+(class, message, at most four causes and 32 stack frames); no Guest pointer crosses the boundary. Kotlin transports
+expose `VmOutcome.UncaughtException`. Source `try`/`catch`/`finally` lowering remains the next implementation stage.
 
 Runtime ABI 1.7 adds an explicit optional superclass to nominal array records. Array header flag bit 0 indicates
 a non-null TypeRef appended after the element ValueType; flag-zero records remain unchanged. The parent must resolve

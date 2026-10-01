@@ -90,6 +90,7 @@ val downloadedRuntimeBundleDirectory =
 val selectedReleaseRuntimeBundleDirectory = runtimeBundleDirectory.orElse(downloadedRuntimeBundleDirectory)
 val shellArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/shell.cpkt")
 val blockingCallArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/blocking-call.cpkt")
+val exceptionsArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt")
 
 val preparePackagedCompukterFfi =
     tasks.register<Sync>("preparePackagedCompukterFfi") {
@@ -156,11 +157,14 @@ val nativeIntegrationTest =
         inputs.file(compukterFfiLibrary)
         inputs.file(shellArtifact)
         inputs.file(blockingCallArtifact)
+        dependsOn(":compiler-k2:generateExceptionsConformanceArtifact")
+        inputs.file(exceptionsArtifact)
         jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
         doFirst {
             systemProperty("compukter.ffi.library", compukterFfiLibrary.absolutePath)
             systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
             systemProperty("compukters.blocking-call.artifact", blockingCallArtifact.get().asFile.absolutePath)
+            systemProperty("compukters.exceptions.artifact", exceptionsArtifact.get().asFile.absolutePath)
         }
     }
 

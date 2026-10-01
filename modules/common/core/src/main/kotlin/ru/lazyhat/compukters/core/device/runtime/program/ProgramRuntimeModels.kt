@@ -139,6 +139,10 @@ sealed interface ProgramStartResult {
 }
 
 sealed interface ProgramFailure {
+    data class UncaughtException(
+        val diagnostic: String,
+    ) : ProgramFailure
+
     data object Verification : ProgramFailure
 
     data class Admission(

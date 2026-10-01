@@ -154,8 +154,50 @@ internal fun channelArtifact(): Artifact {
     )
 }
 
+internal fun scalarLanguageRuntimeArtifact(): Artifact {
+    val source = languageRuntimeArtifact()
+    val module = source.modules.single()
+    return source.copy(
+        minimumRuntimeAbi =
+            ru.lazyhat.compukters.compiler.artifact.model
+                .AbiVersion(1u, 0u),
+        semanticFeatures = emptySet(),
+        modules =
+            listOf(
+                module.copy(
+                    types =
+                        module.types.toMutableList().also {
+                            it[0] =
+                                (it[0] as NominalType.Class).copy(throwableRoot = false, fieldCount = 0u)
+                        },
+                    fields = emptyList(),
+                    exceptions = emptyList(),
+                    functions = listOf(module.functions.single().copy(exceptionCount = 0u)),
+                    blocks =
+                        module.blocks.map { block ->
+                            block.copy(
+                                instructions =
+                                    block.instructions.map {
+                                        if (it is Instruction.Throw) {
+                                            Instruction.Jump(
+                                                BlockId.of(4u),
+                                            )
+                                        } else {
+                                            it
+                                        }
+                                    },
+                            )
+                        },
+                ),
+            ),
+    )
+}
+
 internal fun languageRuntimeArtifact(): Artifact =
     Artifact(
+        minimumRuntimeAbi =
+            ru.lazyhat.compukters.compiler.artifact.model
+                .AbiVersion(1u, 8u),
         semanticFeatures = setOf(SemanticFeature.EXCEPTIONS),
         manifest = Manifest.minimal(maximumBlockCost = 10u),
         entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
@@ -170,10 +212,11 @@ internal fun languageRuntimeArtifact(): Artifact =
                             MetadataText.of("app"),
                             MetadataText.of("array"),
                             MetadataText.of("entry"),
+                            MetadataText.of("kotlin.String"),
                         ),
                     types =
                         listOf(
-                            NominalType.Class(name = StringId.of(0u)),
+                            NominalType.Class(name = StringId.of(0u), throwableRoot = true, fieldCount = 2u),
                             NominalType.Array(name = StringId.of(2u), element = ValueType.I32),
                             NominalType.Function(
                                 name = StringId.of(3u),
@@ -181,8 +224,26 @@ internal fun languageRuntimeArtifact(): Artifact =
                                 result = ValueType.Unit,
                                 parameters = emptyList(),
                             ),
+                            NominalType.Class(name = StringId.of(4u), final = true),
                         ),
                     constants = listOf(Constant.I32(0), Constant.I32(1)),
+                    fields =
+                        listOf(
+                            ru.lazyhat.compukters.compiler.artifact.model.Field(
+                                TypeRef.Local(TypeId.of(0u)),
+                                StringId.of(0u),
+                                ValueType.Ref(true, TypeRef.Local(TypeId.of(3u))),
+                                false,
+                                false,
+                            ),
+                            ru.lazyhat.compukters.compiler.artifact.model.Field(
+                                TypeRef.Local(TypeId.of(0u)),
+                                StringId.of(2u),
+                                ValueType.Ref(true, TypeRef.Local(TypeId.of(0u))),
+                                false,
+                                false,
+                            ),
+                        ),
                     functions =
                         listOf(
                             Function(
