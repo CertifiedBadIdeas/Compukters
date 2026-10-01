@@ -1595,6 +1595,42 @@ class ArtifactValidatorTest {
     }
 
     @Test
+    fun `exception register must accept catch type rather than only a subtype`() {
+        val artifact = languageRuntimeArtifact()
+        val module = artifact.modules.single()
+        val parent = TypeRef.Local(TypeId.of(0u))
+        val child = TypeRef.Local(TypeId.of(module.types.size.toUInt()))
+        val exceptionRegister =
+            module.exceptions
+                .single()
+                .exceptionRegister.value
+                .toInt()
+        val extendedModule =
+            module.copy(
+                types = module.types + NominalType.Class(name = StringId.of(0u), superType = parent),
+                functions =
+                    listOf(
+                        module.functions.single().copy(
+                            values =
+                                module.functions.single().values.toMutableList().also {
+                                    it[exceptionRegister] = FunctionValue.scalar(ValueType.Ref(false, child))
+                                },
+                        ),
+                    ),
+            )
+        val errors = validateArtifact(artifact.copy(modules = listOf(extendedModule)), ArtifactWriteLimits())
+        assertTrue(errors.any { it.detail.contains("incompatible") }, errors.toString())
+
+        val safeModule =
+            extendedModule.copy(
+                functions = module.functions,
+                exceptions = listOf(module.exceptions.single().copy(catchType = child)),
+            )
+        val safeErrors = validateArtifact(exactRoots(artifact.copy(modules = listOf(safeModule))), ArtifactWriteLimits())
+        assertTrue(safeErrors.isEmpty(), safeErrors.toString())
+    }
+
+    @Test
     fun `exception protected ranges may nest but never cross`() {
         val artifact = languageRuntimeArtifact()
         val module = artifact.modules.single()
