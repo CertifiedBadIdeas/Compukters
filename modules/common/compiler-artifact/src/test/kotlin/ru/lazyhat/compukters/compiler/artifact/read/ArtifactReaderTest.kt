@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.compiler.artifact.read
 
 import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
+import ru.lazyhat.compukters.compiler.artifact.analysis.runtimeExceptionKinds
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
@@ -54,6 +55,44 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class ArtifactReaderTest {
+    @Test
+    fun `integer division requires its factory role and rebuild ABI but floating division does not`() {
+        val source = languageRuntimeArtifact()
+        val module = source.modules.single()
+        val first = module.blocks.first()
+        val division = Instruction.Divide(RegisterId.of(7u), RegisterId.of(3u), RegisterId.of(7u))
+        val blocks =
+            listOf(first.copy(instructions = first.instructions.dropLast(1) + division + first.instructions.last())) + module.blocks.drop(1)
+        val operationModule = module.copy(blocks = blocks)
+        val missing =
+            source.copy(
+                minimumRuntimeAbi = AbiVersion(1u, 9u),
+                manifest = Manifest.minimal(maximumBlockCost = 16u),
+                modules = listOf(operationModule),
+            )
+        assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(missing))
+        val role =
+            NominalType.Class(
+                name = StringId.of(0u),
+                superType = TypeRef.Local(TypeId.of(0u)),
+                runtimeExceptionKind = RuntimeExceptionKind.ARITHMETIC,
+            )
+        val valid = missing.copy(modules = listOf(operationModule.copy(types = operationModule.types + role)))
+        val result = ArtifactWriter.write(valid)
+        assertIs<ArtifactWriteResult.Success>(result, result.toString())
+        assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(valid.copy(minimumRuntimeAbi = AbiVersion(1u, 8u))))
+        assertEquals(
+            emptySet(),
+            Instruction
+                .Divide(
+                    ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType.F32,
+                    RegisterId.of(0u),
+                    RegisterId.of(1u),
+                    RegisterId.of(2u),
+                ).runtimeExceptionKinds(),
+        )
+    }
+
     @Test
     fun `runtime exception roles round trip and reject legacy duplicate and stateful classes`() {
         val source = languageRuntimeArtifact()

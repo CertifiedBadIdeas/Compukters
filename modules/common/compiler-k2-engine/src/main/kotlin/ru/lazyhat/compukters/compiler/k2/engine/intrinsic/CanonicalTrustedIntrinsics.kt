@@ -78,6 +78,8 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "IllegalStateException.<init>", "constructor(String?)")
             primitive("kotlin", "builtins", "kotlin", "IllegalStateException.<init>", "constructor(String?,Throwable?)")
             primitive("kotlin", "builtins", "kotlin", "NoWhenBranchMatchedException.<init>", "constructor()")
+            primitive("kotlin", "builtins", "kotlin", "ArithmeticException.<init>", "constructor(String?)")
+            primitive("kotlin", "builtins", "kotlin", "ArithmeticException.<init>", "constructor(String?,Throwable?)")
             primitive("kotlin", "builtins", "kotlin", "Function0.invoke", "fun():R")
             primitive("kotlin", "builtins", "kotlin", "Function1.invoke", "fun(P1):R")
             primitive("kotlin", "builtins", "kotlin", "Function2.invoke", "fun(P1,P2):R")

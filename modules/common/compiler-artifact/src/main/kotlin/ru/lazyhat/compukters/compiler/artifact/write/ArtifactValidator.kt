@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.compiler.artifact.write
 import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
 import ru.lazyhat.compukters.compiler.artifact.analysis.mayThrow
 import ru.lazyhat.compukters.compiler.artifact.analysis.readRegisters
+import ru.lazyhat.compukters.compiler.artifact.analysis.runtimeExceptionKinds
 import ru.lazyhat.compukters.compiler.artifact.analysis.successors
 import ru.lazyhat.compukters.compiler.artifact.analysis.writtenRegisters
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
@@ -583,6 +584,16 @@ internal fun validateArtifact(
                 add(ArtifactWriteErrorCode.BAD_REFERENCE, "runtime exception role requires a zero-state Throwable subclass", location)
             }
         }
+    }
+    val requiredExceptionRoles =
+        artifact.modules
+            .flatMap { module ->
+                module.blocks.flatMap { block -> block.instructions.flatMap { it.runtimeExceptionKinds() } }
+            }.toSet()
+    if (requiredExceptionRoles.isNotEmpty() &&
+        (artifact.minimumRuntimeAbi < AbiVersion(1u, 9u) || !exceptionRoles.containsAll(requiredExceptionRoles))
+    ) {
+        add(ArtifactWriteErrorCode.INCOMPATIBLE_FEATURE_SET, "operation error artifact: rebuild with exception roles for Runtime ABI 1.9")
     }
     artifact.modules.forEachIndexed { moduleIndex, module ->
         val moduleLocation = moduleIndex.toUInt()

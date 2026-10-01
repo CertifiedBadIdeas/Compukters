@@ -599,8 +599,8 @@ class MinimalScriptLoweringTest {
             val instructions = artifact.modules.flatMap { module -> module.blocks.flatMap(Block::instructions) }
 
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-            // Mixed output also calls stdoutInt, whose CharArray has an explicit root superclass.
-            assertEquals(AbiVersion(1u, 7u), artifact.minimumRuntimeAbi)
+            // Integer arithmetic and stdoutInt retain the arithmetic exception factory.
+            assertEquals(AbiVersion(1u, 9u), artifact.minimumRuntimeAbi)
             assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.I64 })
             assertTrue(instructions.any { it is Instruction.Subtract && it.type == ScalarValueType.I64 })
             assertTrue(instructions.any { it is Instruction.Multiply && it.type == ScalarValueType.I64 })
@@ -686,8 +686,8 @@ class MinimalScriptLoweringTest {
             val instructions = artifact.modules.flatMap { module -> module.blocks.flatMap(Block::instructions) }
 
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-            // Mixed output also calls stdoutInt, whose CharArray has an explicit root superclass.
-            assertEquals(AbiVersion(1u, 7u), artifact.minimumRuntimeAbi)
+            // Floating division itself is nonthrowing; stdoutInt uses integer division.
+            assertEquals(AbiVersion(1u, 9u), artifact.minimumRuntimeAbi)
             assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.F32 })
             assertTrue(instructions.any { it is Instruction.Subtract && it.type == ScalarValueType.F32 })
             assertTrue(instructions.any { it is Instruction.Multiply && it.type == ScalarValueType.F32 })
@@ -863,8 +863,8 @@ class MinimalScriptLoweringTest {
             assertTrue(0xea in opcodes, "send must stay inside the VM: $opcodes")
             assertTrue(0xeb in opcodes, "receive must stay inside the VM: $opcodes")
             assertTrue(0x37 in opcodes && 0x38 in opcodes, "top-level state must use static storage: $opcodes")
-            // Printing the received Int retains stdoutInt's rooted CharArray type.
-            assertEquals(AbiVersion(1u, 7u), artifact.minimumRuntimeAbi)
+            // Printing the received Int retains stdoutInt's arithmetic exception factory.
+            assertEquals(AbiVersion(1u, 9u), artifact.minimumRuntimeAbi)
             assertEquals(1u, artifact.manifest.maximumChannels)
             assertEquals(1u, artifact.manifest.maximumChannelValues)
             assertTrue(SemanticFeature.CHANNELS in artifact.semanticFeatures)
@@ -4434,8 +4434,8 @@ class MinimalScriptLoweringTest {
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             val decoded = ArtifactReader.read(artifact)
-            // Collection range preconditions retain the executable exception contract.
-            assertEquals(AbiVersion(1u, 8u), decoded.minimumRuntimeAbi)
+            // Output formatting retains the native arithmetic exception factory.
+            assertEquals(AbiVersion(1u, 9u), decoded.minimumRuntimeAbi)
             assertTrue(SemanticFeature.ARRAY_COPY in decoded.semanticFeatures)
             System.getProperty("compukter.vm.intArrayArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
@@ -4689,6 +4689,38 @@ class MinimalScriptLoweringTest {
                 System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                     Path.of("$output.$name.cpkt").also { it.parent.createDirectories() }.writeBytes(artifact)
                 }
+            }
+        }
+
+    @Test
+    fun `integer arithmetic errors are catchable across calls and preserve finally for vm execution`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                fun quotient(value: Int, divisor: Int): Int = value / divisor
+                fun remainder(value: Long, divisor: Long): Long = value % divisor
+                fun main() {
+                    var cleanups = 0
+                    require(quotient(8, 2) == 4)
+                    try { quotient(1, 0); error("division did not throw") }
+                    catch (caught: ArithmeticException) {
+                        require(caught.message == "/ by zero")
+                        require(caught.cause == null)
+                    } finally { cleanups = cleanups + 1 }
+                    try { remainder(1L, 0L); error("remainder did not throw") }
+                    catch (caught: RuntimeException) { require(caught is ArithmeticException) }
+                    finally { cleanups = cleanups + 1 }
+                    require(cleanups == 2)
+                    println("arithmetic ok")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val bytes = assertNotNull(first.artifact, first.diagnostics.toString()).toByteArray()
+            assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
+            assertEquals(AbiVersion(1u, 9u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
+                Path.of("$output.arithmetic.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
             }
         }
 
