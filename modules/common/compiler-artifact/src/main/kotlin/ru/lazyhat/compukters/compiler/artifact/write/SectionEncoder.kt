@@ -181,7 +181,7 @@ private fun encodeType(
             when (type) {
                 is NominalType.Class -> {
                     writeU8(0u)
-                    writeU8((if (type.abstract) 1u else 0u) or (if (type.final) 2u else 0u))
+                    writeU8((if (type.abstract) 1u else 0u) or (if (type.final) 2u else 0u) or (if (type.throwableRoot) 4u else 0u))
                     writeU16(type.genericArity.toUInt())
                     writeU32(type.name.value)
                     writeClassLike(type.superType, type.interfaces, type.fieldStart, type.fieldCount, type.methodStart, type.methodCount)

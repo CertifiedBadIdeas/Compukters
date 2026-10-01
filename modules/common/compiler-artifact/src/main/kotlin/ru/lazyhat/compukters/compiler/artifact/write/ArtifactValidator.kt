@@ -525,6 +525,9 @@ internal fun validateArtifact(
             runCatching { encodeModuleSections(module, limits).semanticHash }.getOrNull()
         }
 
+    if (artifact.modules.sumOf { module -> module.types.count { it is NominalType.Class && it.throwableRoot } } > 1) {
+        add(ArtifactWriteErrorCode.BAD_REFERENCE, "multiple Throwable roots", ArtifactWriteLocation(table = "TYPES"))
+    }
     artifact.modules.forEachIndexed { moduleIndex, module ->
         val moduleLocation = moduleIndex.toUInt()
         if (module.blocks.size > limits.blocks) {
@@ -575,9 +578,43 @@ internal fun validateArtifact(
                 }
                 if (parent == null || parent.abstract || parent.final || parent.genericArity != 0.toUShort() ||
                     parent.superType != null || parent.interfaces.isNotEmpty() || parent.fieldCount != 0u ||
-                    parent.methodCount != 0u || parent.initializer != null
+                    parent.methodCount != 0u || parent.initializer != null || parent.throwableRoot
                 ) {
                     add(ArtifactWriteErrorCode.BAD_REFERENCE, "array superclass must be a stateless root class", location)
+                }
+            }
+            if (nominal is NominalType.Class && nominal.throwableRoot) {
+                val location = ArtifactWriteLocation(moduleLocation, "TYPES", typeIndex.toUInt())
+                val root = TypeIdentity(moduleIndex, typeIndex)
+                val fieldStart = nominal.fieldStart.toLong()
+                val fields = if (fieldStart <= module.fields.size.toLong()) module.fields.drop(fieldStart.toInt()).take(2) else emptyList()
+                val message = fields.getOrNull(0)?.type as? ValueType.Ref
+                val cause = fields.getOrNull(1)?.type as? ValueType.Ref
+                val messageIdentity = message?.let { resolveType(moduleIndex, it.type) }
+                val messageType = messageIdentity?.let { artifact.modules[it.module].types[it.type] } as? NominalType.Class
+                val messageName =
+                    messageIdentity?.let {
+                        artifact.modules[it.module].strings.getOrNull(messageType?.name?.value?.toInt() ?: -1)
+                    }
+                val parentIdentity = nominal.superType?.let { resolveType(moduleIndex, it) }
+                val parent = parentIdentity?.let { artifact.modules[it.module].types[it.type] } as? NominalType.Class
+                if (artifact.minimumRuntimeAbi < AbiVersion(1u, 8u)) {
+                    add(ArtifactWriteErrorCode.INCOMPATIBLE_FEATURE_SET, "Throwable root requires Runtime ABI 1.8", location)
+                }
+                if (nominal.abstract || nominal.final || nominal.genericArity != 0.toUShort() || nominal.interfaces.isNotEmpty() ||
+                    nominal.fieldCount != 2u || nominal.methodCount != 0u || nominal.initializer != null ||
+                    fields.size != 2 || fields.any { it.static || resolveType(moduleIndex, it.owner) != root } ||
+                    message?.nullable != true || messageName?.toString() != "kotlin.String" ||
+                    cause?.nullable != true || cause?.let { resolveType(moduleIndex, it.type) } != root ||
+                    (
+                        nominal.superType != null && (
+                            parent == null || parent.throwableRoot || parent.abstract || parent.final ||
+                                parent.genericArity != 0.toUShort() || parent.superType != null || parent.interfaces.isNotEmpty() ||
+                                parent.fieldCount != 0u || parent.methodCount != 0u || parent.initializer != null
+                        )
+                    )
+                ) {
+                    add(ArtifactWriteErrorCode.BAD_REFERENCE, "invalid Throwable root layout or superclass", location)
                 }
             }
             val methodRange =

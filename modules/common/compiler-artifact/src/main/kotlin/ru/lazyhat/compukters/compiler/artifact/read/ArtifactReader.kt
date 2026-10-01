@@ -234,6 +234,7 @@ private fun decodeType(bytes: ByteArray): NominalType {
                 if (tag ==
                     0u
                 ) {
+                    require(flags and 7u.inv() == 0u) { "invalid class flags" }
                     NominalType.Class(
                         name,
                         flags and 1u != 0u,
@@ -246,6 +247,7 @@ private fun decodeType(bytes: ByteArray): NominalType {
                         methodStart,
                         methodCount,
                         if (c.done()) null else FunctionId.of(c.u32()),
+                        throwableRoot = flags and 4u != 0u,
                     )
                 } else {
                     NominalType.Interface(name, flags and 1u != 0u, arity, superType, parents, methodStart, methodCount)
