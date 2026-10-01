@@ -50,6 +50,58 @@ import kotlin.test.assertIs
 
 class ArtifactReaderTest {
     @Test
+    fun `heterogeneous reference comparisons round trip with ABI gate and typed operands`() {
+        val source = languageRuntimeArtifact()
+        val module = source.modules.single()
+        for (comparison in listOf(
+            Instruction.RefEqual(RegisterId.of(2u), RegisterId.of(4u), RegisterId.of(0u)),
+            Instruction.RefNotEqual(RegisterId.of(2u), RegisterId.of(4u), RegisterId.of(0u)),
+        )) {
+            val blocks =
+                module.blocks.mapIndexed { index, block ->
+                    if (index ==
+                        1
+                    ) {
+                        block.copy(instructions = block.instructions.dropLast(1) + comparison + block.instructions.last())
+                    } else {
+                        block
+                    }
+                }
+            val artifact =
+                source.copy(
+                    minimumRuntimeAbi = AbiVersion(1u, 6u),
+                    manifest = Manifest.minimal(maximumBlockCost = 20u),
+                    modules = listOf(module.copy(blocks = blocks)),
+                )
+            val bytes = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(artifact)).bytes
+            assertContentEquals(bytes, assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(ArtifactReader.read(bytes))).bytes)
+            assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(artifact.copy(minimumRuntimeAbi = AbiVersion(1u, 5u))))
+            val bad = Instruction.RefEqual(RegisterId.of(2u), RegisterId.of(4u), RegisterId.of(3u))
+            val invalid = blocks.map { block -> block.copy(instructions = block.instructions.map { if (it == comparison) bad else it }) }
+            assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(artifact.copy(modules = listOf(module.copy(blocks = invalid)))))
+            val compatible = Instruction.RefEqual(RegisterId.of(2u), RegisterId.of(0u), RegisterId.of(1u))
+            val legacy =
+                blocks.map { block ->
+                    block.copy(
+                        instructions =
+                            block.instructions.map {
+                                if (it ==
+                                    comparison
+                                ) {
+                                    compatible
+                                } else {
+                                    it
+                                }
+                            },
+                    )
+                }
+            assertIs<ArtifactWriteResult.Success>(
+                ArtifactWriter.write(artifact.copy(minimumRuntimeAbi = AbiVersion(1u, 0u), modules = listOf(module.copy(blocks = legacy)))),
+            )
+        }
+    }
+
+    @Test
     fun `array copy round trips and requires valid operands feature and runtime ABI`() {
         val source = languageRuntimeArtifact()
         val module = source.modules.single()

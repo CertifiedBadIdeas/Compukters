@@ -515,14 +515,21 @@ supported.
   smart casts over admitted references lower to VM type checks and checked
   casts. Boxed `Int` values support `is Int`, `is Int?`, and explicit checked `as Int` / `as Int?`.
   Checked casts between admitted reference types are supported; safe casts (`as?`) remain rejected. Nullable type tests
-  admit null. Reference `===` compares identity, including null, after a checked common-reference conversion.
+  admit null. Reference `===`/`!==` compare identity directly, including null, without artificial `Any` casts.
+  Supported arrays preserve identity across aliases and differ from fresh copies, including comparisons between
+  arrays with nullable and non-null element types. Operands evaluate left-to-right once. Heterogeneous reference
+  comparison requires Runtime ABI 1.6; existing same-nominal comparisons retain older ABI requirements.
   Evidence: `testKotlinNullableCollectionsVmConformance` and
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `guest object subset lowers sealed results data values enum identity and type branches`
   and `guest object subset rejects generic secondary uninitialized stateful and explicit cast shapes`,
   paired with [`heap_tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/heap_tests.rs),
   test `heap_instructions_checked_cast_handles_nullability_and_incompatibility`.
-  Tracking: not scheduled
+  Array identity evidence: `testKotlinIntArrayVmConformance`, test
+  `specialized IntArray lowers deterministically for vm conformance`, and native test
+  `reference_identity_compares_typed_arrays_and_null_without_casts`.
+  Array identity tracking: [#680](https://github.com/CertifiedBadIdeas/Compukters/issues/680).
+  Remaining type-test/cast support: not scheduled.
 
 - [ ] **Primitive `value class` declarations — Partial** — a value class with
   exactly one `Int`, `Boolean`, or `Char` property erases to that scalar for

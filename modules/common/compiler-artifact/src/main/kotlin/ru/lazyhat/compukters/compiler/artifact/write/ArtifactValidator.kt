@@ -1260,10 +1260,12 @@ internal fun validateArtifact(
                                     "reference comparison operands must be references",
                                     location,
                                 )
-                            } else if (leftIdentity != null && rightIdentity != null && leftIdentity != rightIdentity) {
+                            } else if (leftIdentity != null && rightIdentity != null && leftIdentity != rightIdentity &&
+                                artifact.minimumRuntimeAbi < AbiVersion(1u, 6u)
+                            ) {
                                 add(
                                     ArtifactWriteErrorCode.INVALID_RANGE,
-                                    "reference comparison operands have incompatible reference types",
+                                    "heterogeneous reference comparison requires Runtime ABI 1.6",
                                     location,
                                 )
                             }

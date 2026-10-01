@@ -17,6 +17,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- Reference identity comparisons (`===`/`!==`) compare supported arrays and nullable references directly,
+  preserving aliases and distinguishing fresh copies without artificial casts to `Any`.
+
 - Programs can copy supported arrays with public `copyOf` and `copyInto`, including resizing, null/zero padding,
   and overlapping ranges. Native bulk copying respects execution budgets without temporary buffers; `ArrayList`
   growth uses the same APIs. Platform bundle/module formats now preserve receiver-dependent default arguments;
