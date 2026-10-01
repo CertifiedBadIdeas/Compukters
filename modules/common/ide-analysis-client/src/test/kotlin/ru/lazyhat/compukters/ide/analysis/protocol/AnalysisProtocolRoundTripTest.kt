@@ -248,6 +248,7 @@ class AnalysisProtocolRoundTripTest {
                                     ru.lazyhat.compukters.ide.analysis
                                         .CompletionCallShape(true, false, true),
                                 callablePresentation = CompletionCallablePresentation("T", "kotlin", "Int"),
+                                matchedNameRanges = listOf(EditorRange(0, 1), EditorRange(2, 3)),
                             ),
                         ),
                         sourceLengths().getValue(path()),
@@ -255,7 +256,14 @@ class AnalysisProtocolRoundTripTest {
                 AnalysisQuery.ExpressionInfo(identity, path(), 6) to
                     AnalysisResult.ExpressionInfo.create(
                         identity,
-                        EditorExpressionInfo(path(), EditorRange(4, 10), "kotlin.Int", "val answer: kotlin.Int", origin),
+                        EditorExpressionInfo(
+                            path(),
+                            EditorRange(4, 10),
+                            "kotlin.Int",
+                            "val answer: kotlin.Int",
+                            origin,
+                            "The answer.\n@return 😀",
+                        ),
                         sourceLengths(),
                     ),
                 AnalysisQuery.ParameterInfo(identity, path(), 6) to

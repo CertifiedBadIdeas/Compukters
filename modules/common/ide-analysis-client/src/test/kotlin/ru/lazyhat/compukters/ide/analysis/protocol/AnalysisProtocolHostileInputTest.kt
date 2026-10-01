@@ -45,6 +45,52 @@ import kotlin.test.assertFailsWith
 
 class AnalysisProtocolHostileInputTest {
     @Test
+    fun `completion decoder rejects malformed unicode match ranges and excessive range counts`() {
+        val path = VirtualSourcePath.kotlin("main.kt")
+        val query = AnalysisQuery.Completion(identity, path, 3, CompletionTrigger.Manual)
+        val correlated = context.forQuery(query)
+        val item =
+            ru.lazyhat.compukters.ide.analysis.CompletionItem(
+                "😀f()",
+                "😀f",
+                ru.lazyhat.compukters.ide.analysis.CompletionKind.Function,
+                matchedNameRanges = listOf(EditorRange(0, 2)),
+            )
+        val result = AnalysisResult.Completion.create(identity, EditorRange(0, 3), listOf(item), 3)
+        val frame = AnalysisMessageCodec.encode(AnalysisQuerySuccess(RequestId.of(1uL), result), correlated)
+        for (end in listOf(0, 1, 6)) {
+            val hostile = frame.copy(payload = frame.payload.copyOf().also { it[it.size - 4] = end.toByte() })
+            assertEquals(AnalysisProtocolError.InvalidRange, messageFailure(hostile, correlated).error)
+        }
+        val excessive =
+            frame.copy(
+                payload =
+                    frame.payload.copyOf().also { bytes ->
+                        for (index in bytes.size - 12 until bytes.size - 8) bytes[index] = 0xFF.toByte()
+                    },
+            )
+        assertEquals(AnalysisProtocolError.CountLimit, messageFailure(excessive, correlated).error)
+    }
+
+    @Test
+    fun `hover decoder bounds documentation independently`() {
+        val path = VirtualSourcePath.kotlin("main.kt")
+        val query = AnalysisQuery.ExpressionInfo(identity, path, 1)
+        val value =
+            AnalysisResult.ExpressionInfo.create(
+                identity,
+                ru.lazyhat.compukters.ide.analysis
+                    .EditorExpressionInfo(path, EditorRange(0, 1), "Int", null, null, "😀"),
+                mapOf(path to 3),
+            )
+        val frame = AnalysisMessageCodec.encode(AnalysisQuerySuccess(RequestId.of(1uL), value), AnalysisProtocolContext.unchecked())
+        assertEquals(
+            AnalysisProtocolError.CountLimit,
+            messageFailure(frame, AnalysisProtocolContext.of(snapshot, AnalysisLimits(detailTextBytes = 3)).forQuery(query)).error,
+        )
+    }
+
+    @Test
     fun `callable presentation decoder rejects malformed metadata and bounded text`() {
         val path = VirtualSourcePath.kotlin("main.kt")
         val query = AnalysisQuery.Completion(identity, path, 3, CompletionTrigger.Manual)
@@ -75,13 +121,20 @@ class AnalysisProtocolHostileInputTest {
                 ru.lazyhat.compukters.ide.analysis
                     .CompletionCallablePresentation(null, null, "Int"),
             )
-        // Optional marker, two absent strings, then the final length-prefixed return type.
-        val metadataStart = encoded.payload.size - 10
+        // Optional marker, two absent strings, return type, then the empty match-range count.
+        val metadataStart = encoded.payload.size - 14
         val invalidFlag = encoded.copy(payload = encoded.payload.copyOf().also { it[metadataStart] = 2 })
         assertEquals(AnalysisProtocolError.InvalidMessageValue, messageFailure(invalidFlag, correlated).error)
-        val emptyType = encoded.copy(payload = encoded.payload.copyOf(encoded.payload.size - 3).also { it[it.lastIndex - 3] = 0 })
+        val emptyType =
+            encoded.copy(
+                payload =
+                    (encoded.payload.copyOf(encoded.payload.size - 7) + ByteArray(4)).also {
+                        it[metadataStart + 3] =
+                            0
+                    },
+            )
         assertEquals(AnalysisProtocolError.InvalidMessageValue, messageFailure(emptyType, correlated).error)
-        val invalidUtf8 = encoded.copy(payload = encoded.payload.copyOf().also { it[it.lastIndex] = 0x80.toByte() })
+        val invalidUtf8 = encoded.copy(payload = encoded.payload.copyOf().also { it[it.lastIndex - 4] = 0x80.toByte() })
         assertEquals(AnalysisProtocolError.InvalidUtf8, messageFailure(invalidUtf8, correlated).error)
         val limits = AnalysisLimits(detailTextBytes = 3)
         for (value in listOf(
@@ -128,7 +181,7 @@ class AnalysisProtocolHostileInputTest {
                 .toList()
                 .windowed(labelBytes.size)
                 .indexOf(labelBytes)
-        // Optional marker and three canonical booleans precede the length-prefixed label in protocol v13.
+        // Optional marker and three canonical booleans precede the length-prefixed label in protocol v14.
         val shapeStart = labelStart - 8
         for ((offset, value) in listOf(0 to 2, 1 to 2, 1 to 0)) {
             val hostile = frame.copy(payload = frame.payload.copyOf().also { it[shapeStart + offset] = value.toByte() })
@@ -228,7 +281,7 @@ class AnalysisProtocolHostileInputTest {
                 ),
                 context,
             )
-        val wrongProtocol = handshake.copy(payload = handshake.payload.copyOf().also { it[0] = 12 })
+        val wrongProtocol = handshake.copy(payload = handshake.payload.copyOf().also { it[0] = 13 })
         assertEquals(AnalysisProtocolError.WrongVersion, messageFailure(wrongProtocol).error)
     }
 

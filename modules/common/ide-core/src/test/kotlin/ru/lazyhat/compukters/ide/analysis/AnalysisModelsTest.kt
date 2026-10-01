@@ -28,6 +28,36 @@ import kotlin.test.assertTrue
 
 class AnalysisModelsTest {
     @Test
+    fun `completion match ranges own immutable ordered unicode-safe label slices`() {
+        val ranges = mutableListOf(EditorRange(0, 2), EditorRange(3, 4))
+        val item = CompletionItem("😀ab()", "😀ab", CompletionKind.Function, matchedNameRanges = ranges)
+        ranges.clear()
+        assertEquals(listOf(EditorRange(0, 2), EditorRange(3, 4)), item.matchedNameRanges)
+        assertFailsWith<UnsupportedOperationException> { (item.matchedNameRanges as MutableList).clear() }
+        for (invalid in listOf(
+            listOf(EditorRange(0, 1)),
+            listOf(EditorRange(0, 7)),
+            listOf(EditorRange(2, 2)),
+            listOf(EditorRange(2, 4), EditorRange(3, 4)),
+            listOf(EditorRange(3, 4), EditorRange(0, 2)),
+        )) {
+            assertFailsWith<IllegalArgumentException> {
+                CompletionItem("😀ab()", "😀ab", CompletionKind.Function, matchedNameRanges = invalid)
+            }
+        }
+    }
+
+    @Test
+    fun `hover documentation respects utf8 detail budget`() {
+        val path = VirtualSourcePath.kotlin("main.kt")
+        val info = EditorExpressionInfo(path, EditorRange(0, 1), "Int", null, null, "😀")
+        assertFailsWith<IllegalArgumentException> {
+            AnalysisResult.ExpressionInfo.create(identity, info, mapOf(path to 1), AnalysisResultLimits(maxDetailUtf8Bytes = 3))
+        }
+        assertEquals(info, AnalysisResult.ExpressionInfo.create(identity, info, mapOf(path to 1)).value)
+    }
+
+    @Test
     fun `callable presentation validates kind text and negotiated utf8 bounds`() {
         assertFailsWith<IllegalArgumentException> { CompletionCallablePresentation(null, null, "") }
         assertFailsWith<IllegalArgumentException> { CompletionCallablePresentation("", null, "Int") }

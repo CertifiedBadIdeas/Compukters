@@ -46,6 +46,7 @@ data class EditorExpressionInfo(
     val renderedType: String,
     val signature: String?,
     val origin: DeclarationOrigin?,
+    val documentation: String? = null,
 ) {
     init {
         VirtualSourcePath.kotlin(path.value)
@@ -53,6 +54,7 @@ data class EditorExpressionInfo(
         require(renderedType.isNotEmpty()) { "rendered expression type must not be empty" }
         strictUtf8Size(renderedType)
         signature?.let(::strictUtf8Size)
+        documentation?.let(::strictUtf8Size)
     }
 }
 
@@ -134,6 +136,9 @@ sealed interface AnalysisResult {
                     require(strictUtf8Size(info.renderedType) <= limits.maxDetailUtf8Bytes) { "rendered type exceeds limit" }
                     info.signature?.let { signature ->
                         require(strictUtf8Size(signature) <= limits.maxDetailUtf8Bytes) { "expression signature exceeds limit" }
+                    }
+                    info.documentation?.let {
+                        require(strictUtf8Size(it) <= limits.maxDetailUtf8Bytes) { "expression documentation exceeds limit" }
                     }
                 }
                 return ExpressionInfo(identity, value)

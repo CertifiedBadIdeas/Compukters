@@ -36,7 +36,7 @@ import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Collections
 
-const val ANALYSIS_PROTOCOL_VERSION: UInt = 13u
+const val ANALYSIS_PROTOCOL_VERSION: UInt = 14u
 
 data class AnalysisWorkerIdentity(
     val compilerVersion: String,

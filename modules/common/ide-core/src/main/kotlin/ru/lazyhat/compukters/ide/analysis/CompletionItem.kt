@@ -103,6 +103,7 @@ data class CompletionItem private constructor(
     val additionalEdits: List<CompletionTextEdit> = emptyList(),
     val callShape: CompletionCallShape? = null,
     val callablePresentation: CompletionCallablePresentation? = null,
+    val matchedNameRanges: List<EditorRange> = emptyList(),
 ) {
     constructor(
         label: String,
@@ -114,6 +115,7 @@ data class CompletionItem private constructor(
         additionalEdits: Collection<CompletionTextEdit> = emptyList(),
         callShape: CompletionCallShape? = null,
         callablePresentation: CompletionCallablePresentation? = null,
+        matchedNameRanges: Collection<EditorRange> = emptyList(),
     ) : this(
         label,
         insertText,
@@ -124,6 +126,7 @@ data class CompletionItem private constructor(
         Collections.unmodifiableList(additionalEdits.toList()),
         callShape,
         callablePresentation,
+        Collections.unmodifiableList(matchedNameRanges.toList()),
     )
 
     init {
@@ -144,5 +147,14 @@ data class CompletionItem private constructor(
         strictUtf8Size(label)
         strictUtf8Size(insertText)
         detail?.let(::strictUtf8Size)
+        var end = 0
+        matchedNameRanges.forEach { range ->
+            require(range.length > 0 && range.startUtf16 >= end && range.endUtf16 <= label.length) {
+                "completion name-match ranges must be nonempty ordered disjoint label ranges"
+            }
+            requireUtf16Boundary(label, range.startUtf16, "completion match range start")
+            requireUtf16Boundary(label, range.endUtf16, "completion match range end")
+            end = range.endUtf16
+        }
     }
 }

@@ -794,6 +794,8 @@ private class MessageSink {
             nullableString(it.packageName)
             string(it.returnType)
         }
+        u32(value.matchedNameRanges.size)
+        value.matchedNameRanges.forEach(::range)
     }
 
     fun nullableExpressionInfo(value: EditorExpressionInfo?) {
@@ -804,6 +806,7 @@ private class MessageSink {
             string(info.renderedType)
             nullableString(info.signature)
             nullableOrigin(info.origin)
+            nullableString(info.documentation)
         }
     }
 
@@ -1228,6 +1231,7 @@ private class MessageSource(
                     string(context.limits.detailTextBytes),
                 )
             },
+            List(boundedCount(context.limits.detailTextBytes, "completion name-match range")) { range() },
         )
     }
 
@@ -1239,6 +1243,7 @@ private class MessageSource(
                 string(context.limits.detailTextBytes),
                 nullableString(context.limits.detailTextBytes),
                 nullableOrigin(),
+                nullableString(context.limits.detailTextBytes),
             )
         }
 

@@ -47,12 +47,19 @@ class CompletionQueryTest {
             K2QueryFixture.source("main.kt" to source).use { fixture ->
                 val items = fixture.complete("main.kt", source.lastIndexOf(prefix) + prefix.length).items
                 assertEquals(prefix != "tke", items.any { it.insertText == "takeIf" }, prefix)
+                if (prefix != "tke") {
+                    assertEquals(
+                        CompletionNameMatcher(prefix).ranges("takeIf"),
+                        items.single { it.insertText == "takeIf" }.matchedNameRanges,
+                    )
+                }
             }
         }
         val source = "fun main() { ake }"
         K2QueryFixture.source("main.kt" to source, "lib.kt" to "package library\nclass TakeIf").use { fixture ->
             val imported = fixture.complete("main.kt", source.indexOf("ake") + 3).items.single { it.insertText == "TakeIf" }
             assertTrue(imported.additionalEdits.any { it.text.contains("import library.TakeIf") })
+            assertEquals(listOf(EditorRange(1, 4)), imported.matchedNameRanges)
         }
     }
 
