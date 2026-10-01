@@ -224,6 +224,16 @@ private fun Instruction.remapRegisters(register: (RegisterId) -> RegisterId): In
             copy(array = register(array), index = register(index), value = register(value))
         }
 
+        is Instruction.ArrayCopy -> {
+            copy(
+                source = register(source),
+                destination = register(destination),
+                sourceStart = register(sourceStart),
+                destinationStart = register(destinationStart),
+                length = register(length),
+            )
+        }
+
         is Instruction.FieldGet -> {
             copy(destination = register(destination), receiver = register(receiver))
         }

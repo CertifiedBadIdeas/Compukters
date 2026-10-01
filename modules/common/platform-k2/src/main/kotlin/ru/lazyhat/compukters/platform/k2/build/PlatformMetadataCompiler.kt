@@ -533,7 +533,12 @@ class PlatformMetadataCompiler {
                 parameter.defaultValue?.let { expression ->
                     val reference = expression.text
                     val intValue = parseDefaultIntLiteral(reference)
-                    if (intValue != null) {
+                    if (reference == "size" && !ownerHasDispatchReceiver && function.receiverTypeReference?.text?.let {
+                            it == "IntArray" || it == "CharArray" || it.startsWith("Array<")
+                        } == true
+                    ) {
+                        PlatformDefaultArgument.ReceiverArraySize
+                    } else if (intValue != null) {
                         PlatformDefaultArgument.IntValue(intValue)
                     } else {
                         require(reference.matches(QUALIFIED_IDENTIFIER)) {
@@ -661,7 +666,7 @@ class PlatformMetadataCompiler {
 }
 
 object PlatformMetadataCodec {
-    private const val FORMAT = 4
+    private const val FORMAT = 5
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'M'.code.toByte(), 'D'.code.toByte())
 
     fun encode(metadata: DecodedPlatformMetadata): ImmutableBytes {
@@ -683,6 +688,10 @@ object PlatformMetadataCodec {
                         sink.writeInt(declaration.defaultArguments.size)
                         declaration.defaultArguments.forEach { argument ->
                             when (argument) {
+                                PlatformDefaultArgument.ReceiverArraySize -> {
+                                    sink.writeByte(3)
+                                }
+
                                 null -> {
                                     sink.writeByte(0)
                                 }
@@ -735,6 +744,7 @@ object PlatformMetadataCodec {
                                     0 -> null
                                     1 -> PlatformDefaultArgument.EnumEntry(source.string())
                                     2 -> PlatformDefaultArgument.IntValue(source.readInt())
+                                    3 -> PlatformDefaultArgument.ReceiverArraySize
                                     else -> throw IllegalArgumentException("invalid platform default argument tag: $tag")
                                 }
                             },
@@ -807,7 +817,7 @@ private fun DataInputStream.bytes(label: String): ByteArray {
     return readNBytes(length).also { require(it.size == length) { "truncated platform metadata $label" } }
 }
 
-private fun String.canonicalType(): String = replace(Regex("\\s+"), "")
+private fun String.canonicalType(): String = replace(Regex("\\b(out|in)\\s+"), "").replace(Regex("\\s+"), "")
 
 private fun parseDefaultIntLiteral(source: String): Int? {
     if (!source.matches(INT_LITERAL)) return null

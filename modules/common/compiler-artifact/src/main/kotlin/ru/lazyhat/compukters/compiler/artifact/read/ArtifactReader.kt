@@ -661,6 +661,10 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                     tri { a, b, c -> Instruction.ArrayStore(a, b, c) }
                 }
 
+                0x3bu -> {
+                    Instruction.ArrayCopy(r(), r(), r(), r(), r())
+                }
+
                 0x35u -> {
                     Instruction.FieldGet(r(), r(), frame.uleb().fieldRef())
                 }

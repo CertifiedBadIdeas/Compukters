@@ -31,6 +31,22 @@ import kotlin.test.assertTrue
 
 class ExpressionInfoQueryTest {
     @Test
+    fun `array copy hover resolves builtin documentation`() {
+        val source = "fun main() { val values = IntArray(2); values.copyOf(3); values.copyInto(IntArray(2)) }"
+        K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
+            for ((name, text) in listOf("copyOf" to "padding extra elements with zero", "copyInto" to "supporting overlapping ranges")) {
+                val result =
+                    fixture.execute(
+                        AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), source.indexOf(name)),
+                    ) as AnalysisResult.ExpressionInfo
+                val value = assertNotNull(result.value)
+                assertTrue(value.documentation.orEmpty().contains(text), value.toString())
+                assertEquals("kotlin:builtins", assertIs<DeclarationOrigin.Platform>(value.origin).identity.name)
+            }
+        }
+    }
+
+    @Test
     fun `hover documentation follows resolved overload and declaration names`() {
         val source =
             """

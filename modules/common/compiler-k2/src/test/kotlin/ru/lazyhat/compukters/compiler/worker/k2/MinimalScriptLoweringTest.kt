@@ -4220,6 +4220,69 @@ class MinimalScriptLoweringTest {
                 """
                 import compukter.terminal.Terminal
 
+                class CopyItem(val value: Int)
+                fun copySource(copyReceiverCalls: IntArray): IntArray {
+                    copyReceiverCalls[0] += 1
+                    return intArrayOf(5, 6, 7)
+                }
+                fun <T> copyGeneric(values: Array<T>): Array<T> = values.copyOf()
+                fun verifyBulkCopy() {
+                    val original = IntArray(700)
+                    var index = 0
+                    while (index < original.size) { original[index] = index; index += 1 }
+                    val grown = original.copyOf(710)
+                    require(grown[699] == 699 && grown[700] == 0)
+                    grown[0] = -1
+                    require(original[0] == 0)
+                    grown[0] = 0
+                    require(original.copyOf()[699] == 699 && original.copyOf(2)[1] == 1)
+                    require(original.copyOf(0).size == 0)
+                    val returned = grown.copyInto(grown, destinationOffset = 1, endIndex = 700)
+                    returned[0] = -1
+                    require(grown[0] == -1)
+                    grown[0] = 0
+                    require(grown[1] == 0 && grown[700] == 699)
+                    grown.copyInto(grown, startIndex = 1, endIndex = 701)
+                    require(grown[0] == 0 && grown[699] == 699)
+                    val destination = IntArray(3)
+                    val copyReceiverCalls = intArrayOf(0)
+                    copySource(copyReceiverCalls).copyInto(destination)
+                    require(copyReceiverCalls[0] == 1 && destination[2] == 7)
+                    original.copyInto(destination, endIndex = 0)
+
+                    val chars = CharArray(2)
+                    chars[0] = 'A'; chars[1] = '\uD800'
+                    val moreChars = chars.copyOf(3)
+                    require(moreChars[0] == 'A' && moreChars[1] == '\uD800' && moreChars[2] == '\u0000')
+                    chars.copyInto(moreChars, 1)
+                    require(moreChars[2] == '\uD800' && chars.copyOf()[0] == 'A')
+
+                    val first = CopyItem(1)
+                    val second = CopyItem(2)
+                    val objects = arrayOf(first, second)
+                    require(copyGeneric(objects)[0] === first)
+                    val nullable = objects.copyOf(3)
+                    require(nullable[0] === first && nullable[2] == null)
+                    objects.copyInto(nullable, 1)
+                    require(nullable[1] === first && nullable[2] === second)
+                    nullable.copyInto(nullable, 1, 0, 2)
+                    require(nullable[2] === first)
+                    val anyValues = arrayOfNulls<Any>(3)
+                    objects.copyInto(anyValues)
+                    require(anyValues[0] === first && anyValues[1] === second)
+                    val boxes = arrayOfNulls<Int>(2)
+                    boxes[0] = 42
+                    val copiedBoxes = boxes.copyOf(3)
+                    require(copiedBoxes[0] == 42 && copiedBoxes[1] == null && copiedBoxes[2] == null)
+                    require(arrayOf("a", "b").copyOfRange(1, 2)[0] == "b")
+
+                    val ints = ArrayList<Int>()
+                    val references = ArrayList<CopyItem?>()
+                    index = 0
+                    while (index < 100) { ints.add(index); references.add(first); index += 1 }
+                    require(ints[99] == 99 && references[99] === first)
+                }
+
                 fun marked(value: Int): Int {
                     Terminal.write("${'$'}value")
                     return value
@@ -4235,6 +4298,7 @@ class MinimalScriptLoweringTest {
                 fun main() {
                     val mode = Terminal.eventKey()
                     if (mode == 0) {
+                        verifyBulkCopy()
                         val empty = IntArray(0)
                         val emptyLiteral = intArrayOf()
                         verify(empty.size, 0)
@@ -4285,9 +4349,17 @@ class MinimalScriptLoweringTest {
                         IntArray(Int.MAX_VALUE)
                     } else if (mode == 3) {
                         intArrayOf(1)[1]
-                    } else {
+                    } else if (mode == 4) {
                         val values = IntArray(1)
                         values[1] = 1
+                    } else if (mode == 5) {
+                        intArrayOf(1).copyOf(-1)
+                    } else if (mode == 6) {
+                        intArrayOf(1).copyInto(IntArray(1), destinationOffset = -1)
+                    } else if (mode == 7) {
+                        intArrayOf(1).copyInto(IntArray(1), startIndex = 1, endIndex = 0)
+                    } else {
+                        intArrayOf(1, 2).copyInto(IntArray(1))
                     }
                 }
                 """.trimIndent()
@@ -4297,6 +4369,9 @@ class MinimalScriptLoweringTest {
 
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            val decoded = ArtifactReader.read(artifact)
+            assertEquals(AbiVersion(1u, 5u), decoded.minimumRuntimeAbi)
+            assertTrue(SemanticFeature.ARRAY_COPY in decoded.semanticFeatures)
             System.getProperty("compukter.vm.intArrayArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
             }

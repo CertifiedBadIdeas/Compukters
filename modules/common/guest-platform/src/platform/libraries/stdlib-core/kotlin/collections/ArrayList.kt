@@ -195,13 +195,7 @@ internal class IntMutableListStorage(capacity: Int) : MutableListStorage<Int> {
     override fun clearSlot(index: Int): Unit { values[index] = 0 }
     override fun ensureCapacity(minimum: Int): Unit {
         if (minimum <= values.size) return
-        val next = IntArray(grownListCapacity(values.size, minimum))
-        var index = 0
-        while (index < values.size) {
-            next[index] = values[index]
-            index += 1
-        }
-        values = next
+        values = values.copyOf(grownListCapacity(values.size, minimum))
     }
 }
 
@@ -213,12 +207,6 @@ internal class ReferenceMutableListStorage<T>(capacity: Int) : MutableListStorag
     override fun clearSlot(index: Int): Unit { values[index] = null }
     override fun ensureCapacity(minimum: Int): Unit {
         if (minimum <= values.size) return
-        val next = arrayOfNulls<T>(grownListCapacity(values.size, minimum))
-        var index = 0
-        while (index < values.size) {
-            next[index] = values[index]
-            index += 1
-        }
-        values = next
+        values = values.copyOf(grownListCapacity(values.size, minimum))
     }
 }

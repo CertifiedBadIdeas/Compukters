@@ -223,6 +223,8 @@ internal fun Instruction.readRegisters(): List<RegisterId> =
 
         is Instruction.ArrayStore -> listOf(array, index, value)
 
+        is Instruction.ArrayCopy -> listOf(source, destination, sourceStart, destinationStart, length)
+
         is Instruction.FieldGet -> listOf(receiver)
 
         is Instruction.FieldSet -> listOf(receiver, value)
@@ -375,6 +377,7 @@ internal fun Instruction.writtenRegisters(): List<RegisterId> =
         is Instruction.CapabilityCallAsync -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
 
         is Instruction.ArrayStore,
+        is Instruction.ArrayCopy,
         is Instruction.ChannelSend,
         is Instruction.FieldSet,
         is Instruction.StaticSet,
@@ -404,6 +407,7 @@ internal fun Instruction.mayThrow(): Boolean =
         this is Instruction.ArrayLength ||
         this is Instruction.ArrayLoad ||
         this is Instruction.ArrayStore ||
+        this is Instruction.ArrayCopy ||
         this is Instruction.FieldGet ||
         this is Instruction.FieldSet ||
         this is Instruction.StaticGet ||

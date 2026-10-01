@@ -447,6 +447,14 @@ internal fun validateArtifact(
             }
         }
     if (usesChannels) expectedFeatures += SemanticFeature.CHANNELS
+    val usesArrayCopy =
+        artifact.modules.any { module ->
+            module.blocks.any { block -> block.instructions.any { it is Instruction.ArrayCopy } }
+        }
+    if (usesArrayCopy) expectedFeatures += SemanticFeature.ARRAY_COPY
+    if (usesArrayCopy && artifact.minimumRuntimeAbi < AbiVersion(1u, 5u)) {
+        add(ArtifactWriteErrorCode.INVALID_RANGE, "array copying requires minimum runtime ABI 1.5")
+    }
     if (artifact.semanticFeatures != expectedFeatures) {
         add(
             ArtifactWriteErrorCode.INCOMPATIBLE_FEATURE_SET,
@@ -1425,6 +1433,28 @@ internal fun validateArtifact(
                                     "string conversion destination is not the non-null kotlin.String type",
                                     location,
                                 )
+                            }
+                        }
+
+                        is Instruction.ArrayCopy -> {
+                            val source = register(instruction.source, "source")
+                            val destination = register(instruction.destination, "destination")
+                            val sourceElement = arrayElement(source, "array copy source")
+                            val destinationElement = arrayElement(destination, "array copy destination")
+                            val sourceModule = (source as? ValueType.Ref)?.let { resolveType(moduleIndex, it.type)?.module }
+                            val destinationModule = (destination as? ValueType.Ref)?.let { resolveType(moduleIndex, it.type)?.module }
+                            if (sourceElement != null && destinationElement != null && sourceModule != null && destinationModule != null &&
+                                !valueAssignable(sourceModule, sourceElement, destinationModule, destinationElement)
+                            ) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "array copy elements are incompatible", location)
+                            }
+                            listOf(instruction.sourceStart, instruction.destinationStart, instruction.length).forEach { value ->
+                                val actual = register(value, "array copy range")
+                                if (actual != null &&
+                                    actual != ValueType.I32
+                                ) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "array copy range is not I32", location)
+                                }
                             }
                         }
 

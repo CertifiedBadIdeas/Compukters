@@ -132,6 +132,7 @@ class PlatformLibraryCompiler {
                 canonicalIntrinsicRegistry = intrinsicRegistry,
                 capabilityShapes = capabilityShapes,
                 platformFunctions = libraries.functions,
+                platformDefaults = dependencies.flatMap(PlatformModule::declarations).associate { it.identity to it.defaultArguments },
                 platformTypes = libraries.types,
                 platformFields = libraries.fields,
             )

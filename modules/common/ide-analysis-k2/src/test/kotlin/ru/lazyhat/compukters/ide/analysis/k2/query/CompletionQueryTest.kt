@@ -41,6 +41,27 @@ import kotlin.test.assertTrue
 
 class CompletionQueryTest {
     @Test
+    fun `array copying completes with specialized return types`() {
+        for (attachedSources in listOf(false, true)) {
+            for ((initializer, expected) in listOf(
+                "IntArray(2)" to "IntArray",
+                "CharArray(2)" to "CharArray",
+                "arrayOf(\"a\")" to "Array<String>",
+            )) {
+                val source = "fun main() { val values = $initializer; values. }"
+                K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                    val items = fixture.complete("main.kt", source.indexOf("values.") + 7).items
+                    val copies = items.filter { it.insertText == "copyOf" }
+                    assertEquals(2, copies.size, expected)
+                    val returns = copies.map { it.callablePresentation?.returnType }.toSet()
+                    assertEquals(if (expected == "Array<String>") setOf(expected, "Array<String?>") else setOf(expected), returns)
+                    assertEquals(expected, items.single { it.insertText == "copyInto" }.callablePresentation?.returnType)
+                }
+            }
+        }
+    }
+
+    @Test
     fun `string stdlib helpers complete with overloads and concrete return types`() {
         for (attachedSources in listOf(false, true)) {
             val source = "fun main() { val text = \"hello\"; text. }"

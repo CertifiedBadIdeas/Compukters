@@ -66,6 +66,19 @@ import kotlin.test.assertTrue
 
 class LibraryModuleLinkerTest {
     @Test
+    fun `runtime ABI inference is explicit and preserves declared floors by default`() {
+        val base = application(libraryModule())
+        val anchor =
+            base.modules.single().copy(
+                imports = emptyList(),
+                blocks = listOf(Block(FunctionId.of(0u), false, listOf(Instruction.Return(Destination.Unit)))),
+            )
+        val input = base.copy(minimumRuntimeAbi = AbiVersion(1u, 5u), modules = listOf(anchor))
+        assertEquals(AbiVersion(1u, 5u), LibraryModuleLinker.link(input, emptyList()).minimumRuntimeAbi)
+        assertEquals(AbiVersion(1u, 0u), LibraryModuleLinker.link(input, emptyList(), inferMinimumRuntimeAbi = true).minimumRuntimeAbi)
+    }
+
+    @Test
     fun `fragment assembly retains exports that an application entry does not call`() {
         val library = libraryModule()
         val base = application(library)

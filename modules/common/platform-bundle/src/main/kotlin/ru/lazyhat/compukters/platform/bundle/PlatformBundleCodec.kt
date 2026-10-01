@@ -31,7 +31,7 @@ import java.security.MessageDigest
 object PlatformBundleCodec {
     const val SUPPORTED_PLATFORM_ABI = 3
 
-    private const val FORMAT_VERSION = 7
+    private const val FORMAT_VERSION = 8
     private const val MAX_BUNDLE_BYTES = 128 * 1024 * 1024
     private const val MAX_BINARY_BYTES = 64 * 1024 * 1024
     private const val MAX_TEXT_BYTES = 1024 * 1024
@@ -45,7 +45,7 @@ object PlatformBundleCodec {
     private const val MAX_SCALAR_CONSTANTS = 262_144
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'B'.code.toByte(), 'F'.code.toByte())
     private val MODULE_MAGIC = byteArrayOf('C'.code.toByte(), 'P'.code.toByte(), 'M'.code.toByte(), 'D'.code.toByte())
-    private const val MODULE_FORMAT_VERSION = 3
+    private const val MODULE_FORMAT_VERSION = 4
 
     fun assemble(
         languageVersion: String,
@@ -143,7 +143,23 @@ object PlatformBundleCodec {
         return canonical
     }
 
+    private fun validateReceiverDefaults(declaration: PlatformDeclaration) {
+        declaration.defaultArguments.forEachIndexed { index, argument ->
+            if (argument == PlatformDefaultArgument.ReceiverArraySize) {
+                val parameters = declaration.signature.substringAfter("fun(", "").substringBefore("):")
+                val receiver = parameters.substringBefore('.')
+                require(receiver == "IntArray" || receiver == "CharArray" || receiver.startsWith("Array<")) {
+                    "array-size default requires an array extension receiver"
+                }
+                require(index > 0 && parameters.substringAfter('.', "").split(',').getOrNull(index - 1) == "Int") {
+                    "array-size default requires an Int parameter"
+                }
+            }
+        }
+    }
+
     private fun validateSourceDeclarations(module: PlatformModule) {
+        module.declarations.forEach(::validateReceiverDefaults)
         require(module.sourceDeclarations.size <= MAX_DECLARATIONS) { "source declaration count exceeds limit" }
         require(module.sourceDeclarations.toSet().size == module.sourceDeclarations.size) { "duplicate source declaration" }
         val sourceEligible =
@@ -245,9 +261,15 @@ object PlatformBundleCodec {
                 require(declaration.defaultArguments.size <= MAX_DEFAULT_ARGUMENTS) {
                     "platform declaration ${declaration.symbol} has too many default arguments"
                 }
-                declaration.defaultArguments.filterNotNull().forEach { argument ->
+                declaration.defaultArguments.forEach { argument ->
                     when (argument) {
+                        null -> {}
+
                         is PlatformDefaultArgument.IntValue -> {}
+
+                        PlatformDefaultArgument.ReceiverArraySize -> {
+                            validateReceiverDefaults(declaration)
+                        }
 
                         is PlatformDefaultArgument.EnumEntry -> {
                             strictUtf8(argument.symbol, "platform enum default argument")
@@ -419,6 +441,10 @@ object PlatformBundleCodec {
                             string(argument.symbol)
                         }
 
+                        PlatformDefaultArgument.ReceiverArraySize -> {
+                            output.write(3)
+                        }
+
                         is PlatformDefaultArgument.IntValue -> {
                             output.write(2)
                             i32(argument.value)
@@ -575,6 +601,7 @@ object PlatformBundleCodec {
                                     0 -> null
                                     1 -> PlatformDefaultArgument.EnumEntry(string("platform enum default argument"))
                                     2 -> PlatformDefaultArgument.IntValue(i32())
+                                    3 -> PlatformDefaultArgument.ReceiverArraySize
                                     else -> throw IllegalArgumentException("invalid platform default argument tag: $tag")
                                 }
                             },
