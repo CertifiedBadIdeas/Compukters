@@ -1121,9 +1121,10 @@ links to their source files.
   The same presentation applies to resolved autoimport candidates. Function
   parameters and result types retain type-scope specialization and K2 extension
   receiver inference, while independent presentation records declared receiver
-  notation and package context. Unknown generic arguments remain symbolic. Empty
-  safe-call selectors and literal-only receivers without a name anchor currently
-  retain symbolic extension types. Function
+  notation and package context. Contextual query-only expression fragments preserve
+  receiver inference for literals, call chains and empty safe-call selectors, without
+  mutating the admitted snapshot. Unknown generic arguments, including a scope
+  function's independent lambda-result type, remain symbolic. Function
   completion inserts parentheses or a final lambda block from resolved parameter
   types, keeping the caret inside required arguments or the lambda body. Existing
   delimiters are reused; autoimports and caret placement share an atomic undo/redo
@@ -1151,7 +1152,9 @@ links to their source files.
   `CompletionQueryTest`, test
   `completion preserves specialized member and extension signatures with declared receiver context`
   and `scope functions specialize their result and lambda from the explicit receiver` (including an empty dot selector,
-  nullable receivers, generic receiver expressions and non-crashing empty safe-call completion);
+  nullable receivers, generic receiver expressions and empty safe-call completion),
+  `literal and chained receivers specialize extensions without inferring independent lambda results`,
+  and `completion fragment keeps lexical receivers shadowing and snapshot state`;
   `DiagnosticQueryTest`, test `semantic-only presentation omits diagnostics and retains symbol highlighting`;
   [`IdeCompletionInsertionTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-client/src/test/kotlin/ru/lazyhat/compukters/ide/client/analysis/IdeCompletionInsertionTest.kt),
   tests `call completion with import preserves the caret through one undo and redo`

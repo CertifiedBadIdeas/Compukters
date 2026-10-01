@@ -88,7 +88,8 @@ class CompletionIntegrationTest {
 
     @Test
     fun `forked worker returns semantic completion`() {
-        val source = "fun candidate() = Unit\nfun main() { can }"
+        val source =
+            "fun candidate() = Unit\nfun <T> T.echoResult(): T = this\nfun main() { can; val text: String? = null; \"hello\".; text?. }"
         val path = VirtualSourcePath.kotlin("main.kt")
         val sources =
             ProjectSnapshot.of(
@@ -133,6 +134,28 @@ class CompletionIntegrationTest {
                     .CompletionCallShape(false, false, false),
                 candidate.callShape,
             )
+            for (marker in listOf("\"hello\".", "text?.")) {
+                val specialized =
+                    assertIs<AnalysisClientResult.Success>(
+                        controller
+                            .query(
+                                admitted,
+                                AnalysisQuery.Completion(
+                                    identity,
+                                    path,
+                                    source.indexOf(marker) + marker.length,
+                                    CompletionTrigger.Automatic,
+                                ),
+                            ).get(90, TimeUnit.SECONDS),
+                    ).result as AnalysisResult.Completion
+                assertEquals(
+                    "String",
+                    specialized.items
+                        .single { it.insertText == "echoResult" }
+                        .callablePresentation
+                        ?.returnType,
+                )
+            }
         }
     }
 

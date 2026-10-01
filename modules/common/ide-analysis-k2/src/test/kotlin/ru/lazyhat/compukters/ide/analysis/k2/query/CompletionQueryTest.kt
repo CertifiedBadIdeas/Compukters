@@ -68,9 +68,75 @@ class CompletionQueryTest {
             val safeCall = "fun main() { val text: String? = null; text?. }"
             fixture.update("main.kt" to safeCall)
             val safeItems = fixture.complete("main.kt", safeCall.indexOf("text?.") + 6).items
-            // An incomplete safe-call must not crash the worker's completion query.
-            assertTrue(safeItems.any { it.insertText == "also" })
-            assertTrue(safeItems.any { it.insertText == "apply" })
+            for (name in listOf("also", "apply")) {
+                assertEquals("String", safeItems.single { it.insertText == name }.callablePresentation?.returnType)
+            }
+        }
+    }
+
+    @Test
+    fun `literal and chained receivers specialize extensions without inferring independent lambda results`() {
+        for ((receiver, expected) in listOf(
+            "\"hello\"" to "String",
+            "(42)" to "Int",
+            "Box(Box(1))" to "Box<Box<Int>>",
+            "Box(1).also { }" to "Box<Int>",
+            "Box(1).apply { }" to "Box<Int>",
+        )) {
+            val source = "class Box<T>(val value: T)\nfun main() { $receiver. }"
+            K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+                val items = fixture.complete("main.kt", source.indexOf(". }") + 1).items
+                for (name in listOf("also", "apply")) {
+                    val item = items.single { it.insertText == name }
+                    assertEquals(expected, item.callablePresentation?.returnType, receiver)
+                    assertTrue(item.label.contains(expected), item.label)
+                }
+                val let = items.single { it.insertText == "let" }
+                assertEquals("R", let.callablePresentation?.returnType)
+                assertTrue(let.label.contains("($expected) -> R"), let.label)
+            }
+        }
+    }
+
+    @Test
+    fun `completion fragment keeps lexical receivers shadowing and snapshot state`() {
+        val source =
+            """
+            class Box<T>(val value: T)
+            class Scope {
+                val value = "outer"
+                fun <T> Box<T>.scopedResult(): T = value
+                fun work() {
+                    val box = Box(1)
+                    box.scopedR
+                    val value = 2
+                    value.
+                }
+            }
+            """.trimIndent()
+        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+            val identity = fixture.identity
+            val snapshot = fixture.snapshot
+            repeat(2) {
+                val scoped = fixture.complete("main.kt", source.indexOf("box.scopedR") + "box.scopedR".length)
+                assertEquals(
+                    "Int",
+                    scoped.items
+                        .single { it.insertText == "scopedResult" }
+                        .callablePresentation
+                        ?.returnType,
+                )
+                val local = fixture.complete("main.kt", source.indexOf("value.\n") + "value.".length)
+                assertEquals(
+                    "Int",
+                    local.items
+                        .single { it.insertText == "also" }
+                        .callablePresentation
+                        ?.returnType,
+                )
+                assertEquals(identity, fixture.identity)
+                assertEquals(source, snapshot.files.getValue(VirtualSourcePath.kotlin("main.kt")).text)
+            }
         }
     }
 
