@@ -224,6 +224,10 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Computer runtime
 
+- Foreground programs that exhaust their Guest heap report the executable path, heap limit, allocation size,
+  memory usage and GC status before returning control to the shell. Verified debug metadata supplies the source
+  path and UTF-16 offset when available; otherwise diagnostics identify the function and bytecode location.
+
 - Small Guest Kotlin objects use less heap through a compact eight-byte VM header and eight-byte block alignment.
   Empty, one-`Int`, and two-`Int` objects, including boxed `Int` values, occupy 16 bytes in the 256 KiB Guest heap;
   three-`Int` objects occupy 24 bytes. Ordinary references, shared mutations, and identity are preserved. In
