@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
 
 class CompletionNameMatcherTest {
     @Test
-    fun `camel matching consumes only prefixes of name words`() {
+    fun `camel matching consumes contiguous fragments of name words`() {
         for ((pattern, name) in listOf(
             "emm" to "emptyMap",
             "emli" to "emptyList",
@@ -34,6 +34,11 @@ class CompletionNameMatcherTest {
             "пк" to "пустаяКарта",
             "aabc" to "aabXAbc",
             "b2v" to "buffer2Value",
+            "ti" to "takeIf",
+            "tf" to "takeIf",
+            "ake" to "takeIf",
+            "map" to "emptyMap",
+            "akf" to "takeIf",
         )) {
             assertTrue(CompletionNameMatcher(pattern).quality(name) > 0, "$pattern -> $name")
         }
@@ -42,7 +47,9 @@ class CompletionNameMatcherTest {
             "emty" to "emptyMap",
             "emm" to "emptyList",
             "aaaa" to "aab",
-            "map" to "emptyMap",
+            "tke" to "takeIf",
+            "tkf" to "takeIf",
+            "emty" to "empty",
             "emptly" to "emptyList",
         )) {
             assertEquals(0, CompletionNameMatcher(pattern).quality(name), "$pattern -> $name")

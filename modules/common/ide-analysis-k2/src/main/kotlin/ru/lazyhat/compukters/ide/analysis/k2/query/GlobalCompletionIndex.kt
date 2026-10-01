@@ -53,7 +53,7 @@ internal class GlobalCompletionIndex private constructor(
     declarations: List<GlobalCompletionDeclaration>,
 ) {
     private var ordered = declarations.sortedWith(ORDER)
-    private var byInitial = initialBuckets(ordered)
+    private var byCharacter = characterBuckets(ordered)
 
     fun lookup(
         prefix: String,
@@ -88,7 +88,7 @@ internal class GlobalCompletionIndex private constructor(
                 NameMatch::declaration,
             )
         for (declaration in result) ranked.offer(NameMatch(declaration, matcher.quality(declaration.shortName)))
-        for (declaration in byInitial[matcher.initial].orEmpty()) {
+        for (declaration in byCharacter[matcher.initial].orEmpty()) {
             val quality = matcher.quality(declaration.shortName)
             if (quality > 0) ranked.offer(NameMatch(declaration, quality))
         }
@@ -102,7 +102,7 @@ internal class GlobalCompletionIndex private constructor(
         require(path in declarationsByPath) { "completion index does not contain ${path.value}" }
         declarationsByPath[path] = projectDeclarations(path, file)
         ordered = declarationsByPath.values.flatten().sortedWith(ORDER)
-        byInitial = initialBuckets(ordered)
+        byCharacter = characterBuckets(ordered)
     }
 
     private data class NameMatch(
@@ -111,8 +111,19 @@ internal class GlobalCompletionIndex private constructor(
     )
 
     companion object {
-        private fun initialBuckets(declarations: List<GlobalCompletionDeclaration>) =
-            declarations.groupBy { it.shortName.takeIf(String::isNotEmpty)?.let { name -> Character.toLowerCase(name.codePointAt(0)) } }
+        private fun characterBuckets(declarations: List<GlobalCompletionDeclaration>): Map<Int, List<GlobalCompletionDeclaration>> {
+            val buckets = mutableMapOf<Int, MutableList<GlobalCompletionDeclaration>>()
+            for (declaration in declarations) {
+                for (character in declaration.shortName
+                    .codePoints()
+                    .map(Character::toLowerCase)
+                    .distinct()
+                    .toArray()) {
+                    buckets.getOrPut(character) { mutableListOf() } += declaration
+                }
+            }
+            return buckets
+        }
 
         fun project(files: Map<VirtualSourcePath, org.jetbrains.kotlin.psi.KtFile>): GlobalCompletionIndex {
             val byPath = files.mapValuesTo(linkedMapOf()) { (path, file) -> projectDeclarations(path, file) }

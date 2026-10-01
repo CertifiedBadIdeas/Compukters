@@ -41,6 +41,22 @@ import kotlin.test.assertTrue
 
 class CompletionQueryTest {
     @Test
+    fun `completion allows trimmed word fragments without gaps inside a word`() {
+        for (prefix in listOf("ti", "tf", "ake", "tke")) {
+            val source = "fun takeIf() = Unit\nfun main() { $prefix }"
+            K2QueryFixture.source("main.kt" to source).use { fixture ->
+                val items = fixture.complete("main.kt", source.lastIndexOf(prefix) + prefix.length).items
+                assertEquals(prefix != "tke", items.any { it.insertText == "takeIf" }, prefix)
+            }
+        }
+        val source = "fun main() { ake }"
+        K2QueryFixture.source("main.kt" to source, "lib.kt" to "package library\nclass TakeIf").use { fixture ->
+            val imported = fixture.complete("main.kt", source.indexOf("ake") + 3).items.single { it.insertText == "TakeIf" }
+            assertTrue(imported.additionalEdits.any { it.text.contains("import library.TakeIf") })
+        }
+    }
+
+    @Test
     fun `camel completion matches word prefixes but not arbitrary skipped letters`() {
         fun sourceFor(prefix: String) = "fun emptyList() = Unit\nfun emptyMap() = Unit\nfun main() { $prefix }"
         var source = sourceFor("em")

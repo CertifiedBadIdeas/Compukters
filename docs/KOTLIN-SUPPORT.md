@@ -1116,10 +1116,10 @@ links to their source files.
 - [x] **Semantic completion with overloads** — completion uses inferred
   receivers, applicable extensions, visibility, distinct overload entries,
   argument labels, deterministic ranking, and bounded result counts. Identifier matching
-  supports case-insensitive CamelCase word prefixes for scoped declarations, members,
+  supports case-insensitive contiguous CamelCase word fragments for scoped declarations, members,
   libraries and autoimports, without typo correction or arbitrary skipped letters inside
   words. Exact names and direct prefixes rank before CamelCase matches. Global lookup
-  retains its prefix fast path and supplements it through an initial-letter index with
+  retains its prefix fast path and supplements it through a character index with
   bounded best-match selection. Function
   labels use braces for a single non-null, non-vararg lambda argument, displaying
   its name and expanded function type without lambda-internal parameter names.
@@ -1160,9 +1160,10 @@ links to their source files.
   nullable receivers, generic receiver expressions and empty safe-call completion),
   `literal and chained receivers specialize extensions without inferring independent lambda results`,
   and `completion fragment keeps lexical receivers shadowing and snapshot state`;
-  `CompletionNameMatcherTest`, tests `camel matching consumes only prefixes of name words`
+  `CompletionNameMatcherTest`, tests `camel matching consumes contiguous fragments of name words`
   and `match quality favors exact then direct then case insensitive then camel`;
   `CompletionQueryTest`, tests `camel completion matches word prefixes but not arbitrary skipped letters`,
+  `completion allows trimmed word fragments without gaps inside a word`,
   `camel completion also finds admitted stdlib declarations`, and
   `camel completion covers members locals and autoimports with direct prefixes first`;
   `GlobalCompletionIndexTest`, test

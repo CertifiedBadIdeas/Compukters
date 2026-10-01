@@ -18,7 +18,7 @@
 
 package ru.lazyhat.compukters.ide.analysis.k2.query
 
-/** Match consecutive word prefixes from the beginning of a name, never arbitrary subsequences or typos. */
+/** Match ordered contiguous fragments of name words, never skipping letters within a matched fragment. */
 internal class CompletionNameMatcher(
     private val pattern: String,
 ) {
@@ -29,31 +29,28 @@ internal class CompletionNameMatcher(
         if (name == pattern) return 4
         if (name.startsWith(pattern)) return 3
         val points = name.codePoints().toArray()
-        if (folded.isEmpty() || folded.size > points.size || Character.toLowerCase(points[0]) != folded[0]) return 0
+        if (folded.isEmpty() || folded.size > points.size) return 0
         if (folded.indices.all { folded[it] == Character.toLowerCase(points[it]) }) return 2
 
         var reachable = BooleanArray(folded.size + 1)
         var next = BooleanArray(folded.size + 1)
+        val run = BooleanArray(folded.size + 1)
         reachable[0] = true
         var start = 0
         while (start < points.size) {
             var end = start + 1
             while (end < points.size && !wordStart(points, end)) end++
-            next.fill(false)
-            // Once matching has begun, whole later words may be skipped, but not letters within a word.
-            if (start > 0) reachable.copyInto(next)
-            for (matched in folded.indices) {
-                if (!reachable[matched]) continue
-                var offset = matched
-                var cursor = start
-                while (cursor < end && offset < folded.size && folded[offset] == Character.toLowerCase(points[cursor])) {
-                    offset++
-                    cursor++
-                    if (offset == folded.size) return 1
-                    next[offset] = true
+            reachable.copyInto(next)
+            run.fill(false)
+            for (cursor in start until end) {
+                val current = Character.toLowerCase(points[cursor])
+                // Only earlier words may start a new fragment; this word's matches must stay consecutive.
+                for (offset in folded.lastIndex downTo 0) {
+                    run[offset + 1] = (reachable[offset] || run[offset]) && folded[offset] == current
+                    if (run[offset + 1]) next[offset + 1] = true
                 }
+                if (run[folded.size]) return 1
             }
-            next[0] = false
             val previous = reachable
             reachable = next
             next = previous
