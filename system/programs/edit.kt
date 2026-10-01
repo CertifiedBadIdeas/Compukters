@@ -24,7 +24,7 @@ import compukter.terminal.Terminal
 
 fun main(args: Array<String>) {
     val argumentError = editError(args)
-    if (argumentError != "") {
+    if (argumentError.isNotEmpty()) {
         Stderr.write(argumentError + "\n")
         return
     }
@@ -46,7 +46,7 @@ fun main(args: Array<String>) {
         Stderr.write("edit: file exceeds 4096 UTF-16 units\n")
         return
     }
-    var dirty = editContainsCrLf(source)
+    var dirty = source.contains("\r\n")
     var status = if (dirty) "CRLF normalized" else ""
     var rowOffset = 0
     var columnOffset = 0
@@ -87,7 +87,7 @@ fun main(args: Array<String>) {
                 }
             } else {
                 val next = editInsertInput(buffer, state, text)
-                if (next == state && text != "") status = "Buffer full"
+                if (next == state && text.isNotEmpty()) status = "Buffer full"
                 else if (next != state) {
                     state = next
                     dirty = true
@@ -113,18 +113,21 @@ fun main(args: Array<String>) {
                 if (dirty) confirmExit = true else running = false
             } else if (action == 1 || action == 2) {
                 val previous = state
-                if (key == 8) state = editBackspace(buffer, state)
-                else if (key == 9) state = editInsertTab(buffer, state)
-                else if (key == 13) state = editInsertNewline(buffer, state)
-                else if (key == 257) state = editDelete(buffer, state)
-                else if (key == 258) state = editMoveHome(buffer, state)
-                else if (key == 259) state = editMoveEnd(buffer, state)
-                else if (key == 260) state = editMoveVertical(buffer, state, 0 - 16)
-                else if (key == 261) state = editMoveVertical(buffer, state, 16)
-                else if (key == 262) state = editMoveVertical(buffer, state, 0 - 1)
-                else if (key == 263) state = editMoveLeft(buffer, state)
-                else if (key == 264) state = editMoveVertical(buffer, state, 1)
-                else if (key == 265) state = editMoveRight(buffer, state)
+                state = when (key) {
+                    8 -> editBackspace(buffer, state)
+                    9 -> editInsertTab(buffer, state)
+                    13 -> editInsertNewline(buffer, state)
+                    257 -> editDelete(buffer, state)
+                    258 -> editMoveHome(buffer, state)
+                    259 -> editMoveEnd(buffer, state)
+                    260 -> editMoveVertical(buffer, state, -16)
+                    261 -> editMoveVertical(buffer, state, 16)
+                    262 -> editMoveVertical(buffer, state, -1)
+                    263 -> editMoveLeft(buffer, state)
+                    264 -> editMoveVertical(buffer, state, 1)
+                    265 -> editMoveRight(buffer, state)
+                    else -> state
+                }
                 if (state != previous && (key == 8 || key == 9 || key == 13 || key == 257)) dirty = true
                 if (state == previous && (key == 9 || key == 13)) status = "Buffer full"
             }
@@ -137,7 +140,7 @@ fun editError(args: Array<String>): String = if (args.size == 1) "" else "usage:
 
 fun editPath(args: Array<String>): String {
     val path = args[0]
-    return if (path != "" && path[0] == '/') path else "/home/" + path
+    return if (path.startsWith("/")) path else "/home/" + path
 }
 
 fun editEmpty(buffer: CharArray): Int = editState(0, buffer.size)
@@ -159,11 +162,9 @@ fun editInsertText(
     var gapStart = editGapStart(state)
     val gapEnd = editGapEnd(state)
     if (text.length > gapEnd - gapStart) return state
-    var index = 0
-    while (index < text.length) {
+    for (index in 0 until text.length) {
         buffer[gapStart] = text[index]
         gapStart = gapStart + 1
-        index = index + 1
     }
     return editState(gapStart, gapEnd)
 }
@@ -176,10 +177,8 @@ fun editMoveLeft(
     val gapEnd = editGapEnd(state)
     if (gapStart == 0) return state
     val width = editScalarBefore(buffer, gapStart)
-    var index = 0
-    while (index < width) {
+    for (index in 0 until width) {
         buffer[gapEnd - width + index] = buffer[gapStart - width + index]
-        index = index + 1
     }
     return editState(gapStart - width, gapEnd - width)
 }
@@ -192,10 +191,8 @@ fun editMoveRight(
     val gapEnd = editGapEnd(state)
     if (gapEnd == buffer.size) return state
     val width = editScalarAt(buffer, gapEnd, buffer.size)
-    var index = 0
-    while (index < width) {
+    for (index in 0 until width) {
         buffer[gapStart + index] = buffer[gapEnd + index]
-        index = index + 1
     }
     return editState(gapStart + width, gapEnd + width)
 }
@@ -516,11 +513,9 @@ private fun editRender(
     Terminal.setColors(15, 0)
     Terminal.fill(0, 0, 51, 19, ' ')
     Terminal.writeAt(0, 0, "Compukters edit  " + path + if (dirty) " *" else "")
-    var row = 0
-    while (row < 16) {
+    repeat(16) { row ->
         val text = editVisibleLine(buffer, state, rowOffset + row, columnOffset, rowBuffer)
-        if (text != "") Terminal.writeAt(0, row + 1, text)
-        row = row + 1
+        if (text.isNotEmpty()) Terminal.writeAt(0, row + 1, text)
     }
     val cursorLine = editCursorLine(buffer, state)
     val cursorColumn = editCursorColumn(buffer, state)
@@ -605,29 +600,11 @@ private fun editFileSystemError(result: Int): String {
     return "filesystem error"
 }
 
-private fun editContainsSpace(value: String): Boolean {
-    var index = 0
-    while (index < value.length) {
-        if (value[index] == ' ') return true
-        index = index + 1
-    }
-    return false
-}
-
-private fun editContainsCrLf(value: String): Boolean {
-    var index = 0
-    while (index + 1 < value.length) {
-        if (value[index] == '\r' && value[index + 1] == '\n') return true
-        index = index + 1
-    }
-    return false
-}
-
 private fun editStartsWith(
     value: String,
     lower: Char,
     upper: Char,
-): Boolean = value != "" && (value[0] == lower || value[0] == upper)
+): Boolean = value.isNotEmpty() && (value[0] == lower || value[0] == upper)
 
 private fun editHasControl(modifiers: Int): Boolean = modifiers % 4 >= 2
 

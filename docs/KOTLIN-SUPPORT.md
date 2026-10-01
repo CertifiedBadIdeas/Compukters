@@ -491,7 +491,10 @@ supported.
   admitted fixture lowers sealed result types, immutable data values, enum
   identity, exhaustive type branches, and smart-cast property reads, then
   executes those branches in the pinned VM. This does not imply support for
-  all generated data or enum methods. Evidence:
+  all generated data or enum methods. A value-producing exhaustive `when` returning `String` still requires an
+  explicit `else`; the synthetic impossible fallback does not admit reference results. The bundled `boot` keeps its
+  explicit diagnostic fallback, exercised by `checked in boot compiles deterministically with process intrinsic`
+  and `:core:programRuntimeIntegrationTest`. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `guest object subset lowers sealed results data values enum identity and type branches`,
   paired with root task `testKotlinObjectModelVmConformance`.

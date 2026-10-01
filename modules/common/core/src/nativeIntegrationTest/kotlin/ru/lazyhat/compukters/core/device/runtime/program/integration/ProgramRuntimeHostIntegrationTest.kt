@@ -69,6 +69,27 @@ class ProgramRuntimeHostIntegrationTest {
     }
 
     @Test
+    fun `headless benchmark preserves unsigned decimal argument validation`() {
+        VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.ffi.library")))
+        val artifact = Path.of(requiredProperty("compukters.vmbenchAgentRuntime.artifact")).readBytes()
+        for (input in listOf("+2", "-1", " 2", "0", "1000001", "2147483648", "2x", "00002")) {
+            ProgramRuntimeHost().use { host ->
+                assertEquals(ProgramStartResult.Started, host.start(artifact))
+                advanceUntil(host) { it == ProgramRuntimeState.WaitingForInput }
+                assertTrue(host.sendTerminalText(input))
+                advanceUntil(host) { it is ProgramRuntimeState.Halted }
+                val expected =
+                    if (input == "00002") {
+                        "vmbench agent: rounds=2\nvmbench agent: checksum=-365826314\n"
+                    } else {
+                        "vmbench agent requires rounds 1..1000000\n"
+                    }
+                assertEquals(expected, terminalText(requireNotNull(host.terminalFullState())), input)
+            }
+        }
+    }
+
+    @Test
     fun `headless benchmark accepts rounds through terminal input and halts with deterministic checksum`() {
         VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.ffi.library")))
         val artifact = Path.of(requiredProperty("compukters.vmbenchAgentRuntime.artifact")).readBytes()
@@ -150,6 +171,20 @@ class ProgramRuntimeHostIntegrationTest {
                                     .endsWith("> kotlinc\nusage: kotlinc <source.kt> [-o output]\n>\n"),
                             )
 
+                            for ((arguments, diagnostic) in listOf(
+                                "a.kt -o b -o c" to "duplicate -o option",
+                                "-o a.kt" to "source file must precede -o",
+                                ".kt" to "source file must end in .kt",
+                                "a.KT" to "source file must end in .kt",
+                                "a.kt -o" to "missing output after -o",
+                                "a.kt b.kt" to "kotlinc accepts exactly one source file",
+                            )) {
+                                submit(computer, "kotlinc $arguments")
+                                pressEnter(computer)
+                                val output = terminalText(requireNotNull(computer.terminalFullState()))
+                                assertTrue(output.endsWith("> kotlinc $arguments\n$diagnostic\n>\n"), output)
+                            }
+
                             submit(computer, "missing")
                             pressEnter(computer)
                             val missingOutput = terminalText(requireNotNull(computer.terminalFullState()))
@@ -179,6 +214,16 @@ class ProgramRuntimeHostIntegrationTest {
                             pressEnter(computer)
                             val compiledOutput = terminalText(requireNotNull(computer.terminalFullState()))
                             assertTrue(compiledOutput.contains("compiled editor loop"), compiledOutput)
+
+                            submit(computer, "kotlinc demo.kt -o /home/renamed")
+                            pressEnter(computer)
+                            val explicitOutput = terminalText(requireNotNull(computer.terminalFullState()))
+                            assertTrue(explicitOutput.endsWith("compiled: /home/renamed\n>\n"), explicitOutput)
+                            submit(computer, "renamed")
+                            pressEnter(computer)
+                            assertTrue(
+                                terminalText(requireNotNull(computer.terminalFullState())).endsWith("compiled editor loop\n>\n"),
+                            )
 
                             computer.shutdown()
                             assertEquals(ProgramStartResult.Started, computer.startBoot())

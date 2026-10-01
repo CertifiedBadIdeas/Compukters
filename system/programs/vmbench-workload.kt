@@ -20,30 +20,10 @@ package compukter.system.vmbench
 
 internal fun parseVmbenchRounds(text: String): Int {
     val maximumRounds = 1_000_000
-    if (text.length == 0) return 0
-    var value = 0
-    var index = 0
-    while (index < text.length) {
-        val digit =
-            when (text[index]) {
-                '0' -> 0
-                '1' -> 1
-                '2' -> 2
-                '3' -> 3
-                '4' -> 4
-                '5' -> 5
-                '6' -> 6
-                '7' -> 7
-                '8' -> 8
-                '9' -> 9
-                else -> return 0
-            }
-        if (value > (maximumRounds - digit) / 10) return 0
-        value = value * 10 + digit
-        index = index + 1
-    }
-    if (value == 0) return 0
-    return value
+    // The CLI accepts unsigned decimal digits, not the optional signs allowed by toIntOrNull.
+    if (text.startsWith("+") || text.startsWith("-")) return 0
+    val value = text.toIntOrNull() ?: return 0
+    return if (value >= 1 && value <= maximumRounds) value else 0
 }
 
 internal fun runVmbenchCpu(rounds: Int): Int {

@@ -285,6 +285,7 @@ tasks.withType<Test>().configureEach {
 }
 
 tasks.test {
+    inputs.files(rootProject.file("examples/hello/greeting.kt"), rootProject.file("examples/hello/main.kt"))
     dependsOn(tasks.jar)
     filter.excludeTestsMatching("ru.lazyhat.compukters.compiler.worker.integration.*")
     inputs.file(workerJar)
