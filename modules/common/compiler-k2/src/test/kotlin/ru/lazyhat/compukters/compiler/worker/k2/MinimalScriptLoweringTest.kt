@@ -4490,6 +4490,48 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `caught exception preserves identity hierarchy cause and expression result for vm execution`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class Problem(message: String?, cause: Throwable?) : RuntimeException(message, cause)
+                fun fail(error: Throwable) { throw error }
+                fun main() {
+                    val cause = IllegalArgumentException("root")
+                    val error = Problem("detail", cause)
+                    var matched = false
+                    val value = try {
+                        fail(error)
+                        0
+                    } catch (wrong: IllegalArgumentException) {
+                        -1
+                    } catch (caught: RuntimeException) {
+                        require(caught === error)
+                        require(caught.message == "detail")
+                        require(caught.cause === cause)
+                        matched = true
+                        42
+                    }
+                    require(matched && value == 42)
+                    try {
+                        try { fail(error) } catch (caught: Exception) { throw caught }
+                    } catch (caught: Throwable) {
+                        require(caught === error)
+                    }
+                    println("exceptions ok")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(ArtifactReader.read(artifact).modules.any { it.exceptions.isNotEmpty() })
+            System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
+                Path.of("$output.caught.cpkt").also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `bounded when lowers deterministically for vm execution`() =
         withAdapter { adapter ->
             val request =

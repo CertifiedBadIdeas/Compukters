@@ -263,6 +263,7 @@ fun registerKotlinVmConformance(
     cargoTargetDirectory: String,
     artifactEnvironmentVariable: String,
     conformanceScenario: String,
+    additionalArtifacts: Map<String, Provider<RegularFile>> = emptyMap(),
 ) {
     val conformanceTask =
         tasks.register<Exec>(taskName) {
@@ -273,12 +274,16 @@ fun registerKotlinVmConformance(
             inputs.file(compilerArtifactVmConformanceLock)
             inputs.file(compilerArtifactVmConformanceSource)
             inputs.file(artifact)
+            inputs.files(additionalArtifacts.values)
             doFirst {
                 check(compilerArtifactVmConformanceHarness.isFile) {
                     "compiler artifact Rust conformance harness is missing"
                 }
                 check(artifact.get().asFile.isFile) {
                     "$taskName requires generated artifact ${artifact.get().asFile}"
+                }
+                additionalArtifacts.forEach { (_, path) ->
+                    check(path.get().asFile.isFile) { "$taskName requires generated artifact ${path.get().asFile}" }
                 }
             }
             commandLine(
@@ -295,6 +300,7 @@ fun registerKotlinVmConformance(
             )
             environment("CARGO_TARGET_DIR", rootProject.file(cargoTargetDirectory).absolutePath)
             environment(artifactEnvironmentVariable, artifact.get().asFile.absolutePath)
+            additionalArtifacts.forEach { (name, path) -> environment(name, path.get().asFile.absolutePath) }
         }
     verifyKotlinVmConformance.configure {
         dependsOn(conformanceTask)
@@ -309,6 +315,10 @@ registerKotlinVmConformance(
     cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-exceptions-conformance",
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT",
     conformanceScenario = "exceptions",
+    additionalArtifacts = mapOf(
+        "COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_CAUGHT" to
+            project(":compiler-k2").layout.buildDirectory.file("generated/conformance/exceptions.cpkt.caught.cpkt"),
+    ),
 )
 
 registerKotlinVmConformance(

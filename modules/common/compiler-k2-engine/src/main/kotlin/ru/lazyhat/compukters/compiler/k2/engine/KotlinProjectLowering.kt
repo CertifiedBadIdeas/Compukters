@@ -61,6 +61,7 @@ import org.jetbrains.kotlin.ir.expressions.IrSetField
 import org.jetbrains.kotlin.ir.expressions.IrSetValue
 import org.jetbrains.kotlin.ir.expressions.IrStringConcatenation
 import org.jetbrains.kotlin.ir.expressions.IrThrow
+import org.jetbrains.kotlin.ir.expressions.IrTry
 import org.jetbrains.kotlin.ir.expressions.IrTypeOperator
 import org.jetbrains.kotlin.ir.expressions.IrTypeOperatorCall
 import org.jetbrains.kotlin.ir.expressions.IrVararg
@@ -104,6 +105,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.DebugEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.EntryArguments
 import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
+import ru.lazyhat.compukters.compiler.artifact.model.ExceptionEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Export
 import ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility
 import ru.lazyhat.compukters.compiler.artifact.model.Field
@@ -773,6 +775,18 @@ private fun IrClass.runtimeExceptionType(): UInt? =
         "kotlin.RuntimeException" -> 8u
         else -> null
     }
+
+private fun throwablePropertyImport(function: IrSimpleFunction): UInt? {
+    val property = function.correspondingPropertySymbol?.owner
+    if ((property?.parent as? IrClass)?.fqNameWhenAvailable?.asString() == "kotlin.Throwable") {
+        return when (property.name.asString()) {
+            "message" -> THROWABLE_MESSAGE_IMPORT
+            "cause" -> THROWABLE_CAUSE_IMPORT
+            else -> null
+        }
+    }
+    return function.overriddenSymbols.firstNotNullOfOrNull { throwablePropertyImport(it.owner) }
+}
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private fun mapGuestValueType(
@@ -1812,6 +1826,7 @@ internal object KotlinProjectLowering {
             topLevelFields.associateBy { requireNotNull(it.property.declaration.getter).symbol }
         val blocks = mutableListOf<Block>()
         val debug = mutableListOf<DebugEntry>()
+        val exceptions = mutableListOf<ExceptionEntry>()
         val loweredFunctions = mutableListOf<Function>()
 
         functionInstances.forEach { instance ->
@@ -1887,6 +1902,7 @@ internal object KotlinProjectLowering {
                 }
             blocks += compiled.blocks
             debug += compiled.debug
+            exceptions += compiled.exceptions
             val resultType =
                 valueType(
                     function.returnType,
@@ -1949,8 +1965,8 @@ internal object KotlinProjectLowering {
                     parameterCount = parameterTypes.size.toUInt(),
                     firstBlock = BlockId.of(firstBlock.toUInt()),
                     blockCount = compiled.blocks.size.toUInt(),
-                    firstException = 0u,
-                    exceptionCount = 0u,
+                    firstException = (exceptions.size - compiled.exceptions.size).toUInt(),
+                    exceptionCount = compiled.exceptions.size.toUInt(),
                 )
         }
 
@@ -2138,6 +2154,7 @@ internal object KotlinProjectLowering {
                 }
             blocks += compiled.blocks
             debug += compiled.debug
+            exceptions += compiled.exceptions
             loweredFunctions +=
                 Function(
                     owner = closureType,
@@ -2150,8 +2167,8 @@ internal object KotlinProjectLowering {
                     parameterCount = (layout.shape.arity + 1).toUInt(),
                     firstBlock = BlockId.of(firstBlock.toUInt()),
                     blockCount = compiled.blocks.size.toUInt(),
-                    firstException = 0u,
-                    exceptionCount = 0u,
+                    firstException = (exceptions.size - compiled.exceptions.size).toUInt(),
+                    exceptionCount = compiled.exceptions.size.toUInt(),
                 )
         }
 
@@ -2269,6 +2286,7 @@ internal object KotlinProjectLowering {
                 ).compile()
             blocks += compiled.blocks
             debug += compiled.debug
+            exceptions += compiled.exceptions
             loweredFunctions +=
                 Function(
                     owner = null,
@@ -2279,8 +2297,8 @@ internal object KotlinProjectLowering {
                     parameterCount = (parameterTypes.size + 1).toUInt(),
                     firstBlock = BlockId.of(firstBlock.toUInt()),
                     blockCount = compiled.blocks.size.toUInt(),
-                    firstException = 0u,
-                    exceptionCount = 0u,
+                    firstException = (exceptions.size - compiled.exceptions.size).toUInt(),
+                    exceptionCount = compiled.exceptions.size.toUInt(),
                 )
         }
 
@@ -2847,6 +2865,7 @@ internal object KotlinProjectLowering {
                             },
                 functions = loweredFunctions,
                 blocks = blocks,
+                exceptions = exceptions,
                 debug = debug.sortedWith(compareBy({ it.function.value }, { it.block.value }, { it.instruction })),
                 exports =
                     platformFunctionExports.map { (instance, name) ->
@@ -2909,6 +2928,9 @@ internal object KotlinProjectLowering {
                     SemanticFeature.CAPABILITIES.takeIf { capabilityIdentities.isNotEmpty() },
                     SemanticFeature.CHANNELS.takeIf { usesChannels },
                     SemanticFeature.ARRAY_COPY.takeIf { usesArrayCopy },
+                    SemanticFeature.EXCEPTIONS.takeIf {
+                        exceptions.isNotEmpty() || blocks.any { block -> block.instructions.any { it is Instruction.Throw } }
+                    },
                     SemanticFeature.MODULE_IMPORTS,
                 ),
             manifest =
@@ -3095,6 +3117,7 @@ internal object KotlinProjectLowering {
 
         fun isSupported(sourceType: IrType): Boolean {
             val type = instance.substitute(sourceType)
+            if (((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.runtimeExceptionType() != null) return true
             val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
             if (type.isNullable()) {
                 return type.isNullableInt() || type.isKotlinAny() || (type as? IrSimpleType)?.classifier == stringClass ||
@@ -3430,6 +3453,7 @@ private data class CompiledFunction(
     val localTypes: List<ValueType>,
     val blocks: List<Block>,
     val debug: List<DebugEntry> = emptyList(),
+    val exceptions: List<ExceptionEntry> = emptyList(),
 )
 
 private sealed interface ResolvedCallArgument {
@@ -3687,6 +3711,7 @@ private class FunctionCompiler(
     private val values = mutableMapOf<IrValueSymbol, RegisterId>()
     private val blocks = mutableListOf(MutableBlock())
     private val debug = mutableListOf<DebugEntry>()
+    private val exceptions = mutableListOf<ExceptionEntry>()
     private var activeSource: IrElement = function
     private val loopContexts = ArrayDeque<LoopContext>()
     private val returnableContexts = mutableMapOf<IrReturnTargetSymbol, ReturnableContext>()
@@ -3712,6 +3737,7 @@ private class FunctionCompiler(
             localTypes.toList(),
             blocks.map { Block(functionId, it.loopHeaderSafepoint, it.instructions.toList()) },
             debug.toList(),
+            exceptions.toList(),
         )
     }
 
@@ -3822,6 +3848,10 @@ private class FunctionCompiler(
                 compileWhenStatement(statement)
             }
 
+            is IrTry -> {
+                compileTry(statement, asValue = false)
+            }
+
             is IrWhileLoop -> {
                 compileWhile(statement)
             }
@@ -3882,10 +3912,85 @@ private class FunctionCompiler(
         }
     }
 
+    private fun compileExceptionArguments(
+        target: IrConstructor,
+        arguments: List<IrExpression?>,
+        element: IrElement,
+    ): Pair<RegisterId, RegisterId?> {
+        val parameters = target.parameters.filter { it.kind == IrParameterKind.Regular }
+        if (parameters.size !in 1..2) throw UnsupportedKotlinIr(element, "unsupported exception constructor signature")
+        val compiled =
+            target.parameters.mapIndexedNotNull { index, parameter ->
+                if (parameter.kind != IrParameterKind.Regular) return@mapIndexedNotNull null
+                val argument = arguments.getOrNull(index) ?: throw UnsupportedKotlinIr(element, "missing exception constructor argument")
+                compileExpression(argument, parameter.type)
+            }
+        return compiled.first() to compiled.getOrNull(1)
+    }
+
+    private fun compileTry(
+        expression: IrTry,
+        asValue: Boolean,
+    ): RegisterId? {
+        if (expression.finallyExpression != null) throw UnsupportedKotlinIr(expression, "finally lowering is not implemented yet")
+        val destination =
+            if (asValue && expression.type != unitType && !expression.type.isNothing()) {
+                allocate(valueType(expression.type, expression))
+            } else {
+                null
+            }
+        val exits = mutableListOf<Int>()
+
+        fun compileBranch(branch: IrExpression) {
+            if (destination == null || branch.type.isNothing()) {
+                compileStatement(branch)
+            } else {
+                val value = compileExpression(branch, expression.type)
+                if (!isTerminated()) emit(Instruction.Move(destination, value))
+            }
+            if (!isTerminated()) {
+                exits += currentBlock
+                jumpTo(0) // Patched after the protected body and all handlers have been emitted.
+            }
+        }
+        val protectedStart = createBlock()
+        jumpTo(protectedStart)
+        currentBlock = protectedStart
+        compileBranch(expression.tryResult)
+        val protectedCount = blocks.size - protectedStart
+        for (handler in expression.catches) {
+            val type =
+                valueType(handler.catchParameter.type, handler) as? ValueType.Ref
+                    ?: throw UnsupportedKotlinIr(handler, "catch parameter must be a Throwable reference")
+            val exception = allocate(type)
+            val handlerBlock = createBlock()
+            currentBlock = handlerBlock
+            values[handler.catchParameter.symbol] = exception
+            compileBranch(handler.result)
+            values.remove(handler.catchParameter.symbol)
+            exceptions +=
+                ExceptionEntry(functionId, blockId(protectedStart), protectedCount.toUInt(), type.type, blockId(handlerBlock), exception)
+        }
+        if (exits.isNotEmpty()) {
+            val continuation = createBlock()
+            exits.forEach { patchJumpTarget(it, continuation) }
+            currentBlock = continuation
+        }
+        return destination
+    }
+
     private fun compileDelegatingConstructorCall(call: IrDelegatingConstructorCall) {
         if (constructorOwner == null) throw UnsupportedKotlinIr(call, "delegating constructor call is outside a constructor")
         val target = call.symbol.owner
         if (target.parentAsClass.fqNameWhenAvailable?.asString() == "kotlin.Any") return
+        if (target.parentAsClass.runtimeExceptionType() != null) {
+            val arguments = compileExceptionArguments(target, call.arguments, call)
+            emit(Instruction.FieldSet(RegisterId.of(0u), FieldRef.Imported(ImportId.of(THROWABLE_MESSAGE_IMPORT)), arguments.first))
+            arguments.second?.let {
+                emit(Instruction.FieldSet(RegisterId.of(0u), FieldRef.Imported(ImportId.of(THROWABLE_CAUSE_IMPORT)), it))
+            }
+            return
+        }
         val targetConstructor =
             constructorLayouts[call.symbol]
                 ?: throw UnsupportedKotlinIr(call, "super constructor is outside the Guest class subset")
@@ -4062,6 +4167,11 @@ private class FunctionCompiler(
                 compileWhenValue(expression)
             }
 
+            is IrTry -> {
+                compileTry(expression, asValue = true)
+                    ?: throw UnsupportedKotlinIr(expression, "Unit or Nothing try used as a value")
+            }
+
             is IrReturnableBlock -> {
                 compileReturnableBlock(expression)
                     ?: throw UnsupportedKotlinIr(expression, "Unit or Nothing inline block used as a value")
@@ -4167,14 +4277,13 @@ private class FunctionCompiler(
         }
         val exceptionImport = target.parentAsClass.runtimeExceptionType()?.let(ImportId::of)
         if (exceptionImport != null) {
-            val message =
-                arguments.map(::compileExpression).singleOrNull()
-                    ?: throw UnsupportedKotlinIr(call, "exception constructor requires a message")
+            val (message, cause) = compileExceptionArguments(target, call.arguments, call)
             prepareAllocationBlock()
             val type = TypeRef.Imported(exceptionImport)
             return allocate(ValueType.Ref(nullable = false, type = type)).also { destination ->
                 emit(Instruction.NewObject(destination, type))
                 emit(Instruction.FieldSet(destination, FieldRef.Imported(ImportId.of(THROWABLE_MESSAGE_IMPORT)), message))
+                cause?.let { emit(Instruction.FieldSet(destination, FieldRef.Imported(ImportId.of(THROWABLE_CAUSE_IMPORT)), it)) }
             }
         }
         if (target.parentAsClass.symbol == kotlinCharArrayClass &&
@@ -4623,6 +4732,17 @@ private class FunctionCompiler(
             val receiver = compileExpression(receiverExpression)
             return allocate(field.type).also { destination ->
                 emit(Instruction.FieldGet(destination, receiver, FieldRef.Local(field.id)))
+            }
+        }
+        throwablePropertyImport(target)?.let { field ->
+            val receiverExpression =
+                target.parameters
+                    .mapIndexedNotNull { index, parameter ->
+                        call.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.DispatchReceiver }
+                    }.singleOrNull() ?: throw UnsupportedKotlinIr(call, "Throwable getter receiver is missing")
+            val receiver = compileExpression(receiverExpression)
+            return allocate(valueType(call.type, call)).also { destination ->
+                emit(Instruction.FieldGet(destination, receiver, FieldRef.Imported(ImportId.of(field))))
             }
         }
         externalFieldsByGetter[target.symbol]?.let { field ->

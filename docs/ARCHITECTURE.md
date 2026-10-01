@@ -386,7 +386,9 @@ original managed reference; pending exceptions and failed-task slots remain GC r
 terminate its siblings: each join rethrows the retained exception at that join site. An uncaught root exception
 terminates the process. Native C ABI 18 adds outcome tag 12 containing a length-prefixed bounded UTF-8 diagnostic
 (class, message, at most four causes and 32 stack frames); no Guest pointer crosses the boundary. Kotlin transports
-expose `VmOutcome.UncaughtException`. Source `try`/`catch`/`finally` lowering remains the next implementation stage.
+expose `VmOutcome.UncaughtException`. K2 lowers typed `try/catch` statements and expressions to the same handler
+tables, preserving source catch order and result registers. `finally` lowering remains pending. Native verifier
+dataflow owns reachability across both ordinary and exceptional edges; a catch-only continuation is valid.
 
 Runtime ABI 1.7 adds an explicit optional superclass to nominal array records. Array header flag bit 0 indicates
 a non-null TypeRef appended after the element ValueType; flag-zero records remain unchanged. The parent must resolve
