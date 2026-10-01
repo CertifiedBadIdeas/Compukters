@@ -86,7 +86,17 @@ workspace and answers diagnostics, completion, symbol, reference, expression, an
 and analysis use the same resolved platform bundle and source-snapshot identities, but have separate worker sessions
 and result contracts.
 
-Analysis protocol v12 also carries explicit Kotlin format, rename-admission, and parameter-information requests.
+Analysis protocol v13 also carries explicit Kotlin format, rename-admission, and parameter-information requests.
+Callable completions carry bounded independent presentation fields for the declared extension receiver, package and
+specialized return type. Type-scope member signatures retain K2 substitutions; extension applicability supplies
+receiver substitutions through the pinned K2 completion checker. Unknown callable type parameters remain symbolic.
+Member functions have a distinct completion kind. Presentation and insertion metadata share the same resolved
+signature without making the client parse rendered Kotlin declarations.
+Presentation requests explicitly choose whether to include diagnostics. During an automatic or manual completion
+session the client cancels diagnostic work and requests semantic-only presentation; edited diagnostics are rebased
+outside the changed range rather than discarded wholesale. Empty completion results, dismissal, insertion and
+parameter-information transitions resume diagnostics for the latest snapshot. Semantic-only results cannot erase
+previous diagnostics, and the protocol rejects mismatched diagnostics policies.
 Completion items include an optional semantic call shape: presence of parameters, required arguments before a
 trailing lambda, and a final non-null function parameter. K2 derives this from resolved symbols (including type
 aliases), not rendered signatures; imports, callable references, type positions and shorthand string templates
@@ -94,7 +104,7 @@ receive name-only insertions. The client uses that shape to add or reuse call de
 caret together with autoimports in one atomic editor history entry. Newly generated delimiters join smart typing's
 tracked closers. Structural Enter expands an empty Kotlin brace pair even when it was inserted by completion or
 loaded from source, removing inner padding and preserving the document's line endings and leading indentation.
-Protocol v11 workers are rejected at handshake;
+Protocol v12 workers are rejected at handshake;
 the platform bundle, compiler protocol and VM artifact ABI are unchanged. Rename
 returns bounded editable project locations after validating a single Kotlin identifier and speculatively checking
 project diagnostics and reference bindings. The worker restores its original PSI, source identity, and completion

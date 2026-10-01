@@ -1119,6 +1119,9 @@ links to their source files.
   labels use braces for a single non-null, non-vararg lambda argument, displaying
   its name and expanded function type without lambda-internal parameter names.
   The same presentation applies to resolved autoimport candidates. Function
+  parameters and result types retain type-scope specialization and K2 extension
+  receiver inference, while independent presentation records declared receiver
+  notation and package context. Unknown generic arguments remain symbolic. Function
   completion inserts parentheses or a final lambda block from resolved parameter
   types, keeping the caret inside required arguments or the lambda body. Existing
   delimiters are reused; autoimports and caret placement share an atomic undo/redo
@@ -1143,6 +1146,9 @@ links to their source files.
   `CompletionQueryTest`, tests
   `completion labels single lambda arguments with braces and unnamed function types`
   and `autoimported lambda function labels use the same brace presentation`;
+  `CompletionQueryTest`, test
+  `completion preserves specialized member and extension signatures with declared receiver context`;
+  `DiagnosticQueryTest`, test `semantic-only presentation omits diagnostics and retains symbol highlighting`;
   [`IdeCompletionInsertionTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-client/src/test/kotlin/ru/lazyhat/compukters/ide/client/analysis/IdeCompletionInsertionTest.kt),
   tests `call completion with import preserves the caret through one undo and redo`
   and `completed lambda enters an indented block and generated closers are skipped`;

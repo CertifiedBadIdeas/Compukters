@@ -32,6 +32,57 @@ import kotlin.test.assertTrue
 
 class AnalysisRequestCoordinatorTest {
     @Test
+    fun `dismissal cancels scheduled and running completion and rejects late replies`() {
+        val scheduler = ManualAnalysisTaskScheduler()
+        val client = RecordingAnalysisClient()
+        val published = mutableListOf<AnalysisClientResult>()
+        val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 100, 10, resultSink = AnalysisResultSink(published::add))
+        coordinator.sourceChanged(admittedSnapshot("val answer = 42"), testPath())
+        coordinator.automaticCompletion(testPath(), 3)
+        coordinator.cancelCompletion()
+        scheduler.advanceBy(10)
+        assertTrue(client.queries.isEmpty())
+        coordinator.automaticCompletion(testPath(), 3)
+        scheduler.advanceBy(10)
+        val running = client.queryFutures.single()
+        coordinator.cancelCompletion()
+        assertTrue(running in client.cancelled)
+        running.complete(AnalysisClientResult.Stale)
+        assertTrue(published.isEmpty())
+        coordinator.close()
+    }
+
+    @Test
+    fun `diagnostic pause cancels old passes preserves semantic queries and resumes latest snapshot`() {
+        val scheduler = ManualAnalysisTaskScheduler()
+        val client = RecordingAnalysisClient()
+        val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 0, 0)
+        val first = admittedSnapshot("val answer = 42")
+        coordinator.sourceChanged(first, testPath())
+        scheduler.advanceBy(0)
+        assertTrue(assertIs<AnalysisQuery.Presentation>(client.queries.last()).includeDiagnostics)
+        val old = client.queryFutures.last()
+        coordinator.setDiagnosticsEnabled(false, testPath())
+        assertTrue(old in client.cancelled)
+        scheduler.advanceBy(0)
+        assertFalse(assertIs<AnalysisQuery.Presentation>(client.queries.last()).includeDiagnostics)
+        val latest = admittedSnapshot("val answer = 43")
+        coordinator.sourceChanged(latest, testPath())
+        scheduler.advanceBy(0)
+        assertFalse(assertIs<AnalysisQuery.Presentation>(client.queries.last()).includeDiagnostics)
+        coordinator.setDiagnosticsEnabled(true, testPath())
+        scheduler.advanceBy(0)
+        val resumed = assertIs<AnalysisQuery.Presentation>(client.queries.last())
+        assertTrue(resumed.includeDiagnostics)
+        assertEquals(latest.identity, resumed.identity)
+        val count = client.queries.size
+        coordinator.setDiagnosticsEnabled(true, testPath())
+        scheduler.advanceBy(0)
+        assertEquals(count, client.queries.size)
+        coordinator.close()
+    }
+
+    @Test
     fun `symbol occurrences coalesce serialize their queries and cancel on source change`() {
         val scheduler = ManualAnalysisTaskScheduler()
         val client = RecordingAnalysisClient()

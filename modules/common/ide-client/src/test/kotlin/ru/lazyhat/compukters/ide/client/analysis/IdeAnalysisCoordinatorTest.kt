@@ -79,6 +79,65 @@ import kotlin.test.assertTrue
 
 class IdeAnalysisCoordinatorTest {
     @Test
+    fun `autocomplete defers diagnostics retains untouched problems and resumes after empty result or dismissal`() {
+        val fixture = AnalysisFixture("bad; ca")
+        val initial = fixture.open()
+        val diagnostic =
+            ru.lazyhat.compukters.ide.analysis.EditorDiagnostic(
+                ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity.Error,
+                "Previous error",
+                path(),
+                EditorRange(0, 3),
+            )
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Presentation(
+                    initial.identity,
+                    SnapshotPresentation.create(initial.identity, mapOf(path() to fixture.text.length), diagnostics = listOf(diagnostic)),
+                ),
+            ),
+        )
+        val start = fixture.text.length
+        fixture.text += "n"
+        fixture.coordinator.sourceChanged(fixture.project, path(), fixture.text, 1, "n", fixture.text.length, insertion(start, 0, 1))
+        assertEquals(false, fixture.requests.diagnosticPolicies.last())
+        val latest = fixture.requests.snapshots.last()
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Presentation(
+                    latest.identity,
+                    SnapshotPresentation.create(
+                        latest.identity,
+                        mapOf(path() to fixture.text.length),
+                    ),
+                ),
+            ),
+        )
+        assertEquals(listOf(diagnostic), activeState(fixture).presentation.diagnostics)
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Presentation(
+                    latest.identity,
+                    SnapshotPresentation.create(latest.identity, mapOf(path() to fixture.text.length)),
+                    false,
+                ),
+            ),
+        )
+        assertEquals(listOf(diagnostic), activeState(fixture).presentation.diagnostics)
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Completion.create(latest.identity, EditorRange(5, 8), emptyList(), fixture.text.length),
+            ),
+        )
+        assertEquals(true, fixture.requests.diagnosticPolicies.last())
+        fixture.coordinator.manualCompletion()
+        assertEquals(false, fixture.requests.diagnosticPolicies.last())
+        fixture.coordinator.dismissCompletion()
+        assertEquals(true, fixture.requests.diagnosticPolicies.last())
+        fixture.coordinator.close()
+    }
+
+    @Test
     fun `typing suppresses caret occurrences across fresh analysis and reload until explicit caret movement`() {
         val fixture = fixture("val answer = 42\nprintln(answer)")
         val initial = fixture.open()
@@ -660,7 +719,7 @@ class IdeAnalysisCoordinatorTest {
     }
 
     @Test
-    fun `presentation rebases compatible semantic tokens and drops transient diagnostics`() {
+    fun `presentation rebases compatible semantic tokens and retains untouched diagnostics`() {
         val otherPath = VirtualSourcePath.kotlin("src/other.kt")
         val before = SemanticToken(path(), EditorRange(0, 3), SemanticCategory.Property)
         val intersecting = SemanticToken(path(), EditorRange(9, 11), SemanticCategory.LocalVariable)
@@ -681,7 +740,7 @@ class IdeAnalysisCoordinatorTest {
 
         val rebased = presentation.rebase(path(), change)
 
-        assertTrue(rebased.diagnostics.isEmpty())
+        assertEquals(listOf(diagnostic), rebased.diagnostics)
         assertEquals(
             listOf(
                 before,
@@ -765,7 +824,7 @@ class IdeAnalysisCoordinatorTest {
 
         val firstPending = assertIs<IdeAnalysisState.Active>(fixture.coordinator.state())
         assertEquals(listOf(token.copy(range = EditorRange(5, 11))), firstPending.presentation.semanticTokens)
-        assertTrue(firstPending.presentation.diagnostics.isEmpty())
+        assertEquals(listOf(diagnostic.copy(range = EditorRange(5, 11))), firstPending.presentation.diagnostics)
         assertNull(firstPending.completion)
 
         fixture.coordinator.sourceChanged(
@@ -1255,6 +1314,15 @@ private class AnalysisFixture(
 }
 
 private class RecordingRequests : AnalysisRequestCoordinator {
+    val diagnosticPolicies = mutableListOf<Boolean>()
+
+    override fun setDiagnosticsEnabled(
+        enabled: Boolean,
+        activePath: VirtualSourcePath,
+    ) {
+        diagnosticPolicies += enabled
+    }
+
     lateinit var sink: AnalysisResultSink
     val snapshots = mutableListOf<AdmittedAnalysisSnapshot>()
     val automaticOffsets = mutableListOf<Int>()

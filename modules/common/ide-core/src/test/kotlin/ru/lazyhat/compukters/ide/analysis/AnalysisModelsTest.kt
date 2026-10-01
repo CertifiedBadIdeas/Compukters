@@ -27,6 +27,43 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class AnalysisModelsTest {
+    @Test
+    fun `callable presentation validates kind text and negotiated utf8 bounds`() {
+        assertFailsWith<IllegalArgumentException> { CompletionCallablePresentation(null, null, "") }
+        assertFailsWith<IllegalArgumentException> { CompletionCallablePresentation("", null, "Int") }
+        assertFailsWith<IllegalArgumentException> { CompletionCallablePresentation(null, "bad\uD800", "Int") }
+        val presentation = CompletionCallablePresentation("T", "sample", "Int")
+        assertFailsWith<IllegalArgumentException> {
+            CompletionItem("value", "value", CompletionKind.Property, callablePresentation = presentation)
+        }
+        for (kind in listOf(CompletionKind.Function, CompletionKind.ExtensionFunction, CompletionKind.MemberFunction)) {
+            val item = CompletionItem("f", "f", kind, callablePresentation = presentation)
+            assertEquals(
+                presentation,
+                AnalysisResult.Completion
+                    .create(identity, EditorRange(0, 0), listOf(item), 0)
+                    .items
+                    .single()
+                    .callablePresentation,
+            )
+        }
+        for (value in listOf(
+            CompletionCallablePresentation("😀", null, "Int"),
+            CompletionCallablePresentation(null, "😀", "Int"),
+            CompletionCallablePresentation(null, null, "😀"),
+        )) {
+            assertFailsWith<IllegalArgumentException> {
+                AnalysisResult.Completion.create(
+                    identity,
+                    EditorRange(0, 0),
+                    listOf(CompletionItem("f", "f", CompletionKind.Function, callablePresentation = value)),
+                    0,
+                    AnalysisResultLimits(maxDetailUtf8Bytes = 3),
+                )
+            }
+        }
+    }
+
     private val main = VirtualSourcePath.kotlin("src/main.kt")
     private val identity = AnalysisSnapshotIdentity(SourceSnapshotId(hash(1)), AnalysisProfileIdentity(hash(2)))
 

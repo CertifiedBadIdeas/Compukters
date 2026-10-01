@@ -125,6 +125,11 @@ class CompletionIntegrationTest {
             assertEquals("candidate", candidate.insertText)
             assertEquals(
                 ru.lazyhat.compukters.ide.analysis
+                    .CompletionCallablePresentation(null, null, "Unit"),
+                candidate.callablePresentation,
+            )
+            assertEquals(
+                ru.lazyhat.compukters.ide.analysis
                     .CompletionCallShape(false, false, false),
                 candidate.callShape,
             )

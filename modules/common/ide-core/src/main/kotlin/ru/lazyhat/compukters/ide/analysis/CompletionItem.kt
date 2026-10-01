@@ -35,6 +35,7 @@ enum class CompletionKind {
     Package,
     Keyword,
     TypeAlias,
+    MemberFunction,
 }
 
 data class CompletionTextEdit(
@@ -71,6 +72,26 @@ data class CompletionCallShape(
     }
 }
 
+/** Independent callable columns; receiver keeps declaration notation while the result is specialized. */
+data class CompletionCallablePresentation(
+    val receiverType: String?,
+    val packageName: String?,
+    val returnType: String,
+) {
+    init {
+        require(returnType.isNotEmpty()) { "completion return type must not be empty" }
+        strictUtf8Size(returnType)
+        receiverType?.let {
+            require(it.isNotEmpty()) { "completion receiver type must not be empty" }
+            strictUtf8Size(it)
+        }
+        packageName?.let {
+            require(it.isNotEmpty()) { "completion package must not be empty" }
+            strictUtf8Size(it)
+        }
+    }
+}
+
 @ConsistentCopyVisibility
 data class CompletionItem private constructor(
     val label: String,
@@ -81,6 +102,7 @@ data class CompletionItem private constructor(
     val symbol: CompletionSymbol? = null,
     val additionalEdits: List<CompletionTextEdit> = emptyList(),
     val callShape: CompletionCallShape? = null,
+    val callablePresentation: CompletionCallablePresentation? = null,
 ) {
     constructor(
         label: String,
@@ -91,13 +113,33 @@ data class CompletionItem private constructor(
         symbol: CompletionSymbol? = null,
         additionalEdits: Collection<CompletionTextEdit> = emptyList(),
         callShape: CompletionCallShape? = null,
-    ) : this(label, insertText, kind, detail, origin, symbol, Collections.unmodifiableList(additionalEdits.toList()), callShape)
+        callablePresentation: CompletionCallablePresentation? = null,
+    ) : this(
+        label,
+        insertText,
+        kind,
+        detail,
+        origin,
+        symbol,
+        Collections.unmodifiableList(additionalEdits.toList()),
+        callShape,
+        callablePresentation,
+    )
 
     init {
         require(label.isNotEmpty()) { "completion label must not be empty" }
         require(insertText.isNotEmpty()) { "completion insert text must not be empty" }
-        require(callShape == null || kind == CompletionKind.Function || kind == CompletionKind.ExtensionFunction) {
+        require(
+            callShape == null || kind == CompletionKind.Function || kind == CompletionKind.ExtensionFunction ||
+                kind == CompletionKind.MemberFunction,
+        ) {
             "only function completions carry a call shape"
+        }
+        require(
+            callablePresentation == null || kind == CompletionKind.Function || kind == CompletionKind.ExtensionFunction ||
+                kind == CompletionKind.MemberFunction,
+        ) {
+            "only function completions carry callable presentation"
         }
         strictUtf8Size(label)
         strictUtf8Size(insertText)

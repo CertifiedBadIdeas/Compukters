@@ -20,9 +20,13 @@ package ru.lazyhat.compukters.ide.analysis.k2.query
 
 import com.intellij.psi.PsiComment
 import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
+import org.jetbrains.kotlin.analysis.api.KaIdeApi
 import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.analyze
+import org.jetbrains.kotlin.analysis.api.components.KaExtensionApplicabilityResult
+import org.jetbrains.kotlin.analysis.api.components.asSignature
 import org.jetbrains.kotlin.analysis.api.components.canBeCalledAsExtensionOn
+import org.jetbrains.kotlin.analysis.api.components.createExtensionCandidateChecker
 import org.jetbrains.kotlin.analysis.api.components.createUseSiteVisibilityChecker
 import org.jetbrains.kotlin.analysis.api.components.expressionType
 import org.jetbrains.kotlin.analysis.api.components.fullyExpandedType
@@ -35,6 +39,8 @@ import org.jetbrains.kotlin.analysis.api.renderer.types.KaExpandedTypeRenderingM
 import org.jetbrains.kotlin.analysis.api.renderer.types.impl.KaTypeRendererForSource
 import org.jetbrains.kotlin.analysis.api.renderer.types.renderers.KaFunctionalTypeRenderer
 import org.jetbrains.kotlin.analysis.api.scopes.KaScope
+import org.jetbrains.kotlin.analysis.api.signatures.KaCallableSignature
+import org.jetbrains.kotlin.analysis.api.signatures.KaFunctionSignature
 import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassKind
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassLikeSymbol
@@ -49,6 +55,7 @@ import org.jetbrains.kotlin.analysis.api.symbols.findTopLevelCallables
 import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.symbol
 import org.jetbrains.kotlin.analysis.api.types.KaFunctionType
+import org.jetbrains.kotlin.analysis.api.types.KaType
 import org.jetbrains.kotlin.analysis.api.types.KaTypeNullability
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
@@ -59,6 +66,7 @@ import org.jetbrains.kotlin.psi.KtImportDirective
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtPackageDirective
+import org.jetbrains.kotlin.psi.KtSimpleNameExpression
 import org.jetbrains.kotlin.psi.KtSimpleNameStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 import org.jetbrains.kotlin.psi.KtTypeReference
@@ -67,6 +75,7 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisResultLimits
 import ru.lazyhat.compukters.ide.analysis.CompletionCallShape
+import ru.lazyhat.compukters.ide.analysis.CompletionCallablePresentation
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
 import ru.lazyhat.compukters.ide.analysis.CompletionSymbol
@@ -108,7 +117,7 @@ internal object CompletionQuery {
         )
     }
 
-    @OptIn(KaExperimentalApi::class)
+    @OptIn(KaExperimentalApi::class, KaIdeApi::class)
     private fun KaSession.collect(
         context: CompletionContext,
         file: org.jetbrains.kotlin.psi.KtFile,
@@ -122,6 +131,21 @@ internal object CompletionQuery {
         val scopedFqNames = mutableSetOf<String>()
         val nameMatches: (org.jetbrains.kotlin.name.Name) -> Boolean = { name ->
             name.asString().startsWith(context.prefix)
+        }
+        val scopeContext = file.scopeContext(context.position)
+        val receiverType = context.receiver?.expressionType
+        val nameExpression =
+            generateSequence(context.position as com.intellij.psi.PsiElement?) { it.parent }
+                .filterIsInstance<KtSimpleNameExpression>()
+                .firstOrNull()
+        val extensionChecker = nameExpression?.let { createExtensionCandidateChecker(file, it, context.receiver) }
+
+        fun functionSignature(function: KaFunctionSymbol): KaFunctionSignature<*> {
+            val signature = function.asSignature()
+            if (!function.isExtension) return signature
+            val applicable =
+                extensionChecker?.computeApplicability(function) as? KaExtensionApplicabilityResult.Applicable ?: return signature
+            return signature.substitute(applicable.substitutor)
         }
 
         KeywordCompletion.candidates(context).forEach { keyword ->
@@ -144,6 +168,7 @@ internal object CompletionQuery {
         fun accept(
             symbol: KaDeclarationSymbol,
             locality: Int,
+            resolvedSignature: KaCallableSignature<*>? = null,
         ) {
             if (!visibility.isVisible(symbol)) return
             val named = symbol as? KaNamedSymbol ?: return
@@ -162,15 +187,17 @@ internal object CompletionQuery {
                 }
             val fqName = symbol.fqName()
             fqName?.let(scopedFqNames::add)
+            val signature = (resolvedSignature as? KaFunctionSignature<*>) ?: (symbol as? KaFunctionSymbol)?.let(::functionSignature)
             val item =
                 CompletionItem(
-                    completionLabel(symbol, name),
+                    signature?.let { completionLabel(it, name) } ?: name,
                     name,
                     symbol.completionKind(),
                     detail,
                     origin,
                     fqName?.let { CompletionSymbol(it, null) },
-                    callShape = if (context.allowsCall()) (symbol as? KaFunctionSymbol)?.let { callShape(it) } else null,
+                    callShape = if (context.allowsCall()) signature?.let { callShape(it) } else null,
+                    callablePresentation = signature?.let { callablePresentation(it) },
                 )
             ranked.offer(
                 RankedCompletion(
@@ -186,8 +213,6 @@ internal object CompletionQuery {
                 ),
             )
         }
-        val scopeContext = file.scopeContext(context.position)
-        val receiverType = context.receiver?.expressionType
         if (receiverType == null) {
             scopeContext.scopes.forEachIndexed { scopeIndex, scopeWithKind ->
                 val locality = Int.MAX_VALUE - scopeIndex
@@ -213,16 +238,18 @@ internal object CompletionQuery {
                         exactCandidates.filter { it.shortName == declaration.shortName },
                     )
                 val function = indexedFunction(declaration, snapshot)
+                val signature = function?.let(::functionSignature)
                 val item =
                     CompletionItem(
-                        function?.let { completionLabel(it, declaration.shortName) } ?: declaration.shortName,
+                        signature?.let { completionLabel(it, declaration.shortName) } ?: declaration.shortName,
                         importPlan.insertText,
                         declaration.kind,
                         declaration.signature,
                         declaration.origin,
                         importPlan.symbol,
                         importPlan.additionalEdits,
-                        if (context.allowsCall()) function?.let { callShape(it) } else null,
+                        if (context.allowsCall()) signature?.let { callShape(it) } else null,
+                        signature?.let { callablePresentation(it) },
                     )
                 val locality =
                     when (declaration.origin) {
@@ -245,7 +272,7 @@ internal object CompletionQuery {
             }
         } else {
             receiverType.scope?.let { memberScope ->
-                memberScope.getCallableSignatures(nameMatches).forEach { accept(it.symbol, Int.MAX_VALUE) }
+                memberScope.getCallableSignatures(nameMatches).forEach { accept(it.symbol, Int.MAX_VALUE, it) }
                 memberScope.getClassifierSymbols(nameMatches).forEach { accept(it, Int.MAX_VALUE) }
             }
             val receiverClass =
@@ -293,7 +320,11 @@ internal object CompletionQuery {
         declaration: GlobalCompletionDeclaration,
         snapshot: AdmittedK2Snapshot,
     ): KaFunctionSymbol? {
-        if (declaration.kind != CompletionKind.Function && declaration.kind != CompletionKind.ExtensionFunction) return null
+        if (declaration.kind != CompletionKind.Function && declaration.kind != CompletionKind.ExtensionFunction &&
+            declaration.kind != CompletionKind.MemberFunction
+        ) {
+            return null
+        }
         if (declaration.origin == DeclarationOrigin.Project) {
             val file = snapshot.files[declaration.sourcePath] ?: return null
             return generateSequence(file.findElementAt(declaration.sourceRange.startUtf16)) { it.parent }
@@ -312,53 +343,70 @@ internal object CompletionQuery {
     }
 
     @OptIn(KaExperimentalApi::class)
-    private fun KaSession.callShape(symbol: KaFunctionSymbol): CompletionCallShape {
-        val parameters = symbol.valueParameters
+    private fun KaSession.callShape(signature: KaFunctionSignature<*>): CompletionCallShape {
+        val parameters = signature.valueParameters
         val last = parameters.lastOrNull()
-        val trailingLambda = trailingLambdaType(last) != null
+        val trailingLambda = trailingLambdaType(last?.symbol, last?.returnType) != null
         val ordinary = if (trailingLambda) parameters.dropLast(1) else parameters
-        return CompletionCallShape(parameters.isNotEmpty(), ordinary.any { !it.hasDefaultValue && !it.isVararg }, trailingLambda)
+        return CompletionCallShape(
+            parameters.isNotEmpty(),
+            ordinary.any { !it.symbol.hasDefaultValue && !it.symbol.isVararg },
+            trailingLambda,
+        )
     }
 
     @OptIn(KaExperimentalApi::class)
-    private fun KaSession.trailingLambdaType(parameter: KaValueParameterSymbol?): KaFunctionType? {
+    private fun KaSession.trailingLambdaType(
+        parameter: KaValueParameterSymbol?,
+        parameterType: KaType?,
+    ): KaFunctionType? {
         if (parameter == null || parameter.isVararg) return null
-        val type = parameter.returnType.fullyExpandedType as? KaFunctionType ?: return null
+        val type = parameterType?.fullyExpandedType as? KaFunctionType ?: return null
         return type.takeIf { it.nullability == KaTypeNullability.NON_NULLABLE }
     }
 
     @OptIn(KaExperimentalApi::class)
     private fun KaSession.completionLabel(
-        symbol: KaDeclarationSymbol,
+        signature: KaFunctionSignature<*>,
         name: String,
-    ): String =
-        if (symbol is KaFunctionSymbol) {
-            val single = symbol.valueParameters.singleOrNull()
-            val lambdaType = trailingLambdaType(single)
-            if (lambdaType != null) {
-                buildString {
-                    append(name)
-                    append(" { ")
-                    append(requireNotNull(single).name.asString())
-                    append(": ")
-                    append(lambdaType.render(lambdaLabelTypeRenderer, Variance.INVARIANT))
-                    if (single.hasDefaultValue) append(" = …")
-                    append(" }")
-                }
-            } else {
-                symbol.valueParameters.joinToString(prefix = "$name(", postfix = ")") { parameter ->
-                    buildString {
-                        if (parameter.isVararg) append("vararg ")
-                        append(parameter.name.asString())
-                        append(": ")
-                        append(parameter.returnType.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT))
-                        if (parameter.hasDefaultValue) append(" = …")
-                    }
-                }
+    ): String {
+        val single = signature.valueParameters.singleOrNull()
+        val lambdaType = trailingLambdaType(single?.symbol, single?.returnType)
+        return if (lambdaType != null) {
+            buildString {
+                append(name)
+                append(" { ")
+                append(requireNotNull(single).name.asString())
+                append(": ")
+                append(lambdaType.render(lambdaLabelTypeRenderer, Variance.INVARIANT))
+                if (single.symbol.hasDefaultValue) append(" = …")
+                append(" }")
             }
         } else {
-            name
+            signature.valueParameters.joinToString(prefix = "$name(", postfix = ")") { parameter ->
+                buildString {
+                    if (parameter.symbol.isVararg) append("vararg ")
+                    append(parameter.name.asString())
+                    append(": ")
+                    append(parameter.returnType.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT))
+                    if (parameter.symbol.hasDefaultValue) append(" = …")
+                }
+            }
         }
+    }
+
+    @OptIn(KaExperimentalApi::class)
+    private fun KaSession.callablePresentation(signature: KaFunctionSignature<*>): CompletionCallablePresentation =
+        CompletionCallablePresentation(
+            signature.symbol.receiverParameter
+                ?.returnType
+                ?.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT),
+            signature.symbol.callableId
+                ?.packageName
+                ?.asString()
+                ?.takeIf { it.isNotEmpty() },
+            signature.returnType.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT),
+        )
 }
 
 private data class RankedCompletion(
@@ -385,7 +433,11 @@ private fun org.jetbrains.kotlin.analysis.api.symbols.KaDeclarationSymbol.comple
         }
 
         is KaFunctionSymbol -> {
-            if (isExtension) CompletionKind.ExtensionFunction else CompletionKind.Function
+            when {
+                isExtension -> CompletionKind.ExtensionFunction
+                callableId?.classId != null -> CompletionKind.MemberFunction
+                else -> CompletionKind.Function
+            }
         }
 
         is KaPropertySymbol -> {

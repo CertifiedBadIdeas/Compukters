@@ -158,7 +158,27 @@ class IdeAnalysisPresentation private constructor(
                 }
                 usage.copy(range = shifted)
             }
-        return IdeAnalysisPresentation(emptyList(), rebased, counts)
+        val rebasedDiagnostics =
+            diagnostics.mapNotNull { diagnostic ->
+                if (diagnostic.path != activePath) return@mapNotNull diagnostic
+                val range = diagnostic.range ?: return@mapNotNull diagnostic
+                when {
+                    range.endUtf16 <= change.oldRange.startUtf16 -> {
+                        diagnostic
+                    }
+
+                    range.startUtf16 >= change.oldRange.endUtf16 -> {
+                        diagnostic.copy(
+                            range = EditorRange(Math.addExact(range.startUtf16, delta), Math.addExact(range.endUtf16, delta)),
+                        )
+                    }
+
+                    else -> {
+                        null
+                    }
+                }
+            }
+        return IdeAnalysisPresentation(rebasedDiagnostics, rebased, counts)
     }
 
     companion object {
@@ -355,7 +375,8 @@ class IdeAnalysisCoordinator(
             check(!closed) { "analysis coordinator is closed" }
             val current = session ?: return
             request = current.snapshot?.let { CompletionRequest(current.path, current.caretOffsetUtf16) }
-            session = current.copy(pendingCompletion = if (request == null) PendingCompletion.Manual else null)
+            session = current.copy(pendingCompletion = if (request == null) PendingCompletion.Manual else null, diagnosticsDeferred = true)
+            requests.setDiagnosticsEnabled(false, current.path)
         }
         request?.let { requests.manualCompletion(it.path, it.offsetUtf16) }
     }
@@ -462,6 +483,7 @@ class IdeAnalysisCoordinator(
     }
 
     fun showParameterInfo() {
+        requests.cancelCompletion()
         val request: ParameterInfoRequest?
         synchronized(lock) {
             check(!closed) { "analysis coordinator is closed" }
@@ -471,6 +493,8 @@ class IdeAnalysisCoordinator(
             request = current.snapshot?.let { snapshot -> beginParameterInfoLocked(current, snapshot) }
             val active = publishedState.get() as? IdeAnalysisState.Active
             if (active != null) publishedState.set(active.copy(completion = null, parameterInfo = null))
+            session = current.copy(diagnosticsDeferred = false)
+            requests.setDiagnosticsEnabled(true, current.path)
         }
         cancelPointerRequests()
         requests.cancelParameterInfo()
@@ -674,7 +698,16 @@ class IdeAnalysisCoordinator(
         dismissParameterInfo()
     }
 
-    fun dismissCompletion() = updateCompletion { null }
+    fun dismissCompletion() {
+        requests.cancelCompletion()
+        updateCompletion { null }
+        synchronized(lock) {
+            session?.let {
+                session = it.copy(diagnosticsDeferred = false)
+                requests.setDiagnosticsEnabled(true, it.path)
+            }
+        }
+    }
 
     fun selectCompletion(
         document: EditorDocument,
@@ -715,8 +748,11 @@ class IdeAnalysisCoordinator(
             activeAttachedSources = profile?.let { attachedSources.withAddonBundles(it.addonBundles) } ?: attachedSources
             targetProfile = profile
             targetRevision = Math.incrementExact(targetRevision)
+            requests.cancelCompletion()
+            session = session?.copy(diagnosticsDeferred = false)
             val active = publishedState.get() as? IdeAnalysisState.Active ?: return
             publishedState.set(active.copy(completion = null))
+            requests.setDiagnosticsEnabled(true, active.path)
         }
     }
 
@@ -822,7 +858,7 @@ class IdeAnalysisCoordinator(
         synchronized(lock) {
             val latest = session ?: return
             if (closed || version != expectedVersion || latest !== current) return
-            session = latest.copy(snapshot = snapshot, pendingCompletion = null)
+            session = latest.copy(snapshot = snapshot, pendingCompletion = null, diagnosticsDeferred = latest.pendingCompletion != null)
             completion = latest.pendingCompletion
             publishedState.set(
                 IdeAnalysisState.Active(
@@ -833,6 +869,7 @@ class IdeAnalysisCoordinator(
                     null,
                 ),
             )
+            requests.setDiagnosticsEnabled(completion == null, current.path)
             requests.sourceChanged(snapshot, current.path)
             parameterInfo = if (parameterInfoRequested) beginParameterInfoLocked(latest, snapshot) else null
         }
@@ -864,7 +901,17 @@ class IdeAnalysisCoordinator(
                         snapshot.identity,
                         current.path,
                         current.documentRevision,
-                        IdeAnalysisPresentation.of(accepted.diagnostics, accepted.semanticTokens, accepted.methodUsages),
+                        IdeAnalysisPresentation.of(
+                            if (result.diagnosticsIncluded &&
+                                !current.diagnosticsDeferred
+                            ) {
+                                accepted.diagnostics
+                            } else {
+                                prior?.presentation?.diagnostics.orEmpty()
+                            },
+                            accepted.semanticTokens,
+                            accepted.methodUsages,
+                        ),
                         prior?.completion,
                         prior?.interaction ?: IdeSemanticInteraction.None,
                         prior?.parameterInfo,
@@ -876,6 +923,8 @@ class IdeAnalysisCoordinator(
 
             is AnalysisResult.Completion -> {
                 if (result.items.isEmpty() || !validRange(current.text, result.replacement.startUtf16, result.replacement.endUtf16)) {
+                    session = current.copy(diagnosticsDeferred = false)
+                    requests.setDiagnosticsEnabled(true, current.path)
                     visibleLatency.resultUnavailable(IdeVisibleLatencyKind.AutomaticCompletion, current.documentRevision)
                     return
                 }
@@ -894,6 +943,8 @@ class IdeAnalysisCoordinator(
                     }
                 val entries = completionPlanner.plan(result.items, manifest, targetProfile)
                 if (entries.isEmpty()) {
+                    session = current.copy(diagnosticsDeferred = false)
+                    requests.setDiagnosticsEnabled(true, current.path)
                     visibleLatency.resultUnavailable(IdeVisibleLatencyKind.AutomaticCompletion, current.documentRevision)
                     return
                 }
@@ -1336,6 +1387,7 @@ class IdeAnalysisCoordinator(
         val snapshot: AdmittedAnalysisSnapshot?,
         val pendingCompletion: PendingCompletion? = null,
         val provisionalPresentation: IdeAnalysisPresentation = IdeAnalysisPresentation.Empty,
+        val diagnosticsDeferred: Boolean = false,
         val overlays: Map<VirtualSourcePath, String> = emptyMap(),
     )
 

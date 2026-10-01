@@ -58,7 +58,7 @@ internal object K2QueryDispatcher {
         val collected =
             analyze(file) {
                 PresentationParts(
-                    DiagnosticQuery.collect(this, query.path, file, limits),
+                    if (query.includeDiagnostics) DiagnosticQuery.collect(this, query.path, file, limits) else emptyList(),
                     SemanticTokenQuery.collect(this, query.path, file, limits),
                     MethodUsageQuery.collect(this, query.path, file, snapshot, limits),
                 )
@@ -77,7 +77,7 @@ internal object K2QueryDispatcher {
                     ),
                 methodUsages = collected.methodUsages,
             )
-        return AnalysisResult.Presentation(query.identity, presentation)
+        return AnalysisResult.Presentation(query.identity, presentation, query.includeDiagnostics)
     }
 }
 

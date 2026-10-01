@@ -249,11 +249,13 @@ class IdeClientControllerTest {
         val caret = fixture.textEditor().caretUtf16
         fixture.controller.dispatch(IdeCommand.OpenDiagnostic(row))
         assertEquals(caret, fixture.textEditor().caretUtf16)
-        assertTrue(
+        assertEquals(
+            EditorRange(5, 6),
             fixture
                 .workspaceView()
                 .diagnostics.rows
-                .isEmpty(),
+                .single()
+                .diagnostic.range,
         )
         fixture.controller.close()
     }

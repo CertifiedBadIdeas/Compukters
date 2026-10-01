@@ -30,6 +30,7 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
+import ru.lazyhat.compukters.ide.analysis.CompletionCallablePresentation
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
 import ru.lazyhat.compukters.ide.analysis.CompletionSymbol
@@ -59,6 +60,20 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class AnalysisProtocolRoundTripTest {
+    @Test
+    fun `semantic-only presentation policy round trips and rejects mismatched diagnostics`() {
+        val query = AnalysisQuery.Presentation(identity, path(), false)
+        assertEquals(AnalysisQueryRequest(requestId, query), roundTrip(AnalysisQueryRequest(requestId, query), context))
+        val result = AnalysisResult.Presentation(identity, SnapshotPresentation.create(identity, sourceLengths()), false)
+        val message = AnalysisQuerySuccess(requestId, result)
+        val decoded = assertIs<AnalysisQuerySuccess>(roundTrip(message, context.forQuery(query)))
+        assertEquals(false, assertIs<AnalysisResult.Presentation>(decoded.result).diagnosticsIncluded)
+        assertEquals(identity, decoded.result.identity)
+        assertFailsWith<IllegalArgumentException> {
+            AnalysisMessageCodec.encode(message, context.forQuery(query.copy(includeDiagnostics = true)))
+        }
+    }
+
     @Test
     fun `rename query and editable locations round trip`() {
         val query = AnalysisQuery.Rename(identity, path(), 5, "renamed")
@@ -232,6 +247,7 @@ class AnalysisProtocolRoundTripTest {
                                 callShape =
                                     ru.lazyhat.compukters.ide.analysis
                                         .CompletionCallShape(true, false, true),
+                                callablePresentation = CompletionCallablePresentation("T", "kotlin", "Int"),
                             ),
                         ),
                         sourceLengths().getValue(path()),

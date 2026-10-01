@@ -31,6 +31,24 @@ import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
     @Test
+    fun `semantic-only presentation omits diagnostics and retains symbol highlighting`() {
+        K2QueryFixture.source("main.kt" to "fun main() { val value = 1; unknownCall(value) }").use { fixture ->
+            val query = fixture.presentation()
+            val full = fixture.execute(query) as AnalysisResult.Presentation
+            val partial = fixture.execute(query.copy(includeDiagnostics = false)) as AnalysisResult.Presentation
+            val fullValue = full.value.accept(fixture.identity) as ru.lazyhat.compukters.ide.analysis.SnapshotPresentationAcceptance.Active
+            val partialValue =
+                partial.value.accept(
+                    fixture.identity,
+                ) as ru.lazyhat.compukters.ide.analysis.SnapshotPresentationAcceptance.Active
+            assertTrue(fullValue.diagnostics.isNotEmpty())
+            assertTrue(partialValue.diagnostics.isEmpty())
+            assertEquals(fullValue.semanticTokens, partialValue.semanticTokens)
+            assertEquals(false, partial.diagnosticsIncluded)
+        }
+    }
+
+    @Test
     fun `scope functions resolve without imports in native analysis`() {
         val source = "fun main() { val value = \"text\".let { it.length }; val doubled = with(value) { this * 2 } }"
         K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
