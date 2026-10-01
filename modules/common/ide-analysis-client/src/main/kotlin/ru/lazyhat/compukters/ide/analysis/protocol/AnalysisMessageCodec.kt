@@ -32,6 +32,7 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisResultLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
+import ru.lazyhat.compukters.ide.analysis.CompletionCallShape
 import ru.lazyhat.compukters.ide.analysis.CompletionItem
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
 import ru.lazyhat.compukters.ide.analysis.CompletionSymbol
@@ -761,6 +762,12 @@ private class MessageSink {
     }
 
     fun completionItem(value: CompletionItem) {
+        u8(if (value.callShape == null) 0 else 1)
+        value.callShape?.let { shape ->
+            boolean(shape.hasParameters)
+            boolean(shape.hasRequiredArguments)
+            boolean(shape.trailingLambda)
+        }
         string(value.label)
         string(value.insertText)
         enum(value.kind)
@@ -1184,8 +1191,9 @@ private class MessageSource(
     fun diagnostic(): EditorDiagnostic =
         EditorDiagnostic(enumValue(), string(context.limits.diagnosticTextBytes), nullablePath(), nullableRange())
 
-    fun completionItem(): CompletionItem =
-        CompletionItem(
+    fun completionItem(): CompletionItem {
+        val callShape = optional { CompletionCallShape(boolean(), boolean(), boolean()) }
+        return CompletionItem(
             string(context.limits.detailTextBytes),
             string(context.limits.detailTextBytes),
             enumValue(),
@@ -1200,7 +1208,9 @@ private class MessageSource(
             List(boundedCount(1, "completion additional edit")) {
                 CompletionTextEdit(range(), string(context.limits.detailTextBytes))
             },
+            callShape,
         )
+    }
 
     fun nullableExpressionInfo(): EditorExpressionInfo? =
         optional {

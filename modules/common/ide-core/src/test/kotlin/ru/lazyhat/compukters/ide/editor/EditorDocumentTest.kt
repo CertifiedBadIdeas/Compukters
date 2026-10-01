@@ -28,6 +28,14 @@ import kotlin.test.assertTrue
 
 class EditorDocumentTest {
     @Test
+    fun `atomic edit rejects a caret inside a surrogate pair without modifying text`() {
+        val editor = EditorDocument("old")
+        assertIs<EditorEditResult.Rejected>(editor.replaceRanges(EditorRange(0, 3), "😀", emptyList(), 1))
+        assertEquals("old", editor.materialize())
+        assertEquals(0, editor.caretOffset)
+    }
+
+    @Test
     fun `horizontal navigation and deletion preserve scalar and CRLF boundaries`() {
         val editor = EditorDocument("a😀\r\nb")
         assertTrue(editor.setCaret(3))

@@ -86,7 +86,16 @@ workspace and answers diagnostics, completion, symbol, reference, expression, an
 and analysis use the same resolved platform bundle and source-snapshot identities, but have separate worker sessions
 and result contracts.
 
-Analysis protocol v11 also carries explicit Kotlin format, rename-admission, and parameter-information requests. Rename
+Analysis protocol v12 also carries explicit Kotlin format, rename-admission, and parameter-information requests.
+Completion items include an optional semantic call shape: presence of parameters, required arguments before a
+trailing lambda, and a final non-null function parameter. K2 derives this from resolved symbols (including type
+aliases), not rendered signatures; imports, callable references, type positions and shorthand string templates
+receive name-only insertions. The client uses that shape to add or reuse call delimiters and records the primary
+caret together with autoimports in one atomic editor history entry. Newly generated delimiters join smart typing's
+tracked closers. Structural Enter expands an empty Kotlin brace pair even when it was inserted by completion or
+loaded from source, removing inner padding and preserving the document's line endings and leading indentation.
+Protocol v11 workers are rejected at handshake;
+the platform bundle, compiler protocol and VM artifact ABI are unchanged. Rename
 returns bounded editable project locations after validating a single Kotlin identifier and speculatively checking
 project diagnostics and reference bindings. The worker restores its original PSI, source identity, and completion
 state even on cancellation; a failed restoration invalidates the workspace and requires a fresh snapshot open.

@@ -102,6 +102,47 @@ class KotlinSmartTypingTest {
     }
 
     @Test
+    fun `enter splits existing spaced lambda braces and preserves endings indentation and caret history`() {
+        for (separator in listOf("\n", "\r\n")) {
+            for (indent in listOf("    ", "\t")) {
+                val source = "fun main() {$separator${indent}maven {  }$separator}"
+                fixture(source) { document, typing ->
+                    val caret = source.indexOf("{  }") + 2
+                    document.setCaret(caret)
+                    assertIs<EditorEditResult.Applied>(typing.enter())
+                    val expected = "fun main() {$separator${indent}maven {$separator$indent    $separator$indent}$separator}"
+                    assertEquals(expected, document.materialize())
+                    val expectedCaret = expected.indexOf("maven {") + "maven {".length + separator.length + indent.length + 4
+                    assertEquals(expectedCaret, document.caretOffset)
+                    assertIs<EditorEditResult.Applied>(document.undo())
+                    assertEquals(source, document.materialize())
+                    assertEquals(caret, document.caretOffset)
+                    assertIs<EditorEditResult.Applied>(document.redo())
+                    assertEquals(expected, document.materialize())
+                    assertEquals(expectedCaret, document.caretOffset)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `enter does not split apparent braces in strings comments or nonempty blocks`() {
+        for (source in listOf("val value = \"{  }\"", "// {  }", "/* {  } */", "val value = \"\"\"{  }\"\"\"")) {
+            fixture(source) { document, typing ->
+                val caret = source.indexOf("{  }") + 2
+                document.setCaret(caret)
+                typing.enter()
+                assertEquals(source.substring(0, caret) + "\n" + source.substring(caret), document.materialize())
+            }
+        }
+        fixture("maven { value }") { document, typing ->
+            document.setCaret("maven { ".length)
+            typing.enter()
+            assertEquals("maven { \n    value }", document.materialize())
+        }
+    }
+
+    @Test
     fun `rejected structural edit retains its automatic pair`() {
         val document = EditorDocument("", EditorLimits(maxCodeUnits = 2, maxUtf8Bytes = 2))
         val highlighter = IncrementalKotlinHighlighter(document)

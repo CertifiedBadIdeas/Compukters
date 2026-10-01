@@ -45,6 +45,43 @@ import kotlin.test.assertFailsWith
 
 class AnalysisProtocolHostileInputTest {
     @Test
+    fun `completion decoder rejects impossible call shapes and non-canonical shape flags`() {
+        val path = VirtualSourcePath.kotlin("main.kt")
+        val query = AnalysisQuery.Completion(identity, path, 3, CompletionTrigger.Manual)
+        val label = "uniqueCallLabel"
+        val result =
+            AnalysisResult.Completion.create(
+                identity,
+                EditorRange(0, 3),
+                listOf(
+                    ru.lazyhat.compukters.ide.analysis.CompletionItem(
+                        label,
+                        "call",
+                        ru.lazyhat.compukters.ide.analysis.CompletionKind.Function,
+                        callShape =
+                            ru.lazyhat.compukters.ide.analysis
+                                .CompletionCallShape(true, true, true),
+                    ),
+                ),
+                3,
+            )
+        val correlated = context.forQuery(query)
+        val frame = AnalysisMessageCodec.encode(AnalysisQuerySuccess(RequestId.of(1uL), result), correlated)
+        val labelBytes = label.encodeToByteArray().toList()
+        val labelStart =
+            frame.payload
+                .toList()
+                .windowed(labelBytes.size)
+                .indexOf(labelBytes)
+        // Optional marker and three canonical booleans precede the length-prefixed label in protocol v12.
+        val shapeStart = labelStart - 8
+        for ((offset, value) in listOf(0 to 2, 1 to 2, 1 to 0)) {
+            val hostile = frame.copy(payload = frame.payload.copyOf().also { it[shapeStart + offset] = value.toByte() })
+            assertEquals(AnalysisProtocolError.InvalidMessageValue, messageFailure(hostile, correlated).error)
+        }
+    }
+
+    @Test
     fun `method usage decoder rejects count overflow and exhausted item budget`() {
         val path = VirtualSourcePath.kotlin("main.kt")
         val query = AnalysisQuery.Presentation(identity, path)
@@ -136,7 +173,7 @@ class AnalysisProtocolHostileInputTest {
                 ),
                 context,
             )
-        val wrongProtocol = handshake.copy(payload = handshake.payload.copyOf().also { it[0] = 10 })
+        val wrongProtocol = handshake.copy(payload = handshake.payload.copyOf().also { it[0] = 11 })
         assertEquals(AnalysisProtocolError.WrongVersion, messageFailure(wrongProtocol).error)
     }
 

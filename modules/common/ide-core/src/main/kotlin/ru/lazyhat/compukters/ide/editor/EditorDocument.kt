@@ -247,8 +247,20 @@ class EditorDocument(
         primaryRange: EditorRange,
         primaryText: String,
         additionalEdits: List<EditorTextEdit>,
+        primaryCaretUtf16: Int = primaryText.length,
     ): EditorEditResult {
-        if (additionalEdits.isEmpty()) return replaceRange(primaryRange, primaryText)
+        if (primaryCaretUtf16 !in 0..primaryText.length ||
+            (
+                primaryCaretUtf16 > 0 && primaryCaretUtf16 < primaryText.length &&
+                    primaryText[primaryCaretUtf16 - 1].isHighSurrogate() && primaryText[primaryCaretUtf16].isLowSurrogate()
+            )
+        ) {
+            return EditorEditResult.Rejected(EditorRejection.InvalidRange)
+        }
+        if (additionalEdits.isEmpty()) {
+            val caret = primaryRange.startUtf16 + primaryCaretUtf16
+            return replace(primaryRange, primaryText, EditorHistoryKind.Atomic, EditorChangeOrigin.User, EditorSelection(caret, caret))
+        }
         if (closed) return EditorEditResult.Rejected(EditorRejection.Closed)
         val edits = listOf(EditorTextEdit(primaryRange, primaryText)) + additionalEdits
         if (
@@ -278,7 +290,7 @@ class EditorDocument(
         val primaryIndex = ordered.indexOfFirst { it === edits.first() }
         val primary = historyEdits[primaryIndex]
         val before = selection
-        val caret = primary.afterStartUtf16 + primary.inserted.length
+        val caret = primary.afterStartUtf16 + primaryCaretUtf16
         val after = EditorSelection(caret, caret)
         val entry = EditorHistoryEntry(historyEdits, before, after, EditorHistoryKind.Atomic)
         if (!history.canRecord(entry)) return EditorEditResult.Rejected(EditorRejection.UndoLimit)

@@ -126,7 +126,7 @@ internal object DeclarationOriginMapper {
 }
 
 @OptIn(KaExperimentalApi::class)
-private fun KaSession.canonicalPlatformSignature(symbol: KaFunctionSymbol): String {
+internal fun KaSession.canonicalPlatformSignature(symbol: KaFunctionSymbol): String {
     val parameters =
         listOfNotNull(symbol.receiverParameter?.returnType)
             .plus(symbol.valueParameters.map { it.returnType })
