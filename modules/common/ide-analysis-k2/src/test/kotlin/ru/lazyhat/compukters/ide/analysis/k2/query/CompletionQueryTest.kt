@@ -41,6 +41,33 @@ import kotlin.test.assertTrue
 
 class CompletionQueryTest {
     @Test
+    fun `string stdlib helpers complete with overloads and concrete return types`() {
+        for (attachedSources in listOf(false, true)) {
+            val source = "fun main() { val text = \"hello\"; text. }"
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val items = fixture.complete("main.kt", source.indexOf("text.") + 5).items
+                for (name in listOf("trim", "trimStart", "trimEnd", "substringBeforeLast", "removeSuffix", "replace")) {
+                    val matches = items.filter { it.insertText == name }
+                    assertTrue(matches.isNotEmpty(), name)
+                    assertTrue(matches.all { it.callablePresentation?.returnType == "String" }, name)
+                }
+                for (name in listOf("isBlank", "isEmpty", "isNotBlank", "isNotEmpty")) {
+                    assertEquals("Boolean", items.single { it.insertText == name }.callablePresentation?.returnType)
+                }
+                assertEquals(2, items.count { it.insertText == "split" })
+                assertEquals(2, items.count { it.insertText == "replace" })
+                assertTrue(
+                    items
+                        .filter { it.insertText == "split" || it.insertText == "lines" }
+                        .all { it.callablePresentation?.returnType == "List<String>" },
+                )
+                assertTrue(items.filter { it.insertText == "split" }.any { it.label.contains("Char") })
+                assertTrue(items.filter { it.insertText == "split" }.any { it.label.contains("String") })
+            }
+        }
+    }
+
+    @Test
     fun `completion allows trimmed word fragments without gaps inside a word`() {
         for (prefix in listOf("ti", "tf", "ake", "tke")) {
             val source = "fun takeIf() = Unit\nfun main() { $prefix }"

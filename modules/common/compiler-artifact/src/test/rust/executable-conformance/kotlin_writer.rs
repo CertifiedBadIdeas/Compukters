@@ -984,6 +984,55 @@ fn k2_text_stdlib_preserves_utf16_helpers() {
         ["text stdlib ok\n"],
         256,
     );
+    let path = std::env::var("COMPUKTER_KOTLIN_TEXT_STDLIB_ARTIFACT")
+        .expect("text stdlib artifact must be set");
+    let bytes =
+        fs::read(format!("{path}.failure.cpkt")).expect("text stdlib failure artifact must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("text stdlib failures must verify");
+    for mode in [
+        "negative-char-limit",
+        "negative-string-limit",
+        "overflow",
+        "replace-quota",
+        "split-quota",
+    ] {
+        let quota = mode.ends_with("-quota");
+        let mut profile = list_no_io_profile();
+        if quota {
+            profile.heap_bytes = 64 * 1024;
+        }
+        let mut session =
+            Session::admit(verified.clone(), profile, &[]).expect("text failure must admit");
+        let arguments = [utf16(mode).into_boxed_slice()];
+        session
+            .start(&[EntryValue::StringArray(&arguments)])
+            .expect("text failure must start");
+        let mut slices = 0;
+        loop {
+            match session
+                .advance(256, 256)
+                .expect("text failure must execute")
+            {
+                AdvanceOutcome::SliceExhausted => {
+                    slices += 1;
+                    assert!(slices < 100000, "text failure must terminate: {mode}");
+                }
+                AdvanceOutcome::Crashed(trap) if !quota => {
+                    assert_eq!(trap, GuestTrap::InvalidArgument, "{mode}");
+                    break;
+                }
+                AdvanceOutcome::AllocationExhausted(_) if quota => break,
+                outcome => panic!("unexpected text failure outcome for {mode}: {outcome:?}"),
+            }
+        }
+        if quota || mode == "overflow" {
+            assert!(
+                slices > 0,
+                "text loops must resume across quota slices: {mode}"
+            );
+        }
+    }
 }
 
 fn k2_string_compare_uses_utf16_code_units() {

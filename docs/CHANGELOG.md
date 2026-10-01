@@ -53,7 +53,10 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - Programs can search strings by UTF-16 code unit with `startsWith`, `endsWith`, `contains`, and `indexOf`, including
   an optional starting index for `indexOf`, and parse decimal input with `String.toIntOrNull()`.
 - String helpers include Unicode-whitespace blank checks and trimming, Char search and backward `lastIndexOf`,
-  delimiter-based substring extraction with optional fallback, and prefix/suffix removal.
+  delimiter-based substring extraction with optional fallback, prefix/suffix removal, Char/String splitting with
+  limits, CRLF/LF/CR line splitting, and case-sensitive Char/String replacement. Splitting retains empty parts;
+  replacement checks output-length overflow and avoids repeated string concatenation. Completion and hover resolve
+  the concrete overload signatures and their documentation.
 - Programs can use nullable strings and supported class references, compare them with `null`, and use `?:` or
   reference-result `?.` without evaluating the unused branch. Nullable `Int` values use managed boxes, support equality
   and Elvis, and allow Int-result safe calls such as `text?.length`. Other nullable primitives remain unsupported.
