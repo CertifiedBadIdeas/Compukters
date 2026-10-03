@@ -62,3 +62,29 @@ the handle expires. Reconnect and acquire a new handle to continue. Devices and 
 Start with the [kinetics guide]({{ '/CREATE-KINETICS/' | relative_url }}),
 [Stock Ticker guide]({{ '/CREATE-LOGISTICS/' | relative_url }}), or
 [boiler guide]({{ '/CREATE-BOILERS/' | relative_url }}) for code examples and operation limits.
+
+## Development verification
+
+The standalone addon has its own Minecraft 1.21.1 GameTest server with Compukters, Create 6.0.10 and the addon loaded.
+Run it independently from the base mod's GameTest server:
+
+```sh
+cd addons/create
+./gradlew-sandbox-dev-parallel-summary check
+./gradlew-sandbox-dev-parallel runGameTestServer
+```
+
+The tests build real devices and branched cable networks, name them through the server configurator, and compile and
+execute addon-enabled Guest Kotlin programs on placed computers. They cover motor-driven gauges, controller writes,
+cable cuts and restoration, block replacement, duplicate-name rejection, and expired handles. The boiler scenario
+contacts a non-controller tank segment, supplies water through Create's fluid capability, and checks passive heat,
+engine removal and restoration, tank replacement, and cable disconnection. Test classes are excluded from ordinary
+client/server runs and production archives. The base Compukters GameTests continue to run without Create.
+
+For the visual check, launch `./gradlew-sandbox-dev-parallel runClient` from the addon directory in a disposable world.
+Connect a computer to a Speedometer, Stressometer, Rotation Speed Controller and four-block Fluid Tank boiler using
+branched cables. Name each device with the Peripheral Configurator. Inspect the cable connections and editor names;
+attempt a duplicate name and verify the conflict is visible. Cut and restore the cable and confirm the displayed
+reachability changes. Compare a program's boiler readings with Engineer's Goggles, then remove/rebuild its engine and
+replace a tank segment; old program handles must fail before reacquisition. Record a screenshot or short recording.
+This client observation is separate from automated server verification.

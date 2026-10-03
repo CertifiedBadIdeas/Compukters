@@ -182,6 +182,9 @@ val verifyProductionJar =
             check(entries.none { it.startsWith("ru/lazyhat/compukters/addon/api/build/") }) {
                 "addon Guest API build tooling leaked into ${archive.name}"
             }
+            check(entries.none { it.startsWith("com/simibubi/create/") || it.startsWith("ru/lazyhat/compukters/integration/create/") }) {
+                "optional Create implementation or GameTest classes leaked into ${archive.name}"
+            }
             check(
                 entries.none { entry ->
                     entry.startsWith("ru/lazyhat/compukters/") && entry.substringAfterLast('/').contains("GameTest")
