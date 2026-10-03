@@ -23,9 +23,11 @@ NeoForge GameTests cover registration, automatic boot, two computers compiling
 and executing the same source, nested program execution, reboot, ticking,
 removal, VM shutdown, and recovery of a tombstoned persistent filesystem.
 
-The primary game baseline is **Minecraft 26.1.2**, **NeoForge 26.1.2.97**, and
-**JDK 25**. A compatibility build targets **Minecraft 1.21.1**, **NeoForge
-21.1.250**, and **Java 21** through the JNI runtime. The 26.1.2 production
+The primary game target is **Minecraft 26.1.2**, built against **NeoForge 26.1.2.112**,
+with **JDK 25** and the FFM runtime. The compatibility target is **Minecraft 1.21.1**,
+built against **NeoForge 21.1.252**, with **Java 21** and the JNI runtime. Mod metadata
+admits NeoForge starting at **26.1.2.97** and **21.1.250**, respectively; these lower
+bounds are distinct from the pinned build versions. The 26.1.2 production
 archive uses Minecraft's official names directly; the 1.21.1 archive is remapped
 during packaging. Neither archive requires Architectury at runtime.
 
