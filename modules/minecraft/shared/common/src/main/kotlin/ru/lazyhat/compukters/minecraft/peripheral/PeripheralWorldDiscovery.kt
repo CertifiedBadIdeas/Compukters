@@ -41,8 +41,13 @@ object PeripheralCableBlocks {
     internal fun contains(state: BlockState): Boolean = blocks.any { candidate -> state.block === candidate.get() }
 }
 
+internal data class PeripheralCableContact(
+    val position: BlockPos,
+    val face: Direction,
+)
+
 object PeripheralCableTopologyCache {
-    private val levels = WeakHashMap<ServerLevel, MutableMap<BlockPos, PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity>>>()
+    private val levels = WeakHashMap<ServerLevel, MutableMap<BlockPos, PeripheralCableTraversal<BlockPos, PeripheralCableContact>>>()
 
     @JvmStatic
     fun invalidate(level: Level) {
@@ -55,16 +60,21 @@ object PeripheralCableTopologyCache {
     internal fun getOrCompute(
         level: ServerLevel,
         computerPosition: BlockPos,
-        discover: () -> PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity>,
-    ): PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity> {
+        discover: () -> PeripheralCableTraversal<BlockPos, PeripheralCableContact>,
+    ): PeripheralCableTraversal<BlockPos, PeripheralCableContact> {
         val cache = levels.getOrPut(level, ::linkedMapOf)
         val key = computerPosition.immutable()
         cache[key]?.let { return it }
-        if (cache.size >= MAXIMUM_COMPUTER_ENTRIES) cache.clear()
-        return discover().also { cache[key] = it }
+        return discover().also { traversal ->
+            val contactCount = (traversal as? PeripheralCableTraversal.Complete)?.contacts?.size ?: 0
+            val cachedContacts = cache.values.sumOf { (it as? PeripheralCableTraversal.Complete)?.contacts?.size ?: 0 }
+            if (cache.size >= MAXIMUM_COMPUTER_ENTRIES || cachedContacts + contactCount > MAXIMUM_CACHED_CONTACTS) cache.clear()
+            cache[key] = traversal
+        }
     }
 
     private const val MAXIMUM_COMPUTER_ENTRIES = 1024
+    private const val MAXIMUM_CACHED_CONTACTS = 65_536
 }
 
 internal object PeripheralDeviceNames {
@@ -218,9 +228,12 @@ internal object PeripheralWorldDiscovery {
         computerPosition: BlockPos,
     ): PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity> {
         check(level.server.isSameThread) { "peripheral cables must be discovered on the server thread" }
-        return PeripheralCableTopologyCache.getOrCompute(level, computerPosition) {
-            discoverUncached(level, adjacentCables(level, computerPosition))
-        }
+        return resolveContacts(
+            level,
+            PeripheralCableTopologyCache.getOrCompute(level, computerPosition) {
+                discoverUncached(level, adjacentCables(level, computerPosition))
+            },
+        )
     }
 
     fun discoverFromDevice(
@@ -228,9 +241,12 @@ internal object PeripheralWorldDiscovery {
         contactedPosition: BlockPos,
     ): PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity> {
         check(level.server.isSameThread) { "peripheral cables must be discovered on the server thread" }
-        return PeripheralCableTopologyCache.getOrCompute(level, contactedPosition) {
-            discoverUncached(level, adjacentCables(level, contactedPosition))
-        }
+        return resolveContacts(
+            level,
+            PeripheralCableTopologyCache.getOrCompute(level, contactedPosition) {
+                discoverUncached(level, adjacentCables(level, contactedPosition))
+            },
+        )
     }
 
     fun discoverFromCable(
@@ -238,26 +254,27 @@ internal object PeripheralWorldDiscovery {
         cablePosition: BlockPos,
     ): PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity> {
         check(level.server.isSameThread) { "peripheral cables must be discovered on the server thread" }
-        return PeripheralCableTopologyCache.getOrCompute(level, cablePosition) {
-            discoverUncached(level, listOf(cablePosition.immutable()))
-        }
+        return resolveContacts(
+            level,
+            PeripheralCableTopologyCache.getOrCompute(level, cablePosition) {
+                discoverUncached(level, listOf(cablePosition.immutable()))
+            },
+        )
     }
 
     private fun discoverUncached(
         level: ServerLevel,
         starts: List<BlockPos>,
-    ): PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity> {
-        val dimension = level.dimension().toString()
-        return PeripheralCableTopology<BlockPos, PeripheralDeviceIdentity>(
-            limits = DEFAULT_LIMITS,
+    ): PeripheralCableTraversal<BlockPos, PeripheralCableContact> =
+        PeripheralCableTopology<BlockPos, PeripheralCableContact>(
+            limits = DEFAULT_LIMITS.copy(maximumContacts = DEFAULT_LIMITS.maximumCables * Direction.entries.size),
             neighbors = { cable ->
                 Direction.entries.mapNotNull { direction ->
                     cable.relative(direction).immutable().takeIf { position -> isLoadedCable(level, position) }
                 }
             },
-            contacts = { cable -> contacts(level, dimension, cable) },
+            contacts = { cable -> contacts(level, cable) },
         ).traverse(starts)
-    }
 
     private fun adjacentCables(
         level: ServerLevel,
@@ -267,19 +284,29 @@ internal object PeripheralWorldDiscovery {
             position.relative(direction).immutable().takeIf { adjacent -> isLoadedCable(level, adjacent) }
         }
 
+    // Keep empty and currently unloaded positions: provider availability can change without rewiring.
     private fun contacts(
         level: ServerLevel,
-        dimension: String,
         cable: BlockPos,
-    ): List<PeripheralDeviceIdentity> =
-        Direction.entries.flatMap { direction ->
-            val position = cable.relative(direction)
-            if (!level.hasChunkAt(position) || PeripheralCableBlocks.contains(level.getBlockState(position))) {
-                emptyList()
+    ): List<PeripheralCableContact> =
+        Direction.entries.mapNotNull { direction ->
+            val position = cable.relative(direction).immutable()
+            if (level.hasChunkAt(position) && PeripheralCableBlocks.contains(level.getBlockState(position))) {
+                null
             } else {
-                ComputerAddonHosts.resolvePeripheralContact(level, position, direction.opposite).map { device ->
-                    PeripheralDeviceIdentity(device.providerId, dimension, device.anchor.immutable(), device.deviceKey)
-                }
+                PeripheralCableContact(position, direction.opposite)
+            }
+        }
+
+    private fun resolveContacts(
+        level: ServerLevel,
+        traversal: PeripheralCableTraversal<BlockPos, PeripheralCableContact>,
+    ): PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity> =
+        resolvePeripheralCableContacts(traversal, DEFAULT_LIMITS.maximumContacts) { contact ->
+            if (level.hasChunkAt(contact.position)) {
+                PeripheralDeviceNames.resolveContact(level, contact.position, contact.face)
+            } else {
+                emptyList()
             }
         }
 

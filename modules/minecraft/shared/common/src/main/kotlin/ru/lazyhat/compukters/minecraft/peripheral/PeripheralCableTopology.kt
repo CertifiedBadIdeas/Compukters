@@ -105,3 +105,28 @@ internal class PeripheralCableTopology<N, C>(
         return PeripheralCableTraversal.Complete(visited, discoveredContacts)
     }
 }
+
+internal fun <N, P, C> resolvePeripheralCableContacts(
+    traversal: PeripheralCableTraversal<N, P>,
+    maximumContacts: Int,
+    resolve: (P) -> Iterable<C>,
+): PeripheralCableTraversal<N, C> {
+    require(maximumContacts >= 0) { "maximumContacts must not be negative" }
+    return when (traversal) {
+        is PeripheralCableTraversal.LimitExceeded -> {
+            traversal
+        }
+
+        is PeripheralCableTraversal.Complete -> {
+            val contacts = linkedSetOf<C>()
+            for (candidate in traversal.contacts) {
+                for (contact in resolve(candidate)) {
+                    if (contacts.add(contact) && contacts.size > maximumContacts) {
+                        return PeripheralCableTraversal.LimitExceeded(PeripheralCableLimit.CONTACTS, maximumContacts)
+                    }
+                }
+            }
+            PeripheralCableTraversal.Complete(traversal.cables, contacts)
+        }
+    }
+}
