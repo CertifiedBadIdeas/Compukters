@@ -232,15 +232,20 @@ These views share storage: scalar reads allocate boxes, and reference reads reta
 elements into a new typed list, unboxing nullable Int values and retaining non-null references. Generic smart-cast
 arguments use checked reference conversions against their instantiated non-null parameter types.
 Generic call arguments are converted against the specialized parameter types, so searching a widened `List<Any>`
-boxes an `Int` argument before comparison. Universal value
-equality over `Any` and `Any?` lowers through existing reference, type-test, field-read, scalar, and string instructions:
-supported scalar boxes compare by value (boxed Float canonicalizes NaNs and distinguishes signed zero), strings by content, Guest classes with an explicit `equals` override call that method,
-and data classes compare supported primary-constructor properties. Other classes retain the default identity equality.
-Unsupported data-class property shapes receive a compiler diagnostic. `Int?` uses a nullable reference to the same
-managed Int box. Conversion to a scalar Int checks the box and reads its payload; nullable and Any? boundaries preserve
-existing box references. Supported scalar values also box at `Any`/`Any?` boundaries with checked scalar casts.
-Null participates in universal equality. General object hashing remains outside this subset; virtual string
-conversion is described under Runtime ABI 1.10 below.
+boxes an `Int` argument before comparison. Universal equality over references uses the canonical virtual
+`Any.equals(Any?)` method. Nullable `==` evaluates both operands once, compares null left receivers by identity,
+and dispatches non-null left receivers. A literal-null comparison remains a reference test; explicit `.equals(null)`
+still invokes the receiver. Root Any and arrays use identity, String compares UTF-16 content, and typed boxes compare
+values with canonical NaN and distinct signed zero for Float. Primitive Float `==` retains IEEE semantics.
+Generated data-class equals is an ordinary class method: it checks identity/type and compares primary-constructor
+properties through the same scalar/reference contract, including nullable and object fields. Array properties compare
+identity, while their generated hash uses content. Body properties do not participate. Custom/inherited methods and
+compiled libraries share dispatch; there is no compiler-side enumeration of class layouts at each equality call.
+`Int?` uses a nullable reference to the same managed Int box. Conversion to scalar Int checks the box and reads its
+payload; nullable and Any boundaries preserve existing box references. Virtual hashCode and reference-default string
+conversion are described under Runtime ABI 1.11 and 1.10 below. This equality implementation reuses ABI 1.11
+instructions without adding an opcode, C ABI change or persisted-state format. Compiled libraries must rebuild
+against the updated canonical runtime module.
 
 Nullable reference arrays have distinct nominal types with nullable element descriptors. `Array<Int?>` and
 `List<Int?>` store the same managed Int boxes or null, while `List<Int>` retains scalar storage. Nullable and non-null
@@ -585,6 +590,12 @@ Consequently, size-class rounding cannot cause a post-collection OOM when a cont
 adding an unbudgeted free-list or arena scan to allocation.
 
 ## Filesystem and machine lifetime
+
+Object identity is the bits of Ref32, not a separately assigned UUID. A managed Ref32 contains its object-header
+offset in the nonmoving VM heap; image/external references use their own domain payload. Identity stays stable while
+an object is live, but a freed slot may be reused and another VM may produce the same bits. The heap, stack and object
+identities are not persisted across machine close/recreation. Identity hashCode/default toString must not be used as
+durable IDs. The persistent ComputerId below identifies a computer's filesystem, not its Guest objects.
 
 The Rust runtime owns the guest filesystem and its persistence. Minecraft stores only a stable 128-bit `ComputerId`;
 guest paths and bytes never enter block-entity NBT or a JVM-side mirror. Every computer sees an immutable packaged

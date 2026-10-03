@@ -783,8 +783,8 @@ private fun scalarHashForm(type: ValueType): HashValueType =
         else -> error("unsupported scalar hash: $type")
     }
 
-private fun IrSimpleFunction.isGeneratedDataHash(): Boolean =
-    name.asString() == "hashCode" && (parent as? IrClass)?.isData == true &&
+private fun IrSimpleFunction.isGeneratedDataValueMethod(): Boolean =
+    name.asString() in setOf("hashCode", "equals") && (parent as? IrClass)?.isData == true &&
         origin != IrDeclarationOrigin.DEFINED && origin != IrDeclarationOrigin.FAKE_OVERRIDE
 
 private const val ANY_RUNTIME_TYPE = 5u
@@ -797,10 +797,12 @@ private const val UNIT_RUNTIME_TYPE = 21u
 private const val UNIT_INSTANCE_IMPORT = 29u
 private const val ANY_TO_STRING_IMPORT = 30u
 private const val ANY_HASH_CODE_IMPORT = 31u
-private const val RUNTIME_IMPORT_COUNT = 32
+private const val ANY_EQUALS_IMPORT = 32u
+private const val RUNTIME_IMPORT_COUNT = 33
 private const val UNIT_INSTANCE_NAME = "kotlin.Unit.INSTANCE"
 private const val ANY_TO_STRING_NAME = "kotlin.Any.toString"
 private const val ANY_HASH_CODE_NAME = "kotlin.Any.hashCode"
+private const val ANY_EQUALS_NAME = "kotlin.Any.equals"
 
 private data class ScalarBox(
     val type: UInt,
@@ -819,7 +821,7 @@ private val scalarBoxes =
     )
 private val runtimeMemberNames =
     listOf(INT_BOX_VALUE_NAME, THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME) +
-        scalarBoxes.drop(1).map { it.name } + UNIT_INSTANCE_NAME + ANY_TO_STRING_NAME + ANY_HASH_CODE_NAME
+        scalarBoxes.drop(1).map { it.name } + UNIT_INSTANCE_NAME + ANY_TO_STRING_NAME + ANY_HASH_CODE_NAME + ANY_EQUALS_NAME
 private const val INT_BOX_VALUE_NAME = "kotlin.Int.<boxed-value>"
 private const val THROWABLE_MESSAGE_NAME = "kotlin.Throwable.message"
 private const val THROWABLE_CAUSE_NAME = "kotlin.Throwable.cause"
@@ -1137,7 +1139,7 @@ internal object KotlinProjectLowering {
                 functions +
                     sourceClasses.flatMap {
                         it.declarations.filterIsInstance<IrSimpleFunction>().filter { function ->
-                            function.isGeneratedDataHash()
+                            function.isGeneratedDataValueMethod()
                         }
                     } +
                     collectionInterfaceClasses.flatMap { declaration ->
@@ -1163,8 +1165,10 @@ internal object KotlinProjectLowering {
                                 function.origin != IrDeclarationOrigin.FAKE_OVERRIDE &&
                                 (function.correspondingPropertySymbol == null || !function.isDirectFieldAccessor())
                         )
-                }.filter { function -> function.body != null || function.modality == Modality.ABSTRACT || function.isGeneratedDataHash() }
-                .filterNot { function ->
+                }.filter { function ->
+                    function.body != null || function.modality == Modality.ABSTRACT ||
+                        function.isGeneratedDataValueMethod()
+                }.filterNot { function ->
                     !includeTrustedPlatformBodies &&
                         (function.parent as? IrClass)?.fqNameWhenAvailable?.asString() !in specializedCollectionInterfaces &&
                         session.trustedPlatformModule(function.file.fileEntry.name) != null
@@ -1524,7 +1528,7 @@ internal object KotlinProjectLowering {
                 listOfNotNull(Constant.F32(0u).takeIf { literalCollector.usesFloat }) +
                 listOfNotNull(Constant.F32((-1.0f).toBits().toUInt()).takeIf { literalCollector.usesFloat }) +
                 Constant.F32(1.0f.toBits().toUInt()) +
-                Constant.Bool(false)
+                Constant.Bool(false) + Constant.Bool(true)
         ).forEach(constantPool::intern)
         val constants = constantPool.freeze().records
         val constantIds = constants.withIndex().associate { (index, value) -> value to ConstantId.of(index.toUInt()) }
@@ -1933,7 +1937,7 @@ internal object KotlinProjectLowering {
             val functionId = requireNotNull(instanceFunctionIds[instance])
             val firstBlock = blocks.size
             val compiled =
-                if (function.body == null && !function.isGeneratedDataHash()) {
+                if (function.body == null && !function.isGeneratedDataValueMethod()) {
                     CompiledFunction(emptyList(), emptyList())
                 } else {
                     try {
@@ -2048,7 +2052,7 @@ internal object KotlinProjectLowering {
                 setOfNotNull(
                     FunctionFlag.STATIC.takeIf { memberOwner == null },
                     FunctionFlag.SUSPENDING.takeIf { function.isSuspend },
-                    FunctionFlag.ABSTRACT.takeIf { function.body == null && !function.isGeneratedDataHash() },
+                    FunctionFlag.ABSTRACT.takeIf { function.body == null && !function.isGeneratedDataValueMethod() },
                     FunctionFlag.VIRTUAL.takeIf {
                         memberOwner != null && ownerClass?.kind != ClassKind.INTERFACE &&
                             (function.modality != Modality.FINAL || function.overriddenSymbols.isNotEmpty())
@@ -2940,6 +2944,16 @@ internal object KotlinProjectLowering {
                             suspending = false,
                             result = ValueType.I32,
                             parameters = listOf(ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))),
+                        ) +
+                        NominalType.Function(
+                            name = requireNotNull(metadataIds[ANY_EQUALS_NAME]),
+                            suspending = false,
+                            result = ValueType.Bool,
+                            parameters =
+                                listOf(
+                                    ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))),
+                                    ValueType.Ref(true, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))),
+                                ),
                         ),
                 constants = constants,
                 fields = artifactFields,
@@ -2991,6 +3005,13 @@ internal object KotlinProjectLowering {
                             ModuleId.of(1u),
                             requireNotNull(metadataIds[ANY_HASH_CODE_NAME]),
                             TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size + 1).toUInt())),
+                            libraryHash,
+                        ) +
+                        Import(
+                            SymbolKind.FUNCTION,
+                            ModuleId.of(1u),
+                            requireNotNull(metadataIds[ANY_EQUALS_NAME]),
+                            TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size + 2).toUInt())),
                             libraryHash,
                         ) +
                         externalTypeImports.entries
@@ -3466,27 +3487,102 @@ internal object KotlinProjectLowering {
     }
 
     private fun kotlinLibrary(): Module {
-        val names = (runtimeTypeNames + runtimeMemberNames + listOf("toString", "hashCode", "<unit-init>")).sorted()
+        val names = (runtimeTypeNames + runtimeMemberNames + listOf("toString", "hashCode", "equals", "<unit-init>")).sorted()
         val ids = names.withIndex().associate { (index, name) -> name to StringId.of(index.toUInt()) }
         val anyType = TypeRef.Local(TypeId.of(ANY_RUNTIME_TYPE))
         val string = ValueType.Ref(false, TypeRef.Local(TypeId.of(STRING_RUNTIME_TYPE)))
         val unit = ValueType.Ref(false, TypeRef.Local(TypeId.of(UNIT_RUNTIME_TYPE)))
         val owners = listOf(ANY_RUNTIME_TYPE, STRING_RUNTIME_TYPE) + scalarBoxes.map { it.type } + UNIT_RUNTIME_TYPE
-        val methods = owners.flatMap { owner -> listOf(owner to "toString", owner to "hashCode") }
+        val methods = owners.flatMap { owner -> listOf(owner to "toString", owner to "hashCode", owner to "equals") }
         val initializerId = methods.size.toUInt()
         val signatures =
             methods.map { (owner, name) ->
                 NominalType.Function(
                     requireNotNull(ids[name]),
                     false,
-                    if (name == "toString") string else ValueType.I32,
-                    listOf(ValueType.Ref(false, TypeRef.Local(TypeId.of(owner)))),
+                    when (name) {
+                        "toString" -> string
+                        "equals" -> ValueType.Bool
+                        else -> ValueType.I32
+                    },
+                    listOf(ValueType.Ref(false, TypeRef.Local(TypeId.of(owner)))) +
+                        if (name == "equals") listOf(ValueType.Ref(true, anyType)) else emptyList(),
                 )
             } + NominalType.Function(requireNotNull(ids["<unit-init>"]), false, ValueType.Unit, emptyList())
         val blocks =
             methods.flatMapIndexed { index, (owner, name) ->
                 val receiver = RegisterId.of(0u)
                 val destination = RegisterId.of(1u)
+                if (name == "equals") {
+                    val other = RegisterId.of(1u)
+                    val result = RegisterId.of(2u)
+                    val cast = RegisterId.of(3u)
+                    val ownerType = TypeRef.Local(TypeId.of(owner))
+                    val start = (index * 3).toUInt()
+                    val box = scalarBoxes.singleOrNull { it.type == owner }
+                    val compare =
+                        when {
+                            owner == STRING_RUNTIME_TYPE -> {
+                                listOf(Instruction.CheckedCast(cast, other, ownerType), Instruction.StringEquals(result, receiver, cast))
+                            }
+
+                            box != null -> {
+                                val left = RegisterId.of(4u)
+                                val right = RegisterId.of(5u)
+                                val field = FieldRef.Local(FieldId.of(if (owner == INT_BOX_RUNTIME_TYPE) 0u else box.field - 22u))
+                                listOf(
+                                    Instruction.CheckedCast(cast, other, ownerType),
+                                    Instruction.FieldGet(left, receiver, field),
+                                    Instruction.FieldGet(right, cast, field),
+                                ) +
+                                    if (box.valueType == ValueType.F32) {
+                                        listOf(
+                                            // Float hashes are canonical IEEE bits, so equality here is lossless.
+                                            Instruction.ValueHash(HashValueType.F32, RegisterId.of(6u), left),
+                                            Instruction.ValueHash(HashValueType.F32, RegisterId.of(7u), right),
+                                            Instruction.Equal(ScalarValueType.I32, result, RegisterId.of(6u), RegisterId.of(7u)),
+                                        )
+                                    } else {
+                                        listOf(
+                                            Instruction.Equal(
+                                                when (box.valueType) {
+                                                    ValueType.I32 -> ScalarValueType.I32
+                                                    ValueType.I64 -> ScalarValueType.I64
+                                                    ValueType.Bool -> ScalarValueType.BOOL
+                                                    ValueType.Char -> ScalarValueType.CHAR
+                                                    else -> error("unsupported box equality")
+                                                },
+                                                result,
+                                                left,
+                                                right,
+                                            ),
+                                        )
+                                    }
+                            }
+
+                            else -> {
+                                listOf(Instruction.RefEqual(result, receiver, other))
+                            }
+                        }
+                    val first =
+                        if (box != null || owner == STRING_RUNTIME_TYPE) {
+                            listOf(
+                                Instruction.IsType(result, other, ownerType),
+                                Instruction.Branch(
+                                    result,
+                                    BlockId.of(start + 1u),
+                                    BlockId.of(start + 2u),
+                                ),
+                            )
+                        } else {
+                            listOf(Instruction.Jump(BlockId.of(start + 1u)))
+                        }
+                    return@flatMapIndexed listOf(
+                        Block(FunctionId.of(index.toUInt()), false, first),
+                        Block(FunctionId.of(index.toUInt()), false, compare + Instruction.Jump(BlockId.of(start + 2u))),
+                        Block(FunctionId.of(index.toUInt()), false, listOf(Instruction.Return(Destination.Register(result)))),
+                    )
+                }
                 val instructions =
                     if (name == "hashCode") {
                         when (owner) {
@@ -3546,8 +3642,13 @@ internal object KotlinProjectLowering {
                     }
                 val fieldRead = instructions.takeWhile { it is Instruction.FieldGet }
                 listOf(
-                    Block(FunctionId.of(index.toUInt()), false, fieldRead + Instruction.Jump(BlockId.of((index * 2 + 1).toUInt()))),
-                    Block(FunctionId.of(index.toUInt()), false, instructions.drop(fieldRead.size)),
+                    Block(FunctionId.of(index.toUInt()), false, fieldRead + Instruction.Jump(BlockId.of((index * 3 + 1).toUInt()))),
+                    Block(
+                        FunctionId.of(index.toUInt()),
+                        false,
+                        instructions.drop(fieldRead.size).dropLast(1) + Instruction.Jump(BlockId.of((index * 3 + 2).toUInt())),
+                    ),
+                    Block(FunctionId.of(index.toUInt()), false, listOf(instructions.last())),
                 )
             } +
                 Block(
@@ -3561,18 +3662,36 @@ internal object KotlinProjectLowering {
                 )
         val functions =
             methods.mapIndexed { index, (owner, name) ->
+                val receiverType = ValueType.Ref(false, TypeRef.Local(TypeId.of(owner)))
+                val box = scalarBoxes.singleOrNull { it.type == owner }
                 val values =
-                    listOf(ValueType.Ref(false, TypeRef.Local(TypeId.of(owner))), if (name == "toString") string else ValueType.I32) +
-                        scalarBoxes.filter { it.type == owner }.map { it.valueType }
+                    if (name == "equals") {
+                        listOf(receiverType, ValueType.Ref(true, anyType), ValueType.Bool) +
+                            if (box != null || owner == STRING_RUNTIME_TYPE) {
+                                listOf(receiverType) +
+                                    (
+                                        box?.let {
+                                            listOf(it.valueType, it.valueType) +
+                                                if (it.valueType == ValueType.F32) listOf(ValueType.I32, ValueType.I32) else emptyList()
+                                        }
+                                            ?: emptyList()
+                                    )
+                            } else {
+                                emptyList()
+                            }
+                    } else {
+                        listOf(receiverType, if (name == "toString") string else ValueType.I32) +
+                            scalarBoxes.filter { it.type == owner }.map { it.valueType }
+                    }
                 Function(
                     TypeRef.Local(TypeId.of(owner)),
                     requireNotNull(ids[name]),
                     TypeRef.Local(TypeId.of((runtimeTypeNames.size + index).toUInt())),
                     setOf(FunctionFlag.VIRTUAL),
                     values.map(FunctionValue::scalar),
-                    1u,
-                    BlockId.of((index * 2).toUInt()),
-                    2u,
+                    if (name == "equals") 2u else 1u,
+                    BlockId.of((index * 3).toUInt()),
+                    3u,
                     0u,
                     0u,
                 )
@@ -3584,7 +3703,7 @@ internal object KotlinProjectLowering {
                     setOf(FunctionFlag.STATIC),
                     listOf(FunctionValue.scalar(unit)),
                     0u,
-                    BlockId.of(initializerId * 2u),
+                    BlockId.of(initializerId * 3u),
                     1u,
                     0u,
                     0u,
@@ -3604,8 +3723,8 @@ internal object KotlinProjectLowering {
                         name = requireNotNull(ids["kotlin.String"]),
                         final = true,
                         superType = anyType,
-                        methodStart = 2u,
-                        methodCount = 2u,
+                        methodStart = 3u,
+                        methodCount = 3u,
                     ),
                     NominalType.Class(
                         name = requireNotNull(ids["kotlin.Throwable"]),
@@ -3621,15 +3740,15 @@ internal object KotlinProjectLowering {
                         runtimeExceptionKind = ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind.ILLEGAL_ARGUMENT,
                     ),
                     NominalType.Array(name = requireNotNull(ids["kotlin.IntArray"]), element = ValueType.I32, superType = anyType),
-                    NominalType.Class(name = requireNotNull(ids["kotlin.Any"]), methodStart = 0u, methodCount = 2u),
+                    NominalType.Class(name = requireNotNull(ids["kotlin.Any"]), methodStart = 0u, methodCount = 3u),
                     NominalType.Class(
                         name = requireNotNull(ids["kotlin.Int"]),
                         final = true,
                         superType = anyType,
                         fieldStart = 0u,
                         fieldCount = 1u,
-                        methodStart = 4u,
-                        methodCount = 2u,
+                        methodStart = 6u,
+                        methodCount = 3u,
                     ),
                     NominalType.Class(name = requireNotNull(ids["kotlin.Exception"]), superType = TypeRef.Local(TypeId.of(2u))),
                     NominalType.Class(name = requireNotNull(ids["kotlin.RuntimeException"]), superType = TypeRef.Local(TypeId.of(7u))),
@@ -3685,8 +3804,8 @@ internal object KotlinProjectLowering {
                             superType = anyType,
                             fieldStart = (index + 3).toUInt(),
                             fieldCount = 1u,
-                            methodStart = ((index + 3) * 2).toUInt(),
-                            methodCount = 2u,
+                            methodStart = ((index + 3) * 3).toUInt(),
+                            methodCount = 3u,
                         )
                     } +
                     NominalType.Class(
@@ -3695,8 +3814,8 @@ internal object KotlinProjectLowering {
                         superType = anyType,
                         fieldStart = 7u,
                         fieldCount = 1u,
-                        methodStart = 14u,
-                        methodCount = 3u,
+                        methodStart = 21u,
+                        methodCount = 4u,
                         initializer = FunctionId.of(initializerId),
                     ) + signatures,
             fields =
@@ -3795,6 +3914,13 @@ internal object KotlinProjectLowering {
                             requireNotNull(ids[ANY_HASH_CODE_NAME]),
                             1u,
                             TypeRef.Local(TypeId.of(23u)),
+                        ) +
+                        Export(
+                            SymbolKind.FUNCTION,
+                            ExportVisibility.PUBLIC_LIBRARY,
+                            requireNotNull(ids[ANY_EQUALS_NAME]),
+                            2u,
+                            TypeRef.Local(TypeId.of(24u)),
                         )
                 ).sortedWith(compareBy({ it.kind.ordinal }, { names[it.name.value.toInt()] })),
         )
@@ -4184,8 +4310,8 @@ private class FunctionCompiler(
         constructorDeclaration?.thisReceiver?.let { receiver ->
             values[receiver.symbol] = RegisterId.of(0u)
         }
-        if ((function as? IrSimpleFunction)?.isGeneratedDataHash() == true) {
-            compileDataHash()
+        if ((function as? IrSimpleFunction)?.isGeneratedDataValueMethod() == true) {
+            if (function.name.asString() == "hashCode") compileDataHash() else compileDataEquals()
         } else {
             val body = function.body as? IrBlockBody ?: throw UnsupportedKotlinIr(function, "function body is not a block")
             body.statements.forEach(::compileStatement)
@@ -5135,7 +5261,8 @@ private class FunctionCompiler(
         }
         val function = FunctionRef.Imported(ImportId.of(ANY_HASH_CODE_IMPORT))
 
-        fun invoke(receiver: RegisterId) {
+        fun invoke(value: RegisterId) {
+            val receiver = asAnyReference(value, nullable = false)
             if (direct) {
                 emit(Instruction.Call(Destination.Register(destination), function, listOf(receiver)))
             } else {
@@ -5263,9 +5390,7 @@ private class FunctionCompiler(
         val function = FunctionRef.Imported(ImportId.of(ANY_TO_STRING_IMPORT))
 
         fun present() {
-            val anyType = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))
-            val receiver = allocate(ValueType.Ref(false, anyType))
-            emit(Instruction.CheckedCast(receiver, source, anyType))
+            val receiver = asAnyReference(source, nullable = false)
             if (direct) {
                 emit(Instruction.Call(Destination.Register(destination), function, listOf(receiver)))
             } else {
@@ -5494,6 +5619,25 @@ private class FunctionCompiler(
             return allocate(valueType(call.type, call)).also { destination ->
                 emit(Instruction.FieldGet(destination, receiver, FieldRef.Imported(field.importId)))
             }
+        }
+        if (target.name.asString() == "equals" && target.parameters.any { it.kind == IrParameterKind.DispatchReceiver } &&
+            target.parameters
+                .singleOrNull { it.kind == IrParameterKind.Regular }
+                ?.type
+                ?.isKotlinAny() == true &&
+            call.arguments.filterNotNull().size == 2 &&
+            (call.superQualifierSymbol == null || (target.parent as? IrClass)?.fqNameWhenAvailable?.asString() == "kotlin.Any")
+        ) {
+            val expressions = call.arguments.filterNotNull()
+            val left =
+                if (expressions[0].type == unitType) {
+                    if (expressions[0] !is IrGetObjectValue) compileStatement(expressions[0])
+                    loadUnitReference()
+                } else {
+                    compileExpression(expressions[0])
+                }
+            val right = compileExpression(expressions[1], target.parameters.single { it.kind == IrParameterKind.Regular }.type)
+            return equalsValue(left, right, direct = call.superQualifierSymbol != null, nullableOperator = false)
         }
         val memberHashCode =
             target.parameters.none { it.kind == IrParameterKind.Regular } &&
@@ -6878,26 +7022,11 @@ private class FunctionCompiler(
         val floatIeeeEquality =
             name.equals("ieee754Equals", ignoreCase = true) && leftType == floatType && rightType == floatType
         if (name in setOf("EQEQ", "equals", "eqeq") || floatIeeeEquality) {
-            val equalityLayouts = equalityLayoutsFor(leftType)
-            val hasGuestEqualityOverride =
-                equalityLayouts.any { layout ->
-                    val declaration = layout.declaration
-                    declaration.isData ||
-                        declaration.declarations.any { member ->
-                            member is IrSimpleFunction && member.name.asString() == "equals" && member.body != null
-                        }
+            if (!numeric && (registerValueType(operands[0]) is ValueType.Ref || registerValueType(operands[1]) is ValueType.Ref)) {
+                if (expressions.any { it is IrConst && it.value == null }) {
+                    return allocate(ValueType.Bool).also { emit(Instruction.RefEqual(it, operands[0], operands[1])) }
                 }
-            if (
-                leftType.isKotlinAny() || rightType.isKotlinAny() || leftType.isNullableInt() || rightType.isNullableInt() ||
-                leftType.isNullableString() || rightType.isNullableString() ||
-                (
-                    hasGuestEqualityOverride &&
-                        expressions.none { it is IrConst && it.value == null } &&
-                        valueType(leftType, call) is ValueType.Ref &&
-                        valueType(rightType, call) is ValueType.Ref
-                )
-            ) {
-                return compileUniversalEquality(call, operands, equalityLayouts)
+                return equalsValue(operands[0], operands[1])
             }
             return allocate(ValueType.Bool).also { destination ->
                 if (leftType == kotlinStringType && rightType == kotlinStringType) {
@@ -6939,220 +7068,135 @@ private class FunctionCompiler(
         }
     }
 
-    private fun equalityLayoutsFor(type: IrType): List<GuestClassLayout> {
-        val layouts = (constructorLayouts.values + genericConstructorLayouts.values).mapNotNull { it.layout }.distinctBy { it.typeId }
-        if (type.isKotlinAny()) return layouts
-        val sourceClass = (type as? IrSimpleType)?.classifier as? IrClassSymbol ?: return layouts
-
-        fun inheritsFrom(declaration: IrClass): Boolean =
-            declaration.symbol == sourceClass ||
-                declaration.superTypes.any { superType ->
-                    val parent = (superType as? IrSimpleType)?.classifier as? IrClassSymbol
-                    parent != null && inheritsFrom(parent.owner)
-                }
-        return layouts.filter { inheritsFrom(it.declaration) }
+    private fun asAnyReference(
+        source: RegisterId,
+        nullable: Boolean = (registerValueType(source) as? ValueType.Ref)?.nullable == true,
+    ): RegisterId {
+        val anyType = ValueType.Ref(nullable, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))
+        val sourceType = registerValueType(source)
+        if (sourceType !is ValueType.Ref) return boxScalar(source, anyType)
+        if (sourceType == anyType) return source
+        // Interface views need an explicit Any cast; their nominal type has no class-supertype edge.
+        return allocate(anyType).also { emit(Instruction.CheckedCast(it, source, anyType.type)) }
     }
 
-    private fun compileUniversalEquality(
-        call: IrCall,
-        operands: List<RegisterId>,
-        equalityLayouts: List<GuestClassLayout>,
+    private fun equalsValue(
+        left: RegisterId,
+        right: RegisterId,
+        direct: Boolean = false,
+        nullableOperator: Boolean = true,
     ): RegisterId {
-        val anyType = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))
-        val nullableAny = ValueType.Ref(nullable = true, type = anyType)
-        val registerTypes = leadingParameterTypes + sourceParameters.map { valueType(it.type, it) } + localTypes
-        val references =
-            operands.map { operand ->
-                val type = registerTypes[operand.value.toInt()]
-                if (type !is ValueType.Ref) {
-                    boxScalar(operand, nullableAny)
+        val receiver = asAnyReference(left)
+        val argument = asAnyReference(right)
+        val receiverType = registerValueType(receiver) as ValueType.Ref
+        val result = allocate(ValueType.Bool)
+
+        fun invoke() {
+            val nonNull =
+                if (receiverType.nullable) {
+                    allocate(receiverType.copy(nullable = false)).also { emit(Instruction.CheckedCast(it, receiver, receiverType.type)) }
                 } else {
-                    allocate(nullableAny).also { destination -> emit(Instruction.CheckedCast(destination, operand, anyType)) }
+                    receiver
                 }
-            }
-        val same = allocate(ValueType.Bool)
-        emit(Instruction.RefEqual(same, references[0], references[1]))
-        val destination = allocate(ValueType.Bool)
-        val exits = mutableListOf<Int>()
-        scalarBoxes.forEach { layout ->
-            val boxType = TypeRef.Imported(ImportId.of(layout.type))
-            val leftMatches = allocate(ValueType.Bool)
-            emit(Instruction.IsType(leftMatches, references[0], boxType))
-            val checkRight = createBlock()
-            val nextKind = createBlock()
-            emit(Instruction.Branch(leftMatches, blockId(checkRight), blockId(nextKind)))
-            currentBlock = checkRight
-            val rightMatches = allocate(ValueType.Bool)
-            emit(Instruction.IsType(rightMatches, references[1], boxType))
-            val compare = createBlock()
-            val differentKinds = createBlock()
-            emit(Instruction.Branch(rightMatches, blockId(compare), blockId(differentKinds)))
-            currentBlock = differentKinds
-            emit(Instruction.Move(destination, same))
-            exits += currentBlock
-            currentBlock = compare
-            val values = references.map { unboxScalar(it, layout.valueType) }
-            val scalarForm =
-                when (layout.valueType) {
-                    ValueType.I32 -> ScalarValueType.I32
-                    ValueType.I64 -> ScalarValueType.I64
-                    ValueType.F32 -> ScalarValueType.F32
-                    ValueType.Bool -> ScalarValueType.BOOL
-                    ValueType.Char -> ScalarValueType.CHAR
-                    else -> error("unsupported scalar box")
-                }
-            if (layout.valueType != ValueType.F32) {
-                emit(Instruction.Equal(scalarForm, destination, values[0], values[1]))
-                exits += currentBlock
-            } else {
-                // Kotlin boxed Float equality canonicalizes NaNs and distinguishes signed zero.
-                val equal = allocate(ValueType.Bool)
-                emit(Instruction.Equal(ScalarValueType.F32, equal, values[0], values[1]))
-                val compareReciprocal = createBlock()
-                val compareNaN = createBlock()
-                emit(Instruction.Branch(equal, blockId(compareReciprocal), blockId(compareNaN)))
-                currentBlock = compareReciprocal
-                val one = allocate(ValueType.F32)
-                emit(Instruction.Const(one, requireNotNull(constantIds[Constant.F32(1f.toBits().toUInt())])))
-                val reciprocals =
-                    values.map { value ->
-                        allocate(ValueType.F32).also {
-                            emit(Instruction.Divide(ScalarValueType.F32, it, one, value))
-                        }
-                    }
-                emit(Instruction.Equal(ScalarValueType.F32, destination, reciprocals[0], reciprocals[1]))
-                exits += currentBlock
-                currentBlock = compareNaN
-                val leftNaN = allocate(ValueType.Bool)
-                emit(Instruction.Equal(ScalarValueType.F32, leftNaN, values[0], values[0]))
-                val rightNaN = createBlock()
-                val differentValues = createBlock()
-                emit(Instruction.Branch(leftNaN, blockId(differentValues), blockId(rightNaN)))
-                currentBlock = rightNaN
-                val ordered = allocate(ValueType.Bool)
-                emit(Instruction.Equal(ScalarValueType.F32, ordered, values[1], values[1]))
-                val falseValue = allocate(ValueType.Bool)
-                emit(Instruction.Const(falseValue, requireNotNull(constantIds[Constant.Bool(false)])))
-                emit(Instruction.Equal(ScalarValueType.BOOL, destination, ordered, falseValue))
-                exits += currentBlock
-                currentBlock = differentValues
-                emit(Instruction.Move(destination, same))
-                exits += currentBlock
-            }
-            currentBlock = nextKind
+            val target = FunctionRef.Imported(ImportId.of(ANY_EQUALS_IMPORT))
+            emit(
+                if (direct) {
+                    Instruction.Call(Destination.Register(result), target, listOf(nonNull, argument))
+                } else {
+                    Instruction.CallVirtual(Destination.Register(result), target, listOf(nonNull, argument))
+                },
+            )
+        }
+        if (nullableOperator && receiverType.nullable) {
+            val nullRef = allocate(receiverType).also { emit(Instruction.Null(it)) }
+            val isNull = allocate(ValueType.Bool).also { emit(Instruction.RefEqual(it, receiver, nullRef)) }
+            val absent = createBlock()
+            val present = createBlock()
+            val join = createBlock()
+            emit(Instruction.Branch(isNull, blockId(absent), blockId(present)))
+            currentBlock = absent
+            emit(Instruction.RefEqual(result, receiver, argument))
+            jumpTo(join)
+            currentBlock = present
+            invoke()
+            jumpTo(join)
+            currentBlock = join
+        } else {
+            invoke()
+        }
+        return result
+    }
+
+    private fun compileDataEquals() {
+        val owner = function.parent as IrClass
+        val ownerType = registerValueType(RegisterId.of(0u)) as ValueType.Ref
+
+        fun returnBool(value: Boolean) {
+            val result = allocate(ValueType.Bool).also { emit(Instruction.Const(it, requireNotNull(constantIds[Constant.Bool(value)]))) }
+            emit(Instruction.Return(Destination.Register(result)))
         }
 
-        val stringRef = (stringType as ValueType.Ref).type
-        val leftString = allocate(ValueType.Bool)
-        emit(Instruction.IsType(leftString, references[0], stringRef))
-        val checkRightString = createBlock()
-        val nonString = createBlock()
-        emit(Instruction.Branch(leftString, blockId(checkRightString), blockId(nonString)))
-
-        currentBlock = checkRightString
-        val rightString = allocate(ValueType.Bool)
-        emit(Instruction.IsType(rightString, references[1], stringRef))
-        val compareStrings = createBlock()
-        val differentStringKinds = createBlock()
-        emit(Instruction.Branch(rightString, blockId(compareStrings), blockId(differentStringKinds)))
-
-        currentBlock = compareStrings
-        val strings =
-            references.map { reference ->
-                allocate(stringType).also { value -> emit(Instruction.CheckedCast(value, reference, stringRef)) }
-            }
-        emit(Instruction.StringEquals(destination, strings[0], strings[1]))
-        exits += currentBlock
-
-        currentBlock = differentStringKinds
-        emit(Instruction.Move(destination, same))
-        exits += currentBlock
-
-        currentBlock = nonString
-        equalityLayouts.forEach { layout ->
-            val override =
-                layout.declaration.declarations
-                    .filterIsInstance<IrSimpleFunction>()
-                    .firstOrNull { it.name.asString() == "equals" && it.body != null }
-            val overrideId = override?.let { functionIds[it.symbol] }
-            if (override != null && overrideId == null && !layout.declaration.isData) {
-                throw UnsupportedKotlinIr(call, "equality override is unavailable for ${layout.declaration.name}")
-            }
-            if (!layout.declaration.isData && overrideId == null) return@forEach
-            val classRef = TypeRef.Local(layout.typeId)
-            val leftMatches = allocate(ValueType.Bool)
-            emit(Instruction.IsType(leftMatches, references[0], classRef))
-            val matched = createBlock()
+        fun requireTrue(value: RegisterId) {
             val next = createBlock()
-            emit(Instruction.Branch(leftMatches, blockId(matched), blockId(next)))
-
-            currentBlock = matched
-            val left = allocate(ValueType.Ref(nullable = false, type = classRef))
-            emit(Instruction.CheckedCast(left, references[0], classRef))
-            if (overrideId != null) {
-                emit(Instruction.CallVirtual(Destination.Register(destination), FunctionRef.Local(overrideId), listOf(left, references[1])))
-                exits += currentBlock
-            } else {
-                val rightMatches = allocate(ValueType.Bool)
-                emit(Instruction.IsType(rightMatches, references[1], classRef))
-                val compareFields = createBlock()
-                val differentClass = createBlock()
-                emit(Instruction.Branch(rightMatches, blockId(compareFields), blockId(differentClass)))
-
-                currentBlock = compareFields
-                val right = allocate(ValueType.Ref(nullable = false, type = classRef))
-                emit(Instruction.CheckedCast(right, references[1], classRef))
-                val constructorProperties =
-                    layout.declaration.constructors
-                        .singleOrNull { it.isPrimary }
-                        ?.parameters
-                        ?.filter { it.kind == IrParameterKind.Regular }
-                        ?.map { it.name.asString() }
-                        ?: throw UnsupportedKotlinIr(call, "data class primary constructor is unavailable for equality")
-                constructorProperties.forEach { name ->
-                    val field =
-                        layout.fields.singleOrNull { it.property.name.asString() == name }
-                            ?: throw UnsupportedKotlinIr(call, "data class equality field $name is unavailable")
-                    val leftValue = allocate(field.type)
-                    emit(Instruction.FieldGet(leftValue, left, FieldRef.Local(field.id)))
-                    val rightValue = allocate(field.type)
-                    emit(Instruction.FieldGet(rightValue, right, FieldRef.Local(field.id)))
-                    val equal = allocate(ValueType.Bool)
-                    when (field.type) {
-                        ValueType.I32 -> emit(Instruction.Equal(ScalarValueType.I32, equal, leftValue, rightValue))
-                        ValueType.I64 -> emit(Instruction.Equal(ScalarValueType.I64, equal, leftValue, rightValue))
-                        ValueType.Bool -> emit(Instruction.Equal(ScalarValueType.BOOL, equal, leftValue, rightValue))
-                        ValueType.Char -> emit(Instruction.Equal(ScalarValueType.CHAR, equal, leftValue, rightValue))
-                        stringType -> emit(Instruction.StringEquals(equal, leftValue, rightValue))
-                        else -> throw UnsupportedKotlinIr(call, "data class equality field $name needs virtual equals dispatch")
-                    }
-                    val nextField = createBlock()
-                    val differentField = createBlock()
-                    emit(Instruction.Branch(equal, blockId(nextField), blockId(differentField)))
-                    currentBlock = differentField
-                    emit(Instruction.Move(destination, same))
-                    exits += currentBlock
-                    currentBlock = nextField
-                }
-                emit(Instruction.Move(destination, rightMatches))
-                exits += currentBlock
-
-                currentBlock = differentClass
-                emit(Instruction.Move(destination, same))
-                exits += currentBlock
-            }
+            val failed = createBlock()
+            emit(Instruction.Branch(value, blockId(next), blockId(failed)))
+            currentBlock = failed
+            returnBool(false)
             currentBlock = next
         }
-        emit(Instruction.Move(destination, same))
-        exits += currentBlock
+        val same = allocate(ValueType.Bool).also { emit(Instruction.RefEqual(it, RegisterId.of(0u), RegisterId.of(1u))) }
+        val identical = createBlock()
+        val different = createBlock()
+        emit(Instruction.Branch(same, blockId(identical), blockId(different)))
+        currentBlock = identical
+        returnBool(true)
+        currentBlock = different
+        val matches = allocate(ValueType.Bool).also { emit(Instruction.IsType(it, RegisterId.of(1u), ownerType.type)) }
+        requireTrue(matches)
+        val other = allocate(ownerType).also { emit(Instruction.CheckedCast(it, RegisterId.of(1u), ownerType.type)) }
+        val properties = owner.declarations.filterIsInstance<IrProperty>()
+        owner.constructors.single { it.isPrimary }.parameters.filter { it.kind == IrParameterKind.Regular }.forEach { parameter ->
+            val property = properties.single { it.name == parameter.name }
+            val symbol = requireNotNull(property.backingField).symbol
+            val field =
+                fieldsByBacking[symbol] ?: currentClassInstance?.let { genericFieldsByBacking[symbol to it] }
+                    ?: throw UnsupportedKotlinIr(property, "data class equality field is unavailable")
+            val left = allocate(field.type).also { emit(Instruction.FieldGet(it, RegisterId.of(0u), FieldRef.Local(field.id))) }
+            val right = allocate(field.type).also { emit(Instruction.FieldGet(it, other, FieldRef.Local(field.id))) }
+            val equal =
+                when (field.type) {
+                    ValueType.F32 -> {
+                        val a = hashValue(left)
+                        val b = hashValue(right)
+                        allocate(ValueType.Bool).also { emit(Instruction.Equal(ScalarValueType.I32, it, a, b)) }
+                    }
 
-        val join = createBlock()
-        exits.forEach { exit ->
-            currentBlock = exit
-            jumpTo(join)
+                    is ValueType.Ref -> {
+                        equalsValue(left, right)
+                    }
+
+                    else -> {
+                        allocate(ValueType.Bool).also {
+                            emit(
+                                Instruction.Equal(
+                                    when (field.type) {
+                                        ValueType.I32 -> ScalarValueType.I32
+                                        ValueType.I64 -> ScalarValueType.I64
+                                        ValueType.Bool -> ScalarValueType.BOOL
+                                        ValueType.Char -> ScalarValueType.CHAR
+                                        else -> error("unsupported data equality field")
+                                    },
+                                    it,
+                                    left,
+                                    right,
+                                ),
+                            )
+                        }
+                    }
+                }
+            requireTrue(equal)
         }
-        currentBlock = join
-        return destination
+        returnBool(true)
     }
 
     private fun compileWhile(loop: IrWhileLoop) {

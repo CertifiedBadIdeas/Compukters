@@ -84,7 +84,7 @@ class K2CompilerAdapterTest {
                     """
                     package sample
 
-                    open class LibraryMessage() { override fun toString(): String = "library"; override fun hashCode(): Int = 27 }
+                    open class LibraryMessage() { override fun toString(): String = "library"; override fun hashCode(): Int = 27; override fun equals(other: Any?): Boolean = other is LibraryMessage }
                     fun message(): Any = LibraryMessage()
                     fun <T> identity(value: T): T = value
                     inline fun <T, R> transform(value: T, block: (T) -> R): R = block(value)
@@ -215,7 +215,8 @@ class K2CompilerAdapterTest {
                     class InheritedMessage: LibraryMessage()
                     class OverrideMessage: LibraryMessage() {
                         override fun toString(): String = super.toString() + "/child"
-                        override fun hashCode(): Int = super.hashCode() + 1
+                        override fun hashCode(): Int = super.hashCode()
+                        override fun equals(other: Any?): Boolean = super.equals(other)
                     }
                     fun main() {
                         require(message().toString() == "library")
@@ -225,7 +226,9 @@ class K2CompilerAdapterTest {
                         require(inherited.hashCode() == 27)
                         val overridden: Any = OverrideMessage()
                         require(overridden.toString() == "library/child")
-                        require(overridden.hashCode() == 28)
+                        require(overridden.hashCode() == 27)
+                        require(message() == inherited && inherited == overridden && overridden.equals(message()))
+                        require(!overridden.equals(null))
                         require("${'$'}overridden" == "library/child")
                         try { require(false) { inherited } }
                         catch (e: IllegalArgumentException) { require(e.message == "library") }

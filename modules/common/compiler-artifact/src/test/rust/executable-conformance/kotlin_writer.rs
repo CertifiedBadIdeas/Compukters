@@ -19,6 +19,10 @@ fn main() {
     match scenario.as_str() {
         "executable" => pinned_vm_verifies_kotlin_executable_instruction_artifact(),
         "exceptions" => k2_explicit_exception_unwinds_across_guest_calls(),
+        "equals" => {
+            let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_EQUALS_ARTIFACT", 1, 64 * 1024);
+            k2_assert_prints(&mut session, ["equals ok\n"], 256);
+        },
         "hash-code" => {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_HASH_CODE_ARTIFACT", 1, 64 * 1024);
             k2_assert_prints(&mut session, ["hashCode ok\n"], 256);

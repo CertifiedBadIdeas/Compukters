@@ -308,6 +308,16 @@ fun registerKotlinVmConformance(
 }
 
 registerKotlinVmConformance(
+    taskName = "testKotlinEqualsVmConformance",
+    taskDescription = "Executes uniform virtual equals and generated data-class equality.",
+    artifactTask = ":compiler-k2:generateEqualsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/equals.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-equals-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_EQUALS_ARTIFACT",
+    conformanceScenario = "equals",
+)
+
+registerKotlinVmConformance(
     taskName = "testKotlinHashCodeVmConformance",
     taskDescription = "Executes virtual hashCode, scalar boxes and equality-compatible hashes.",
     artifactTask = ":compiler-k2:generateHashCodeConformanceArtifact",

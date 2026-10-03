@@ -41,6 +41,11 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   supported data-class properties receive generated value hashing. Null hashes to zero, and boxed Float hashing
   agrees with value equality for NaN and signed zero. Rebuild programs and libraries for Runtime ABI 1.11.
 
+- `equals`, `==` and `!=` use virtual value equality across compiled libraries, including custom/inherited and
+  superclass implementations. Data classes compare nullable, object and Float constructor properties;
+  array properties retain reference equality. Receiver/argument effects run once and exceptions remain catchable.
+  The shared equality/hashCode contract reuses Runtime ABI 1.11; compiled libraries need rebuilding.
+
 - Reference identity comparisons (`===`/`!==`) compare supported arrays and nullable references directly,
   preserving aliases and distinguishing fresh copies without artificial casts to `Any`.
   Supported arrays can also pass through `Any` and `Any?` without copying or boxing, preserving their runtime

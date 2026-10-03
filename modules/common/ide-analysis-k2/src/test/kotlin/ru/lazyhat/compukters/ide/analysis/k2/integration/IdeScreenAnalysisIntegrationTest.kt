@@ -50,11 +50,14 @@ class IdeScreenAnalysisIntegrationTest {
     fun `toString and Any lazy assertion messages share canonical IDE semantics`() {
         val source =
             """
-            class Message { override fun toString(): String = "message"; override fun hashCode(): Int = 42 }
+            class Message { override fun toString(): String = "message"; override fun hashCode(): Int = 42; override fun equals(other: Any?): Boolean = other is Message }
             fun main() {
                 val value: Any? = Message()
                 val text = value.toString()
                 val hash = value.hashCode()
+                val other: Any = Message()
+                val equal = other.equals(value)
+                val same = value == other
                 require(true) { 42 }
                 check(true) { Message() }
             }
@@ -116,6 +119,22 @@ class IdeScreenAnalysisIntegrationTest {
                     ).result,
                 )
             assertTrue(hashCompletion.items.any { it.insertText == "hashCode" }, hashCompletion.items.toString())
+            val equalsCompletion =
+                assertIs<AnalysisResult.Completion>(
+                    assertIs<AnalysisClientResult.Success>(
+                        controller
+                            .query(
+                                admitted,
+                                AnalysisQuery.Completion(
+                                    identity,
+                                    path,
+                                    source.indexOf("other.equals") + "other.eq".length,
+                                    CompletionTrigger.Automatic,
+                                ),
+                            ).get(90, TimeUnit.SECONDS),
+                    ).result,
+                )
+            assertTrue(equalsCompletion.items.any { it.insertText == "equals" }, equalsCompletion.items.toString())
         }
     }
 
