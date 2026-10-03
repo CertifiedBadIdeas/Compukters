@@ -174,6 +174,7 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - Addon projects register one atomic Guest API by addon ID; its version defaults to the addon's Gradle project version,
   while platform dependencies and capability wiring remain internal. Compukters projects list only addon IDs in
   `compukter.toml`, with exact versions and hashes retained in `compukter.lock`.
+  The computer's `kotlinc` command uses the same full module identities advertised by the server for addon compilation.
 - The separately installed Create addon supports Create 6.0.x on Minecraft 1.21.1 while the base Compukters mod remains
   usable without Create.
 - Added passive peripheral cables for orthogonal, branching and looping connections between computers and supported

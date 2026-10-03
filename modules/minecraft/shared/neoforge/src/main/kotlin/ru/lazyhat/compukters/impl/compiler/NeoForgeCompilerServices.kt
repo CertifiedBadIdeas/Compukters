@@ -138,8 +138,7 @@ internal class NeoForgeCompilerService private constructor(
                 )
             val controller = CompilerWorkerController(packaged, launch, limits, JdkWorkerProcessFactory())
             val addonCatalog = ComputerAddonHosts.availableGuestApiCatalog()
-            val addonBundles = addonPayloads(addonCatalog)
-            val platformModules = platformModules(platform) + addonBundles.map(TrustedBundlePayload::identity)
+            val targetProfile = serverTargetProfile(packaged.manifest.identity, platform, limits, addonCatalog)
             val backend = WorkerCompilerBackend(controller)
             val cache =
                 PersistentCompilationCache.open(
@@ -155,18 +154,13 @@ internal class NeoForgeCompilerService private constructor(
                     ServerCompilerService(
                         cache,
                         backend,
-                        CompilerServiceConfiguration(
-                            packaged.manifest.identity,
-                            limits,
-                            platformModules = platformModules,
-                            addonBundles = addonBundles,
-                        ),
+                        serverCompilerConfiguration(packaged.manifest.identity, targetProfile),
                         executor = executor,
                     )
                 val compiler = ServerComputerCompiler(service, limits)
                 return NeoForgeCompilerService(
                     CompilerCompletionRouter(compiler),
-                    serverTargetProfile(packaged.manifest.identity, platform, limits, addonCatalog),
+                    targetProfile,
                     service,
                     executor,
                 )
@@ -260,7 +254,13 @@ private fun resolvedModule(bundle: AddonGuestApiBundle): ResolvedModule {
     )
 }
 
-private fun platformModules(platform: PlatformBundle): List<TrustedBundleIdentity> =
-    PlatformCatalog.of(platform).entries.map { entry ->
-        TrustedBundleIdentity.of(entry.identity.id.value, entry.identity.contentHash)
-    }
+internal fun serverCompilerConfiguration(
+    identity: WorkerIdentity,
+    profile: TargetCompileProfile,
+): CompilerServiceConfiguration =
+    CompilerServiceConfiguration(
+        identity,
+        profile.limits,
+        platformModules = profile.modules.map { module -> TrustedBundleIdentity.of(module.id.value, module.contentHash) },
+        addonBundles = profile.addonBundles,
+    )

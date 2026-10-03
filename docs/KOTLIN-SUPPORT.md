@@ -906,6 +906,10 @@ and enable their addon IDs; diagnostics, parameter information, navigation, comp
 then use the same selected API identity without adding the addon JAR to either worker's JVM classpath. Evidence:
 [`CompletionQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/CompletionQueryTest.kt)
 and [`IdeCompletionPlannerTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-client/src/test/kotlin/ru/lazyhat/compukters/ide/client/analysis/IdeCompletionPlannerTest.kt).
+The server compiler derives full platform-module names and hashes from that same target profile; addon payloads retain
+their separate addon IDs. Evidence: `NeoForgeCompilerServicesTest`, test
+`server advertises an admitted addon bundle with its exact content identity`, which checks both advertised and
+configured identities for an addon whose ID differs from its module name.
 
 ## Kotlin standard library
 
