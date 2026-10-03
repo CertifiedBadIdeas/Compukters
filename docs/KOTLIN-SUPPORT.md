@@ -604,7 +604,7 @@ supported.
   `exception_handlers_choose_innermost_region_and_source_order_and_rethrow_to_outer`.
   Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)
 
-- [ ] **Standard exception classes — Partial** — Guest `Throwable`, `Exception`, `RuntimeException`,
+- [x] **Supported exception classes and operation errors** — Guest `Throwable`, `Exception`, `RuntimeException`,
   `IllegalArgumentException`, `IllegalStateException`, `ArithmeticException`, `IndexOutOfBoundsException`,
   `NegativeArraySizeException`, `NullPointerException`, `ClassCastException`, `NoWhenBranchMatchedException`
   and `compukter.io.IOException` have distinct nominal
@@ -709,7 +709,8 @@ supported.
   Copies preserve reference identity, overlap, empty ranges, truncation, and zero/null padding. Resized reference
   copies return `Array<T?>`; `copyInto` admits assignable reference elements through an `Array<out T>` source.
   Receivers and explicit arguments evaluate once. Native copying is bounded by the Guest budget without temporary
-  buffers; `ArrayList` growth uses these APIs. Negative sizes and invalid ranges retain Guest trap behavior.
+  buffers; `ArrayList` growth uses these APIs. Negative sizes and invalid ranges throw typed catchable exceptions
+  through the same operation-error mechanism described above.
   Evidence: `testKotlinIntArrayVmConformance`, `bulk_array_copy_preserves_overlap_in_both_directions_across_tiny_budgets`,
   and `bulk_array_instruction_resumes_with_exact_dynamic_cost_and_one_retirement`.
   Tracking: [#679](https://github.com/CertifiedBadIdeas/Compukters/issues/679)
@@ -719,7 +720,8 @@ supported.
   `String`, supported Guest class references, and `Any`, including their nullable forms and boxed `Int?`, with concrete
   uses inside specialized generic functions. `Array<Any>` boxes `Int` when constructed or written, preserves object
   identity, and returns the stored reference on reads. `arrayOfNulls<T>(size)` creates null-filled arrays for supported
-  reference elements and boxed `Int?`, including generic specializations; negative sizes trap.
+  reference elements and boxed `Int?`, including generic specializations; negative sizes throw catchable
+  `NegativeArraySizeException`.
   Evidence: `testKotlinMutableListVmConformance`. `copyOfRange` is available only
   for `Array<String>`. `Array<Int>`, other primitive-to-`Any` boxing, spread
   arguments, iterators, and higher-order operations are unavailable. Evidence:
@@ -736,8 +738,8 @@ supported.
 - [x] **Specialized `IntArray` storage** — `IntArray(size)`, `intArrayOf(...)`,
   empty arrays, `size`, indexed get/set, mutation, and direct `for` iteration lower to dense unboxed
   i32 storage. Factory arguments evaluate left-to-right exactly once; negative
-  sizes, oversized allocations, and invalid indexes preserve VM trap or
-  allocation-exhaustion behavior across quota slices. A direct `for` snapshots
+  sizes and invalid indexes throw catchable `NegativeArraySizeException` and `IndexOutOfBoundsException`,
+  while allocation exhaustion remains noncatchable across quota slices. A direct `for` snapshots
   the source array once and reads its current elements by index, without an
   iterator allocation; empty arrays, reassignment, mutation, nested loops,
   `break`, and `continue` retain Kotlin behavior. Initializer lambdas,
@@ -951,7 +953,7 @@ links to their source files.
   supported `List<Any>` and `List<Any?>` views use universal read bridges. `MutableList` remains invariant.
   Iterator removal requires one preceding `next` and adjusts the iterator position. Structural changes invalidate
   later `next`/`remove` calls, while `set` is non-structural. Invalid capacities, indexes, and iterator states produce
-  `InvalidArgument` traps; general collection exception handling remains unavailable. Bulk operations, construction
+  catchable `IllegalArgumentException` through library preconditions. Bulk operations, construction
   from a collection, `listIterator`, and `subList` are not yet implemented.
   Evidence: `MinimalScriptLoweringTest`, tests `mutable ArrayList preserves growth mutation and read only views`
   and `mutable list element types remain invariant`; `testKotlinMutableListVmConformance` executes mutation, failure,
@@ -1017,7 +1019,7 @@ links to their source files.
 - [ ] **Other standard collections and functional helpers — Unsupported** — sets, maps,
   sequences and collection conversion helpers have no Guest implementation. Tracking: not scheduled
 
-- [ ] **Standard exceptions, reflection, and coroutine libraries — Unsupported** —
+- [ ] **Reflection and coroutine libraries — Unsupported** —
   these packages have no Guest implementation. Tracking: not scheduled
 
 ## Compukters Guest APIs
