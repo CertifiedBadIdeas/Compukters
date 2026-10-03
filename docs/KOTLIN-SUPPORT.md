@@ -91,18 +91,21 @@ supported.
   `scalar_vectors_match_kotlin_jvm_semantics`.
 
 - [ ] **`Any` value equality — Partial** — non-null values held as `Any` support `==`, `!=`, and `equals`.
-  Distinct boxed `Int` values compare by i32 value; strings compare by UTF-16 content. Guest classes honor explicit
+  Distinct boxes of `Int`, `Long`, `Float`, `Boolean`, and `Char` compare by value;
+  boxed Float equality canonicalizes NaNs and distinguishes signed zero. Strings compare by UTF-16 content. Guest classes honor explicit
   `equals` overrides; data classes compare supported scalar and non-null `String` primary-constructor properties.
   Other classes use default identity equality. Unsupported data-class property shapes receive a compiler diagnostic.
-  An `Int` operand boxes at this boundary. `Any?` also preserves null values and supports equality; hashing and
-  object string conversion remain unavailable. Evidence:
+  Supported scalar operands box at this boundary. `Any?` preserves null values and supports equality;
+  general object hashing remains unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `list Int covariance to Any preserves the list and boxes reads`, executed by `testKotlinListAnyVmConformance`.
+  tests `list Int covariance to Any preserves the list and boxes reads` (`testKotlinListAnyVmConformance`) and
+  `toString dispatch and lazy Any messages preserve values and effects for vm execution` (`testKotlinToStringVmConformance`).
   Tracking: [#581](https://github.com/CertifiedBadIdeas/Compukters/issues/581)
 
 - [ ] **`Unit` and `Nothing` — Partial** — `Unit` function results and
-  non-returning trusted intrinsics are admitted, but general `Nothing`
-  expressions such as arbitrary throws are not lowered. Evidence:
+  non-returning intrinsics and the explicit exception forms described below are admitted.
+  A Unit value can pass through `Any` as a managed singleton and convert to `kotlin.Unit`;
+  broader Nothing inference remains outside this support claim. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `ordinary zero argument Unit main lowers deterministically`
   and `typed process v2 facade lowers without public capability masks or suspend calls`.
@@ -166,12 +169,12 @@ supported.
   [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
   test `k2_bounded_when_selects_matched_and_fallback_branches`.
 
-- [ ] **Pattern-rich `when` — Unsupported** — range membership, comma-joined
-  branch conditions, and arbitrary `Any` type patterns do not publish an
-  artifact. Type branches over the admitted sealed class subset are handled
-  separately under the object model. Evidence:
+- [ ] **Pattern-rich `when` — Partial** — the tested constant scalar range-membership
+  and comma-joined branches accept Unit statements. Broader pattern combinations
+  are outside this support claim. Type branches over the admitted sealed class subset
+  are handled separately under the object model. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `unsupported when patterns produce no artifact`.
+  test `when range and alternative branches accept Unit statements`.
   Tracking: not scheduled
 
 - [ ] **`if`, blocks, mutable locals, and `while` — Partial** — these forms
@@ -294,8 +297,8 @@ supported.
   Concrete generic interfaces and covariant result interfaces support the read-only `List<T>` contract.
   Contravariance, reified parameters, generic
   value classes, generic methods declaring their own type parameters, nullable
-  primitive arguments, and broad `Any` boxing bridges remain outside the subset; the `List<Int>` read bridge below
-  admits one bounded `Int`-to-`Any` boundary. Expansion is
+  primitive arguments other than the supported nullable Int forms, and automatic primitive-list `Any` boxing bridges
+  beyond `List<Int>` remain outside the subset. Direct `Any` values use the supported scalar boxes described above. Expansion is
   bounded to 256 function and 256 class variants per compilation. Binary
   generic library templates and runtime instantiation are absent. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
@@ -639,10 +642,13 @@ supported.
 
 - [x] **Preconditions and explicit failure** — `require` throws `IllegalArgumentException`; `check` and
   `error(String): Nothing` throw `IllegalStateException`. Both Boolean preconditions accept inline lazy
-  `() -> String` messages, evaluated only on failure. These are ordinary catchable Guest exceptions.
-  Arbitrary `Any` lazy messages are outside the current object-to-string subset. Evidence:
-  `assertions and exhaustive reference when share exceptions for vm execution` and
-  `testKotlinExceptionsVmConformance`. Tracking: [#677](https://github.com/CertifiedBadIdeas/Compukters/issues/677)
+  `() -> Any` messages, matching the stdlib signature. The body runs once on failure, then its result
+  converts through virtual `toString`; both body and conversion exceptions propagate unchanged.
+  Successful conditions evaluate neither the body nor the conversion. `Any` is non-null; use a nullable value's
+  `toString()` explicitly for a nullable message. Evidence: `assertions and exhaustive reference when share
+  exceptions for vm execution` (`testKotlinExceptionsVmConformance`) and
+  `toString dispatch and lazy Any messages preserve values and effects for vm execution`
+  (`testKotlinToStringVmConformance`). Tracking: [#683](https://github.com/CertifiedBadIdeas/Compukters/issues/683)
 
 - [x] **Compiler diagnostic source coordinates** — syntax and type diagnostics
   preserve virtual paths and UTF-16 offsets while bounding count and text.
@@ -662,6 +668,24 @@ supported.
   and
   [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
   test `k2_char_array_program_executes_exact_utf16_materialization`.
+
+- [x] **`toString()` for supported Guest values** — direct calls, string templates, and `String.plus`
+  share the conversion path. `Int`, `Long`, `Float`, `Boolean`, and `Char` use their scalar representation;
+  String returns itself, Unit becomes `kotlin.Unit`, and nullable receivers produce `null` when absent.
+  Scalar values passed through `Any` use managed typed boxes, including checked `is`/`as` access.
+  Virtual calls select user-defined or inherited overrides, including separately compiled library methods.
+  `super.toString()` calls the selected superclass body directly. Without an override, an object or supported
+  array produces `qualifiedRuntimeType@hexIdentity`; identity is stable while live and contains no host address.
+  Conversion and concatenation evaluate operands once in source order and remain sliceable under allocation/GC quotas.
+  Generated data-class/enum methods remain subject to their partial support entry above.
+  Evidence: `toString dispatch and lazy Any messages preserve values and effects for vm execution`
+  (`testKotlinToStringVmConformance`, 64 KiB heap with repeated allocation),
+  `source library generic functions and classes specialize in consumer` (`testKotlinGenericLibraryVmConformance`),
+  native `reference_default_string_conversion_handles_null_unicode_and_tiny_slices` and
+  `reference_string_conversion_requires_abi_1_10_and_a_reference_operand`, and IDE test
+  `toString and Any lazy assertion messages share canonical IDE semantics`.
+  New reference-default conversions and root-method inheritance require Runtime ABI 1.10.
+  Tracking: [#683](https://github.com/CertifiedBadIdeas/Compukters/issues/683)
 
 - [ ] **`String` operations — Partial** — literals, concatenation,
   interpolation lowered as concatenation, `length`, indexed `get`,
@@ -718,12 +742,12 @@ supported.
 - [ ] **Reference `Array<T>` operations — Partial** — entry `Array<String>`,
   `emptyArray<T>()`, direct `arrayOf` calls, `size`, and indexed get/set work for
   `String`, supported Guest class references, and `Any`, including their nullable forms and boxed `Int?`, with concrete
-  uses inside specialized generic functions. `Array<Any>` boxes `Int` when constructed or written, preserves object
+  uses inside specialized generic functions. `Array<Any>` boxes supported scalars when constructed or written, preserves object
   identity, and returns the stored reference on reads. `arrayOfNulls<T>(size)` creates null-filled arrays for supported
   reference elements and boxed `Int?`, including generic specializations; negative sizes throw catchable
   `NegativeArraySizeException`.
   Evidence: `testKotlinMutableListVmConformance`. `copyOfRange` is available only
-  for `Array<String>`. `Array<Int>`, other primitive-to-`Any` boxing, spread
+  for `Array<String>`. Primitive `Array<Int>`/`Array<Long>` and other primitive element arrays, spread
   arguments, iterators, and higher-order operations are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `string arrays can be constructed read and written` and
@@ -794,7 +818,7 @@ supported.
   iteration resumes across quota slices. `List<Int>` can widen to `List<Any>` without copying the list;
   reads and iteration through the universal view allocate `Int` boxes with checked `is Int` and `as Int` access. A
   supported reference list can also widen to `List<Any>` while preserving its element references. Direct
-  `listOf<Any>(...)` stores boxed `Int` and supported references in one array; indexed reads reuse those references.
+  `listOf<Any>(...)` stores supported scalar boxes and references in one array; indexed reads reuse those references.
   `Collection<T>` owns `size`, `isEmpty`, and `contains`; custom collections can implement this contract.
   `isNotEmpty` is a `Collection<T>` extension. `List<T>` owns indexed access and the index-based `indexOf` and
   `lastIndexOf` methods; custom lists implement them. Searches use the supported `==` semantics and return the first

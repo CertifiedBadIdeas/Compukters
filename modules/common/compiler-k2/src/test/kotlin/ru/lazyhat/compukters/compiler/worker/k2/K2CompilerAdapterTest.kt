@@ -84,6 +84,8 @@ class K2CompilerAdapterTest {
                     """
                     package sample
 
+                    open class LibraryMessage() { override fun toString(): String = "library" }
+                    fun message(): Any = LibraryMessage()
                     fun <T> identity(value: T): T = value
                     inline fun <T, R> transform(value: T, block: (T) -> R): R = block(value)
 
@@ -202,13 +204,27 @@ class K2CompilerAdapterTest {
                     "project/Main.kt",
                     """
                     import sample.Cell
+                    import sample.LibraryMessage
+                    import sample.message
                     import sample.Holder
                     import sample.describe
                     import sample.describeSize
                     import sample.identity
                     import sample.transform
 
+                    class InheritedMessage: LibraryMessage()
+                    class OverrideMessage: LibraryMessage() {
+                        override fun toString(): String = super.toString() + "/child"
+                    }
                     fun main() {
+                        require(message().toString() == "library")
+                        val inherited: Any = InheritedMessage()
+                        require(inherited.toString() == "library")
+                        val overridden: Any = OverrideMessage()
+                        require(overridden.toString() == "library/child")
+                        require("${'$'}overridden" == "library/child")
+                        try { require(false) { inherited } }
+                        catch (e: IllegalArgumentException) { require(e.message == "library") }
                         require(describe("hello") { it.length } == "length=5")
                         require(describe(42) { it } == "length=42")
                         require(describeSize(7) == "length=7")

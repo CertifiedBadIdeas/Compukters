@@ -23,6 +23,7 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
+import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
 import ru.lazyhat.compukters.ide.analysis.SnapshotPresentationAcceptance
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.controller.AdmittedAnalysisSnapshot
@@ -45,6 +46,62 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class IdeScreenAnalysisIntegrationTest {
+    @Test
+    fun `toString and Any lazy assertion messages share canonical IDE semantics`() {
+        val source =
+            """
+            class Message { override fun toString(): String = "message" }
+            fun main() {
+                val value: Any? = Message()
+                val text = value.toString()
+                require(true) { 42 }
+                check(true) { Message() }
+            }
+            """.trimIndent()
+        val path = VirtualSourcePath.kotlin("src/main.kt")
+        val sources = ProjectSnapshot.of(listOf(ProjectSource(path, BinaryValue.of(source.encodeToByteArray()))), WorkerLimits())
+        val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 19 }))
+        val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
+        val admitted =
+            AdmittedAnalysisSnapshot(
+                identity,
+                sources,
+                AdmittedAnalysisProfile(
+                    profile,
+                    ru.lazyhat.compukters.ide.analysis.k2
+                        .testAdmittedPlatform(selectAllModules = true),
+                ),
+                AnalysisLimits(),
+            )
+        withController { controller ->
+            assertEquals(SnapshotOpenResult.Opened(identity), controller.open(admitted).get(90, TimeUnit.SECONDS))
+            val presentation =
+                assertIs<AnalysisResult.Presentation>(
+                    assertIs<AnalysisClientResult.Success>(
+                        controller.query(admitted, AnalysisQuery.Presentation(identity, path)).get(90, TimeUnit.SECONDS),
+                    ).result,
+                )
+            val active = assertIs<SnapshotPresentationAcceptance.Active>(presentation.value.accept(identity))
+            assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            val completion =
+                assertIs<AnalysisResult.Completion>(
+                    assertIs<AnalysisClientResult.Success>(
+                        controller
+                            .query(
+                                admitted,
+                                AnalysisQuery.Completion(
+                                    identity,
+                                    path,
+                                    source.indexOf("value.toString") + "value.toStr".length,
+                                    CompletionTrigger.Automatic,
+                                ),
+                            ).get(90, TimeUnit.SECONDS),
+                    ).result,
+                )
+            assertTrue(completion.items.any { it.insertText == "toString" }, completion.items.toString())
+        }
+    }
+
     @Test
     fun `covariant List Any members complete from the canonical platform`() {
         val source =

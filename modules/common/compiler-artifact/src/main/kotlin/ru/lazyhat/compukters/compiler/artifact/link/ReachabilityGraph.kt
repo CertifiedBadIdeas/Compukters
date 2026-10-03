@@ -147,7 +147,7 @@ internal class ReachabilityGraph(
         val module = artifact.modules[node.module]
         when (node) {
             is Node.Type -> {
-                visitType(node.module, module.types.at(node, "type"))
+                visitType(node.module, node.index, module.types.at(node, "type"))
             }
 
             is Node.Constant -> {
@@ -191,9 +191,26 @@ internal class ReachabilityGraph(
 
     private fun visitType(
         module: Int,
+        index: Int,
         type: NominalType,
     ) {
         markString(module, type.name.value.toInt())
+        // String instructions resolve the public canonical identity even when all uses are local.
+        val source = artifact.modules[module]
+        if (source.kind == ru.lazyhat.compukters.compiler.artifact.model.ModuleKind.LIBRARY &&
+            type is NominalType.Class && source.strings[type.name.value.toInt()].toString() == "kotlin.String"
+        ) {
+            source.exports.forEachIndexed { exportIndex, export ->
+                if (export.kind == SymbolKind.TYPE && export.localSymbol.toInt() == index &&
+                    export.visibility == ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility.PUBLIC_LIBRARY &&
+                    source.strings[export.name.value.toInt()].toString() == "kotlin.String"
+                ) {
+                    reachable[module].exports += exportIndex
+                    markString(module, export.name.value.toInt())
+                    markType(module, export.signature)
+                }
+            }
+        }
         when (type) {
             is NominalType.Array -> {
                 markValueType(module, type.element)

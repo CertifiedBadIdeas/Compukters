@@ -1001,6 +1001,24 @@ class ArtifactValidatorTest {
     }
 
     @Test
+    fun `reference string conversion requires ABI 1 10 and a reference operand`() {
+        val valid =
+            exactRoots(
+                executableArtifact(
+                    Instruction.StringValueOf(StringValueType.REFERENCE, RegisterId.of(3u), RegisterId.of(1u)),
+                ).copy(minimumRuntimeAbi = AbiVersion(1u, 10u)),
+            )
+        assertEquals(emptyList(), validateArtifact(valid, ArtifactWriteLimits()))
+        val oldAbi = validateArtifact(valid.copy(minimumRuntimeAbi = AbiVersion(1u, 9u)), ArtifactWriteLimits())
+        assertTrue(oldAbi.any { "runtime ABI 1.10" in it.detail }, oldAbi.toString())
+        val scalar =
+            executableArtifact(
+                Instruction.StringValueOf(StringValueType.REFERENCE, RegisterId.of(3u), RegisterId.of(0u)),
+            ).copy(minimumRuntimeAbi = AbiVersion(1u, 10u))
+        assertTrue(validateArtifact(scalar, ArtifactWriteLimits()).any { "string conversion source" in it.detail })
+    }
+
+    @Test
     fun `i64 string conversion requires runtime ABI 1 3`() {
         val source =
             executableArtifact(

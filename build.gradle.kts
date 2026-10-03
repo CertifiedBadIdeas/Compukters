@@ -308,6 +308,16 @@ fun registerKotlinVmConformance(
 }
 
 registerKotlinVmConformance(
+    taskName = "testKotlinToStringVmConformance",
+    taskDescription = "Executes virtual toString, scalar boxes and lazy Any assertion messages.",
+    artifactTask = ":compiler-k2:generateToStringConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/to-string.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-to-string-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_TO_STRING_ARTIFACT",
+    conformanceScenario = "to-string",
+)
+
+registerKotlinVmConformance(
     taskName = "testKotlinExceptionsVmConformance",
     taskDescription = "Executes explicit managed exceptions across Guest calls.",
     artifactTask = ":compiler-k2:generateExceptionsConformanceArtifact",
