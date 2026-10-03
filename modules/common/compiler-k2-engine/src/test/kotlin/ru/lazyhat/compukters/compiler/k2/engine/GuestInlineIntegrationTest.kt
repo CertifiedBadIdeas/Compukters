@@ -39,6 +39,7 @@ import ru.lazyhat.compukters.compiler.artifact.link.LibraryModuleLinker
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.Module
+import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalCallableSignature
@@ -130,6 +131,7 @@ class GuestInlineIntegrationTest {
                 0,
                 assertNotNull(artifact)
                     .modules
+                    .filter { it.kind == ModuleKind.APPLICATION }
                     .flatMap { it.blocks }
                     .flatMap { it.instructions }
                     .count { it is Instruction.NewObject },

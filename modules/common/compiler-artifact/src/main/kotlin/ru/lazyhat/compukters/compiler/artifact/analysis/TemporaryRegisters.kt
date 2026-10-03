@@ -278,6 +278,14 @@ private fun Instruction.remapRegisters(register: (RegisterId) -> RegisterId): In
             copy(destination = register(destination), left = register(left), right = register(right))
         }
 
+        is Instruction.ValueHash -> {
+            copy(destination = register(destination), source = register(source))
+        }
+
+        is Instruction.StringHash -> {
+            copy(destination = register(destination), string = register(string))
+        }
+
         is Instruction.StringValueOf -> {
             copy(destination = register(destination), source = register(source))
         }

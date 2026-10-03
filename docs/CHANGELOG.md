@@ -35,7 +35,11 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   values, with virtual user-defined and inherited overrides across compiled libraries. Default object and array
   text includes the qualified runtime type and stable VM identity. Supported scalars can pass through `Any`
   with value equality and checked casts. Lazy assertion messages run and convert only on failure;
-  exceptions from their bodies or `toString` remain catchable. Rebuild programs and libraries for Runtime ABI 1.10.
+  exceptions from their bodies or `toString` remain catchable.
+- `hashCode()` supports scalars, UTF-16 strings, nullable and `Any` values, with virtual user-defined and inherited
+  overrides across compiled libraries. Default object and array hashes retain their identity across GC;
+  supported data-class properties receive generated value hashing. Null hashes to zero, and boxed Float hashing
+  agrees with value equality for NaN and signed zero. Rebuild programs and libraries for Runtime ABI 1.11.
 
 - Reference identity comparisons (`===`/`!==`) compare supported arrays and nullable references directly,
   preserving aliases and distinguishing fresh copies without artificial casts to `Any`.

@@ -444,6 +444,20 @@ fields, interfaces, superclass and initializer restrictions remain. Form 7 and t
 1.10 in both validators; the linker infers that minimum from retained instructions. The container format and
 C ABI 18 are unchanged. Newly built platform libraries and programs use the updated canonical runtime module.
 
+Runtime ABI 1.11 adds `value_hash` (opcode `0x69`), with forms 1/2/3/5/6/7 for Int/Long/Float/Boolean/Char/reference.
+Both validators require the matching initialized source type and an Int destination. Each hash costs one fixed
+instruction without allocation: Int and Char use their bits, Long folds its halves, Boolean uses 1231/1237, Float
+canonicalizes NaN while preserving signed zero, and references use live VM identity with null zero. Identity remains
+stable in the current nonmoving managed heap; a future moving collector must preserve the observable hash.
+String hashing reuses the charged, sliceable UTF-16 `string_hash` instruction, retaining its source as a GC root.
+The canonical library adds virtual `Any.hashCode` and overrides for String, typed boxes and Unit. Ordinary and library
+overrides use virtual dispatch; superclass calls remain direct. The stdlib `Any?.hashCode` extension returns zero for
+absence and dispatches present values. Generated data-class hashes combine primary-constructor property hashes with
+wrapping Int multiplication by 31; body properties are excluded. Supported array properties use a charged Guest
+loop over element hashes with initial value one and null zero, while ordinary arrays keep identity hashing.
+The linker infers ABI 1.11 from retained `value_hash` instructions. Container format and C ABI 18 stay unchanged;
+Runtime revision is 0.18.2 and `stdlib:core` version is 1.7.0.
+
 Runtime ABI 1.7 adds an explicit optional superclass to nominal array records. Array header flag bit 0 indicates
 a non-null TypeRef appended after the element ValueType; flag-zero records remain unchanged. The parent must resolve
 to a non-abstract, non-final, zero-arity root class with no superclass, interfaces, fields, methods or initializer.

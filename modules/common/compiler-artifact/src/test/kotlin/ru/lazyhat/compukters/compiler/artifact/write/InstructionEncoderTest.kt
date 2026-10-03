@@ -25,6 +25,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.FieldId
 import ru.lazyhat.compukters.compiler.artifact.model.FieldRef
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
+import ru.lazyhat.compukters.compiler.artifact.model.HashValueType
 import ru.lazyhat.compukters.compiler.artifact.model.ImportId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.OrderedScalarValueType
@@ -383,6 +384,18 @@ class InstructionEncoderTest {
 
         assertContentEquals(byteArrayOf(0x65, 0, 10, 0, 2, 0, 3, 0, 4, 0), encoded.bytes)
         assertEquals(1u, encoded.fixedCost)
+    }
+
+    @Test
+    fun `value and string hashes encode canonical forms and fixed costs`() {
+        HashValueType.entries.forEach { type ->
+            val encoded = encodeInstruction(Instruction.ValueHash(type, RegisterId.of(1u), RegisterId.of(2u)), 64)
+            assertContentEquals(byteArrayOf(0x69, type.artifactForm.toByte(), 8, 0, 1, 0, 2, 0), encoded.bytes)
+            assertEquals(1u, encoded.fixedCost)
+        }
+        val string = encodeInstruction(Instruction.StringHash(RegisterId.of(1u), RegisterId.of(2u)), 64)
+        assertContentEquals(byteArrayOf(0x64, 0, 8, 0, 1, 0, 2, 0), string.bytes)
+        assertEquals(1u, string.fixedCost)
     }
 
     @Test

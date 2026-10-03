@@ -321,6 +321,10 @@ private fun minimumRuntimeAbi(
                 required = maxOf(required, AbiVersion(1u, 5u))
             }
 
+            is Instruction.ValueHash -> {
+                required = maxOf(required, AbiVersion(1u, 11u))
+            }
+
             is Instruction.StringValueOf -> {
                 when (it.type) {
                     StringValueType.REFERENCE -> {

@@ -35,6 +35,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.FieldRef
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionValue
+import ru.lazyhat.compukters.compiler.artifact.model.HashValueType
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
@@ -484,6 +485,13 @@ internal fun validateArtifact(
                 block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F32 }
             }
         }
+    if (artifact.minimumRuntimeAbi < AbiVersion(1u, 11u) &&
+        artifact.modules.any { module ->
+            module.blocks.any { block -> block.instructions.any { it is Instruction.ValueHash } }
+        }
+    ) {
+        add(ArtifactWriteErrorCode.INVALID_RANGE, "value hashing requires minimum runtime ABI 1.11")
+    }
     if (artifact.minimumRuntimeAbi < AbiVersion(1u, 10u) &&
         artifact.modules.any { module ->
             module.blocks.any { block ->
@@ -1547,6 +1555,43 @@ internal fun validateArtifact(
                                     )
                                 }
                             }
+                        }
+
+                        is Instruction.ValueHash -> {
+                            val source = register(instruction.source, "source")
+                            val matches =
+                                if (instruction.type ==
+                                    HashValueType.REFERENCE
+                                ) {
+                                    source is ValueType.Ref
+                                } else {
+                                    source == instruction.type.valueType
+                                }
+                            if (source != null &&
+                                !matches
+                            ) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "hash source does not match its declared operand type",
+                                    location,
+                                )
+                            }
+                            val result = register(instruction.destination, "destination")
+                            if (result != null &&
+                                result != ValueType.I32
+                            ) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "hash destination is not I32", location)
+                            }
+                        }
+
+                        is Instruction.StringHash -> {
+                            val result = register(instruction.destination, "destination")
+                            if (result != null &&
+                                result != ValueType.I32
+                            ) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "string hash destination is not I32", location)
+                            }
+                            stringRegister(register(instruction.string, "source"))
                         }
 
                         is Instruction.StringValueOf -> {

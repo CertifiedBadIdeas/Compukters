@@ -308,6 +308,17 @@ fun registerKotlinVmConformance(
 }
 
 registerKotlinVmConformance(
+    taskName = "testKotlinHashCodeVmConformance",
+    taskDescription = "Executes virtual hashCode, scalar boxes and equality-compatible hashes.",
+    artifactTask = ":compiler-k2:generateHashCodeConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/hash-code.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-hash-code-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_HASH_CODE_ARTIFACT",
+    conformanceScenario = "hash-code",
+    additionalArtifacts = mapOf("COMPUKTER_KOTLIN_HASH_CODE_ARRAY_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/hash-code-arrays.cpkt")),
+)
+
+registerKotlinVmConformance(
     taskName = "testKotlinToStringVmConformance",
     taskDescription = "Executes virtual toString, scalar boxes and lazy Any assertion messages.",
     artifactTask = ":compiler-k2:generateToStringConformanceArtifact",

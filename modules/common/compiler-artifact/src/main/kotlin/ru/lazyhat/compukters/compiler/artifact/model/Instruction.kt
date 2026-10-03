@@ -340,6 +340,17 @@ sealed interface Instruction {
         val right: RegisterId,
     ) : Instruction
 
+    data class ValueHash(
+        val type: HashValueType,
+        val destination: RegisterId,
+        val source: RegisterId,
+    ) : Instruction
+
+    data class StringHash(
+        val destination: RegisterId,
+        val string: RegisterId,
+    ) : Instruction
+
     data class StringValueOf(
         val type: StringValueType,
         val destination: RegisterId,

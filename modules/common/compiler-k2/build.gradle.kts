@@ -1539,3 +1539,22 @@ val generateToStringConformanceArtifact = tasks.register<Test>("generateToString
         systemProperty("compukter.vm.toStringArtifact", toStringConformanceArtifact.get().asFile.absolutePath)
     }
 }
+val hashCodeConformanceArtifact = layout.buildDirectory.file("generated/conformance/hash-code.cpkt")
+val hashCodeArrayConformanceArtifact = layout.buildDirectory.file("generated/conformance/hash-code-arrays.cpkt")
+val generateHashCodeConformanceArtifact = tasks.register<Test>("generateHashCodeConformanceArtifact") {
+    description = "Compiles virtual, scalar and data-class hashCode for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*hashCode values and virtual dispatch preserve equality and effects for vm execution*")
+    inputs.file(workerJar)
+    outputs.file(hashCodeConformanceArtifact)
+    outputs.file(hashCodeArrayConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.hashCodeArtifact", hashCodeConformanceArtifact.get().asFile.absolutePath)
+        systemProperty("compukter.vm.hashCodeArrayArtifact", hashCodeArrayConformanceArtifact.get().asFile.absolutePath)
+    }
+}
