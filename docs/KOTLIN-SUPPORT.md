@@ -90,17 +90,22 @@ supported.
   [`tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/tests.rs), test
   `scalar_vectors_match_kotlin_jvm_semantics`.
 
-- [ ] **`Any` value equality — Partial** — non-null values held as `Any` support `==`, `!=`, and `equals`.
-  Distinct boxes of `Int`, `Long`, `Float`, `Boolean`, and `Char` compare by value;
-  boxed Float equality canonicalizes NaNs and distinguishes signed zero. Strings compare by UTF-16 content. Guest classes honor explicit
-  `equals` overrides; data classes compare supported scalar and non-null `String` primary-constructor properties.
-  Other classes use default identity equality. Unsupported data-class property shapes receive a compiler diagnostic.
-  Supported scalar operands box at this boundary. `Any?` preserves null values and supports equality;
-  hashing follows the supported value and virtual-dispatch contract below. Evidence:
-  [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  tests `list Int covariance to Any preserves the list and boxes reads` (`testKotlinListAnyVmConformance`) and
-  `toString dispatch and lazy Any messages preserve values and effects for vm execution` (`testKotlinToStringVmConformance`).
-  Tracking: [#581](https://github.com/CertifiedBadIdeas/Compukters/issues/581)
+- [x] **Value equality and virtual `equals` for supported Guest values** — `==`, `!=` and explicit `equals`
+  share ordinary virtual `Any.equals(Any?)` for references. Null left receivers use null equality; a literal-null
+  comparison skips overrides, while explicit `equals(null)` invokes the receiver. Operands evaluate once in order.
+  String compares UTF-16 content; typed scalar boxes compare values, with canonical NaN and distinct signed zero for
+  Float. Primitive Float `==` retains IEEE equality. Objects and arrays default to identity; custom and inherited
+  overrides, `super.equals`, exceptions and independently compiled library methods use normal dispatch.
+  Generated data-class methods compare constructor properties, including nullable, Float and object fields;
+  arrays compare identity and body properties are excluded. Hashes agree for supported equal values; custom classes
+  remain responsible for coherent equals/hashCode overrides. Other generated data/enum methods remain partial.
+  Evidence: `virtual equals handles libraries data values nullable references and effects for vm execution`
+  (`testKotlinEqualsVmConformance`, 64 KiB heap and repeated allocation),
+  `source library generic functions and classes specialize in consumer` (`testKotlinGenericLibraryVmConformance`),
+  `testKotlinHashCodeVmConformance`, `testKotlinListAnyVmConformance` and IDE test
+  `toString and Any lazy assertion messages share canonical IDE semantics` with equals diagnostics/completion.
+  Reuses Runtime ABI 1.11; compiled libraries require rebuilding against the canonical runtime module.
+  Tracking: [#685](https://github.com/CertifiedBadIdeas/Compukters/issues/685)
 
 - [ ] **`Unit` and `Nothing` — Partial** — `Unit` function results and
   non-returning intrinsics and the explicit exception forms described below are admitted.
@@ -693,7 +698,8 @@ supported.
   retain value hashes through `Any`. User-defined and inherited overrides dispatch virtually, including compiled
   libraries; `super.hashCode()` invokes the selected superclass directly. Receiver evaluation happens once and
   exceptions from overrides remain catchable. Default objects and arrays hash their stable live VM identity,
-  including across GC; Unit uses singleton identity. Supported data-class primary-constructor properties combine
+  including across GC. Freed slots may be reused; this identity is not persisted across VM recreation. Unit uses
+  singleton identity. Supported data-class primary-constructor properties combine
   value hashes, excluding body properties. Supported array properties use element hashes with initial value one
   and null zero; ordinary arrays use identity. This does not add Set/Map or complete generated data-class/enum support.
   Evidence: `hashCode values and virtual dispatch preserve equality and effects for vm execution`

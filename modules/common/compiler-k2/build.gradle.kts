@@ -1558,3 +1558,20 @@ val generateHashCodeConformanceArtifact = tasks.register<Test>("generateHashCode
         systemProperty("compukter.vm.hashCodeArrayArtifact", hashCodeArrayConformanceArtifact.get().asFile.absolutePath)
     }
 }
+
+val equalsConformanceArtifact = layout.buildDirectory.file("generated/conformance/equals.cpkt")
+val generateEqualsConformanceArtifact = tasks.register<Test>("generateEqualsConformanceArtifact") {
+    description = "Compiles virtual equals and generated data-class equality for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*virtual equals handles libraries data values nullable references and effects for vm execution*")
+    inputs.file(workerJar)
+    outputs.file(equalsConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.equalsArtifact", equalsConformanceArtifact.get().asFile.absolutePath)
+    }
+}

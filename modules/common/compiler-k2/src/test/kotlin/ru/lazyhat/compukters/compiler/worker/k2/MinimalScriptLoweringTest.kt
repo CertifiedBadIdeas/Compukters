@@ -5095,6 +5095,91 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `virtual equals handles libraries data values nullable references and effects for vm execution`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class State(var calls: Int)
+                open class Key(val n: Int, val state: State) {
+                    override fun equals(other: Any?): Boolean { state.calls = state.calls + 1; return other is Key && n == other.n }
+                    override fun hashCode(): Int = n
+                }
+                class Child(n: Int, state: State): Key(n, state)
+                class Super(n: Int, state: State): Key(n, state) { override fun equals(other: Any?): Boolean = super.equals(other) }
+                class Identity { override fun equals(other: Any?): Boolean = super.equals(other) }
+                class Never { override fun equals(other: Any?): Boolean = false }
+                class AcceptsNull { override fun equals(other: Any?): Boolean = other == null; override fun hashCode(): Int = 0 }
+                class Broken { override fun equals(other: Any?): Boolean { throw IllegalStateException("equals") } }
+                data class Nested(val n: Int)
+                data class Record(val nested: Nested?, val key: Key, val text: String?, val number: Float, val array: IntArray) { var ignored: Int = 0 }
+                fun left(state: State): Any? { state.calls = state.calls * 10 + 1; return "abc" }
+                fun right(state: State): Any? { state.calls = state.calls * 10 + 2; return "abc" }
+                fun main() {
+                    val state = State(0)
+                    val a: Any = Child(7, state)
+                    val b: Any = Child(7, state)
+                    check(a == b && state.calls == 1) { "equality check 1" }
+                    check(a.equals(b) && state.calls == 2) { "equality check 2" }
+                    check(Super(7, state) == b && state.calls == 3) { "equality check 3" }
+                    check(a != null && !(null == a) && state.calls == 3) { "equality check 4" }
+                    check(!a.equals(null) && state.calls == 4) { "equality check 5" }
+                    val absent: Any? = null
+                    check(absent == null && absent != a && !(absent == a)) { "equality check 6" }
+                    val acceptsNull = AcceptsNull()
+                    check(!(acceptsNull == null) && acceptsNull.equals(null) && acceptsNull == absent) { "literal null versus equals call" }
+                    val order = State(0)
+                    check(left(order) == right(order) && order.calls == 12) { "equality check 7" }
+                    val identity = Identity()
+                    check(identity == identity && identity != Identity()) { "equality check 8" }
+                    val never = Never()
+                    check(!(never == never) && !never.equals(never)) { "equality check 9" }
+                    var caught = false
+                    try { val broken: Any = Broken(); broken == a }
+                    catch (e: IllegalStateException) { caught = e.message == "equals" }
+                    check(caught) { "equality check 10" }
+                    check(7.equals(7) && !7.equals(7L)) { "equality check 11" }
+                    check("abc".equals("abc") && !"abc".equals(null)) { "equality check 12" }
+                    check(Unit.equals(Unit) && !Unit.equals(null)) { "equality check 13" }
+                    val nan: Any = Float.NaN
+                    check(nan == (0f / 0f) && nan.equals(Float.NaN)) { "equality check 14" }
+                    val plus: Any = 0f
+                    val minus: Any = -0f
+                    check(plus != minus && plus.hashCode() != minus.hashCode()) { "equality check 15" }
+                    val list = listOf(1, 2)
+                    val listView: Any = list
+                    check(list == list && list.equals(listView)) { "interface equality" }
+                    check(list.hashCode() == listView.hashCode() && list.toString() == listView.toString()) { "interface root methods" }
+                    val zero = 0f
+                    val negativeZero = -0f
+                    check(zero == negativeZero) { "equality check 16" }
+                    val array = intArrayOf(1, 2)
+                    val first = Record(Nested(1), Child(7, state), "abc", Float.NaN, array)
+                    val second = Record(Nested(1), Child(7, state), "abc", 0f / 0f, array)
+                    second.ignored = 99
+                    check(first == second && first.equals(second)) { "equality check 17" }
+                    val x: Any = first
+                    val y: Any = second
+                    check(x == y && x.hashCode() == y.hashCode()) { "equality check 18" }
+                    check(first != Record(Nested(1), Child(7, state), "abc", Float.NaN, intArrayOf(1, 2))) { "equality check 19" }
+                    check(array == array && array != intArrayOf(1, 2)) { "equality check 20" }
+                    check(array === array && first !== second) { "equality check 21" }
+                    val empty = Record(null, Child(7, state), null, 0f, array)
+                    check(empty == Record(null, Child(7, state), null, 0f, array)) { "equality check 22" }
+                    check(empty != Record(null, Child(7, state), null, -0f, array)) { "equality check 23" }
+                    var i = 0
+                    while (i < 2000) { Identity().toString(); i = i + 1 }
+                    check(x == y && x.hashCode() == y.hashCode()) { "equality check 24" }
+                    println("equals ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            System.getProperty("compukter.vm.equalsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `scalar hashCode uses typed instructions without boxing`() =
         withAdapter { adapter ->
             val result =
