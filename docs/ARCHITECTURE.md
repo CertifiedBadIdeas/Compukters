@@ -313,6 +313,9 @@ Minecraft code, and 26.1 code have no direct Create ownership. The adapter resol
 named devices across loaded peripheral cables and binds handles to exact block-entity identities, preventing replacement
 from silently rebinding a running Guest program. Stock Ticker snapshots and package requests remain inside that addon
 and use the same bounded server-thread host boundary.
+The server compiler configuration derives its selected module names and content hashes from the advertised target
+profile. Addon bundle payloads use addon IDs, while platform-module selections use full module IDs; these identities
+share the exact content hash but are not interchangeable.
 
 `ProgramRuntimeHost` owns one current Rust `ComputerMachine`, advances it with bounded guest and maintenance budgets,
 commits terminal changes once per active server tick, and exposes typed full/delta states and failures through JDK 25

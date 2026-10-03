@@ -117,6 +117,28 @@ class NeoForgeCompilerServicesTest {
                 .identity.hash,
         )
         assertNotEquals(TargetCompileProfileIdentity.of(unavailable), TargetCompileProfileIdentity.of(available))
+
+        val configuration = serverCompilerConfiguration(identity, available)
+        assertEquals(
+            available.modules.map { it.id.value to it.contentHash },
+            configuration.platformModules.map { it.name to it.hash },
+        )
+        assertEquals(
+            "fixture",
+            configuration.addonBundles
+                .single()
+                .identity.name,
+        )
+        assertEquals(
+            "fixture:api",
+            configuration.platformModules
+                .single {
+                    it.hash ==
+                        available.addonBundles
+                            .single()
+                            .identity.hash
+                }.name,
+        )
     }
 
     @Test
