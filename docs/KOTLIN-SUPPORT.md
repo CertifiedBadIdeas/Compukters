@@ -790,7 +790,8 @@ supported.
   through specialized `ArrayList<T>` instances. Factories create fresh lists with capacity equal to their element count;
   the `List<T>` view can be cast to `MutableList<T>` or `ArrayList<T>` to change the same object. `List<Int>` stores and
   returns unboxed i32 values; list aliases refer to the same object. Factory arguments run once in source order.
-  Invalid indexes fail the shared `ArrayList` argument check, and iteration resumes across quota slices. `List<Int>` can widen to `List<Any>` without copying the list;
+  Invalid indexes throw catchable `IllegalArgumentException` through the shared `ArrayList` argument check;
+  iteration resumes across quota slices. `List<Int>` can widen to `List<Any>` without copying the list;
   reads and iteration through the universal view allocate `Int` boxes with checked `is Int` and `as Int` access. A
   supported reference list can also widen to `List<Any>` while preserving its element references. Direct
   `listOf<Any>(...)` stores boxed `Int` and supported references in one array; indexed reads reuse those references.
@@ -803,8 +804,9 @@ supported.
   searches preserve null and use value equality. Non-null lists also widen to `List<Any?>`. Evidence:
   `testKotlinNullableCollectionsVmConformance`, test `nullable Int and collection elements preserve values and nulls`.
   Extension functions are Guest `kotlin.collections` declarations and require imports. Unsupported
-  primitive element types, spread arguments, `Set`, `Map`, sequences, and other collection
-  algorithms are unavailable. Evidence:
+  primitive element types, spread arguments, `Set`, `Map`, sequences, and collection APIs not listed here
+  remain unavailable. Generic list implementations are distributed as source bodies in the hybrid `stdlib:core`
+  module, alongside ordinary precompiled library implementations. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `read only lists retain typed Int String and guest references`,
   `list index outside bounds compiles to trapped array access`,
