@@ -1034,7 +1034,10 @@ links to their source files.
   read or set a rotation controller's target speed. Handles remain bound to the exact acquired block entity and fail
   rather than rebinding after replacement. Evidence: `KineticsHostStateTest`, including `named acquisition routes
   every kinetic type and shares handles with side acquisition`; `ComputerPeripheralLookupTest`; and neutral addon IDE
-  diagnostic/completion/parameter-information tests. See
+  diagnostic/completion/parameter-information tests. The standalone addon GameTest
+  `CreatePeripheralGameTests.namedKineticLifecycle` compiles and executes a Guest program against motor-driven
+  real gauges and a rotation controller, including cable cuts, reconnection, block replacement and configurator conflicts.
+  See
   [Create addon](https://certifiedbadideas.github.io/Compukters/CREATE/) for setup and
   [Create kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/) for the API.
 
@@ -1048,7 +1051,9 @@ links to their source files.
 - [x] **Create steam boiler on Minecraft 1.21.1** — the optional `create` addon exposes adjacent or named active
   boilers through `Boilers`. Programs read water supply in mB/t, its 0–18 water level, active heat, effective boiler
   level, and passive-heating status. Handles stay bound to the selected Fluid Tank segment and controller. Evidence:
-  `BoilerHostStateTest`, the independent Create addon `check`, and its packaged Guest API bundle. See
+  `BoilerHostStateTest`, the independent Create addon `check`, and its packaged Guest API bundle.
+  `CreateBoilerGameTests.namedBoilerLifecycle` executes a Guest program through a real non-controller tank segment,
+  with water supplied through Create's fluid capability, passive heat, engine/tank changes and cable reconnection. See
   [Create boilers](https://certifiedbadideas.github.io/Compukters/CREATE-BOILERS/).
 
 - [x] **Addon Guest API bundles** — a loader integration can register one bounded, versioned Kotlin metadata/source

@@ -58,6 +58,15 @@ compuktersAddon {
     register("create")
 }
 
+val gameTest by sourceSets.creating
+kotlin.target.compilations.named(gameTest.name) {
+    associateWith(kotlin.target.compilations.getByName("main"))
+}
+configurations[gameTest.implementationConfigurationName].extendsFrom(configurations.testImplementation.get())
+configurations[gameTest.runtimeOnlyConfigurationName].extendsFrom(configurations.testRuntimeOnly.get())
+gameTest.compileClasspath += sourceSets.main.get().compileClasspath + sourceSets.main.get().output
+gameTest.runtimeClasspath += sourceSets.main.get().runtimeClasspath + sourceSets.main.get().output
+
 repositories {
     mavenLocal()
     mavenCentral()
@@ -88,6 +97,7 @@ dependencies {
     neoForge("net.neoforged:neoforge:21.1.252")
 
     runtimeOnly(compuktersDevelopmentMod)
+    add(gameTest.implementationConfigurationName, compuktersDevelopmentMod)
     testImplementation(compuktersCommonApi)
     testImplementation(compuktersAdapterApi)
     modImplementation("com.simibubi.create:create-1.21.1:6.0.10-280:slim") { isTransitive = false }
@@ -121,6 +131,21 @@ loom {
         named("server") {
             runDir("run/server")
             ideConfigGenerated(true)
+        }
+        register("gameTestServer") {
+            server()
+            source(gameTest)
+            environment("gametestserver")
+            forgeTemplate("gameTestServer")
+            runDir("run/gameTestServer")
+            property("neoforge.enabledGameTestNamespaces", "minecraft")
+            ideConfigGenerated(true)
+            mods {
+                maybeCreate("compukters_create").apply {
+                    sourceSet("main")
+                    sourceSet(gameTest.name)
+                }
+            }
         }
     }
 }
@@ -184,11 +209,40 @@ val verifyProductionJar =
             check(entries.none { it.startsWith("ru/lazyhat/compukters/api/") }) { "Compukters API classes leaked into ${archive.name}" }
             check(entries.none { it.startsWith("ru/lazyhat/compukters/core/") }) { "Compukters core classes leaked into ${archive.name}" }
             check(entries.none { it.startsWith("ru/lazyhat/compukters/impl/") }) { "Compukters implementation leaked into ${archive.name}" }
+            check(entries.none { it.startsWith("ru/lazyhat/compukters/integration/create/gametest/") }) {
+                "Create GameTest classes leaked into ${archive.name}"
+            }
         }
     }
 
 tasks.named("check") {
-    dependsOn(verifyProductionJar)
+    dependsOn(verifyProductionJar, gameTest.classesTaskName)
+}
+
+tasks.configureEach {
+    if (name == "runGameTestServer") dependsOn(gameTest.classesTaskName)
+}
+
+val verifyGameTestRunIsolation =
+    tasks.register("verifyGameTestRunIsolation") {
+        group = "verification"
+        description = "Checks that Create GameTests are visible only to their dedicated server run."
+        doLast {
+            val outputs = gameTest.output.files.map(File::getCanonicalFile).toSet()
+            fun modFiles(runName: String): Set<File> {
+                val run = loom.runs.named(runName).get()
+                return (if (run.mods.isEmpty()) loom.mods else run.mods)
+                    .flatMap { it.modFiles.files }.map(File::getCanonicalFile).toSet()
+            }
+            listOf("client", "server").forEach { runName ->
+                check(modFiles(runName).intersect(outputs).isEmpty()) { "Create GameTest output leaked into $runName" }
+            }
+            check(modFiles("gameTestServer").intersect(outputs).isNotEmpty()) { "Create GameTest output is missing" }
+        }
+    }
+
+tasks.named("check") {
+    dependsOn(verifyGameTestRunIsolation)
 }
 
 tasks.named("assemble") {
