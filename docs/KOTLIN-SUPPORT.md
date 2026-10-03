@@ -96,7 +96,7 @@ supported.
   `equals` overrides; data classes compare supported scalar and non-null `String` primary-constructor properties.
   Other classes use default identity equality. Unsupported data-class property shapes receive a compiler diagnostic.
   Supported scalar operands box at this boundary. `Any?` preserves null values and supports equality;
-  general object hashing remains unavailable. Evidence:
+  hashing follows the supported value and virtual-dispatch contract below. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   tests `list Int covariance to Any preserves the list and boxes reads` (`testKotlinListAnyVmConformance`) and
   `toString dispatch and lazy Any messages preserve values and effects for vm execution` (`testKotlinToStringVmConformance`).
@@ -686,6 +686,24 @@ supported.
   `toString and Any lazy assertion messages share canonical IDE semantics`.
   New reference-default conversions and root-method inheritance require Runtime ABI 1.10.
   Tracking: [#683](https://github.com/CertifiedBadIdeas/Compukters/issues/683)
+
+- [x] **`hashCode()` for supported Guest values** — Int and Char use their values, Long folds high/low bits,
+  Boolean uses 1231/1237, and Float hashes canonical NaN bits while distinguishing signed zero. String hashes UTF-16
+  content with wrapping multiplication by 31. Nullable receivers hash to zero when absent; scalar boxes and String
+  retain value hashes through `Any`. User-defined and inherited overrides dispatch virtually, including compiled
+  libraries; `super.hashCode()` invokes the selected superclass directly. Receiver evaluation happens once and
+  exceptions from overrides remain catchable. Default objects and arrays hash their stable live VM identity,
+  including across GC; Unit uses singleton identity. Supported data-class primary-constructor properties combine
+  value hashes, excluding body properties. Supported array properties use element hashes with initial value one
+  and null zero; ordinary arrays use identity. This does not add Set/Map or complete generated data-class/enum support.
+  Evidence: `hashCode values and virtual dispatch preserve equality and effects for vm execution`
+  (`testKotlinHashCodeVmConformance`, 64 KiB heap and repeated allocation),
+  `source library generic functions and classes specialize in consumer` (`testKotlinGenericLibraryVmConformance`),
+  artifact tests `value hash requires ABI 1 11 matching source and I32 destination` and
+  `value and string hashes encode canonical forms and fixed costs`, native `value_hash` tests, and IDE test
+  `toString and Any lazy assertion messages share canonical IDE semantics` with hashCode diagnostics/completion.
+  Typed value hashing requires Runtime ABI 1.11; the nullable extension belongs to `stdlib:core` 1.7.0.
+  Tracking: [#684](https://github.com/CertifiedBadIdeas/Compukters/issues/684)
 
 - [ ] **`String` operations — Partial** — literals, concatenation,
   interpolation lowered as concatenation, `length`, indexed `get`,

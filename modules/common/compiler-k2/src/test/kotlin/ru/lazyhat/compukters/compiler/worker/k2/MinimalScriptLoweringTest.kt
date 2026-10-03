@@ -600,7 +600,7 @@ class MinimalScriptLoweringTest {
 
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
             // Integer arithmetic and stdoutInt retain the arithmetic exception factory.
-            assertEquals(AbiVersion(1u, 10u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 11u), artifact.minimumRuntimeAbi)
             assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.I64 })
             assertTrue(instructions.any { it is Instruction.Subtract && it.type == ScalarValueType.I64 })
             assertTrue(instructions.any { it is Instruction.Multiply && it.type == ScalarValueType.I64 })
@@ -627,7 +627,7 @@ class MinimalScriptLoweringTest {
                 ArtifactReader.read(
                     assertNotNull(consoleOnly.artifact, consoleOnly.diagnostics.joinToString()).toByteArray(),
                 )
-            assertEquals(AbiVersion(1u, 10u), consoleArtifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 11u), consoleArtifact.minimumRuntimeAbi)
 
             System.getProperty("compukter.vm.longArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
@@ -687,7 +687,7 @@ class MinimalScriptLoweringTest {
 
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
             // Floating division itself is nonthrowing; stdoutInt uses integer division.
-            assertEquals(AbiVersion(1u, 10u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 11u), artifact.minimumRuntimeAbi)
             assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.F32 })
             assertTrue(instructions.any { it is Instruction.Subtract && it.type == ScalarValueType.F32 })
             assertTrue(instructions.any { it is Instruction.Multiply && it.type == ScalarValueType.F32 })
@@ -709,7 +709,7 @@ class MinimalScriptLoweringTest {
                 ArtifactReader.read(
                     assertNotNull(consoleOnly.artifact, consoleOnly.diagnostics.joinToString()).toByteArray(),
                 )
-            assertEquals(AbiVersion(1u, 10u), consoleArtifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 11u), consoleArtifact.minimumRuntimeAbi)
 
             System.getProperty("compukter.vm.floatArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
@@ -864,7 +864,7 @@ class MinimalScriptLoweringTest {
             assertTrue(0xeb in opcodes, "receive must stay inside the VM: $opcodes")
             assertTrue(0x37 in opcodes && 0x38 in opcodes, "top-level state must use static storage: $opcodes")
             // Printing the received Int retains stdoutInt's arithmetic exception factory.
-            assertEquals(AbiVersion(1u, 10u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 11u), artifact.minimumRuntimeAbi)
             assertEquals(1u, artifact.manifest.maximumChannels)
             assertEquals(1u, artifact.manifest.maximumChannelValues)
             assertTrue(SemanticFeature.CHANNELS in artifact.semanticFeatures)
@@ -938,7 +938,7 @@ class MinimalScriptLoweringTest {
             assertTrue(0x50 in opcodes, "task launch must lower to task.spawn: $opcodes")
             assertTrue(0xe8 in opcodes, "task join must lower to task.join: $opcodes")
             // Tasks.launch retains IllegalArgumentException's verified factory role through require.
-            assertEquals(AbiVersion(1u, 10u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 11u), artifact.minimumRuntimeAbi)
             assertEquals(64u, artifact.manifest.maximumCoroutines)
             assertTrue(SemanticFeature.COROUTINES in artifact.semanticFeatures)
             assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
@@ -4228,7 +4228,7 @@ class MinimalScriptLoweringTest {
                 """.trimIndent()
             val result = adapter.compile(request(source))
             val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
-            assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 11u), ArtifactReader.read(bytes).minimumRuntimeAbi)
         }
 
     @Test
@@ -4430,7 +4430,7 @@ class MinimalScriptLoweringTest {
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             val decoded = ArtifactReader.read(artifact)
             // Output formatting retains the native arithmetic exception factory.
-            assertEquals(AbiVersion(1u, 10u), decoded.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 11u), decoded.minimumRuntimeAbi)
             assertTrue(SemanticFeature.ARRAY_COPY in decoded.semanticFeatures)
             System.getProperty("compukter.vm.intArrayArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
@@ -4478,7 +4478,7 @@ class MinimalScriptLoweringTest {
             val second = adapter.compile(request(source))
             val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(artifact).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 11u), ArtifactReader.read(artifact).minimumRuntimeAbi)
             System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
             }
@@ -4734,7 +4734,7 @@ class MinimalScriptLoweringTest {
             val second = adapter.compile(request(source))
             val bytes = assertNotNull(first.artifact, first.diagnostics.toString()).toByteArray()
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 11u), ArtifactReader.read(bytes).minimumRuntimeAbi)
             System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of("$output.arithmetic.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
             }
@@ -4782,7 +4782,7 @@ class MinimalScriptLoweringTest {
             val second = adapter.compile(request(source))
             val bytes = assertNotNull(first.artifact, first.diagnostics.toString()).toByteArray()
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 11u), ArtifactReader.read(bytes).minimumRuntimeAbi)
             System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of("$output.operations.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
             }
@@ -4850,7 +4850,7 @@ class MinimalScriptLoweringTest {
                 val second = adapter.compile(request(source))
                 val bytes = assertNotNull(first.artifact, "$name: ${first.diagnostics}").toByteArray()
                 assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-                assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+                assertEquals(AbiVersion(1u, 11u), ArtifactReader.read(bytes).minimumRuntimeAbi)
                 System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                     Path.of("$output.$name.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
                 }
@@ -5095,6 +5095,141 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `scalar hashCode uses typed instructions without boxing`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request("fun main() { 7.hashCode(); 1L.hashCode(); 1f.hashCode(); true.hashCode(); 'x'.hashCode() }"),
+                )
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            val instructions =
+                ArtifactReader
+                    .read(
+                        bytes,
+                    ).modules
+                    .single { it.kind == ModuleKind.APPLICATION }
+                    .blocks
+                    .flatMap(Block::instructions)
+            assertEquals(5, instructions.filterIsInstance<Instruction.ValueHash>().size)
+            assertTrue(instructions.none { it is Instruction.NewObject })
+        }
+
+    @Test
+    fun `hashCode values and virtual dispatch preserve equality and effects for vm execution`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class State(var calls: Int)
+                open class Message(val state: State) {
+                    override fun hashCode(): Int { state.calls = state.calls + 1; return 42 }
+                }
+                class Child(state: State): Message(state)
+                class Super(state: State): Message(state) { override fun hashCode(): Int = super.hashCode() + 1 }
+                class Plain
+                class Broken { override fun hashCode(): Int { throw IllegalStateException("hash") } }
+                data class Record(val n: Int, val wide: Long, val yes: Boolean, val letter: Char, val text: String) { var ignored: Int = 0 }
+                fun hashCode(value: Int): Int = 333
+                fun Plain?.hashCode(): Int = 444
+                fun asAny(value: Any): Any = value
+                fun produce(state: State): Any { state.calls = state.calls + 1; return Child(state) }
+                fun main() {
+                    check(hashCode(1) == 333)
+                    val extension: Plain? = null
+                    check(extension.hashCode() == 444)
+                    check(42.hashCode() == 42 && (-7).hashCode() == -7)
+                    check((-1L).hashCode() == 0 && 4294967296L.hashCode() == 1)
+                    check(1.5f.hashCode() == 1069547520)
+                    check(Float.NaN.hashCode() == 2143289344)
+                    check((0f / 0f).hashCode() == Float.NaN.hashCode())
+                    check(0f.hashCode() == 0 && (-0f).hashCode() == -2147483648)
+                    check(true.hashCode() == 1231 && false.hashCode() == 1237)
+                    check('Ж'.hashCode() == 1046 && '\uD800'.hashCode() == 55296)
+                    check("abc".hashCode() == 96354 && "".hashCode() == 0)
+                    check("\uD800".hashCode() == 55296)
+                    check(asAny(42).hashCode() == 42 && asAny(-1L).hashCode() == 0)
+                    check(asAny(1.5f).hashCode() == 1069547520 && asAny(true).hashCode() == 1231)
+                    check(asAny('Ж').hashCode() == 1046 && asAny("abc").hashCode() == 96354)
+                    check(asAny(Float.NaN) == asAny(Float.NaN))
+                    check(asAny(Float.NaN).hashCode() == asAny(Float.NaN).hashCode())
+                    val absent: Any? = null
+                    check(absent.hashCode() == 0)
+                    val nullableString: String? = "abc"
+                    check(nullableString.hashCode() == 96354)
+                    val nullableInt: Int? = 42
+                    check(nullableInt.hashCode() == 42)
+                    val absentInt: Int? = null
+                    check(absentInt.hashCode() == 0)
+                    val state = State(0)
+                    val value: Any = Child(state)
+                    check(value.hashCode() == 42 && state.calls == 1)
+                    check(produce(state).hashCode() == 42 && state.calls == 3)
+                    check(Super(state).hashCode() == 43 && state.calls == 4)
+                    var caught = false
+                    try { asAny(Broken()).hashCode() }
+                    catch (e: IllegalStateException) { check(e.message == "hash"); caught = true }
+                    check(caught)
+                    val plain = Plain()
+                    val identity = plain.hashCode()
+                    check(asAny(plain).hashCode() == identity)
+                    val array = intArrayOf(1, 2)
+                    val arrayHash = array.hashCode()
+                    var allocations = 0
+                    while (allocations < 2000) { Plain().toString(); allocations = allocations + 1 }
+                    check(plain.hashCode() == identity && array.hashCode() == arrayHash)
+                    array[0] = 8
+                    check(array.hashCode() == arrayHash && asAny(array).hashCode() == arrayHash)
+                    val refs = arrayOf("a")
+                    check(refs.hashCode() == asAny(refs).hashCode())
+                    check(Unit.hashCode() == asAny(Unit).hashCode())
+                    val first = Record(7, -1L, true, 'A', "abc")
+                    val second = Record(7, -1L, true, 'A', "abc")
+                    second.ignored = 99
+                    check(asAny(first) == asAny(second))
+                    check(first.hashCode() == second.hashCode() && asAny(first).hashCode() == first.hashCode())
+                    check(first.hashCode() == ((((7 * 31 + 0) * 31 + 1231) * 31 + 65) * 31 + 96354))
+                    val chars = CharArray(200)
+                    var i = 0
+                    var expected = 0
+                    while (i < chars.size) { chars[i] = 'a'; expected = expected * 31 + 97; i = i + 1 }
+                    val longText = chars.concatToString(0, chars.size)
+                    check(asAny(longText).hashCode() == expected && longText.hashCode() == expected)
+                    println("hashCode ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            assertEquals(AbiVersion(1u, 11u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            System.getProperty("compukter.vm.hashCodeArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+            val arrays =
+                adapter.compile(
+                    request(
+                        """
+                            data class WithArrays(val ints: IntArray, val chars: CharArray, val strings: Array<String?>, val optional: String?)
+                            data class ArrayRecord(val value: IntArray)
+                            fun main() {
+                                val letters = CharArray(1)
+                                letters[0] = 'A'
+                                val withArrays = WithArrays(intArrayOf(1, 2), letters, arrayOf("abc", null), null)
+                                check(withArrays.hashCode() == (((994 * 31 + 96) * 31 + 2987935) * 31))
+                        check(ArrayRecord(IntArray(0)).hashCode() == 1)
+                        var expected = 1
+                        var i = 0
+                        while (i < 300) { expected = expected * 31; i = i + 1 }
+                        check(ArrayRecord(IntArray(300)).hashCode() == expected)
+                                println("array hashes ok")
+                            }
+                        """.trimIndent(),
+                    ),
+                )
+            val arrayBytes = assertNotNull(arrays.artifact, arrays.diagnostics.toString()).toByteArray()
+            System.getProperty("compukter.vm.hashCodeArrayArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(arrayBytes)
+            }
+        }
+
+    @Test
     fun `toString dispatch and lazy Any messages preserve values and effects for vm execution`() =
         withAdapter { adapter ->
             val source =
@@ -5198,7 +5333,7 @@ class MinimalScriptLoweringTest {
                 """.trimIndent()
             val result = adapter.compile(request(source))
             val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
-            assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 11u), ArtifactReader.read(bytes).minimumRuntimeAbi)
             System.getProperty("compukter.vm.toStringArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }

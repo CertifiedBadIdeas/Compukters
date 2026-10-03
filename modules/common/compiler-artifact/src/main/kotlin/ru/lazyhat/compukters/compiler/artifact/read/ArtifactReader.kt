@@ -720,6 +720,14 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                     }
                 }
 
+                0x64u -> {
+                    Instruction.StringHash(r(), r())
+                }
+
+                0x69u -> {
+                    Instruction.ValueHash(HashValueType.entries.single { it.artifactForm == form }, r(), r())
+                }
+
                 0x68u -> {
                     val type =
                         when (form) {

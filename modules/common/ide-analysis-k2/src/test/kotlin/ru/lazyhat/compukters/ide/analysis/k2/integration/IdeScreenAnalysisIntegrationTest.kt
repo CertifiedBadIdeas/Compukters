@@ -50,10 +50,11 @@ class IdeScreenAnalysisIntegrationTest {
     fun `toString and Any lazy assertion messages share canonical IDE semantics`() {
         val source =
             """
-            class Message { override fun toString(): String = "message" }
+            class Message { override fun toString(): String = "message"; override fun hashCode(): Int = 42 }
             fun main() {
                 val value: Any? = Message()
                 val text = value.toString()
+                val hash = value.hashCode()
                 require(true) { 42 }
                 check(true) { Message() }
             }
@@ -99,6 +100,22 @@ class IdeScreenAnalysisIntegrationTest {
                     ).result,
                 )
             assertTrue(completion.items.any { it.insertText == "toString" }, completion.items.toString())
+            val hashCompletion =
+                assertIs<AnalysisResult.Completion>(
+                    assertIs<AnalysisClientResult.Success>(
+                        controller
+                            .query(
+                                admitted,
+                                AnalysisQuery.Completion(
+                                    identity,
+                                    path,
+                                    source.indexOf("value.hashCode") + "value.hash".length,
+                                    CompletionTrigger.Automatic,
+                                ),
+                            ).get(90, TimeUnit.SECONDS),
+                    ).result,
+                )
+            assertTrue(hashCompletion.items.any { it.insertText == "hashCode" }, hashCompletion.items.toString())
         }
     }
 

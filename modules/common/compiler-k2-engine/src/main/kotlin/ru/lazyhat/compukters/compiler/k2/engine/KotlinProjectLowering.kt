@@ -83,6 +83,7 @@ import org.jetbrains.kotlin.ir.types.IrTypeProjection
 import org.jetbrains.kotlin.ir.types.IrTypeSubstitutor
 import org.jetbrains.kotlin.ir.types.impl.makeTypeProjection
 import org.jetbrains.kotlin.ir.types.isNothing
+import org.jetbrains.kotlin.ir.types.makeNotNull
 import org.jetbrains.kotlin.ir.util.constructors
 import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
@@ -118,6 +119,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionValue
+import ru.lazyhat.compukters.compiler.artifact.model.HashValueType
 import ru.lazyhat.compukters.compiler.artifact.model.Import
 import ru.lazyhat.compukters.compiler.artifact.model.ImportId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
@@ -771,6 +773,20 @@ private fun scalarStringForm(type: ValueType): StringValueType =
         else -> error("unsupported scalar string conversion: $type")
     }
 
+private fun scalarHashForm(type: ValueType): HashValueType =
+    when (type) {
+        ValueType.I32 -> HashValueType.I32
+        ValueType.I64 -> HashValueType.I64
+        ValueType.F32 -> HashValueType.F32
+        ValueType.Bool -> HashValueType.BOOL
+        ValueType.Char -> HashValueType.CHAR
+        else -> error("unsupported scalar hash: $type")
+    }
+
+private fun IrSimpleFunction.isGeneratedDataHash(): Boolean =
+    name.asString() == "hashCode" && (parent as? IrClass)?.isData == true &&
+        origin != IrDeclarationOrigin.DEFINED && origin != IrDeclarationOrigin.FAKE_OVERRIDE
+
 private const val ANY_RUNTIME_TYPE = 5u
 private const val INT_BOX_RUNTIME_TYPE = 6u
 private const val INT_BOX_VALUE_IMPORT = 22u
@@ -780,9 +796,11 @@ private const val INT_ARRAY_RUNTIME_TYPE = 4u
 private const val UNIT_RUNTIME_TYPE = 21u
 private const val UNIT_INSTANCE_IMPORT = 29u
 private const val ANY_TO_STRING_IMPORT = 30u
-private const val RUNTIME_IMPORT_COUNT = 31
+private const val ANY_HASH_CODE_IMPORT = 31u
+private const val RUNTIME_IMPORT_COUNT = 32
 private const val UNIT_INSTANCE_NAME = "kotlin.Unit.INSTANCE"
 private const val ANY_TO_STRING_NAME = "kotlin.Any.toString"
+private const val ANY_HASH_CODE_NAME = "kotlin.Any.hashCode"
 
 private data class ScalarBox(
     val type: UInt,
@@ -801,7 +819,7 @@ private val scalarBoxes =
     )
 private val runtimeMemberNames =
     listOf(INT_BOX_VALUE_NAME, THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME) +
-        scalarBoxes.drop(1).map { it.name } + UNIT_INSTANCE_NAME + ANY_TO_STRING_NAME
+        scalarBoxes.drop(1).map { it.name } + UNIT_INSTANCE_NAME + ANY_TO_STRING_NAME + ANY_HASH_CODE_NAME
 private const val INT_BOX_VALUE_NAME = "kotlin.Int.<boxed-value>"
 private const val THROWABLE_MESSAGE_NAME = "kotlin.Throwable.message"
 private const val THROWABLE_CAUSE_NAME = "kotlin.Throwable.cause"
@@ -1117,6 +1135,11 @@ internal object KotlinProjectLowering {
         val playerFunctions =
             (
                 functions +
+                    sourceClasses.flatMap {
+                        it.declarations.filterIsInstance<IrSimpleFunction>().filter { function ->
+                            function.isGeneratedDataHash()
+                        }
+                    } +
                     collectionInterfaceClasses.flatMap { declaration ->
                         declaration.declarations.flatMap { member ->
                             when (member) {
@@ -1140,7 +1163,7 @@ internal object KotlinProjectLowering {
                                 function.origin != IrDeclarationOrigin.FAKE_OVERRIDE &&
                                 (function.correspondingPropertySymbol == null || !function.isDirectFieldAccessor())
                         )
-                }.filter { function -> function.body != null || function.modality == Modality.ABSTRACT }
+                }.filter { function -> function.body != null || function.modality == Modality.ABSTRACT || function.isGeneratedDataHash() }
                 .filterNot { function ->
                     !includeTrustedPlatformBodies &&
                         (function.parent as? IrClass)?.fqNameWhenAvailable?.asString() !in specializedCollectionInterfaces &&
@@ -1485,7 +1508,7 @@ internal object KotlinProjectLowering {
                     platformScalars.constantValues() +
                     linkedSymbols.defaultIntValues
             ).map { value -> value.toArtifactConstant(literalIds) } +
-                Constant.I32(0) +
+                Constant.I32(31) + Constant.I32(0) + Constant.I32(1) +
                 listOfNotNull(
                     Constant.I32(-1).takeIf {
                         needsAllBitsI32 || needsIntegerCompareToResult || needsFloatCompareToResult || needsBooleanCompareToResult
@@ -1910,7 +1933,7 @@ internal object KotlinProjectLowering {
             val functionId = requireNotNull(instanceFunctionIds[instance])
             val firstBlock = blocks.size
             val compiled =
-                if (function.body == null) {
+                if (function.body == null && !function.isGeneratedDataHash()) {
                     CompiledFunction(emptyList(), emptyList())
                 } else {
                     try {
@@ -2025,7 +2048,7 @@ internal object KotlinProjectLowering {
                 setOfNotNull(
                     FunctionFlag.STATIC.takeIf { memberOwner == null },
                     FunctionFlag.SUSPENDING.takeIf { function.isSuspend },
-                    FunctionFlag.ABSTRACT.takeIf { function.body == null },
+                    FunctionFlag.ABSTRACT.takeIf { function.body == null && !function.isGeneratedDataHash() },
                     FunctionFlag.VIRTUAL.takeIf {
                         memberOwner != null && ownerClass?.kind != ClassKind.INTERFACE &&
                             (function.modality != Modality.FINAL || function.overriddenSymbols.isNotEmpty())
@@ -2911,6 +2934,12 @@ internal object KotlinProjectLowering {
                             suspending = false,
                             result = ValueType.Ref(false, TypeRef.Imported(ImportId.of(STRING_RUNTIME_TYPE))),
                             parameters = listOf(ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))),
+                        ) +
+                        NominalType.Function(
+                            name = requireNotNull(metadataIds[ANY_HASH_CODE_NAME]),
+                            suspending = false,
+                            result = ValueType.I32,
+                            parameters = listOf(ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))),
                         ),
                 constants = constants,
                 fields = artifactFields,
@@ -2955,6 +2984,13 @@ internal object KotlinProjectLowering {
                             ModuleId.of(1u),
                             requireNotNull(metadataIds[ANY_TO_STRING_NAME]),
                             TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size).toUInt())),
+                            libraryHash,
+                        ) +
+                        Import(
+                            SymbolKind.FUNCTION,
+                            ModuleId.of(1u),
+                            requireNotNull(metadataIds[ANY_HASH_CODE_NAME]),
+                            TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size + 1).toUInt())),
                             libraryHash,
                         ) +
                         externalTypeImports.entries
@@ -3037,6 +3073,12 @@ internal object KotlinProjectLowering {
         return Artifact(
             minimumRuntimeAbi =
                 when {
+                    modules.any { module ->
+                        module.blocks.any { block ->
+                            block.instructions.any { it is Instruction.ValueHash }
+                        }
+                    } -> AbiVersion(1u, 11u)
+
                     modules.any { module ->
                         module.blocks.any { block ->
                             block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.REFERENCE }
@@ -3424,58 +3466,82 @@ internal object KotlinProjectLowering {
     }
 
     private fun kotlinLibrary(): Module {
-        val names = (runtimeTypeNames + runtimeMemberNames + listOf("toString", "<unit-init>")).sorted()
+        val names = (runtimeTypeNames + runtimeMemberNames + listOf("toString", "hashCode", "<unit-init>")).sorted()
         val ids = names.withIndex().associate { (index, name) -> name to StringId.of(index.toUInt()) }
         val anyType = TypeRef.Local(TypeId.of(ANY_RUNTIME_TYPE))
         val string = ValueType.Ref(false, TypeRef.Local(TypeId.of(STRING_RUNTIME_TYPE)))
         val unit = ValueType.Ref(false, TypeRef.Local(TypeId.of(UNIT_RUNTIME_TYPE)))
         val owners = listOf(ANY_RUNTIME_TYPE, STRING_RUNTIME_TYPE) + scalarBoxes.map { it.type } + UNIT_RUNTIME_TYPE
+        val methods = owners.flatMap { owner -> listOf(owner to "toString", owner to "hashCode") }
+        val initializerId = methods.size.toUInt()
         val signatures =
-            owners.map { owner ->
+            methods.map { (owner, name) ->
                 NominalType.Function(
-                    requireNotNull(ids["toString"]),
-                    suspending = false,
-                    result = string,
-                    parameters = listOf(ValueType.Ref(false, TypeRef.Local(TypeId.of(owner)))),
+                    requireNotNull(ids[name]),
+                    false,
+                    if (name == "toString") string else ValueType.I32,
+                    listOf(ValueType.Ref(false, TypeRef.Local(TypeId.of(owner)))),
                 )
-            } +
-                NominalType.Function(
-                    requireNotNull(ids["<unit-init>"]),
-                    suspending = false,
-                    result = ValueType.Unit,
-                    parameters = emptyList(),
-                )
+            } + NominalType.Function(requireNotNull(ids["<unit-init>"]), false, ValueType.Unit, emptyList())
         val blocks =
-            owners.flatMapIndexed { index, owner ->
+            methods.flatMapIndexed { index, (owner, name) ->
                 val receiver = RegisterId.of(0u)
                 val destination = RegisterId.of(1u)
                 val instructions =
-                    when (owner) {
-                        STRING_RUNTIME_TYPE -> {
-                            listOf(Instruction.Return(Destination.Register(receiver)))
-                        }
+                    if (name == "hashCode") {
+                        when (owner) {
+                            STRING_RUNTIME_TYPE -> {
+                                listOf(Instruction.StringHash(destination, receiver), Instruction.Return(Destination.Register(destination)))
+                            }
 
-                        UNIT_RUNTIME_TYPE -> {
-                            listOf(Instruction.Const(destination, ConstantId.of(0u)), Instruction.Return(Destination.Register(destination)))
-                        }
+                            ANY_RUNTIME_TYPE, UNIT_RUNTIME_TYPE -> {
+                                listOf(
+                                    Instruction.ValueHash(HashValueType.REFERENCE, destination, receiver),
+                                    Instruction.Return(Destination.Register(destination)),
+                                )
+                            }
 
-                        ANY_RUNTIME_TYPE -> {
-                            listOf(
-                                Instruction.StringValueOf(StringValueType.REFERENCE, destination, receiver),
-                                Instruction.Return(Destination.Register(destination)),
-                            )
+                            else -> {
+                                val box = scalarBoxes.single { it.type == owner }
+                                val field = if (owner == INT_BOX_RUNTIME_TYPE) 0u else box.field - 22u
+                                val scalar = RegisterId.of(2u)
+                                listOf(
+                                    Instruction.FieldGet(scalar, receiver, FieldRef.Local(FieldId.of(field))),
+                                    Instruction.ValueHash(scalarHashForm(box.valueType), destination, scalar),
+                                    Instruction.Return(Destination.Register(destination)),
+                                )
+                            }
                         }
+                    } else {
+                        when (owner) {
+                            STRING_RUNTIME_TYPE -> {
+                                listOf(Instruction.Return(Destination.Register(receiver)))
+                            }
 
-                        else -> {
-                            val box = scalarBoxes.single { it.type == owner }
-                            val scalar = RegisterId.of(2u)
-                            val field = if (owner == INT_BOX_RUNTIME_TYPE) 0u else box.field - 22u
-                            val form = scalarStringForm(box.valueType)
-                            listOf(
-                                Instruction.FieldGet(scalar, receiver, FieldRef.Local(FieldId.of(field))),
-                                Instruction.StringValueOf(form, destination, scalar),
-                                Instruction.Return(Destination.Register(destination)),
-                            )
+                            UNIT_RUNTIME_TYPE -> {
+                                listOf(
+                                    Instruction.Const(destination, ConstantId.of(0u)),
+                                    Instruction.Return(Destination.Register(destination)),
+                                )
+                            }
+
+                            ANY_RUNTIME_TYPE -> {
+                                listOf(
+                                    Instruction.StringValueOf(StringValueType.REFERENCE, destination, receiver),
+                                    Instruction.Return(Destination.Register(destination)),
+                                )
+                            }
+
+                            else -> {
+                                val box = scalarBoxes.single { it.type == owner }
+                                val scalar = RegisterId.of(2u)
+                                val field = if (owner == INT_BOX_RUNTIME_TYPE) 0u else box.field - 22u
+                                listOf(
+                                    Instruction.FieldGet(scalar, receiver, FieldRef.Local(FieldId.of(field))),
+                                    Instruction.StringValueOf(scalarStringForm(box.valueType), destination, scalar),
+                                    Instruction.Return(Destination.Register(destination)),
+                                )
+                            }
                         }
                     }
                 val fieldRead = instructions.takeWhile { it is Instruction.FieldGet }
@@ -3485,7 +3551,7 @@ internal object KotlinProjectLowering {
                 )
             } +
                 Block(
-                    FunctionId.of(8u),
+                    FunctionId.of(initializerId),
                     false,
                     listOf(
                         Instruction.NewObject(RegisterId.of(0u), TypeRef.Local(TypeId.of(UNIT_RUNTIME_TYPE))),
@@ -3494,13 +3560,13 @@ internal object KotlinProjectLowering {
                     ),
                 )
         val functions =
-            owners.mapIndexed { index, owner ->
+            methods.mapIndexed { index, (owner, name) ->
                 val values =
-                    listOf(ValueType.Ref(false, TypeRef.Local(TypeId.of(owner))), string) +
+                    listOf(ValueType.Ref(false, TypeRef.Local(TypeId.of(owner))), if (name == "toString") string else ValueType.I32) +
                         scalarBoxes.filter { it.type == owner }.map { it.valueType }
                 Function(
                     TypeRef.Local(TypeId.of(owner)),
-                    requireNotNull(ids["toString"]),
+                    requireNotNull(ids[name]),
                     TypeRef.Local(TypeId.of((runtimeTypeNames.size + index).toUInt())),
                     setOf(FunctionFlag.VIRTUAL),
                     values.map(FunctionValue::scalar),
@@ -3514,11 +3580,11 @@ internal object KotlinProjectLowering {
                 Function(
                     TypeRef.Local(TypeId.of(UNIT_RUNTIME_TYPE)),
                     requireNotNull(ids["<unit-init>"]),
-                    TypeRef.Local(TypeId.of(30u)),
+                    TypeRef.Local(TypeId.of(runtimeTypeNames.size.toUInt() + initializerId)),
                     setOf(FunctionFlag.STATIC),
                     listOf(FunctionValue.scalar(unit)),
                     0u,
-                    BlockId.of(16u),
+                    BlockId.of(initializerId * 2u),
                     1u,
                     0u,
                     0u,
@@ -3538,8 +3604,8 @@ internal object KotlinProjectLowering {
                         name = requireNotNull(ids["kotlin.String"]),
                         final = true,
                         superType = anyType,
-                        methodStart = 1u,
-                        methodCount = 1u,
+                        methodStart = 2u,
+                        methodCount = 2u,
                     ),
                     NominalType.Class(
                         name = requireNotNull(ids["kotlin.Throwable"]),
@@ -3555,15 +3621,15 @@ internal object KotlinProjectLowering {
                         runtimeExceptionKind = ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind.ILLEGAL_ARGUMENT,
                     ),
                     NominalType.Array(name = requireNotNull(ids["kotlin.IntArray"]), element = ValueType.I32, superType = anyType),
-                    NominalType.Class(name = requireNotNull(ids["kotlin.Any"]), methodStart = 0u, methodCount = 1u),
+                    NominalType.Class(name = requireNotNull(ids["kotlin.Any"]), methodStart = 0u, methodCount = 2u),
                     NominalType.Class(
                         name = requireNotNull(ids["kotlin.Int"]),
                         final = true,
                         superType = anyType,
                         fieldStart = 0u,
                         fieldCount = 1u,
-                        methodStart = 2u,
-                        methodCount = 1u,
+                        methodStart = 4u,
+                        methodCount = 2u,
                     ),
                     NominalType.Class(name = requireNotNull(ids["kotlin.Exception"]), superType = TypeRef.Local(TypeId.of(2u))),
                     NominalType.Class(name = requireNotNull(ids["kotlin.RuntimeException"]), superType = TypeRef.Local(TypeId.of(7u))),
@@ -3619,8 +3685,8 @@ internal object KotlinProjectLowering {
                             superType = anyType,
                             fieldStart = (index + 3).toUInt(),
                             fieldCount = 1u,
-                            methodStart = (index + 3).toUInt(),
-                            methodCount = 1u,
+                            methodStart = ((index + 3) * 2).toUInt(),
+                            methodCount = 2u,
                         )
                     } +
                     NominalType.Class(
@@ -3629,9 +3695,9 @@ internal object KotlinProjectLowering {
                         superType = anyType,
                         fieldStart = 7u,
                         fieldCount = 1u,
-                        methodStart = 7u,
-                        methodCount = 2u,
-                        initializer = FunctionId.of(8u),
+                        methodStart = 14u,
+                        methodCount = 3u,
+                        initializer = FunctionId.of(initializerId),
                     ) + signatures,
             fields =
                 listOf(
@@ -3722,6 +3788,13 @@ internal object KotlinProjectLowering {
                             requireNotNull(ids[ANY_TO_STRING_NAME]),
                             0u,
                             TypeRef.Local(TypeId.of(22u)),
+                        ) +
+                        Export(
+                            SymbolKind.FUNCTION,
+                            ExportVisibility.PUBLIC_LIBRARY,
+                            requireNotNull(ids[ANY_HASH_CODE_NAME]),
+                            1u,
+                            TypeRef.Local(TypeId.of(23u)),
                         )
                 ).sortedWith(compareBy({ it.kind.ordinal }, { names[it.name.value.toInt()] })),
         )
@@ -4111,8 +4184,12 @@ private class FunctionCompiler(
         constructorDeclaration?.thisReceiver?.let { receiver ->
             values[receiver.symbol] = RegisterId.of(0u)
         }
-        val body = function.body as? IrBlockBody ?: throw UnsupportedKotlinIr(function, "function body is not a block")
-        body.statements.forEach(::compileStatement)
+        if ((function as? IrSimpleFunction)?.isGeneratedDataHash() == true) {
+            compileDataHash()
+        } else {
+            val body = function.body as? IrBlockBody ?: throw UnsupportedKotlinIr(function, "function body is not a block")
+            body.statements.forEach(::compileStatement)
+        }
         if (blocks[currentBlock].instructions.lastOrNull()?.isTerminator() != true) emit(Instruction.Return(Destination.Unit))
         return CompiledFunction(
             localTypes.toList(),
@@ -5041,6 +5118,134 @@ private class FunctionCompiler(
         return convertToString(compileExpression(expression))
     }
 
+    private fun hashValue(
+        source: RegisterId,
+        direct: Boolean = false,
+    ): RegisterId {
+        val type = registerValueType(source)
+        val destination = allocate(ValueType.I32)
+        if (isTerminated()) return destination
+        if (type !is ValueType.Ref) {
+            emit(Instruction.ValueHash(scalarHashForm(type), destination, source))
+            return destination
+        }
+        if (type == stringType) {
+            emit(Instruction.StringHash(destination, source))
+            return destination
+        }
+        val function = FunctionRef.Imported(ImportId.of(ANY_HASH_CODE_IMPORT))
+
+        fun invoke(receiver: RegisterId) {
+            if (direct) {
+                emit(Instruction.Call(Destination.Register(destination), function, listOf(receiver)))
+            } else {
+                emit(Instruction.CallVirtual(Destination.Register(destination), function, listOf(receiver)))
+            }
+        }
+        if (!type.nullable) {
+            invoke(source)
+            return destination
+        }
+        val absent = allocate(type)
+        emit(Instruction.Null(absent))
+        val isNull = allocate(ValueType.Bool)
+        emit(Instruction.RefEqual(isNull, source, absent))
+        val nullBlock = createBlock()
+        val valueBlock = createBlock()
+        val join = createBlock()
+        emit(Instruction.Branch(isNull, blockId(nullBlock), blockId(valueBlock)))
+        currentBlock = nullBlock
+        emit(Instruction.ValueHash(HashValueType.REFERENCE, destination, absent))
+        jumpTo(join)
+        currentBlock = valueBlock
+        val receiver = allocate(type.copy(nullable = false))
+        emit(Instruction.CheckedCast(receiver, source, type.type))
+        invoke(receiver)
+        jumpTo(join)
+        currentBlock = join
+        return destination
+    }
+
+    private fun compileDataHash() {
+        val owner = function.parent as IrClass
+        val properties = owner.declarations.filterIsInstance<IrProperty>()
+        val names =
+            owner.constructors
+                .single { it.isPrimary }
+                .parameters
+                .filter { it.kind == IrParameterKind.Regular }
+                .map { it.name }
+        var result: RegisterId? = null
+        val multiplier = allocate(ValueType.I32).also { emit(Instruction.Const(it, requireNotNull(constantIds[Constant.I32(31)]))) }
+        names.forEach { name ->
+            val property = properties.single { it.name == name }
+            val symbol = requireNotNull(property.backingField).symbol
+            val field =
+                fieldsByBacking[symbol] ?: currentClassInstance?.let { genericFieldsByBacking[symbol to it] }
+                    ?: throw UnsupportedKotlinIr(property, "data class hash field is unavailable")
+            val sourceType = resolvedType(requireNotNull(property.backingField).type)
+            val arrayElement =
+                when {
+                    sourceType.isExactClass(kotlinCharArrayClass) -> ValueType.Char
+                    sourceType.isExactClass(kotlinIntArrayClass) -> ValueType.I32
+                    else -> guestTypes.arrayElement(sourceType.makeNotNull())?.let { valueType(it, property) }
+                }
+            val value = allocate(field.type)
+            emit(Instruction.FieldGet(value, RegisterId.of(0u), FieldRef.Local(field.id)))
+            val hash = if (arrayElement == null) hashValue(value) else hashArrayContents(value, arrayElement, multiplier)
+            result = result?.let { previous ->
+                val product = allocate(ValueType.I32).also { emit(Instruction.Multiply(ScalarValueType.I32, it, previous, multiplier)) }
+                allocate(ValueType.I32).also { emit(Instruction.Add(ScalarValueType.I32, it, product, hash)) }
+            } ?: hash
+        }
+        emit(Instruction.Return(Destination.Register(requireNotNull(result))))
+    }
+
+    private fun hashArrayContents(
+        source: RegisterId,
+        elementType: ValueType,
+        multiplier: RegisterId,
+    ): RegisterId {
+        val type = registerValueType(source) as ValueType.Ref
+        val result = allocate(ValueType.I32)
+        // The exit precedes its callers in block order, so it must admit backward-edge safepoints.
+        val exit = createBlock(loopHeader = true)
+        val array =
+            if (type.nullable) {
+                val absent = allocate(type).also { emit(Instruction.Null(it)) }
+                val isNull = allocate(ValueType.Bool).also { emit(Instruction.RefEqual(it, source, absent)) }
+                val nullBlock = createBlock()
+                val present = createBlock()
+                emit(Instruction.Branch(isNull, blockId(nullBlock), blockId(present)))
+                currentBlock = nullBlock
+                emit(Instruction.ValueHash(HashValueType.REFERENCE, result, absent))
+                jumpTo(exit)
+                currentBlock = present
+                allocate(type.copy(nullable = false)).also { emit(Instruction.CheckedCast(it, source, type.type)) }
+            } else {
+                source
+            }
+        val one = allocate(ValueType.I32).also { emit(Instruction.Const(it, requireNotNull(constantIds[Constant.I32(1)]))) }
+        emit(Instruction.Move(result, one))
+        val index = allocate(ValueType.I32).also { emit(Instruction.Const(it, requireNotNull(constantIds[Constant.I32(0)]))) }
+        val length = allocate(ValueType.I32).also { emit(Instruction.ArrayLength(it, array)) }
+        val condition = createBlock(loopHeader = true)
+        val body = createBlock()
+        jumpTo(condition)
+        currentBlock = condition
+        val hasNext = allocate(ValueType.Bool).also { emit(Instruction.Less(OrderedScalarValueType.I32, it, index, length)) }
+        emit(Instruction.Branch(hasNext, blockId(body), blockId(exit)))
+        currentBlock = body
+        val element = allocate(elementType).also { emit(Instruction.ArrayLoad(it, array, index)) }
+        val hash = hashValue(element)
+        val product = allocate(ValueType.I32).also { emit(Instruction.Multiply(ScalarValueType.I32, it, result, multiplier)) }
+        emit(Instruction.Add(ScalarValueType.I32, result, product, hash))
+        emit(Instruction.Add(index, index, one))
+        jumpTo(condition)
+        currentBlock = exit
+        return result
+    }
+
     private fun convertToString(
         source: RegisterId,
         direct: Boolean = false,
@@ -5289,6 +5494,20 @@ private class FunctionCompiler(
             return allocate(valueType(call.type, call)).also { destination ->
                 emit(Instruction.FieldGet(destination, receiver, FieldRef.Imported(field.importId)))
             }
+        }
+        val memberHashCode =
+            target.parameters.none { it.kind == IrParameterKind.Regular } &&
+                target.parameters.any { it.kind == IrParameterKind.DispatchReceiver }
+        if (target.name.asString() == "hashCode" && (memberHashCode || target.fqNameWhenAvailable?.asString() == "kotlin.hashCode") &&
+            call.arguments.filterNotNull().size == 1 && call.type == intType &&
+            (call.superQualifierSymbol == null || (target.parent as? IrClass)?.fqNameWhenAvailable?.asString() == "kotlin.Any")
+        ) {
+            val argument = call.arguments.filterNotNull().single()
+            if (argument.type == unitType) {
+                if (argument !is IrGetObjectValue) compileStatement(argument)
+                return hashValue(loadUnitReference())
+            }
+            return hashValue(compileExpression(argument), direct = call.superQualifierSymbol != null)
         }
         val memberToString =
             target.parameters.none { it.kind == IrParameterKind.Regular } &&

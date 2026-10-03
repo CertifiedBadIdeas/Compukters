@@ -289,6 +289,19 @@ internal fun encodeInstruction(
             operands.writeRegister(instruction.right)
         }
 
+        is Instruction.ValueHash -> {
+            opcode = 0x69u
+            form = instruction.type.artifactForm
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.source)
+        }
+
+        is Instruction.StringHash -> {
+            opcode = 0x64u
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.string)
+        }
+
         is Instruction.StringValueOf -> {
             opcode = 0x68u
             form = instruction.type.artifactForm
@@ -482,6 +495,8 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
         is Instruction.StringSubstring,
         is Instruction.StringFromCharArray,
         is Instruction.StringConcat,
+        is Instruction.StringHash,
+        is Instruction.ValueHash,
         is Instruction.StringValueOf,
         is Instruction.Jump,
         is Instruction.Branch,

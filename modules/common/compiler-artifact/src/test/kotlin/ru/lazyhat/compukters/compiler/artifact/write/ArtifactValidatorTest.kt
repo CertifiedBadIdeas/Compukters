@@ -41,6 +41,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionValue
+import ru.lazyhat.compukters.compiler.artifact.model.HashValueType
 import ru.lazyhat.compukters.compiler.artifact.model.Import
 import ru.lazyhat.compukters.compiler.artifact.model.ImportId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
@@ -997,6 +998,56 @@ class ArtifactValidatorTest {
             )
         assertTrue(
             validateArtifact(wrongDestination, ArtifactWriteLimits()).any { it.detail.contains("kotlin.String") },
+        )
+    }
+
+    @Test
+    fun `value hash requires ABI 1 11 matching source and I32 destination`() {
+        fun artifact(instruction: Instruction) = exactRoots(executableArtifact(instruction).copy(minimumRuntimeAbi = AbiVersion(1u, 11u)))
+        val valid = artifact(Instruction.ValueHash(HashValueType.REFERENCE, RegisterId.of(0u), RegisterId.of(1u)))
+        assertEquals(emptyList(), validateArtifact(valid, ArtifactWriteLimits()))
+        assertTrue(
+            validateArtifact(valid.copy(minimumRuntimeAbi = AbiVersion(1u, 10u)), ArtifactWriteLimits()).any {
+                "runtime ABI 1.11" in
+                    it.detail
+            },
+        )
+        assertTrue(
+            validateArtifact(
+                artifact(Instruction.ValueHash(HashValueType.REFERENCE, RegisterId.of(0u), RegisterId.of(0u))),
+                ArtifactWriteLimits(),
+            ).any {
+                "hash source" in
+                    it.detail
+            },
+        )
+        assertTrue(
+            validateArtifact(
+                artifact(Instruction.ValueHash(HashValueType.I64, RegisterId.of(0u), RegisterId.of(0u))),
+                ArtifactWriteLimits(),
+            ).any {
+                "hash source" in
+                    it.detail
+            },
+        )
+        assertTrue(
+            validateArtifact(
+                artifact(Instruction.ValueHash(HashValueType.REFERENCE, RegisterId.of(3u), RegisterId.of(1u))),
+                ArtifactWriteLimits(),
+            ).any {
+                "hash destination" in
+                    it.detail
+            },
+        )
+        assertEquals(
+            emptyList(),
+            validateArtifact(artifact(Instruction.StringHash(RegisterId.of(0u), RegisterId.of(1u))), ArtifactWriteLimits()),
+        )
+        assertTrue(
+            validateArtifact(artifact(Instruction.StringHash(RegisterId.of(0u), RegisterId.of(0u))), ArtifactWriteLimits()).any {
+                "kotlin.String" in
+                    it.detail
+            },
         )
     }
 

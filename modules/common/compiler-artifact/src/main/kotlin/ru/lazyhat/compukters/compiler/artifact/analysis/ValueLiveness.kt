@@ -259,6 +259,10 @@ internal fun Instruction.readRegisters(): List<RegisterId> =
 
         is Instruction.StringConcat -> listOf(left, right)
 
+        is Instruction.ValueHash -> listOf(source)
+
+        is Instruction.StringHash -> listOf(string)
+
         is Instruction.StringValueOf -> listOf(source)
 
         is Instruction.StringLength -> listOf(string)
@@ -362,6 +366,10 @@ internal fun Instruction.writtenRegisters(): List<RegisterId> =
 
         is Instruction.StringConcat -> listOf(destination)
 
+        is Instruction.ValueHash -> listOf(destination)
+
+        is Instruction.StringHash -> listOf(destination)
+
         is Instruction.StringValueOf -> listOf(destination)
 
         is Instruction.StringLength -> listOf(destination)
@@ -419,7 +427,7 @@ fun Instruction.runtimeExceptionKinds(): Set<RuntimeExceptionKind> {
 
         is Instruction.ArrayLength, is Instruction.FieldGet, is Instruction.FieldSet,
         is Instruction.StaticGet, is Instruction.StaticSet, is Instruction.CallVirtual, is Instruction.CallInterface,
-        is Instruction.StringLength, is Instruction.StringEquals, is Instruction.StringConcat,
+        is Instruction.StringHash, is Instruction.StringLength, is Instruction.StringEquals, is Instruction.StringConcat,
         -> return setOf(RuntimeExceptionKind.NULL_POINTER)
 
         is Instruction.ChannelCreate, is Instruction.ChannelSend, is Instruction.ChannelReceive,
@@ -470,6 +478,7 @@ fun Instruction.mayThrow(): Boolean =
         this is Instruction.CapabilityCallSync ||
         this is Instruction.CapabilityCallAsync ||
         this is Instruction.StringGet ||
+        this is Instruction.StringHash ||
         this is Instruction.StringLength ||
         this is Instruction.StringEquals ||
         this is Instruction.StringConcat ||

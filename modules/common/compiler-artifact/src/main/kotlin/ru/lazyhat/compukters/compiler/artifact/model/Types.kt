@@ -161,6 +161,19 @@ enum class StringValueType(
     REFERENCE(7u, null),
 }
 
+/** Operand kinds accepted by Runtime ABI 1.11 value hashing. */
+enum class HashValueType(
+    internal val artifactForm: UInt,
+    internal val valueType: ValueType?,
+) {
+    I32(1u, ValueType.I32),
+    I64(2u, ValueType.I64),
+    F32(3u, ValueType.F32),
+    BOOL(5u, ValueType.Bool),
+    CHAR(6u, ValueType.Char),
+    REFERENCE(7u, null),
+}
+
 /** Verified zero-state Throwable subclasses allocated by intrinsic and host failures in Runtime ABI 1.9. */
 enum class RuntimeExceptionKind(
     internal val artifactTag: UInt,
