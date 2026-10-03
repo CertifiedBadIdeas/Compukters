@@ -131,6 +131,42 @@ class PeripheralCableTopologyTest {
         assertEquals(listOf("motor", "gauge"), complete.contacts.toList())
     }
 
+    @Test
+    fun `cached cable contacts reflect device disappearance and recovery`() {
+        val physical = PeripheralCableTraversal.Complete(setOf("cable"), setOf("tank"))
+        var active = true
+        val resolve: (String) -> List<String> = { if (active) listOf("boiler") else emptyList() }
+
+        fun devices() =
+            assertIs<PeripheralCableTraversal.Complete<String, String>>(
+                resolvePeripheralCableContacts(physical, 1, resolve),
+            ).contacts
+
+        assertEquals(setOf("boiler"), devices())
+        active = false
+        assertEquals(emptySet(), devices())
+        active = true
+        assertEquals(setOf("boiler"), devices())
+    }
+
+    @Test
+    fun `resolved contact limit counts devices after deduplicating physical contacts`() {
+        val physical = PeripheralCableTraversal.Complete(setOf("cable"), setOf("left", "right"))
+        val duplicate = resolvePeripheralCableContacts(physical, 1) { listOf("boiler") }
+        assertEquals(setOf("boiler"), assertIs<PeripheralCableTraversal.Complete<String, String>>(duplicate).contacts)
+        assertEquals(
+            PeripheralCableTraversal.LimitExceeded(PeripheralCableLimit.CONTACTS, 1),
+            resolvePeripheralCableContacts(physical, 1) { listOf(it) },
+        )
+    }
+
+    @Test
+    fun `physical topology failure does not resolve any devices`() {
+        val physical: PeripheralCableTraversal<String, String> =
+            PeripheralCableTraversal.LimitExceeded(PeripheralCableLimit.CABLES, 1)
+        assertEquals(physical, resolvePeripheralCableContacts<String, String, String>(physical, 1) { error("must not resolve") })
+    }
+
     private fun topology(
         edges: Map<String, List<String>>,
         contacts: Map<String, List<String>> = emptyMap(),
