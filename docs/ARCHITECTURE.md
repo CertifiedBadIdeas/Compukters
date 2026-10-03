@@ -234,12 +234,13 @@ arguments use checked reference conversions against their instantiated non-null 
 Generic call arguments are converted against the specialized parameter types, so searching a widened `List<Any>`
 boxes an `Int` argument before comparison. Universal value
 equality over `Any` and `Any?` lowers through existing reference, type-test, field-read, scalar, and string instructions:
-boxed `Int` compares by value, strings by content, Guest classes with an explicit `equals` override call that method,
+supported scalar boxes compare by value (boxed Float canonicalizes NaNs and distinguishes signed zero), strings by content, Guest classes with an explicit `equals` override call that method,
 and data classes compare supported primary-constructor properties. Other classes retain the default identity equality.
 Unsupported data-class property shapes receive a compiler diagnostic. `Int?` uses a nullable reference to the same
 managed Int box. Conversion to a scalar Int checks the box and reads its payload; nullable and Any? boundaries preserve
-existing box references. Null participates in universal equality. Hash and object string conversion remain outside
-this subset.
+existing box references. Supported scalar values also box at `Any`/`Any?` boundaries with checked scalar casts.
+Null participates in universal equality. General object hashing remains outside this subset; virtual string
+conversion is described under Runtime ABI 1.10 below.
 
 Nullable reference arrays have distinct nominal types with nullable element descriptors. `Array<Int?>` and
 `List<Int?>` store the same managed Int boxes or null, while `List<Int>` retains scalar storage. Nullable and non-null
@@ -402,7 +403,7 @@ for enclosing scopes they remain inside. Lowering shares the artifact's conserva
 with verification and liveness, omitting handlers for protected code that cannot throw. Native verifier
 dataflow owns reachability across both ordinary and exceptional edges; a catch-only continuation is valid.
 Ordinary Guest precondition functions use the same mechanism: `require` throws IllegalArgumentException;
-`check` and `error` throw IllegalStateException. Lazy String messages execute only on failure. Synthesized
+`check` and `error` throw IllegalStateException. Lazy `() -> Any` messages execute once on failure and convert through virtual `toString`; conversion exceptions propagate. Synthesized
 exhaustive-when branches allocate and throw NoWhenBranchMatchedException, including for reference-valued results;
 no fake result or trap fallback is emitted.
 
@@ -430,6 +431,18 @@ Host EOF/I/O failures raise IOException; unavailable/other failures raise Illega
 remains terminal. Accepted failures retain bounded owned details per waiting task and materialize only after
 that task's frames are restored, at the original host-call instruction. Admission accounts this storage;
 factory allocation and unwinding remain sliceable and do not retire the published call a second time.
+
+Runtime ABI 1.10 adds reference-default form 7 of `string_value_of`. It accepts nullable references and returns
+non-null String: `null` for absence, otherwise the qualified runtime type name followed by `@` and lowercase
+hexadecimal VM Ref32 identity. Identity is stable for a live object, never a host pointer. Admission deduplicates
+verified type names into shared UTF-16 storage bounded by source metadata bytes and type records; construction uses
+existing charged, sliceable scan/allocation/copy and GC machinery without publishing partial strings.
+The compiler-owned `kotlin` library supplies concrete virtual `Any.toString` and overrides for String, typed scalar
+boxes and the Unit singleton. Ordinary CallVirtual selects user/library overrides; super calls remain direct.
+Arrays inherit the root dispatch slot. ABI 1.10 allows methods on the stateless root parent of arrays and Throwable;
+fields, interfaces, superclass and initializer restrictions remain. Form 7 and this root-method allowance require
+1.10 in both validators; the linker infers that minimum from retained instructions. The container format and
+C ABI 18 are unchanged. Newly built platform libraries and programs use the updated canonical runtime module.
 
 Runtime ABI 1.7 adds an explicit optional superclass to nominal array records. Array header flag bit 0 indicates
 a non-null TypeRef appended after the element ValueType; flag-zero records remain unchanged. The parent must resolve

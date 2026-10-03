@@ -323,6 +323,10 @@ private fun minimumRuntimeAbi(
 
             is Instruction.StringValueOf -> {
                 when (it.type) {
+                    StringValueType.REFERENCE -> {
+                        required = maxOf(required, AbiVersion(1u, 10u))
+                    }
+
                     StringValueType.F32 -> {
                         required = maxOf(required, AbiVersion(1u, 4u))
                     }

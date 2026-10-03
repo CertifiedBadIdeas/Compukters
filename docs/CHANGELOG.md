@@ -20,17 +20,22 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 - Programs can throw and catch exceptions through nested calls, match user-defined exception subclasses,
   rethrow the original object, and read nullable `message` and `cause`. `finally` runs on normal and exceptional
   exits, returns and supported loop/inline exits. Uncaught exceptions report their class,
-  message and bounded source stack. Runtime libraries containing exception instructions need rebuilding for Runtime ABI 1.8.
-  `require`, `check` and `error` use catchable exceptions, with lazy String messages for the preconditions.
+  message and bounded source stack.
+  `require`, `check` and `error` use catchable exceptions, with stdlib-compatible lazy `() -> Any` messages for the preconditions.
   Integer division/remainder, array and string bounds, negative array sizes, null references and checked casts
   throw typed catchable exceptions. Invalid channel arguments are catchable; resource exhaustion remains terminal.
   Ordinary host EOF/I/O and unavailable-operation failures are catchable as IOException and IllegalStateException,
   including across task suspension and filesystem reads; cancellation and VM resource failures remain terminal.
-  Programs and libraries containing these fallible operations need rebuilding for Runtime ABI 1.9.
   Standard exception descendants and `compukter.io.IOException` use ordinary library constructors,
   preserving nullable causes through superclass calls. Platform bundles and standalone modules need rebuilding
   for bundle format 9 / module format 5.
   Exhaustive `when` can return references without an explicit `else`.
+
+- `toString()`, string templates and string concatenation support scalar, String, Unit, nullable and `Any`
+  values, with virtual user-defined and inherited overrides across compiled libraries. Default object and array
+  text includes the qualified runtime type and stable VM identity. Supported scalars can pass through `Any`
+  with value equality and checked casts. Lazy assertion messages run and convert only on failure;
+  exceptions from their bodies or `toString` remain catchable. Rebuild programs and libraries for Runtime ABI 1.10.
 
 - Reference identity comparisons (`===`/`!==`) compare supported arrays and nullable references directly,
   preserving aliases and distinguishing fresh copies without artificial casts to `Any`.

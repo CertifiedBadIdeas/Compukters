@@ -761,12 +761,47 @@ private class InlineValueClassRegistry private constructor(
     }
 }
 
+private fun scalarStringForm(type: ValueType): StringValueType =
+    when (type) {
+        ValueType.I32 -> StringValueType.I32
+        ValueType.I64 -> StringValueType.I64
+        ValueType.F32 -> StringValueType.F32
+        ValueType.Bool -> StringValueType.BOOL
+        ValueType.Char -> StringValueType.CHAR
+        else -> error("unsupported scalar string conversion: $type")
+    }
+
 private const val ANY_RUNTIME_TYPE = 5u
 private const val INT_BOX_RUNTIME_TYPE = 6u
-private const val INT_BOX_VALUE_IMPORT = 17u
-private const val THROWABLE_MESSAGE_IMPORT = 18u
-private const val THROWABLE_CAUSE_IMPORT = 19u
+private const val INT_BOX_VALUE_IMPORT = 22u
+private const val THROWABLE_MESSAGE_IMPORT = 23u
+private const val THROWABLE_CAUSE_IMPORT = 24u
 private const val INT_ARRAY_RUNTIME_TYPE = 4u
+private const val UNIT_RUNTIME_TYPE = 21u
+private const val UNIT_INSTANCE_IMPORT = 29u
+private const val ANY_TO_STRING_IMPORT = 30u
+private const val RUNTIME_IMPORT_COUNT = 31
+private const val UNIT_INSTANCE_NAME = "kotlin.Unit.INSTANCE"
+private const val ANY_TO_STRING_NAME = "kotlin.Any.toString"
+
+private data class ScalarBox(
+    val type: UInt,
+    val field: UInt,
+    val valueType: ValueType,
+    val name: String,
+)
+
+private val scalarBoxes =
+    listOf(
+        ScalarBox(INT_BOX_RUNTIME_TYPE, INT_BOX_VALUE_IMPORT, ValueType.I32, "kotlin.Int.<boxed-value>"),
+        ScalarBox(17u, 25u, ValueType.Bool, "kotlin.Boolean.<boxed-value>"),
+        ScalarBox(18u, 26u, ValueType.I64, "kotlin.Long.<boxed-value>"),
+        ScalarBox(19u, 27u, ValueType.F32, "kotlin.Float.<boxed-value>"),
+        ScalarBox(20u, 28u, ValueType.Char, "kotlin.Char.<boxed-value>"),
+    )
+private val runtimeMemberNames =
+    listOf(INT_BOX_VALUE_NAME, THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME) +
+        scalarBoxes.drop(1).map { it.name } + UNIT_INSTANCE_NAME + ANY_TO_STRING_NAME
 private const val INT_BOX_VALUE_NAME = "kotlin.Int.<boxed-value>"
 private const val THROWABLE_MESSAGE_NAME = "kotlin.Throwable.message"
 private const val THROWABLE_CAUSE_NAME = "kotlin.Throwable.cause"
@@ -974,6 +1009,11 @@ internal object KotlinProjectLowering {
             "kotlin.NullPointerException",
             "kotlin.ClassCastException",
             "compukter.io.IOException",
+            "kotlin.Boolean",
+            "kotlin.Long",
+            "kotlin.Float",
+            "kotlin.Char",
+            "kotlin.Unit",
         )
 
     fun lower(
@@ -1314,7 +1354,7 @@ internal object KotlinProjectLowering {
             (
                 listOf("app") +
                     runtimeTypeNames +
-                    listOf(INT_BOX_VALUE_NAME, THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME) +
+                    runtimeMemberNames +
                     listOfNotNull("kotlin.Array".takeIf { usesStringArray }) +
                     referenceArrays.keys +
                     capabilityIdentities.flatMap { listOf(it.namespace, it.name) } +
@@ -1460,7 +1500,7 @@ internal object KotlinProjectLowering {
                 listOfNotNull(Constant.I64(-1).takeIf { needsAllBitsI64 }) +
                 listOfNotNull(Constant.F32(0u).takeIf { literalCollector.usesFloat }) +
                 listOfNotNull(Constant.F32((-1.0f).toBits().toUInt()).takeIf { literalCollector.usesFloat }) +
-                listOfNotNull(Constant.F32(1.0f.toBits().toUInt()).takeIf { needsFloatCompareToResult }) +
+                Constant.F32(1.0f.toBits().toUInt()) +
                 Constant.Bool(false)
         ).forEach(constantPool::intern)
         val constants = constantPool.freeze().records
@@ -1566,7 +1606,7 @@ internal object KotlinProjectLowering {
             linkedSymbols.types.entries
                 .sortedBy { (_, target) -> target.sortKey }
                 .mapIndexed { index, (symbol, target) ->
-                    symbol to target.copy(importId = ImportId.of((runtimeTypeNames.size + 3 + index).toUInt()))
+                    symbol to target.copy(importId = ImportId.of((RUNTIME_IMPORT_COUNT + index).toUInt()))
                 }.toMap()
         val externalClassTypes = externalTypeImports.mapValues { (_, target) -> TypeRef.Imported(target.importId) }
         val externalFieldImports =
@@ -1574,7 +1614,7 @@ internal object KotlinProjectLowering {
                 .distinctBy(ExternalFieldTarget::sortKey)
                 .sortedBy(ExternalFieldTarget::sortKey)
                 .mapIndexed { index, target ->
-                    target.copy(importId = ImportId.of((runtimeTypeNames.size + 3 + externalTypeImports.size + index).toUInt()))
+                    target.copy(importId = ImportId.of((RUNTIME_IMPORT_COUNT + externalTypeImports.size + index).toUInt()))
                 }
         val externalFieldsBySortKey = externalFieldImports.associateBy(ExternalFieldTarget::sortKey)
         val externalGetterFieldImports =
@@ -1593,7 +1633,7 @@ internal object KotlinProjectLowering {
                         target.copy(
                             importId =
                                 ImportId.of(
-                                    (runtimeTypeNames.size + 3 + externalTypeImports.size + externalFieldImportCount + index).toUInt(),
+                                    (RUNTIME_IMPORT_COUNT + externalTypeImports.size + externalFieldImportCount + index).toUInt(),
                                 ),
                         )
                 }.toMap()
@@ -2629,6 +2669,10 @@ internal object KotlinProjectLowering {
                         .sortedBy { (it as TypeRef.Local).id.value }
                 val superType =
                     sourceParents.firstOrNull { (symbol, _) -> symbol.owner.kind != ClassKind.INTERFACE }?.second
+                        ?: declaration.superTypes.firstNotNullOfOrNull { type ->
+                            val parent = (type as? IrSimpleType)?.classifier as? IrClassSymbol
+                            parent?.takeIf { it.owner.kind != ClassKind.INTERFACE }?.let { externalClassTypes[it] }
+                        }
                         ?: declaration.superTypes
                             .mapNotNull { ((it as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.runtimeExceptionType() }
                             .singleOrNull()
@@ -2861,7 +2905,13 @@ internal object KotlinProjectLowering {
                                             },
                                     ),
                             )
-                        } + initializerTypes + topLevelInitializerTypes + externalFunctionTypes,
+                        } + initializerTypes + topLevelInitializerTypes + externalFunctionTypes +
+                        NominalType.Function(
+                            name = requireNotNull(metadataIds[ANY_TO_STRING_NAME]),
+                            suspending = false,
+                            result = ValueType.Ref(false, TypeRef.Imported(ImportId.of(STRING_RUNTIME_TYPE))),
+                            parameters = listOf(ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))),
+                        ),
                 constants = constants,
                 fields = artifactFields,
                 imports =
@@ -2884,6 +2934,29 @@ internal object KotlinProjectLowering {
                                 targetModuleHash = libraryHash,
                             )
                         } +
+                        scalarBoxes.drop(1).map { box ->
+                            Import(
+                                SymbolKind.FIELD,
+                                ModuleId.of(1u),
+                                requireNotNull(metadataIds[box.name]),
+                                TypeRef.Imported(ImportId.of(box.type)),
+                                libraryHash,
+                            )
+                        } +
+                        Import(
+                            SymbolKind.FIELD,
+                            ModuleId.of(1u),
+                            requireNotNull(metadataIds[UNIT_INSTANCE_NAME]),
+                            TypeRef.Imported(ImportId.of(UNIT_RUNTIME_TYPE)),
+                            libraryHash,
+                        ) +
+                        Import(
+                            SymbolKind.FUNCTION,
+                            ModuleId.of(1u),
+                            requireNotNull(metadataIds[ANY_TO_STRING_NAME]),
+                            TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size).toUInt())),
+                            libraryHash,
+                        ) +
                         externalTypeImports.entries
                             .sortedBy { (_, target) -> target.sortKey }
                             .mapIndexed { index, (_, target) ->
@@ -2964,6 +3037,12 @@ internal object KotlinProjectLowering {
         return Artifact(
             minimumRuntimeAbi =
                 when {
+                    modules.any { module ->
+                        module.blocks.any { block ->
+                            block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.REFERENCE }
+                        }
+                    } -> AbiVersion(1u, 10u)
+
                     modules.any { module ->
                         module.types.any { it is NominalType.Class && it.runtimeExceptionKind != null }
                     } -> AbiVersion(1u, 9u)
@@ -3345,17 +3424,123 @@ internal object KotlinProjectLowering {
     }
 
     private fun kotlinLibrary(): Module {
-        val names = (runtimeTypeNames + listOf(INT_BOX_VALUE_NAME, THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME)).sorted()
+        val names = (runtimeTypeNames + runtimeMemberNames + listOf("toString", "<unit-init>")).sorted()
         val ids = names.withIndex().associate { (index, name) -> name to StringId.of(index.toUInt()) }
         val anyType = TypeRef.Local(TypeId.of(ANY_RUNTIME_TYPE))
+        val string = ValueType.Ref(false, TypeRef.Local(TypeId.of(STRING_RUNTIME_TYPE)))
+        val unit = ValueType.Ref(false, TypeRef.Local(TypeId.of(UNIT_RUNTIME_TYPE)))
+        val owners = listOf(ANY_RUNTIME_TYPE, STRING_RUNTIME_TYPE) + scalarBoxes.map { it.type } + UNIT_RUNTIME_TYPE
+        val signatures =
+            owners.map { owner ->
+                NominalType.Function(
+                    requireNotNull(ids["toString"]),
+                    suspending = false,
+                    result = string,
+                    parameters = listOf(ValueType.Ref(false, TypeRef.Local(TypeId.of(owner)))),
+                )
+            } +
+                NominalType.Function(
+                    requireNotNull(ids["<unit-init>"]),
+                    suspending = false,
+                    result = ValueType.Unit,
+                    parameters = emptyList(),
+                )
+        val blocks =
+            owners.flatMapIndexed { index, owner ->
+                val receiver = RegisterId.of(0u)
+                val destination = RegisterId.of(1u)
+                val instructions =
+                    when (owner) {
+                        STRING_RUNTIME_TYPE -> {
+                            listOf(Instruction.Return(Destination.Register(receiver)))
+                        }
+
+                        UNIT_RUNTIME_TYPE -> {
+                            listOf(Instruction.Const(destination, ConstantId.of(0u)), Instruction.Return(Destination.Register(destination)))
+                        }
+
+                        ANY_RUNTIME_TYPE -> {
+                            listOf(
+                                Instruction.StringValueOf(StringValueType.REFERENCE, destination, receiver),
+                                Instruction.Return(Destination.Register(destination)),
+                            )
+                        }
+
+                        else -> {
+                            val box = scalarBoxes.single { it.type == owner }
+                            val scalar = RegisterId.of(2u)
+                            val field = if (owner == INT_BOX_RUNTIME_TYPE) 0u else box.field - 22u
+                            val form = scalarStringForm(box.valueType)
+                            listOf(
+                                Instruction.FieldGet(scalar, receiver, FieldRef.Local(FieldId.of(field))),
+                                Instruction.StringValueOf(form, destination, scalar),
+                                Instruction.Return(Destination.Register(destination)),
+                            )
+                        }
+                    }
+                val fieldRead = instructions.takeWhile { it is Instruction.FieldGet }
+                listOf(
+                    Block(FunctionId.of(index.toUInt()), false, fieldRead + Instruction.Jump(BlockId.of((index * 2 + 1).toUInt()))),
+                    Block(FunctionId.of(index.toUInt()), false, instructions.drop(fieldRead.size)),
+                )
+            } +
+                Block(
+                    FunctionId.of(8u),
+                    false,
+                    listOf(
+                        Instruction.NewObject(RegisterId.of(0u), TypeRef.Local(TypeId.of(UNIT_RUNTIME_TYPE))),
+                        Instruction.StaticSet(FieldRef.Local(FieldId.of(7u)), RegisterId.of(0u)),
+                        Instruction.Return(Destination.Unit),
+                    ),
+                )
+        val functions =
+            owners.mapIndexed { index, owner ->
+                val values =
+                    listOf(ValueType.Ref(false, TypeRef.Local(TypeId.of(owner))), string) +
+                        scalarBoxes.filter { it.type == owner }.map { it.valueType }
+                Function(
+                    TypeRef.Local(TypeId.of(owner)),
+                    requireNotNull(ids["toString"]),
+                    TypeRef.Local(TypeId.of((runtimeTypeNames.size + index).toUInt())),
+                    setOf(FunctionFlag.VIRTUAL),
+                    values.map(FunctionValue::scalar),
+                    1u,
+                    BlockId.of((index * 2).toUInt()),
+                    2u,
+                    0u,
+                    0u,
+                )
+            } +
+                Function(
+                    TypeRef.Local(TypeId.of(UNIT_RUNTIME_TYPE)),
+                    requireNotNull(ids["<unit-init>"]),
+                    TypeRef.Local(TypeId.of(30u)),
+                    setOf(FunctionFlag.STATIC),
+                    listOf(FunctionValue.scalar(unit)),
+                    0u,
+                    BlockId.of(16u),
+                    1u,
+                    0u,
+                    0u,
+                )
         return Module(
             name = requireNotNull(ids["kotlin.Any"]),
+            utf16Literals = listOf(Utf16Literal.of(*"kotlin.Unit".map { it.code }.toIntArray())),
+            constants = listOf(Constant.StringLiteral(Utf16LiteralId.of(0u))),
+            functions = functions,
+            blocks = blocks,
             kind = ModuleKind.LIBRARY,
             strings = names.map(MetadataText::of),
             types =
                 listOf(
                     NominalType.Array(name = requireNotNull(ids["kotlin.CharArray"]), element = ValueType.Char, superType = anyType),
-                    NominalType.Class(name = requireNotNull(ids["kotlin.String"]), final = true, superType = anyType),
+                    NominalType.Class(
+                        name = requireNotNull(ids["kotlin.String"]),
+                        final = true,
+                        superType = anyType,
+                        methodStart = 1u,
+                        methodCount = 1u,
+                    ),
                     NominalType.Class(
                         name = requireNotNull(ids["kotlin.Throwable"]),
                         superType = anyType,
@@ -3370,13 +3555,15 @@ internal object KotlinProjectLowering {
                         runtimeExceptionKind = ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind.ILLEGAL_ARGUMENT,
                     ),
                     NominalType.Array(name = requireNotNull(ids["kotlin.IntArray"]), element = ValueType.I32, superType = anyType),
-                    NominalType.Class(name = requireNotNull(ids["kotlin.Any"])),
+                    NominalType.Class(name = requireNotNull(ids["kotlin.Any"]), methodStart = 0u, methodCount = 1u),
                     NominalType.Class(
                         name = requireNotNull(ids["kotlin.Int"]),
                         final = true,
                         superType = anyType,
                         fieldStart = 0u,
                         fieldCount = 1u,
+                        methodStart = 2u,
+                        methodCount = 1u,
                     ),
                     NominalType.Class(name = requireNotNull(ids["kotlin.Exception"]), superType = TypeRef.Local(TypeId.of(2u))),
                     NominalType.Class(name = requireNotNull(ids["kotlin.RuntimeException"]), superType = TypeRef.Local(TypeId.of(7u))),
@@ -3424,7 +3611,28 @@ internal object KotlinProjectLowering {
                         superType = TypeRef.Local(TypeId.of(7u)),
                         runtimeExceptionKind = ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind.IO,
                     ),
-                ),
+                ) +
+                    scalarBoxes.drop(1).mapIndexed { index, box ->
+                        NominalType.Class(
+                            requireNotNull(ids[runtimeTypeNames[box.type.toInt()]]),
+                            final = true,
+                            superType = anyType,
+                            fieldStart = (index + 3).toUInt(),
+                            fieldCount = 1u,
+                            methodStart = (index + 3).toUInt(),
+                            methodCount = 1u,
+                        )
+                    } +
+                    NominalType.Class(
+                        requireNotNull(ids["kotlin.Unit"]),
+                        final = true,
+                        superType = anyType,
+                        fieldStart = 7u,
+                        fieldCount = 1u,
+                        methodStart = 7u,
+                        methodCount = 2u,
+                        initializer = FunctionId.of(8u),
+                    ) + signatures,
             fields =
                 listOf(
                     Field(
@@ -3448,7 +3656,23 @@ internal object KotlinProjectLowering {
                         mutable = true,
                         static = false,
                     ),
-                ),
+                ) +
+                    scalarBoxes.drop(1).map { box ->
+                        Field(
+                            TypeRef.Local(TypeId.of(box.type)),
+                            requireNotNull(ids[box.name]),
+                            box.valueType,
+                            mutable = true,
+                            static = false,
+                        )
+                    } +
+                    Field(
+                        TypeRef.Local(TypeId.of(UNIT_RUNTIME_TYPE)),
+                        requireNotNull(ids[UNIT_INSTANCE_NAME]),
+                        unit,
+                        mutable = true,
+                        static = true,
+                    ),
             exports =
                 (
                     runtimeTypeNames.mapIndexed { index, name ->
@@ -3475,7 +3699,30 @@ internal object KotlinProjectLowering {
                                 localSymbol = (index + 1).toUInt(),
                                 signature = TypeRef.Local(TypeId.of(2u)),
                             )
-                        }
+                        } +
+                        scalarBoxes.drop(1).map { box ->
+                            Export(
+                                SymbolKind.FIELD,
+                                ExportVisibility.PUBLIC_LIBRARY,
+                                requireNotNull(ids[box.name]),
+                                box.field - 22u,
+                                TypeRef.Local(TypeId.of(box.type)),
+                            )
+                        } +
+                        Export(
+                            SymbolKind.FIELD,
+                            ExportVisibility.PUBLIC_LIBRARY,
+                            requireNotNull(ids[UNIT_INSTANCE_NAME]),
+                            7u,
+                            TypeRef.Local(TypeId.of(UNIT_RUNTIME_TYPE)),
+                        ) +
+                        Export(
+                            SymbolKind.FUNCTION,
+                            ExportVisibility.PUBLIC_LIBRARY,
+                            requireNotNull(ids[ANY_TO_STRING_NAME]),
+                            0u,
+                            TypeRef.Local(TypeId.of(22u)),
+                        )
                 ).sortedWith(compareBy({ it.kind.ordinal }, { names[it.name.value.toInt()] })),
         )
     }
@@ -3651,6 +3898,7 @@ private fun linkedPlatformSymbols(
         object : IrVisitorVoid() {
             override fun visitElement(element: IrElement) {
                 if (element is IrExpression) considerType(element.type)
+                if (element is IrClass) element.superTypes.forEach(::considerType)
                 element.acceptChildren(this, null)
             }
 
@@ -4035,6 +4283,10 @@ private class FunctionCompiler(
                 )
             }
 
+            is IrGetObjectValue -> {
+                if (statement.type != unitType) compileExpression(statement)
+            }
+
             is IrExpression -> {
                 compileExpression(statement)
             }
@@ -4233,11 +4485,18 @@ private class FunctionCompiler(
         expression: IrExpression,
         expectedType: IrType?,
     ): RegisterId {
-        val source = compileRawExpression(expression, expectedType)
+        val source =
+            if (resolvedType(expression.type) == unitType && expectedType?.let { resolvedType(it).isKotlinAny() } == true) {
+                if (expression !is IrGetObjectValue) compileStatement(expression)
+                loadUnitReference()
+            } else {
+                compileRawExpression(expression, expectedType)
+            }
         val actual = registerValueType(source)
         val targetType = expectedType ?: expression.type
-        if (resolvedType(targetType) == intType && actual is ValueType.Ref) {
-            return unboxInt(source)
+        val target = valueType(targetType, expression)
+        if (actual is ValueType.Ref && scalarBoxes.any { it.valueType == target }) {
+            return unboxScalar(source, target)
         }
         if (expectedType != null && actual is ValueType.Ref) {
             val target = valueType(expectedType, expression)
@@ -4248,26 +4507,18 @@ private class FunctionCompiler(
         if (expectedType == null || (!resolvedType(expectedType).isKotlinAny() && !resolvedType(expectedType).isNullableInt())) {
             return source
         }
-        val target = valueType(expectedType, expression) as ValueType.Ref
+        val referenceTarget = valueType(expectedType, expression) as ValueType.Ref
         if (expression is IrConst && expression.value == null) return source
-        return when (actual) {
-            ValueType.I32 -> {
-                boxInt(source, target)
-            }
-
-            is ValueType.Ref -> {
-                if (actual == target) {
-                    source
-                } else {
-                    allocate(target).also { destination ->
-                        emit(Instruction.CheckedCast(destination, source, target.type))
-                    }
+        return if (actual is ValueType.Ref) {
+            if (actual == referenceTarget) {
+                source
+            } else {
+                allocate(referenceTarget).also { destination ->
+                    emit(Instruction.CheckedCast(destination, source, referenceTarget.type))
                 }
             }
-
-            else -> {
-                throw UnsupportedKotlinIr(expression, "universal boxing is supported only for Int and references")
-            }
+        } else {
+            boxScalar(source, referenceTarget)
         }
     }
 
@@ -4626,15 +4877,17 @@ private class FunctionCompiler(
         return when (expression.operator) {
             IrTypeOperator.INSTANCEOF -> {
                 val reference =
-                    if (expression.typeOperand == intType) {
-                        intBoxType
+                    if (target == ValueType.Unit) {
+                        TypeRef.Imported(ImportId.of(UNIT_RUNTIME_TYPE))
                     } else {
-                        (target as? ValueType.Ref)?.type
-                            ?: throw UnsupportedKotlinIr(expression, "type test target is not a reference")
+                        scalarBoxes.firstOrNull { it.valueType == target }?.let { TypeRef.Imported(ImportId.of(it.type)) } ?: run {
+                            (target as? ValueType.Ref)?.type
+                                ?: throw UnsupportedKotlinIr(expression, "type test target is not a reference")
+                        }
                     }
                 val referenceSource =
-                    if (registerValueType(source) == ValueType.I32) {
-                        boxInt(source, ValueType.Ref(nullable = false, type = intBoxType))
+                    if (registerValueType(source) !is ValueType.Ref) {
+                        boxScalar(source, ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))))
                     } else {
                         source
                     }
@@ -4662,6 +4915,10 @@ private class FunctionCompiler(
             }
 
             IrTypeOperator.CAST -> {
+                if (target == ValueType.Unit) {
+                    val unit = TypeRef.Imported(ImportId.of(UNIT_RUNTIME_TYPE))
+                    return allocate(ValueType.Ref(false, unit)).also { emit(Instruction.CheckedCast(it, source, unit)) }
+                }
                 if (expression.typeOperand.isNullableInt()) {
                     return allocate(target).also { destination ->
                         emit(Instruction.CheckedCast(destination, source, intBoxType))
@@ -4672,13 +4929,10 @@ private class FunctionCompiler(
                         emit(Instruction.CheckedCast(destination, source, target.type))
                     }
                 }
-                if (expression.typeOperand != intType) {
-                    throw UnsupportedKotlinIr(expression, "cast target is outside the supported boxed Int subset")
+                if (scalarBoxes.none { it.valueType == target } || registerValueType(source) !is ValueType.Ref) {
+                    throw UnsupportedKotlinIr(expression, "scalar cast requires a supported box and reference operand")
                 }
-                if (valueType(expression.argument.type, expression) !is ValueType.Ref) {
-                    throw UnsupportedKotlinIr(expression, "boxed Int cast requires a reference operand")
-                }
-                unboxInt(source)
+                unboxScalar(source, target)
             }
 
             IrTypeOperator.IMPLICIT_CAST,
@@ -4698,25 +4952,42 @@ private class FunctionCompiler(
     private fun boxInt(
         source: RegisterId,
         target: ValueType.Ref,
+    ): RegisterId = boxScalar(source, target)
+
+    private fun boxScalar(
+        source: RegisterId,
+        target: ValueType.Ref,
     ): RegisterId {
-        val boxType = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE))
+        val layout = scalarBoxes.single { it.valueType == registerValueType(source) }
+        val boxType = TypeRef.Imported(ImportId.of(layout.type))
         prepareAllocationBlock()
         val box = allocate(ValueType.Ref(nullable = false, type = boxType))
         emit(Instruction.NewObject(box, boxType))
-        emit(Instruction.FieldSet(box, FieldRef.Imported(ImportId.of(INT_BOX_VALUE_IMPORT)), source))
+        emit(Instruction.FieldSet(box, FieldRef.Imported(ImportId.of(layout.field)), source))
         return allocate(target).also { destination ->
             emit(Instruction.CheckedCast(destination, box, target.type))
         }
     }
 
-    private fun unboxInt(source: RegisterId): RegisterId {
-        val intBoxType = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE))
-        val box = allocate(ValueType.Ref(nullable = false, type = intBoxType))
-        emit(Instruction.CheckedCast(box, source, intBoxType))
-        return allocate(ValueType.I32).also { destination ->
-            emit(Instruction.FieldGet(destination, box, FieldRef.Imported(ImportId.of(INT_BOX_VALUE_IMPORT))))
+    private fun unboxInt(source: RegisterId): RegisterId = unboxScalar(source, ValueType.I32)
+
+    private fun unboxScalar(
+        source: RegisterId,
+        type: ValueType,
+    ): RegisterId {
+        val layout = scalarBoxes.single { it.valueType == type }
+        val boxType = TypeRef.Imported(ImportId.of(layout.type))
+        val box = allocate(ValueType.Ref(nullable = false, type = boxType))
+        emit(Instruction.CheckedCast(box, source, boxType))
+        return allocate(type).also { destination ->
+            emit(Instruction.FieldGet(destination, box, FieldRef.Imported(ImportId.of(layout.field))))
         }
     }
+
+    private fun loadUnitReference(): RegisterId =
+        allocate(ValueType.Ref(false, TypeRef.Imported(ImportId.of(UNIT_RUNTIME_TYPE)))).also {
+            emit(Instruction.StaticGet(it, FieldRef.Imported(ImportId.of(UNIT_INSTANCE_IMPORT))))
+        }
 
     private fun registerValueType(register: RegisterId): ValueType =
         (leadingParameterTypes + sourceParameters.map { valueType(it.type, it) } + localTypes)[register.value.toInt()]
@@ -4763,28 +5034,61 @@ private class FunctionCompiler(
     }
 
     private fun compileStringPart(expression: IrExpression): RegisterId {
-        if (expression.type == kotlinStringType) return compileExpression(expression)
         if (expression.type == unitType) {
-            compileStatement(expression)
-            return loadStringLiteral("kotlin.Unit")
+            if (expression !is IrGetObjectValue) compileStatement(expression)
+            return convertToString(loadUnitReference())
         }
-        val conversionType = stringValueType(expression)
-        val source = compileExpression(expression)
-        prepareAllocationBlock()
-        return allocate(stringType).also { destination ->
-            emit(Instruction.StringValueOf(conversionType, destination, source))
-        }
+        return convertToString(compileExpression(expression))
     }
 
-    private fun stringValueType(expression: IrExpression): StringValueType =
-        when (valueType(expression.type, expression)) {
-            ValueType.I32 -> StringValueType.I32
-            ValueType.I64 -> StringValueType.I64
-            ValueType.F32 -> StringValueType.F32
-            ValueType.Bool -> StringValueType.BOOL
-            ValueType.Char -> StringValueType.CHAR
-            else -> throw UnsupportedKotlinIr(expression, "object string conversion requires virtual dispatch")
+    private fun convertToString(
+        source: RegisterId,
+        direct: Boolean = false,
+    ): RegisterId {
+        val type = registerValueType(source)
+        if (type == stringType) return source
+        val destination = allocate(stringType)
+        if (isTerminated()) return destination
+        if (type !is ValueType.Ref) {
+            val conversion = scalarStringForm(type)
+            prepareAllocationBlock()
+            emit(Instruction.StringValueOf(conversion, destination, source))
+            return destination
         }
+        val function = FunctionRef.Imported(ImportId.of(ANY_TO_STRING_IMPORT))
+
+        fun present() {
+            val anyType = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))
+            val receiver = allocate(ValueType.Ref(false, anyType))
+            emit(Instruction.CheckedCast(receiver, source, anyType))
+            if (direct) {
+                emit(Instruction.Call(Destination.Register(destination), function, listOf(receiver)))
+            } else {
+                emit(Instruction.CallVirtual(Destination.Register(destination), function, listOf(receiver)))
+            }
+        }
+        if (!type.nullable) {
+            present()
+        } else {
+            val nullValue = allocate(type.copy(nullable = true))
+            emit(Instruction.Null(nullValue))
+            val absent = allocate(ValueType.Bool)
+            emit(Instruction.RefEqual(absent, source, nullValue))
+            val nullBlock = createBlock()
+            val valueBlock = createBlock()
+            val join = createBlock()
+            emit(Instruction.Branch(absent, blockId(nullBlock), blockId(valueBlock)))
+            currentBlock = nullBlock
+            prepareAllocationBlock()
+            emit(Instruction.StringValueOf(StringValueType.REFERENCE, destination, source))
+            jumpTo(join)
+            currentBlock = valueBlock
+            present()
+            jumpTo(join)
+            currentBlock = join
+        }
+        return destination
+    }
 
     private fun loadStringLiteral(value: String): RegisterId {
         val constant = value.toArtifactConstant(literalIds)
@@ -4986,6 +5290,28 @@ private class FunctionCompiler(
                 emit(Instruction.FieldGet(destination, receiver, FieldRef.Imported(field.importId)))
             }
         }
+        val memberToString =
+            target.parameters.none { it.kind == IrParameterKind.Regular } &&
+                target.parameters.any { it.kind == IrParameterKind.DispatchReceiver }
+        val nullableToString = target.fqNameWhenAvailable?.asString() == "kotlin.toString"
+        if (target.name.asString() == "toString" && (memberToString || nullableToString) &&
+            call.arguments.filterNotNull().size == 1 && call.type == kotlinStringType &&
+            (call.superQualifierSymbol == null || (target.parent as? IrClass)?.fqNameWhenAvailable?.asString() == "kotlin.Any")
+        ) {
+            val argument = call.arguments.filterNotNull().single()
+            if (argument.type == unitType) {
+                if (argument !is IrGetObjectValue) compileStatement(argument)
+                return convertToString(loadUnitReference())
+            }
+            return convertToString(compileExpression(argument), direct = call.superQualifierSymbol != null)
+        }
+        if (target.fqNameWhenAvailable?.asString() == "kotlin.String.plus" && call.arguments.filterNotNull().size == 2) {
+            val parts = call.arguments.filterNotNull()
+            val left = compileExpression(parts[0])
+            val right = compileStringPart(parts[1])
+            prepareAllocationBlock()
+            return allocate(stringType).also { emit(Instruction.StringConcat(it, left, right)) }
+        }
         compileIntArrayFactory(call, target)?.let { return it }
         compileReferenceArrayFactory(call, target)?.let { return it }
         trustedIntrinsic(target)?.let { intrinsic ->
@@ -5026,7 +5352,27 @@ private class FunctionCompiler(
                 emit(Instruction.CallSuspend(destination, FunctionRef.Imported(external.importId), arguments, blockId(resume)))
                 currentBlock = resume
             } else {
-                emit(Instruction.Call(destination, FunctionRef.Imported(external.importId), arguments))
+                val function = FunctionRef.Imported(external.importId)
+                val owner = target.parent as? IrClass
+                emit(
+                    when {
+                        call.superQualifierSymbol != null -> {
+                            Instruction.Call(destination, function, arguments)
+                        }
+
+                        owner?.kind == ClassKind.INTERFACE -> {
+                            Instruction.CallInterface(destination, function, arguments)
+                        }
+
+                        owner != null && (target.modality != Modality.FINAL || target.overriddenSymbols.isNotEmpty()) -> {
+                            Instruction.CallVirtual(destination, function, arguments)
+                        }
+
+                        else -> {
+                            Instruction.Call(destination, function, arguments)
+                        }
+                    },
+                )
             }
             if (target.returnType.isNothing()) emit(Instruction.Unreachable)
             return (destination as? Destination.Register)?.id
@@ -5070,8 +5416,8 @@ private class FunctionCompiler(
                         }
                     } else {
                         val compiled = compileExpression(argument)
-                        if (universalEquality && registerValueType(compiled) == ValueType.I32) {
-                            boxInt(compiled, ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))))
+                        if (universalEquality && scalarBoxes.any { it.valueType == registerValueType(compiled) }) {
+                            boxScalar(compiled, ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))))
                         } else {
                             compiled
                         }
@@ -5098,7 +5444,7 @@ private class FunctionCompiler(
             val owner = target.parent as? IrClass
             val instruction =
                 when {
-                    interfaceSuper -> {
+                    call.superQualifierSymbol != null -> {
                         Instruction.Call(destination, FunctionRef.Local(targetId), arguments)
                     }
 
@@ -5734,20 +6080,6 @@ private class FunctionCompiler(
             call.type == intType
         ) {
             return compileBooleanCompareTo(call, arguments)
-        }
-        if (arguments.size == 2 && call.type == kotlinStringType && fqName == "kotlin.String.plus") {
-            val right =
-                if (argumentExpressions[1].type == kotlinStringType) {
-                    arguments[1]
-                } else {
-                    val conversionType = stringValueType(argumentExpressions[1])
-                    prepareAllocationBlock()
-                    allocate(stringType).also { destination ->
-                        emit(Instruction.StringValueOf(conversionType, destination, arguments[1]))
-                    }
-                }
-            prepareAllocationBlock()
-            return result(stringType) { Instruction.StringConcat(it, arguments[0], right) }
         }
         if (arguments.size == 2 && argumentExpressions.all { it.type == intType || it.type == longType || it.type == floatType }) {
             if (name in setOf("plus", "minus", "times", "div", "rem")) {
@@ -6414,49 +6746,83 @@ private class FunctionCompiler(
             operands.map { operand ->
                 val type = registerTypes[operand.value.toInt()]
                 if (type !is ValueType.Ref) {
-                    throw UnsupportedKotlinIr(call, "universal equality supports only boxed Int and references")
+                    boxScalar(operand, nullableAny)
+                } else {
+                    allocate(nullableAny).also { destination -> emit(Instruction.CheckedCast(destination, operand, anyType)) }
                 }
-                allocate(nullableAny).also { destination -> emit(Instruction.CheckedCast(destination, operand, anyType)) }
             }
         val same = allocate(ValueType.Bool)
         emit(Instruction.RefEqual(same, references[0], references[1]))
         val destination = allocate(ValueType.Bool)
         val exits = mutableListOf<Int>()
-        val checkInt = createBlock()
-        jumpTo(checkInt)
-
-        currentBlock = checkInt
-        val boxType = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE))
-        val leftInt = allocate(ValueType.Bool)
-        emit(Instruction.IsType(leftInt, references[0], boxType))
-        val checkRightInt = createBlock()
-        val checkString = createBlock()
-        emit(Instruction.Branch(leftInt, blockId(checkRightInt), blockId(checkString)))
-
-        currentBlock = checkRightInt
-        val rightInt = allocate(ValueType.Bool)
-        emit(Instruction.IsType(rightInt, references[1], boxType))
-        val compareInts = createBlock()
-        val differentIntKinds = createBlock()
-        emit(Instruction.Branch(rightInt, blockId(compareInts), blockId(differentIntKinds)))
-
-        currentBlock = compareInts
-        val intValues =
-            references.map { reference ->
-                val box = allocate(ValueType.Ref(nullable = false, type = boxType))
-                emit(Instruction.CheckedCast(box, reference, boxType))
-                allocate(ValueType.I32).also { value ->
-                    emit(Instruction.FieldGet(value, box, FieldRef.Imported(ImportId.of(INT_BOX_VALUE_IMPORT))))
+        scalarBoxes.forEach { layout ->
+            val boxType = TypeRef.Imported(ImportId.of(layout.type))
+            val leftMatches = allocate(ValueType.Bool)
+            emit(Instruction.IsType(leftMatches, references[0], boxType))
+            val checkRight = createBlock()
+            val nextKind = createBlock()
+            emit(Instruction.Branch(leftMatches, blockId(checkRight), blockId(nextKind)))
+            currentBlock = checkRight
+            val rightMatches = allocate(ValueType.Bool)
+            emit(Instruction.IsType(rightMatches, references[1], boxType))
+            val compare = createBlock()
+            val differentKinds = createBlock()
+            emit(Instruction.Branch(rightMatches, blockId(compare), blockId(differentKinds)))
+            currentBlock = differentKinds
+            emit(Instruction.Move(destination, same))
+            exits += currentBlock
+            currentBlock = compare
+            val values = references.map { unboxScalar(it, layout.valueType) }
+            val scalarForm =
+                when (layout.valueType) {
+                    ValueType.I32 -> ScalarValueType.I32
+                    ValueType.I64 -> ScalarValueType.I64
+                    ValueType.F32 -> ScalarValueType.F32
+                    ValueType.Bool -> ScalarValueType.BOOL
+                    ValueType.Char -> ScalarValueType.CHAR
+                    else -> error("unsupported scalar box")
                 }
+            if (layout.valueType != ValueType.F32) {
+                emit(Instruction.Equal(scalarForm, destination, values[0], values[1]))
+                exits += currentBlock
+            } else {
+                // Kotlin boxed Float equality canonicalizes NaNs and distinguishes signed zero.
+                val equal = allocate(ValueType.Bool)
+                emit(Instruction.Equal(ScalarValueType.F32, equal, values[0], values[1]))
+                val compareReciprocal = createBlock()
+                val compareNaN = createBlock()
+                emit(Instruction.Branch(equal, blockId(compareReciprocal), blockId(compareNaN)))
+                currentBlock = compareReciprocal
+                val one = allocate(ValueType.F32)
+                emit(Instruction.Const(one, requireNotNull(constantIds[Constant.F32(1f.toBits().toUInt())])))
+                val reciprocals =
+                    values.map { value ->
+                        allocate(ValueType.F32).also {
+                            emit(Instruction.Divide(ScalarValueType.F32, it, one, value))
+                        }
+                    }
+                emit(Instruction.Equal(ScalarValueType.F32, destination, reciprocals[0], reciprocals[1]))
+                exits += currentBlock
+                currentBlock = compareNaN
+                val leftNaN = allocate(ValueType.Bool)
+                emit(Instruction.Equal(ScalarValueType.F32, leftNaN, values[0], values[0]))
+                val rightNaN = createBlock()
+                val differentValues = createBlock()
+                emit(Instruction.Branch(leftNaN, blockId(differentValues), blockId(rightNaN)))
+                currentBlock = rightNaN
+                val ordered = allocate(ValueType.Bool)
+                emit(Instruction.Equal(ScalarValueType.F32, ordered, values[1], values[1]))
+                val falseValue = allocate(ValueType.Bool)
+                emit(Instruction.Const(falseValue, requireNotNull(constantIds[Constant.Bool(false)])))
+                emit(Instruction.Equal(ScalarValueType.BOOL, destination, ordered, falseValue))
+                exits += currentBlock
+                currentBlock = differentValues
+                emit(Instruction.Move(destination, same))
+                exits += currentBlock
             }
-        emit(Instruction.Equal(ScalarValueType.I32, destination, intValues[0], intValues[1]))
-        exits += currentBlock
+            currentBlock = nextKind
+        }
 
-        currentBlock = differentIntKinds
-        emit(Instruction.Move(destination, same))
-        exits += currentBlock
-
-        currentBlock = checkString
         val stringRef = (stringType as ValueType.Ref).type
         val leftString = allocate(ValueType.Bool)
         emit(Instruction.IsType(leftString, references[0], stringRef))
@@ -7240,6 +7606,7 @@ private class FunctionCompiler(
     private fun jumpTo(local: Int) = emit(Instruction.Jump(blockId(local)))
 
     private fun prepareAllocationBlock() {
+        if (isTerminated()) return
         val instructions = blocks[currentBlock].instructions
         if (instructions.isNotEmpty()) {
             val allocationBlock = createBlock()

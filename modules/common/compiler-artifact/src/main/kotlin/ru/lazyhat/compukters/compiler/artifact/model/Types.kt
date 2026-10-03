@@ -148,16 +148,17 @@ enum class OrderedScalarValueType(
     CHAR(6u, ValueType.Char),
 }
 
-/** Scalar kinds accepted by Artifact v1 string-value conversion forms. */
+/** Operand kinds accepted by Artifact v1 string-value conversion forms. */
 enum class StringValueType(
     internal val artifactForm: UInt,
-    internal val valueType: ValueType,
+    internal val valueType: ValueType?,
 ) {
     I32(1u, ValueType.I32),
     I64(2u, ValueType.I64),
     F32(3u, ValueType.F32),
     BOOL(5u, ValueType.Bool),
     CHAR(6u, ValueType.Char),
+    REFERENCE(7u, null),
 }
 
 /** Verified zero-state Throwable subclasses allocated by intrinsic and host failures in Runtime ABI 1.9. */

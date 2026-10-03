@@ -600,7 +600,7 @@ class MinimalScriptLoweringTest {
 
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
             // Integer arithmetic and stdoutInt retain the arithmetic exception factory.
-            assertEquals(AbiVersion(1u, 9u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 10u), artifact.minimumRuntimeAbi)
             assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.I64 })
             assertTrue(instructions.any { it is Instruction.Subtract && it.type == ScalarValueType.I64 })
             assertTrue(instructions.any { it is Instruction.Multiply && it.type == ScalarValueType.I64 })
@@ -627,7 +627,7 @@ class MinimalScriptLoweringTest {
                 ArtifactReader.read(
                     assertNotNull(consoleOnly.artifact, consoleOnly.diagnostics.joinToString()).toByteArray(),
                 )
-            assertEquals(AbiVersion(1u, 9u), consoleArtifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 10u), consoleArtifact.minimumRuntimeAbi)
 
             System.getProperty("compukter.vm.longArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
@@ -687,7 +687,7 @@ class MinimalScriptLoweringTest {
 
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
             // Floating division itself is nonthrowing; stdoutInt uses integer division.
-            assertEquals(AbiVersion(1u, 9u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 10u), artifact.minimumRuntimeAbi)
             assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.F32 })
             assertTrue(instructions.any { it is Instruction.Subtract && it.type == ScalarValueType.F32 })
             assertTrue(instructions.any { it is Instruction.Multiply && it.type == ScalarValueType.F32 })
@@ -709,7 +709,7 @@ class MinimalScriptLoweringTest {
                 ArtifactReader.read(
                     assertNotNull(consoleOnly.artifact, consoleOnly.diagnostics.joinToString()).toByteArray(),
                 )
-            assertEquals(AbiVersion(1u, 9u), consoleArtifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 10u), consoleArtifact.minimumRuntimeAbi)
 
             System.getProperty("compukter.vm.floatArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
@@ -864,7 +864,7 @@ class MinimalScriptLoweringTest {
             assertTrue(0xeb in opcodes, "receive must stay inside the VM: $opcodes")
             assertTrue(0x37 in opcodes && 0x38 in opcodes, "top-level state must use static storage: $opcodes")
             // Printing the received Int retains stdoutInt's arithmetic exception factory.
-            assertEquals(AbiVersion(1u, 9u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 10u), artifact.minimumRuntimeAbi)
             assertEquals(1u, artifact.manifest.maximumChannels)
             assertEquals(1u, artifact.manifest.maximumChannelValues)
             assertTrue(SemanticFeature.CHANNELS in artifact.semanticFeatures)
@@ -938,7 +938,7 @@ class MinimalScriptLoweringTest {
             assertTrue(0x50 in opcodes, "task launch must lower to task.spawn: $opcodes")
             assertTrue(0xe8 in opcodes, "task join must lower to task.join: $opcodes")
             // Tasks.launch retains IllegalArgumentException's verified factory role through require.
-            assertEquals(AbiVersion(1u, 9u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 10u), artifact.minimumRuntimeAbi)
             assertEquals(64u, artifact.manifest.maximumCoroutines)
             assertTrue(SemanticFeature.COROUTINES in artifact.semanticFeatures)
             assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
@@ -3510,7 +3510,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `other primitive to Any conversions report diagnostics without artifacts`() =
+    fun `supported scalars convert to Any without diagnostics`() =
         withAdapter { adapter ->
             listOf(
                 "fun main() { val value: Any = true }",
@@ -3519,8 +3519,8 @@ class MinimalScriptLoweringTest {
                 "fun main() { val value: Any = 1; println(value == true) }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))
-                assertNull(result.artifact, source)
-                assertTrue(result.diagnostics.any { it.severity.name == "ERROR" && it.path != null }, result.diagnostics.toString())
+                assertNotNull(result.artifact, result.diagnostics.toString())
+                assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
             }
         }
 
@@ -3593,7 +3593,6 @@ class MinimalScriptLoweringTest {
                 listOf(
                     "import kotlin.collections.listOf\nfun main() { listOf<Long?>(null) }",
                     "import kotlin.collections.listOf\nfun main() { listOf(true) }",
-                    "import kotlin.collections.listOf\nfun main() { listOf<Any>(true) }",
                     "import kotlin.collections.listOf\nfun main() { val array = arrayOf(\"a\"); listOf(*array) }",
                 )
             unsupported.forEach { source ->
@@ -3959,10 +3958,6 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             listOf(
                 "fun main() { arrayOf(1, 2) }",
-                "fun main() { arrayOf<Any>(true) }",
-                "fun main() { arrayOf<Any>(1L) }",
-                "fun main() { val values = arrayOf<Any>(1); values[0] = true }",
-                "fun main() { val values = arrayOf<Any>(1); values[0] = 1L }",
                 "fun main() { arrayOf<Long?>(null) }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))
@@ -4218,7 +4213,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `same nominal identity and null comparison retain baseline runtime ABI`() =
+    fun `same nominal identity and null comparison retain legacy forms with current runtime library`() =
         withAdapter { adapter ->
             val source =
                 """
@@ -4233,7 +4228,7 @@ class MinimalScriptLoweringTest {
                 """.trimIndent()
             val result = adapter.compile(request(source))
             val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
-            assertEquals(AbiVersion(1u, 0u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
         }
 
     @Test
@@ -4435,7 +4430,7 @@ class MinimalScriptLoweringTest {
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             val decoded = ArtifactReader.read(artifact)
             // Output formatting retains the native arithmetic exception factory.
-            assertEquals(AbiVersion(1u, 9u), decoded.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 10u), decoded.minimumRuntimeAbi)
             assertTrue(SemanticFeature.ARRAY_COPY in decoded.semanticFeatures)
             System.getProperty("compukter.vm.intArrayArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
@@ -4483,7 +4478,7 @@ class MinimalScriptLoweringTest {
             val second = adapter.compile(request(source))
             val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 9u), ArtifactReader.read(artifact).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(artifact).minimumRuntimeAbi)
             System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
             }
@@ -4739,7 +4734,7 @@ class MinimalScriptLoweringTest {
             val second = adapter.compile(request(source))
             val bytes = assertNotNull(first.artifact, first.diagnostics.toString()).toByteArray()
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 9u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
             System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of("$output.arithmetic.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
             }
@@ -4787,7 +4782,7 @@ class MinimalScriptLoweringTest {
             val second = adapter.compile(request(source))
             val bytes = assertNotNull(first.artifact, first.diagnostics.toString()).toByteArray()
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 9u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
             System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of("$output.operations.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
             }
@@ -4855,7 +4850,7 @@ class MinimalScriptLoweringTest {
                 val second = adapter.compile(request(source))
                 val bytes = assertNotNull(first.artifact, "$name: ${first.diagnostics}").toByteArray()
                 assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-                assertEquals(AbiVersion(1u, 9u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+                assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
                 System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                     Path.of("$output.$name.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
                 }
@@ -4916,7 +4911,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `unsupported when patterns produce no artifact`() =
+    fun `when range and alternative branches accept Unit statements`() =
         withAdapter { adapter ->
             listOf(
                 "fun main() { when (2) { in 1..3 -> Unit; else -> Unit } }",
@@ -4924,14 +4919,8 @@ class MinimalScriptLoweringTest {
             ).forEach { source ->
                 val result = adapter.compile(request(source))
 
-                assertNull(result.artifact, source)
-                assertTrue(result.hasErrors, source)
-                assertTrue(
-                    result.diagnostics.any {
-                        it.category != DiagnosticCategory.TARGET || it.code == "UNSUPPORTED_IR"
-                    },
-                    "$source\n${result.diagnostics}",
-                )
+                assertNotNull(result.artifact, "$source\n${result.diagnostics}")
+                assertTrue(!result.hasErrors, "$source\n${result.diagnostics}")
             }
         }
 
@@ -5101,32 +5090,118 @@ class MinimalScriptLoweringTest {
                 listOf(StringValueType.I32, StringValueType.I32, StringValueType.BOOL, StringValueType.CHAR, StringValueType.I32),
                 conversions.map(Instruction.StringValueOf::type),
             )
-            assertTrue(Utf16Literal.fromString("kotlin.Unit") in application.utf16Literals)
+            assertTrue(ArtifactReader.read(artifactBytes).modules.any { Utf16Literal.fromString("kotlin.Unit") in it.utf16Literals })
             assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
         }
 
     @Test
-    fun `string template rejects arbitrary objects until virtual dispatch exists`() =
+    fun `toString dispatch and lazy Any messages preserve values and effects for vm execution`() =
         withAdapter { adapter ->
-            val result =
-                adapter.compile(
-                    request(
-                        """
-                        class Box(val value: Int)
-
-                        fun main() {
-                            println("${'$'}{Box(1)}")
-                        }
-                        """.trimIndent(),
-                    ),
-                )
-
-            assertNull(result.artifact)
-            assertTrue(result.hasErrors)
-            assertTrue(
-                result.diagnostics.any { "object string conversion requires virtual dispatch" in it.message },
-                result.diagnostics.toString(),
-            )
+            val source =
+                """
+                class State(var calls: Int)
+                open class Message(val state: State) {
+                    override fun toString(): String { state.calls = state.calls + 1; return "custom" }
+                }
+                class Child(state: State): Message(state)
+                class Plain
+                class Broken { override fun toString(): String { throw IllegalStateException("conversion") } }
+                class Ordered(val state: State, val index: Int) {
+                    override fun toString(): String { state.calls = state.calls * 10 + index; return index.toString() }
+                }
+                fun ordered(state: State, index: Int): Ordered {
+                    state.calls = state.calls * 10 + index
+                    return Ordered(state, index)
+                }
+                fun toString(value: Int): String = "helper"
+                fun Plain?.toString(): String = "extension"
+                fun asAny(value: Any): Any = value
+                fun main() {
+                    check(toString(42) == "helper")
+                    val customNullable: Plain? = null
+                    check(customNullable.toString() == "extension")
+                    val sequence = State(0)
+                    check("${'$'}{ordered(sequence, 1)}${'$'}{ordered(sequence, 2)}" == "12")
+                    check(sequence.calls == 1122)
+                    check(42.toString() == "42")
+                    check((-9L).toString() == "-9")
+                    check(1.5f.toString() == "1.5")
+                    check(true.toString() == "true")
+                    check('Ж'.toString() == "Ж")
+                    check("text".toString() == "text")
+                    check(Unit.toString() == "kotlin.Unit")
+                    check(asAny(42).toString() == "42")
+                    check(asAny(-9L).toString() == "-9")
+                    check(asAny(1.5f).toString() == "1.5")
+                    check(asAny(true).toString() == "true")
+                    check(asAny('Ж').toString() == "Ж")
+                    check(asAny(Unit).toString() == "kotlin.Unit")
+                    check(asAny(Unit) is Unit)
+                    check(asAny(true) == asAny(true) && asAny(true) != asAny(false))
+                    check(asAny(-9L) == asAny(-9L) && asAny(-9L) != asAny(9L))
+                    check(asAny('Ж') == asAny('Ж') && asAny('Ж') != asAny('A'))
+                    check(asAny(1.5f) == asAny(1.5f))
+                    check(asAny(Float.NaN) == asAny(Float.NaN))
+                    check(asAny(0f) != asAny(-0f))
+                    check(asAny("text").toString() == "text")
+                    val identityString = "text"
+                    check(asAny(identityString).toString() === identityString)
+                    val mixed = arrayOf<Any>(true, 7L, 1.5f, 'Ж', Unit)
+                    check(mixed[0].toString() == "true" && mixed[1].toString() == "7")
+                    mixed[0] = 'A'
+                    check(mixed[0].toString() == "A")
+                    val list = kotlin.collections.listOf<Any>(true, 7L, 1.5f, 'Ж', Unit)
+                    check(list[0].toString() == "true" && list[2].toString() == "1.5")
+                    check(asAny(true) is Boolean && (asAny(true) as Boolean))
+                    check(asAny(-9L) is Long && (asAny(-9L) as Long) == -9L)
+                    check(asAny(1.5f) is Float && (asAny(1.5f) as Float) == 1.5f)
+                    check(asAny('Ж') is Char && (asAny('Ж') as Char) == 'Ж')
+                    val absent: Any? = null
+                    check(absent.toString() == "null")
+                    check("" + absent == "null")
+                    check("" + Unit == "kotlin.Unit")
+                    check("${'$'}absent" == "null")
+                    val nullable: String? = "present"
+                    check(nullable.toString() == "present")
+                    val state = State(0)
+                    val message: Any = Child(state)
+                    check(message.toString() == "custom" && state.calls == 1)
+                    check("${'$'}message/${'$'}message" == "custom/custom" && state.calls == 3)
+                    check("value=" + message == "value=custom" && state.calls == 4)
+                    val plain = Plain()
+                    val defaultText = plain.toString()
+                    check(defaultText.startsWith("Plain@"))
+                    check(plain.toString() == defaultText)
+                    check(Plain().toString() != defaultText)
+                    var allocations = 0
+                    while (allocations < 2000) { Plain().toString(); allocations = allocations + 1 }
+                    check(plain.toString() == defaultText)
+                    check(intArrayOf(1).toString().startsWith("kotlin.IntArray@"))
+                    check(arrayOf("x").toString().startsWith("kotlin.Array@"))
+                    require(true) { state.calls = state.calls + 100; message }
+                    check(true) { state.calls = state.calls + 100; message }
+                    check(state.calls == 4)
+                    try { require(false) { state.calls = state.calls + 1; message } }
+                    catch (e: IllegalArgumentException) { check(e.message == "custom" && state.calls == 6) }
+                    try { check(false) { 73 } }
+                    catch (e: IllegalStateException) { check(e.message == "73") }
+                    try { require(false) { true } }
+                    catch (e: IllegalArgumentException) { check(e.message == "true") }
+                    try { check(false) { Unit } }
+                    catch (e: IllegalStateException) { check(e.message == "kotlin.Unit") }
+                    try { require(false) { throw IllegalStateException("body") } }
+                    catch (e: IllegalStateException) { check(e.message == "body") }
+                    try { check(false) { Broken() } }
+                    catch (e: IllegalStateException) { check(e.message == "conversion") }
+                    println("toString ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            System.getProperty("compukter.vm.toStringArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
         }
 
     @Test

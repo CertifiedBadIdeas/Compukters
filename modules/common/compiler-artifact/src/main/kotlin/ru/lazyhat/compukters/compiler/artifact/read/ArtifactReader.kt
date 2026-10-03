@@ -728,6 +728,7 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                             3u -> StringValueType.F32
                             5u -> StringValueType.BOOL
                             6u -> StringValueType.CHAR
+                            7u -> StringValueType.REFERENCE
                             else -> error("unsupported string conversion form $form")
                         }
                     Instruction.StringValueOf(type, r(), r())

@@ -484,6 +484,15 @@ internal fun validateArtifact(
                 block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F32 }
             }
         }
+    if (artifact.minimumRuntimeAbi < AbiVersion(1u, 10u) &&
+        artifact.modules.any { module ->
+            module.blocks.any { block ->
+                block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.REFERENCE }
+            }
+        }
+    ) {
+        add(ArtifactWriteErrorCode.INVALID_RANGE, "reference string conversion requires minimum runtime ABI 1.10")
+    }
     if (usesTasks && artifact.minimumRuntimeAbi < AbiVersion(1u, 1u)) {
         add(
             ArtifactWriteErrorCode.INVALID_RANGE,
@@ -645,7 +654,9 @@ internal fun validateArtifact(
                 }
                 if (parent == null || parent.abstract || parent.final || parent.genericArity != 0.toUShort() ||
                     parent.superType != null || parent.interfaces.isNotEmpty() || parent.fieldCount != 0u ||
-                    parent.methodCount != 0u || parent.initializer != null || parent.throwableRoot || parent.runtimeExceptionKind != null
+                    (parent.methodCount != 0u && artifact.minimumRuntimeAbi < AbiVersion(1u, 10u)) || parent.initializer != null ||
+                    parent.throwableRoot ||
+                    parent.runtimeExceptionKind != null
                 ) {
                     add(ArtifactWriteErrorCode.BAD_REFERENCE, "array superclass must be a stateless root class", location)
                 }
@@ -679,7 +690,8 @@ internal fun validateArtifact(
                             parent == null || parent.throwableRoot || parent.runtimeExceptionKind != null ||
                                 parent.abstract || parent.final ||
                                 parent.genericArity != 0.toUShort() || parent.superType != null || parent.interfaces.isNotEmpty() ||
-                                parent.fieldCount != 0u || parent.methodCount != 0u || parent.initializer != null
+                                parent.fieldCount != 0u || (parent.methodCount != 0u && artifact.minimumRuntimeAbi < AbiVersion(1u, 10u)) ||
+                                parent.initializer != null
                         )
                     )
                 ) {
@@ -1539,10 +1551,16 @@ internal fun validateArtifact(
 
                         is Instruction.StringValueOf -> {
                             val source = register(instruction.source, "source")
-                            if (source != null && source != instruction.type.valueType) {
+                            val matches =
+                                if (instruction.type == StringValueType.REFERENCE) {
+                                    source is ValueType.Ref
+                                } else {
+                                    source == instruction.type.valueType
+                                }
+                            if (source != null && !matches) {
                                 add(
                                     ArtifactWriteErrorCode.INVALID_RANGE,
-                                    "string conversion source does not match its declared scalar type",
+                                    "string conversion source does not match its declared operand type",
                                     location,
                                 )
                             }

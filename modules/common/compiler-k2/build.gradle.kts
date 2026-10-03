@@ -1522,3 +1522,20 @@ tasks.register<Test>("generateCollectionReuseBenchmarkArtifacts") {
         systemProperty("compukter.bench.collectionReuseOutput", collectionReuseBenchmarkArtifacts.get().asFile.absolutePath)
     }
 }
+
+val toStringConformanceArtifact = layout.buildDirectory.file("generated/conformance/to-string.cpkt")
+val generateToStringConformanceArtifact = tasks.register<Test>("generateToStringConformanceArtifact") {
+    description = "Compiles virtual toString and lazy Any assertion messages for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*toString dispatch and lazy Any messages preserve values and effects for vm execution*")
+    inputs.file(workerJar)
+    outputs.file(toStringConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.toStringArtifact", toStringConformanceArtifact.get().asFile.absolutePath)
+    }
+}

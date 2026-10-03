@@ -19,6 +19,10 @@ fn main() {
     match scenario.as_str() {
         "executable" => pinned_vm_verifies_kotlin_executable_instruction_artifact(),
         "exceptions" => k2_explicit_exception_unwinds_across_guest_calls(),
+        "to-string" => {
+            let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_TO_STRING_ARTIFACT", 1, 64 * 1024);
+            k2_assert_prints(&mut session, ["toString ok\n"], 256);
+        },
         "int-array" => k2_int_array_executes_specialized_storage_and_traps(),
         "nullable-references" => k2_nullable_references_preserve_branch_and_call_semantics(),
         "int-loops" => k2_int_loops_execute_across_quota_slices_without_host_io(),
@@ -1420,6 +1424,10 @@ fn k2_expected_prints_with_budget<const N: usize>(
 }
 
 fn k2_stdio_session(artifact_variable: &str, maximum_coroutines: u32) -> Session {
+    k2_stdio_session_with_heap(artifact_variable, maximum_coroutines, 1024 * 1024)
+}
+
+fn k2_stdio_session_with_heap(artifact_variable: &str, maximum_coroutines: u32, heap_bytes: u32) -> Session {
     let path = std::env::var(artifact_variable).expect("K2 artifact path must be set");
     let bytes = fs::read(path).expect("K2 artifact must exist");
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
@@ -1432,7 +1440,7 @@ fn k2_stdio_session(artifact_variable: &str, maximum_coroutines: u32) -> Session
     ];
     let stdio = CapabilityBinding::new("compukter", "stdio", 1, 0, &operations);
     let profile = ExecutionProfile {
-        heap_bytes: 1024 * 1024,
+        heap_bytes,
         frame_storage_bytes: 1024 * 1024,
         maximum_call_depth: 64,
         maximum_coroutines,
