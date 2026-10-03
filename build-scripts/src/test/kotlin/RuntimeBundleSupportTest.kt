@@ -44,8 +44,8 @@ class RuntimeBundleSupportTest {
     fun pinsTheCurrentRuntimeRelease() {
         val contract = currentRuntimeBundleContract("0".repeat(40))
 
-        assertEquals("0.18.1", contract.runtimeVersion)
-        assertEquals("v0.18.1", contract.releaseTag)
+        assertEquals("0.18.2", contract.runtimeVersion)
+        assertEquals("v0.18.2", contract.releaseTag)
         assertEquals(18, contract.ffiAbi)
         assertEquals(2, contract.formats["resource-snapshot"])
     }
