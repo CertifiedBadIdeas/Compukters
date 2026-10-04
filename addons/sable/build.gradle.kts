@@ -24,6 +24,7 @@ plugins {
     id("dev.architectury.loom")
     id("architectury-plugin")
     id("org.jmailen.kotlinter")
+    id("ru.lazyhat.compukters.addon")
 }
 
 group = "ru.lazyhat.compukters"
@@ -53,6 +54,9 @@ apply(from = "gradle/sable-libraries.gradle.kts")
 val sableCompanion = files(configurations.named("sableCompanion"))
 val sableLibraries = files(configurations.named("sableNestedMods"))
 val veilLibraries = files(configurations.named("sableRuntimeLibraries"))
+
+apply(from = "../gradle/workspace-sdk.gradle.kts")
+compuktersAddon { register("sable") }
 
 val gameTest by sourceSets.creating
 kotlin.target.compilations.named(gameTest.name) {

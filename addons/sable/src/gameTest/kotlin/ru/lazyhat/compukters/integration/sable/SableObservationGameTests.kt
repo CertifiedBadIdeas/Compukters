@@ -43,7 +43,7 @@ import net.minecraft.util.Unit as MinecraftUnit
 @PrefixGameTestTemplate(false)
 object SableObservationGameTests {
     @JvmStatic
-    @GameTest(template = "bastion/mobs/empty", templateNamespace = "minecraft", timeoutTicks = 600)
+    @GameTest(template = "bastion/mobs/empty", templateNamespace = "minecraft", timeoutTicks = 100_000)
     fun computerAssemblyAndReturn(helper: GameTestHelper) {
         val level = helper.level
         val relative = BlockPos(2, 3, 2)
@@ -60,8 +60,13 @@ object SableObservationGameTests {
         var body: ServerSubLevel? = null
         var retained: PhysicsSnapshot? = null
         var originalMachine: Long? = null
-        helper
-            .startSequence()
+        var currentPosition = anchor
+        val guest = SableGuestComputerScenario(helper) { currentPosition }
+        val sequence = helper.startSequence()
+        guest.prepare(sequence, SNAPSHOT_PROGRAM)
+        guest.run(sequence, "world")
+        guest.awaitMarker(sequence, "sable-unavailable-world")
+        sequence
             .thenWaitUntil {
                 helper.assertTrue(original.terminalMachineId != null, "world computer has not attached its runtime")
                 originalMachine = original.terminalMachineId
@@ -77,6 +82,7 @@ object SableObservationGameTests {
                 container.addForceLoadTicket(requireNotNull(body), SubLevelLoadingTicketType.COMMAND_FORCED, MinecraftUnit.INSTANCE)
                 helper.assertTrue(original.isRemoved, "assembly did not retire the source block entity")
                 val assembledPosition = requireNotNull(body).plot.centerBlock
+                currentPosition = assembledPosition
                 helper.assertTrue(level.getBlockEntity(assembledPosition) is ComputerBlockEntity, "computer was not copied during assembly")
             }.thenWaitUntil {
                 val position = requireNotNull(body).plot.centerBlock
@@ -94,13 +100,18 @@ object SableObservationGameTests {
                 helper.assertTrue(snapshot!!.constructionId == requireNotNull(body).uniqueId, "snapshot belongs to another construction")
                 helper.assertTrue(snapshot.linearVelocity.y.isFinite(), "invalid solver velocity")
                 retained = snapshot
-            }.thenExecute {
+            }
+        guest.run(sequence, "inside")
+        guest.awaitMarker(sequence, "sable-snapshot-ok")
+        sequence
+            .thenExecute {
                 val position = requireNotNull(body).plot.centerBlock
                 SubLevelAssemblyHelper.moveBlocks(
                     level,
                     SubLevelAssemblyHelper.AssemblyTransform(position, anchor, 0, Rotation.NONE, level),
                     listOf(position),
                 )
+                currentPosition = anchor
             }.thenWaitUntil {
                 val restored = level.getBlockEntity(anchor) as? ComputerBlockEntity
                 helper.assertTrue(restored != null, "returned computer block entity is missing")
@@ -108,7 +119,11 @@ object SableObservationGameTests {
                 helper.assertTrue(restored.terminalMachineId != null, "returned computer did not attach its runtime")
                 helper.assertTrue(SablePhysicsSnapshots.read(level, anchor) == null, "returned computer is still bound to a construction")
                 helper.assertTrue(requireNotNull(retained).constructionId == requireNotNull(body).uniqueId, "retained snapshot changed")
-            }.thenExecute {
+            }
+        guest.run(sequence, "returned")
+        guest.awaitMarker(sequence, "sable-unavailable-returned")
+        sequence
+            .thenExecute {
                 container.removeForceLoadTicket(requireNotNull(body), SubLevelLoadingTicketType.COMMAND_FORCED, MinecraftUnit.INSTANCE)
                 container.removeSubLevel(requireNotNull(body), SubLevelRemovalReason.REMOVED)
                 physics.setPaused(wasPaused)
@@ -143,6 +158,30 @@ object SableObservationGameTests {
             },
         )
     }
+
+    private val SNAPSHOT_PROGRAM =
+        """
+        import sable.physics.Physics
+        import compukter.filesystem.FileSystem
+        fun main(args: Array<String>) {
+            check(FileSystem.readText("/home/survivor.txt") == "sable-files-survived")
+            try {
+                val snapshot = Physics.snapshot()
+                check(snapshot.constructionId.length == 36)
+                check(snapshot.dimension == "minecraft:overworld")
+                check(snapshot.gameTick >= 0L)
+                check(snapshot.paused)
+                check(snapshot.position.x > -30000000.0 && snapshot.position.x < 30000000.0)
+                check(snapshot.linearVelocity.y == snapshot.linearVelocity.y)
+                check(snapshot.angularVelocity.y == snapshot.angularVelocity.y)
+                check(snapshot.orientation.w == snapshot.orientation.w)
+                check(snapshot.scale.x > 0.0)
+                println("sable-snapshot-ok")
+            } catch (error: IllegalStateException) {
+                println("sable-unavailable-" + args[0])
+            }
+        }
+        """.trimIndent()
 }
 
 @EventBusSubscriber(modid = CompuktersSableMod.MOD_ID, bus = EventBusSubscriber.Bus.MOD)

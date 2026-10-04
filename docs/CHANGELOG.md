@@ -13,15 +13,17 @@ headings so this page has one stable URL that can be shared outside the reposito
 ## 0.5.0 — In development
 
 This release expands the Kotlin available to computer programs and introduces support for independently installed
-addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
+addon mods, with optional Create and Sable integrations for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
 - Guest compilation with addons selects the canonical owner of collection specializations even when an addon bundle
   contains a pruned dependency copy. Conflicting standalone owners remain rejected.
 
-- Generated addon handlers can return Long, Double and Char, preserving Double IEEE bits and exact UTF-16 code units
-  through both native transports. This requires the bundled native C ABI 19.
+- Generated addon handlers can return Long, Double, Char and bounded immutable nested data records. The SDK
+  generates typed host DTOs and validates the record shape; the VM copies and materializes responses under its
+  existing budgets. Double IEEE bits and UTF-16 code units are preserved. Structured responses require
+  Runtime ABI 1.13 and the bundled native C ABI 19; rebuild addon bundles and Guest programs.
 
 - Programs can use Double with F64 arithmetic, mixed numeric operations, conversions, constants,
   nullable and generic values, console/text output, equality and hashCode. DoubleArray stores F64 elements
@@ -188,7 +190,7 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   stored, and invoked as typed function values, including references adapted to omit supported trailing constructor
   defaults.
 
-### Addons and Create
+### Addons, Create and Sable
 
 - Independently installed addon mods can provide typed Guest Kotlin APIs without becoming dependencies of Compukters.
   An independently versioned Gradle SDK generates their stable ABI lock, typed host contract, capability schema,
@@ -202,6 +204,10 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   The computer's `kotlinc` command uses the same full module identities advertised by the server for addon compilation.
 - The separately installed Create addon supports Create 6.0.x on Minecraft 1.21.1 while the base Compukters mod remains
   usable without Create.
+- The independent Sable addon exposes `sable.physics.Physics.snapshot()` for computers on constructions. One request
+  returns a typed copy of identity, dimension, world tick, paused state, logical pose and solver velocities using
+  Double values. Unavailable constructions throw a catchable IllegalStateException. Observation runs only on request
+  and retains the existing VM cadence and budget.
 - Added passive peripheral cables for orthogonal, branching and looping connections between computers and supported
   addon devices. Their thin model follows the actual connections in all six directions. Cables discover loaded chunks
   only and do not require adapters or a controller block.

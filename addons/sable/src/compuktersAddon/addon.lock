@@ -1,0 +1,5 @@
+lock 2
+record sable.physics.PhysicsRotation sable.physics.PhysicsRotation{x:F64,y:F64,z:F64,w:F64}
+record sable.physics.PhysicsSnapshot sable.physics.PhysicsSnapshot{constructionId:STRING,dimension:STRING,gameTick:I64,paused:BOOL,position:sable.physics.PhysicsVector{x:F64,y:F64,z:F64},orientation:sable.physics.PhysicsRotation{x:F64,y:F64,z:F64,w:F64},scale:sable.physics.PhysicsVector{x:F64,y:F64,z:F64},rotationPoint:sable.physics.PhysicsVector{x:F64,y:F64,z:F64},linearVelocity:sable.physics.PhysicsVector{x:F64,y:F64,z:F64},angularVelocity:sable.physics.PhysicsVector{x:F64,y:F64,z:F64}}
+record sable.physics.PhysicsVector sable.physics.PhysicsVector{x:F64,y:F64,z:F64}
+operation sable sable 1 0 active sable.physics.PhysicsBindings.snapshot fun():PhysicsSnapshot
