@@ -1,0 +1,10 @@
+    Finished `release` profile [optimized] target(s) in 0.00s
+     Running unittests src/lib.rs (.toolchain/build/cargo/native-benchmark/release/deps/compukter_vm-e65eeae897765ef7)
+
+running 1 test
+test execution::session_tests::host_session_performance_baseline ... iterations	elapsed_ns	request_resume_per_s	reserved_mutable_bytes
+100000	18424889	5427441	2390818
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 436 filtered out; finished in 0.02s
+

@@ -1,0 +1,40 @@
+    Finished `release` profile [optimized] target(s) in 0.00s
+     Running collections_bench.rs (.toolchain/build/cargo/collection-benchmark/release/deps/collections_bench-88b7df64afd3e662)
+prepared indexed-1024-scalar: minimum ready heap 4176 bytes
+prepared indexed-1024-boxed: minimum ready heap 20560 bytes
+prepared indexed-1024-bridge: minimum ready heap 4176 bytes
+prepared iteration-1024-scalar: minimum ready heap 4176 bytes
+prepared iteration-1024-boxed: minimum ready heap 20560 bytes
+prepared iteration-1024-bridge: minimum ready heap 4176 bytes
+prepared update-1024-scalar: minimum ready heap 4176 bytes
+prepared update-1024-boxed: minimum ready heap 20560 bytes
+prepared update-1024-bridge: minimum ready heap 4176 bytes
+prepared pipeline-1024-scalar: minimum ready heap 4176 bytes
+prepared pipeline-1024-boxed: minimum ready heap 20560 bytes
+prepared pipeline-1024-bridge: minimum ready heap 4176 bytes
+prepared search-1024-scalar: minimum ready heap 4176 bytes
+prepared search-1024-boxed: minimum ready heap 20560 bytes
+prepared search-1024-bridge: minimum ready heap 4176 bytes
+prepared indexed-4096-scalar: minimum ready heap 16464 bytes
+prepared indexed-4096-boxed: minimum ready heap 82000 bytes
+prepared indexed-4096-bridge: minimum ready heap 16464 bytes
+prepared iteration-4096-scalar: minimum ready heap 16464 bytes
+prepared iteration-4096-boxed: minimum ready heap 82000 bytes
+prepared iteration-4096-bridge: minimum ready heap 16464 bytes
+prepared update-4096-scalar: minimum ready heap 16464 bytes
+prepared update-4096-boxed: minimum ready heap 82000 bytes
+prepared update-4096-bridge: minimum ready heap 16464 bytes
+prepared pipeline-4096-scalar: minimum ready heap 16464 bytes
+prepared pipeline-4096-boxed: minimum ready heap 82000 bytes
+prepared pipeline-4096-bridge: minimum ready heap 16464 bytes
+prepared search-4096-scalar: minimum ready heap 16464 bytes
+prepared search-4096-boxed: minimum ready heap 82000 bytes
+prepared search-4096-bridge: minimum ready heap 16464 bytes
+measurement round 1/7 complete
+measurement round 2/7 complete
+measurement round 3/7 complete
+measurement round 4/7 complete
+measurement round 5/7 complete
+measurement round 6/7 complete
+measurement round 7/7 complete
+reports saved in /home/lzwork/CompuktersMod/Compukters-vm-optimization/build/reports/benchmarks/ryzen-9950x3d-2026-10-04/collections

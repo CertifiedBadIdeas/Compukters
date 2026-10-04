@@ -1,0 +1,13 @@
+    Finished `release` profile [optimized] target(s) in 0.00s
+     Running object_arrays_bench.rs (.toolchain/build/cargo/collection-benchmark/release/deps/object_arrays_bench-e77795612a101e0c)
+prepared map-not-null-1024-100-fresh: sample heap 262144 bytes
+prepared map-not-null-1024-100-reuse-list: sample heap 262144 bytes
+prepared map-not-null-1024-100-reuse-objects: sample heap 262144 bytes
+measurement round 1/7 complete
+measurement round 2/7 complete
+measurement round 3/7 complete
+measurement round 4/7 complete
+measurement round 5/7 complete
+measurement round 6/7 complete
+measurement round 7/7 complete
+reports saved in /home/lzwork/CompuktersMod/Compukters-vm-optimization/build/reports/benchmarks/ryzen-9950x3d-2026-10-04/collection-reuse

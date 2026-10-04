@@ -1,0 +1,18 @@
+    Finished `release` profile [optimized] target(s) in 0.00s
+     Running object_arrays_bench.rs (.toolchain/build/cargo/collection-benchmark/release/deps/object_arrays_bench-e77795612a101e0c)
+prepared while-indexed-256-300: sample heap 16384 bytes
+prepared for-list-256-300: sample heap 16384 bytes
+prepared fold-256-300: sample heap 16384 bytes
+prepared fold-val-256-300: sample heap 16384 bytes
+prepared fold-read-var-256-300: sample heap 16384 bytes
+prepared fold-write-var-256-300: sample heap 16384 bytes
+prepared fold-ref-256-300: sample heap 16384 bytes
+prepared fold-prebuilt-256-300: sample heap 16384 bytes
+measurement round 1/7 complete
+measurement round 2/7 complete
+measurement round 3/7 complete
+measurement round 4/7 complete
+measurement round 5/7 complete
+measurement round 6/7 complete
+measurement round 7/7 complete
+reports saved in /home/lzwork/CompuktersMod/Compukters-vm-optimization/build/reports/benchmarks/ryzen-9950x3d-2026-10-04/transient-allocations
