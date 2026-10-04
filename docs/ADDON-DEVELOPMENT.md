@@ -201,10 +201,16 @@ The SDK generates a JVM mirror DTO, an ordered nominal schema and its typed resp
 mirror through `AddonCallResult`; no reflection, handwritten operation numbers or Guest constructors are involved.
 The ABI lock records the complete nested shape, so changing field order, name or type requires a reviewed ABI update.
 Record bundles use CAGB 3 / lock format 2; scalar-only contracts retain their earlier encoding. Programs returning
-records require Runtime ABI 1.13; runtime transports retain C ABI 19.
+records require Runtime ABI 1.13; runtime transports require C ABI 20.
 
 Limits are 8 nesting levels, 32 record/String nodes, 64 expanded fields, 4096 aggregate UTF-16 code units and a 64 KiB
 response. The native boundary validates and copies caller-owned responses. Normal VM advancement allocates rooted
 objects and Strings in slices, then publishes the root atomically. The host does not execute Guest construction code.
 See [the Sable addon](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/addons/sable) for a complete nested record
 API and its real assembly/return GameTest.
+
+Addon hosts are created separately for each live Guest program when it first calls an addon. A suspended parent
+retains its host and devices while a child runs. Returning or failing from the child closes only the child's hosts;
+stopping or removing the computer closes every host. Request IDs are unique for the lifetime of the native computer,
+so a late completion cannot bind to a newer program. Host factories must return fresh instances and tolerate `close()`
+without prior requests. The main mod delivers these lifecycle transitions on the server thread.
