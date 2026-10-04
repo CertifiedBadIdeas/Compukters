@@ -1,0 +1,29 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 4K of event 'cycles:u'
+# Event count (approx.): 49277419032
+#
+# Overhead  Symbol                                                                                      IPC   [IPC Coverage]
+# ........  ..........................................................................................  ....................
+#
+    44.67%  [.] <guest_benchmark::execution::machine::Machine>::run_slice_inner                         -      -
+    10.27%  [.] <guest_benchmark::execution::machine::Machine>::read_register                           -      -
+     8.01%  [.] guest_benchmark::execution::machine::execute_scalar                                     -      -
+     6.74%  [.] <guest_benchmark::execution::image::ExecutionImage>::dispatch_target                    -      -
+     6.12%  [.] <guest_benchmark::execution::image::ExecutionImage>::type_key                           -      -
+     3.95%  [.] <guest_benchmark::execution::machine::Machine>::reference_type                          -      -
+     3.05%  [.] <guest_benchmark::execution::heap::Heap>::read_payload                                  -      -
+     2.41%  [.] <guest_benchmark::execution::image::ExecutionImage>::is_assignable                      -      -
+     1.85%  [.] <guest_benchmark::execution::machine::Machine>::trace_block_entry                       -      -
+     1.63%  [.] <guest_benchmark::execution::heap::Heap>::managed_type                                  -      -
+     1.54%  [.] <guest_benchmark::execution::machine::Machine>::write_register                          -      -
+     1.12%  [.] sha2::sha256::x86::digest_blocks                                                        -      -
+     1.07%  [.] <guest_benchmark::execution::frame::FrameArena>::push                                   -      -
+
+
+#
+# (Tip: To trace calls using Processor Trace use perf record -e intel_pt// ... ; perf script --call-trace. Then use perf script --time A-B --insn-trace to look at region of interest.)
+#

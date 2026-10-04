@@ -1,0 +1,27 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 4K of event 'cycles:u'
+# Event count (approx.): 45174445157
+#
+# Overhead  Symbol                                                                            IPC   [IPC Coverage]
+# ........  ................................................................................  ....................
+#
+    51.38%  [.] <guest_benchmark::execution::machine::Machine>::run_slice_inner               -      -
+     8.52%  [.] guest_benchmark::execution::machine::execute_scalar                           -      -
+     8.34%  [.] <guest_benchmark::execution::machine::Machine>::read_register                 -      -
+     8.13%  [.] <guest_benchmark::execution::image::ExecutionImage>::dispatch_target          -      -
+     3.58%  [.] <guest_benchmark::execution::heap::Heap>::read_payload                        -      -
+     3.48%  [.] <guest_benchmark::execution::image::ExecutionImage>::is_assignable            -      -
+     2.37%  [.] <guest_benchmark::execution::machine::Machine>::trace_block_entry             -      -
+     2.05%  [.] <guest_benchmark::execution::heap::Heap>::managed_type                        -      -
+     1.85%  [.] <guest_benchmark::execution::machine::Machine>::write_register                -      -
+     1.23%  [.] sha2::sha256::x86::digest_blocks                                              -      -
+     1.18%  [.] <guest_benchmark::execution::machine::Machine>::reference_type                -      -
+
+
+#
+# (Tip: To trace calls using Processor Trace use perf record -e intel_pt// ... ; perf script --call-trace. Then use perf script --time A-B --insn-trace to look at region of interest.)
+#

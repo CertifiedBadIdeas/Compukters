@@ -31,6 +31,8 @@ Seven independent invocations per benchmark, with native benchmark order reverse
 | `nested_direct_calls` | 74.01 | 71.78–74.99 | 18.45 |
 | `empty_quota_loop` | 265.64 | 253.88–267.69 | 36.71 |
 
+These native rates come from Rust unit fixtures and include `cfg(test)` register-initialization instrumentation. For the later standalone interpreter measurements without that instrumentation, see [the production-path optimization report](VM-OPTIMIZATION-2026-10-04.md).
+
 ### Host exchange and managed storage
 
 These also use seven native invocations. Request/resume is a traced Rust Session benchmark; it excludes JNI, FFM, JVM scheduling and Minecraft. Allocator rates measure pairs of reserve/commit/free operations. Field/array/string round trips include construction, start and execution of a fresh VM, so they do not isolate field or string instruction latency.

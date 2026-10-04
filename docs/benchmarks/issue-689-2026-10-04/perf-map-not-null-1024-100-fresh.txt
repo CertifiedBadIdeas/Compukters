@@ -1,0 +1,30 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 14K of event 'cycles:u'
+# Event count (approx.): 164399085834
+#
+# Overhead  Symbol                                                                            IPC   [IPC Coverage]
+# ........  ................................................................................  ....................
+#
+    45.14%  [.] <guest_benchmark::execution::machine::Machine>::run_slice_inner               -      -
+     8.43%  [.] <guest_benchmark::execution::machine::Machine>::read_register                 -      -
+     8.06%  [.] <guest_benchmark::execution::image::ExecutionImage>::dispatch_target          -      -
+     7.66%  [.] guest_benchmark::execution::machine::execute_scalar                           -      -
+     4.85%  [.] <guest_benchmark::execution::machine::Machine>::reference_type                -      -
+     4.48%  [.] <guest_benchmark::execution::image::ExecutionImage>::type_key                 -      -
+     2.39%  [.] <guest_benchmark::execution::heap::Heap>::read_payload                        -      -
+     2.26%  [.] <guest_benchmark::execution::machine::Machine>::trace_block_entry             -      -
+     1.95%  [.] <guest_benchmark::execution::image::ExecutionImage>::is_assignable            -      -
+     1.59%  [.] sha2::sha256::x86::digest_blocks                                              -      -
+     1.46%  [.] <guest_benchmark::execution::machine::Machine>::write_register                -      -
+     1.19%  [.] <guest_benchmark::execution::heap::Heap>::managed_type                        -      -
+     1.17%  [.] <guest_benchmark::execution::frame::FrameArena>::push                         -      -
+     1.03%  [.] guest_benchmark::execution::machine::trace_register                           -      -
+
+
+#
+# (Tip: To trace calls using Processor Trace use perf record -e intel_pt// ... ; perf script --call-trace. Then use perf script --time A-B --insn-trace to look at region of interest.)
+#
