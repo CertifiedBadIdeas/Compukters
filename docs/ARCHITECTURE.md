@@ -460,6 +460,21 @@ fields, interfaces, superclass and initializer restrictions remain. Form 7 and t
 1.10 in both validators; the linker infers that minimum from retained instructions. The container format and
 C ABI 18 are unchanged. Newly built platform libraries and programs use the updated canonical runtime module.
 
+Runtime ABI 1.13 adds structured asynchronous host results through the existing C ABI 19 resume-value boundary.
+Capability schema wire version 2 carries an ordered nominal record tree; scalar-only schemas remain version 1.
+Response tag 8 carries qualified ASCII type names, ordered named fields and exact scalar or nested-record values.
+Limits are 8 nesting levels, 32 record/String nodes, 64 expanded fields, 4096 aggregate UTF-16 code units and 64 KiB.
+The SDK accepts public immutable acyclic data records with scalar or nested-record fields; nullable fields, arrays,
+record arguments and custom construction logic are unsupported. Bundle format CAGB 3 and addon ABI lock format 2
+retain record shape; scalar-only bundles and locks keep their older encoding.
+
+Rust admission checks the asynchronous destination's nominal name, instance layout and field storage against the
+host schema. Resume validates and copies the response, without executing Guest code or allocating Guest objects.
+Advance materializes the tree under existing budgets, keeps partial nodes rooted through GC and publishes the root
+only when complete. Other tasks' replies queue without replacing unfinished reference materialization. Owned reply
+buffers and pending plans contribute to execution-resident accounting. Structured programs require Runtime ABI 1.13;
+rebuild addon bundles and programs. Artifact encoding and the native export inventory are unchanged.
+
 Runtime ABI 1.12 extends `string_value_of` (`0x68`) and `value_hash` (`0x69`) with
 form 4 for F64. Both the writer and Rust admission reject these forms below ABI 1.12;
 linking infers the requirement from retained instructions. Double hashing canonicalizes

@@ -282,3 +282,22 @@ sealed interface Constant {
         override val tag: Int = 7
     }
 }
+
+/** Host references other than String require bounded record materialization in Runtime ABI 1.13. */
+fun Module.hasStructuredHostResponse(): Boolean =
+    blocks.any { block ->
+        block.instructions.filterIsInstance<Instruction.CapabilityCallAsync>().any calls@{ call ->
+            val destination = call.destination as? Destination.Register ?: return@calls false
+            val function = functions.getOrNull(block.owner.value.toInt()) ?: return@calls false
+            val type =
+                function.values.getOrNull(destination.id.value.toInt())?.semanticType as? ValueType.Ref
+                    ?: return@calls false
+            val nameId =
+                when (val reference = type.type) {
+                    is TypeRef.Local -> types.getOrNull(reference.id.value.toInt())?.name
+                    is TypeRef.Imported -> imports.getOrNull(reference.id.value.toInt())?.targetName
+                } ?: return@calls false
+            val name = strings.getOrNull(nameId.value.toInt())?.toString() ?: return@calls false
+            name != "kotlin.String"
+        }
+    }

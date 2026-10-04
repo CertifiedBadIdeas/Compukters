@@ -47,6 +47,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
+import ru.lazyhat.compukters.compiler.artifact.model.hasStructuredHostResponse
 
 internal fun validateArtifact(
     artifact: Artifact,
@@ -485,6 +486,9 @@ internal fun validateArtifact(
                 block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F32 }
             }
         }
+    if (artifact.minimumRuntimeAbi < AbiVersion(1u, 13u) && artifact.modules.any { it.hasStructuredHostResponse() }) {
+        add(ArtifactWriteErrorCode.INVALID_RANGE, "Structured host responses require minimum runtime ABI 1.13")
+    }
     if (artifact.minimumRuntimeAbi < AbiVersion(1u, 12u) &&
         artifact.modules.any { module ->
             module.blocks.any { block ->
