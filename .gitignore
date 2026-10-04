@@ -34,7 +34,7 @@ logs
 repo
 versions.properties
 /Compukter-Craft.code-workspace
-/.kotlin/
+.kotlin
 /build-scripts/.kotlin/
 .architectury-transformer/
 /.obsidian/
