@@ -1,0 +1,7 @@
+lock 2
+record propulsion.thrusters.CreativeThrusterState propulsion.thrusters.CreativeThrusterState{gameTick:I64,throttle:F64,effectiveThrottle:F64,thrustPercent:I32,configuredThrustKn:F64,currentThrustKn:F64,startupProgress:F64,active:BOOL,startingUp:BOOL,fadingOut:BOOL,width:I32,unobstructedBlocks:I32}
+operation propulsion propulsion 1 0 active propulsion.thrusters.ThrusterBindings.acquire fun(String):Int
+operation propulsion propulsion 1 1 active propulsion.thrusters.ThrusterBindings.close fun(Int):Unit
+operation propulsion propulsion 1 2 active propulsion.thrusters.ThrusterBindings.setThrottle fun(Int,Double):Unit
+operation propulsion propulsion 1 3 active propulsion.thrusters.ThrusterBindings.setThrustPercent fun(Int,Int):Unit
+operation propulsion propulsion 1 4 active propulsion.thrusters.ThrusterBindings.state fun(Int):CreativeThrusterState
