@@ -1746,6 +1746,29 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `addon libraries share canonical collection specializations with the base platform`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        import fixture.kinetics.Kinetics
+                        import kotlin.collections.ArrayList
+                        fun main() {
+                            val values = ArrayList<Int>()
+                            values.add(42)
+                            try { check(Kinetics.front.speedometer().speed() == 0f) }
+                            catch (error: IllegalStateException) { println(error.message ?: "missing") }
+                            println(values[0])
+                        }
+                        """.trimIndent(),
+                        includeAddonFixture = true,
+                    ),
+                )
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+        }
+
+    @Test
     fun `addon fixture typed API and built in timer lower with their own capability descriptors`() =
         withAdapter { adapter ->
             val source =

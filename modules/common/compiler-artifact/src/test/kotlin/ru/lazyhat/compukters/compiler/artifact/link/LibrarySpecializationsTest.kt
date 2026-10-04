@@ -130,6 +130,22 @@ class LibrarySpecializationsTest {
     }
 
     @Test
+    fun `canonical owner outranks a reachable pruned dependency copy inside another library`() {
+        val source = artifact(module("app", ModuleKind.APPLICATION))
+        val owner = LibrarySpecializations.export(module("owner", ModuleKind.LIBRARY), names)
+        val partial = owner.copy(exports = owner.exports.filter { it.kind == SymbolKind.TYPE })
+        val dependent = module("dependent", ModuleKind.LIBRARY).copy(exports = emptyList())
+        val bundled = artifact(dependent).copy(modules = listOf(dependent, partial))
+        val expected = LibrarySpecializations.reuse(source, listOf(artifact(owner)), names)
+        for (libraries in listOf(listOf(bundled, artifact(owner)), listOf(artifact(owner), bundled))) {
+            assertContentEquals(
+                ArtifactWriter.moduleSemanticHash(expected.modules[0]),
+                ArtifactWriter.moduleSemanticHash(LibrarySpecializations.reuse(source, libraries, names).modules[0]),
+            )
+        }
+    }
+
+    @Test
     fun `dependent library redirects its variants without reexporting another owner`() {
         val anchor = module("anchor", ModuleKind.APPLICATION)
         val dependent = LibrarySpecializations.export(module("dependent", ModuleKind.LIBRARY), names)

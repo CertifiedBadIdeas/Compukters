@@ -17,6 +17,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- Guest compilation with addons selects the canonical owner of collection specializations even when an addon bundle
+  contains a pruned dependency copy. Conflicting standalone owners remain rejected.
+
 - Generated addon handlers can return Long, Double and Char, preserving Double IEEE bits and exact UTF-16 code units
   through both native transports. This requires the bundled native C ABI 19.
 
@@ -313,6 +316,9 @@ This release makes the integrated multi-file Kotlin IDE available on both suppor
 
 ### Guest Kotlin
 
+- Guest compilation with addons selects the canonical owner of collection specializations even when an addon bundle
+  contains a pruned dependency copy. Conflicting standalone owners remain rejected.
+
 - Generated addon handlers can return Long, Double and Char, preserving Double IEEE bits and exact UTF-16 code units
   through both native transports. This requires the bundled native C ABI 19.
 
@@ -391,6 +397,9 @@ substantially reworked managed runtime.
 - Sampled and coalesced input changes at Minecraft tick boundaries without Guest-side polling.
 
 ### Guest Kotlin
+
+- Guest compilation with addons selects the canonical owner of collection specializations even when an addon bundle
+  contains a pruned dependency copy. Conflicting standalone owners remain rejected.
 
 - Generated addon handlers can return Long, Double and Char, preserving Double IEEE bits and exact UTF-16 code units
   through both native transports. This requires the bundled native C ABI 19.
