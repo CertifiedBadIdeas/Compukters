@@ -37,6 +37,15 @@ public value class RotationController internal constructor(private val handle: I
 }
 
 public object Kinetics {
+    public fun boxSide(side: KineticSide): Any = side
+
+    public fun optionalSide(value: Any): KineticSide? = value as KineticSide
+
+    public fun isSide(value: Any): Boolean = value is KineticSide
+
+    public fun boxedFront(): Any = front
+
+
     public val front: KineticSide
         get() = KineticSide(0)
 

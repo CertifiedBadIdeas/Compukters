@@ -85,6 +85,7 @@ import org.jetbrains.kotlin.ir.types.impl.makeTypeProjection
 import org.jetbrains.kotlin.ir.types.isNothing
 import org.jetbrains.kotlin.ir.types.makeNotNull
 import org.jetbrains.kotlin.ir.util.constructors
+import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.util.isNullable
@@ -907,7 +908,9 @@ private fun mapGuestValueType(
         val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
         val guestClass = (type as? IrSimpleType)?.classifier as? IrClassSymbol
         val guestInstance = type.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
-        if (!type.isKotlinAny() && guestClass != stringClass && guestClass !in classTypeIds && guestInstance !in classInstanceTypeIds) {
+        if (guestTypes.valueClassBox(type) == null && !type.isKotlinAny() && guestClass != stringClass &&
+            guestClass !in classTypeIds && guestInstance !in classInstanceTypeIds
+        ) {
             throw UnsupportedKotlinIr(element, "nullable type is outside the supported reference subset")
         }
     }
@@ -977,14 +980,14 @@ private fun mapGuestValueType(
                 val external = externalClassTypes[classifier]
                 val platformScalar = platformScalars.representation(type)
                 if (platformScalar != null) {
-                    if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable platform scalar types are not supported")
+                    if (type.isNullable()) return ValueType.Ref(true, requireNotNull(guestTypes.valueClassBox(type)).type)
                     when (platformScalar) {
                         PlatformScalarRepresentation.INT -> ValueType.I32
                         PlatformScalarRepresentation.BOOLEAN -> ValueType.Bool
                         PlatformScalarRepresentation.CHAR -> ValueType.Char
                     }
                 } else if (inline != null) {
-                    if (type.isNullable()) throw UnsupportedKotlinIr(element, "nullable value classes are not supported")
+                    if (type.isNullable()) return ValueType.Ref(true, requireNotNull(guestTypes.valueClassBox(type)).type)
                     mapGuestValueType(
                         resolveUnderlyingType(inline.underlyingType),
                         pluginContext,
@@ -1348,6 +1351,90 @@ internal object KotlinProjectLowering {
                     guestTypes.isStringArray(function.returnType) ||
                         loweredParameters(function, session).any { parameter -> guestTypes.isStringArray(parameter.type) }
                 }
+
+        fun discoverValueClass(type: IrType) {
+            val simple = type as? IrSimpleType ?: return
+            simple.arguments.filterIsInstance<IrTypeProjection>().forEach { discoverValueClass(it.type) }
+            val symbol = simple.classifier as? IrClassSymbol ?: return
+            val inline = inlineValueClasses[symbol]
+            val scalar = platformScalars.representation(type)
+            val underlying =
+                when {
+                    inline != null -> {
+                        when (inline.underlyingType) {
+                            pluginContext.irBuiltIns.intType -> ValueType.I32
+                            pluginContext.irBuiltIns.booleanType -> ValueType.Bool
+                            pluginContext.irBuiltIns.charType -> ValueType.Char
+                            else -> return
+                        }
+                    }
+
+                    scalar != null -> {
+                        when (scalar) {
+                            PlatformScalarRepresentation.INT -> ValueType.I32
+                            PlatformScalarRepresentation.BOOLEAN -> ValueType.Bool
+                            PlatformScalarRepresentation.CHAR -> ValueType.Char
+                        }
+                    }
+
+                    else -> {
+                        return
+                    }
+                }
+            val name = type.specializationTypeIdentity().removeSuffix("?")
+            guestTypes.valueClassBoxes.getOrPut(name) {
+                GuestValueClassBox(
+                    name,
+                    symbol,
+                    symbol.owner.name.asString(),
+                    inline
+                        ?.getter
+                        ?.owner
+                        ?.correspondingPropertySymbol
+                        ?.owner
+                        ?.name
+                        ?.asString()
+                        ?: symbol.owner.declarations
+                            .filterIsInstance<IrProperty>()
+                            .firstOrNull()
+                            ?.name
+                            ?.asString()
+                        ?: "value",
+                    underlying,
+                )
+            }
+        }
+        functionInstances.forEach { instance ->
+            instance.declaration.accept(
+                object : IrVisitorVoid() {
+                    override fun visitElement(element: IrElement) {
+                        when (element) {
+                            is IrExpression -> discoverValueClass(instance.substitute(element.type))
+                            is IrValueDeclaration -> discoverValueClass(instance.substitute(element.type))
+                        }
+                        if (element is IrTypeOperatorCall) discoverValueClass(instance.substitute(element.typeOperand))
+                        element.acceptChildren(this, null)
+                    }
+                },
+                null,
+            )
+            discoverValueClass(instance.substitute(instance.declaration.returnType))
+            loweredParameters(instance.declaration, session).forEach { discoverValueClass(instance.substitute(it.type)) }
+        }
+        classInstances.forEach { instance ->
+            instance.declaration.declarations.filterIsInstance<IrProperty>().forEach {
+                it.backingField
+                    ?.type
+                    ?.let(instance::substitute)
+                    ?.let(::discoverValueClass)
+            }
+        }
+        if (includeTrustedPlatformBodies) classes.filter { it.isValue }.forEach { discoverValueClass(it.defaultType) }
+        topLevelProperties.forEach {
+            it.declaration.backingField
+                ?.type
+                ?.let(::discoverValueClass)
+        }
         val referenceArrayUsage =
             ReferenceArrayUsageCollector(guestTypes, userClasses.associateBy { it.symbol }, classInstances.toSet())
         functionInstances.forEach { instance ->
@@ -1398,6 +1485,8 @@ internal object KotlinProjectLowering {
                     runtimeMemberNames +
                     listOfNotNull("kotlin.Array".takeIf { usesStringArray }) +
                     referenceArrays.keys +
+                    guestTypes.valueClassBoxes.keys + guestTypes.valueClassBoxes.keys.map { "$it.<boxed-value>" } +
+                    listOf("<boxed-value>", "toString", "hashCode", "equals") +
                     capabilityIdentities.flatMap { listOf(it.namespace, it.name) } +
                     externalFunctions.values.map(ExternalFunctionTarget::exportName) +
                     linkedSymbols.types.values.map(ExternalTypeTarget::exportName) +
@@ -1506,7 +1595,7 @@ internal object KotlinProjectLowering {
             )
         }
         val literals =
-            literalCollector.strings
+            (literalCollector.strings + guestTypes.valueClassBoxes.values.flatMap { listOf(it.stringPrefix, ")") })
                 .distinct()
                 .map {
                     Utf16Literal.fromString(it)
@@ -1515,7 +1604,7 @@ internal object KotlinProjectLowering {
         val constantPool = ConstantPoolBuilder()
         (
             (
-                literalCollector.values +
+                literalCollector.values + guestTypes.valueClassBoxes.values.flatMap { listOf(it.stringPrefix, ")") } +
                     topLevelProperties.mapNotNull { property ->
                         when (val initializer = property.initializer) {
                             TopLevelInitializer.Null -> null
@@ -1656,9 +1745,18 @@ internal object KotlinProjectLowering {
                     symbol to target.copy(importId = ImportId.of((RUNTIME_IMPORT_COUNT + index).toUInt()))
                 }.toMap()
         val externalClassTypes = externalTypeImports.mapValues { (_, target) -> TypeRef.Imported(target.importId) }
+        val externalBoxFields =
+            linkedSymbols.types.keys.mapNotNull { symbol ->
+                val name = symbol.owner.fqNameWhenAvailable?.asString() ?: return@mapNotNull null
+                if (session.platformScalarTypes.none { it.symbol == name }) return@mapNotNull null
+                val link = session.platformFields.singleOrNull { it.symbol == "$name.<boxed-value>" } ?: return@mapNotNull null
+                ExternalFieldTarget(link.exportName, symbol, link.moduleHash.copyOf(), false)
+            }
         val externalFieldImports =
-            (linkedSymbols.fieldsByGetter.values + linkedSymbols.enumEntries.values + linkedSymbols.defaultEnumEntries.values)
-                .distinctBy(ExternalFieldTarget::sortKey)
+            (
+                linkedSymbols.fieldsByGetter.values + linkedSymbols.enumEntries.values + linkedSymbols.defaultEnumEntries.values +
+                    externalBoxFields
+            ).distinctBy(ExternalFieldTarget::sortKey)
                 .sortedBy(ExternalFieldTarget::sortKey)
                 .mapIndexed { index, target ->
                     target.copy(importId = ImportId.of((RUNTIME_IMPORT_COUNT + externalTypeImports.size + index).toUInt()))
@@ -1704,6 +1802,24 @@ internal object KotlinProjectLowering {
                         type = TypeRef.Local(TypeId.of((referenceArrayTypeBase + index).toUInt())),
                     )
             }
+        var localBoxIndex = 0
+        guestTypes.valueClassBoxes.toSortedMap().values.forEach { box ->
+            val imported = externalClassTypes[box.symbol]
+            if (imported == null) {
+                box.type =
+                    TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size + 3 + localBoxIndex++ * 4).toUInt()))
+            } else {
+                box.type = imported
+                val target = externalBoxFields.single { it.ownerSymbol == box.symbol }
+                box.field = FieldRef.Imported(requireNotNull(externalFieldsBySortKey[target.sortKey]).importId)
+            }
+            box.toStringTarget =
+                box.symbol.owner.declarations
+                    .filterIsInstance<IrSimpleFunction>()
+                    .singleOrNull { it.name.asString() == "toString" && it.origin == IrDeclarationOrigin.DEFINED }
+                    ?.let { functionIds[it.symbol] }
+                    ?.let(FunctionRef::Local)
+        }
         guestTypes.registerReferenceArrays(referenceArrayTypes)
         functionInstances.forEach { instance ->
             validateFunction(
@@ -1950,6 +2066,14 @@ internal object KotlinProjectLowering {
         val blocks = mutableListOf<Block>()
         val debug = mutableListOf<DebugEntry>()
         val exceptions = mutableListOf<ExceptionEntry>()
+        val localValueClassBoxes =
+            guestTypes.valueClassBoxes
+                .toSortedMap()
+                .values
+                .filter { it.type is TypeRef.Local }
+        localValueClassBoxes.forEachIndexed { index, box ->
+            box.field = FieldRef.Local(FieldId.of((firstTopLevelField + topLevelFields.size + index).toUInt()))
+        }
         val loweredFunctions = mutableListOf<Function>()
 
         functionInstances.forEach { instance ->
@@ -2871,6 +2995,20 @@ internal object KotlinProjectLowering {
                         static = true,
                     )
                 }
+        val valueClassBoxArtifacts =
+            lowerValueClassBoxes(
+                localValueClassBoxes,
+                loweredFunctions.size.toUInt(),
+                blocks.size.toUInt(),
+                metadataIds,
+                guestTypes.valueClassBoxes.values
+                    .flatMap { listOf(it.stringPrefix, ")") }
+                    .associateWith { requireNotNull(constantIds[it.toArtifactConstant(literalIds)]) },
+                TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)),
+                stringType,
+            )
+        loweredFunctions += valueClassBoxArtifacts.functions
+        blocks += valueClassBoxArtifacts.blocks
         val externalFunctionTypes =
             externalFunctionImports.entries
                 .sortedBy { (_, target) -> target.sortKey }
@@ -2951,6 +3089,10 @@ internal object KotlinProjectLowering {
                                         nullable = element.nullable,
                                         type =
                                             when (element) {
+                                                is ReferenceArrayElement.ValueClass -> {
+                                                    element.box.type
+                                                }
+
                                                 is ReferenceArrayElement.Runtime -> {
                                                     TypeRef.Imported(ImportId.of(element.runtimeType))
                                                 }
@@ -2983,9 +3125,9 @@ internal object KotlinProjectLowering {
                                     ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))),
                                     ValueType.Ref(true, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))),
                                 ),
-                        ),
+                        ) + valueClassBoxArtifacts.types,
                 constants = constants,
-                fields = artifactFields,
+                fields = artifactFields + valueClassBoxArtifacts.fields,
                 imports =
                     runtimeTypeNames.indices.map { index ->
                         runtimeTypeImport(index, requireNotNull(metadataIds[runtimeTypeNames[index]]), libraryHash)
@@ -3079,15 +3221,39 @@ internal object KotlinProjectLowering {
                 exceptions = exceptions,
                 debug = debug.sortedWith(compareBy({ it.function.value }, { it.block.value }, { it.instruction })),
                 exports =
-                    platformFunctionExports.map { (instance, name) ->
-                        Export(
-                            SymbolKind.FUNCTION,
-                            ExportVisibility.PUBLIC_LIBRARY,
-                            requireNotNull(metadataIds[name]),
-                            requireNotNull(instanceFunctionIds[instance]).value,
-                            TypeRef.Local(requireNotNull(instanceTypeIds[instance])),
-                        )
-                    },
+                    (
+                        if (includeTrustedPlatformBodies) {
+                            localValueClassBoxes.flatMap { box ->
+                                listOf(
+                                    Export(
+                                        SymbolKind.TYPE,
+                                        ExportVisibility.PUBLIC_LIBRARY,
+                                        requireNotNull(metadataIds[box.name]),
+                                        (box.type as TypeRef.Local).id.value,
+                                        box.type,
+                                    ),
+                                    Export(
+                                        SymbolKind.FIELD,
+                                        ExportVisibility.PUBLIC_LIBRARY,
+                                        requireNotNull(metadataIds["${box.name}.<boxed-value>"]),
+                                        (box.field as FieldRef.Local).id.value,
+                                        box.type,
+                                    ),
+                                )
+                            }
+                        } else {
+                            emptyList()
+                        }
+                    ) +
+                        platformFunctionExports.map { (instance, name) ->
+                            Export(
+                                SymbolKind.FUNCTION,
+                                ExportVisibility.PUBLIC_LIBRARY,
+                                requireNotNull(metadataIds[name]),
+                                requireNotNull(instanceFunctionIds[instance]).value,
+                                TypeRef.Local(requireNotNull(instanceTypeIds[instance])),
+                            )
+                        },
             )
         val modules = listOf(app, library)
         val maximumCallDepth = 16u
@@ -3373,7 +3539,8 @@ internal object KotlinProjectLowering {
             if (((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.runtimeExceptionType() != null) return true
             val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
             if (type.isNullable()) {
-                return type.isNullableScalar() || type.isKotlinAny() || (type as? IrSimpleType)?.classifier == stringClass ||
+                return guestTypes.valueClassBox(type) != null || type.isNullableScalar() || type.isKotlinAny() ||
+                    (type as? IrSimpleType)?.classifier == stringClass ||
                     classTypeIds.containsKey((type as? IrSimpleType)?.classifier) ||
                     type.classInstance(
                         classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration },
@@ -4194,7 +4361,9 @@ private fun linkedPlatformSymbols(
     }
 
     fun considerType(type: IrType) {
-        val symbol = (type as? IrSimpleType)?.classifier as? IrClassSymbol ?: return
+        val simple = type as? IrSimpleType ?: return
+        simple.arguments.filterIsInstance<IrTypeProjection>().forEach { considerType(it.type) }
+        val symbol = simple.classifier as? IrClassSymbol ?: return
         considerTypeSymbol(symbol)
     }
 
@@ -4815,8 +4984,9 @@ private class FunctionCompiler(
         val actual = registerValueType(source)
         val targetType = expectedType ?: expression.type
         val target = valueType(targetType, expression)
-        if (actual is ValueType.Ref && scalarBoxes.any { it.valueType == target }) {
-            return unboxScalar(source, target)
+        if (actual is ValueType.Ref && target !is ValueType.Ref) {
+            guestTypes.valueClassBox(resolvedType(targetType))?.let { return unboxValueClass(source, it) }
+            if (scalarBoxes.any { it.valueType == target }) return unboxScalar(source, target)
         }
         if (expectedType != null && actual is ValueType.Ref) {
             val target = valueType(expectedType, expression)
@@ -4824,7 +4994,11 @@ private class FunctionCompiler(
                 return allocate(target).also { destination -> emit(Instruction.CheckedCast(destination, source, target.type)) }
             }
         }
-        if (expectedType == null || (!resolvedType(expectedType).isKotlinAny() && !resolvedType(expectedType).isNullableScalar())) {
+        if (expectedType == null || (
+                !resolvedType(expectedType).isKotlinAny() && !resolvedType(expectedType).isNullableScalar() &&
+                    !(resolvedType(expectedType).isNullable() && guestTypes.valueClassBox(resolvedType(expectedType)) != null)
+            )
+        ) {
             return source
         }
         val referenceTarget = valueType(expectedType, expression) as ValueType.Ref
@@ -4838,7 +5012,7 @@ private class FunctionCompiler(
                 }
             }
         } else {
-            boxScalar(source, referenceTarget)
+            boxValue(source, expression.type, referenceTarget)
         }
     }
 
@@ -5196,7 +5370,13 @@ private class FunctionCompiler(
             } else if (expression.operator == IrTypeOperator.IMPLICIT_CAST ||
                 (
                     expression.operator == IrTypeOperator.CAST &&
-                        (expression.typeOperand.isNullableScalar() || expression.typeOperand.isKotlinAny())
+                        (
+                            expression.typeOperand.isNullableScalar() || expression.typeOperand.isKotlinAny() ||
+                                (
+                                    resolvedType(expression.typeOperand).isNullable() &&
+                                        guestTypes.valueClassBox(resolvedType(expression.typeOperand)) != null
+                                )
+                        )
                 )
             ) {
                 compileExpression(expression.argument, expression.typeOperand)
@@ -5204,20 +5384,26 @@ private class FunctionCompiler(
                 compileExpression(expression.argument)
             }
         val target = valueType(expression.typeOperand, expression)
+        val valueBox = guestTypes.valueClassBox(resolvedType(expression.typeOperand))
         return when (expression.operator) {
             IrTypeOperator.INSTANCEOF -> {
                 val reference =
                     if (target == ValueType.Unit) {
                         TypeRef.Imported(ImportId.of(UNIT_RUNTIME_TYPE))
                     } else {
-                        scalarBoxes.firstOrNull { it.valueType == target }?.let { TypeRef.Imported(ImportId.of(it.type)) } ?: run {
-                            (target as? ValueType.Ref)?.type
-                                ?: throw UnsupportedKotlinIr(expression, "type test target is not a reference")
-                        }
+                        valueBox?.type ?: scalarBoxes.firstOrNull { it.valueType == target }?.let { TypeRef.Imported(ImportId.of(it.type)) }
+                            ?: run {
+                                (target as? ValueType.Ref)?.type
+                                    ?: throw UnsupportedKotlinIr(expression, "type test target is not a reference")
+                            }
                     }
                 val referenceSource =
                     if (registerValueType(source) !is ValueType.Ref) {
-                        boxScalar(source, ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))))
+                        boxValue(
+                            source,
+                            expression.argument.type,
+                            ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))),
+                        )
                     } else {
                         source
                     }
@@ -5259,6 +5445,24 @@ private class FunctionCompiler(
                         emit(Instruction.CheckedCast(destination, source, target.type))
                     }
                 }
+                if (valueBox != null) {
+                    if (registerValueType(source) !is ValueType.Ref &&
+                        guestTypes.valueClassBox(resolvedType(expression.argument.type)) == valueBox
+                    ) {
+                        return source
+                    }
+                    val reference =
+                        if (registerValueType(source) is ValueType.Ref) {
+                            source
+                        } else {
+                            boxValue(
+                                source,
+                                expression.argument.type,
+                                ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))),
+                            )
+                        }
+                    return unboxValueClass(reference, valueBox)
+                }
                 if (scalarBoxes.none { it.valueType == target } || registerValueType(source) !is ValueType.Ref) {
                     throw UnsupportedKotlinIr(expression, "scalar cast requires a supported box and reference operand")
                 }
@@ -5277,6 +5481,38 @@ private class FunctionCompiler(
                 throw UnsupportedKotlinIr(expression, "cast ${expression.operator} is outside the project subset")
             }
         }
+    }
+
+    private fun boxValue(
+        source: RegisterId,
+        sourceType: IrType,
+        target: ValueType.Ref,
+    ): RegisterId {
+        val box = guestTypes.valueClassBox(resolvedType(sourceType)) ?: return boxScalar(source, target)
+        prepareAllocationBlock()
+        val reference = allocate(ValueType.Ref(false, box.type))
+        emit(Instruction.NewObject(reference, box.type))
+        emit(Instruction.FieldSet(reference, box.field, source))
+        return allocate(target).also { emit(Instruction.CheckedCast(it, reference, target.type)) }
+    }
+
+    private fun unboxValueClass(
+        source: RegisterId,
+        box: GuestValueClassBox,
+    ): RegisterId {
+        val reference = allocate(ValueType.Ref(false, box.type))
+        emit(Instruction.CheckedCast(reference, source, box.type))
+        return allocate(box.scalar).also { emit(Instruction.FieldGet(it, reference, box.field)) }
+    }
+
+    private fun compileReferenceArrayElement(
+        expression: IrExpression,
+        elementType: IrType?,
+    ): RegisterId {
+        val value = compileExpression(expression, elementType)
+        val box = elementType?.let(::resolvedType)?.let(guestTypes::valueClassBox) ?: return value
+        if (registerValueType(value) is ValueType.Ref) return value
+        return boxValue(value, expression.type, ValueType.Ref(false, box.type))
     }
 
     private fun boxInt(
@@ -5368,7 +5604,13 @@ private class FunctionCompiler(
             if (expression !is IrGetObjectValue) compileStatement(expression)
             return convertToString(loadUnitReference())
         }
-        return convertToString(compileExpression(expression))
+        return convertToString(compileStringValue(expression))
+    }
+
+    private fun compileStringValue(expression: IrExpression): RegisterId {
+        val source = compileExpression(expression)
+        if (registerValueType(source) is ValueType.Ref || guestTypes.valueClassBox(resolvedType(expression.type)) == null) return source
+        return boxValue(source, expression.type, ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))))
     }
 
     private fun hashValue(
@@ -5440,10 +5682,23 @@ private class FunctionCompiler(
             val sourceType = resolvedType(requireNotNull(property.backingField).type)
             val arrayElement =
                 when {
-                    sourceType.isExactClass(kotlinCharArrayClass) -> ValueType.Char
-                    sourceType.isExactClass(kotlinIntArrayClass) -> ValueType.I32
-                    sourceType.isExactClass(kotlinDoubleArrayClass) -> ValueType.F64
-                    else -> guestTypes.arrayElement(sourceType.makeNotNull())?.let { valueType(it, property) }
+                    sourceType.isExactClass(kotlinCharArrayClass) -> {
+                        ValueType.Char
+                    }
+
+                    sourceType.isExactClass(kotlinIntArrayClass) -> {
+                        ValueType.I32
+                    }
+
+                    sourceType.isExactClass(kotlinDoubleArrayClass) -> {
+                        ValueType.F64
+                    }
+
+                    else -> {
+                        guestTypes.arrayElement(sourceType.makeNotNull())?.let {
+                            guestTypes.valueClassBox(it)?.let { box -> ValueType.Ref(it.isNullable(), box.type) } ?: valueType(it, property)
+                        }
+                    }
                 }
             val value = allocate(field.type)
             emit(Instruction.FieldGet(value, RegisterId.of(0u), FieldRef.Local(field.id)))
@@ -5768,7 +6023,15 @@ private class FunctionCompiler(
                     compileExpression(expressions[0])
                 }
             val right = compileExpression(expressions[1], target.parameters.single { it.kind == IrParameterKind.Regular }.type)
-            return equalsValue(left, right, direct = call.superQualifierSymbol != null, nullableOperator = false)
+            val receiver =
+                if (registerValueType(left) !is ValueType.Ref &&
+                    guestTypes.valueClassBox(resolvedType(expressions[0].type)) != null
+                ) {
+                    boxValue(left, expressions[0].type, ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))))
+                } else {
+                    left
+                }
+            return equalsValue(receiver, right, direct = call.superQualifierSymbol != null, nullableOperator = false)
         }
         val memberHashCode =
             target.parameters.none { it.kind == IrParameterKind.Regular } &&
@@ -5797,7 +6060,7 @@ private class FunctionCompiler(
                 if (argument !is IrGetObjectValue) compileStatement(argument)
                 return convertToString(loadUnitReference())
             }
-            return convertToString(compileExpression(argument), direct = call.superQualifierSymbol != null)
+            return convertToString(compileStringValue(argument), direct = call.superQualifierSymbol != null)
         }
         if (target.fqNameWhenAvailable?.asString() == "kotlin.String.plus" && call.arguments.filterNotNull().size == 2) {
             val parts = call.arguments.filterNotNull()
@@ -5885,7 +6148,8 @@ private class FunctionCompiler(
                     argumentExpressions.size == 2 &&
                     argumentExpressions.any {
                         resolvedType(it.type).isKotlinAny() || resolvedType(it.type).isNullableScalar() ||
-                            resolvedType(it.type).isNullableString()
+                            resolvedType(it.type).isNullableString() ||
+                            (resolvedType(it.type).isNullable() && guestTypes.valueClassBox(resolvedType(it.type)) != null)
                     }
             val arrayStoreElementType =
                 if (
@@ -5900,7 +6164,7 @@ private class FunctionCompiler(
             val arguments =
                 argumentExpressions.mapIndexed { index, argument ->
                     if (index == 2 && arrayStoreElementType != null) {
-                        compileExpression(argument, arrayStoreElementType)
+                        compileReferenceArrayElement(argument, arrayStoreElementType)
                     } else if (argument is IrConst && argument.value == null) {
                         val other = argumentExpressions.firstOrNull { it !== argument && it.type != argument.type }
                         val reference = other?.let { valueType(it.type, it) as? ValueType.Ref }
@@ -5912,7 +6176,11 @@ private class FunctionCompiler(
                     } else {
                         val compiled = compileExpression(argument)
                         if (universalEquality && scalarBoxes.any { it.valueType == registerValueType(compiled) }) {
-                            boxScalar(compiled, ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))))
+                            boxValue(
+                                compiled,
+                                argument.type,
+                                ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))),
+                            )
                         } else {
                             compiled
                         }
@@ -6313,7 +6581,7 @@ private class FunctionCompiler(
                 }
             }
         val elementType = guestTypes.arrayElement(resolvedCallType)
-        return compileArrayElements(call, arrayType as ValueType.Ref, elements) { compileExpression(it, elementType) }
+        return compileArrayElements(call, arrayType as ValueType.Ref, elements) { compileReferenceArrayElement(it, elementType) }
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -6807,7 +7075,10 @@ private class FunctionCompiler(
             return result(ValueType.F64) { Instruction.ArrayLoad(it, arguments[0], arguments[1]) }
         }
         if (arguments.size == 2 && isSupportedReferenceArray(argumentExpressions[0].type) && name == "get") {
-            return result(valueType(call.type, call)) { Instruction.ArrayLoad(it, arguments[0], arguments[1]) }
+            val box = guestTypes.valueClassBox(resolvedType(call.type))
+            return result(box?.let { ValueType.Ref(call.type.isNullable(), it.type) } ?: valueType(call.type, call)) {
+                Instruction.ArrayLoad(it, arguments[0], arguments[1])
+            }
         }
         if (arguments.size == 3 &&
             argumentExpressions[0].type.isExactClass(kotlinCharArrayClass) &&
@@ -8715,6 +8986,11 @@ private class StringArrayUsageCollector(
 private sealed interface ReferenceArrayElement {
     val nullable: Boolean
 
+    data class ValueClass(
+        val box: GuestValueClassBox,
+        override val nullable: Boolean,
+    ) : ReferenceArrayElement
+
     data class Runtime(
         val runtimeType: UInt,
         override val nullable: Boolean,
@@ -8739,6 +9015,10 @@ private class ReferenceArrayUsageCollector(
     ) {
         val resolved = substitute(type)
         val element = guestTypes.arrayElement(resolved) ?: return
+        guestTypes.valueClassBox(element)?.let { box ->
+            arrays[resolved.specializationTypeIdentity()] = ReferenceArrayElement.ValueClass(box, element.isNullable())
+            return
+        }
         val runtimeType =
             when {
                 element.isKotlinAny() -> ANY_RUNTIME_TYPE

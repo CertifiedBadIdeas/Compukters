@@ -582,23 +582,32 @@ supported.
   exactly one `Int`, `Boolean`, or `Char` property erases to that scalar for
   constructors, properties, methods, operators, constants, and trusted ABI
   calls. `@JvmInline` is deliberately rejected because it belongs to the JVM
-  platform, not Guest Kotlin. Nullable, generic, reference-backed, boxed, and
-  multi-property forms are rejected. Evidence:
+  platform, not Guest Kotlin. Nullable values and `Any` use nominal managed wrappers: checked casts and
+  type tests preserve the value-class type, equality compares type and payload, hashCode uses the payload,
+  and toString preserves the class/property form or a source override. Lists and generic reference arrays
+  store these wrappers, including null; indexed reads and iteration recover the typed scalar for methods
+  and addon calls. Precompiled platform/addon libraries export one canonical wrapper type and payload
+  field so boxing in a library and in its consumer shares identity. Direct scalar calls remain unboxed.
+  Generic declarations, reference-backed and multi-property forms remain rejected. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `typed redstone side API lowers deterministically to scalar capability operations`,
   and
   [`CanonicalPlatformSourceTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/test/kotlin/ru/lazyhat/compukters/platform/source/CanonicalPlatformSourceTest.kt),
   which rejects JVM-only value-class syntax from native platform sources.
-  Tracking: not scheduled
+  Additional evidence: tests `value class boxes preserve nominal types nullable collections and iteration`,
+  `value class boxes share canonical identity across precompiled addon functions`, and
+  `addon scalar handles support typed lists and forEach`. `testKotlinValueClassBoxesVmConformance`
+  executes the source and precompiled-library boxing scenarios.
+  Tracking: [#692](https://github.com/CertifiedBadIdeas/Compukters/issues/692)
 
 ## Nullability and exceptions
 
 - [x] **Nullable user references** — `String?` and supported Guest class references
   can be local values, top-level immutable properties, class fields, function
   parameters, and results. `null` can initialize these values or be passed and
-  returned in a typed reference context. Nullable arrays, function values,
-  platform capability values, and primitive values other than `Int?` remain outside
-  this subset. Evidence:
+  returned in a typed reference context. Nullable scalar value classes use nominal managed wrappers as
+  described above. Nullable arrays, function values, and primitive values other than `Int?` and `Double?`
+  remain outside this subset. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt), tests
   `nullable references lower null comparisons Elvis and reference safe calls` and
   `unsupported nullable forms do not publish artifacts`,
@@ -863,7 +872,7 @@ supported.
   executed by `testKotlinFoldVmConformance` with bounded slices.
 
 - [ ] **Read-only `Collection<T>` and `List<T>` — Partial** — direct `listOf(...)`, `listOf<T>()`, and `emptyList<T>()`
-  support `Int`, `String`, and supported Guest class references, including nullable elements. `size`, indexed `get`,
+  support `Int`, `String`, supported scalar value classes and supported Guest class references, including nullable elements. `size`, indexed `get`,
   and ordinary `for` iteration execute
   through specialized `ArrayList<T>` instances. Factories create fresh lists with capacity equal to their element count;
   the `List<T>` view can be cast to `MutableList<T>` or `ArrayList<T>` to change the same object. `List<Int>` stores and

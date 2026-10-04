@@ -669,6 +669,20 @@ registerKotlinVmConformance(
     conformanceScenario = "list-any",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinValueClassBoxesVmConformance",
+    taskDescription = "Executes boxed value classes and nominal collection elements with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateValueClassBoxesConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-value-class-boxes.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-value-class-boxes-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_VALUE_CLASS_BOXES_ARTIFACT",
+    conformanceScenario = "value-class-boxes",
+    additionalArtifacts =
+        mapOf(
+            "COMPUKTER_KOTLIN_VALUE_CLASS_BOXES_ADDON_ARTIFACT" to
+                project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-value-class-boxes.cpkt.addon.cpkt"),
+        ),
+)
+registerKotlinVmConformance(
     taskName = "testKotlinNullableCollectionsVmConformance",
     taskDescription = "Executes nullable Int and collection elements with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateNullableCollectionsConformanceArtifact",

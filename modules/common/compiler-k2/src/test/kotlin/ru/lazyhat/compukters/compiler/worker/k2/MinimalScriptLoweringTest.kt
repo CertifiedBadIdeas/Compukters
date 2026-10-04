@@ -1746,6 +1746,191 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `boxed support retains rejection of unsupported value class declarations`() =
+        withAdapter { adapter ->
+            for (source in listOf(
+                "value class Unsupported(val value: String); fun main() { val values = listOf(Unsupported(\"text\")) }",
+                "value class Unsupported<T>(val value: T); fun main() { val values = listOf(Unsupported(1)) }",
+            )) {
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact)
+                assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" }, result.diagnostics.joinToString())
+            }
+        }
+
+    @Test
+    fun `value class boxes preserve nominal types nullable collections and iteration`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.listOf
+                import kotlin.collections.forEach
+                value class Engine(val id: Int)
+                value class Sensor(val id: Int)
+                value class Enabled(val flag: Boolean)
+                value class Letter(val character: Char)
+                value class Custom(val code: Int) {
+                    override fun toString(): String = "custom:" + code
+                }
+                class Cell<T>(val value: T)
+                fun main() {
+                    val engines = listOf(Engine(7), Engine(9))
+                    var sum = 0
+                    engines.forEach { sum += it.id }
+                    for (engine in engines) sum += engine.id
+                    check(sum == 32)
+                    val broad: kotlin.collections.List<Any> = engines
+                    check(broad[0] is Engine)
+                    check(!(broad[0] is Int))
+                    check(!(broad[0] is Sensor))
+                    check((broad[0] as Engine).id == 7)
+                    check(broad[0] == Engine(7))
+                    check(broad[0] != Engine(8))
+                    check(broad[0] != Sensor(7))
+                    check(broad[0] != 7)
+                    check(broad[0].hashCode() == 7)
+                    check(broad[0].toString() == "Engine(id=7)")
+                    check(Engine(7).toString() == "Engine(id=7)")
+                    check("engine:" + Engine(7) == "engine:Engine(id=7)")
+                    check(Engine(7).equals(Engine(7)))
+                    check(!Engine(7).equals(Sensor(7)))
+                    val custom: Any = Custom(3)
+                    check(custom.toString() == "custom:3")
+                    check(Custom(3).toString() == "custom:3")
+                    check(broad.contains(Engine(9)))
+                    check(!broad.contains(Sensor(9)))
+                    val nullable = listOf<Engine?>(Engine(7), null)
+                    check(nullable[0] == Engine(7))
+                    check(nullable[1] == null)
+                    check((nullable[0] ?: Engine(0)).id == 7)
+                    check((nullable[1] ?: Engine(0)).id == 0)
+                    val optional: Engine? = Engine(4)
+                    check(optional?.id == 4)
+                    val anyNullable: Any? = optional
+                    check(anyNullable is Engine?)
+                    check((anyNullable as Engine).id == 4)
+                    check(Cell<Engine?>(optional).value == Engine(4))
+                    val mutable = engines as kotlin.collections.MutableList<Engine>
+                    mutable.add(Engine(11))
+                    check(mutable.removeAt(0).id == 7)
+                    check(engines[0].id == 9)
+                    val flags = listOf(Enabled(true), Enabled(false))
+                    check(flags[0].flag)
+                    check(!flags[1].flag)
+                    val letters = listOf(Letter('z'), Letter('a'))
+                    check(letters[0].character == 'z')
+                    val values = listOf<Any>(Enabled(true), Letter('z'), Engine(7), Sensor(7))
+                    check(values[0] == Enabled(true))
+                    check(values[0] != true)
+                    check(values[1] == Letter('z'))
+                    check(values[1] != 'z')
+                    check((values[0] as Enabled).flag)
+                    check((values[1] as Letter).character == 'z')
+                    check(values[2] != values[3])
+                    var badCast = false
+                    try { values[2] as Sensor } catch (error: ClassCastException) { badCast = true }
+                    check(badCast)
+                    check((Engine(5) as Engine).id == 5)
+                    check((Engine(5) as Engine?)?.id == 5)
+                    check((null as Engine?) == null)
+                    badCast = false
+                    try { Engine(7) as Sensor } catch (error: ClassCastException) { badCast = true }
+                    check(badCast)
+                    val optionalFlag: Enabled? = Enabled(false)
+                    check(!(optionalFlag ?: Enabled(true)).flag)
+                    val optionalLetter: Letter? = Letter('a')
+                    check((optionalLetter ?: Letter('b')).character == 'a')
+                    check(values[0].hashCode() == true.hashCode())
+                    check(values[1].hashCode() == 'z'.hashCode())
+                    check(values[0].toString() == "Enabled(flag=true)")
+                    check(values[1].toString() == "Letter(character=z)")
+                    val array = arrayOf(Engine(1), Engine(2))
+                    array[0] = Engine(3)
+                    check(array[0].id == 3)
+                    val slots = arrayOf<Engine?>(null, Engine(4))
+                    slots[0] = Engine(5)
+                    slots[1] = null
+                    check(slots[0] == Engine(5))
+                    check(slots[1] == null)
+                    var index = 0
+                    while (index < 4000) {
+                        val box: Any = Engine(index)
+                        check((box as Engine).id == index)
+                        index += 1
+                    }
+                    check(broad[0] == Engine(9))
+                    println("value boxes ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val repeated = adapter.compile(request(source))
+            assertContentEquals(bytes, assertNotNull(repeated.artifact, repeated.diagnostics.joinToString()).toByteArray())
+            System.getProperty("compukter.vm.valueClassBoxesArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `value class boxes share canonical identity across precompiled addon functions`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        import fixture.kinetics.Kinetics
+                        import fixture.kinetics.KineticSide
+                        import kotlin.collections.listOf
+                        fun main() {
+                            val front = Kinetics.front
+                            val boxed: Any = front
+                            val libraryBox = Kinetics.boxSide(front)
+                            check(libraryBox is KineticSide)
+                            check(Kinetics.isSide(boxed))
+                            check(!Kinetics.isSide(0))
+                            check(Kinetics.boxedFront() == boxed)
+                            check(libraryBox == boxed)
+                            check(libraryBox != 0)
+                            check((libraryBox as KineticSide) == front)
+                            check(Kinetics.optionalSide(boxed) == front)
+                            check(listOf<KineticSide?>(Kinetics.optionalSide(boxed), null)[0] == front)
+                            check(boxed.toString() == "KineticSide(index=0)")
+                            println("addon boxes ok")
+                        }
+                        """.trimIndent(),
+                        includeAddonFixture = true,
+                    ),
+                )
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.valueClassBoxesArtifact")?.let { output ->
+                Path.of("$output.addon.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `addon scalar handles support typed lists and forEach`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        import fixture.kinetics.Kinetics
+                        fun main() {
+                            val front = Kinetics.front.rotationController()
+                            val back = Kinetics.back.rotationController()
+                            val handles = listOf(front, back)
+                            check(handles.size == 2)
+                            handles.forEach { it.setTargetSpeed(32) }
+                            for (handle in handles) println(handle.targetSpeed())
+                        }
+                        """.trimIndent(),
+                        includeAddonFixture = true,
+                    ),
+                )
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+        }
+
+    @Test
     fun `addon libraries share canonical collection specializations with the base platform`() =
         withAdapter { adapter ->
             val result =

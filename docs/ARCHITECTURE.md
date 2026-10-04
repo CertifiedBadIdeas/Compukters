@@ -39,6 +39,13 @@ Direct `IntArray` `for` loops follow the same canonical-shape rule: the compiler
 its length, and reads each element with existing array instructions at the current index. The loop header retains its
 quota safepoint; no iterator object is created. A source variable may be reassigned without changing the traversed
 array, while writes to that array's elements remain visible to later iterations.
+Scalar value classes retain their scalar representation for direct typed calls. Nullable/Any boundaries and reference
+collection storage use ordinary nominal managed wrapper classes with one payload field. Canonical platform and addon
+libraries export the wrapper type and payload field through existing type/field links; consumers import these instead
+of introducing a second nominal identity. Source value classes own their application-local wrappers. Equality checks
+nominal type and payload, hashing uses the payload, and virtual toString dispatch preserves default or custom rendering.
+This uses existing artifact instructions and ABI versions; there is no separate VM boxing representation.
+
 Nullable `String` and supported Guest class source references use the artifact's existing nullable reference types and
 `Null` instruction. K2's safe-call and Elvis branches lower through ordinary verified control flow, with reference
 casts when a non-null branch joins a nullable result. `Int?` uses the existing managed Int box or null; other nullable primitives remain unsupported.

@@ -933,6 +933,27 @@ val generateListAnyConformanceArtifact = tasks.register<Test>("generateListAnyCo
     }
 }
 
+val generateValueClassBoxesConformanceArtifact = tasks.register<Test>("generateValueClassBoxesConformanceArtifact") {
+    description = "Compiles nominal value-class boxes and collections for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*value class boxes preserve nominal types nullable collections and iteration*")
+    filter.includeTestsMatching("*value class boxes share canonical identity across precompiled addon functions*")
+    inputs.files(addonGuestApiFixtureBundle)
+    inputs.file(workerJar)
+    val artifact = layout.buildDirectory.file("generated/conformance/kotlin-value-class-boxes.cpkt")
+    outputs.file(artifact)
+    outputs.file(artifact.map { File(it.asFile.absolutePath + ".addon.cpkt") })
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
+        systemProperty("compukter.vm.valueClassBoxesArtifact", artifact.get().asFile.absolutePath)
+    }
+}
+
 val generateNullableCollectionsConformanceArtifact = tasks.register<Test>("generateNullableCollectionsConformanceArtifact") {
     description = "Compiles nullable Int and collection elements for pinned VM conformance."
     group = "verification"

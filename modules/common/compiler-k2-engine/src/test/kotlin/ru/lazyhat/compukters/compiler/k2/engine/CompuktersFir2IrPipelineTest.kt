@@ -156,6 +156,50 @@ class CompuktersFir2IrPipelineTest {
                     ),
                     emptyList(),
                 )
+            val valueOnly =
+                environment.compile(
+                    PlatformModuleId("sample", "value-types"),
+                    listOf(source("ValueTypes.kt", "package sample.types\nvalue class Token(val code: Int)")),
+                    listOf(builtins),
+                )
+            val valueIr = CompuktersFir2IrPipeline.convert(listOf(builtins, valueOnly))
+            val valueFragment =
+                assertNotNull(
+                    PlatformLibraryCompiler().compile(
+                        PlatformModuleId("sample", "value-types"),
+                        emptyList(),
+                        valueIr.irModuleFragment,
+                        valueIr.pluginContext,
+                        setOf("ValueTypes.kt"),
+                        mapOf(
+                            "Builtins.kt" to PlatformModuleId("kotlin", "builtins"),
+                            "Collections.kt" to PlatformModuleId("kotlin", "builtins"),
+                            "Reflection.kt" to PlatformModuleId("kotlin", "builtins"),
+                            "ValueTypes.kt" to PlatformModuleId("sample", "value-types"),
+                        ),
+                        CanonicalTrustedIntrinsics.registry,
+                    ),
+                )
+            val valueArtifact = ArtifactReader.read(PlatformLibraryFragmentCodec.decode(valueFragment).artifact.toByteArray())
+            val valueOwner = valueArtifact.modules.first { it.kind == ModuleKind.LIBRARY }
+            val exportNames =
+                valueArtifact.modules.map { module ->
+                    module.exports.map { module.strings[it.name.value.toInt()].toString() }
+                }
+            assertTrue(
+                valueOwner.exports.any {
+                    it.kind == SymbolKind.TYPE &&
+                        valueOwner.strings[it.name.value.toInt()].toString() == "sample.types.Token"
+                },
+                exportNames.toString(),
+            )
+            assertTrue(
+                valueOwner.exports.any {
+                    it.kind == SymbolKind.FIELD &&
+                        valueOwner.strings[it.name.value.toInt()].toString() == "sample.types.Token.<boxed-value>"
+                },
+            )
+
             val library =
                 environment.compile(
                     PlatformModuleId("stdlib", "core"),
