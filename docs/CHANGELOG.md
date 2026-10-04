@@ -300,6 +300,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Build tooling
 
+- Contributors can launch and test the independent Create and Sable addons together from `addons/dev`. The stand uses
+  the current workspace SDK and platform bundle and produces no distributable umbrella mod.
+
 - The standalone Create addon has an independent GameTest server for real kinetic devices and boilers, exercising
   Guest programs, peripheral naming, cable reconnection and stale handles without adding Create to base-mod tests.
 - Runtime dependencies and NeoForge are updated within the existing Minecraft 1.21.1 and 26.1.2 targets;

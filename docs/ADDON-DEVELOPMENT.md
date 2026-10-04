@@ -179,3 +179,11 @@ as tombstones, and new operations append after all existing selectors. Ordinary 
 
 The project's ordinary `jar`, `check` and Kotlin compilation tasks depend on the generated bundle and host contract.
 The consumable `compuktersAddonBundle` configuration is also available to custom packaging or verification tasks.
+
+## Joint development runs
+
+[`addons/dev`](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/addons/dev) composes the main mod and the
+independent Create and Sable builds. From that directory, run `./gradlew-sandbox-dev-parallel-summary verifyAddons`
+for both addon checks, or `./gradlew-sandbox-dev-parallel runGameTestServer` for their shared real NeoForge scenarios.
+`runClient` and `runServer` use the same upstream dependency pins and ordinary development archives. This build
+produces no distributable umbrella mod; adding another addon does not introduce a dependency between existing addons.
