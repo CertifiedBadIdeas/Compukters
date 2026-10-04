@@ -306,7 +306,8 @@ addon mods, with optional Create and Sable integrations for Minecraft 1.21.1.
 
 ### Build tooling
 
-- Contributors can launch and test the independent Create and Sable addons together from `addons/dev`. The stand uses
+- Contributors can launch and test the independent Create and Sable addons together with Aeronautics, Simulated,
+  Offroad and Propulsion: Simulated from `addons/dev`. The stand uses
   the current workspace SDK and platform bundle and produces no distributable umbrella mod.
 
 - The standalone Create addon has an independent GameTest server for real kinetic devices and boilers, exercising
