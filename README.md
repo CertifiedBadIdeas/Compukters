@@ -43,7 +43,9 @@ weak/direct outputs, and tick-boundary behavior.
 See [Text display](docs/DISPLAY.md) for the in-world 20x10 output grid and
 peripheral cables. The optional, separately installed [Create addon](docs/CREATE.md)
 for 1.21.1 provides kinetic devices, Stock Ticker logistics, and steam boiler
-monitoring.
+monitoring. Independent [Sable](addons/sable/README.md) and [Propulsion](addons/propulsion/README.md) addons
+provide construction physics snapshots and Creative Thruster control. The [shared dev stand](addons/dev/README.md)
+loads all addons with the pinned Aeronautics/Sable/Propulsion runtime.
 See [Addon development](docs/ADDON-DEVELOPMENT.md) for publishing typed Guest
 Kotlin APIs from independent NeoForge mods.
 See [Verification](docs/VERIFICATION.md) for focused checks, complete local

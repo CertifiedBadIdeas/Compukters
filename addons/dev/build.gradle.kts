@@ -58,11 +58,16 @@ val baseMod = files(rootProject.file("../../modules/minecraft/v1_21_1/v1_21_1-ne
 val addonMods = mapOf(
     "create" to "compukters-create",
     "sable" to "compukters-sable",
+    "propulsion" to "compukters-propulsion",
 ).mapValues { (directory, buildName) ->
     files(rootProject.file("../$directory/build/devlibs/$buildName-development-mod.jar"))
         .builtBy(gradle.includedBuild(buildName).task(":developmentModJar"))
 }
-val addonGameTestMods = mapOf("create" to "compukters-create", "sable" to "compukters-sable").mapValues { (directory, buildName) ->
+val addonGameTestMods = mapOf(
+    "create" to "compukters-create",
+    "sable" to "compukters-sable",
+    "propulsion" to "compukters-propulsion",
+).mapValues { (directory, buildName) ->
     files(rootProject.file("../$directory/build/devlibs/$buildName-gametest-mod.jar"))
         .builtBy(gradle.includedBuild(buildName).task(":developmentGameTestModJar"))
 }
@@ -165,6 +170,7 @@ tasks.register("verifyAddons") {
     dependsOn(verifyDevelopmentMods, verifyPhysicsMods)
     dependsOn(gradle.includedBuild("compukters-create").task(":check"))
     dependsOn(gradle.includedBuild("compukters-sable").task(":check"))
+    dependsOn(gradle.includedBuild("compukters-propulsion").task(":check"))
 }
 
 tasks.configureEach {

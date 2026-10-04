@@ -13,9 +13,18 @@ headings so this page has one stable URL that can be shared outside the reposito
 ## 0.5.0 — In development
 
 This release expands the Kotlin available to computer programs and introduces support for independently installed
-addon mods, with optional Create and Sable integrations for Minecraft 1.21.1.
+addon mods, with optional Create, Sable and Propulsion integrations for Minecraft 1.21.1.
+
+- Optional **Compukters: Propulsion** adds named Creative Thruster control through peripheral cables: normalized
+  Double throttle, saved thrust percentage and typed state snapshots in kN. One program owns control; stopping,
+  disconnection or computer removal clears digital input and restores redstone. Explicit close releases control
+  early. Chunk saves and construction copies retain engine configuration without transferring a program's digital
+  command. The independent addon joins Create/Sable and the pinned Aeronautics/Propulsion runtime in the shared dev stand.
 
 ### Guest Kotlin
+
+- Addon resources now belong to individual Guest programs: completion releases their devices while suspended
+  parent programs retain theirs. Native transports require bundled C ABI 20.
 
 - Guest compilation with addons selects the canonical owner of collection specializations even when an addon bundle
   contains a pruned dependency copy. Conflicting standalone owners remain rejected.
@@ -23,7 +32,7 @@ addon mods, with optional Create and Sable integrations for Minecraft 1.21.1.
 - Generated addon handlers can return Long, Double, Char and bounded immutable nested data records. The SDK
   generates typed host DTOs and validates the record shape; the VM copies and materializes responses under its
   existing budgets. Double IEEE bits and UTF-16 code units are preserved. Structured responses require
-  Runtime ABI 1.13 and the bundled native C ABI 19; rebuild addon bundles and Guest programs.
+  Runtime ABI 1.13 and the bundled native C ABI 20; rebuild addon bundles and Guest programs.
 
 - Programs can use Double with F64 arithmetic, mixed numeric operations, conversions, constants,
   nullable and generic values, console/text output, equality and hashCode. DoubleArray stores F64 elements

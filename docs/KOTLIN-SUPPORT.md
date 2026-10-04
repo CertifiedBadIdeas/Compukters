@@ -1010,6 +1010,21 @@ single addon and both addons for local and attached-target compilation.
   [`SableObservationGameTests`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/addons/sable/src/gameTest/kotlin/ru/lazyhat/compukters/integration/sable/SableObservationGameTests.kt),
   scenario `computerAssemblyAndReturn`, compiling and executing the typed Guest API through JNI.
 
+- [x] **Program-owned addon resources** — each live Guest program receives its own addon hosts on first use.
+  Completing a child closes its devices while a suspended parent retains its hosts. Computer shutdown closes all
+  scopes, and late responses cannot bind to another program. Native transports require C ABI 20; Guest artifact ABI
+  is unchanged. Evidence: `ScopedProgramAddonHostTest`, `ProgramRuntimeHostTest`,
+  `ProgramRuntimeActorProcessorTest` and native `computer.rs` process lifetime/request routing tests.
+
+- [x] **Creative Thruster control** — the independent Minecraft 1.21.1 Propulsion addon exposes
+  `propulsion.thrusters.Thrusters.creative(name)`, normalized Double throttle, saved thrust percentage,
+  `close()` and immutable `CreativeThrusterState` snapshots in kN. One program owns writes; reading does not claim
+  control. Completion, cable loss, removal and Sable assembly release digital input. Upstream Propulsion retains
+  Float precision and its ordinary startup, atmosphere and obstruction behavior. Evidence:
+  [`CreativeThrusterGameTests`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/addons/propulsion/src/gameTest/kotlin/ru/lazyhat/compukters/integration/propulsion/CreativeThrusterGameTests.kt),
+  `guestControlLifetime` and `multiblockAssemblyClearsControl` compile and run real Guest programs through JNI.
+  See the [addon README](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/addons/propulsion/README.md).
+
 ## Kotlin standard library
 
 The detailed API inventory is in [Guest standard library support]({{ '/STDLIB-SUPPORT/' | relative_url }}).

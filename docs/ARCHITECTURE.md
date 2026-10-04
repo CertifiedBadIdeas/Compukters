@@ -361,7 +361,7 @@ offset when present, otherwise function and bytecode coordinates. Runtime format
 
 Native C ABI 17 appends a length-prefixed, bounded UTF-8 trace to terminal outcome tags 2 (OOM), 5 (Guest trap), and
 6 (VM fault), after their existing scalar payload. Empty text means unavailable diagnostic text. FFM and JNI validate
-ABI 19 before decoding; both retain typed failures and carry the trace through the runtime host. Other wire tags and
+ABI 20 before decoding; both retain typed failures and carry the trace through the runtime host. Other wire tags and
 guest capability schemas are unchanged.
 Native C ABI 19 adds `compukter_resume_value(handle, taskId, requestId, payload, payloadLength)`.
 The caller owns the byte buffer; native code validates and copies its contents before returning and retains no caller
@@ -820,6 +820,17 @@ Addon host handlers report failures with a broad `HostFailureKind` and a non-emp
 The kind remains suitable for runtime classification; the producer-owned detail is diagnostic text and is not a stable
 programmatic identifier.
 
+The independent `addons/propulsion` build owns named Creative Thruster control and its `propulsion.api` Guest module.
+It depends on upstream Propulsion/Create/Sable types, without depending on other Compukters addon implementations.
+Commands and observations execute through the existing server-thread addon request boundary; physics and VM cadence
+are unchanged. Controller identity and cable reachability bind each handle. A server-confined lease registry owns
+only temporary program control, validates active leases on server ticks, and restores normal redstone on release.
+It does not mirror authoritative thrust or physics state. Typed observations copy current upstream fields in kN.
+The pinned Propulsion binary persists digital commands, so a dedicated read/write mixin marks owned full NBT saves
+and clears the unowned digital input/mode when those saves or construction copies load; client packets are unaffected.
+Only engine configuration persists across that boundary. The independent `addons/dev` run build composes all three
+addon archives and their GameTests with the upstream Aeronautics/Propulsion runtime.
+
 ## Module ownership
 
 Minecraft-independent Gradle modules are physically grouped under `modules/common`; all shared and version-specific
@@ -877,3 +888,16 @@ Ownership rules:
 - Compiler-internal FIR and IR types must not leak into the platform bundle, artifact, worker protocol, FFM, or native
   runtime contracts.
 - `LegacyImplementationRemovalTest` prevents removed product contours and old package identities from returning.
+
+### Program-owned addon resources
+
+Native C ABI 20 adds outcome tags 13 (`ProcessEntered`) and 14 (`ProcessExited`) with positive computer-wide
+process IDs. Root ID 0 remains live until the computer stops. Child enter is published before child execution;
+exit is published before the resumed parent executes. The export inventory remains unchanged. External host
+request IDs are remapped through a bounded table to their owning process and task, including suspended parents;
+retired process routes are discarded and IDs are never reused within a computer.
+
+The actor carries ordered lifecycle actions alongside addon requests and ordinary world effects. The server carrier
+creates addon hosts lazily per program, closes only the exiting program's hosts, and rejects its queued completions.
+Suspended parents retain their resources. Computer shutdown resets every scope. This makes peripheral ownership
+follow the program lifetime without inferring it from terminal output or changing world/physics cadence.
