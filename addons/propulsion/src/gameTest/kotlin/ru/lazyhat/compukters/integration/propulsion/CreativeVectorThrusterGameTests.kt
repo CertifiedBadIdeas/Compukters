@@ -37,6 +37,7 @@ import net.minecraft.resources.ResourceLocation
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.neoforged.neoforge.common.util.FakePlayerFactory
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
@@ -309,12 +310,108 @@ object CreativeVectorThrusterGameTests {
         )
     }
 
+    @JvmStatic
+    @GameTest(batch = "propulsion_vector_mount", template = "bastion/mobs/empty", templateNamespace = "minecraft", timeoutTicks = 100_000)
+    fun guestMountOnConstruction(helper: GameTestHelper) {
+        val computer = BlockPos(2, 2, 3)
+        // Deliberately rotated names: fl is +X,+Z, unlike the controller's former hard-coded map.
+        val engines =
+            listOf(
+                "fl" to BlockPos(4, 2, 5),
+                "fr" to BlockPos(4, 2, 1),
+                "bl" to BlockPos(0, 2, 5),
+                "br" to BlockPos(0, 2, 1),
+            )
+        val positions = mutableListOf<BlockPos>()
+        val cable = CompuktersRegistry.PERIPHERAL_CABLE.get()
+        for (x in 0..4) {
+            for (z in 1..5) {
+                val position = BlockPos(x, 2, z)
+                positions.add(position)
+                helper.setBlock(position, cable)
+            }
+        }
+        helper.setBlock(computer, CompuktersRegistry.COMPUTER.get())
+        val block = BuiltInRegistries.BLOCK.get(ResourceLocation.fromNamespaceAndPath("createpropulsion", "creative_vector_thruster"))
+        engines.forEach { (_, position) ->
+            helper.setBlock(position, block.defaultBlockState().setValue(BlockStateProperties.FACING, Direction.UP))
+        }
+        val container = requireNotNull(SubLevelContainer.getContainer(helper.level))
+        val physics = container.physicsSystem()
+        val wasPaused = physics.paused
+        physics.setPaused(true)
+        var body: ServerSubLevel? = null
+        var currentPosition = helper.absolutePos(computer)
+        val guest = GuestComputerScenario(helper, computer) { currentPosition }
+        val sequence = helper.startSequence()
+        sequence.thenExecuteAfter(5) {
+            val minimum = helper.absolutePos(BlockPos(0, 2, 1))
+            val maximum = helper.absolutePos(BlockPos(5, 3, 6))
+            body =
+                SubLevelAssemblyHelper.assembleBlocks(
+                    helper.level,
+                    helper.absolutePos(computer),
+                    positions.map(helper::absolutePos),
+                    BoundingBox3i(minimum.x, minimum.y, minimum.z, maximum.x, maximum.y, maximum.z),
+                )
+            container.addForceLoadTicket(requireNotNull(body), SubLevelLoadingTicketType.COMMAND_FORCED, MinecraftUnit.INSTANCE)
+            currentPosition = requireNotNull(body).plot.centerBlock
+            engines.forEach { (name, position) ->
+                nameDeviceAt(helper, currentPosition.offset(position.subtract(computer)), name)
+            }
+        }
+        guest.prepare(sequence, MOUNT)
+        guest.awaitMarker(sequence, "vector-mount-ok")
+        sequence.thenExecute {
+            val origin = requireNotNull(body).plot.centerBlock
+            engines.forEach { (_, position) ->
+                val entity = VectorThrusterHost.resolve(helper.level, origin.offset(position.subtract(computer)))!!
+                helper.assertTrue(!PropulsionGuestIntegration.isControlled(entity), "Read-only mount claimed engine control")
+            }
+        }
+        sequence.thenSucceed()
+        helper.testInfo.addListener(
+            object : GameTestListener {
+                private fun cleanup() {
+                    physics.setPaused(wasPaused)
+                    body?.let {
+                        container.removeForceLoadTicket(it, SubLevelLoadingTicketType.COMMAND_FORCED, MinecraftUnit.INSTANCE)
+                        if (!it.isRemoved) container.removeSubLevel(it, SubLevelRemovalReason.REMOVED)
+                    }
+                }
+
+                override fun testStructureLoaded(info: GameTestInfo) = Unit
+
+                override fun testPassed(
+                    info: GameTestInfo,
+                    runner: GameTestRunner,
+                ) = cleanup()
+
+                override fun testFailed(
+                    info: GameTestInfo,
+                    runner: GameTestRunner,
+                ) = cleanup()
+
+                override fun testAddedForRerun(
+                    info: GameTestInfo,
+                    original: GameTestInfo,
+                    runner: GameTestRunner,
+                ) = cleanup()
+            },
+        )
+    }
+
     private fun nameDevice(
         helper: GameTestHelper,
         position: BlockPos,
         name: String = "engine",
+    ) = nameDeviceAt(helper, helper.absolutePos(position), name)
+
+    private fun nameDeviceAt(
+        helper: GameTestHelper,
+        absolute: BlockPos,
+        name: String,
     ) {
-        val absolute = helper.absolutePos(position)
         val player = FakePlayerFactory.getMinecraft(helper.level)
         player.setPos(absolute.x + 0.5, absolute.y + 0.5, absolute.z + 0.5)
         player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(CompuktersRegistry.PERIPHERAL_CONFIGURATOR_ITEM.get()))
@@ -328,6 +425,26 @@ object CreativeVectorThrusterGameTests {
         helper.assertTrue(result == PeripheralConfiguratorSaveResult.NAMED_DEVICE, "Could not name Creative Vector Thruster: $result")
     }
 
+    private val MOUNT =
+        """
+        import propulsion.thrusters.Thrusters
+        fun main() {
+            val names = listOf("fl", "fr", "bl", "br")
+            var construction = ""
+            repeat(4) { index ->
+                val mount = Thrusters.creativeVector(names[index]).mount()
+                check(mount.constructionId != "")
+                if (index == 0) construction = mount.constructionId
+                check(mount.constructionId == construction)
+                check(mount.offsetX == (if (index < 2) 2 else -2))
+                check(mount.offsetY == 0)
+                check(mount.offsetZ == (if (index == 0 || index == 2) 2 else -2))
+                check(mount.forceX == 0 && mount.forceY == 1 && mount.forceZ == 0)
+            }
+            println("vector-mount-ok")
+        }
+        """.trimIndent()
+
     private val HANDLE_LIST =
         """
         import propulsion.thrusters.Thrusters
@@ -337,6 +454,11 @@ object CreativeVectorThrusterGameTests {
             val bl = Thrusters.creativeVector("bl")
             val br = Thrusters.creativeVector("br")
             val all = listOf(fl, fr, bl, br)
+            repeat(4) { index ->
+                val mount = all[index].mount()
+                check(mount.constructionId == "")
+                check(mount.offsetX == 3 && mount.offsetY == 0 && mount.offsetZ == index - 1)
+            }
             all.forEach {
                 it.setThrustKn(100.0)
                 it.setThrottle(0.25)

@@ -34,8 +34,9 @@ import java.util.concurrent.CompletableFuture
 internal class GuestComputerScenario(
     private val helper: GameTestHelper,
     position: BlockPos,
+    private val resolvePosition: () -> BlockPos = { helper.absolutePos(position) },
 ) {
-    private val computer = helper.getBlockEntity(position) as ComputerBlockEntity
+    private val computer get() = helper.level.getBlockEntity(resolvePosition()) as ComputerBlockEntity
     private var operation: CompletableFuture<*>? = null
     private var snapshot: CompletableFuture<TerminalState?>? = null
     private var lastObservation = "no terminal snapshot completed"

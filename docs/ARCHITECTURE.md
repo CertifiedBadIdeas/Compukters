@@ -841,7 +841,10 @@ targets follow the latest signals; digital input and the old shutdown envelope a
 override is removed, then physical thrust is recalculated from the current redstone input. This prevents residual
 program throttle from multiplying the restored engine setting. Full saves retain
 redstone signals and the saved engine configuration, clearing owned steering/tween and absolute thrust commands;
-client packets retain the live visual state. Vector capability operations append IDs 5..11, preserving ordinary
+client packets retain the live visual state. Vector mount operation 12 copies integer computer-relative block
+offsets, a neutral force axis and the common construction ID. It rejects cross-construction mounts; ordinary-world mounts have an empty ID and world axes.
+Guest flight programs own geometry-to-torque allocation; names do not encode corner orientation.
+Vector capability operations append IDs 5..12, preserving ordinary
 operations 0..4 at capability version 1, Runtime ABI 1.13 and C ABI 20. The independent `addons/dev` run build composes
 all three
 addon archives and their GameTests with the upstream Aeronautics/Propulsion runtime.

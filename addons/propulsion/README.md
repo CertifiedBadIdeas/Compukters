@@ -39,6 +39,15 @@ thrust before throttle and atmosphere, within `state().maxThrustKn`. It does not
 computer removal release throttle, steering and custom thrust together. Saves and Sable copies preserve redstone
 signals and saved configuration without carrying program commands; client update packets retain visual state.
 
+`mount()` returns `CreativeVectorThrusterMount` without claiming control: `constructionId`, integer
+`offsetX/offsetY/offsetZ` from the calling computer's block to the engine's block, and `forceX/forceY/forceZ`
+for the neutral (zero-steering) force direction. On a Sable construction these use plot axes, so offsets and
+corner assignments survive world translation/rotation. In the ordinary world the ID is empty and axes are world axes.
+The engine must share the computer's construction (or both be outside constructions); a different construction
+throws IllegalStateException. Reachability, replacement and handle validity use the same checks as `state()`.
+Neutral direction describes mounting, not current smoothed nozzle steering; it is a unit axis vector.
+Use offsets to assign roll/pitch torque signs instead of treating peripheral names as geometric labels.
+
 `CreativeVectorThrusterState` includes `gameTick`, requested/effective throttle, `thrustKn`, `maxThrustKn`,
 `customThrust`, `currentThrustKn`, target/current X/Y coordinates, `startupProgress` and `active`. Both thrust fields
 use kN; current output and current vector represent the upstream tick, which may lag commands. Finite input/range
@@ -100,7 +109,8 @@ Snapshots retain their values after later engine changes. The SDK bounds structu
 Runtime ABI 1.13 / native C ABI 20, already provided by the current checkout.
 
 Other thruster types are not exposed by this addon. Existing ordinary-engine operations keep ABI operation IDs 0..4;
-vector operations append IDs 5..11 in capability version 1. Rebuild the addon bundle and Guest programs to use the new API.
+vector operations use IDs 5..11 and `mount()` appends ID 12 in capability version 1.
+Rebuild the addon bundle and Guest programs to use the new API.
 
 ## Development
 
@@ -120,4 +130,6 @@ Standalone `check` verifies the archive and both ordinary and vector GameTest so
 exclusive ownership, invalid inputs, typed observations, cable loss, completion, explicit close, tiny input clearing,
 computer removal, NBT copies and actual Sable assembly. Vector tests also preserve live redstone steering signals and
 client packets. The shared dev stand composes these scenarios with Create and Sable tests and pinned Aeronautics.
+Mount observations are checked in the ordinary world and on an assembled four-engine Sable platform with rotated
+peripheral names, including neutral force directions and read-only ownership.
 Interactive flight under changing load remains a manual scenario; no additional VM or Propulsion ticks are introduced.
