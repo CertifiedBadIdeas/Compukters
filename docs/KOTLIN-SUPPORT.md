@@ -1025,6 +1025,15 @@ single addon and both addons for local and attached-target compilation.
   `guestControlLifetime` and `multiblockAssemblyClearsControl` compile and run real Guest programs through JNI.
   See the [addon README](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/addons/propulsion/README.md).
 
+- [x] **Creative Vector Thruster control** — `Thrusters.creativeVector(name)` exposes a separate typed handle and
+  `CreativeVectorThrusterState`, normalized throttle, local X/Y steering and absolute creative thrust in kN.
+  Commands claim one program owner; close/completion/disconnection/removal return throttle, steering and thrust
+  to ordinary redstone and saved configuration. Steering retains Float precision, 1/15 steps and ordinary tick
+  smoothing; no extra physics or VM ticks. Live redstone-link inputs continue updating while owned.
+  Full saves and Sable copies discard program commands while client packets retain them for rendering.
+  Evidence: `CreativeVectorThrusterGameTests.guestVectorControlLifetime` and `vectorAssemblyClearsControl`
+  compile and execute real Guest programs through JNI on actual upstream blocks.
+
 ## Kotlin standard library
 
 The detailed API inventory is in [Guest standard library support]({{ '/STDLIB-SUPPORT/' | relative_url }}).

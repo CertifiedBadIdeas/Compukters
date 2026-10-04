@@ -1,6 +1,6 @@
 # Compukters: Propulsion
 
-Independent Creative Thruster addon for Minecraft 1.21.1, NeoForge 21.1.252, Create 6.0.10, Sable 2.0.5 and
+Independent Creative Thruster and Creative Vector Thruster addon for Minecraft 1.21.1, NeoForge 21.1.252, Create 6.0.10, Sable 2.0.5 and
 Propulsion: Simulated 1.1.5 (Modrinth H13U56dc). Install alongside Compukters and the upstream mods. It has no dependency
 on Compukters: Create or Compukters: Sable; the main mod has no Propulsion dependency.
 
@@ -13,7 +13,38 @@ mixin resources and separation from upstream, base-mod and GameTest implementati
 ## Guest API
 
 Select `addons = ["propulsion"]` in `compukter.toml` (format 3). Connect the computer and engine with peripheral cables
-and name the engine with the Peripheral Configurator. A multiblock contact resolves to its controller.
+and name the engine with the Peripheral Configurator. Ordinary Creative Thruster multiblock contacts resolve to their controller.
+
+For **Creative Vector Thruster** (`createpropulsion:creative_vector_thruster`):
+
+```kotlin
+import propulsion.thrusters.Thrusters
+
+fun main() {
+    val engine = Thrusters.creativeVector("main-engine")
+    engine.setThrustKn(120.0)
+    engine.setVector(0.6, -0.4)
+    engine.setThrottle(0.75)
+    println(engine.state().currentThrustKn)
+    readln()
+    engine.close()
+}
+```
+
+`setVector(x, y)` uses local nozzle coordinates −1..1, not world coordinates or degrees. Commands are rounded to
+upstream steps of 1/15 and use its ordinary smoothing. Digital steering overrides the target while live redstone-link
+inputs keep updating; release restores the latest link inputs. `setThrustKn` temporarily overrides the base creative
+thrust before throttle and atmosphere, within `state().maxThrustKn`. It does not change the saved scroll-wheel setting.
+`clearThrustOverride()` returns that setting while keeping ownership. Close, program completion, cable loss and
+computer removal release throttle, steering and custom thrust together. Saves and Sable copies preserve redstone
+signals and saved configuration without carrying program commands; client update packets retain visual state.
+
+`CreativeVectorThrusterState` includes `gameTick`, requested/effective throttle, `thrustKn`, `maxThrustKn`,
+`customThrust`, `currentThrustKn`, target/current X/Y coordinates, `startupProgress` and `active`. Both thrust fields
+use kN; current output and current vector represent the upstream tick, which may lag commands. Finite input/range
+checks apply on both sides; exceeding the server-configured thrust limit throws IllegalStateException.
+
+For the ordinary **Creative Thruster** (`createpropulsion:creative_thruster`):
 
 ```kotlin
 import propulsion.thrusters.Thrusters
@@ -66,7 +97,8 @@ computed by Propulsion's ordinary tick, so a command and immediate observation n
 Snapshots retain their values after later engine changes. The SDK bounds structured results; this API requires
 Runtime ABI 1.13 / native C ABI 20, already provided by the current checkout.
 
-Only the ordinary Creative Thruster is supported. Creative Vector Thruster and other thruster types are separate work.
+Other thruster types are not exposed by this addon. Existing ordinary-engine operations keep ABI operation IDs 0..4;
+vector operations append IDs 5..11 in capability version 1. Rebuild the addon bundle and Guest programs to use the new API.
 
 ## Development
 
@@ -82,9 +114,8 @@ The standalone build extracts the pinned upstream Sable libraries for Loom; thes
 
 ## Verification
 
-On 2026-10-04, standalone `check` and both required GameTests passed. The shared dev stand also passed all five
-Create/Sable/Propulsion scenarios with the complete pinned Aeronautics runtime. The control test runs real Guest
-programs, validates invalid inputs, exclusive ownership, NBT copies, cable loss, ordinary completion, explicit close,
-tiny digital input clearing and computer removal. The assembly test forms a real 2×2×2 engine, copies it onto a Sable
-construction, checks retained configuration and cleared control, and rejects the original handle.
+Standalone `check` verifies the archive and both ordinary and vector GameTest sources. Real Guest programs exercise
+exclusive ownership, invalid inputs, typed observations, cable loss, completion, explicit close, tiny input clearing,
+computer removal, NBT copies and actual Sable assembly. Vector tests also preserve live redstone steering signals and
+client packets. The shared dev stand composes these scenarios with Create and Sable tests and pinned Aeronautics.
 Interactive flight under changing load remains a manual scenario; no additional VM or Propulsion ticks are introduced.

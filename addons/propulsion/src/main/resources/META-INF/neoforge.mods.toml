@@ -7,7 +7,7 @@ modId="compukters_propulsion"
 version="${addon_version}"
 displayName="Compukters: Propulsion"
 authors="lazyhat"
-description="Creative Thruster control adapter for Compukters."
+description="Creative and Creative Vector Thruster control adapter for Compukters."
 
 [[dependencies.compukters_propulsion]]
 modId="neoforge"

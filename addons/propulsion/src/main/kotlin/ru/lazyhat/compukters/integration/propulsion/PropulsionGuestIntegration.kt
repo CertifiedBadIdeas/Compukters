@@ -21,11 +21,13 @@ package ru.lazyhat.compukters.integration.propulsion
 import dev.propulsionteam.propulsionsimulated.PropulsionConfig
 import dev.propulsionteam.propulsionsimulated.content.thruster.AbstractThrusterBlockEntity.ControlMode
 import dev.propulsionteam.propulsionsimulated.content.thruster.thruster.creative_thruster.CreativeThrusterBlockEntity
+import dev.propulsionteam.propulsionsimulated.content.thruster.vector_thruster.creative_vector_thruster.CreativeVectorThrusterBlockEntity
 import net.minecraft.server.level.ServerLevel
 import net.neoforged.neoforge.common.NeoForge
 import net.neoforged.neoforge.event.server.ServerStoppedEvent
 import net.neoforged.neoforge.event.tick.ServerTickEvent
 import propulsion.CreativeThrusterState
+import propulsion.CreativeVectorThrusterState
 import propulsion.PropulsionAddonContract
 import propulsion.PropulsionCapabilityHandler
 import ru.lazyhat.compukters.api.addon.AddonCallResult
@@ -42,9 +44,15 @@ import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 internal object PropulsionGuestIntegration {
     private const val DEVICE_KEY = "creative_thruster"
     private val leases = ThrusterControlLeases<CreativeThrusterBlockEntity>()
+    private val vectorLeases = ThrusterControlLeases<CreativeVectorThrusterBlockEntity>()
 
     @JvmStatic
-    fun isControlled(entity: Any): Boolean = entity is CreativeThrusterBlockEntity && leases.contains(entity)
+    fun isControlled(entity: Any): Boolean =
+        when (entity) {
+            is CreativeThrusterBlockEntity -> leases.contains(entity)
+            is CreativeVectorThrusterBlockEntity -> vectorLeases.contains(entity)
+            else -> false
+        }
 
     fun register() {
         CompuktersAddonRegistry.register(
@@ -52,10 +60,19 @@ internal object PropulsionGuestIntegration {
             CompuktersAddonHostFactory { computer -> PropulsionAddonContract.host(ThrusterHost(computer, leases)) },
             CompuktersPeripheralProvider { contact ->
                 controller(contact.level, contact.position)?.let { CompuktersPeripheralDevice(it.blockPos, DEVICE_KEY) }
+                    ?: VectorThrusterHost.resolve(contact.level, contact.position)?.let {
+                        CompuktersPeripheralDevice(it.blockPos, VectorThrusterHost.DEVICE_KEY)
+                    }
             },
         )
-        NeoForge.EVENT_BUS.addListener<ServerTickEvent.Post> { leases.reap() }
-        NeoForge.EVENT_BUS.addListener<ServerStoppedEvent> { leases.releaseAll() }
+        NeoForge.EVENT_BUS.addListener<ServerTickEvent.Post> {
+            leases.reap()
+            vectorLeases.reap()
+        }
+        NeoForge.EVENT_BUS.addListener<ServerStoppedEvent> {
+            leases.releaseAll()
+            vectorLeases.releaseAll()
+        }
     }
 
     fun controller(
@@ -88,6 +105,32 @@ internal object PropulsionGuestIntegration {
                 return !stale
             }
         }
+
+        private val vectorHost = VectorThrusterHost(computer, vectorLeases)
+
+        override fun vectorAcquire(name: String): AddonCallResult<Int> = vectorHost.acquire(name)
+
+        override fun vectorState(handle: Int): AddonCallResult<CreativeVectorThrusterState> = vectorHost.state(handle)
+
+        override fun vectorSetThrottle(
+            handle: Int,
+            throttle: Double,
+        ): AddonCallResult<Unit> = vectorHost.setThrottle(handle, throttle)
+
+        override fun vectorSetVector(
+            handle: Int,
+            x: Double,
+            y: Double,
+        ): AddonCallResult<Unit> = vectorHost.setVector(handle, x, y)
+
+        override fun vectorSetThrustKn(
+            handle: Int,
+            thrust: Double,
+        ): AddonCallResult<Unit> = vectorHost.setThrustKn(handle, thrust)
+
+        override fun vectorClearThrustOverride(handle: Int): AddonCallResult<Unit> = vectorHost.clearThrustOverride(handle)
+
+        override fun vectorClose(handle: Int): AddonCallResult<Unit> = vectorHost.close(handle)
 
         private val handles = mutableMapOf<Int, BoundThruster>()
         private var nextHandle = 1
@@ -163,6 +206,7 @@ internal object PropulsionGuestIntegration {
         override fun reset() {
             checkThread()
             leases.releaseOwner(this)
+            vectorHost.reset()
             handles.clear()
         }
 

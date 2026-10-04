@@ -820,7 +820,8 @@ Addon host handlers report failures with a broad `HostFailureKind` and a non-emp
 The kind remains suitable for runtime classification; the producer-owned detail is diagnostic text and is not a stable
 programmatic identifier.
 
-The independent `addons/propulsion` build owns named Creative Thruster control and its `propulsion.api` Guest module.
+The independent `addons/propulsion` build owns named Creative Thruster and Creative Vector Thruster control and its
+`propulsion.api` Guest module.
 It depends on upstream Propulsion/Create/Sable types, without depending on other Compukters addon implementations.
 Commands and observations execute through the existing server-thread addon request boundary; physics and VM cadence
 are unchanged. Controller identity and cable reachability bind each handle. A server-confined lease registry owns
@@ -828,7 +829,12 @@ only temporary program control, validates active leases on server ticks, and res
 It does not mirror authoritative thrust or physics state. Typed observations copy current upstream fields in kN.
 The pinned Propulsion binary persists digital commands, so a dedicated read/write mixin marks owned full NBT saves
 and clears the unowned digital input/mode when those saves or construction copies load; client packets are unaffected.
-Only engine configuration persists across that boundary. The independent `addons/dev` run build composes all three
+Vector steering temporarily overrides mapped local targets without changing live redstone-link inputs. On release,
+targets follow the latest signals; creative thrust override and throttle are cleared together. Full saves retain
+redstone signals and the saved engine configuration, clearing owned steering/tween and absolute thrust commands;
+client packets retain the live visual state. Vector capability operations append IDs 5..11, preserving ordinary
+operations 0..4 at capability version 1, Runtime ABI 1.13 and C ABI 20. The independent `addons/dev` run build composes
+all three
 addon archives and their GameTests with the upstream Aeronautics/Propulsion runtime.
 
 ## Module ownership

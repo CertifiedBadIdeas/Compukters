@@ -294,5 +294,6 @@ object PropulsionGameTestRegistration {
     @JvmStatic
     fun register(event: RegisterGameTestsEvent) {
         event.register(CreativeThrusterGameTests::class.java)
+        event.register(CreativeVectorThrusterGameTests::class.java)
     }
 }
