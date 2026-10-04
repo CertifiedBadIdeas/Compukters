@@ -67,22 +67,31 @@ internal fun platformBundle(
 
 internal fun platformCatalog(bundle: PlatformBundle = platformBundle()): PlatformCatalog = PlatformCatalog.of(bundle)
 
-internal fun platformResolutionWithAddon(addonVersion: String = "1.0.0"): ProjectResolution {
+internal fun platformResolutionWithAddon(
+    addonVersion: String = "1.0.0",
+    addonIds: List<String> = listOf("fixture"),
+): ProjectResolution {
     val platform = platformBundle()
-    val addon = addonBundle(platform.modules.single { it.id.toString() == "stdlib:core" }.id, addonVersion)
-    val encoded = AddonGuestApiBundleCodec.encode(addon)
-    val hash = Hash256.of(addon.identity.contentHash.toByteArray())
-    val payload = TrustedBundlePayload(TrustedBundleIdentity.of(addon.identity.id, hash), BinaryValue.of(encoded))
+    val addons = addonIds.map { addonBundle(platform.modules.single { it.id.toString() == "stdlib:core" }.id, addonVersion, it) }
+    val payloads =
+        addons.map { addon ->
+            TrustedBundlePayload(
+                TrustedBundleIdentity.of(addon.identity.id, Hash256.of(addon.identity.contentHash.toByteArray())),
+                BinaryValue.of(AddonGuestApiBundleCodec.encode(addon)),
+            )
+        }
     val local = PlatformCatalog.of(platform)
     val advertised =
         local.entries.map(PlatformCatalogEntry::identity) +
-            ResolvedModule(
-                ModuleId.parse(addon.moduleDescriptor.id.toString()),
-                ApiMajor(addonVersion.substringBefore('.').toInt()),
-                addonVersion,
-                hash,
-            )
-    return ProjectResolution(platformToolchain(platform), PlatformCatalog.forTarget(platform, advertised, listOf(payload)))
+            addons.map { addon ->
+                ResolvedModule(
+                    ModuleId.parse(addon.moduleDescriptor.id.toString()),
+                    ApiMajor(addonVersion.substringBefore('.').toInt()),
+                    addonVersion,
+                    Hash256.of(addon.identity.contentHash.toByteArray()),
+                )
+            }
+    return ProjectResolution(platformToolchain(platform), PlatformCatalog.forTarget(platform, advertised, payloads))
 }
 
 internal fun platformToolchain(bundle: PlatformBundle = platformBundle()): ToolchainLockIdentity =
@@ -132,11 +141,12 @@ private fun platformModule(
 private fun addonBundle(
     core: PlatformModuleId,
     version: String,
+    addonId: String,
 ): ru.lazyhat.compukters.addon.api.AddonGuestApiBundle {
-    val id = PlatformModuleId("fixture", "api")
-    val path = "fixture/meters/Meters.kt"
-    val source = "package fixture.meters\nprivate object Bindings { external fun read(value: Int): Int }\n"
-    val capability = AddonCapabilityIdentity("fixture", "meters", 1, 0)
+    val id = PlatformModuleId(addonId, "api")
+    val path = "$addonId/meters/Meters.kt"
+    val source = "package $addonId.meters\nprivate object Bindings { external fun read(value: Int): Int }\n"
+    val capability = AddonCapabilityIdentity(addonId, "meters", 1, 0)
     val module =
         PlatformModule(
             id,
@@ -145,11 +155,11 @@ private fun addonBundle(
             ImmutableBytes.of(byteArrayOf(1)),
             null,
             listOf(PlatformSource(path, ImmutableBytes.of(source.encodeToByteArray()))),
-            listOf(PlatformDeclaration("fixture.meters.Bindings.read", "fun(Int):Int", id, path, 0, source.length, true)),
+            listOf(PlatformDeclaration("$addonId.meters.Bindings.read", "fun(Int):Int", id, path, 0, source.length, true)),
             emptyList(),
         )
     return AddonGuestApiBundleCodec.assemble(
-        "fixture",
+        addonId,
         PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
         module,
         listOf(
@@ -158,6 +168,6 @@ private fun addonBundle(
                 listOf(AddonCapabilityOperation(listOf(AddonCapabilityValueType.I32), AddonCapabilityValueType.I32, false)),
             ),
         ),
-        listOf(AddonGuestApiBinding("fixture.meters", "Bindings", "read", "fun(Int):Int", capability, 0)),
+        listOf(AddonGuestApiBinding("$addonId.meters", "Bindings", "read", "fun(Int):Int", capability, 0)),
     )
 }
