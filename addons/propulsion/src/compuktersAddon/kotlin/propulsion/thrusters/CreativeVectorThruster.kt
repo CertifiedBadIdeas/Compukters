@@ -35,7 +35,23 @@ public data class CreativeVectorThrusterState(
     public val active: Boolean,
 )
 
+/** Mount relative to the calling computer's block, in construction axes (world axes outside a construction).
+ * Empty constructionId denotes the ordinary world. Neutral force direction ignores live nozzle steering.
+ */
+public data class CreativeVectorThrusterMount(
+    public val constructionId: String,
+    public val offsetX: Int,
+    public val offsetY: Int,
+    public val offsetZ: Int,
+    public val forceX: Int,
+    public val forceY: Int,
+    public val forceZ: Int,
+)
+
 public value class CreativeVectorThruster internal constructor(private val handle: Int) {
+    /** Read-only; rejects a mount on a different construction from the computer. */
+    public fun mount(): CreativeVectorThrusterMount = VectorThrusterBindings.vectorMount(handle)
+
     public fun state(): CreativeVectorThrusterState = VectorThrusterBindings.vectorState(handle)
 
     /** Claims exclusive program control; normal Propulsion startup rules still apply. */
@@ -65,6 +81,7 @@ public value class CreativeVectorThruster internal constructor(private val handl
 
 internal object VectorThrusterBindings {
     external fun vectorAcquire(name: String): Int
+    external fun vectorMount(handle: Int): CreativeVectorThrusterMount
     external fun vectorState(handle: Int): CreativeVectorThrusterState
     external fun vectorSetThrottle(handle: Int, throttle: Double)
     external fun vectorSetVector(handle: Int, x: Double, y: Double)

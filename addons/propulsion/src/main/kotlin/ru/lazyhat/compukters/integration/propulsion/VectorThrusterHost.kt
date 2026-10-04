@@ -21,8 +21,10 @@ package ru.lazyhat.compukters.integration.propulsion
 import dev.propulsionteam.propulsionsimulated.PropulsionConfig
 import dev.propulsionteam.propulsionsimulated.content.thruster.AbstractThrusterBlockEntity.ControlMode
 import dev.propulsionteam.propulsionsimulated.content.thruster.vector_thruster.creative_vector_thruster.CreativeVectorThrusterBlockEntity
+import dev.ryanhcode.sable.Sable
 import net.minecraft.core.BlockPos
 import net.minecraft.server.level.ServerLevel
+import propulsion.CreativeVectorThrusterMount
 import propulsion.CreativeVectorThrusterState
 import ru.lazyhat.compukters.api.addon.AddonCallResult
 import ru.lazyhat.compukters.api.addon.addonCompleted
@@ -66,6 +68,29 @@ internal class VectorThrusterHost(
             }
         return addonCompleted(handle)
     }
+
+    fun mount(handle: Int): AddonCallResult<CreativeVectorThrusterMount> =
+        withHandle(handle) { bound ->
+            val entity = bound.entity
+            val computerBody = Sable.HELPER.getContaining(computer.level, computer.position)
+            val engineBody = Sable.HELPER.getContaining(computer.level, entity.blockPos)
+            if (computerBody !== engineBody) {
+                return@withHandle addonFailed(HostFailureKind.UNAVAILABLE, "Thruster and computer are on different constructions")
+            }
+            val offset = entity.blockPos.subtract(computer.position)
+            val direction = entity.facing
+            addonCompleted(
+                CreativeVectorThrusterMount(
+                    computerBody?.uniqueId?.toString() ?: "",
+                    offset.x,
+                    offset.y,
+                    offset.z,
+                    direction.stepX,
+                    direction.stepY,
+                    direction.stepZ,
+                ),
+            )
+        }
 
     fun state(handle: Int): AddonCallResult<CreativeVectorThrusterState> =
         withHandle(handle) { bound ->

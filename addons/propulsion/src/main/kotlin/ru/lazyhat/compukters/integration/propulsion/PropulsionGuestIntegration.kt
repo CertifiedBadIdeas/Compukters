@@ -27,6 +27,7 @@ import net.neoforged.neoforge.common.NeoForge
 import net.neoforged.neoforge.event.server.ServerStoppedEvent
 import net.neoforged.neoforge.event.tick.ServerTickEvent
 import propulsion.CreativeThrusterState
+import propulsion.CreativeVectorThrusterMount
 import propulsion.CreativeVectorThrusterState
 import propulsion.PropulsionAddonContract
 import propulsion.PropulsionCapabilityHandler
@@ -109,6 +110,8 @@ internal object PropulsionGuestIntegration {
         private val vectorHost = VectorThrusterHost(computer, vectorLeases)
 
         override fun vectorAcquire(name: String): AddonCallResult<Int> = vectorHost.acquire(name)
+
+        override fun vectorMount(handle: Int): AddonCallResult<CreativeVectorThrusterMount> = vectorHost.mount(handle)
 
         override fun vectorState(handle: Int): AddonCallResult<CreativeVectorThrusterState> = vectorHost.state(handle)
 
