@@ -31,16 +31,21 @@ enum class HostValueType(
     BOOL(5),
     CHAR(6),
     STRING(7),
+    RECORD(8),
 }
 
 class HostOperationSchema(
     arguments: List<HostValueType>,
     val result: HostValueType,
     val asynchronous: Boolean,
+    val resultRecord: HostRecordSchema? = null,
 ) {
     val arguments: List<HostValueType> = arguments.toList()
 
     init {
+        require(arguments.none { it == HostValueType.RECORD }) { "record arguments are not supported" }
+        require((result == HostValueType.RECORD) == (resultRecord != null)) { "record result schema does not match its type" }
+        require(resultRecord == null || asynchronous) { "record results must be asynchronous" }
         require(this.arguments.size <= HostCapabilityLimits.MAXIMUM_ARGUMENTS) {
             "host capability operation has too many arguments"
         }
@@ -50,9 +55,10 @@ class HostOperationSchema(
         other is HostOperationSchema &&
             arguments == other.arguments &&
             result == other.result &&
-            asynchronous == other.asynchronous
+            asynchronous == other.asynchronous && resultRecord == other.resultRecord
 
-    override fun hashCode(): Int = 31 * (31 * arguments.hashCode() + result.hashCode()) + asynchronous.hashCode()
+    override fun hashCode(): Int =
+        31 * (31 * (31 * arguments.hashCode() + result.hashCode()) + asynchronous.hashCode()) + (resultRecord?.hashCode() ?: 0)
 
     override fun toString(): String = "HostOperationSchema(arguments=$arguments, result=$result, asynchronous=$asynchronous)"
 }
@@ -102,7 +108,7 @@ internal object HostCapabilitySchemaWire {
             "duplicate host capability identity"
         }
         val sink = BoundedWireSink(HostCapabilityLimits.MAXIMUM_WIRE_BYTES)
-        sink.u8(VERSION)
+        sink.u8(if (schemas.any { schema -> schema.operations.any { it.resultRecord != null } }) 2 else VERSION)
         sink.u8(schemas.size)
         schemas.forEach { schema ->
             sink.ascii(schema.identity.namespace)
@@ -115,6 +121,7 @@ internal object HostCapabilitySchemaWire {
                 sink.u8(operation.result.wireCode)
                 sink.u8(operation.arguments.size)
                 operation.arguments.forEach { argument -> sink.u8(argument.wireCode) }
+                operation.resultRecord?.let { sink.record(it) }
             }
         }
         return sink.bytes()
@@ -144,6 +151,17 @@ private class BoundedWireSink(
         require(encoded.all { it >= 0 }) { "wire string must be ASCII" }
         u8(encoded.size)
         encoded.forEach { write(it.toInt()) }
+    }
+
+    fun record(schema: HostRecordSchema) {
+        u16(schema.typeName.length)
+        schema.typeName.forEach { write(it.code) }
+        u8(schema.fields.size)
+        schema.fields.forEach { field ->
+            ascii(field.name)
+            u8(field.type.wireCode)
+            field.record?.let(::record)
+        }
     }
 
     fun bytes(): ByteArray = buffer.copyOf(position)

@@ -57,22 +57,30 @@ enum class AddonCapabilityValueType {
     BOOL,
     CHAR,
     STRING,
+    RECORD,
 }
 
 class AddonCapabilityOperation(
     arguments: List<AddonCapabilityValueType>,
     val result: AddonCapabilityValueType,
     val asynchronous: Boolean,
+    val resultRecord: AddonRecordSchema? = null,
 ) {
     val arguments: List<AddonCapabilityValueType> = Collections.unmodifiableList(arguments.toList())
+
+    init {
+        require(arguments.none { it == AddonCapabilityValueType.RECORD }) { "record arguments are not supported" }
+        require((result == AddonCapabilityValueType.RECORD) == (resultRecord != null)) { "record result schema does not match its type" }
+        require(resultRecord == null || asynchronous) { "record results must be asynchronous" }
+    }
 
     override fun equals(other: Any?): Boolean =
         other is AddonCapabilityOperation &&
             arguments == other.arguments &&
             result == other.result &&
-            asynchronous == other.asynchronous
+            asynchronous == other.asynchronous && resultRecord == other.resultRecord
 
-    override fun hashCode(): Int = listOf(arguments, result, asynchronous).hashCode()
+    override fun hashCode(): Int = listOf(arguments, result, asynchronous, resultRecord).hashCode()
 }
 
 class AddonCapabilitySchema(

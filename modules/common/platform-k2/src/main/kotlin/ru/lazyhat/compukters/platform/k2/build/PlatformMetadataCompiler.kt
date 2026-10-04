@@ -76,6 +76,19 @@ data class CompiledPlatformMetadata(
     val scalarTypes: List<PlatformScalarType> = emptyList(),
     val scalarConstants: List<PlatformScalarConstant> = emptyList(),
     val sourceDeclarations: List<PlatformDeclarationIdentity> = emptyList(),
+    val recordCandidates: List<PlatformRecordCandidate> = emptyList(),
+)
+
+/** Transient source provenance for constructorless host record materialization. */
+data class PlatformRecordCandidate(
+    val symbol: String,
+    val fields: List<PlatformRecordField>,
+    val rejection: String?,
+)
+
+data class PlatformRecordField(
+    val name: String,
+    val type: String,
 )
 
 data class PlatformLibraryDeclaration(
@@ -181,6 +194,7 @@ class PlatformMetadataCompiler {
             scalarTypes = parsedPlatform.scalarTypes.sortedBy(PlatformScalarType::symbol),
             scalarConstants = parsedPlatform.scalarConstants.sortedBy(PlatformScalarConstant::symbol),
             sourceDeclarations = declarations.filter(ParsedDeclaration::requiresSource).map { it.declaration.identity },
+            recordCandidates = parsedPlatform.recordCandidates,
         )
     }
 
@@ -241,6 +255,7 @@ class PlatformMetadataCompiler {
             val completionDeclarations = mutableListOf<PlatformCompletionDeclaration>()
             val scalarTypes = mutableListOf<PlatformScalarType>()
             val scalarConstants = mutableListOf<PlatformScalarConstant>()
+            val recordCandidates = mutableListOf<PlatformRecordCandidate>()
             sources
                 .sortedBy(PlatformSource::path)
                 .forEach { source ->
@@ -251,6 +266,60 @@ class PlatformMetadataCompiler {
                         "invalid Kotlin platform source ${source.path}: ${errors.joinToString { it.errorDescription }}"
                     }
                     val packageName = file.packageFqName.asString()
+                    val imports =
+                        file.importDirectives.filterNot { it.isAllUnder }.associate { directive ->
+                            (directive.aliasName ?: directive.importedFqName!!.shortName().asString()) to
+                                directive.importedFqName!!.asString()
+                        }
+                    file.declarations.filterIsInstance<KtClass>().forEach { klass ->
+                        val symbol = listOf(packageName, requireNotNull(klass.name)).filter(String::isNotEmpty).joinToString(".")
+                        val rejection =
+                            when {
+                                !klass.hasModifier(KtTokens.DATA_KEYWORD) -> "must be a data class"
+
+                                klass.hasModifier(
+                                    KtTokens.PRIVATE_KEYWORD,
+                                ) || klass.hasModifier(KtTokens.INTERNAL_KEYWORD) -> "must be public"
+
+                                klass.typeParameters.isNotEmpty() -> "cannot have type parameters"
+
+                                klass.superTypeListEntries.isNotEmpty() -> "cannot declare supertypes"
+
+                                klass.declarations.isNotEmpty() -> "cannot contain a class body or initializers"
+
+                                listOf(KtTokens.PRIVATE_KEYWORD, KtTokens.INTERNAL_KEYWORD, KtTokens.PROTECTED_KEYWORD).any {
+                                    klass.primaryConstructor?.hasModifier(it) ==
+                                        true
+                                } -> "must have a public constructor"
+
+                                klass.primaryConstructorParameters.isEmpty() -> "must declare at least one field"
+
+                                klass.primaryConstructorParameters.any {
+                                    it.valOrVarKeyword?.node?.elementType != KtTokens.VAL_KEYWORD || it.defaultValue != null ||
+                                        it.hasModifier(KtTokens.PRIVATE_KEYWORD) || it.hasModifier(KtTokens.INTERNAL_KEYWORD) ||
+                                        it.hasModifier(KtTokens.VARARG_KEYWORD) || it.typeReference == null
+                                } -> "must use public val fields without defaults or varargs"
+
+                                else -> null
+                            }
+                        val fields =
+                            klass.primaryConstructorParameters.map { parameter ->
+                                val raw =
+                                    parameter.typeReference
+                                        ?.text
+                                        .orEmpty()
+                                        .replace(" ", "")
+                                val type =
+                                    when {
+                                        raw in setOf("Int", "Long", "Float", "Double", "Boolean", "Char", "String", "Unit") -> "kotlin.$raw"
+                                        raw in imports -> imports.getValue(raw)
+                                        '.' in raw || raw.isEmpty() -> raw
+                                        else -> listOf(packageName, raw).filter(String::isNotEmpty).joinToString(".")
+                                    }
+                                PlatformRecordField(parameter.name.orEmpty(), type)
+                            }
+                        recordCandidates += PlatformRecordCandidate(symbol, fields, rejection)
+                    }
                     file.declarations.forEach { declaration ->
                         declarations += collect(module, source.path, packageName, emptyList(), declaration = declaration)
                         completionDeclaration(module, source.path, packageName, declaration)?.let(completionDeclarations::add)
@@ -260,7 +329,7 @@ class PlatformMetadataCompiler {
                         }
                     }
                 }
-            ParsedPlatform(declarations, completionDeclarations, scalarTypes, scalarConstants)
+            ParsedPlatform(declarations, completionDeclarations, scalarTypes, scalarConstants, recordCandidates)
         } finally {
             Disposer.dispose(disposable)
         }
@@ -654,6 +723,7 @@ class PlatformMetadataCompiler {
         val completionDeclarations: List<PlatformCompletionDeclaration>,
         val scalarTypes: List<PlatformScalarType>,
         val scalarConstants: List<PlatformScalarConstant>,
+        val recordCandidates: List<PlatformRecordCandidate>,
     )
 
     private data class ScalarExtraction(

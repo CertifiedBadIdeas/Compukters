@@ -27,84 +27,111 @@ internal object HostResponseWire {
     const val MAXIMUM_STRING_UNITS: Int = 4096
 
     fun encode(response: HostResponse): ByteArray {
-        val size =
-            when (response) {
-                HostResponse.UnitSuccess -> {
-                    0
-                }
-
-                is HostResponse.IntSuccess, is HostResponse.FloatSuccess -> {
-                    4
-                }
-
-                is HostResponse.LongSuccess, is HostResponse.DoubleSuccess -> {
-                    8
-                }
-
-                is HostResponse.BoolSuccess -> {
-                    1
-                }
-
-                is HostResponse.CharSuccess -> {
-                    2
-                }
-
-                is HostResponse.StringSuccess -> {
-                    require(response.value.length <= MAXIMUM_STRING_UNITS) { "host response string exceeds limit" }
-                    2 + 2 * response.value.length
-                }
-
-                is HostResponse.Failure -> {
-                    error("failures use the host failure boundary")
-                }
-            }
-        val buffer = ByteBuffer.allocate(2 + size).order(ByteOrder.LITTLE_ENDIAN)
+        val size = 1 + encodedSize(response)
+        require(size <= MAXIMUM_BYTES) { "host response exceeds byte limit" }
+        val buffer = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN)
         buffer.put(1)
+        write(buffer, response)
+        return buffer.array()
+    }
+
+    private fun encodedSize(response: HostResponse): Int =
         when (response) {
             HostResponse.UnitSuccess -> {
-                buffer.put(0)
+                1
             }
 
-            is HostResponse.IntSuccess -> {
-                buffer.put(1)
-                buffer.putInt(response.value)
+            is HostResponse.IntSuccess, is HostResponse.FloatSuccess -> {
+                5
             }
 
-            is HostResponse.LongSuccess -> {
-                buffer.put(2)
-                buffer.putLong(response.value)
-            }
-
-            is HostResponse.FloatSuccess -> {
-                buffer.put(3)
-                buffer.putInt(response.value.toRawBits())
-            }
-
-            is HostResponse.DoubleSuccess -> {
-                buffer.put(4)
-                buffer.putLong(response.value.toRawBits())
+            is HostResponse.LongSuccess, is HostResponse.DoubleSuccess -> {
+                9
             }
 
             is HostResponse.BoolSuccess -> {
-                buffer.put(5)
-                buffer.put(if (response.value) 1.toByte() else 0.toByte())
+                2
             }
 
             is HostResponse.CharSuccess -> {
-                buffer.put(6)
-                buffer.putChar(response.value)
+                3
             }
 
             is HostResponse.StringSuccess -> {
-                buffer.put(7)
-                buffer.putShort(response.value.length.toShort())
-                response.value.forEach(buffer::putChar)
+                require(response.value.length <= MAXIMUM_STRING_UNITS) { "host response string exceeds limit" }
+                3 + 2 * response.value.length
+            }
+
+            is HostResponse.RecordSuccess -> {
+                val record = response.value
+                4 + record.schema.typeName.length +
+                    record.schema.fields.zip(record.values).sumOf { (field, value) ->
+                        1 + field.name.length + encodedSize(value)
+                    }
             }
 
             is HostResponse.Failure -> {
                 error("failures use the host failure boundary")
             }
         }
-        return buffer.array()
+
+    private fun write(
+        buffer: ByteBuffer,
+        response: HostResponse,
+    ) {
+        buffer.put(response.valueType().wireCode.toByte())
+        when (response) {
+            HostResponse.UnitSuccess -> {
+                Unit
+            }
+
+            is HostResponse.IntSuccess -> {
+                buffer.putInt(response.value)
+            }
+
+            is HostResponse.LongSuccess -> {
+                buffer.putLong(response.value)
+            }
+
+            is HostResponse.FloatSuccess -> {
+                buffer.putInt(response.value.toRawBits())
+            }
+
+            is HostResponse.DoubleSuccess -> {
+                buffer.putLong(response.value.toRawBits())
+            }
+
+            is HostResponse.BoolSuccess -> {
+                buffer.put(if (response.value) 1.toByte() else 0.toByte())
+            }
+
+            is HostResponse.CharSuccess -> {
+                buffer.putChar(response.value)
+            }
+
+            is HostResponse.StringSuccess -> {
+                buffer.putShort(response.value.length.toShort())
+                response.value.forEach(buffer::putChar)
+            }
+
+            is HostResponse.RecordSuccess -> {
+                val record = response.value
+                buffer.putShort(
+                    record.schema.typeName.length
+                        .toShort(),
+                )
+                record.schema.typeName.forEach { buffer.put(it.code.toByte()) }
+                buffer.put(record.values.size.toByte())
+                record.schema.fields.zip(record.values).forEach { (field, value) ->
+                    buffer.put(field.name.length.toByte())
+                    field.name.forEach { buffer.put(it.code.toByte()) }
+                    write(buffer, value)
+                }
+            }
+
+            is HostResponse.Failure -> {
+                error("failures use the host failure boundary")
+            }
+        }
     }
 }

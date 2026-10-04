@@ -181,6 +181,96 @@ class AddonContractAuthoringTest {
         }
     }
 
+    @Test
+    fun `nested record responses retain schemas and operation tombstones`() =
+        withSources(
+            """
+            package fixture.physics
+            data class Vector(val x: Double, val y: Double)
+            data class Snapshot(val tick: Long, val position: Vector)
+            private object Bindings { external fun snapshot(): Snapshot }
+            """.trimIndent(),
+        ) { root ->
+            val initial = resolveAddonContract(root, contract(), AddonAbiLock.empty())
+            val schema =
+                initial.contract.schemas
+                    .single()
+                    .operations
+                    .single()
+                    .resultRecord!!
+            assertEquals("fixture.physics.Snapshot", schema.typeName)
+            assertEquals("fixture.physics.Vector", schema.fields[1].record!!.typeName)
+            assertEquals(initial.expectedLock, AddonAbiLock.parse(initial.expectedLock.render().lines()))
+            val generated = renderAddonHostContract(contract(), initial.contract)
+            kotlin.test.assertTrue("AddonCallResult<Snapshot>" in generated)
+            kotlin.test.assertTrue("public data class Vector" in generated)
+            kotlin.test.assertTrue("encodeVector(value.position)" in generated)
+            kotlin.test.assertTrue("HostResponse.LongSuccess(value.tick)" in generated)
+            writeSource(root, "package fixture.physics; private object Bindings { external fun available(): Boolean }")
+            val removed = resolveAddonContract(root, contract(), initial.expectedLock)
+            assertEquals(AddonAbiEntryState.TOMBSTONE, removed.expectedLock.entries[0].state)
+            assertEquals(
+                schema,
+                removed.contract.schemas
+                    .single()
+                    .operations[0]
+                    .resultRecord,
+            )
+        }
+
+    @Test
+    fun `record field changes change the expected ABI lock`() =
+        withSources(
+            "package fixture.physics; data class Snapshot(val tick: Long); private object Bindings { external fun snapshot(): Snapshot }",
+        ) { root ->
+            val initial = resolveAddonContract(root, contract(), AddonAbiLock.empty())
+            writeSource(
+                root,
+                "package fixture.physics; data class Snapshot(val tick: Double); private object Bindings { external fun snapshot(): Snapshot }",
+            )
+            val changed = resolveAddonContract(root, contract(), initial.expectedLock)
+            kotlin.test.assertNotEquals(initial.expectedLock, changed.expectedLock)
+        }
+
+    @Test
+    fun `record responses reject mutable executable nullable array and cyclic shapes`() {
+        listOf(
+            "data class Snapshot(var x: Double)",
+            "data class Snapshot(val x: Double = 0.0)",
+            "data class Snapshot(val x: Double) { init { println(x) } }",
+            "data class Snapshot(val x: Double) { fun value(): Double = x }",
+            "private data class Snapshot(val x: Double)",
+            "data class Snapshot private constructor(val x: Double)",
+            "data class Snapshot internal constructor(val x: Double)",
+            "data class Snapshot(val x: Double?)",
+            "data class Snapshot(val x: DoubleArray)",
+            "data class Snapshot(val x: Snapshot)",
+        ).forEach { declaration ->
+            withSources("package fixture.physics; $declaration; private object Bindings { external fun snapshot(): Snapshot }") { root ->
+                assertFailsWith<IllegalArgumentException>(declaration) {
+                    resolveAddonContract(root, contract(), AddonAbiLock.empty())
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `record ABI parser rejects malformed excessive and inconsistent shapes`() {
+        listOf(
+            "fixture.Snapshot{x:UNIT}",
+            "fixture.Snapshot{x:RECORD}",
+            "fixture.Snapshot{x:F64,x:F64}",
+            "fixture.Snapshot{x:F64}trailing",
+            "fixture.Snapshot{}",
+            "fixture.Snapshot{x:UNKNOWN}",
+            "fixture.Other{x:F64}",
+        ).forEach { shape ->
+            assertFailsWith<IllegalArgumentException>(shape) {
+                AddonAbiLock.parse(listOf("lock 2", "record fixture.Snapshot $shape"))
+            }
+        }
+    }
+
     private fun contract(): AddonAuthoringContract =
         AddonAuthoringContract.parse(
             """

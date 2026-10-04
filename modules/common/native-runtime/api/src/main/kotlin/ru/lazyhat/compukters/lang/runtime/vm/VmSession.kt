@@ -127,7 +127,7 @@ class VmSession private constructor(
                 resumeInt(identity, response.value)
             }
 
-            is HostResponse.LongSuccess, is HostResponse.DoubleSuccess, is HostResponse.CharSuccess -> {
+            is HostResponse.LongSuccess, is HostResponse.DoubleSuccess, is HostResponse.CharSuccess, is HostResponse.RecordSuccess -> {
                 bridge.resumeValue(requireHandle(), identity.taskId, identity.requestId, HostResponseWire.encode(response))
             }
 

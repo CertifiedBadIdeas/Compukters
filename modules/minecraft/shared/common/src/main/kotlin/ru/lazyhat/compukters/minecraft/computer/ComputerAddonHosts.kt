@@ -26,9 +26,12 @@ import ru.lazyhat.compukters.addon.api.AddonCapabilitySchema
 import ru.lazyhat.compukters.addon.api.AddonCapabilityValueType
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.addon.api.AddonGuestApiCatalog
+import ru.lazyhat.compukters.addon.api.AddonRecordSchema
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.programAddonHostOf
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
+import ru.lazyhat.compukters.lang.runtime.capability.HostRecordField
+import ru.lazyhat.compukters.lang.runtime.capability.HostRecordSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -148,8 +151,21 @@ private fun AddonCapabilitySchema.toHostSchema(): HostCapabilitySchema =
                 operation.arguments.map { argument -> argument.toHostValueType() },
                 operation.result.toHostValueType(),
                 operation.asynchronous,
+                operation.resultRecord?.toHostRecordSchema(),
             )
         },
     )
 
 private fun AddonCapabilityValueType.toHostValueType(): HostValueType = HostValueType.valueOf(name)
+
+private fun AddonRecordSchema.toHostRecordSchema(): HostRecordSchema =
+    HostRecordSchema(
+        typeName,
+        fields.map { field ->
+            HostRecordField(
+                field.name,
+                field.type.toHostValueType(),
+                field.record?.toHostRecordSchema(),
+            )
+        },
+    )

@@ -54,6 +54,10 @@ sealed interface HostResponse {
         val value: String,
     ) : HostResponse
 
+    data class RecordSuccess(
+        val value: HostRecordValue,
+    ) : HostResponse
+
     data class Failure(
         val kind: HostFailureKind,
         val detail: String,
