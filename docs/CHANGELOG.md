@@ -17,6 +17,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- Generated addon handlers can return Long, Double and Char, preserving Double IEEE bits and exact UTF-16 code units
+  through both native transports. This requires the bundled native C ABI 19.
+
 - Programs can use Double with F64 arithmetic, mixed numeric operations, conversions, constants,
   nullable and generic values, console/text output, equality and hashCode. DoubleArray stores F64 elements
   without boxing and supports indexed access, iteration and copying. Double text and hashing require
@@ -310,6 +313,9 @@ This release makes the integrated multi-file Kotlin IDE available on both suppor
 
 ### Guest Kotlin
 
+- Generated addon handlers can return Long, Double and Char, preserving Double IEEE bits and exact UTF-16 code units
+  through both native transports. This requires the bundled native C ABI 19.
+
 - Added bounded cooperative tasks through `Tasks.launch`, task handles, and `join`.
 - Added VM-owned bounded `IntChannel` communication between Guest tasks with suspending `send(Int)` and `receive()`.
 - Added immutable top-level Guest state, including scalar constants and channel declarations.
@@ -385,6 +391,9 @@ substantially reworked managed runtime.
 - Sampled and coalesced input changes at Minecraft tick boundaries without Guest-side polling.
 
 ### Guest Kotlin
+
+- Generated addon handlers can return Long, Double and Char, preserving Double IEEE bits and exact UTF-16 code units
+  through both native transports. This requires the bundled native C ABI 19.
 
 - Replaced the JVM-bootstrap Guest environment with a native Compukters K2 platform.
 - Made compiler and IDE analysis consume the same explicit platform metadata and source declarations.

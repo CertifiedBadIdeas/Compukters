@@ -320,6 +320,13 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
         value: CharArray,
     ) = requireSuccess("resume string", JniNative.resumeString(handle, taskId, requestId, value))
 
+    override fun resumeValue(
+        handle: Long,
+        taskId: Int,
+        requestId: Long,
+        payload: ByteArray,
+    ) = requireSuccess("resume value", JniNative.resumeValue(handle, taskId, requestId, payload))
+
     override fun resumeFailure(
         handle: Long,
         taskId: Int,
@@ -545,7 +552,7 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
 
         fun open(library: Path): JniBridge {
             System.load(library.toAbsolutePath().normalize().toString())
-            if (JniNative.abiVersion() != 18) throw VmBridgeException("unsupported Compukter JNI ABI")
+            if (JniNative.abiVersion() != 19) throw VmBridgeException("unsupported Compukter JNI ABI")
             return JniBridge()
         }
     }

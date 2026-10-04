@@ -203,6 +203,14 @@ interface LowLevelVmBridge {
         value: CharArray,
     )
 
+    /** Copies a bounded, versioned value payload before this call returns. */
+    fun resumeValue(
+        handle: Long,
+        taskId: Int,
+        requestId: Long,
+        payload: ByteArray,
+    ): Unit = error("encoded host responses are unavailable")
+
     fun resumeFailure(
         handle: Long,
         taskId: Int,

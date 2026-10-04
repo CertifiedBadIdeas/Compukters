@@ -227,6 +227,9 @@ private val SUPPORTED_HOST_RESULTS =
     setOf(
         AddonCapabilityValueType.UNIT,
         AddonCapabilityValueType.I32,
+        AddonCapabilityValueType.I64,
+        AddonCapabilityValueType.F64,
+        AddonCapabilityValueType.CHAR,
         AddonCapabilityValueType.F32,
         AddonCapabilityValueType.BOOL,
         AddonCapabilityValueType.STRING,
@@ -260,10 +263,12 @@ private fun AddonCapabilityValueType.encodeExpression(value: String): String =
     when (this) {
         AddonCapabilityValueType.UNIT -> "HostResponse.UnitSuccess"
         AddonCapabilityValueType.I32 -> "HostResponse.IntSuccess($value)"
+        AddonCapabilityValueType.I64 -> "HostResponse.LongSuccess($value)"
+        AddonCapabilityValueType.F64 -> "HostResponse.DoubleSuccess($value)"
+        AddonCapabilityValueType.CHAR -> "HostResponse.CharSuccess($value)"
         AddonCapabilityValueType.F32 -> "HostResponse.FloatSuccess($value)"
         AddonCapabilityValueType.BOOL -> "HostResponse.BoolSuccess($value)"
         AddonCapabilityValueType.STRING -> "HostResponse.StringSuccess($value)"
-        else -> error("generated addon hosts cannot complete $this results yet")
     }
 
 private fun AddonCapabilityIdentity.identityConstant(): String = "${name.uppercase().replace('-', '_')}_IDENTITY"

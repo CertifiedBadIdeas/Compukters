@@ -66,6 +66,7 @@ internal class FfmBridge private constructor(
     private val resumeFloatBitsHandle: MethodHandle,
     private val resumeBoolHandle: MethodHandle,
     private val resumeStringHandle: MethodHandle,
+    private val resumeValueHandle: MethodHandle,
     private val resumeFailureHandle: MethodHandle,
     private val closeHandle: MethodHandle,
     private val terminalCommitHandle: MethodHandle,
@@ -588,6 +589,26 @@ internal class FfmBridge private constructor(
         }
     }
 
+    override fun resumeValue(
+        handle: Long,
+        taskId: Int,
+        requestId: Long,
+        payload: ByteArray,
+    ) {
+        Arena.ofConfined().use { callArena ->
+            requireSuccess(
+                "resume value",
+                resumeValueHandle.invokeExact(
+                    handle,
+                    taskId,
+                    requestId,
+                    callArena.nativeBytes(payload),
+                    payload.size.toLong(),
+                ) as Int,
+            )
+        }
+    }
+
     override fun resumeFailure(
         handle: Long,
         taskId: Int,
@@ -971,6 +992,7 @@ internal class FfmBridge private constructor(
                         downcall(FfmAbiFunction.RESUME_BOOL),
                     resumeStringHandle =
                         downcall(FfmAbiFunction.RESUME_STRING),
+                    resumeValueHandle = downcall(FfmAbiFunction.RESUME_VALUE),
                     resumeFailureHandle =
                         downcall(FfmAbiFunction.RESUME_FAILURE),
                     closeHandle =
@@ -986,7 +1008,7 @@ internal class FfmBridge private constructor(
                     terminalTextHandle =
                         downcall(FfmAbiFunction.TERMINAL_TEXT),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 18) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 19) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()

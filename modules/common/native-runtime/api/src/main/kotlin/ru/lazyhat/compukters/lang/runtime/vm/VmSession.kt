@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.lang.runtime.vm
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchemaWire
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.capability.HostResponseWire
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryEntry
 import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryListing
@@ -118,12 +119,33 @@ class VmSession private constructor(
         response: HostResponse,
     ) {
         when (response) {
-            HostResponse.UnitSuccess -> resumeUnit(identity)
-            is HostResponse.IntSuccess -> resumeInt(identity, response.value)
-            is HostResponse.FloatSuccess -> resumeFloat(identity, response.value)
-            is HostResponse.BoolSuccess -> resumeBool(identity, response.value)
-            is HostResponse.StringSuccess -> resumeString(identity, response.value)
-            is HostResponse.Failure -> resumeFailure(identity, response.kind, response.detail)
+            HostResponse.UnitSuccess -> {
+                resumeUnit(identity)
+            }
+
+            is HostResponse.IntSuccess -> {
+                resumeInt(identity, response.value)
+            }
+
+            is HostResponse.LongSuccess, is HostResponse.DoubleSuccess, is HostResponse.CharSuccess -> {
+                bridge.resumeValue(requireHandle(), identity.taskId, identity.requestId, HostResponseWire.encode(response))
+            }
+
+            is HostResponse.FloatSuccess -> {
+                resumeFloat(identity, response.value)
+            }
+
+            is HostResponse.BoolSuccess -> {
+                resumeBool(identity, response.value)
+            }
+
+            is HostResponse.StringSuccess -> {
+                resumeString(identity, response.value)
+            }
+
+            is HostResponse.Failure -> {
+                resumeFailure(identity, response.kind, response.detail)
+            }
         }
     }
 

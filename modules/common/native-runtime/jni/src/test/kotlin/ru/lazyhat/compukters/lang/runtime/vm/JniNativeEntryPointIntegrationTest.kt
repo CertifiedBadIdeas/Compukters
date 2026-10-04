@@ -43,7 +43,7 @@ class JniNativeEntryPointIntegrationTest {
     }
 
     @Test
-    fun `every Java 21 JNI entry point resolves against ABI v18 adapter`() {
+    fun `every Java 21 JNI entry point resolves against ABI v19 adapter`() {
         JniBridge.open(Path.of(requiredProperty("compukter.jni.library")))
         val bytes = ByteArray(0)
         val output = ByteArray(1)
@@ -53,7 +53,7 @@ class JniNativeEntryPointIntegrationTest {
         val candidate = LongArray(1)
         val capabilitySchemas = byteArrayOf(1, 0)
 
-        assertEquals(18, JniNative.abiVersion())
+        assertEquals(19, JniNative.abiVersion())
         assertTrue(JniNative.maximumOutcomeBytes() > 0)
         assertTrue(JniNative.maximumCreateBytes() > 0)
         statuses(
@@ -91,6 +91,7 @@ class JniNativeEntryPointIntegrationTest {
             JniNative.resumeFloatBits(0, 1, 0, (-0.0f).toBits()),
             JniNative.resumeBool(0, 1, 0, false),
             JniNative.resumeString(0, 1, 0, charArrayOf()),
+            JniNative.resumeValue(0, 1, 0, byteArrayOf(1, 2, 0, 0, 0, 0, 0, 0, 0, 0)),
             JniNative.resumeFailure(0, 1, 0, 0, byteArrayOf(1)),
             JniNative.terminalCommit(0),
             JniNative.terminalFullState(0, output, written),

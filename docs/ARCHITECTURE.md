@@ -361,8 +361,17 @@ offset when present, otherwise function and bytecode coordinates. Runtime format
 
 Native C ABI 17 appends a length-prefixed, bounded UTF-8 trace to terminal outcome tags 2 (OOM), 5 (Guest trap), and
 6 (VM fault), after their existing scalar payload. Empty text means unavailable diagnostic text. FFM and JNI validate
-ABI 18 before decoding; both retain typed failures and carry the trace through the runtime host. Other wire tags and
+ABI 19 before decoding; both retain typed failures and carry the trace through the runtime host. Other wire tags and
 guest capability schemas are unchanged.
+Native C ABI 19 adds `compukter_resume_value(handle, taskId, requestId, payload, payloadLength)`.
+The caller owns the byte buffer; native code validates and copies its contents before returning and retains no caller
+pointer. The payload starts with version 1 and a HostValueType tag, followed by exact little-endian scalar data:
+I32/F32 use four bytes, I64/F64 eight, Bool one checked byte, Char one UTF-16 code unit, and String a u16 code-unit
+count followed by exact UTF-16. Unit has no payload. The boundary accepts at most 64 KiB and 4096 String code units;
+unknown versions/tags, invalid widths/Boolean values, over-limit strings and trailing bytes fail before consuming the
+pending request. Existing scalar resume exports remain available. The SDK can now generate Long, Double and Char
+completion handlers, and both JNI and FFM dispatch those responses through this encoding.
+
 An explicit actor request can also compose one immutable resource snapshot from host lifecycle/configuration and the
 native machine's semantic work, Guest heap, admitted mutable execution-resident, and filesystem quota counters. The
 host counts Guest and maintenance budgets only when it actually invokes native advancement; both host and native
