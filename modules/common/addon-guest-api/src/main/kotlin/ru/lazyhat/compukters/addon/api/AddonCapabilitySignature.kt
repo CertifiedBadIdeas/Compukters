@@ -21,9 +21,13 @@ package ru.lazyhat.compukters.addon.api
 data class AddonCapabilitySignature(
     val arguments: List<AddonCapabilityValueType>,
     val result: AddonCapabilityValueType,
+    val resultRecordName: String? = null,
 ) {
     companion object {
-        fun parse(signature: String): AddonCapabilitySignature {
+        fun parse(
+            signature: String,
+            recordNames: Set<String> = emptySet(),
+        ): AddonCapabilitySignature {
             val match =
                 Regex("fun\\(([^)]*)\\):([A-Za-z0-9_.]+)").matchEntire(signature)
                     ?: throw IllegalArgumentException("addon external binding must use a canonical function signature")
@@ -33,7 +37,12 @@ data class AddonCapabilitySignature(
                     ?.split(',')
                     ?.map(::hostType)
                     .orEmpty()
-            return AddonCapabilitySignature(arguments, hostType(match.groupValues[2]))
+            val resultName = match.groupValues[2]
+            return if (resultName in recordNames) {
+                AddonCapabilitySignature(arguments, AddonCapabilityValueType.RECORD, resultName)
+            } else {
+                AddonCapabilitySignature(arguments, hostType(resultName))
+            }
         }
 
         private fun hostType(value: String): AddonCapabilityValueType =

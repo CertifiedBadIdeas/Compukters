@@ -75,7 +75,7 @@ object AddonGuestApiBundleCodec {
             .also { output ->
                 DataOutputStream(output).use { sink ->
                     sink.write(MAGIC)
-                    sink.writeInt(FORMAT_VERSION)
+                    sink.writeInt(formatVersion(canonical))
                     sink.write(canonical.identity.contentHash.toByteArray())
                     sink.write(semantic)
                 }
@@ -87,7 +87,8 @@ object AddonGuestApiBundleCodec {
         require(bytes.size <= AddonGuestApiLimits.MAXIMUM_BUNDLE_BYTES) { "addon guest API bundle exceeds byte limit" }
         val input = DataInputStream(ByteArrayInputStream(bytes))
         require(input.readNBytes(MAGIC.size).contentEquals(MAGIC)) { "invalid addon guest API bundle magic" }
-        require(input.readInt() == FORMAT_VERSION) { "unsupported addon guest API bundle format" }
+        val format = input.readInt()
+        require(format in 2..3) { "unsupported addon guest API bundle format" }
         val storedHash = Sha256.of(input.readNBytes(32).also { require(it.size == 32) { "truncated addon guest API bundle hash" } })
         val addon = input.text("addon identity")
         val platformAbi = input.readInt().also { require(it >= 0) { "invalid addon platform ABI" } }
@@ -113,7 +114,9 @@ object AddonGuestApiBundleCodec {
                         val result = input.valueType()
                         val arguments =
                             List(input.count(AddonGuestApiLimits.MAXIMUM_ARGUMENTS, "capability argument")) { input.valueType() }
-                        AddonCapabilityOperation(arguments, result, asynchronous)
+                        require(result != AddonCapabilityValueType.RECORD || format == 3) { "records require addon bundle format 3" }
+                        val record = if (result == AddonCapabilityValueType.RECORD) input.record(1, intArrayOf(0, 0)) else null
+                        AddonCapabilityOperation(arguments, result, asynchronous, record)
                     }
                 AddonCapabilitySchema(identity, operations)
             }
@@ -190,7 +193,7 @@ object AddonGuestApiBundleCodec {
                 orderedSchemas,
                 orderedBindings,
             )
-        val hash = contentHash(semanticBytes(placeholder))
+        val hash = contentHash(semanticBytes(placeholder), formatVersion(placeholder))
         return AddonGuestApiBundle(
             placeholder.identity.copy(contentHash = hash),
             module,
@@ -228,6 +231,11 @@ object AddonGuestApiBundleCodec {
             require(identity.abiMinor in 0..UShort.MAX_VALUE.toInt()) { "addon capability ABI minor is out of range" }
         }
         schemas.flatMap(AddonCapabilitySchema::operations).forEach { operation ->
+            fun validateRecord(record: AddonRecordSchema) {
+                require(record.typeName.startsWith("$addon.")) { "record response escapes addon namespace" }
+                record.fields.forEach { it.record?.let(::validateRecord) }
+            }
+            operation.resultRecord?.let(::validateRecord)
             require(AddonCapabilityValueType.UNIT !in operation.arguments) { "addon capability arguments cannot use Unit" }
             require(
                 operation.arguments.size <= AddonGuestApiLimits.MAXIMUM_ARGUMENTS,
@@ -277,7 +285,9 @@ object AddonGuestApiBundleCodec {
             val operation =
                 schema.operations.getOrNull(binding.operation)
                     ?: throw IllegalArgumentException("addon binding operation is outside capability schema")
-            val signature = AddonCapabilitySignature.parse(binding.signature)
+            val records = listOfNotNull(operation.resultRecord)
+            val recordNames = records.flatMap { listOf(it.typeName, it.typeName.substringAfterLast('.')) }.toSet()
+            val signature = AddonCapabilitySignature.parse(binding.signature, recordNames)
             require(signature.arguments == operation.arguments && signature.result == operation.result) {
                 "addon binding signature does not match capability operation: ${binding.symbol} ${binding.signature}"
             }
@@ -331,6 +341,7 @@ object AddonGuestApiBundleCodec {
                             sink.writeByte(operation.result.ordinal)
                             sink.writeInt(operation.arguments.size)
                             operation.arguments.forEach { argument -> sink.writeByte(argument.ordinal) }
+                            operation.resultRecord?.let { sink.record(it) }
                         }
                     }
                     sink.writeInt(bundle.bindings.size)
@@ -349,10 +360,13 @@ object AddonGuestApiBundleCodec {
                 }
             }.toByteArray()
 
-    private fun contentHash(bytes: ByteArray): Sha256 {
+    private fun contentHash(
+        bytes: ByteArray,
+        format: Int,
+    ): Sha256 {
         val digest = MessageDigest.getInstance("SHA-256")
         digest.update(MAGIC)
-        digest.update(ByteBuffer.allocate(Int.SIZE_BYTES).putInt(FORMAT_VERSION).array())
+        digest.update(ByteBuffer.allocate(Int.SIZE_BYTES).putInt(format).array())
         digest.update(bytes)
         return Sha256.of(digest.digest())
     }
@@ -477,6 +491,40 @@ object AddonGuestApiBundleCodec {
             1 -> text(description)
             else -> throw IllegalArgumentException("invalid $description presence: $value")
         }
+
+    private fun formatVersion(bundle: AddonGuestApiBundle): Int =
+        if (bundle.capabilitySchemas.any { schema -> schema.operations.any { it.resultRecord != null } }) 3 else FORMAT_VERSION
+
+    private fun DataOutputStream.record(record: AddonRecordSchema) {
+        text(record.typeName)
+        writeInt(record.fields.size)
+        record.fields.forEach { field ->
+            text(field.name)
+            writeByte(field.type.ordinal)
+            field.record?.let { record(it) }
+        }
+    }
+
+    private fun DataInputStream.record(
+        depth: Int,
+        counts: IntArray,
+    ): AddonRecordSchema {
+        require(depth <= AddonRecordSchema.MAXIMUM_DEPTH) { "record nesting exceeds limit" }
+        counts[0]++
+        require(counts[0] <= AddonRecordSchema.MAXIMUM_NODES) { "record node count exceeds limit" }
+        val name = text("record type name")
+        val size = count(AddonRecordSchema.MAXIMUM_FIELDS, "record field")
+        counts[1] += size
+        require(counts[1] <= AddonRecordSchema.MAXIMUM_FIELDS) { "record field count exceeds limit" }
+        val fields =
+            List(size) {
+                val fieldName = text("record field name")
+                val type = valueType()
+                val nested = if (type == AddonCapabilityValueType.RECORD) record(depth + 1, counts) else null
+                AddonRecordField(fieldName, type, nested)
+            }
+        return AddonRecordSchema(name, fields)
+    }
 
     private fun DataInputStream.valueType(): AddonCapabilityValueType =
         AddonCapabilityValueType.entries.getOrNull(readUnsignedByte()) ?: throw IllegalArgumentException("invalid addon value type")

@@ -119,6 +119,45 @@ class AddonGuestApiBundleCodecTest {
         }
     }
 
+    @Test
+    fun `record bundle round trip hashes field identity and rejects corrupt schemas`() {
+        val vector = AddonRecordSchema("fixture.meters.Vector", listOf(AddonRecordField("x", AddonCapabilityValueType.F64)))
+        val snapshot =
+            AddonRecordSchema(
+                "fixture.meters.Snapshot",
+                listOf(
+                    AddonRecordField("tick", AddonCapabilityValueType.I64),
+                    AddonRecordField("position", AddonCapabilityValueType.RECORD, vector),
+                ),
+            )
+        val original = bundle(result = AddonCapabilityValueType.RECORD, signature = "fun(Int):Snapshot", resultRecord = snapshot)
+        val encoded = AddonGuestApiBundleCodec.encode(original)
+        assertEquals(original, AddonGuestApiBundleCodec.decode(encoded))
+        val changed = AddonRecordSchema(snapshot.typeName, listOf(snapshot.fields[0].copy(name = "time"), snapshot.fields[1]))
+        assertNotEquals(
+            original.identity.contentHash,
+            bundle(result = AddonCapabilityValueType.RECORD, signature = "fun(Int):Snapshot", resultRecord = changed).identity.contentHash,
+        )
+        assertFailsWith<java.io.EOFException> { AddonGuestApiBundleCodec.decode(encoded.copyOf(encoded.size - 1)) }
+        assertFailsWith<IllegalArgumentException> {
+            bundle(
+                result = AddonCapabilityValueType.RECORD,
+                signature = "fun(Int):Snapshot",
+                resultRecord =
+                    AddonRecordSchema(
+                        snapshot.typeName,
+                        listOf(
+                            AddonRecordField(
+                                "nested",
+                                AddonCapabilityValueType.RECORD,
+                                AddonRecordSchema("foreign.Vector", vector.fields),
+                            ),
+                        ),
+                    ),
+            )
+        }
+    }
+
     private fun bundle(
         source: String = SOURCE,
         result: AddonCapabilityValueType = AddonCapabilityValueType.I32,
@@ -129,6 +168,7 @@ class AddonGuestApiBundleCodecTest {
         declarationSymbol: String = "fixture.meters.MeterBindings.read",
         capability: AddonCapabilityIdentity = AddonCapabilityIdentity("fixture", "meters", 1, 0),
         includeSources: Boolean = true,
+        resultRecord: AddonRecordSchema? = null,
     ): AddonGuestApiBundle {
         val path = "fixture/meters/Meters.kt"
         val moduleId = PlatformModuleId("fixture", "api")
@@ -165,8 +205,25 @@ class AddonGuestApiBundleCodecTest {
                     ),
                 ),
             )
-        val operations = mutableListOf(AddonCapabilityOperation(listOf(AddonCapabilityValueType.I32), result, asynchronous = false))
-        if (extraOperation) operations += AddonCapabilityOperation(listOf(AddonCapabilityValueType.I32), result, asynchronous = false)
+        val operations =
+            mutableListOf(
+                AddonCapabilityOperation(
+                    listOf(AddonCapabilityValueType.I32),
+                    result,
+                    asynchronous =
+                        resultRecord != null,
+                    resultRecord = resultRecord,
+                ),
+            )
+        if (extraOperation) {
+            operations +=
+                AddonCapabilityOperation(
+                    listOf(AddonCapabilityValueType.I32),
+                    result,
+                    asynchronous = resultRecord != null,
+                    resultRecord = resultRecord,
+                )
+        }
         return AddonGuestApiBundleCodec.assemble(
             "fixture",
             platformAbi = PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,

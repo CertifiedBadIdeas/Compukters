@@ -39,4 +39,60 @@ class HostResponseWireTest {
     fun `response string encoding rejects values outside the native boundary`() {
         assertFailsWith<IllegalArgumentException> { HostResponseWire.encode(HostResponse.StringSuccess("a".repeat(4097))) }
     }
+
+    @Test
+    fun `record encoding copies values and retains nested identities and wide scalar bits`() {
+        val vector = HostRecordSchema("fixture.Vector", listOf(HostRecordField("x", HostValueType.F64)))
+        val fields = mutableListOf(HostRecordField("tick", HostValueType.I64), HostRecordField("position", HostValueType.RECORD, vector))
+        val schema = HostRecordSchema("fixture.Snapshot", fields)
+        fields.clear()
+        val values =
+            mutableListOf<HostResponse>(
+                HostResponse.LongSuccess(Long.MIN_VALUE),
+                HostResponse.RecordSuccess(HostRecordValue(vector, listOf(HostResponse.DoubleSuccess(-0.0)))),
+            )
+        val response = HostResponse.RecordSuccess(HostRecordValue(schema, values))
+        values.clear()
+        val encoded =
+            java.nio.ByteBuffer
+                .wrap(HostResponseWire.encode(response))
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        kotlin.test.assertEquals(1, encoded.get().toInt())
+        kotlin.test.assertEquals(8, encoded.get().toInt())
+
+        fun text(length: Int): String = ByteArray(length).also { encoded.get(it) }.decodeToString()
+        kotlin.test.assertEquals("fixture.Snapshot", text(encoded.short.toInt()))
+        kotlin.test.assertEquals(2, encoded.get().toInt())
+        kotlin.test.assertEquals("tick", text(encoded.get().toInt()))
+        kotlin.test.assertEquals(2, encoded.get().toInt())
+        kotlin.test.assertEquals(Long.MIN_VALUE, encoded.long)
+        kotlin.test.assertEquals("position", text(encoded.get().toInt()))
+        kotlin.test.assertEquals(8, encoded.get().toInt())
+        kotlin.test.assertEquals("fixture.Vector", text(encoded.short.toInt()))
+        kotlin.test.assertEquals(1, encoded.get().toInt())
+        kotlin.test.assertEquals("x", text(encoded.get().toInt()))
+        kotlin.test.assertEquals(4, encoded.get().toInt())
+        kotlin.test.assertEquals(Long.MIN_VALUE, encoded.long)
+        kotlin.test.assertEquals(0, encoded.remaining())
+        assertFailsWith<UnsupportedOperationException> { (response.value.values as MutableList).clear() }
+    }
+
+    @Test
+    fun `record values reject mismatched types nested identities and aggregate string overflow`() {
+        val vector = HostRecordSchema("fixture.Vector", listOf(HostRecordField("x", HostValueType.F64)))
+        assertFailsWith<IllegalArgumentException> { HostRecordValue(vector, listOf(HostResponse.LongSuccess(1))) }
+        val nested = HostRecordSchema("fixture.Snapshot", listOf(HostRecordField("position", HostValueType.RECORD, vector)))
+        val other = HostRecordSchema("fixture.Other", vector.fields)
+        assertFailsWith<IllegalArgumentException> {
+            HostRecordValue(nested, listOf(HostResponse.RecordSuccess(HostRecordValue(other, listOf(HostResponse.DoubleSuccess(1.0))))))
+        }
+        val strings =
+            HostRecordSchema(
+                "fixture.Strings",
+                listOf(HostRecordField("a", HostValueType.STRING), HostRecordField("b", HostValueType.STRING)),
+            )
+        assertFailsWith<IllegalArgumentException> {
+            HostRecordValue(strings, listOf(HostResponse.StringSuccess("a".repeat(2048)), HostResponse.StringSuccess("b".repeat(2049))))
+        }
+    }
 }
