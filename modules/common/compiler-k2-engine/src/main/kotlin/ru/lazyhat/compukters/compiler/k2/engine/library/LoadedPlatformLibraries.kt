@@ -50,7 +50,7 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
     artifacts.forEach { (platformModule, artifact) ->
         val library =
             artifact.modules.first { module ->
-                module.kind == ModuleKind.LIBRARY && module.exports.any { it.kind == SymbolKind.FUNCTION }
+                module.kind == ModuleKind.LIBRARY && module.exports.isNotEmpty()
             }
         val moduleHash = ArtifactWriter.moduleSemanticHash(library)
         val constructors = platformModule.declarations.filter { it.signature.startsWith("constructor(") }

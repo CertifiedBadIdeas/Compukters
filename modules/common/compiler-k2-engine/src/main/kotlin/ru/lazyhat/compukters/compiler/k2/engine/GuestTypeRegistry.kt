@@ -31,6 +31,10 @@ internal class GuestTypeRegistry(
 ) {
     val stringType: IrType = pluginContext.irBuiltIns.stringType
     val arrayClass: IrClassSymbol = pluginContext.irBuiltIns.arrayClass
+    val valueClassBoxes = linkedMapOf<String, GuestValueClassBox>()
+
+    fun valueClassBox(type: IrType): GuestValueClassBox? = valueClassBoxes[type.specializationTypeIdentity().removeSuffix("?")]
+
     private var referenceArrays: Map<String, ValueType.Ref> = emptyMap()
 
     fun arrayElement(type: IrType): IrType? {

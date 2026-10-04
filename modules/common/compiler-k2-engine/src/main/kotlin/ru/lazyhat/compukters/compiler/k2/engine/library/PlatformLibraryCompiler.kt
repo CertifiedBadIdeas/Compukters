@@ -19,7 +19,9 @@
 package ru.lazyhat.compukters.compiler.k2.engine.library
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.builders.declarations.buildFun
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
@@ -27,6 +29,7 @@ import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
+import org.jetbrains.kotlin.name.Name
 import ru.lazyhat.compukters.compiler.artifact.link.LibraryModuleLinker
 import ru.lazyhat.compukters.compiler.artifact.link.LibrarySpecializations
 import ru.lazyhat.compukters.compiler.artifact.model.Block
@@ -84,11 +87,12 @@ class PlatformLibraryCompiler {
         capabilityShapes: Map<PlatformCapabilityId, PlatformCapabilityShape> = emptyMap(),
         dependencies: List<PlatformModule> = emptyList(),
     ): ImmutableBytes? {
-        if (declarations.none { it.kind == PlatformLibraryDeclarationKind.FUNCTION }) return null
         val filesByPath = ir.files.associateBy { file -> matchSourcePath(file.fileEntry.name, sourceModules.keys) }
         val currentFiles = currentSourcePaths.mapNotNull(filesByPath::get).toSet()
         require(currentFiles.isNotEmpty()) { "FIR-to-IR produced no files for platform module $module" }
         val collected = LibraryDeclarationCollector(currentFiles).also { ir.accept(it, null) }
+        val valueClasses = collected.classes.filter { it.isValue }
+        if (declarations.none { it.kind == PlatformLibraryDeclarationKind.FUNCTION } && valueClasses.isEmpty()) return null
         val dependencyIds = dependencies.mapTo(mutableSetOf(), PlatformModule::id)
         val dependencyFiles = filesByPath.filterKeys { sourceModules[it] in dependencyIds }.values.toSet()
         val dependencyDeclarations = LibraryDeclarationCollector(dependencyFiles).also { ir.accept(it, null) }
@@ -116,7 +120,19 @@ class PlatformLibraryCompiler {
                 .filter { it.body != null }
                 .sortedWith(compareBy({ it.file.fileEntry.name }, IrSimpleFunction::startOffset, { it.name.asString() }))
                 .firstOrNull()
-                ?: return null
+                ?: if (valueClasses.isEmpty()) {
+                    return null
+                } else {
+                    pluginContext.irFactory
+                        .buildFun {
+                            name = Name.special("<value-class-anchor>")
+                            returnType = pluginContext.irBuiltIns.unitType
+                            visibility = DescriptorVisibilities.PRIVATE
+                        }.apply {
+                            parent = currentFiles.first()
+                            body = pluginContext.irFactory.createBlockBody(-1, -1)
+                        }
+                }
         val templateFunctions =
             collected.functions.filter { function ->
                 !function.isInline &&
@@ -135,11 +151,13 @@ class PlatformLibraryCompiler {
                 platformDefaults = dependencies.flatMap(PlatformModule::declarations).associate { it.identity to it.defaultArguments },
                 platformTypes = libraries.types,
                 platformFields = libraries.fields,
+                platformScalarTypes = dependencies.flatMap(PlatformModule::scalarTypes),
+                platformScalarConstants = dependencies.flatMap(PlatformModule::scalarConstants),
             )
         val artifact =
             try {
                 KotlinProjectLowering.lower(
-                    (ordinaryFunctions + templateFunctions + dependencyTemplateFunctions).distinctBy { it.symbol },
+                    (listOf(entry) + ordinaryFunctions + templateFunctions + dependencyTemplateFunctions).distinctBy { it.symbol },
                     emptyList(),
                     (collected.classes + dependencyTemplateClasses).distinctBy { it.symbol },
                     entry,
@@ -263,11 +281,19 @@ private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFr
             )
         }
     val initializerFunctions = lowered.types.filterIsInstance<NominalType.Class>().mapNotNullTo(mutableSetOf()) { it.initializer?.value }
-    val namedFunctions = lowered.exports.mapTo(mutableSetOf(), Export::localSymbol)
+    val namedFunctions = lowered.exports.filter { it.kind == SymbolKind.FUNCTION }.mapTo(mutableSetOf(), Export::localSymbol)
     val functionExports =
-        lowered.exports +
+        lowered.exports.filter {
+            it.kind == SymbolKind.FUNCTION &&
+                lowered.strings[
+                    lowered.functions[it.localSymbol.toInt()]
+                        .name.value
+                        .toInt(),
+                ].toString() != "<value-class-anchor>"
+        } +
             lowered.functions.mapIndexedNotNull { index, function ->
-                if (index.toUInt() in initializerFunctions || index.toUInt() in namedFunctions ||
+                if (lowered.strings[function.name.value.toInt()].toString() == "<value-class-anchor>" ||
+                    index.toUInt() in initializerFunctions || index.toUInt() in namedFunctions ||
                     LibrarySpecializations.ownsFunction(lowered, function, specializationNames)
                 ) {
                     return@mapIndexedNotNull null
@@ -300,7 +326,11 @@ private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFr
                     lowered.imports.map { value ->
                         value.copy(targetModule = ModuleId.of(value.targetModule.value + 1u))
                     },
-                exports = typeExports + functionExports + fieldExports,
+                exports =
+                    typeExports + functionExports + fieldExports +
+                        lowered.exports.filter { export ->
+                            export.kind in setOf(SymbolKind.TYPE, SymbolKind.FIELD) && export !in typeExports && export !in fieldExports
+                        },
             ),
             specializationNames,
         )

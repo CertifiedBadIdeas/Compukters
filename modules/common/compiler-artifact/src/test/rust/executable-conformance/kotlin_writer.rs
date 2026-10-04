@@ -19,6 +19,12 @@ fn main() {
     match scenario.as_str() {
         "executable" => pinned_vm_verifies_kotlin_executable_instruction_artifact(),
         "exceptions" => k2_explicit_exception_unwinds_across_guest_calls(),
+        "value-class-boxes" => {
+            let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_VALUE_CLASS_BOXES_ARTIFACT", 1, 64 * 1024);
+            k2_assert_prints(&mut session, ["value boxes ok\n"], 256);
+            let mut addon = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_VALUE_CLASS_BOXES_ADDON_ARTIFACT", 1, 64 * 1024);
+            k2_assert_prints(&mut addon, ["addon boxes ok\n"], 256);
+        },
         "equals" => {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_EQUALS_ARTIFACT", 1, 64 * 1024);
             k2_assert_prints(&mut session, ["equals ok\n"], 256);
