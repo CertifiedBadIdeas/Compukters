@@ -485,6 +485,18 @@ internal fun validateArtifact(
                 block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F32 }
             }
         }
+    if (artifact.minimumRuntimeAbi < AbiVersion(1u, 12u) &&
+        artifact.modules.any { module ->
+            module.blocks.any { block ->
+                block.instructions.any {
+                    (it is Instruction.ValueHash && it.type == HashValueType.F64) ||
+                        (it is Instruction.StringValueOf && it.type == StringValueType.F64)
+                }
+            }
+        }
+    ) {
+        add(ArtifactWriteErrorCode.INVALID_RANGE, "Double text and hashing require minimum runtime ABI 1.12")
+    }
     if (artifact.minimumRuntimeAbi < AbiVersion(1u, 11u) &&
         artifact.modules.any { module ->
             module.blocks.any { block -> block.instructions.any { it is Instruction.ValueHash } }

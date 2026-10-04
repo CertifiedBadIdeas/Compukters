@@ -1002,6 +1002,70 @@ class ArtifactValidatorTest {
     }
 
     @Test
+    fun `Double string and hash forms require ABI 1 12 and F64 operands`() {
+        listOf(
+            Instruction.StringValueOf(StringValueType.F64, RegisterId.of(3u), RegisterId.of(0u)),
+            Instruction.ValueHash(HashValueType.F64, RegisterId.of(0u), RegisterId.of(0u)),
+        ).forEach { instruction ->
+            val original = executableArtifact(instruction)
+            val module = original.modules.first()
+            val function = module.functions.first()
+            val values = function.values.mapIndexed { index, value -> if (index == 0) FunctionValue.scalar(ValueType.F64) else value }
+            // Hash destination needs its own I32 register; append register 4.
+            val operation = if (instruction is Instruction.ValueHash) instruction.copy(destination = RegisterId.of(4u)) else instruction
+            val artifact =
+                exactRoots(
+                    original.copy(
+                        minimumRuntimeAbi = AbiVersion(1u, 12u),
+                        modules =
+                            listOf(
+                                module.copy(
+                                    functions =
+                                        listOf(function.copy(values = values + FunctionValue.scalar(ValueType.I32))) +
+                                            module.functions.drop(1),
+                                    types =
+                                        module.types.mapIndexed { index, type ->
+                                            if (index ==
+                                                0
+                                            ) {
+                                                (type as NominalType.Function).copy(
+                                                    parameters =
+                                                        listOf(ValueType.F64) + type.parameters.drop(1),
+                                                )
+                                            } else {
+                                                type
+                                            }
+                                        },
+                                    blocks =
+                                        module.blocks.map { block ->
+                                            block.copy(
+                                                instructions =
+                                                    block.instructions.map {
+                                                        if (it ==
+                                                            instruction
+                                                        ) {
+                                                            operation
+                                                        } else {
+                                                            it
+                                                        }
+                                                    },
+                                            )
+                                        },
+                                ),
+                            ) + original.modules.drop(1),
+                    ),
+                )
+            assertEquals(emptyList(), validateArtifact(artifact, ArtifactWriteLimits()))
+            assertTrue(
+                validateArtifact(artifact.copy(minimumRuntimeAbi = AbiVersion(1u, 11u)), ArtifactWriteLimits()).any {
+                    "1.12" in
+                        it.detail
+                },
+            )
+        }
+    }
+
+    @Test
     fun `value hash requires ABI 1 11 matching source and I32 destination`() {
         fun artifact(instruction: Instruction) = exactRoots(executableArtifact(instruction).copy(minimumRuntimeAbi = AbiVersion(1u, 11u)))
         val valid = artifact(Instruction.ValueHash(HashValueType.REFERENCE, RegisterId.of(0u), RegisterId.of(1u)))

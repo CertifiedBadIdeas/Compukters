@@ -335,6 +335,8 @@ val listAnyQuotaConformanceArtifact = layout.buildDirectory.file("generated/conf
 val listBoundsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-bounds.cpkt")
 val listQuotaConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-quota.cpkt")
 val genericLibraryConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-library.cpkt")
+val doubleArrayConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-double-array.cpkt")
+val doubleConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-double.cpkt")
 val floatConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-float.cpkt")
 val stringCompareConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-string-compare.cpkt")
 val scalarCompareConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-scalar-compare.cpkt")
@@ -1186,6 +1188,38 @@ val generateFloatConformanceArtifact = tasks.register<Test>("generateFloatConfor
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.floatArtifact", floatConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateDoubleConformanceArtifact = tasks.register<Test>("generateDoubleConformanceArtifact") {
+    description = "Compiles Guest Kotlin Double operations and text output for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*Double arithmetic conversions comparisons boxing and text lower for vm conformance*")
+    inputs.file(workerJar)
+    outputs.file(doubleConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.doubleArtifact", doubleConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateDoubleArrayConformanceArtifact = tasks.register<Test>("generateDoubleArrayConformanceArtifact") {
+    description = "Compiles Guest Kotlin DoubleArray storage, copying, iteration, and failures for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*DoubleArray storage copying iteration and failures lower for vm conformance*")
+    inputs.file(workerJar)
+    outputs.file(doubleArrayConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.doubleArrayArtifact", doubleArrayConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

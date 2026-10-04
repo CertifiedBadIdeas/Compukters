@@ -404,6 +404,7 @@ class InstructionEncoderTest {
             StringValueType.I32 to 1,
             StringValueType.I64 to 2,
             StringValueType.F32 to 3,
+            StringValueType.F64 to 4,
             StringValueType.BOOL to 5,
             StringValueType.CHAR to 6,
             StringValueType.REFERENCE to 7,

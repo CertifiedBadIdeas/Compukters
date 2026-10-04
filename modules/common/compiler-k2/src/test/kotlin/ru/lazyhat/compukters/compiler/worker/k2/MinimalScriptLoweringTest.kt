@@ -717,6 +717,137 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `Double arithmetic conversions comparisons boxing and text lower for vm conformance`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                val base = 1.5
+                data class Sample(val value: Double)
+                fun <T> identity(value: T): T = value
+                fun left(): Double { println("left"); return -0.0 }
+                fun right(): Float { println("right"); return 0.0F }
+                fun main() {
+                    val value = -((((5 + base) - 0.5F) * 2L) / 3) % 7.0
+                    println(value)
+                    println("value=" + value)
+                    println(16777217.0 - 16777216.0)
+                    println("${'$'}{3.toDouble()}:${'$'}{4L.toDouble()}:${'$'}{1.5F.toDouble()}:${'$'}{3.9.toInt()}:${'$'}{(-3.9).toLong()}:${'$'}{1.5.toFloat()}")
+                    println("${'$'}{Double.MIN_VALUE}:${'$'}{Double.MAX_VALUE}:${'$'}{Double.POSITIVE_INFINITY}:${'$'}{Double.NEGATIVE_INFINITY}:${'$'}{Double.NaN}:${'$'}{-0.0}")
+                    println("${'$'}{Double.NaN.compareTo(Double.NaN)}:${'$'}{Double.NaN.compareTo(Double.POSITIVE_INFINITY)}:${'$'}{Double.NEGATIVE_INFINITY.compareTo(Double.NaN)}")
+                    println("${'$'}{(-0.0).compareTo(0.0)}:${'$'}{0.0.compareTo(-0.0)}:${'$'}{1.5.compareTo(2)}:${'$'}{2L.compareTo(1.5)}:${'$'}{1.5F.compareTo(1.5)}")
+                    println(left().compareTo(right()))
+                    val nan = Double.NaN
+                    println("${'$'}{nan == nan}:${'$'}{-0.0 == 0.0}:${'$'}{nan < 0.0}:${'$'}{nan >= 0.0}")
+                    val boxedNaN: Any = nan
+                    val otherNaN: Any = Double.NaN
+                    val negativeZero: Any = -0.0
+                    val positiveZero: Any = 0.0
+                    println("${'$'}{boxedNaN == otherNaN}:${'$'}{negativeZero == positiveZero}:${'$'}{boxedNaN}:${'$'}{negativeZero}")
+                    println("${'$'}{Sample(nan) == Sample(nan)}:${'$'}{Sample(-0.0) == Sample(0.0)}:${'$'}{Sample(1.5) == Sample(1.5)}")
+                    // Both finite values fold to the same 32-bit Double hash.
+                    val collision = 1.0000009536743166
+                    val a: Any = 1.0
+                    val b: Any = collision
+                    println("${'$'}{a.hashCode() == b.hashCode()}:${'$'}{a == b}:${'$'}{Sample(1.0) == Sample(collision)}")
+                    val nullable: Double? = identity(1.5)
+                    val absent: Double? = null
+                    println("${'$'}{(nullable ?: 0.0) + 0.5}:${'$'}{absent ?: 2.5}:${'$'}{identity(3.5)}:${'$'}{(a as Double)}")
+                    println("${'$'}{nan.hashCode()}:${'$'}{(-0.0).hashCode()}:${'$'}{1.5.hashCode()}")
+                    println("${'$'}{Double.NaN.toInt()}:${'$'}{Double.POSITIVE_INFINITY.toLong()}:${'$'}{Double.NEGATIVE_INFINITY.toInt()}")
+                    val typed = listOf(1.5, 2.5)
+                    val widened: List<Any> = typed
+                    val nullableValues: List<Double?> = listOf(null, 3.5)
+                    val array: Array<Double?> = arrayOf(null, 4.5)
+                    println("${'$'}{typed[0] + typed[1]}:${'$'}{widened[1]}:${'$'}{nullableValues[0]}:${'$'}{array[1]}")
+                    val nullableNaN: Double? = nan
+                    println("${'$'}{nullableNaN == nan}:${'$'}{absent == null}:${'$'}{absent.hashCode()}:${'$'}{nullableNaN.hashCode()}")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val bytes = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
+            val artifact = ArtifactReader.read(bytes)
+            assertEquals(AbiVersion(1u, 12u), artifact.minimumRuntimeAbi)
+            val instructions = artifact.modules.flatMap { it.blocks.flatMap(Block::instructions) }
+            assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.F64 })
+            assertTrue(instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F64 })
+            val numericOnly = adapter.compile(request("fun sum(value: Double): Double = value + 1L; fun main() { sum(1.5) > 0.0 }"))
+            val numericArtifact =
+                ArtifactReader.read(
+                    assertNotNull(numericOnly.artifact, numericOnly.diagnostics.joinToString()).toByteArray(),
+                )
+            assertEquals(AbiVersion(1u, 0u), numericArtifact.minimumRuntimeAbi)
+            System.getProperty("compukter.vm.doubleArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `DoubleArray storage copying iteration and failures lower for vm conformance`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                data class Measurement(val values: DoubleArray)
+                class Source {
+                    var reads = 0
+                    fun values(): DoubleArray { reads += 1; return doubleArrayOf(1.5, 2.5, 3.5) }
+                    fun next(): Double { reads += 1; return reads.toDouble() }
+                }
+                fun main() {
+                    val source = Source()
+                    val values = DoubleArray(3)
+                    println("${'$'}{values.size}:${'$'}{values[0]}:${'$'}{values[2]}")
+                    values[0] = 16777217.0
+                    values[1] = -0.0
+                    values[2] = Double.NaN
+                    println("${'$'}{values[0] - 16777216.0}:${'$'}{values[1]}:${'$'}{values[2]}")
+                    var total = 0.0
+                    for (value in source.values()) { total += value }
+                    println("${'$'}{source.reads}:${'$'}total")
+                    val factorySource = Source()
+                    val ordered = doubleArrayOf(factorySource.next(), factorySource.next())
+                    println("${'$'}{factorySource.reads}:${'$'}{ordered[0]}:${'$'}{ordered[1]}")
+                    var selected = 0.0
+                    for (value in doubleArrayOf(1.0, 2.0, 3.0, 4.0)) {
+                        if (value == 2.0) continue
+                        if (value == 4.0) break
+                        selected += value
+                    }
+                    println(selected)
+                    var emptyIterations = 0
+                    for (value in doubleArrayOf()) { emptyIterations += 1 }
+                    println(emptyIterations)
+                    val original = doubleArrayOf(1.0, 2.0, 3.0)
+                    val copy = original.copyOf(5)
+                    original[0] = 9.0
+                    println("${'$'}{copy.size}:${'$'}{copy[0]}:${'$'}{copy[4]}")
+                    copy.copyInto(copy, 1, 0, 4)
+                    println("${'$'}{copy[0]}:${'$'}{copy[1]}:${'$'}{copy[2]}:${'$'}{copy[3]}:${'$'}{copy[4]}")
+                    val same = original.copyOf()
+                    println("${'$'}{same[0]}:${'$'}{same.size}:${'$'}{same == original}:${'$'}{original == original}")
+                    val shortened = original.copyOf(2)
+                    val destination = DoubleArray(4)
+                    original.copyInto(destination)
+                    println("${'$'}{shortened.size}:${'$'}{shortened[1]}:${'$'}{destination[0]}:${'$'}{destination[2]}:${'$'}{destination[3]}")
+                    println(Measurement(doubleArrayOf(1.5, -0.0, Double.NaN)).hashCode())
+                    try { DoubleArray(-1) } catch (failure: NegativeArraySizeException) { println("negative") }
+                    try { original.copyOf(-1) } catch (failure: NegativeArraySizeException) { println("negative-resize") }
+                    try { values[3] } catch (failure: IndexOutOfBoundsException) { println("read-bounds") }
+                    try { values[-1] = 2.0 } catch (failure: IndexOutOfBoundsException) { println("write-bounds") }
+                    try { copy.copyInto(copy, 4, 0, 3) } catch (failure: IndexOutOfBoundsException) { println("copy-bounds") }
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val artifact = ArtifactReader.read(bytes)
+            assertEquals(AbiVersion(1u, 12u), artifact.minimumRuntimeAbi)
+            System.getProperty("compukter.vm.doubleArrayArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `String compareTo and ordering operators lower UTF-16 order for vm conformance`() =
         withAdapter { adapter ->
             val source =
@@ -6178,11 +6309,12 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `unsupported unsigned and Double source produces a stable diagnostic and no artifact`() =
+    fun `unsupported unsigned Byte and Short source produces a stable diagnostic and no artifact`() =
         withAdapter { adapter ->
             listOf(
                 "fun main() { val answer: UInt = 42u }",
-                "fun main() { val answer: Double = 42.0 }",
+                "fun main() { val answer: Byte = 42 }",
+                "fun main() { val answer: Short = 42 }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))
                 val errors = result.diagnostics.filter { it.severity.name == "ERROR" }

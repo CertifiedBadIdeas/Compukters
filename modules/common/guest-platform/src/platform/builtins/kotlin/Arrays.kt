@@ -7,6 +7,7 @@
 package kotlin
 
 import kotlin.collections.IntIterator
+import kotlin.collections.DoubleIterator
 
 public class Array<T> private constructor() {
     public external val size: Int
@@ -44,7 +45,15 @@ internal class LongArray private constructor()
 
 internal class FloatArray private constructor()
 
-internal class DoubleArray private constructor()
+public class DoubleArray external constructor(size: Int) {
+    public external val size: Int
+
+    public external operator fun get(index: Int): Double
+
+    public external operator fun set(index: Int, value: Double): Unit
+
+    public external operator fun iterator(): DoubleIterator
+}
 
 internal class UByteArray private constructor()
 
@@ -57,6 +66,8 @@ internal class ULongArray private constructor()
 public external fun <T> arrayOf(vararg elements: T): Array<T>
 
 public external fun intArrayOf(vararg elements: Int): IntArray
+
+public external fun doubleArrayOf(vararg elements: Double): DoubleArray
 
 /** Creates an array of the requested size with every element set to null. */
 public external fun <T> arrayOfNulls(size: Int): Array<T?>

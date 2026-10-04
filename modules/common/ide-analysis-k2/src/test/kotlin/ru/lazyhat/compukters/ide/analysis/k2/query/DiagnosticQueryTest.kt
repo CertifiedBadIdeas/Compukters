@@ -116,6 +116,31 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `Guest Double arithmetic conversions and console API resolve without errors`() {
+        val source =
+            """
+            fun main() {
+                val samples = doubleArrayOf(16.5, 17.5)
+                val speed: Double = samples.copyOf(3)[0]
+                for (sample in samples) println(sample)
+                val scaled = speed * 2 + 1L + 0.5F
+                val nullable: Double? = scaled
+                println(nullable ?: Double.NaN)
+                println("speed=${'$'}scaled int=${'$'}{scaled.toInt()}")
+            }
+            """.trimIndent()
+        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+            val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+
+            assertTrue(
+                active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error },
+                active.diagnostics.toString(),
+            )
+        }
+    }
+
+    @Test
     fun `foreign JVM declarations are outside the native analysis platform`() {
         K2QueryFixture.source("main.kt" to "val forbidden: java.lang.String? = null").use { fixture ->
             val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation

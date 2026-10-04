@@ -734,6 +734,7 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                             1u -> StringValueType.I32
                             2u -> StringValueType.I64
                             3u -> StringValueType.F32
+                            4u -> StringValueType.F64
                             5u -> StringValueType.BOOL
                             6u -> StringValueType.CHAR
                             7u -> StringValueType.REFERENCE

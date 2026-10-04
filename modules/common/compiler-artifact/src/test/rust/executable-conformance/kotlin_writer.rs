@@ -58,6 +58,8 @@ fn main() {
         "generic-library" => k2_generic_library_specializes_in_consumer(),
         "reference-array" => k2_reference_arrays_retain_typed_guest_objects(),
         "float" => k2_float_executes_arithmetic_conversions_comparisons_and_text(),
+        "double" => k2_double_executes_scalar_semantics(),
+        "double-array" => k2_double_array_executes_storage_and_lifecycle(),
         "string-compare" => k2_string_compare_uses_utf16_code_units(),
         "text-stdlib" => k2_text_stdlib_preserves_utf16_helpers(),
         "scalar-compare" => k2_char_and_boolean_compare_preserve_ordering(),
@@ -1566,6 +1568,141 @@ fn k2_float_executes_arithmetic_conversions_comparisons_and_text() {
             AdvanceOutcome::SliceExhausted => {}
             AdvanceOutcome::Halted(None) => break,
             outcome => panic!("unexpected K2 Float outcome: {outcome:?}"),
+        }
+    }
+}
+fn k2_double_executes_scalar_semantics() {
+    let path = std::env::var("COMPUKTER_KOTLIN_DOUBLE_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_DOUBLE_ARTIFACT must be set for this conformance test");
+    let bytes = fs::read(path).expect("K2 Double output must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("pinned VM must verify K2 Double output");
+    let string_argument = [HostValueType::String];
+    let operations = [
+        OperationSchema::asynchronous(&[], HostValueType::String),
+        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
+        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
+    ];
+    let stdio = CapabilityBinding::new("compukter", "stdio", 1, 0, &operations);
+    let profile = ExecutionProfile {
+        heap_bytes: 1024 * 1024,
+        frame_storage_bytes: 1024 * 1024,
+        maximum_call_depth: 64,
+        maximum_coroutines: 1,
+        maximum_channels: 0,
+        maximum_channel_values: 0,
+        maximum_host_requests: 64,
+        maximum_events: 0,
+        maximum_slice_budget: u32::MAX,
+        compiler_abi: [0; 32],
+        platform_abi: [0; 32],
+        maximum_host_arguments: 16,
+        maximum_outbound_utf16_code_units: 4096,
+        maximum_inbound_utf16_code_units: 4096,
+        maximum_accepted_responses: 64,
+        entry_argument_limits: entry_argument_limits(),
+    };
+    let mut session = Session::admit(verified, profile, &[stdio]).expect("K2 Double must admit");
+    session.start(&[]).expect("K2 Double must start");
+
+    for (label, expected) in [
+        ("arithmetic", "-4.0\n"),
+        ("concatenation", "value=-4.0\n"),
+        ("precision", "1.0\n"),
+        ("conversions", "3.0:4.0:1.5:3:-3:1.5\n"),
+        ("constants", "4.9E-324:1.7976931348623157E308:Infinity:-Infinity:NaN:-0.0\n"),
+        ("NaN compareTo", "0:1:-1\n"),
+        ("mixed compareTo", "-1:1:-1:1:0\n"),
+        ("left evaluation", "left\n"),
+        ("right evaluation", "right\n"),
+        ("ordered result", "-1\n"),
+        ("IEEE equality", "false:true:false:false\n"),
+        ("boxed values", "true:false:NaN:-0.0\n"),
+        ("data values", "true:false:true\n"),
+        ("hash collisions", "true:false:false\n"),
+        ("nullable generic casts", "2.0:2.5:3.5:1.0\n"),
+        ("hashes", "2146959360:-2147483648:1073217536\n"),
+        ("saturating conversions", "0:9223372036854775807:-2147483648\n"),
+        ("typed and boxed collections", "4.0:2.5:null:4.5\n"),
+        ("nullable equality and hashes", "false:true:0:2146959360\n"),
+    ] {
+        let value = utf16(expected);
+        let write = next_host_request(&mut session, label, 1, Some(&value));
+        session
+            .resume(write, HostResponse::Success(HostValueInput::Unit))
+            .expect("println must resume the Double program");
+    }
+    loop {
+        match session.advance(64, 64).expect("K2 Double must finish") {
+            AdvanceOutcome::SliceExhausted => {}
+            AdvanceOutcome::Halted(None) => break,
+            outcome => panic!("unexpected K2 Double outcome: {outcome:?}"),
+        }
+    }
+}
+fn k2_double_array_executes_storage_and_lifecycle() {
+    let path = std::env::var("COMPUKTER_KOTLIN_DOUBLE_ARRAY_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_DOUBLE_ARRAY_ARTIFACT must be set for this conformance test");
+    let bytes = fs::read(path).expect("K2 Double output must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
+        .expect("pinned VM must verify K2 Double output");
+    let string_argument = [HostValueType::String];
+    let operations = [
+        OperationSchema::asynchronous(&[], HostValueType::String),
+        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
+        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
+    ];
+    let stdio = CapabilityBinding::new("compukter", "stdio", 1, 0, &operations);
+    let profile = ExecutionProfile {
+        heap_bytes: 1024 * 1024,
+        frame_storage_bytes: 1024 * 1024,
+        maximum_call_depth: 64,
+        maximum_coroutines: 1,
+        maximum_channels: 0,
+        maximum_channel_values: 0,
+        maximum_host_requests: 64,
+        maximum_events: 0,
+        maximum_slice_budget: u32::MAX,
+        compiler_abi: [0; 32],
+        platform_abi: [0; 32],
+        maximum_host_arguments: 16,
+        maximum_outbound_utf16_code_units: 4096,
+        maximum_inbound_utf16_code_units: 4096,
+        maximum_accepted_responses: 64,
+        entry_argument_limits: entry_argument_limits(),
+    };
+    let mut session = Session::admit(verified, profile, &[stdio]).expect("K2 Double must admit");
+    session.start(&[]).expect("K2 Double must start");
+
+    for (label, expected) in [
+        ("zeroed storage", "3:0.0:0.0\n"),
+        ("F64 precision and special values", "1.0:-0.0:NaN\n"),
+        ("single source evaluation", "1:7.5\n"),
+        ("factory evaluation order", "2:1.0:2.0\n"),
+        ("loop control", "4.0\n"),
+        ("empty array", "0\n"),
+        ("resize copy", "5:1.0:0.0\n"),
+        ("overlapping copy", "1.0:1.0:2.0:3.0:0.0\n"),
+        ("copy identity", "9.0:3:false:true\n"),
+        ("shrink and default copy bounds", "2:2.0:9.0:3.0:0.0\n"),
+        ("data hash", "569406559\n"),
+        ("negative size", "negative\n"),
+        ("negative resize", "negative-resize\n"),
+        ("read bounds", "read-bounds\n"),
+        ("write bounds", "write-bounds\n"),
+        ("copy bounds", "copy-bounds\n"),
+    ] {
+        let value = utf16(expected);
+        let write = next_host_request(&mut session, label, 1, Some(&value));
+        session
+            .resume(write, HostResponse::Success(HostValueInput::Unit))
+            .expect("println must resume the Double program");
+    }
+    loop {
+        match session.advance(64, 64).expect("K2 Double must finish") {
+            AdvanceOutcome::SliceExhausted => {}
+            AdvanceOutcome::Halted(None) => break,
+            outcome => panic!("unexpected K2 Double outcome: {outcome:?}"),
         }
     }
 }

@@ -17,6 +17,11 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Guest Kotlin
 
+- Programs can use Double with F64 arithmetic, mixed numeric operations, conversions, constants,
+  nullable and generic values, console/text output, equality and hashCode. DoubleArray stores F64 elements
+  without boxing and supports indexed access, iteration and copying. Double text and hashing require
+  Runtime ABI 1.12; rebuild platform bundles, programs and compiled libraries.
+
 - Programs can throw and catch exceptions through nested calls, match user-defined exception subclasses,
   rethrow the original object, and read nullable `message` and `cause`. `finally` runs on normal and exceptional
   exits, returns and supported loop/inline exits. Uncaught exceptions report their class,
@@ -42,7 +47,7 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
   agrees with value equality for NaN and signed zero. Rebuild programs and libraries for Runtime ABI 1.11.
 
 - `equals`, `==` and `!=` use virtual value equality across compiled libraries, including custom/inherited and
-  superclass implementations. Data classes compare nullable, object and Float constructor properties;
+  superclass implementations. Data classes compare nullable, object, Float and Double constructor properties;
   array properties retain reference equality. Receiver/argument effects run once and exceptions remain catchable.
   The shared equality/hashCode contract reuses Runtime ABI 1.11; compiled libraries need rebuilding.
 
