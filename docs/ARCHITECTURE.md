@@ -277,6 +277,8 @@ full inter-tick interval before the next deterministic delivery boundary. Stoppi
 it, so late callbacks cannot reopen it.
 Production computers attach one actor identified by `ComputerId` and a machine epoch. A full scheduler rejects a new
 attachment without blocking or failing the server tick; the block remains powered off and retries on a later tick.
+Minecraft runtime epochs come from one process-wide monotonic allocator, so replacing a block entity cannot reuse
+the old actor address even when its persisted `ComputerId` is retained. Epochs are runtime identities and are not saved.
 The server config exposes `vm.workers`, `vm.maximum_actors`, `vm.mailbox_capacity`, `vm.messages_per_turn`, and
 `vm.result_capacity_per_worker`; defaults are half of the available processors clamped to 2..8, 4096 actors, 64
 commands, 4 commands per turn, and 256 replies per worker. Operators may explicitly configure up to 64 workers.

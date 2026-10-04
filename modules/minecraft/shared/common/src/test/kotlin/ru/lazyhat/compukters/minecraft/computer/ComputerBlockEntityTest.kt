@@ -275,6 +275,25 @@ class ComputerBlockEntityTest {
     }
 
     @Test
+    fun `replacing a block entity preserves ComputerId but renews its runtime epoch`() {
+        val original = fixture()
+        original.entity.serverTick()
+        val identity = original.entity.computerId()
+        val epoch = requireNotNull(original.entity.terminalMachineId)
+        val saved = original.entity.saveForTest()
+        original.entity.setRemoved()
+
+        val replacement = fixture()
+        replacement.entity.loadForTest(saved)
+        replacement.entity.serverTick()
+
+        assertEquals(identity, replacement.entity.computerId())
+        assertTrue(requireNotNull(replacement.entity.terminalMachineId) > epoch)
+        assertNull(original.entity.terminalMachineId)
+        assertEquals(1, original.carriers.single().closeCalls)
+    }
+
+    @Test
     fun `identity survives carrier recreation and removal closes once`() {
         val fixture = fixture()
         val id = fixture.entity.computerId()

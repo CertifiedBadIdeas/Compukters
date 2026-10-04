@@ -277,6 +277,9 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Computer runtime
 
+- Runtime attachment epochs remain unique when a computer block entity is replaced while preserving its
+  ComputerId, preventing an old actor address from matching the new runtime.
+
 - Foreground programs that exhaust their Guest heap report the executable path, heap limit, allocation size,
   memory usage and GC status before returning control to the shell. Verified debug metadata supplies the source
   path and UTF-16 offset when available; otherwise diagnostics identify the function and bytecode location.

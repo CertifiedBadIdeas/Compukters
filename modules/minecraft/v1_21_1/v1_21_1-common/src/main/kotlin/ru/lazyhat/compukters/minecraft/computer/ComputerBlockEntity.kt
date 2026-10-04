@@ -72,7 +72,6 @@ open class ComputerBlockEntity internal constructor(
 
     private var carrier: ComputerCarrier? = null
     private var filesystemLease: ComputerFileSystemLease? = null
-    private var lastMachineId = 0L
     private var committedRedstoneOutput = 0
     private var sampledRedstoneInputs = IntArray(RedstoneWire.SIDE_COUNT)
     private var dirtyRedstoneInputs = RedstoneWire.ALL_SIDES_MASK
@@ -237,7 +236,7 @@ open class ComputerBlockEntity internal constructor(
 
     private fun createCarrier(): ComputerCarrier? {
         val deviceId = blockPos.hashCode()
-        val machineId = nextMachineId()
+        val machineId = ComputerMachineEpochs.next()
         val filesystem =
             (level as? ServerLevel)?.let { serverLevel ->
                 filesystemContextSource?.create(serverLevel, identity.id(), SystemRomImage.packaged())
@@ -337,11 +336,6 @@ open class ComputerBlockEntity internal constructor(
         terminalMachineId = null
         filesystemLease = null
         return current?.closeAsync() ?: CompletableFuture.completedFuture(null)
-    }
-
-    private fun nextMachineId(): Long {
-        lastMachineId = Math.incrementExact(lastMachineId)
-        return lastMachineId
     }
 
     private fun ProgramComputerState.isPoweredOn(): Boolean =
