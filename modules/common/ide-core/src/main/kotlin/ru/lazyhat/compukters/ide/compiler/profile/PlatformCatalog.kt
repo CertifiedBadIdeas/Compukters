@@ -89,7 +89,7 @@ class PlatformCatalog private constructor(
     fun resolve(requirements: Set<AddonId>): ResolvedPlatformSelection {
         val selectedAddons = requirements.map { id -> requireNotNull(findAddon(id)) { "addon ${id.value} is unavailable" } }
         val directModuleIds = selectedAddons.mapTo(mutableSetOf()) { projectId(it.descriptor.id) }
-        val roots = bundle.modules.mapTo(mutableSetOf()) { it.id }
+        val roots = baseBundle.modules.mapTo(mutableSetOf()) { it.id }
         roots += selectedAddons.map { it.descriptor.id }
         val resolved = graph.resolve(roots)
         return ResolvedPlatformSelection(

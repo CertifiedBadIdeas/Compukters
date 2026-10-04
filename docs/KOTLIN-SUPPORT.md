@@ -990,6 +990,10 @@ The server compiler derives full platform-module names and hashes from that same
 their separate addon IDs. Evidence: `NeoForgeCompilerServicesTest`, test
 `server advertises an admitted addon bundle with its exact content identity`, which checks both advertised and
 configured identities for an addon whose ID differs from its module name.
+The IDE compile profile includes built-in modules and the project's selected addons only, even when the server
+advertises more addons. Each selected external module has its matching payload. Evidence: `CompileProfileResolverTest`,
+test `a target with two addons includes only project selected modules and matching payloads` covers no addon, either
+single addon and both addons for local and attached-target compilation.
 
 - [x] **Structured asynchronous addon results** — one host request can return a bounded immutable data record
   with non-null scalar or nested-record fields. The SDK checks pure data declarations, generates typed host mirrors

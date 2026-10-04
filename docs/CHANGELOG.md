@@ -202,6 +202,8 @@ addon mods, with optional Create and Sable integrations for Minecraft 1.21.1.
   while platform dependencies and capability wiring remain internal. Compukters projects list only addon IDs in
   `compukter.toml`, with exact versions and hashes retained in `compukter.lock`.
   The computer's `kotlinc` command uses the same full module identities advertised by the server for addon compilation.
+  IDE compilation includes only the project's selected addon modules and their matching API bundles when several
+  addons are installed together.
 - The separately installed Create addon supports Create 6.0.x on Minecraft 1.21.1 while the base Compukters mod remains
   usable without Create.
 - The independent Sable addon exposes `sable.physics.Physics.snapshot()` for computers on constructions. One request

@@ -110,6 +110,38 @@ class CompileProfileResolverTest {
         assertTrue(profile.modules.single { it.identity.id.value == "fixture:api" }.direct)
     }
 
+    @Test
+    fun `a target with two addons includes only project selected modules and matching payloads`() {
+        val resolution = platformResolutionWithAddon(addonIds = listOf("create", "sable"))
+        val catalog = resolution.catalog
+        val target =
+            TargetCompileProfile(
+                resolution.toolchain,
+                catalog.entries.map { it.identity },
+                WorkerLimits(),
+                catalog.addons.map { it.payload },
+            )
+        val resolver = CompileProfileResolver(resolution.toolchain, catalog, WorkerLimits())
+        for (selected in listOf(emptySet(), setOf("create"), setOf("sable"), setOf("create", "sable"))) {
+            val lock =
+                ProjectLockService(NOOP_LOCK_WRITER).resolve(
+                    ru.lazyhat.compukters.ide.project.ProjectManifest
+                        .of("project", selected.mapTo(mutableSetOf(), ::AddonId)),
+                    resolution,
+                )
+            val expectedModules =
+                catalog.baseBundle.modules
+                    .map { it.id.toString() }
+                    .toSet() + selected.map { "$it:api" }
+            for (result in listOf(resolver.resolveLocal(lock), resolver.resolveTarget(lock, target))) {
+                val profile = assertIs<ProfileResolution.Resolved>(result).profile
+                assertEquals(expectedModules, profile.modules.map { it.identity.id.value }.toSet(), selected.toString())
+                assertEquals(selected, profile.addonBundles.map { it.identity.name }.toSet())
+                assertEquals(selected, profile.addons.map { it.id.value }.toSet())
+            }
+        }
+    }
+
     private fun fixture(requiredLimits: WorkerLimits = WorkerLimits()): Fixture {
         val resolution = platformResolutionWithAddon()
         val bundle = resolution.catalog.bundle
