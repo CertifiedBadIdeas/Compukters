@@ -35,23 +35,33 @@ interface ProgramAddonHost : AutoCloseable {
         return emptyList()
     }
 
+    /** A computer-wide, non-reused ID; 0 denotes the root program. */
+    fun programStarted(programId: Long) = Unit
+
+    /** Default cleanup for a host without independently retained parent scopes. */
+    fun programStopped(programId: Long) = reset()
+
     fun reset()
 
     override fun close() = reset()
 }
 
-class ProgramAddonRequest(
-    val identity: VmHostRequestIdentity,
-    val capability: CapabilityIdentity,
-    val operation: Int,
-    arguments: List<VmValue>,
-) {
-    val arguments: List<VmValue> = arguments.toList()
+class ProgramAddonRequest
+    @JvmOverloads
+    constructor(
+        val identity: VmHostRequestIdentity,
+        val capability: CapabilityIdentity,
+        val operation: Int,
+        arguments: List<VmValue>,
+        val programId: Long = 0,
+    ) {
+        val arguments: List<VmValue> = arguments.toList()
 
-    init {
-        require(operation >= 0) { "addon operation must not be negative" }
+        init {
+            require(programId >= 0) { "addon program id must not be negative" }
+            require(operation >= 0) { "addon operation must not be negative" }
+        }
     }
-}
 
 data class ProgramAddonCompletion(
     val identity: VmHostRequestIdentity,
@@ -64,4 +74,19 @@ sealed interface ProgramAddonDispatch {
     ) : ProgramAddonDispatch
 
     data object Pending : ProgramAddonDispatch
+}
+
+/** Ordered world-thread actions emitted by the runtime, including requests from nested programs. */
+sealed interface ProgramAddonAction {
+    data class Request(
+        val request: ProgramAddonRequest,
+    ) : ProgramAddonAction
+
+    data class Started(
+        val programId: Long,
+    ) : ProgramAddonAction
+
+    data class Stopped(
+        val programId: Long,
+    ) : ProgramAddonAction
 }

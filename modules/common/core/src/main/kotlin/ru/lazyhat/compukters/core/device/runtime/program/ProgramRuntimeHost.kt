@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.core.device.runtime.program
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.compiler.runtime.CompilerSubmissionResult
@@ -58,6 +59,7 @@ class ProgramRuntimeHost internal constructor(
     addonCapabilitySchemas: List<HostCapabilitySchema> = emptyList(),
     private val addonRequestPort: ProgramAddonRequestPort = UNAVAILABLE_ADDON_PORT,
     initialRedstoneOutput: Int = 0,
+    private val addonLifecyclePort: ProgramAddonLifecyclePort = ProgramAddonLifecyclePort { true },
 ) : AutoCloseable {
     constructor(tickBudget: ProgramTickBudget = ProgramTickBudget()) : this(NativeProgramVmSessionFactory(), tickBudget)
 
@@ -72,6 +74,7 @@ class ProgramRuntimeHost internal constructor(
         addonCapabilitySchemas: List<HostCapabilitySchema> = emptyList(),
         addonRequestPort: ProgramAddonRequestPort = UNAVAILABLE_ADDON_PORT,
         initialRedstoneOutput: Int = 0,
+        addonLifecyclePort: ProgramAddonLifecyclePort = ProgramAddonLifecyclePort { true },
     ) : this(
         NativeProgramVmSessionFactory(
             ProgramFileSystemLaunchContext(store, computerId, romImage),
@@ -85,8 +88,10 @@ class ProgramRuntimeHost internal constructor(
         addonCapabilitySchemas,
         addonRequestPort,
         initialRedstoneOutput,
+        addonLifecyclePort,
     )
 
+    private val programScopes = ArrayDeque<Long>().apply { addLast(0) }
     private var session: ProgramVmSession? = null
     private var vmEpoch = 0L
     private var activeVmEpoch = 0L
@@ -223,6 +228,33 @@ class ProgramRuntimeHost internal constructor(
                     return
                 }
             when (outcome) {
+                is VmOutcome.ProcessEntered -> {
+                    check(!programScopes.contains(outcome.programId)) { "duplicate native program id" }
+                    programScopes.addLast(outcome.programId)
+                    check(
+                        addonLifecyclePort.submit(
+                            ProgramAddonAction
+                                .Started(outcome.programId),
+                        ),
+                    ) {
+                        "addon lifecycle action limit exceeded"
+                    }
+                }
+
+                is VmOutcome.ProcessExited -> {
+                    check(programScopes.size > 1 && programScopes.removeLast() == outcome.programId) { "native program scope mismatch" }
+                    pendingAddonRequests.entries.removeAll { it.value.programId == outcome.programId }
+                    pendingTimerRequests.entries.removeAll { it.value.programId == outcome.programId }
+                    check(
+                        addonLifecyclePort.submit(
+                            ProgramAddonAction
+                                .Stopped(outcome.programId),
+                        ),
+                    ) {
+                        "addon lifecycle action limit exceeded"
+                    }
+                }
+
                 VmOutcome.SliceExhausted -> {
                     if (retirementAllowance != Int.MAX_VALUE && retiredInstructionsLastTick >= retirementAllowance) return
                     return@repeat
@@ -724,6 +756,8 @@ class ProgramRuntimeHost internal constructor(
         pendingRedstoneCommit = null
         pendingSoundCommit = null
         pendingAddonRequests.clear()
+        programScopes.clear()
+        programScopes.addLast(0)
         pendingTimerRequests.clear()
         activeVmEpoch = 0
         try {
@@ -783,10 +817,10 @@ class ProgramRuntimeHost internal constructor(
         }
         val submitted =
             addonRequestPort.submit(
-                ProgramAddonRequest(request.identity, request.capability, request.operation, request.arguments),
+                ProgramAddonRequest(request.identity, request.capability, request.operation, request.arguments, programScopes.last()),
             )
         if (!submitted) return resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Addon request was not accepted"))
-        pendingAddonRequests[request.identity] = PendingAddonRequest(activeSession, request)
+        pendingAddonRequests[request.identity] = PendingAddonRequest(activeSession, request, programScopes.last())
         return true
     }
 
@@ -810,7 +844,8 @@ class ProgramRuntimeHost internal constructor(
             return resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Timer pending request limit was reached"))
         }
         val delay = maxOf(1L, duration.toLong())
-        pendingTimerRequests[request.identity] = PendingTimerRequest(activeSession, request, requestTick.saturatingAdd(delay))
+        pendingTimerRequests[request.identity] =
+            PendingTimerRequest(activeSession, request, requestTick.saturatingAdd(delay), programScopes.last())
         return true
     }
 
@@ -846,12 +881,14 @@ class ProgramRuntimeHost internal constructor(
     private data class PendingAddonRequest(
         val session: ProgramVmSession,
         val request: VmHostRequest,
+        val programId: Long,
     )
 
     private data class PendingTimerRequest(
         val session: ProgramVmSession,
         val request: VmHostRequest,
         val wakeTick: Long,
+        val programId: Long,
     )
 }
 

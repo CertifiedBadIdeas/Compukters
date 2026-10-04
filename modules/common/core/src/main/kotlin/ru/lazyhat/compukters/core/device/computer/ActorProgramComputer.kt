@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.core.device.computer
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
@@ -40,6 +41,7 @@ import ru.lazyhat.compukters.core.device.runtime.program.SoundHostPort
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
+import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
 
@@ -61,7 +63,7 @@ class ActorProgramComputer(
     private var pendingSound: PendingSound? = null
     private val pendingRedstoneInputs = ArrayDeque<Int>()
     private val pendingAddonCompletions = ArrayDeque<ProgramAddonCompletion>()
-    private val outstandingAddonRequests = mutableSetOf<ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity>()
+    private val outstandingAddonRequests = mutableMapOf<VmHostRequestIdentity, Long>()
     private var closeResult: CompletableFuture<Long?>? = null
     private var bootRequest: CompletableFuture<ProgramRuntimeActorReply>? = null
     private var lastAdvanceTick = -1L
@@ -202,12 +204,36 @@ class ActorProgramComputer(
         reply: ProgramRuntimeActorReply,
         currentLifecycle: Long,
     ) {
-        if (
-            reply.state != ProgramRuntimeState.Running &&
-            reply.state != ProgramRuntimeState.WaitingForInput &&
-            reply.state != ProgramRuntimeState.WaitingForCompiler
-        ) {
-            discardAddonRequests()
+        reply.addonActions.forEach { action ->
+            when (action) {
+                is ProgramAddonAction.Started -> {
+                    addon.programStarted(action.programId)
+                }
+
+                is ProgramAddonAction.Stopped -> {
+                    addon.programStopped(action.programId)
+                    val retired = outstandingAddonRequests.filterValues { it == action.programId }.keys
+                    pendingAddonCompletions.removeAll { it.identity in retired }
+                    retired.forEach(outstandingAddonRequests::remove)
+                }
+
+                is ProgramAddonAction.Request -> {
+                    val addonRequest = action.request
+                    check(
+                        outstandingAddonRequests.put(addonRequest.identity, addonRequest.programId) == null,
+                    ) { "duplicate pending addon request" }
+                    val result =
+                        try {
+                            addon.dispatch(addonRequest)
+                        } catch (_: Exception) {
+                            ProgramAddonDispatch.Completed(HostResponse.Failure(HostFailureKind.INPUT_OUTPUT, "Addon request failed"))
+                        }
+                    if (result is ProgramAddonDispatch.Completed) {
+                        pendingAddonCompletions += ProgramAddonCompletion(addonRequest.identity, result.response)
+                    }
+                    hostCompletionTick = lastObservedServerTick
+                }
+            }
         }
         when (val request = reply.value) {
             is ProgramRuntimeActorValue.RedstoneOutputRequested -> {
@@ -238,27 +264,16 @@ class ActorProgramComputer(
                 hostCompletionTick = lastObservedServerTick
             }
 
-            is ProgramRuntimeActorValue.AddonsRequested -> {
-                request.requests.forEach { addonRequest ->
-                    check(outstandingAddonRequests.add(addonRequest.identity)) {
-                        "addon host received a duplicate pending request"
-                    }
-                    val result =
-                        try {
-                            addon.dispatch(addonRequest)
-                        } catch (_: Exception) {
-                            ProgramAddonDispatch.Completed(HostResponse.Failure(HostFailureKind.INPUT_OUTPUT, "Addon request failed"))
-                        }
-                    if (result is ProgramAddonDispatch.Completed) {
-                        pendingAddonCompletions += ProgramAddonCompletion(addonRequest.identity, result.response)
-                    }
-                }
-                hostCompletionTick = lastObservedServerTick
-            }
-
             else -> {
                 Unit
             }
+        }
+        if (
+            reply.state != ProgramRuntimeState.Running &&
+            reply.state != ProgramRuntimeState.WaitingForInput &&
+            reply.state != ProgramRuntimeState.WaitingForCompiler
+        ) {
+            discardAddonRequests()
         }
     }
 

@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
@@ -558,6 +559,32 @@ class ProgramRuntimeActorProcessorTest {
                     )
                 assertTrue(assertIs<ProgramRuntimeActorValue.Accepted>(discarded.value).accepted)
             }
+        }
+    }
+
+    @Test
+    fun `addon lifecycle order survives a simultaneous redstone world effect`() {
+        val session = RecordingSession()
+        val redstone = ActorRedstoneHostPort()
+        val addons = ActorAddonRequestPort()
+        val host = ProgramRuntimeHost(ProgramVmSessionFactory { session }, redstoneHostPort = redstone)
+        ProgramRuntimeActorProcessor(host, redstonePort = redstone, addonPort = addons).use { processor ->
+            processor.process(ProgramRuntimeActorCommand.Start(request(1), byteArrayOf(1)))
+            val deviceRequest = ProgramAddonRequest(VmHostRequestIdentity(2, 31), TEST_ADDON_CAPABILITY, 0, emptyList(), 1)
+            assertTrue(addons.submit(ProgramAddonAction.Started(1)))
+            assertTrue(addons.submit(deviceRequest))
+            assertTrue(addons.submit(ProgramAddonAction.Stopped(1)))
+            session.nextOutcome =
+                VmOutcome.HostRequestBatch(
+                    listOf(VmHostRequest(1, REDSTONE, 6, listOf(VmValue.I32(2), VmValue.I32(7)))),
+                )
+            val reply = processor.advance(ProgramRuntimeTickPermit(request(2), 1))
+            assertIs<ProgramRuntimeActorValue.RedstoneOutputRequested>(reply.value)
+            assertEquals(
+                listOf(ProgramAddonAction.Started(1), ProgramAddonAction.Request(deviceRequest), ProgramAddonAction.Stopped(1)),
+                reply.addonActions,
+            )
+            assertTrue(addons.takeActions().isEmpty())
         }
     }
 

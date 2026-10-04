@@ -29,6 +29,7 @@ import ru.lazyhat.compukters.addon.api.AddonGuestApiCatalog
 import ru.lazyhat.compukters.addon.api.AddonRecordSchema
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.programAddonHostOf
+import ru.lazyhat.compukters.core.device.runtime.program.programScopedAddonHostOf
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostRecordField
 import ru.lazyhat.compukters.lang.runtime.capability.HostRecordSchema
@@ -100,17 +101,23 @@ object ComputerAddonHosts {
         position: BlockPos,
         state: BlockState,
     ): ProgramAddonHost {
-        val hosts =
-            registrations.mapNotNull { registration ->
-                registration.factory.create(level, position, state)?.also { host ->
-                    requireAddonCapabilitySchemas(registration.guestApiBundles, host.capabilitySchemas)
+        // Capture registrations for this computer; each program owns fresh host state for the same context.
+        val factories = registrations.toList()
+        if (factories.isEmpty()) return programAddonHostOf(emptyList())
+        return programScopedAddonHostOf {
+            val hosts = mutableListOf<ProgramAddonHost>()
+            try {
+                factories.forEach { registration ->
+                    registration.factory.create(level, position, state)?.let { host ->
+                        hosts += host
+                        requireAddonCapabilitySchemas(registration.guestApiBundles, host.capabilitySchemas)
+                    }
                 }
+                programAddonHostOf(hosts)
+            } catch (failure: Throwable) {
+                hosts.asReversed().forEach { host -> runCatching(host::close).onFailure(failure::addSuppressed) }
+                throw failure
             }
-        return try {
-            programAddonHostOf(hosts)
-        } catch (failure: Throwable) {
-            hosts.asReversed().forEach { host -> runCatching(host::close).onFailure(failure::addSuppressed) }
-            throw failure
         }
     }
 

@@ -107,7 +107,13 @@ internal class ProgramRuntimeActorProcessor(
                     ProgramRuntimeActorFailure.Bridge(failure.message ?: "native VM bridge failure"),
                 )
             }
-        return ProgramRuntimeActorReply(requestId, host.state, value, lastFileSystemGeneration)
+        return ProgramRuntimeActorReply(
+            requestId,
+            host.state,
+            value,
+            lastFileSystemGeneration,
+            addonActions = addonPort?.takeActions().orEmpty(),
+        )
     }
 
     private fun execute(command: ProgramRuntimeActorCommand): ProgramRuntimeActorValue =
@@ -260,8 +266,7 @@ internal class ProgramRuntimeActorProcessor(
         check(redstone == null || sound == null) { "one actor advance cannot defer two world request batches" }
         if (redstone != null) return redstone
         if (sound != null) return sound
-        val addons = addonPort?.takeRequests().orEmpty()
-        return if (addons.isEmpty()) ProgramRuntimeActorValue.None else ProgramRuntimeActorValue.AddonsRequested(addons)
+        return ProgramRuntimeActorValue.None
     }
 
     private fun prepareDeployment(command: ProgramRuntimeActorCommand.PrepareDeployment): ProgramRuntimeActorValue {

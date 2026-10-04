@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
@@ -248,6 +249,7 @@ data class ProgramRuntimeActorReply(
     val fileSystemGeneration: Long? = null,
     val retiredInstructions: Long = 0,
     val hostDeadlineMissed: Boolean = false,
+    val addonActions: List<ProgramAddonAction> = emptyList(),
 )
 
 sealed interface ProgramRuntimeActorValue {
@@ -311,25 +313,6 @@ sealed interface ProgramRuntimeActorValue {
         requests: List<SoundRequest>,
     ) : ProgramRuntimeActorValue {
         val requests: List<SoundRequest> = requests.toList()
-    }
-
-    class AddonsRequested(
-        requests: List<ProgramAddonRequest>,
-    ) : ProgramRuntimeActorValue {
-        val requests: List<ProgramAddonRequest> = requests.toList()
-
-        init {
-            require(this.requests.isNotEmpty()) { "addon request batch must not be empty" }
-            require(this.requests.size <= MAXIMUM_ADDON_BATCH) { "addon request batch exceeds its bound" }
-            require(
-                this.requests
-                    .map(ProgramAddonRequest::identity)
-                    .toSet()
-                    .size == this.requests.size,
-            ) {
-                "addon request batch contains duplicate identities"
-            }
-        }
     }
 
     data class Rejected(
