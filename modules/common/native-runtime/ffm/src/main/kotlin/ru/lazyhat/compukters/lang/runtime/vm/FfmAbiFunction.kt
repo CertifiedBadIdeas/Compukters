@@ -271,6 +271,16 @@ internal enum class FfmAbiFunction(
             ValueLayout.JAVA_LONG,
         ),
     ),
+    RESUME_VALUE(
+        "compukter_resume_value",
+        status(
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_INT,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+        ),
+    ),
     RESUME_FAILURE(
         "compukter_resume_failure",
         status(

@@ -30,6 +30,18 @@ sealed interface HostResponse {
         val value: Int,
     ) : HostResponse
 
+    data class LongSuccess(
+        val value: Long,
+    ) : HostResponse
+
+    data class DoubleSuccess(
+        val value: Double,
+    ) : HostResponse
+
+    data class CharSuccess(
+        val value: Char,
+    ) : HostResponse
+
     data class FloatSuccess(
         val value: Float,
     ) : HostResponse

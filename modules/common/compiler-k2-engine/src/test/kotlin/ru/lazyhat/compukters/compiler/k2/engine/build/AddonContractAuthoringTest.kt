@@ -28,6 +28,26 @@ import kotlin.test.assertFailsWith
 
 class AddonContractAuthoringTest {
     @Test
+    fun `generated addon hosts complete all scalar result kinds`() =
+        withSources(
+            """
+            package fixture.numeric
+            private object Bindings {
+                external fun tick(): Long
+                external fun coordinate(): Double
+                external fun letter(): Char
+            }
+            """.trimIndent(),
+        ) { root ->
+            val authoring = contract()
+            val resolved = resolveAddonContract(root, authoring, AddonAbiLock.empty())
+            val generated = renderAddonHostContract(authoring, resolved.contract)
+            kotlin.test.assertTrue("HostResponse.LongSuccess" in generated)
+            kotlin.test.assertTrue("HostResponse.DoubleSuccess" in generated)
+            kotlin.test.assertTrue("HostResponse.CharSuccess" in generated)
+        }
+
+    @Test
     fun `addon derives its internal module and capability from one identity`() =
         withSources(
             """

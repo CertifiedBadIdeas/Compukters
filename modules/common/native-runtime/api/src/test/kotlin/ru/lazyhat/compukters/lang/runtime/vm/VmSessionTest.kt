@@ -399,6 +399,31 @@ class VmSessionTest {
     }
 
     @Test
+    fun `wide scalar responses preserve request identity and encoded bits`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(11)))
+        VmSession.open(byteArrayOf(1), bridge).use { session ->
+            session.resume(VmHostRequestIdentity(9, 14), HostResponse.LongSuccess(Long.MIN_VALUE))
+            session.resume(VmHostRequestIdentity(10, 15), HostResponse.DoubleSuccess(-0.0))
+            session.resume(VmHostRequestIdentity(11, 16), HostResponse.CharSuccess('\ud800'))
+        }
+        assertEquals(
+            listOf(
+                EncodedResponse(11, 9, 14, byteArrayOf(1, 2, 0, 0, 0, 0, 0, 0, 0, -128).toList()),
+                EncodedResponse(11, 10, 15, byteArrayOf(1, 4, 0, 0, 0, 0, 0, 0, 0, -128).toList()),
+                EncodedResponse(11, 11, 16, byteArrayOf(1, 6, 0, -40).toList()),
+            ),
+            bridge.encodedResponses,
+        )
+    }
+
+    private data class EncodedResponse(
+        val handle: Long,
+        val taskId: Int,
+        val requestId: Long,
+        val payload: List<Byte>,
+    )
+
+    @Test
     fun `malformed compilation snapshots are bridge failures`() {
         val bridge = FakeBridge(createResult = bytes(0, long(11)))
         val session = VmSession.open(byteArrayOf(1), bridge)
@@ -647,6 +672,7 @@ class VmSessionTest {
         val outcomes = ArrayDeque<ByteArray>()
         val advances = mutableListOf<AdvanceCall>()
         val closed = mutableListOf<Long>()
+        val encodedResponses = mutableListOf<EncodedResponse>()
         val unitResponses = mutableListOf<UnitResponse>()
         val intResponses = mutableListOf<IntResponse>()
         val floatResponses = mutableListOf<FloatBitsResponse>()
@@ -806,6 +832,15 @@ class VmSessionTest {
             requestId: Long,
         ) {
             unitResponses += UnitResponse(handle, taskId, requestId)
+        }
+
+        override fun resumeValue(
+            handle: Long,
+            taskId: Int,
+            requestId: Long,
+            payload: ByteArray,
+        ) {
+            encodedResponses += EncodedResponse(handle, taskId, requestId, payload.toList())
         }
 
         override fun resumeString(
