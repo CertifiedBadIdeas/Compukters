@@ -32,6 +32,13 @@ val addonToolingJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tas
     exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
 }
 
+// Stable SDK tooling for independent addon builds inside this workspace.
+tasks.register<Copy>("developmentAddonToolingJar") {
+    from(addonToolingJar)
+    into(layout.buildDirectory.dir("devlibs"))
+    rename { "compukters-addon-tooling-development.jar" }
+}
+
 publishing {
     publications {
         create<MavenPublication>("addonTooling") {

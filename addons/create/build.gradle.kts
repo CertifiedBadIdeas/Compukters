@@ -54,6 +54,8 @@ architectury {
     neoForge()
 }
 
+apply(from = "../gradle/workspace-sdk.gradle.kts")
+
 compuktersAddon {
     register("create")
 }
@@ -253,4 +255,21 @@ tasks.register("buildProductionJar") {
     group = "build"
     description = "Builds the standalone remapped Create addon mod JAR."
     dependsOn(productionJar, verifyProductionJar)
+}
+
+// Stable development archive consumed by the independent all-addon run build.
+val developmentModJar = tasks.register<Jar>("developmentModJar") {
+    group = "build"
+    archiveFileName.set("compukters-create-development-mod.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("devlibs"))
+    from(sourceSets.main.get().output)
+}
+
+// Test composition archive; independent from the normal addon development archive.
+val developmentGameTestModJar = tasks.register<Jar>("developmentGameTestModJar") {
+    group = "verification"
+    archiveFileName.set("compukters-create-gametest-mod.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("devlibs"))
+    from(sourceSets.main.get().output)
+    from(gameTest.output)
 }
