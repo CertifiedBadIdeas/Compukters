@@ -277,8 +277,8 @@ addon mods, beginning with an optional Create integration for Minecraft 1.21.1.
 
 ### Computer runtime
 
-- Managed object type lookup uses a precomputed VM image table, reducing interpreter overhead in
-  measured collection and loop workloads while preserving Guest execution budgets.
+- Managed object type lookup and virtual/interface method lookup use precomputed VM image tables,
+  reducing interpreter overhead in measured collection and loop workloads while preserving Guest execution budgets.
 
 - Runtime attachment epochs remain unique when a computer block entity is replaced while preserving its
   ComputerId, preventing an old actor address from matching the new runtime.

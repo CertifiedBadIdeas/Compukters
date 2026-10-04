@@ -276,3 +276,6 @@ For fresh Ryzen 9 9950X3D native and compiled Guest workload results, see
 
 For untraced Guest measurements, CPU profiles and a paired interpreter optimization, see
 [the production-path VM optimization report](VM-OPTIMIZATION-2026-10-04.md).
+
+For the subsequent virtual/interface dispatch optimization and paired evidence, see
+[the VM dispatch report](VM-DISPATCH-2026-10-04.md).

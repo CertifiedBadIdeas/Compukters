@@ -1,0 +1,28 @@
+cargo test --manifest-path host/compukter-vm/Cargo.toml -p compukter-vm --locked --offline
+test result: ok. 432 passed; 0 failed; 9 ignored; 0 measured; 0 filtered out; finished in 8.28s
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+Kotlin-to-VM conformance scenario passed: function-values
+Kotlin-to-VM conformance scenario passed: generic-interface
+Kotlin-to-VM conformance scenario passed: map-not-null
+Kotlin-to-VM conformance scenario passed: mutable-list
+Kotlin-to-VM conformance scenario passed: tasks
+Kotlin-to-VM conformance scenario passed: exceptions
+cargo clippy --manifest-path host/compukter-vm/Cargo.toml -p compukter-vm --all-targets --all-features --locked --offline -- -D warnings: passed
+cargo fmt --manifest-path host/compukter-vm/Cargo.toml --all --check: passed
+JAVA_HOME=/usr/lib/jvm/java-25-openjdk ./gradlew-sandbox-dev-parallel-summary testKotlinFunctionValuesVmConformance testKotlinGenericInterfaceVmConformance testKotlinMapNotNullVmConformance testKotlinMutableListVmConformance testKotlinTasksVmConformance testKotlinExceptionsVmConformance --offline --max-workers=4: passed
