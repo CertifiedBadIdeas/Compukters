@@ -128,16 +128,29 @@ object LibrarySpecializations {
                 application.modules.filterIndexed { index, module -> index != definitionModule && module.kind == ModuleKind.LIBRARY } +
                     libraries.flatMap { it.modules.filter { m -> m.kind == ModuleKind.LIBRARY } }
             ).distinctBy { ArtifactWriter.moduleSemanticHash(it).hex() }
+        // Only an artifact's defining library owns its complete exported variants. Embedded dependencies
+        // may be pruned copies with different semantic hashes; they cannot compete with a direct owner.
+        val definingModules =
+            libraries
+                .mapNotNull { artifact ->
+                    artifact.modules.firstOrNull { it.kind == ModuleKind.LIBRARY }
+                }.distinctBy { ArtifactWriter.moduleSemanticHash(it).hex() }
         val source = application.modules[definitionModule]
         val owners = linkedMapOf<Int, Module>()
         source.types.forEachIndexed { index, type ->
             val name = source.text(type.name)
             if (name !in names) return@forEachIndexed
-            val candidates =
-                modules.filter { module ->
-                    module.exports.any { it.kind == SymbolKind.TYPE && module.text(it.name) == typeName(name) }
-                }
-            require(candidates.size <= 1) { "ambiguous specialization owner for $name" }
+
+            fun exportsVariant(module: Module): Boolean =
+                module.exports.any { it.kind == SymbolKind.TYPE && module.text(it.name) == typeName(name) }
+            val directOwners = definingModules.filter(::exportsVariant)
+            val candidates = directOwners.ifEmpty { modules.filter(::exportsVariant) }
+            require(candidates.size <= 1) {
+                "ambiguous specialization owner for $name: " +
+                    candidates.joinToString { module ->
+                        "${module.text(module.name)}@${ArtifactWriter.moduleSemanticHash(module).hex()}"
+                    }
+            }
             candidates.singleOrNull()?.let { owners[index] = it }
         }
         if (owners.isEmpty()) return application
