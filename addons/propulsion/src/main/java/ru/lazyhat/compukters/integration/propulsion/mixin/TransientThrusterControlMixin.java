@@ -23,15 +23,29 @@ import dev.propulsionteam.propulsionsimulated.content.thruster.AbstractThrusterB
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import ru.lazyhat.compukters.integration.propulsion.PropulsionGuestIntegration;
+import ru.lazyhat.compukters.integration.propulsion.TransientThrusterControl;
 
 /** Never deserialize a program lease: chunk saves and Sable copies retain engine settings only. */
 @Mixin(value = AbstractThrusterBlockEntity.class, remap = false)
-public abstract class TransientThrusterControlMixin {
+public abstract class TransientThrusterControlMixin implements TransientThrusterControl {
     private static final String COMPUKTERS_CONTROL = "compukters_propulsion:transient_control";
+
+    @Shadow protected float digitalInput;
+    @Shadow private float fadePower;
+
+    @Override
+    public void compukters$clearProgramPower() {
+        // Bypass the setter's epsilon without temporarily commanding full power.
+        digitalInput = 0f;
+        // The old envelope must not multiply the restored scroll-wheel thrust.
+        fadePower = 0f;
+        ((AbstractThrusterBlockEntity) (Object) this).dirtyThrust();
+    }
 
     @Inject(method = "write", at = @At("TAIL"))
     private void compukters$markTransientControl(CompoundTag tag, HolderLookup.Provider registries,
@@ -46,9 +60,7 @@ public abstract class TransientThrusterControlMixin {
                                                  boolean clientPacket, CallbackInfo callback) {
         if (!clientPacket && tag.getBoolean(COMPUKTERS_CONTROL)) {
             AbstractThrusterBlockEntity entity = (AbstractThrusterBlockEntity) (Object) this;
-            // The public input setter has an epsilon; clear arbitrarily small saved commands too.
-            entity.setDigitalInput(1f);
-            entity.setDigitalInput(0f);
+            compukters$clearProgramPower();
             entity.setControlMode(ControlMode.NORMAL);
         }
     }

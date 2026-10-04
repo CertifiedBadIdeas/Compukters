@@ -74,6 +74,8 @@ the exclusive Compukters lease contract; cleanup does not overwrite an attached 
 
 Program completion/stop, computer removal, and observed cable loss release the digital input and restore normal
 redstone. Cable validation runs on server ticks only for owned engines, including while the program waits for input.
+Release also clears the program's stored shutdown envelope before restoring engine settings and immediately
+recalculates physical thrust. Unpowered redstone produces no residual program thrust or handoff spike.
 Powered redstone may immediately request thrust. `close()` releases control early and invalidates the handle.
 Stale/disconnected/replaced/unloaded handles throw IllegalStateException; reacquire by name after reconnecting.
 Aliases acquired by the same program for the same engine share one handle, so closing one closes all its aliases.

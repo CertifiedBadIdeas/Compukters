@@ -51,6 +51,19 @@ object CreativeVectorThrusterGameTests {
     @JvmStatic
     @GameTest(batch = "propulsion_vector", template = "bastion/mobs/empty", templateNamespace = "minecraft", timeoutTicks = 100_000)
     fun guestVectorHandleList(helper: GameTestHelper) {
+        vectorHandleList(helper, removeComputer = false)
+    }
+
+    @JvmStatic
+    @GameTest(batch = "propulsion_vector", template = "bastion/mobs/empty", templateNamespace = "minecraft", timeoutTicks = 100_000)
+    fun guestVectorComputerRemovalClearsThrust(helper: GameTestHelper) {
+        vectorHandleList(helper, removeComputer = true)
+    }
+
+    private fun vectorHandleList(
+        helper: GameTestHelper,
+        removeComputer: Boolean,
+    ) {
         val computer = BlockPos(2, 2, 3)
         val engines = listOf("fl", "fr", "bl", "br").mapIndexed { index, name -> name to BlockPos(5, 2, index + 2) }
         helper.setBlock(computer, CompuktersRegistry.COMPUTER.get())
@@ -66,19 +79,36 @@ object CreativeVectorThrusterGameTests {
         }
         scenario.prepare(sequence, HANDLE_LIST)
         scenario.awaitMarker(sequence, "vector-list-owned")
-        sequence.thenExecute {
+        sequence.thenExecuteAfter(20) {
             engines.forEach { (name, position) ->
                 val thruster = helper.getBlockEntity(position) as CreativeVectorThrusterBlockEntity
                 helper.assertTrue(thruster.hasPeripheralThrustOverride(), "$name did not receive custom thrust through list iteration")
                 helper.assertTrue(thruster.throttle == 0.25f, "$name did not receive throttle through list iteration")
+                helper.assertTrue(thruster.currentThrust > 0f, "$name must produce physical thrust before release")
             }
         }
-        scenario.resume(sequence)
-        scenario.awaitMarker(sequence, "vector-list-finished")
-        sequence.thenExecute {
+        if (removeComputer) {
+            sequence.thenExecute { helper.setBlock(computer, Blocks.AIR) }
+        } else {
+            scenario.resume(sequence)
+            scenario.awaitMarker(sequence, "vector-list-finished")
+        }
+        sequence.thenWaitUntil {
             engines.forEach { (name, position) ->
                 val thruster = helper.getBlockEntity(position) as CreativeVectorThrusterBlockEntity
                 helper.assertTrue(!thruster.hasPeripheralThrustOverride(), "$name retained its lease after program completion")
+            }
+        }
+        sequence.thenExecute {
+            engines.forEach { (name, position) ->
+                val thruster = helper.getBlockEntity(position) as CreativeVectorThrusterBlockEntity
+                helper.assertTrue(thruster.currentThrust == 0f, "$name retained physical thrust after program completion")
+            }
+        }
+        sequence.thenExecuteAfter(2) {
+            engines.forEach { (name, position) ->
+                val thruster = helper.getBlockEntity(position) as CreativeVectorThrusterBlockEntity
+                helper.assertTrue(thruster.currentThrust == 0f, "$name regained thrust from its old shutdown envelope")
             }
         }
         sequence.thenSucceed()
