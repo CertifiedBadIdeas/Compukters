@@ -98,6 +98,96 @@ class ProgramRuntimeActorIntegrationTest {
         }
     }
 
+    @Test
+    fun `physics observation bursts preserve native VM execution and capacity baseline`() {
+        VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.ffi.library")))
+        val artifact = Path.of(requiredProperty("compukters.vmbenchAgentRuntime.artifact")).readBytes()
+        val runs = listOf(1, 4, 16, 64).map { substeps -> nativeBaseline(artifact, substeps) }
+        val baseline = runs.first()
+        runs.forEach { run ->
+            assertEquals(baseline.turns, run.turns)
+            assertEquals(baseline.instructions, run.instructions)
+            assertEquals(baseline.guestUnits, run.guestUnits)
+            assertEquals(baseline.maintenanceUnits, run.maintenanceUnits)
+            assertEquals(baseline.retiredInstructions, run.retiredInstructions)
+            assertEquals(baseline.output, run.output)
+            assertEquals(run.turns * run.substeps, run.observations)
+        }
+        println("physics observation baseline: $runs")
+    }
+
+    private fun nativeBaseline(
+        artifact: ByteArray,
+        substeps: Int,
+    ): NativeBaseline {
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(686, substeps.toLong()), 1)
+        ProgramRuntimeActorService(
+            VmActorSchedulerConfig(workerCount = 1, maximumActors = 1),
+            safeInstructionCapacity = 131_072,
+        ).use { scheduler ->
+            assertTrue(scheduler.registerStandalone(endpoint))
+            val started = scheduler.awaitRequest(endpoint) { ProgramRuntimeActorCommand.Start(it, artifact) }
+            assertEquals(ProgramStartResult.Started, assertIs<ProgramRuntimeActorValue.Start>(started.value).result)
+            var state = started.state
+            var tick = 0L
+            var latestStep = 0L
+            var inputSent = false
+            while (state !is ProgramRuntimeState.Halted && tick < MAXIMUM_TICKS) {
+                // Test-only physics producer: coalesce all observations before the existing world-tick turn.
+                // This measures VM budget isolation, not a Guest sensor API or physics callback throughput.
+                repeat(substeps) { latestStep++ }
+                if (state == ProgramRuntimeState.WaitingForInput && !inputSent) {
+                    scheduler.awaitRequest(endpoint) { ProgramRuntimeActorCommand.SendTerminalText(it, "200") }
+                    inputSent = true
+                }
+                scheduler.beginCapacityFrame(tick)
+                val future = scheduler.turn(endpoint, tick++)
+                scheduler.flushCapacityFrame()
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS)
+                while (!future.isDone && System.nanoTime() < deadline) {
+                    scheduler.pump(1)
+                    Thread.onSpinWait()
+                }
+                assertTrue(future.isDone, "native baseline turn completed before timeout")
+                val reply = future.get()
+                assertTrue(reply.retiredInstructions in 0..131_072)
+                state = reply.state
+            }
+            assertIs<ProgramRuntimeState.Halted>(state)
+            val resources = scheduler.awaitRequest(endpoint) { ProgramRuntimeActorCommand.ResourceSnapshot(it) }
+            val snapshot =
+                assertIs<ProgramResourceSnapshot.Available>(
+                    assertIs<ProgramRuntimeActorValue.ResourceSnapshotValue>(resources.value).snapshot,
+                )
+            val terminal = scheduler.awaitRequest(endpoint) { ProgramRuntimeActorCommand.TerminalFullState(it) }
+            val output = terminalText(requireNotNull(assertIs<ProgramRuntimeActorValue.TerminalStateValue>(terminal.value).state))
+            assertTrue(output.startsWith("vmbench agent: rounds=200\nvmbench agent: checksum="))
+            assertTrue(snapshot.executedInstructions > 131_072, "workload spans multiple capacity-limited turns")
+            assertEquals(tick, scheduler.metrics().acceptedPermits)
+            return NativeBaseline(
+                substeps,
+                latestStep,
+                tick,
+                snapshot.executedInstructions,
+                snapshot.grantedGuestUnits,
+                snapshot.grantedMaintenanceUnits,
+                scheduler.runtimeMetrics().retiredInstructionsTotal,
+                output,
+            )
+        }
+    }
+
+    private data class NativeBaseline(
+        val substeps: Int,
+        val observations: Long,
+        val turns: Long,
+        val instructions: Long,
+        val guestUnits: Long,
+        val maintenanceUnits: Long,
+        val retiredInstructions: Long,
+        val output: String,
+    )
+
     private fun ProgramRuntimeActorService.awaitRequest(
         endpoint: VmActorEndpoint,
         command: (ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand,
