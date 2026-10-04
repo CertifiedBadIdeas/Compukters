@@ -768,6 +768,7 @@ private fun scalarStringForm(type: ValueType): StringValueType =
         ValueType.I32 -> StringValueType.I32
         ValueType.I64 -> StringValueType.I64
         ValueType.F32 -> StringValueType.F32
+        ValueType.F64 -> StringValueType.F64
         ValueType.Bool -> StringValueType.BOOL
         ValueType.Char -> StringValueType.CHAR
         else -> error("unsupported scalar string conversion: $type")
@@ -778,6 +779,7 @@ private fun scalarHashForm(type: ValueType): HashValueType =
         ValueType.I32 -> HashValueType.I32
         ValueType.I64 -> HashValueType.I64
         ValueType.F32 -> HashValueType.F32
+        ValueType.F64 -> HashValueType.F64
         ValueType.Bool -> HashValueType.BOOL
         ValueType.Char -> HashValueType.CHAR
         else -> error("unsupported scalar hash: $type")
@@ -789,16 +791,18 @@ private fun IrSimpleFunction.isGeneratedDataValueMethod(): Boolean =
 
 private const val ANY_RUNTIME_TYPE = 5u
 private const val INT_BOX_RUNTIME_TYPE = 6u
-private const val INT_BOX_VALUE_IMPORT = 22u
-private const val THROWABLE_MESSAGE_IMPORT = 23u
-private const val THROWABLE_CAUSE_IMPORT = 24u
+private const val INT_BOX_VALUE_IMPORT = 24u
+private const val THROWABLE_MESSAGE_IMPORT = 25u
+private const val THROWABLE_CAUSE_IMPORT = 26u
 private const val INT_ARRAY_RUNTIME_TYPE = 4u
-private const val UNIT_RUNTIME_TYPE = 21u
-private const val UNIT_INSTANCE_IMPORT = 29u
-private const val ANY_TO_STRING_IMPORT = 30u
-private const val ANY_HASH_CODE_IMPORT = 31u
-private const val ANY_EQUALS_IMPORT = 32u
-private const val RUNTIME_IMPORT_COUNT = 33
+private const val DOUBLE_ARRAY_RUNTIME_TYPE = 23u
+private const val DOUBLE_BOX_RUNTIME_TYPE = 20u
+private const val UNIT_RUNTIME_TYPE = 22u
+private const val UNIT_INSTANCE_IMPORT = 32u
+private const val ANY_TO_STRING_IMPORT = 33u
+private const val ANY_HASH_CODE_IMPORT = 34u
+private const val ANY_EQUALS_IMPORT = 35u
+private const val RUNTIME_IMPORT_COUNT = 36
 private const val UNIT_INSTANCE_NAME = "kotlin.Unit.INSTANCE"
 private const val ANY_TO_STRING_NAME = "kotlin.Any.toString"
 private const val ANY_HASH_CODE_NAME = "kotlin.Any.hashCode"
@@ -814,10 +818,11 @@ private data class ScalarBox(
 private val scalarBoxes =
     listOf(
         ScalarBox(INT_BOX_RUNTIME_TYPE, INT_BOX_VALUE_IMPORT, ValueType.I32, "kotlin.Int.<boxed-value>"),
-        ScalarBox(17u, 25u, ValueType.Bool, "kotlin.Boolean.<boxed-value>"),
-        ScalarBox(18u, 26u, ValueType.I64, "kotlin.Long.<boxed-value>"),
-        ScalarBox(19u, 27u, ValueType.F32, "kotlin.Float.<boxed-value>"),
-        ScalarBox(20u, 28u, ValueType.Char, "kotlin.Char.<boxed-value>"),
+        ScalarBox(17u, 27u, ValueType.Bool, "kotlin.Boolean.<boxed-value>"),
+        ScalarBox(18u, 28u, ValueType.I64, "kotlin.Long.<boxed-value>"),
+        ScalarBox(19u, 29u, ValueType.F32, "kotlin.Float.<boxed-value>"),
+        ScalarBox(DOUBLE_BOX_RUNTIME_TYPE, 30u, ValueType.F64, "kotlin.Double.<boxed-value>"),
+        ScalarBox(21u, 31u, ValueType.Char, "kotlin.Char.<boxed-value>"),
     )
 private val runtimeMemberNames =
     listOf(INT_BOX_VALUE_NAME, THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME) +
@@ -891,8 +896,8 @@ private fun mapGuestValueType(
             resolveUnderlyingType = resolveUnderlyingType,
         )
     }
-    if (type.isNullableInt()) {
-        return ValueType.Ref(nullable = true, type = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE)))
+    if (type.isNullableScalar()) {
+        return ValueType.Ref(nullable = true, type = TypeRef.Imported(ImportId.of(type.nullableScalarRuntimeType())))
     }
     ((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.runtimeExceptionType()?.let {
         return ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Imported(ImportId.of(it)))
@@ -926,6 +931,10 @@ private fun mapGuestValueType(
             ValueType.F32
         }
 
+        pluginContext.irBuiltIns.doubleType -> {
+            ValueType.F64
+        }
+
         pluginContext.irBuiltIns.booleanType -> {
             ValueType.Bool
         }
@@ -943,6 +952,8 @@ private fun mapGuestValueType(
                 ValueType.Unit
             } else if (type.isExactClass(pluginContext.irBuiltIns.charArray)) {
                 charArrayType
+            } else if (type.isExactClass(pluginContext.irBuiltIns.doubleArray)) {
+                ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(DOUBLE_ARRAY_RUNTIME_TYPE)))
             } else if (type.isExactClass(pluginContext.irBuiltIns.intArray)) {
                 ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(INT_ARRAY_RUNTIME_TYPE)))
             } else if (guestTypes.isStringArray(type)) {
@@ -1032,8 +1043,10 @@ internal object KotlinProjectLowering {
             "kotlin.Boolean",
             "kotlin.Long",
             "kotlin.Float",
+            "kotlin.Double",
             "kotlin.Char",
             "kotlin.Unit",
+            "kotlin.DoubleArray",
         )
 
     fun lower(
@@ -1428,6 +1441,7 @@ internal object KotlinProjectLowering {
                 pluginContext.irBuiltIns.unitType,
                 pluginContext.irBuiltIns.longType,
                 pluginContext.irBuiltIns.floatType,
+                pluginContext.irBuiltIns.doubleType,
             ).also { collector ->
                 userFunctions.forEach { function -> function.accept(collector, null) }
                 constructorClasses.forEach { declaration -> declaration.accept(collector, null) }
@@ -1465,7 +1479,7 @@ internal object KotlinProjectLowering {
                         if (
                             callee == "kotlin.Int.compareTo" ||
                             callee == "kotlin.Long.compareTo" ||
-                            callee == "kotlin.Float.compareTo"
+                            callee == "kotlin.Float.compareTo" || callee == "kotlin.Double.compareTo"
                         ) {
                             val operands = expression.arguments.filterNotNull()
                             if (operands.size == 2) {
@@ -1473,11 +1487,11 @@ internal object KotlinProjectLowering {
                                 if (types.all { it == pluginContext.irBuiltIns.intType || it == pluginContext.irBuiltIns.longType }) {
                                     needsIntegerCompareToResult = true
                                 } else if (
-                                    types.any { it == pluginContext.irBuiltIns.floatType } &&
+                                    types.any { it == pluginContext.irBuiltIns.floatType || it == pluginContext.irBuiltIns.doubleType } &&
                                     types.all {
                                         it == pluginContext.irBuiltIns.intType ||
                                             it == pluginContext.irBuiltIns.longType ||
-                                            it == pluginContext.irBuiltIns.floatType
+                                            it == pluginContext.irBuiltIns.floatType || it == pluginContext.irBuiltIns.doubleType
                                     }
                                 ) {
                                     needsFloatCompareToResult = true
@@ -1515,7 +1529,8 @@ internal object KotlinProjectLowering {
                 Constant.I32(31) + Constant.I32(0) + Constant.I32(1) +
                 listOfNotNull(
                     Constant.I32(-1).takeIf {
-                        needsAllBitsI32 || needsIntegerCompareToResult || needsFloatCompareToResult || needsBooleanCompareToResult
+                        needsAllBitsI32 || needsIntegerCompareToResult || needsFloatCompareToResult || needsBooleanCompareToResult ||
+                            literalCollector.usesDouble
                     },
                 ) +
                 listOfNotNull(
@@ -1528,6 +1543,9 @@ internal object KotlinProjectLowering {
                 listOfNotNull(Constant.F32(0u).takeIf { literalCollector.usesFloat }) +
                 listOfNotNull(Constant.F32((-1.0f).toBits().toUInt()).takeIf { literalCollector.usesFloat }) +
                 Constant.F32(1.0f.toBits().toUInt()) +
+                listOfNotNull(Constant.F64(0uL).takeIf { literalCollector.usesDouble }) +
+                listOfNotNull(Constant.F64((-1.0).toBits().toULong()).takeIf { literalCollector.usesDouble }) +
+                Constant.F64(1.0.toBits().toULong()) +
                 Constant.Bool(false) + Constant.Bool(true)
         ).forEach(constantPool::intern)
         val constants = constantPool.freeze().records
@@ -1538,6 +1556,7 @@ internal object KotlinProjectLowering {
         val charArrayType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(CHAR_ARRAY_RUNTIME_TYPE)))
         val stringType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(STRING_RUNTIME_TYPE)))
         val intArrayType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(INT_ARRAY_RUNTIME_TYPE)))
+        val doubleArrayType = ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(DOUBLE_ARRAY_RUNTIME_TYPE)))
         val instanceFunctionIds =
             functionInstances.withIndex().associate { (index, instance) -> instance to FunctionId.of(index.toUInt()) }
         val instanceTypeIds =
@@ -1949,15 +1968,18 @@ internal object KotlinProjectLowering {
                             stringType = stringType,
                             charArrayType = charArrayType,
                             intArrayType = intArrayType,
+                            doubleArrayType = doubleArrayType,
                             stringArrayType = stringArrayType,
                             guestTypes = guestTypes,
                             unitType = pluginContext.irBuiltIns.unitType,
                             kotlinStringType = pluginContext.irBuiltIns.stringType,
                             kotlinCharArrayClass = pluginContext.irBuiltIns.charArray,
                             kotlinIntArrayClass = pluginContext.irBuiltIns.intArray,
+                            kotlinDoubleArrayClass = pluginContext.irBuiltIns.doubleArray,
                             intType = pluginContext.irBuiltIns.intType,
                             longType = pluginContext.irBuiltIns.longType,
                             floatType = pluginContext.irBuiltIns.floatType,
+                            doubleType = pluginContext.irBuiltIns.doubleType,
                             booleanType = pluginContext.irBuiltIns.booleanType,
                             charType = pluginContext.irBuiltIns.charType,
                             functionIds = functionIds,
@@ -2205,15 +2227,18 @@ internal object KotlinProjectLowering {
                         stringType = stringType,
                         charArrayType = charArrayType,
                         intArrayType = intArrayType,
+                        doubleArrayType = doubleArrayType,
                         stringArrayType = stringArrayType,
                         guestTypes = guestTypes,
                         unitType = pluginContext.irBuiltIns.unitType,
                         kotlinStringType = pluginContext.irBuiltIns.stringType,
                         kotlinCharArrayClass = pluginContext.irBuiltIns.charArray,
                         kotlinIntArrayClass = pluginContext.irBuiltIns.intArray,
+                        kotlinDoubleArrayClass = pluginContext.irBuiltIns.doubleArray,
                         intType = pluginContext.irBuiltIns.intType,
                         longType = pluginContext.irBuiltIns.longType,
                         floatType = pluginContext.irBuiltIns.floatType,
+                        doubleType = pluginContext.irBuiltIns.doubleType,
                         booleanType = pluginContext.irBuiltIns.booleanType,
                         charType = pluginContext.irBuiltIns.charType,
                         functionIds = functionIds,
@@ -2344,15 +2369,18 @@ internal object KotlinProjectLowering {
                     stringType = stringType,
                     charArrayType = charArrayType,
                     intArrayType = intArrayType,
+                    doubleArrayType = doubleArrayType,
                     stringArrayType = stringArrayType,
                     guestTypes = guestTypes,
                     unitType = pluginContext.irBuiltIns.unitType,
                     kotlinStringType = pluginContext.irBuiltIns.stringType,
                     kotlinCharArrayClass = pluginContext.irBuiltIns.charArray,
                     kotlinIntArrayClass = pluginContext.irBuiltIns.intArray,
+                    kotlinDoubleArrayClass = pluginContext.irBuiltIns.doubleArray,
                     intType = pluginContext.irBuiltIns.intType,
                     longType = pluginContext.irBuiltIns.longType,
                     floatType = pluginContext.irBuiltIns.floatType,
+                    doubleType = pluginContext.irBuiltIns.doubleType,
                     booleanType = pluginContext.irBuiltIns.booleanType,
                     charType = pluginContext.irBuiltIns.charType,
                     functionIds = functionIds,
@@ -3096,6 +3124,15 @@ internal object KotlinProjectLowering {
                 when {
                     modules.any { module ->
                         module.blocks.any { block ->
+                            block.instructions.any {
+                                (it is Instruction.ValueHash && it.type == HashValueType.F64) ||
+                                    (it is Instruction.StringValueOf && it.type == StringValueType.F64)
+                            }
+                        }
+                    } -> AbiVersion(1u, 12u)
+
+                    modules.any { module ->
+                        module.blocks.any { block ->
                             block.instructions.any { it is Instruction.ValueHash }
                         }
                     } -> AbiVersion(1u, 11u)
@@ -3205,7 +3242,9 @@ internal object KotlinProjectLowering {
                 TopLevelInitializer.Null
             } else {
                 val value = (expression as? IrConst)?.value
-                if (value !is Int && value !is Long && value !is Float && value !is Boolean && value !is Char && value !is String) {
+                if (value !is Int && value !is Long && value !is Float && value !is Double && value !is Boolean && value !is Char &&
+                    value !is String
+                ) {
                     throw UnsupportedKotlinIr(
                         expression,
                         "top-level val initializer must be a scalar literal or direct IntChannel construction",
@@ -3259,6 +3298,10 @@ internal object KotlinProjectLowering {
 
             pluginContext.irBuiltIns.floatType -> {
                 "kotlin.Float"
+            }
+
+            pluginContext.irBuiltIns.doubleType -> {
+                "kotlin.Double"
             }
 
             pluginContext.irBuiltIns.booleanType -> {
@@ -3316,6 +3359,7 @@ internal object KotlinProjectLowering {
                 pluginContext.irBuiltIns.intType,
                 pluginContext.irBuiltIns.longType,
                 pluginContext.irBuiltIns.floatType,
+                pluginContext.irBuiltIns.doubleType,
                 pluginContext.irBuiltIns.booleanType,
                 pluginContext.irBuiltIns.charType,
                 pluginContext.irBuiltIns.anyType,
@@ -3326,7 +3370,7 @@ internal object KotlinProjectLowering {
             if (((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.runtimeExceptionType() != null) return true
             val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
             if (type.isNullable()) {
-                return type.isNullableInt() || type.isKotlinAny() || (type as? IrSimpleType)?.classifier == stringClass ||
+                return type.isNullableScalar() || type.isKotlinAny() || (type as? IrSimpleType)?.classifier == stringClass ||
                     classTypeIds.containsKey((type as? IrSimpleType)?.classifier) ||
                     type.classInstance(
                         classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration },
@@ -3336,6 +3380,7 @@ internal object KotlinProjectLowering {
                 type.isNothing() ||
                 type.isExactClass(pluginContext.irBuiltIns.charArray) ||
                 type.isExactClass(pluginContext.irBuiltIns.intArray) ||
+                type.isExactClass(pluginContext.irBuiltIns.doubleArray) ||
                 guestTypes.isStringArray(type) ||
                 guestTypes.referenceArrayType(type) != null ||
                 (
@@ -3494,6 +3539,8 @@ internal object KotlinProjectLowering {
         val unit = ValueType.Ref(false, TypeRef.Local(TypeId.of(UNIT_RUNTIME_TYPE)))
         val owners = listOf(ANY_RUNTIME_TYPE, STRING_RUNTIME_TYPE) + scalarBoxes.map { it.type } + UNIT_RUNTIME_TYPE
         val methods = owners.flatMap { owner -> listOf(owner to "toString", owner to "hashCode", owner to "equals") }
+        val blockCounts = methods.map { (owner, name) -> if (owner == DOUBLE_BOX_RUNTIME_TYPE && name == "equals") 6u else 3u }
+        val blockStarts = blockCounts.runningFold(0u, UInt::plus)
         val initializerId = methods.size.toUInt()
         val signatures =
             methods.map { (owner, name) ->
@@ -3518,8 +3565,57 @@ internal object KotlinProjectLowering {
                     val result = RegisterId.of(2u)
                     val cast = RegisterId.of(3u)
                     val ownerType = TypeRef.Local(TypeId.of(owner))
-                    val start = (index * 3).toUInt()
+                    val start = blockStarts[index]
                     val box = scalarBoxes.singleOrNull { it.type == owner }
+                    if (box?.valueType == ValueType.F64) {
+                        val left = RegisterId.of(4u)
+                        val right = RegisterId.of(5u)
+                        val leftHash = RegisterId.of(6u)
+                        val rightHash = RegisterId.of(7u)
+                        val field = FieldRef.Local(FieldId.of(box.field - 24u))
+
+                        fun block(instructions: List<Instruction>) = Block(FunctionId.of(index.toUInt()), false, instructions)
+
+                        fun branch(
+                            yes: UInt,
+                            no: UInt,
+                        ) = Instruction.Branch(result, BlockId.of(start + yes), BlockId.of(start + no))
+                        // Hash agreement distinguishes zero signs; IEEE equality and both-NaN checks
+                        // prevent folded Double hash collisions from becoming equality.
+                        return@flatMapIndexed listOf(
+                            block(listOf(Instruction.IsType(result, other, ownerType), branch(1u, 5u))),
+                            block(
+                                listOf(
+                                    Instruction.CheckedCast(cast, other, ownerType),
+                                    Instruction.FieldGet(left, receiver, field),
+                                    Instruction.FieldGet(right, cast, field),
+                                    Instruction.ValueHash(HashValueType.F64, leftHash, left),
+                                    Instruction.ValueHash(HashValueType.F64, rightHash, right),
+                                    Instruction.Equal(ScalarValueType.I32, result, leftHash, rightHash),
+                                    branch(2u, 5u),
+                                ),
+                            ),
+                            block(listOf(Instruction.Equal(ScalarValueType.F64, result, left, right), branch(5u, 3u))),
+                            block(
+                                listOf(
+                                    Instruction.Equal(ScalarValueType.F64, result, left, left),
+                                    Instruction.Const(RegisterId.of(8u), ConstantId.of(1u)),
+                                    Instruction.Equal(ScalarValueType.BOOL, result, result, RegisterId.of(8u)),
+                                    branch(4u, 5u),
+                                ),
+                            ),
+                            block(
+                                listOf(
+                                    Instruction.Equal(ScalarValueType.F64, result, right, right),
+                                    Instruction.Equal(ScalarValueType.BOOL, result, result, RegisterId.of(8u)),
+                                    Instruction.Jump(
+                                        BlockId.of(start + 5u),
+                                    ),
+                                ),
+                            ),
+                            block(listOf(Instruction.Return(Destination.Register(result)))),
+                        )
+                    }
                     val compare =
                         when {
                             owner == STRING_RUNTIME_TYPE -> {
@@ -3529,7 +3625,7 @@ internal object KotlinProjectLowering {
                             box != null -> {
                                 val left = RegisterId.of(4u)
                                 val right = RegisterId.of(5u)
-                                val field = FieldRef.Local(FieldId.of(if (owner == INT_BOX_RUNTIME_TYPE) 0u else box.field - 22u))
+                                val field = FieldRef.Local(FieldId.of(if (owner == INT_BOX_RUNTIME_TYPE) 0u else box.field - 24u))
                                 listOf(
                                     Instruction.CheckedCast(cast, other, ownerType),
                                     Instruction.FieldGet(left, receiver, field),
@@ -3599,7 +3695,7 @@ internal object KotlinProjectLowering {
 
                             else -> {
                                 val box = scalarBoxes.single { it.type == owner }
-                                val field = if (owner == INT_BOX_RUNTIME_TYPE) 0u else box.field - 22u
+                                val field = if (owner == INT_BOX_RUNTIME_TYPE) 0u else box.field - 24u
                                 val scalar = RegisterId.of(2u)
                                 listOf(
                                     Instruction.FieldGet(scalar, receiver, FieldRef.Local(FieldId.of(field))),
@@ -3631,7 +3727,7 @@ internal object KotlinProjectLowering {
                             else -> {
                                 val box = scalarBoxes.single { it.type == owner }
                                 val scalar = RegisterId.of(2u)
-                                val field = if (owner == INT_BOX_RUNTIME_TYPE) 0u else box.field - 22u
+                                val field = if (owner == INT_BOX_RUNTIME_TYPE) 0u else box.field - 24u
                                 listOf(
                                     Instruction.FieldGet(scalar, receiver, FieldRef.Local(FieldId.of(field))),
                                     Instruction.StringValueOf(scalarStringForm(box.valueType), destination, scalar),
@@ -3642,11 +3738,11 @@ internal object KotlinProjectLowering {
                     }
                 val fieldRead = instructions.takeWhile { it is Instruction.FieldGet }
                 listOf(
-                    Block(FunctionId.of(index.toUInt()), false, fieldRead + Instruction.Jump(BlockId.of((index * 3 + 1).toUInt()))),
+                    Block(FunctionId.of(index.toUInt()), false, fieldRead + Instruction.Jump(BlockId.of(blockStarts[index] + 1u))),
                     Block(
                         FunctionId.of(index.toUInt()),
                         false,
-                        instructions.drop(fieldRead.size).dropLast(1) + Instruction.Jump(BlockId.of((index * 3 + 2).toUInt())),
+                        instructions.drop(fieldRead.size).dropLast(1) + Instruction.Jump(BlockId.of(blockStarts[index] + 2u)),
                     ),
                     Block(FunctionId.of(index.toUInt()), false, listOf(instructions.last())),
                 )
@@ -3656,7 +3752,7 @@ internal object KotlinProjectLowering {
                     false,
                     listOf(
                         Instruction.NewObject(RegisterId.of(0u), TypeRef.Local(TypeId.of(UNIT_RUNTIME_TYPE))),
-                        Instruction.StaticSet(FieldRef.Local(FieldId.of(7u)), RegisterId.of(0u)),
+                        Instruction.StaticSet(FieldRef.Local(FieldId.of(8u)), RegisterId.of(0u)),
                         Instruction.Return(Destination.Unit),
                     ),
                 )
@@ -3672,7 +3768,17 @@ internal object KotlinProjectLowering {
                                     (
                                         box?.let {
                                             listOf(it.valueType, it.valueType) +
-                                                if (it.valueType == ValueType.F32) listOf(ValueType.I32, ValueType.I32) else emptyList()
+                                                if (it.valueType ==
+                                                    ValueType.F64
+                                                ) {
+                                                    listOf(ValueType.I32, ValueType.I32, ValueType.Bool)
+                                                } else if (it.valueType ==
+                                                    ValueType.F32
+                                                ) {
+                                                    listOf(ValueType.I32, ValueType.I32)
+                                                } else {
+                                                    emptyList()
+                                                }
                                         }
                                             ?: emptyList()
                                     )
@@ -3690,8 +3796,8 @@ internal object KotlinProjectLowering {
                     setOf(FunctionFlag.VIRTUAL),
                     values.map(FunctionValue::scalar),
                     if (name == "equals") 2u else 1u,
-                    BlockId.of((index * 3).toUInt()),
-                    3u,
+                    BlockId.of(blockStarts[index]),
+                    blockCounts[index],
                     0u,
                     0u,
                 )
@@ -3703,7 +3809,7 @@ internal object KotlinProjectLowering {
                     setOf(FunctionFlag.STATIC),
                     listOf(FunctionValue.scalar(unit)),
                     0u,
-                    BlockId.of(initializerId * 3u),
+                    BlockId.of(blockStarts.last()),
                     1u,
                     0u,
                     0u,
@@ -3711,7 +3817,7 @@ internal object KotlinProjectLowering {
         return Module(
             name = requireNotNull(ids["kotlin.Any"]),
             utf16Literals = listOf(Utf16Literal.of(*"kotlin.Unit".map { it.code }.toIntArray())),
-            constants = listOf(Constant.StringLiteral(Utf16LiteralId.of(0u))),
+            constants = listOf(Constant.StringLiteral(Utf16LiteralId.of(0u)), Constant.Bool(false)),
             functions = functions,
             blocks = blocks,
             kind = ModuleKind.LIBRARY,
@@ -3812,11 +3918,16 @@ internal object KotlinProjectLowering {
                         requireNotNull(ids["kotlin.Unit"]),
                         final = true,
                         superType = anyType,
-                        fieldStart = 7u,
+                        fieldStart = 8u,
                         fieldCount = 1u,
-                        methodStart = 21u,
+                        methodStart = 24u,
                         methodCount = 4u,
                         initializer = FunctionId.of(initializerId),
+                    ) +
+                    NominalType.Array(
+                        name = requireNotNull(ids["kotlin.DoubleArray"]),
+                        element = ValueType.F64,
+                        superType = anyType,
                     ) + signatures,
             fields =
                 listOf(
@@ -3890,7 +4001,7 @@ internal object KotlinProjectLowering {
                                 SymbolKind.FIELD,
                                 ExportVisibility.PUBLIC_LIBRARY,
                                 requireNotNull(ids[box.name]),
-                                box.field - 22u,
+                                box.field - 24u,
                                 TypeRef.Local(TypeId.of(box.type)),
                             )
                         } +
@@ -3898,7 +4009,7 @@ internal object KotlinProjectLowering {
                             SymbolKind.FIELD,
                             ExportVisibility.PUBLIC_LIBRARY,
                             requireNotNull(ids[UNIT_INSTANCE_NAME]),
-                            7u,
+                            8u,
                             TypeRef.Local(TypeId.of(UNIT_RUNTIME_TYPE)),
                         ) +
                         Export(
@@ -3906,21 +4017,21 @@ internal object KotlinProjectLowering {
                             ExportVisibility.PUBLIC_LIBRARY,
                             requireNotNull(ids[ANY_TO_STRING_NAME]),
                             0u,
-                            TypeRef.Local(TypeId.of(22u)),
+                            TypeRef.Local(TypeId.of(runtimeTypeNames.size.toUInt() + 0u)),
                         ) +
                         Export(
                             SymbolKind.FUNCTION,
                             ExportVisibility.PUBLIC_LIBRARY,
                             requireNotNull(ids[ANY_HASH_CODE_NAME]),
                             1u,
-                            TypeRef.Local(TypeId.of(23u)),
+                            TypeRef.Local(TypeId.of(runtimeTypeNames.size.toUInt() + 1u)),
                         ) +
                         Export(
                             SymbolKind.FUNCTION,
                             ExportVisibility.PUBLIC_LIBRARY,
                             requireNotNull(ids[ANY_EQUALS_NAME]),
                             2u,
-                            TypeRef.Local(TypeId.of(24u)),
+                            TypeRef.Local(TypeId.of(runtimeTypeNames.size.toUInt() + 2u)),
                         )
                 ).sortedWith(compareBy({ it.kind.ordinal }, { names[it.name.value.toInt()] })),
         )
@@ -4074,7 +4185,7 @@ private fun linkedPlatformSymbols(
     fun considerTypeSymbol(symbol: IrClassSymbol) {
         val fqName = symbol.owner.fqNameWhenAvailable?.asString() ?: return
         classSymbols[fqName] = symbol
-        if (fqName == "kotlin.IntArray") return
+        if (fqName in setOf("kotlin.IntArray", "kotlin.DoubleArray")) return
         val link = typeLinks[fqName] ?: return
         types[symbol] = ExternalTypeTarget(link.exportName, link.moduleHash.copyOf())
     }
@@ -4235,15 +4346,18 @@ private class FunctionCompiler(
     private val stringType: ValueType,
     private val charArrayType: ValueType,
     private val intArrayType: ValueType,
+    private val doubleArrayType: ValueType,
     private val stringArrayType: ValueType,
     private val guestTypes: GuestTypeRegistry,
     private val unitType: IrType,
     private val kotlinStringType: IrType,
     private val kotlinCharArrayClass: IrClassSymbol,
     private val kotlinIntArrayClass: IrClassSymbol,
+    private val kotlinDoubleArrayClass: IrClassSymbol,
     private val intType: IrType,
     private val longType: IrType,
     private val floatType: IrType,
+    private val doubleType: IrType,
     private val booleanType: IrType,
     private val charType: IrType,
     private val functionIds: Map<org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol, FunctionId>,
@@ -4707,7 +4821,7 @@ private class FunctionCompiler(
                 return allocate(target).also { destination -> emit(Instruction.CheckedCast(destination, source, target.type)) }
             }
         }
-        if (expectedType == null || (!resolvedType(expectedType).isKotlinAny() && !resolvedType(expectedType).isNullableInt())) {
+        if (expectedType == null || (!resolvedType(expectedType).isKotlinAny() && !resolvedType(expectedType).isNullableScalar())) {
             return source
         }
         val referenceTarget = valueType(expectedType, expression) as ValueType.Ref
@@ -4966,6 +5080,17 @@ private class FunctionCompiler(
                 emit(Instruction.NewArray(destination, (intArrayType as ValueType.Ref).type, length))
             }
         }
+        if (target.parentAsClass.symbol == kotlinDoubleArrayClass &&
+            call.type.isExactClass(kotlinDoubleArrayClass) &&
+            arguments.size == 1 &&
+            arguments[0].type == intType
+        ) {
+            val length = compileExpression(arguments.single())
+            prepareAllocationBlock()
+            return allocate(doubleArrayType).also { destination ->
+                emit(Instruction.NewArray(destination, (doubleArrayType as ValueType.Ref).type, length))
+            }
+        }
         if (call.type == kotlinStringType &&
             arguments.size == 3 &&
             arguments[0].type.isExactClass(kotlinCharArrayClass) &&
@@ -5068,7 +5193,7 @@ private class FunctionCompiler(
             } else if (expression.operator == IrTypeOperator.IMPLICIT_CAST ||
                 (
                     expression.operator == IrTypeOperator.CAST &&
-                        (expression.typeOperand.isNullableInt() || expression.typeOperand.isKotlinAny())
+                        (expression.typeOperand.isNullableScalar() || expression.typeOperand.isKotlinAny())
                 )
             ) {
                 compileExpression(expression.argument, expression.typeOperand)
@@ -5076,7 +5201,6 @@ private class FunctionCompiler(
                 compileExpression(expression.argument)
             }
         val target = valueType(expression.typeOperand, expression)
-        val intBoxType = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE))
         return when (expression.operator) {
             IrTypeOperator.INSTANCEOF -> {
                 val reference =
@@ -5122,9 +5246,9 @@ private class FunctionCompiler(
                     val unit = TypeRef.Imported(ImportId.of(UNIT_RUNTIME_TYPE))
                     return allocate(ValueType.Ref(false, unit)).also { emit(Instruction.CheckedCast(it, source, unit)) }
                 }
-                if (expression.typeOperand.isNullableInt()) {
+                if (expression.typeOperand.isNullableScalar()) {
                     return allocate(target).also { destination ->
-                        emit(Instruction.CheckedCast(destination, source, intBoxType))
+                        emit(Instruction.CheckedCast(destination, source, (target as ValueType.Ref).type))
                     }
                 }
                 if (target is ValueType.Ref) {
@@ -5315,6 +5439,7 @@ private class FunctionCompiler(
                 when {
                     sourceType.isExactClass(kotlinCharArrayClass) -> ValueType.Char
                     sourceType.isExactClass(kotlinIntArrayClass) -> ValueType.I32
+                    sourceType.isExactClass(kotlinDoubleArrayClass) -> ValueType.F64
                     else -> guestTypes.arrayElement(sourceType.makeNotNull())?.let { valueType(it, property) }
                 }
             val value = allocate(field.type)
@@ -5549,6 +5674,9 @@ private class FunctionCompiler(
                 emit(Instruction.Const(destination, constantId))
             }
         }
+        doubleCompanionConstant(target)?.let { value ->
+            return emitF64Constant(value, call)
+        }
         inlineValueClasses.getter(target.symbol)?.let {
             val receiver =
                 target.parameters
@@ -5676,6 +5804,7 @@ private class FunctionCompiler(
             return allocate(stringType).also { emit(Instruction.StringConcat(it, left, right)) }
         }
         compileIntArrayFactory(call, target)?.let { return it }
+        compileDoubleArrayFactory(call, target)?.let { return it }
         compileReferenceArrayFactory(call, target)?.let { return it }
         trustedIntrinsic(target)?.let { intrinsic ->
             val arguments =
@@ -5752,7 +5881,7 @@ private class FunctionCompiler(
                 target.name.asString() in setOf("EQEQ", "equals", "eqeq") &&
                     argumentExpressions.size == 2 &&
                     argumentExpressions.any {
-                        resolvedType(it.type).isKotlinAny() || resolvedType(it.type).isNullableInt() ||
+                        resolvedType(it.type).isKotlinAny() || resolvedType(it.type).isNullableScalar() ||
                             resolvedType(it.type).isNullableString()
                     }
             val arrayStoreElementType =
@@ -6034,7 +6163,7 @@ private class FunctionCompiler(
     private fun isSupportedScalarDefault(expression: IrExpression): Boolean =
         expression is IrConst &&
             expression.value != null &&
-            expression.type in setOf(intType, floatType, booleanType, charType, kotlinStringType)
+            expression.type in setOf(intType, floatType, doubleType, booleanType, charType, kotlinStringType)
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun isSupportedStringArrayDefault(expression: IrExpression): Boolean {
@@ -6201,6 +6330,22 @@ private class FunctionCompiler(
         return compileArrayElements(call, intArrayType as ValueType.Ref, elements, ::compileExpression)
     }
 
+    private fun compileDoubleArrayFactory(
+        call: IrCall,
+        target: IrSimpleFunction,
+    ): RegisterId? {
+        if (!call.type.isExactClass(kotlinDoubleArrayClass) || target.fqNameWhenAvailable?.asString() != "kotlin.doubleArrayOf") {
+            return null
+        }
+        val elements =
+            directVarargElements(
+                call,
+                "doubleArrayOf requires a direct vararg",
+                "spread doubleArrayOf arguments are outside the project subset",
+            )
+        return compileArrayElements(call, doubleArrayType as ValueType.Ref, elements, ::compileExpression)
+    }
+
     private fun directVarargElements(
         call: IrCall,
         invalidVararg: String,
@@ -6268,6 +6413,27 @@ private class FunctionCompiler(
             longType -> value
             intType -> allocate(ValueType.I64).also { emit(Instruction.Convert(it, value)) }
             else -> throw UnsupportedKotlinIr(element, "only Int can be widened to Long")
+        }
+
+    private fun emitF64Constant(
+        value: Double,
+        element: IrElement,
+    ): RegisterId {
+        val id =
+            constantIds[Constant.F64(value.toBits().toULong())]
+                ?: throw UnsupportedKotlinIr(element, "generated Double constant is absent from canonical pool")
+        return allocate(ValueType.F64).also { emit(Instruction.Const(it, id)) }
+    }
+
+    private fun widenToF64(
+        value: RegisterId,
+        type: IrType,
+        element: IrElement,
+    ): RegisterId =
+        when (type) {
+            doubleType -> value
+            intType, longType, floatType -> allocate(ValueType.F64).also { emit(Instruction.Convert(it, value)) }
+            else -> throw UnsupportedKotlinIr(element, "only Int, Long or Float can be widened to Double")
         }
 
     private fun widenToF32(
@@ -6355,18 +6521,23 @@ private class FunctionCompiler(
                 )
             }
         }
-        val numeric = operands.all { it.type == intType || it.type == longType || it.type == floatType }
-        val mixedFloat = numeric && operands.any { it.type == floatType }
+        val numeric = operands.all { it.type == intType || it.type == longType || it.type == floatType || it.type == doubleType }
+        val mixedDouble = numeric && operands.any { it.type == doubleType }
+        val mixedFloat = !mixedDouble && numeric && operands.any { it.type == floatType }
         val mixedLong =
             !mixedFloat && operands.all { it.type == intType || it.type == longType } &&
                 operands.any { it.type == longType }
         val type =
             when {
+                mixedDouble -> OrderedScalarValueType.F64
                 mixedFloat -> OrderedScalarValueType.F32
                 mixedLong -> OrderedScalarValueType.I64
                 else -> orderedType(operands[0].type, call)
             }
-        if (mixedFloat) {
+        if (mixedDouble) {
+            left = widenToF64(left, operands[0].type, call)
+            right = widenToF64(right, operands[1].type, call)
+        } else if (mixedFloat) {
             left = widenToF32(left, operands[0].type, call)
             right = widenToF32(right, operands[1].type, call)
         } else if (mixedLong) {
@@ -6408,13 +6579,13 @@ private class FunctionCompiler(
             return compileIntegerCompareTo(call, argumentExpressions, arguments)
         }
         if (
-            fqName in setOf("kotlin.Int.compareTo", "kotlin.Long.compareTo", "kotlin.Float.compareTo") &&
+            fqName in setOf("kotlin.Int.compareTo", "kotlin.Long.compareTo", "kotlin.Float.compareTo", "kotlin.Double.compareTo") &&
             arguments.size == 2 &&
-            argumentExpressions.any { it.type == floatType } &&
-            argumentExpressions.all { it.type == intType || it.type == longType || it.type == floatType } &&
+            argumentExpressions.any { it.type == floatType || it.type == doubleType } &&
+            argumentExpressions.all { it.type == intType || it.type == longType || it.type == floatType || it.type == doubleType } &&
             call.type == intType
         ) {
-            return compileFloatCompareTo(call, argumentExpressions, arguments)
+            return compileFloatingCompareTo(call, argumentExpressions.map { it.type }, arguments)
         }
         if (
             fqName == "kotlin.String.compareTo" &&
@@ -6444,29 +6615,35 @@ private class FunctionCompiler(
         ) {
             return compileBooleanCompareTo(call, arguments)
         }
-        if (arguments.size == 2 && argumentExpressions.all { it.type == intType || it.type == longType || it.type == floatType }) {
+        if (arguments.size == 2 &&
+            argumentExpressions.all { it.type == intType || it.type == longType || it.type == floatType || it.type == doubleType }
+        ) {
             if (name in setOf("plus", "minus", "times", "div", "rem")) {
                 val type =
                     when (call.type) {
                         floatType -> ScalarValueType.F32
+                        doubleType -> ScalarValueType.F64
                         longType -> ScalarValueType.I64
                         else -> ScalarValueType.I32
                     }
                 val valueType =
                     when (type) {
                         ScalarValueType.F32 -> ValueType.F32
+                        ScalarValueType.F64 -> ValueType.F64
                         ScalarValueType.I64 -> ValueType.I64
                         else -> ValueType.I32
                     }
                 val left =
                     when (type) {
                         ScalarValueType.F32 -> widenToF32(arguments[0], argumentExpressions[0].type, call)
+                        ScalarValueType.F64 -> widenToF64(arguments[0], argumentExpressions[0].type, call)
                         ScalarValueType.I64 -> widenToI64(arguments[0], argumentExpressions[0].type, call)
                         else -> arguments[0]
                     }
                 val right =
                     when (type) {
                         ScalarValueType.F32 -> widenToF32(arguments[1], argumentExpressions[1].type, call)
+                        ScalarValueType.F64 -> widenToF64(arguments[1], argumentExpressions[1].type, call)
                         ScalarValueType.I64 -> widenToI64(arguments[1], argumentExpressions[1].type, call)
                         else -> arguments[1]
                     }
@@ -6519,6 +6696,17 @@ private class FunctionCompiler(
         if (arguments.size == 1 && argumentExpressions[0].type == floatType && name == "unaryMinus") {
             val negativeOne = emitF32Constant(-1.0f, call)
             return result(ValueType.F32) { Instruction.Multiply(ScalarValueType.F32, it, arguments[0], negativeOne) }
+        }
+        if (arguments.size == 1 && argumentExpressions[0].type == doubleType && name == "unaryMinus") {
+            val negativeOne = emitF64Constant(-1.0, call)
+            return result(ValueType.F64) { Instruction.Multiply(ScalarValueType.F64, it, arguments[0], negativeOne) }
+        }
+        if (arguments.size == 1 && argumentExpressions[0].type in setOf(intType, longType, floatType, doubleType) &&
+            name in setOf("toInt", "toLong", "toFloat", "toDouble")
+        ) {
+            val resultType = valueType(call.type, call)
+            if (resultType == registerValueType(arguments[0])) return arguments[0]
+            return result(resultType) { Instruction.Convert(it, arguments[0]) }
         }
         if (arguments.size == 1 && argumentExpressions[0].type == intType && name == "inv") {
             val allBits = emitI32Constant(-1, call)
@@ -6584,6 +6772,13 @@ private class FunctionCompiler(
         ) {
             return result(ValueType.I32) { Instruction.ArrayLength(it, arguments[0]) }
         }
+        if (arguments.size == 1 &&
+            argumentExpressions[0].type.isExactClass(kotlinDoubleArrayClass) &&
+            name == "<get-size>" &&
+            fqName == "kotlin.DoubleArray.<get-size>"
+        ) {
+            return result(ValueType.I32) { Instruction.ArrayLength(it, arguments[0]) }
+        }
         if (arguments.size == 1 && isSupportedReferenceArray(argumentExpressions[0].type) && name == "<get-size>") {
             return result(ValueType.I32) { Instruction.ArrayLength(it, arguments[0]) }
         }
@@ -6601,6 +6796,13 @@ private class FunctionCompiler(
         ) {
             return result(ValueType.I32) { Instruction.ArrayLoad(it, arguments[0], arguments[1]) }
         }
+        if (arguments.size == 2 &&
+            argumentExpressions[0].type.isExactClass(kotlinDoubleArrayClass) &&
+            name == "get" &&
+            fqName == "kotlin.DoubleArray.get"
+        ) {
+            return result(ValueType.F64) { Instruction.ArrayLoad(it, arguments[0], arguments[1]) }
+        }
         if (arguments.size == 2 && isSupportedReferenceArray(argumentExpressions[0].type) && name == "get") {
             return result(valueType(call.type, call)) { Instruction.ArrayLoad(it, arguments[0], arguments[1]) }
         }
@@ -6616,6 +6818,14 @@ private class FunctionCompiler(
             argumentExpressions[0].type.isExactClass(kotlinIntArrayClass) &&
             name == "set" &&
             fqName == "kotlin.IntArray.set"
+        ) {
+            emit(Instruction.ArrayStore(arguments[0], arguments[1], arguments[2]))
+            return null
+        }
+        if (arguments.size == 3 &&
+            argumentExpressions[0].type.isExactClass(kotlinDoubleArrayClass) &&
+            name == "set" &&
+            fqName == "kotlin.DoubleArray.set"
         ) {
             emit(Instruction.ArrayStore(arguments[0], arguments[1], arguments[2]))
             return null
@@ -6800,17 +7010,26 @@ private class FunctionCompiler(
         return destination
     }
 
-    private fun compileFloatCompareTo(
-        call: IrCall,
-        expressions: List<IrExpression>,
+    private fun compileFloatingCompareTo(
+        call: IrElement,
+        types: List<IrType>,
         arguments: List<RegisterId>,
     ): RegisterId {
-        val left = widenToF32(arguments[0], expressions[0].type, call)
-        val right = widenToF32(arguments[1], expressions[1].type, call)
+        val double = types.any { it == doubleType }
+        val valueType = if (double) ValueType.F64 else ValueType.F32
+        val scalar = if (double) ScalarValueType.F64 else ScalarValueType.F32
+        val ordered = if (double) OrderedScalarValueType.F64 else OrderedScalarValueType.F32
+
+        fun widen(
+            value: RegisterId,
+            type: IrType,
+        ) = if (double) widenToF64(value, type, call) else widenToF32(value, type, call)
+        val left = widen(arguments[0], types[0])
+        val right = widen(arguments[1], types[1])
         val negative = emitI32Constant(-1, call)
         val zero = emitI32Constant(0, call)
         val positive = emitI32Constant(1, call)
-        val oneFloat = emitF32Constant(1.0f, call)
+        val oneFloat = if (double) emitF64Constant(1.0, call) else emitF32Constant(1.0f, call)
         val destination = allocate(ValueType.I32)
         val exits = mutableListOf<Int>()
 
@@ -6831,11 +7050,11 @@ private class FunctionCompiler(
             currentBlock = next
         }
 
-        // A Float is ordered with itself exactly when it is not NaN.
+        // A floating value is ordered with itself exactly when it is not NaN.
         val leftNumeric = allocate(ValueType.Bool)
-        emit(Instruction.GreaterOrEqual(OrderedScalarValueType.F32, leftNumeric, left, left))
+        emit(Instruction.GreaterOrEqual(ordered, leftNumeric, left, left))
         val rightNumeric = allocate(ValueType.Bool)
-        emit(Instruction.GreaterOrEqual(OrderedScalarValueType.F32, rightNumeric, right, right))
+        emit(Instruction.GreaterOrEqual(ordered, rightNumeric, right, right))
         val numericLeft = createBlock()
         val nanLeft = createBlock()
         emit(Instruction.Branch(leftNumeric, blockId(numericLeft), blockId(nanLeft)))
@@ -6853,22 +7072,22 @@ private class FunctionCompiler(
 
         currentBlock = bothNumeric
         val less = allocate(ValueType.Bool)
-        emit(Instruction.Less(OrderedScalarValueType.F32, less, left, right))
+        emit(Instruction.Less(ordered, less, left, right))
         select(less, negative)
         val greater = allocate(ValueType.Bool)
-        emit(Instruction.Greater(OrderedScalarValueType.F32, greater, left, right))
+        emit(Instruction.Greater(ordered, greater, left, right))
         select(greater, positive)
 
         // IEEE comparisons equate both zero signs; their reciprocals retain the sign as infinity.
-        val leftReciprocal = allocate(ValueType.F32)
-        emit(Instruction.Divide(ScalarValueType.F32, leftReciprocal, oneFloat, left))
-        val rightReciprocal = allocate(ValueType.F32)
-        emit(Instruction.Divide(ScalarValueType.F32, rightReciprocal, oneFloat, right))
+        val leftReciprocal = allocate(valueType)
+        emit(Instruction.Divide(scalar, leftReciprocal, oneFloat, left))
+        val rightReciprocal = allocate(valueType)
+        emit(Instruction.Divide(scalar, rightReciprocal, oneFloat, right))
         val negativeZero = allocate(ValueType.Bool)
-        emit(Instruction.Less(OrderedScalarValueType.F32, negativeZero, leftReciprocal, rightReciprocal))
+        emit(Instruction.Less(ordered, negativeZero, leftReciprocal, rightReciprocal))
         select(negativeZero, negative)
         val positiveZero = allocate(ValueType.Bool)
-        emit(Instruction.Greater(OrderedScalarValueType.F32, positiveZero, leftReciprocal, rightReciprocal))
+        emit(Instruction.Greater(ordered, positiveZero, leftReciprocal, rightReciprocal))
         select(positiveZero, positive)
         complete(zero)
 
@@ -6889,7 +7108,8 @@ private class FunctionCompiler(
         if (fqName !in setOf("kotlin.collections.copyOf", "kotlin.collections.copyInto") || !target.isExternal) return null
         val receiverExpression = call.arguments.firstOrNull() ?: return null
         val receiverType = resolvedType(receiverExpression.type)
-        if (!receiverType.isExactClass(kotlinIntArrayClass) && !receiverType.isExactClass(kotlinCharArrayClass) &&
+        if (!receiverType.isExactClass(kotlinIntArrayClass) && !receiverType.isExactClass(kotlinDoubleArrayClass) &&
+            !receiverType.isExactClass(kotlinCharArrayClass) &&
             !isSupportedReferenceArray(receiverType)
         ) {
             return null
@@ -6903,6 +7123,7 @@ private class FunctionCompiler(
         val arrayName =
             when {
                 receiverType.isExactClass(kotlinIntArrayClass) -> "IntArray"
+                receiverType.isExactClass(kotlinDoubleArrayClass) -> "DoubleArray"
                 receiverType.isExactClass(kotlinCharArrayClass) -> "CharArray"
                 else -> "Array<T>"
             }
@@ -7000,13 +7221,22 @@ private class FunctionCompiler(
         if (arguments.size != 2) return null
         val leftType = resolvedType(expressions[0].type)
         val rightType = resolvedType(expressions[1].type)
-        val numeric = listOf(leftType, rightType).all { it == intType || it == longType || it == floatType }
-        val mixedFloat = numeric && (leftType == floatType || rightType == floatType)
+        if (name.equals("ieee754Equals", ignoreCase = true) &&
+            listOf(leftType, rightType).all { it.makeNotNull() == doubleType } &&
+            listOf(leftType, rightType).any { it.isNullable() }
+        ) {
+            return compileNullableDoubleEquality(arguments)
+        }
+        val numeric = listOf(leftType, rightType).all { it == intType || it == longType || it == floatType || it == doubleType }
+        val mixedDouble = numeric && (leftType == doubleType || rightType == doubleType)
+        val mixedFloat = !mixedDouble && numeric && (leftType == floatType || rightType == floatType)
         val mixedLong =
             !mixedFloat && listOf(leftType, rightType).all { it == intType || it == longType } &&
                 (leftType == longType || rightType == longType)
         val operands =
-            if (mixedFloat) {
+            if (mixedDouble) {
+                listOf(widenToF64(arguments[0], leftType, call), widenToF64(arguments[1], rightType, call))
+            } else if (mixedFloat) {
                 listOf(
                     widenToF32(arguments[0], leftType, call),
                     widenToF32(arguments[1], rightType, call),
@@ -7020,7 +7250,8 @@ private class FunctionCompiler(
                 arguments
             }
         val floatIeeeEquality =
-            name.equals("ieee754Equals", ignoreCase = true) && leftType == floatType && rightType == floatType
+            name.equals("ieee754Equals", ignoreCase = true) &&
+                ((leftType == floatType && rightType == floatType) || (leftType == doubleType && rightType == doubleType))
         if (name in setOf("EQEQ", "equals", "eqeq") || floatIeeeEquality) {
             if (!numeric && (registerValueType(operands[0]) is ValueType.Ref || registerValueType(operands[1]) is ValueType.Ref)) {
                 if (expressions.any { it is IrConst && it.value == null }) {
@@ -7040,6 +7271,7 @@ private class FunctionCompiler(
                 } else {
                     val type =
                         when {
+                            mixedDouble -> ScalarValueType.F64
                             mixedFloat -> ScalarValueType.F32
                             mixedLong -> ScalarValueType.I64
                             else -> scalarType(leftType, call)
@@ -7058,6 +7290,7 @@ private class FunctionCompiler(
             }
         val orderedType =
             when {
+                mixedDouble -> OrderedScalarValueType.F64
                 mixedFloat -> OrderedScalarValueType.F32
                 mixedLong -> OrderedScalarValueType.I64
                 else -> orderedType(leftType, call)
@@ -7066,6 +7299,48 @@ private class FunctionCompiler(
             val instruction = instructionFactory(orderedType, destination)
             emit(instruction)
         }
+    }
+
+    private fun compileNullableDoubleEquality(arguments: List<RegisterId>): RegisterId {
+        val result = allocate(ValueType.Bool)
+        val left = arguments[0]
+        val right = arguments[1]
+        val leftBlocks = if (registerValueType(left) is ValueType.Ref) createBlock() to createBlock() else null
+        val rightBlocks = if (registerValueType(right) is ValueType.Ref) createBlock() to createBlock() else null
+        val join = createBlock()
+        val falseConstant = requireNotNull(constantIds[Constant.Bool(false)])
+
+        fun isNull(value: RegisterId): RegisterId {
+            val type = registerValueType(value) as ValueType.Ref
+            val absent = allocate(type.copy(nullable = true)).also { emit(Instruction.Null(it)) }
+            return allocate(ValueType.Bool).also { emit(Instruction.RefEqual(it, value, absent)) }
+        }
+        if (leftBlocks != null) {
+            val (absent, present) = leftBlocks
+            emit(Instruction.Branch(isNull(left), blockId(absent), blockId(present)))
+            currentBlock = absent
+            if (registerValueType(right) is ValueType.Ref) {
+                emit(Instruction.Move(result, isNull(right)))
+            } else {
+                emit(Instruction.Const(result, falseConstant))
+            }
+            jumpTo(join)
+            currentBlock = present
+        }
+        if (rightBlocks != null) {
+            val (absent, present) = rightBlocks
+            emit(Instruction.Branch(isNull(right), blockId(absent), blockId(present)))
+            currentBlock = absent
+            emit(Instruction.Const(result, falseConstant))
+            jumpTo(join)
+            currentBlock = present
+        }
+
+        fun unbox(value: RegisterId) = if (registerValueType(value) is ValueType.Ref) unboxScalar(value, ValueType.F64) else value
+        emit(Instruction.Equal(ScalarValueType.F64, result, unbox(left), unbox(right)))
+        jumpTo(join)
+        currentBlock = join
+        return result
     }
 
     private fun asAnyReference(
@@ -7171,6 +7446,12 @@ private class FunctionCompiler(
                         allocate(ValueType.Bool).also { emit(Instruction.Equal(ScalarValueType.I32, it, a, b)) }
                     }
 
+                    ValueType.F64 -> {
+                        val compared = compileFloatingCompareTo(function, listOf(doubleType, doubleType), listOf(left, right))
+                        val zero = emitI32Constant(0, function)
+                        allocate(ValueType.Bool).also { emit(Instruction.Equal(ScalarValueType.I32, it, compared, zero)) }
+                    }
+
                     is ValueType.Ref -> {
                         equalsValue(left, right)
                     }
@@ -7227,8 +7508,8 @@ private class FunctionCompiler(
     private fun compileForLoop(block: IrBlock) {
         val iterator = block.statements.firstOrNull() as? IrVariable
         val iteratorCall = iterator?.initializer as? IrCall
-        if (iteratorCall?.targetFqName() == "kotlin.IntArray.iterator") {
-            compileIntArrayForLoop(block)
+        if (iteratorCall?.targetFqName() in setOf("kotlin.IntArray.iterator", "kotlin.DoubleArray.iterator")) {
+            compilePrimitiveArrayForLoop(block)
         } else if (iteratorCall?.targetFqName() in
             setOf("kotlin.collections.Iterable.iterator", "kotlin.collections.List.iterator")
         ) {
@@ -7238,8 +7519,9 @@ private class FunctionCompiler(
         }
     }
 
-    private fun compileIntArrayForLoop(block: IrBlock) {
-        val plan = intArrayForLoopPlan(block) ?: throw UnsupportedKotlinIr(block, "unsupported canonical IntArray for-loop shape")
+    private fun compilePrimitiveArrayForLoop(block: IrBlock) {
+        val plan =
+            primitiveArrayForLoopPlan(block) ?: throw UnsupportedKotlinIr(block, "unsupported canonical primitive-array for-loop shape")
         val source = compileExpression(plan.array)
         val array = allocate(valueType(plan.array.type, plan.array))
         emit(Instruction.Move(array, source))
@@ -7256,7 +7538,7 @@ private class FunctionCompiler(
         emit(Instruction.Branch(initialHasNext, blockId(body), blockId(body)))
 
         currentBlock = body
-        val loopValue = allocate(ValueType.I32)
+        val loopValue = allocate(valueType(plan.canonical.loopVariable.type, plan.canonical.loopVariable))
         values[plan.canonical.loopVariable.symbol] = loopValue
         emit(Instruction.ArrayLoad(loopValue, array, index))
         val context = LoopContext(plan.canonical.loop, continueTarget = null, placeholderTarget = body, finallyDepth = finallyContexts.size)
@@ -7398,36 +7680,41 @@ private class FunctionCompiler(
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
-    private fun intArrayForLoopPlan(block: IrBlock): IntArrayForLoopPlan? {
+    private fun primitiveArrayForLoopPlan(block: IrBlock): PrimitiveArrayForLoopPlan? {
         if (block.statements.size != 2) return null
         val iterator = block.statements[0] as? IrVariable ?: return null
         if (iterator.origin.toString() != "FOR_LOOP_ITERATOR") return null
         val iteratorCall = iterator.initializer as? IrCall ?: return null
-        if (iteratorCall.targetFqName() != "kotlin.IntArray.iterator") return null
+        if (iteratorCall.targetFqName() !in setOf("kotlin.IntArray.iterator", "kotlin.DoubleArray.iterator")) return null
         val array = iteratorCall.arguments.filterNotNull().singleOrNull() ?: return null
-        if (!array.type.isExactClass(kotlinIntArrayClass)) return null
-        val canonical = canonicalIntForLoopBody(block, iterator) ?: return null
-        return IntArrayForLoopPlan(canonical, array)
+        if (!array.type.isExactClass(kotlinIntArrayClass) && !array.type.isExactClass(kotlinDoubleArrayClass)) return null
+        val double = array.type.isExactClass(kotlinDoubleArrayClass)
+        val canonical =
+            canonicalIntForLoopBody(block, iterator, if (double) doubleType else intType, if (double) "DoubleIterator" else "IntIterator")
+                ?: return null
+        return PrimitiveArrayForLoopPlan(canonical, array)
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun canonicalIntForLoopBody(
         block: IrBlock,
         iterator: IrVariable,
+        elementType: IrType = intType,
+        iteratorName: String = "IntIterator",
     ): CanonicalIntForLoopBody? {
         val loop = block.statements[1] as? IrWhileLoop ?: return null
         if (loop.origin?.toString() != "FOR_LOOP_INNER_WHILE") return null
         val hasNext = loop.condition as? IrCall ?: return null
-        if (hasNext.targetFqName() != "kotlin.collections.IntIterator.hasNext") return null
+        if (hasNext.targetFqName() != "kotlin.collections.$iteratorName.hasNext") return null
         val iteratorRead = hasNext.arguments.filterNotNull().singleOrNull() as? IrGetValue ?: return null
         if (iteratorRead.symbol !== iterator.symbol) return null
 
         val loopBody = loop.body as? IrBlock ?: return null
         if (loopBody.statements.size != 2) return null
         val loopVariable = loopBody.statements[0] as? IrVariable ?: return null
-        if (loopVariable.origin.toString() != "FOR_LOOP_VARIABLE" || loopVariable.type != intType) return null
+        if (loopVariable.origin.toString() != "FOR_LOOP_VARIABLE" || loopVariable.type != elementType) return null
         val nextCall = loopVariable.initializer as? IrCall ?: return null
-        if (nextCall.targetFqName() != "kotlin.collections.IntIterator.next") return null
+        if (nextCall.targetFqName() != "kotlin.collections.$iteratorName.next") return null
         val nextReceiver = nextCall.arguments.filterNotNull().singleOrNull() as? IrGetValue ?: return null
         if (nextReceiver.symbol !== iterator.symbol) return null
         val body = loopBody.statements[1] as? IrExpression ?: return null
@@ -7808,6 +8095,7 @@ private class FunctionCompiler(
             ValueType.I32 -> ScalarValueType.I32
             ValueType.I64 -> ScalarValueType.I64
             ValueType.F32 -> ScalarValueType.F32
+            ValueType.F64 -> ScalarValueType.F64
             ValueType.Bool -> ScalarValueType.BOOL
             ValueType.Char -> ScalarValueType.CHAR
             else -> throw UnsupportedKotlinIr(element, "unsupported equality operand")
@@ -7821,6 +8109,7 @@ private class FunctionCompiler(
             ValueType.I32 -> OrderedScalarValueType.I32
             ValueType.I64 -> OrderedScalarValueType.I64
             ValueType.F32 -> OrderedScalarValueType.F32
+            ValueType.F64 -> OrderedScalarValueType.F64
             ValueType.Char -> OrderedScalarValueType.CHAR
             else -> throw UnsupportedKotlinIr(element, "unsupported ordered-comparison operand")
         }
@@ -7951,7 +8240,7 @@ private class FunctionCompiler(
         val body: IrExpression,
     )
 
-    private data class IntArrayForLoopPlan(
+    private data class PrimitiveArrayForLoopPlan(
         val canonical: CanonicalIntForLoopBody,
         val array: IrExpression,
     )
@@ -7963,8 +8252,17 @@ private fun IrType.isNullableString(): Boolean =
     isNullable() &&
         ((this as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == "kotlin.String"
 
-private fun IrType.isNullableInt(): Boolean =
-    isNullable() && ((this as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == "kotlin.Int"
+private fun IrType.isNullableScalar(): Boolean =
+    isNullable() &&
+        ((this as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() in
+        setOf("kotlin.Int", "kotlin.Double")
+
+private fun IrType.nullableScalarRuntimeType(): UInt =
+    when (((this as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString()) {
+        "kotlin.Int" -> INT_BOX_RUNTIME_TYPE
+        "kotlin.Double" -> DOUBLE_BOX_RUNTIME_TYPE
+        else -> error("unsupported nullable scalar")
+    }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private fun IrType.isKotlinAny(): Boolean =
@@ -8312,11 +8610,14 @@ private class LiteralCollector(
     private val unitType: IrType,
     private val longType: IrType,
     private val floatType: IrType,
+    private val doubleType: IrType,
 ) : IrVisitorVoid() {
     val values = mutableListOf<Any>()
     var usesLong: Boolean = false
         private set
     var usesFloat: Boolean = false
+        private set
+    var usesDouble: Boolean = false
         private set
     val strings: List<String>
         get() = values.filterIsInstance<String>()
@@ -8324,12 +8625,13 @@ private class LiteralCollector(
     override fun visitElement(element: IrElement) {
         if (element is IrExpression && element.type == longType) usesLong = true
         if (element is IrExpression && element.type == floatType) usesFloat = true
+        if (element is IrExpression && element.type == doubleType) usesDouble = true
         element.acceptChildren(this, null)
     }
 
     override fun visitConst(expression: IrConst) {
         expression.value
-            ?.takeIf { it is String || it is Int || it is Long || it is Float || it is Boolean || it is Char }
+            ?.takeIf { it is String || it is Int || it is Long || it is Float || it is Double || it is Boolean || it is Char }
             ?.let(values::add)
         super.visitConst(expression)
     }
@@ -8347,9 +8649,12 @@ private class LiteralCollector(
             values += false
         }
         floatCompanionConstant(expression.symbol.owner)?.let(values::add)
+        doubleCompanionConstant(expression.symbol.owner)?.let(values::add)
         if (fqName == "kotlin.emptyArray" || fqName == "kotlin.collections.emptyList") {
             values += 0
-        } else if (fqName == "kotlin.arrayOf" || fqName == "kotlin.intArrayOf" || fqName == "kotlin.collections.listOf") {
+        } else if (fqName == "kotlin.arrayOf" || fqName == "kotlin.intArrayOf" || fqName == "kotlin.doubleArrayOf" ||
+            fqName == "kotlin.collections.listOf"
+        ) {
             val size = (expression.arguments.filterNotNull().singleOrNull() as? IrVararg)?.elements?.size
             if (size != null) {
                 values.addAll(0..size)
@@ -8376,6 +8681,18 @@ private fun floatCompanionConstant(function: IrSimpleFunction): Float? {
         "<get-POSITIVE_INFINITY>" -> Float.POSITIVE_INFINITY
         "<get-NEGATIVE_INFINITY>" -> Float.NEGATIVE_INFINITY
         "<get-NaN>" -> Float.NaN
+        else -> null
+    }
+}
+
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+private fun doubleCompanionConstant(function: IrSimpleFunction): Double? {
+    val owner = function.parent as? IrClass ?: return null
+    if (owner.fqNameWhenAvailable?.asString() != "kotlin.Double.Companion") return null
+    return when (function.name.asString()) {
+        "<get-POSITIVE_INFINITY>" -> Double.POSITIVE_INFINITY
+        "<get-NEGATIVE_INFINITY>" -> Double.NEGATIVE_INFINITY
+        "<get-NaN>" -> Double.NaN
         else -> null
     }
 }
@@ -8423,7 +8740,7 @@ private class ReferenceArrayUsageCollector(
             when {
                 element.isKotlinAny() -> ANY_RUNTIME_TYPE
 
-                element.isNullableInt() -> INT_BOX_RUNTIME_TYPE
+                element.isNullableScalar() -> element.nullableScalarRuntimeType()
 
                 element.isNullable() &&
                     element.isNullableString() -> 1u
@@ -8594,6 +8911,7 @@ private fun Any.toArtifactConstant(literalIds: Map<Utf16Literal, Utf16LiteralId>
         is Int -> Constant.I32(this)
         is Long -> Constant.I64(this)
         is Float -> Constant.F32(toBits().toUInt())
+        is Double -> Constant.F64(toBits().toULong())
         is Boolean -> Constant.Bool(this)
         is Char -> Constant.Char(code.toUShort())
         else -> error("unsupported literal $this")
@@ -8605,6 +8923,7 @@ private fun IrConst.toArtifactConstant(literalIds: Map<Utf16Literal, Utf16Litera
         is Int -> Constant.I32(literal)
         is Long -> Constant.I64(literal)
         is Float -> Constant.F32(literal.toBits().toUInt())
+        is Double -> Constant.F64(literal.toBits().toULong())
         is Boolean -> Constant.Bool(literal)
         is Char -> Constant.Char(literal.code.toUShort())
         else -> throw UnsupportedKotlinIr(this, "unsupported constant")

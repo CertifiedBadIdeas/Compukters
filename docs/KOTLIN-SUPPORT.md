@@ -75,7 +75,7 @@ supported.
 
 ## Types and numeric semantics
 
-- [x] **`Int`, `Long`, `Float`, `Boolean`, and `Char` scalar values** — these source types lower
+- [x] **`Int`, `Long`, `Float`, `Double`, `Boolean`, and `Char` scalar values** — these source types lower
   to distinct verified VM scalar types with Kotlin-compatible control and
   comparison behavior. Direct `Char.compareTo` returns the UTF-16 code-unit
   difference. Direct `Boolean.compareTo` returns `-1`, `0`, or `1` with
@@ -116,12 +116,42 @@ supported.
   and `typed process v2 facade lowers without public capability masks or suspend calls`.
   Tracking: not scheduled
 
-- [ ] **`Byte`, `Short`, and `Double` — Unsupported** — these numeric types have no
-  Guest source representation. `Float` is supported separately as an unboxed F32
-  scalar. Evidence:
-  [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `unsupported collection unsigned and Double source produces a stable diagnostic and no artifact`.
+- [ ] **`Byte` and `Short` — Unsupported** — these numeric types have no admitted
+  Guest source representation. Evidence: `unsupported unsigned Byte and Short source produces a stable diagnostic and no artifact`.
   Tracking: not scheduled
+
+- [x] **`Double` scalar values** — unboxed F64 literals, top-level scalar constants,
+  arithmetic (`+`, `-`, `*`, `/`, `%`, unary minus), IEEE equality and ordering,
+  mixed operations with Int/Long/Float, and conversions in both directions are admitted.
+  Double operands promote mixed operations to F64. `compareTo` orders NaN above numbers
+  and distinguishes signed zero; primitive `==` keeps IEEE semantics. Companion limits,
+  infinities and NaN are available. Boxing through Any, nullable Double with Elvis,
+  generic functions and supported collections/arrays preserve the value. Boxed and
+  generated data-class equality treat NaN as equal and distinguish zero signs without
+  confusing hash collisions with equality. Data-class Double comparison stays unboxed.
+  Text conversion uses bounded shortest-round-trip decimal notation, including signed
+  zero, NaN, Infinity and three-digit exponents. This support does not admit
+  Byte/Short or previously unsupported nullable operators such as `!!`.
+  Evidence: `Double arithmetic conversions comparisons boxing and text lower for vm conformance`
+  executed by `testKotlinDoubleVmConformance`, artifact test
+  `Double string and hash forms require ABI 1 12 and F64 operands`, native
+  `double_decimal_round_trips_finite_values_in_a_fixed_buffer`, and IDE tests
+  `Guest Double arithmetic conversions and console API resolve without errors` and
+  `qualified completion exposes Double conversion members on a parameter`.
+  F64 text and hashing require Runtime ABI 1.12; numeric-only F64 reuses ABI 1.0.
+  Canonical `kotlin:builtins` is 1.7.0 and `compukter:core` is 1.1.0.
+  Tracking: [#688](https://github.com/CertifiedBadIdeas/Compukters/issues/688)
+
+- [x] **`DoubleArray`** — unboxed F64 storage supports `DoubleArray(size)`,
+  `doubleArrayOf`, zero initialization, `size`, indexed reads/writes, direct `for`
+  loops with break/continue, `copyOf` (including resize with zero padding) and
+  overlapping `copyInto`. Factory arguments and loop sources evaluate once.
+  Bounds and negative sizes raise managed exceptions. Arrays retain identity
+  equality; generated data-class hashing uses element hashes. No boxed Double
+  allocation is needed for element storage or direct iteration. Evidence:
+  `DoubleArray storage copying iteration and failures lower for vm conformance`
+  and `testKotlinDoubleArrayVmConformance`, plus the Guest Double IDE diagnostic test.
+  Tracking: [#688](https://github.com/CertifiedBadIdeas/Compukters/issues/688)
 
 - [ ] **Unsigned types — Unsupported** — `UByte`, `UShort`, `UInt`, and
   `ULong` have no Guest representation or standard operations; a `UInt`
@@ -158,7 +188,7 @@ supported.
 
 - [ ] **Conversions — Partial** — `Int.toChar()`, `Int.toLong()`, `Long.toInt()`,
   `Int.toFloat()`, `Long.toFloat()`, `Float.toInt()`, and `Float.toLong()` are
-  lowered. Other numeric conversions remain outside the
+  lowered, together with Double conversions to/from Int, Long and Float. Other numeric conversions remain outside the
   source subset. Tracking: [#619](https://github.com/CertifiedBadIdeas/Compukters/issues/619),
   [#620](https://github.com/CertifiedBadIdeas/Compukters/issues/620)
 
@@ -404,7 +434,7 @@ supported.
   defines it as a supported language contract. Tracking: not scheduled
 
 - [ ] **Top-level state — Partial** — immutable top-level properties support
-  direct `Int`, `Long`, `Float`, `Boolean`, `Char`, and `String` literals plus direct
+  direct `Int`, `Long`, `Float`, `Double`, `Boolean`, `Char`, and `String` literals plus direct
   `IntChannel(capacity)` construction. They lower to lazily initialized static
   VM storage. Top-level `var`, custom or delegated accessors, initializer
   dependencies, and arbitrary object construction remain unsupported. Evidence:
@@ -675,7 +705,7 @@ supported.
   test `k2_char_array_program_executes_exact_utf16_materialization`.
 
 - [x] **`toString()` for supported Guest values** — direct calls, string templates, and `String.plus`
-  share the conversion path. `Int`, `Long`, `Float`, `Boolean`, and `Char` use their scalar representation;
+  share the conversion path. `Int`, `Long`, `Float`, `Double`, `Boolean`, and `Char` use their scalar representation;
   String returns itself, Unit becomes `kotlin.Unit`, and nullable receivers produce `null` when absent.
   Scalar values passed through `Any` use managed typed boxes, including checked `is`/`as` access.
   Virtual calls select user-defined or inherited overrides, including separately compiled library methods.
@@ -693,7 +723,7 @@ supported.
   Tracking: [#683](https://github.com/CertifiedBadIdeas/Compukters/issues/683)
 
 - [x] **`hashCode()` for supported Guest values** — Int and Char use their values, Long folds high/low bits,
-  Boolean uses 1231/1237, and Float hashes canonical NaN bits while distinguishing signed zero. String hashes UTF-16
+  Boolean uses 1231/1237; Float hashes canonical NaN bits and Double folds canonical 64-bit NaN bits, both distinguishing signed zero. String hashes UTF-16
   content with wrapping multiplication by 31. Nullable receivers hash to zero when absent; scalar boxes and String
   retain value hashes through `Any`. User-defined and inherited overrides dispatch virtually, including compiled
   libraries; `super.hashCode()` invokes the selected superclass directly. Receiver evaluation happens once and
@@ -978,7 +1008,7 @@ links to their source files.
   `stdlib scope functions execute with inline receiver and nullable semantics`.
 
 - [ ] **Console functions — Partial** — `print` accepts `String`, `Int`, `Long`,
-  `Float`, `Boolean`, and `Char`; `println` supports those types plus the no-argument
+  `Float`, `Double`, `Boolean`, and `Char`; `println` supports those types plus the no-argument
   form; `readln()` reads one canonical line. Other overloads and formatting
   are unavailable. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),

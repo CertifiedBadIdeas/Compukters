@@ -60,6 +60,11 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "IntArray.iterator", "fun():IntIterator")
             primitive("kotlin", "builtins", "kotlin", "IntArray.set", "fun(Int,Int):Unit")
             primitive("kotlin", "builtins", "kotlin", "IntArray.size", "val():Int")
+            primitive("kotlin", "builtins", "kotlin", "DoubleArray.<init>", "constructor(Int)")
+            primitive("kotlin", "builtins", "kotlin", "DoubleArray.get", "fun(Int):Double")
+            primitive("kotlin", "builtins", "kotlin", "DoubleArray.iterator", "fun():DoubleIterator")
+            primitive("kotlin", "builtins", "kotlin", "DoubleArray.set", "fun(Int,Double):Unit")
+            primitive("kotlin", "builtins", "kotlin", "DoubleArray.size", "val():Int")
             primitive("kotlin", "builtins", "kotlin", "CharSequence.get", "fun(Int):Char")
             primitive("kotlin", "builtins", "kotlin", "Comparable.compareTo", "fun(T):Int")
             primitive("kotlin", "builtins", "kotlin", "Enum.name", "val():String")
@@ -168,6 +173,23 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "Float.Companion.POSITIVE_INFINITY", "val():Float")
             primitive("kotlin", "builtins", "kotlin", "Float.Companion.NEGATIVE_INFINITY", "val():Float")
             primitive("kotlin", "builtins", "kotlin", "Float.Companion.NaN", "val():Float")
+            listOf("Int", "Long", "Float", "Double").forEach { owner ->
+                val operands = if (owner == "Double") listOf("Int", "Long", "Float", "Double") else listOf("Double")
+                operands.forEach { operand ->
+                    primitive("kotlin", "builtins", "kotlin", "$owner.compareTo", "fun($operand):Int")
+                    listOf("plus", "minus", "times", "div", "rem").forEach { operation ->
+                        primitive("kotlin", "builtins", "kotlin", "$owner.$operation", "fun($operand):Double")
+                    }
+                }
+                if (owner != "Double") primitive("kotlin", "builtins", "kotlin", "$owner.toDouble", "fun():Double")
+            }
+            listOf("Int", "Long", "Float").forEach { target ->
+                primitive("kotlin", "builtins", "kotlin", "Double.to$target", "fun():$target")
+            }
+            primitive("kotlin", "builtins", "kotlin", "Double.unaryMinus", "fun():Double")
+            listOf("POSITIVE_INFINITY", "NEGATIVE_INFINITY", "NaN").forEach { name ->
+                primitive("kotlin", "builtins", "kotlin", "Double.Companion.$name", "val():Double")
+            }
             primitive("kotlin", "builtins", "kotlin", "String.<init>", "constructor()")
             primitive("kotlin", "builtins", "kotlin", "String.<init>", "constructor(CharArray)")
             primitive("kotlin", "builtins", "kotlin", "String.<init>", "constructor(CharArray,Int,Int)")
@@ -180,8 +202,9 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "arrayOf", "fun(T):Array<T>")
             primitive("kotlin", "builtins", "kotlin", "arrayOfNulls", "fun(Int):Array<T?>")
             primitive("kotlin", "builtins", "kotlin", "intArrayOf", "fun(Int):IntArray")
+            primitive("kotlin", "builtins", "kotlin", "doubleArrayOf", "fun(Double):DoubleArray")
             primitive("kotlin", "builtins", "kotlin", "toString", "fun(T?.):String")
-            listOf("IntArray", "CharArray", "Array<T>").forEach { array ->
+            listOf("IntArray", "DoubleArray", "CharArray", "Array<T>").forEach { array ->
                 primitive("kotlin", "builtins", "kotlin.collections", "copyOf", "fun($array.):$array")
                 primitive(
                     "kotlin",

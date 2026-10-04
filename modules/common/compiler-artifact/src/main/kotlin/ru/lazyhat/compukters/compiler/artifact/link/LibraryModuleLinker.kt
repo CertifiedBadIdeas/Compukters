@@ -40,6 +40,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.FieldRef
 import ru.lazyhat.compukters.compiler.artifact.model.Function
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
+import ru.lazyhat.compukters.compiler.artifact.model.HashValueType
 import ru.lazyhat.compukters.compiler.artifact.model.Import
 import ru.lazyhat.compukters.compiler.artifact.model.ImportId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
@@ -322,13 +323,17 @@ private fun minimumRuntimeAbi(
             }
 
             is Instruction.ValueHash -> {
-                required = maxOf(required, AbiVersion(1u, 11u))
+                required = maxOf(required, if (it.type == HashValueType.F64) AbiVersion(1u, 12u) else AbiVersion(1u, 11u))
             }
 
             is Instruction.StringValueOf -> {
                 when (it.type) {
                     StringValueType.REFERENCE -> {
                         required = maxOf(required, AbiVersion(1u, 10u))
+                    }
+
+                    StringValueType.F64 -> {
+                        required = maxOf(required, AbiVersion(1u, 12u))
                     }
 
                     StringValueType.F32 -> {

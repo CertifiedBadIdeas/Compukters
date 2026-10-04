@@ -148,7 +148,7 @@ object PlatformBundleCodec {
             if (argument == PlatformDefaultArgument.ReceiverArraySize) {
                 val parameters = declaration.signature.substringAfter("fun(", "").substringBefore("):")
                 val receiver = parameters.substringBefore('.')
-                require(receiver == "IntArray" || receiver == "CharArray" || receiver.startsWith("Array<")) {
+                require(receiver == "IntArray" || receiver == "DoubleArray" || receiver == "CharArray" || receiver.startsWith("Array<")) {
                     "array-size default requires an array extension receiver"
                 }
                 require(index > 0 && parameters.substringAfter('.', "").split(',').getOrNull(index - 1) == "Int") {

@@ -449,6 +449,16 @@ fields, interfaces, superclass and initializer restrictions remain. Form 7 and t
 1.10 in both validators; the linker infers that minimum from retained instructions. The container format and
 C ABI 18 are unchanged. Newly built platform libraries and programs use the updated canonical runtime module.
 
+Runtime ABI 1.12 extends `string_value_of` (`0x68`) and `value_hash` (`0x69`) with
+form 4 for F64. Both the writer and Rust admission reject these forms below ABI 1.12;
+linking infers the requirement from retained instructions. Double hashing canonicalizes
+NaN to `0x7ff8000000000000`, then folds high and low words with xor. Equality compares
+values in addition to hashes, so hash collisions never imply Double equality. Generated
+data-class comparisons remain unboxed and use Kotlin floating total order. Scalar text
+formatting uses a fixed 24-unit stack buffer and existing sliced managed-string publication;
+F64 retains shortest-round-trip decimal precision and three-digit exponents. Numeric F64
+operations already belong to ABI 1.0. Artifact format and C ABI 18 remain unchanged.
+
 Runtime ABI 1.11 adds `value_hash` (opcode `0x69`), with forms 1/2/3/5/6/7 for Int/Long/Float/Boolean/Char/reference.
 Both validators require the matching initialized source type and an Int destination. Each hash costs one fixed
 instruction without allocation: Int and Char use their bits, Long folds its halves, Boolean uses 1231/1237, Float

@@ -92,4 +92,8 @@ internal abstract class LongIterator : Iterator<Long>
 
 internal abstract class FloatIterator : Iterator<Float>
 
-internal abstract class DoubleIterator : Iterator<Double>
+public abstract class DoubleIterator : Iterator<Double> {
+    public abstract override operator fun next(): Double
+
+    public abstract fun nextDouble(): Double
+}

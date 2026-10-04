@@ -804,6 +804,24 @@ registerKotlinVmConformance(
     conformanceScenario = "float",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinDoubleVmConformance",
+    taskDescription = "Executes Guest Kotlin Double arithmetic, conversions, comparisons, and text with the pinned VM.",
+    artifactTask = ":compiler-k2:generateDoubleConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-double.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-double-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_DOUBLE_ARTIFACT",
+    conformanceScenario = "double",
+)
+registerKotlinVmConformance(
+    taskName = "testKotlinDoubleArrayVmConformance",
+    taskDescription = "Executes Guest Kotlin DoubleArray storage, copying, iteration, and failures with the pinned VM.",
+    artifactTask = ":compiler-k2:generateDoubleArrayConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-double-array.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-double-array-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_DOUBLE_ARRAY_ARTIFACT",
+    conformanceScenario = "double-array",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinStringCompareVmConformance",
     taskDescription = "Executes Guest Kotlin string ordering on the pinned VM.",
     artifactTask = ":compiler-k2:generateStringCompareConformanceArtifact",

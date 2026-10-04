@@ -17,6 +17,8 @@ public fun print(value: Long): Unit = stdoutPrint(value)
 
 public fun print(value: Float): Unit = stdoutPrint(value)
 
+public fun print(value: Double): Unit = stdoutPrint(value)
+
 public fun print(value: Boolean): Unit = stdoutPrint(value)
 
 public fun print(value: Char): Unit = stdoutPrint(value)
@@ -30,6 +32,8 @@ public fun println(value: Int): Unit = stdoutPrintln(value)
 public fun println(value: Long): Unit = stdoutPrintln(value)
 
 public fun println(value: Float): Unit = stdoutPrintln(value)
+
+public fun println(value: Double): Unit = stdoutPrintln(value)
 
 public fun println(value: Boolean): Unit = stdoutPrintln(value)
 

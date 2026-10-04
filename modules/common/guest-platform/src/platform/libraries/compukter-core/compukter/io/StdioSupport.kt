@@ -18,6 +18,8 @@ internal fun stdoutPrint(value: Long): Unit = StdioBindings.write("$value")
 
 internal fun stdoutPrint(value: Float): Unit = StdioBindings.write("$value")
 
+internal fun stdoutPrint(value: Double): Unit = StdioBindings.write("$value")
+
 internal fun stdoutPrint(value: Boolean): Unit = StdioBindings.write(if (value) "true" else "false")
 
 internal fun stdoutPrint(value: Char): Unit = StdioBindings.write(stdoutChar(value))
@@ -31,6 +33,8 @@ internal fun stdoutPrintln(value: Int): Unit = StdioBindings.write(stdoutInt(val
 internal fun stdoutPrintln(value: Long): Unit = StdioBindings.write("$value\n")
 
 internal fun stdoutPrintln(value: Float): Unit = StdioBindings.write("$value\n")
+
+internal fun stdoutPrintln(value: Double): Unit = StdioBindings.write("$value\n")
 
 internal fun stdoutPrintln(value: Boolean): Unit = StdioBindings.write(if (value) "true\n" else "false\n")
 

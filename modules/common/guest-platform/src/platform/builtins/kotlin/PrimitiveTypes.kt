@@ -23,9 +23,13 @@ public class Char private constructor() : Comparable<Char> {
 public class Int private constructor() : Number(), Comparable<Int> {
     public external override operator fun compareTo(other: Int): Int
 
+    public external operator fun compareTo(other: Double): Int
+
     public external operator fun compareTo(other: Long): Int
 
     public external operator fun compareTo(other: Float): Int
+
+    public external operator fun plus(other: Double): Double
 
     public external operator fun plus(other: Int): Int
 
@@ -33,11 +37,15 @@ public class Int private constructor() : Number(), Comparable<Int> {
 
     public external operator fun plus(other: Float): Float
 
+    public external operator fun minus(other: Double): Double
+
     public external operator fun minus(other: Int): Int
 
     public external operator fun minus(other: Long): Long
 
     public external operator fun minus(other: Float): Float
+
+    public external operator fun times(other: Double): Double
 
     public external operator fun times(other: Int): Int
 
@@ -45,11 +53,15 @@ public class Int private constructor() : Number(), Comparable<Int> {
 
     public external operator fun times(other: Float): Float
 
+    public external operator fun div(other: Double): Double
+
     public external operator fun div(other: Int): Int
 
     public external operator fun div(other: Long): Long
 
     public external operator fun div(other: Float): Float
+
+    public external operator fun rem(other: Double): Double
 
     public external operator fun rem(other: Int): Int
 
@@ -79,6 +91,8 @@ public class Int private constructor() : Number(), Comparable<Int> {
 
     public external fun toFloat(): Float
 
+    public external fun toDouble(): Double
+
     public companion object {
         public const val MIN_VALUE: Int = -2147483647 - 1
         public const val MAX_VALUE: Int = 2147483647
@@ -92,9 +106,13 @@ internal class Short private constructor() : Number()
 public class Long private constructor() : Number(), Comparable<Long> {
     public external override operator fun compareTo(other: Long): Int
 
+    public external operator fun compareTo(other: Double): Int
+
     public external operator fun compareTo(other: Int): Int
 
     public external operator fun compareTo(other: Float): Int
+
+    public external operator fun plus(other: Double): Double
 
     public external operator fun plus(other: Long): Long
 
@@ -102,11 +120,15 @@ public class Long private constructor() : Number(), Comparable<Long> {
 
     public external operator fun plus(other: Float): Float
 
+    public external operator fun minus(other: Double): Double
+
     public external operator fun minus(other: Long): Long
 
     public external operator fun minus(other: Int): Long
 
     public external operator fun minus(other: Float): Float
+
+    public external operator fun times(other: Double): Double
 
     public external operator fun times(other: Long): Long
 
@@ -114,11 +136,15 @@ public class Long private constructor() : Number(), Comparable<Long> {
 
     public external operator fun times(other: Float): Float
 
+    public external operator fun div(other: Double): Double
+
     public external operator fun div(other: Long): Long
 
     public external operator fun div(other: Int): Long
 
     public external operator fun div(other: Float): Float
+
+    public external operator fun rem(other: Double): Double
 
     public external operator fun rem(other: Long): Long
 
@@ -146,6 +172,8 @@ public class Long private constructor() : Number(), Comparable<Long> {
 
     public external fun toFloat(): Float
 
+    public external fun toDouble(): Double
+
     public companion object {
         public const val MIN_VALUE: Long = -9223372036854775807L - 1L
         public const val MAX_VALUE: Long = 9223372036854775807L
@@ -155,9 +183,13 @@ public class Long private constructor() : Number(), Comparable<Long> {
 public class Float private constructor() : Number(), Comparable<Float> {
     public external override operator fun compareTo(other: Float): Int
 
+    public external operator fun compareTo(other: Double): Int
+
     public external operator fun compareTo(other: Int): Int
 
     public external operator fun compareTo(other: Long): Int
+
+    public external operator fun plus(other: Double): Double
 
     public external operator fun plus(other: Float): Float
 
@@ -165,11 +197,15 @@ public class Float private constructor() : Number(), Comparable<Float> {
 
     public external operator fun plus(other: Long): Float
 
+    public external operator fun minus(other: Double): Double
+
     public external operator fun minus(other: Float): Float
 
     public external operator fun minus(other: Int): Float
 
     public external operator fun minus(other: Long): Float
+
+    public external operator fun times(other: Double): Double
 
     public external operator fun times(other: Float): Float
 
@@ -177,11 +213,15 @@ public class Float private constructor() : Number(), Comparable<Float> {
 
     public external operator fun times(other: Long): Float
 
+    public external operator fun div(other: Double): Double
+
     public external operator fun div(other: Float): Float
 
     public external operator fun div(other: Int): Float
 
     public external operator fun div(other: Long): Float
+
+    public external operator fun rem(other: Double): Double
 
     public external operator fun rem(other: Float): Float
 
@@ -195,6 +235,8 @@ public class Float private constructor() : Number(), Comparable<Float> {
 
     public external fun toLong(): Long
 
+    public external fun toDouble(): Double
+
     public companion object {
         public const val MIN_VALUE: Float = 1.4E-45F
         public const val MAX_VALUE: Float = 3.4028235E38F
@@ -204,7 +246,71 @@ public class Float private constructor() : Number(), Comparable<Float> {
     }
 }
 
-internal class Double private constructor() : Number()
+public class Double private constructor() : Number(), Comparable<Double> {
+    public external override operator fun compareTo(other: Double): Int
+
+    public external operator fun compareTo(other: Float): Int
+
+    public external operator fun compareTo(other: Int): Int
+
+    public external operator fun compareTo(other: Long): Int
+
+    public external operator fun plus(other: Float): Double
+
+    public external operator fun plus(other: Double): Double
+
+    public external operator fun plus(other: Int): Double
+
+    public external operator fun plus(other: Long): Double
+
+    public external operator fun minus(other: Float): Double
+
+    public external operator fun minus(other: Double): Double
+
+    public external operator fun minus(other: Int): Double
+
+    public external operator fun minus(other: Long): Double
+
+    public external operator fun times(other: Float): Double
+
+    public external operator fun times(other: Double): Double
+
+    public external operator fun times(other: Int): Double
+
+    public external operator fun times(other: Long): Double
+
+    public external operator fun div(other: Float): Double
+
+    public external operator fun div(other: Double): Double
+
+    public external operator fun div(other: Int): Double
+
+    public external operator fun div(other: Long): Double
+
+    public external operator fun rem(other: Float): Double
+
+    public external operator fun rem(other: Double): Double
+
+    public external operator fun rem(other: Int): Double
+
+    public external operator fun rem(other: Long): Double
+
+    public external operator fun unaryMinus(): Double
+
+    public external fun toInt(): Int
+
+    public external fun toLong(): Long
+
+    public external fun toFloat(): Float
+
+    public companion object {
+        public const val MIN_VALUE: Double = 4.9E-324
+        public const val MAX_VALUE: Double = 1.7976931348623157E308
+        public external val POSITIVE_INFINITY: Double
+        public external val NEGATIVE_INFINITY: Double
+        public external val NaN: Double
+    }
+}
 
 internal class UByte private constructor()
 

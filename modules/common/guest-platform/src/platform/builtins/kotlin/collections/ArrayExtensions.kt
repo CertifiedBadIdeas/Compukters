@@ -9,6 +9,7 @@ package kotlin.collections
 import kotlin.Array
 import kotlin.Int
 import kotlin.IntArray
+import kotlin.DoubleArray
 import kotlin.CharArray
 
 public external fun <T> Array<T>.copyOfRange(fromIndex: Int, toIndex: Int): Array<T>
@@ -26,6 +27,13 @@ public external fun IntArray.copyOf(): IntArray
 public external fun IntArray.copyOf(newSize: Int): IntArray
 /** Copies this range into [destination], supporting overlapping ranges, and returns it. */
 public external fun IntArray.copyInto(destination: IntArray, destinationOffset: Int = 0, startIndex: Int = 0, endIndex: Int = size): IntArray
+
+/** Returns a new array containing the same elements. */
+public external fun DoubleArray.copyOf(): DoubleArray
+/** Returns a resized copy, padding extra elements with zero. */
+public external fun DoubleArray.copyOf(newSize: Int): DoubleArray
+/** Copies this range into [destination], supporting overlapping ranges, and returns it. */
+public external fun DoubleArray.copyInto(destination: DoubleArray, destinationOffset: Int = 0, startIndex: Int = 0, endIndex: Int = size): DoubleArray
 
 /** Returns a new array containing the same elements. */
 public external fun CharArray.copyOf(): CharArray
