@@ -1207,6 +1207,30 @@ tasks.register<Exec>("benchmarkTransientAllocations") {
     )
     environment("CARGO_TARGET_DIR", rootProject.file(".toolchain/build/cargo/collection-benchmark").absolutePath)
 }
+// Compile the same VM sources without cfg(test) register instrumentation.
+val productionGuestBenchmarkReports = layout.buildDirectory.dir("reports/benchmarks/guest-production")
+
+tasks.register<Exec>("benchmarkGuestProductionLoops") {
+    description = "Measures compiled Guest loops through the untraced production interpreter."
+    group = "benchmark"
+    dependsOn(":compiler-k2:generateTransientAllocationBenchmarkArtifacts")
+    inputs.dir(transientBenchmarkArtifacts)
+    inputs.file(compukterVmRoot.resolve("Cargo.toml"))
+    inputs.file(compukterVmRoot.resolve("Cargo.lock"))
+    inputs.dir(compukterVmRoot.resolve("src"))
+    outputs.dir(productionGuestBenchmarkReports.map { it.dir("loops") })
+    outputs.upToDateWhen { false }
+    commandLine(
+        "cargo", "run", "--release", "--locked", "--offline", "--manifest-path",
+        compukterVmRoot.resolve("Cargo.toml").absolutePath,
+        "--features", "guest-benchmark", "--bin", "guest-benchmark", "--",
+        transientBenchmarkArtifacts.get().asFile.absolutePath,
+        productionGuestBenchmarkReports.get().dir("loops").asFile.absolutePath,
+        "7", "16384", "untraced",
+    )
+    environment("CARGO_TARGET_DIR", rootProject.file(".toolchain/build/cargo/guest-benchmark").absolutePath)
+}
+
 val objectArrayBenchmarkReports = layout.buildDirectory.dir("reports/benchmarks/object-arrays")
 
 tasks.register<Exec>("benchmarkObjectArrayHeap") {
