@@ -57,6 +57,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.Utf16LiteralId
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
+import ru.lazyhat.compukters.compiler.artifact.model.hasStructuredHostResponse
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.artifact.write.encodeTypeRef
@@ -306,6 +307,7 @@ private fun minimumRuntimeAbi(
     modules: List<Module>,
 ): AbiVersion {
     var required = declared
+    if (modules.any { it.hasStructuredHostResponse() }) required = maxOf(required, AbiVersion(1u, 13u))
     if (modules.any { module -> module.types.any { it is NominalType.Class && it.runtimeExceptionKind != null } }) {
         required = maxOf(required, AbiVersion(1u, 9u))
     }

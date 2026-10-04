@@ -948,6 +948,42 @@ class ArtifactValidatorTest {
     }
 
     @Test
+    fun `structured host responses require ABI 1 13 while String responses remain compatible`() {
+        val source =
+            executableArtifact(
+                Instruction.CapabilityCallAsync(
+                    Destination.Register(RegisterId.of(1u)),
+                    CapabilityId.of(0u),
+                    0u,
+                    emptyList(),
+                    BlockId.of(1u),
+                ),
+            )
+
+        fun gateErrors(artifact: Artifact) = validateArtifact(artifact, ArtifactWriteLimits()).filter { "1.13" in it.detail }
+        val scalar = source.copy(minimumRuntimeAbi = AbiVersion(1u, 12u))
+        assertTrue(gateErrors(scalar).isEmpty())
+        val record =
+            scalar.copy(
+                modules =
+                    scalar.modules.mapIndexed { index, module ->
+                        if (index != 0) {
+                            module
+                        } else {
+                            module.copy(
+                                strings =
+                                    module.strings.mapIndexed { stringIndex, text ->
+                                        if (stringIndex == 3) MetadataText.of("sable.physics.PhysicsSnapshot") else text
+                                    },
+                            )
+                        }
+                    },
+            )
+        assertTrue(gateErrors(record).isNotEmpty())
+        assertTrue(gateErrors(record.copy(minimumRuntimeAbi = AbiVersion(1u, 13u))).isEmpty())
+    }
+
+    @Test
     fun `string concat requires string operands and destination`() {
         val cases =
             listOf(
