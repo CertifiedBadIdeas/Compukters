@@ -3,6 +3,6 @@
   "minVersion": "0.8",
   "package": "ru.lazyhat.compukters.integration.propulsion.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": ["TransientThrusterControlMixin"],
+  "mixins": ["TransientThrusterControlMixin", "VectorThrusterControlMixin", "CreativeVectorThrustMixin"],
   "injectors": { "defaultRequire": 1 }
 }

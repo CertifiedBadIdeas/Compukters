@@ -181,6 +181,8 @@ val verifyProductionJar = tasks.register("verifyProductionJar") {
                 "ru/lazyhat/compukters/integration/propulsion/CompuktersPropulsionMod.class",
                 "ru/lazyhat/compukters/integration/propulsion/PropulsionGuestIntegration.class",
                 "ru/lazyhat/compukters/integration/propulsion/mixin/TransientThrusterControlMixin.class",
+                "ru/lazyhat/compukters/integration/propulsion/mixin/VectorThrusterControlMixin.class",
+                "ru/lazyhat/compukters/integration/propulsion/mixin/CreativeVectorThrustMixin.class",
             ).forEach { required ->
                 check(entries.count { it == required } == 1) { "$required is missing or duplicated in ${archive.name}" }
             }

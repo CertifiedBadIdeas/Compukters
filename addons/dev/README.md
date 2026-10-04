@@ -42,7 +42,7 @@ Run these verification/development commands from this directory with Gradle on J
 `verifyAddons` checks all standalone addons, verifies that their development archives contain only their own
 implementation, and checks the complete pinned physics mod set through `verifyPhysicsMods`. Every client/server/GameTest
 launch also performs that physics-set check. The common GameTest server loads complete test archives instead of the
-ordinary addon archives, registering the two Create scenarios, Sable assembly/return and two Propulsion
+ordinary addon archives, registering the two Create scenarios, Sable assembly/return and four Propulsion
 control/assembly scenarios together. Client and ordinary server runs load the ordinary archives. Each archive is built
 by its owning included Gradle build. Addon Guest bundles use the current workspace SDK tooling and platform bundle,
 so launches do not mix a stale published compiler with the base mod from this checkout.
@@ -52,12 +52,13 @@ archives to the maps in `build.gradle.kts`, and declare its upstream runtime dep
 own standalone checks, test registration and metadata. The shared stand owns only launch and verification composition.
 
 Compukters exposes the Create Guest API, request-only `sable.physics.Physics.snapshot()` and the independent
-`propulsion.thrusters.Thrusters.creative(name)` control API. Select the required addon IDs in each Guest project's
+`propulsion.thrusters.Thrusters.creative(name)` and `creativeVector(name)` control APIs. Select the required addon IDs
+in each Guest project's
 `compukter.toml`. See the [Sable README](../sable/README.md) and [Propulsion README](../propulsion/README.md) for examples,
 units and control lifetime.
 
-Verification on 2026-10-04: `verifyAddons` and the common GameTest server passed all five required scenarios
-(two Create, Sable assembly/return, Propulsion ownership/lifetime and Propulsion multiblock assembly).
+Verification on 2026-10-04: `verifyAddons` and the common GameTest server passed all seven required scenarios
+(two Create, Sable assembly/return, ordinary and vector Propulsion ownership/lifetime and Sable assembly).
 Interactive construction/flight behavior still needs manual testing. Propulsion 1.1.5 emits
 missing-model warnings (including oxidizer states and lodestone tracker overlay) from its upstream resources; these
 do not prevent startup.
