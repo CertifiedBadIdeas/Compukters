@@ -43,6 +43,13 @@ repositories {
     maven("https://maven.ithundxr.dev/snapshots")
 }
 apply(from = "../sable/gradle/sable-libraries.gradle.kts")
+apply(from = "gradle/aeronautics-libraries.gradle.kts")
+val aeronauticsLibraries = files(configurations.named("aeronauticsNestedMods"))
+val physicsMods = configurations.create("physicsMods") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
 val sableLibraries = files(configurations.named("sableNestedMods"))
 val veilLibraries = files(configurations.named("sableRuntimeLibraries"))
 
@@ -75,6 +82,10 @@ dependencies {
     neoForge("net.neoforged:neoforge:21.1.252")
     runtimeOnly(baseMod)
     addonMods.values.forEach { runtimeOnly(it) }
+    physicsMods("maven.modrinth:create-aeronautics:Vzp221Un")
+    physicsMods("maven.modrinth:create-propulsion-simulated:H13U56dc")
+    modRuntimeOnly(files(physicsMods))
+    modRuntimeOnly(aeronauticsLibraries)
     modRuntimeOnly("maven.modrinth:sable:U678xqle")
     modRuntimeOnly(sableLibraries)
     forgeRuntimeLibrary(veilLibraries)
@@ -129,14 +140,34 @@ val verifyDevelopmentMods = tasks.register("verifyDevelopmentMods") {
         check(baseMod.singleFile.isFile) { "base development mod is missing" }
     }
 }
-tasks.named("check") { dependsOn(verifyDevelopmentMods) }
+val verifyPhysicsMods = tasks.register("verifyPhysicsMods") {
+    group = "verification"
+    description = "Verify the exact Aeronautics bundle and Propulsion mods used by every development run."
+    inputs.files(physicsMods, aeronauticsLibraries)
+    doLast {
+        val ids = (physicsMods.files + aeronauticsLibraries.files).map { archive ->
+            ZipFile(archive).use { zip ->
+                val metadata = checkNotNull(zip.getEntry("META-INF/neoforge.mods.toml"))
+                val text = zip.getInputStream(metadata).bufferedReader().use { it.readText() }
+                checkNotNull(Regex("(?m)^modId\\s*=\\s*\"([^\"]+)\"").find(text)).groupValues[1]
+            }
+        }
+        check(ids.size == ids.toSet().size) { "duplicate physics mod IDs: $ids" }
+        check(ids.toSet() == setOf("aeronautics_bundled", "aeronautics", "offroad", "simulated", "createpropulsion")) {
+            "incomplete physics runtime: $ids"
+        }
+        logger.lifecycle("Development physics mods: ${ids.sorted().joinToString()}")
+    }
+}
+tasks.named("check") { dependsOn(verifyDevelopmentMods, verifyPhysicsMods) }
 tasks.register("verifyAddons") {
     group = "verification"
-    dependsOn(verifyDevelopmentMods)
+    dependsOn(verifyDevelopmentMods, verifyPhysicsMods)
     dependsOn(gradle.includedBuild("compukters-create").task(":check"))
     dependsOn(gradle.includedBuild("compukters-sable").task(":check"))
 }
 
 tasks.configureEach {
+    if (name == "runClient" || name == "runServer" || name == "runGameTestServer") dependsOn(verifyPhysicsMods)
     if (name == "runGameTestServer") dependsOn(addonGameTestMods.values)
 }
