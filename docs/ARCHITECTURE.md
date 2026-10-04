@@ -837,7 +837,9 @@ It does not mirror authoritative thrust or physics state. Typed observations cop
 The pinned Propulsion binary persists digital commands, so a dedicated read/write mixin marks owned full NBT saves
 and clears the unowned digital input/mode when those saves or construction copies load; client packets are unaffected.
 Vector steering temporarily overrides mapped local targets without changing live redstone-link inputs. On release,
-targets follow the latest signals; creative thrust override and throttle are cleared together. Full saves retain
+targets follow the latest signals; digital input and the old shutdown envelope are cleared before the creative thrust
+override is removed, then physical thrust is recalculated from the current redstone input. This prevents residual
+program throttle from multiplying the restored engine setting. Full saves retain
 redstone signals and the saved engine configuration, clearing owned steering/tween and absolute thrust commands;
 client packets retain the live visual state. Vector capability operations append IDs 5..11, preserving ordinary
 operations 0..4 at capability version 1, Runtime ABI 1.13 and C ABI 20. The independent `addons/dev` run build composes

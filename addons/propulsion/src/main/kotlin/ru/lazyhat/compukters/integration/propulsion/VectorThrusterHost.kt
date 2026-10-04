@@ -189,12 +189,12 @@ internal class VectorThrusterHost(
         private fun restoreRedstone(entity: CreativeVectorThrusterBlockEntity) {
             (entity as VectorThrusterControl).`compukters$clearVector`()
             if (entity.computerBehaviour?.hasAttachedComputer() == true) return
-            entity.clearPeripheralThrustOutput()
-            entity.setDigitalInput(1f)
-            entity.setDigitalInput(0f)
+            (entity as TransientThrusterControl).`compukters$clearProgramPower`()
             entity.setControlMode(ControlMode.NORMAL)
             val level = entity.level
             if (level != null && level.hasChunkAt(entity.blockPos)) entity.setRedstoneInput(level.getBestNeighborSignal(entity.blockPos))
+            // This setter immediately publishes physical thrust; restore power first.
+            entity.clearPeripheralThrustOutput()
             entity.setChanged()
         }
     }

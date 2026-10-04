@@ -19,7 +19,8 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
   peripheral cables: normalized Double throttle, local vector steering, absolute vector-engine thrust in kN,
   saved ordinary-engine thrust percentage and typed state snapshots. One program owns control; stopping,
   disconnection or computer removal clears digital throttle, steering and custom vector thrust and restores current
-  redstone/link inputs. Explicit close releases control early. Chunk saves and construction copies retain engine configuration without transferring a program's digital
+  redstone/link inputs without a residual program shutdown envelope or a thrust spike during handoff.
+  Explicit close releases control early. Chunk saves and construction copies retain engine configuration without transferring a program's digital
   command. The independent addon joins Create/Sable and the pinned Aeronautics/Propulsion runtime in the shared dev stand.
 
 ### Guest Kotlin

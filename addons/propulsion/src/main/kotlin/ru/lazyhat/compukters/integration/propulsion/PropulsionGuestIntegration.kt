@@ -249,13 +249,11 @@ internal object PropulsionGuestIntegration {
         private fun restoreRedstone(entity: CreativeThrusterBlockEntity) {
             // An attached CC peripheral owns its own detach policy; do not overwrite its commands.
             if (entity.computerBehaviour?.hasAttachedComputer() == true) return
-            // The upstream setter ignores changes <= 1e-4. Two writes clear even a tiny retained input;
-            // no world/physics tick occurs between them.
-            entity.setDigitalInput(1f)
-            entity.setDigitalInput(0f)
+            (entity as TransientThrusterControl).`compukters$clearProgramPower`()
             entity.setControlMode(ControlMode.NORMAL)
             val level = entity.level
             if (level != null && level.hasChunkAt(entity.blockPos)) entity.setRedstoneInput(level.getBestNeighborSignal(entity.blockPos))
+            entity.updateThrust(entity.blockState)
             entity.setChanged()
         }
     }
