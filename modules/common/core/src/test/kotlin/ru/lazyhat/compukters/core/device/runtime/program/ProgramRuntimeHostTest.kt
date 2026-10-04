@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.core.device.runtime.program
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.compiler.runtime.CompilerSubmissionResult
@@ -142,6 +143,51 @@ class ProgramRuntimeHostTest {
         host.shutdown()
         assertFalse(host.completeAddon(ProgramAddonCompletion(first.identity, HostResponse.IntSuccess(7))))
         assertEquals(1, session.responses.size)
+    }
+
+    @Test
+    fun `nested program exit cancels only its own requests and keeps parent completion alive`() {
+        val parent = VmHostRequest(11, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(3)), taskId = 2)
+        val child = VmHostRequest(12, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(4)), taskId = 2)
+        val session =
+            ScriptedSession(
+                outcomes =
+                    listOf(
+                        VmOutcome.HostRequestBatch(listOf(parent)),
+                        VmOutcome.ProcessEntered(1),
+                        VmOutcome.HostRequestBatch(listOf(child)),
+                        VmOutcome.ProcessExited(1),
+                        VmOutcome.SliceExhausted,
+                    ),
+            )
+        val actions = mutableListOf<ProgramAddonAction>()
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { session },
+                tickBudget = ProgramTickBudget(maximumAdvancesPerTick = 5),
+                addonCapabilitySchemas = listOf(TEST_ADDON_SCHEMA),
+                addonRequestPort =
+                    ProgramAddonRequestPort {
+                        actions += ProgramAddonAction.Request(it)
+                        true
+                    },
+                addonLifecyclePort =
+                    ProgramAddonLifecyclePort {
+                        actions += it
+                        true
+                    },
+            )
+        host.start(byteArrayOf(1))
+        host.serverTick()
+        assertEquals(listOf(0L, 1L), actions.filterIsInstance<ProgramAddonAction.Request>().map { it.request.programId })
+        assertIs<ProgramAddonAction.Request>(actions[0])
+        assertEquals(ProgramAddonAction.Started(1), actions[1])
+        assertIs<ProgramAddonAction.Request>(actions[2])
+        assertEquals(ProgramAddonAction.Stopped(1), actions[3])
+        assertFalse(host.completeAddon(ProgramAddonCompletion(child.identity, HostResponse.IntSuccess(1))))
+        assertTrue(host.completeAddon(ProgramAddonCompletion(parent.identity, HostResponse.IntSuccess(2))))
+        assertEquals(listOf(response(2, 11, HostResponse.IntSuccess(2))), session.responses)
+        host.shutdown()
     }
 
     @Test

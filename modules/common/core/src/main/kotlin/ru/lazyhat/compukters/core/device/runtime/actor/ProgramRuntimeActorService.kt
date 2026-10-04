@@ -18,10 +18,12 @@
 
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.program.EmptyProgramAddonHost
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonLifecyclePort
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonRequestPort
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
@@ -125,6 +127,7 @@ class ProgramRuntimeActorService(
                 soundHostPort = soundPort,
                 addonCapabilitySchemas = effectiveAddonHost.capabilitySchemas,
                 addonRequestPort = addonPort,
+                addonLifecyclePort = addonPort,
                 initialRedstoneOutput = initialRedstoneOutput,
             )
         return attach(endpoint, host, port, soundPort, addonPort)
@@ -308,7 +311,7 @@ class ProgramRuntimeActorService(
                         (
                             reply.value is ProgramRuntimeActorValue.RedstoneOutputRequested ||
                                 reply.value is ProgramRuntimeActorValue.SoundRequested ||
-                                reply.value is ProgramRuntimeActorValue.AddonsRequested
+                                reply.addonActions.isNotEmpty()
                         ) &&
                         deferredWorldRequests.add(event.endpoint)
                     ) {
@@ -498,20 +501,28 @@ internal class ActorSoundHostPort : SoundHostPort {
     fun takeRequestedSounds(): List<SoundRequest>? = requestedSounds.also { requestedSounds = null }
 }
 
-internal class ActorAddonRequestPort : ProgramAddonRequestPort {
-    private val requests = mutableListOf<ProgramAddonRequest>()
+internal class ActorAddonRequestPort :
+    ProgramAddonRequestPort,
+    ProgramAddonLifecyclePort {
+    private val actions = mutableListOf<ProgramAddonAction>()
 
-    override fun submit(request: ProgramAddonRequest): Boolean {
-        if (requests.size >= MAXIMUM_ADDON_REQUEST_BATCH) return false
-        requests += request
+    override fun submit(request: ProgramAddonRequest): Boolean =
+        submit(
+            ProgramAddonAction
+                .Request(request),
+        )
+
+    override fun submit(action: ProgramAddonAction): Boolean {
+        if (actions.size >= MAXIMUM_ADDON_ACTION_BATCH) return false
+        actions += action
         return true
     }
 
-    fun takeRequests(): List<ProgramAddonRequest> = requests.toList().also { requests.clear() }
+    fun takeActions(): List<ProgramAddonAction> = actions.toList().also { actions.clear() }
 
-    fun clear() = requests.clear()
+    fun clear() = actions.clear()
 
     private companion object {
-        const val MAXIMUM_ADDON_REQUEST_BATCH = 256
+        const val MAXIMUM_ADDON_ACTION_BATCH = 512
     }
 }

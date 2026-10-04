@@ -102,3 +102,7 @@ private class CompositeProgramAddonHost(
         val abiMajor: Int,
     )
 }
+
+fun interface ProgramAddonLifecyclePort {
+    fun submit(action: ru.lazyhat.compukters.api.addon.ProgramAddonAction): Boolean
+}

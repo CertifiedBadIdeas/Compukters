@@ -211,6 +211,22 @@ internal fun encodeHostFailureDetail(detail: String): ByteArray {
 }
 
 sealed interface VmOutcome {
+    data class ProcessEntered(
+        val programId: Long,
+    ) : VmOutcome {
+        init {
+            require(programId > 0)
+        }
+    }
+
+    data class ProcessExited(
+        val programId: Long,
+    ) : VmOutcome {
+        init {
+            require(programId > 0)
+        }
+    }
+
     data object SliceExhausted : VmOutcome
 
     data object WaitingForHostQuota : VmOutcome

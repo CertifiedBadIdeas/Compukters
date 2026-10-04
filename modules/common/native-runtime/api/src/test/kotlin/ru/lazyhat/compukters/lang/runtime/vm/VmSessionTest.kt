@@ -304,6 +304,22 @@ class VmSessionTest {
     }
 
     @Test
+    fun `process lifecycle decodes identities and rejects malformed scopes`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(11)))
+        val session = VmSession.open(byteArrayOf(1), bridge)
+        bridge.outcomes += bytes(13, long(7))
+        bridge.outcomes += bytes(14, long(7))
+        assertEquals(VmOutcome.ProcessEntered(7), session.advance(64, 64, Int.MAX_VALUE))
+        assertEquals(VmOutcome.ProcessExited(7), session.advance(64, 64, Int.MAX_VALUE))
+        for (tag in listOf(13, 14)) {
+            for (payload in listOf(bytes(tag), bytes(tag, long(0)), bytes(tag, long(-1)), bytes(tag, long(1), 99))) {
+                bridge.outcomes += payload
+                assertFailsWith<VmBridgeException> { session.advance(64, 64, Int.MAX_VALUE) }
+            }
+        }
+    }
+
+    @Test
     fun `advance forwards host request budget and maps quota waiting`() {
         val bridge = FakeBridge(createResult = bytes(0, long(11)))
         val session = VmSession.open(byteArrayOf(1), bridge)
