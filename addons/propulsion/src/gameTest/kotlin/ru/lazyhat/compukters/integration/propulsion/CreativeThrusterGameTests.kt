@@ -43,6 +43,7 @@ import net.neoforged.neoforge.common.util.FakePlayerFactory
 import net.neoforged.neoforge.event.RegisterGameTestsEvent
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralCableBlock
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorContext
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorSaveResult
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorServer
@@ -69,7 +70,13 @@ object CreativeThrusterGameTests {
         val owner = GuestComputerScenario(helper, first)
         val contender = GuestComputerScenario(helper, second)
         val sequence = helper.startSequence()
-        sequence.thenExecuteAfter(5) { nameDevice(helper, engine) }
+        sequence.thenExecuteAfter(5) {
+            helper.assertTrue(
+                helper.getBlockState(BlockPos(4, 2, 3)).getValue(PeripheralCableBlock.EAST),
+                "Peripheral cable did not visually connect to the Creative Thruster",
+            )
+            nameDevice(helper, engine)
+        }
         owner.prepare(sequence, OWNER)
         owner.awaitMarker(sequence, "owner-acquired")
         sequence.thenExecute {
