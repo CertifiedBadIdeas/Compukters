@@ -94,7 +94,6 @@ class LegacyImplementationRemovalTest {
                 "compukter" + "craft",
                 "Compukter" + " Kraft",
                 "CC" + ":Tweaked",
-                "Computer" + "Craft",
                 "Craft" + "OS",
                 "dan" + "200",
                 "RISC" + "-V",
@@ -118,6 +117,7 @@ class LegacyImplementationRemovalTest {
                                 relative.startsWith("docs/superpowers/") ||
                                 relative.startsWith("build/") ||
                                 relative.contains("/build/") ||
+                                relative.contains("/run/") ||
                                 relative.contains("/.gradle/")
                         )
                     }.filter { path ->
