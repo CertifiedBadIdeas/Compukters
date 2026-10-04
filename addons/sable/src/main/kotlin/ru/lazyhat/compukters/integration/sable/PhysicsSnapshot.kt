@@ -37,6 +37,8 @@ internal data class PhysicsRotation(
 internal data class PhysicsSnapshot(
     val constructionId: UUID,
     val gameTick: Long,
+    val dimension: String,
+    val paused: Boolean,
     val position: PhysicsVector,
     val orientation: PhysicsRotation,
     val scale: PhysicsVector,

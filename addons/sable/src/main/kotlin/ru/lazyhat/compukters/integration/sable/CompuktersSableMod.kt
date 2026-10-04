@@ -22,6 +22,10 @@ import net.neoforged.fml.common.Mod
 
 @Mod(CompuktersSableMod.MOD_ID)
 class CompuktersSableMod {
+    init {
+        SableGuestIntegration.register()
+    }
+
     companion object {
         const val MOD_ID = "compukters_sable"
     }

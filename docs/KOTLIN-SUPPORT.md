@@ -991,6 +991,21 @@ their separate addon IDs. Evidence: `NeoForgeCompilerServicesTest`, test
 `server advertises an admitted addon bundle with its exact content identity`, which checks both advertised and
 configured identities for an addon whose ID differs from its module name.
 
+- [x] **Structured asynchronous addon results** — one host request can return a bounded immutable data record
+  with non-null scalar or nested-record fields. The SDK checks pure data declarations, generates typed host mirrors
+  and retains the nominal field shape in the addon ABI. Native admission validates the destination layout; resume
+  copies the response, and normal budgeted advancement materializes rooted nodes without Guest constructors.
+  Arrays, nullable fields, record arguments and cyclic records are unsupported. Structured programs require
+  Runtime ABI 1.13. Evidence: `ArtifactValidatorTest`, test
+  `structured host responses require ABI 1 13 while String responses remain compatible`,
+  [`session_tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/session_tests.rs),
+  tests `records_copy_validate_and_publish_only_after_budgeted_materialization`,
+  `record_admission_requires_runtime_and_exact_nested_layout`,
+  `record_allocation_failure_is_budgeted_bounded_and_releases_unpublished_storage` and
+  `other_task_responses_do_not_replace_an_incomplete_record_frame`, plus
+  [`SableObservationGameTests`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/addons/sable/src/gameTest/kotlin/ru/lazyhat/compukters/integration/sable/SableObservationGameTests.kt),
+  scenario `computerAssemblyAndReturn`, compiling and executing the typed Guest API through JNI.
+
 ## Kotlin standard library
 
 The detailed API inventory is in [Guest standard library support]({{ '/STDLIB-SUPPORT/' | relative_url }}).

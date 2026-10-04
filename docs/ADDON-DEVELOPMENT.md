@@ -187,3 +187,23 @@ independent Create and Sable builds. From that directory, run `./gradlew-sandbox
 for both addon checks, or `./gradlew-sandbox-dev-parallel runGameTestServer` for their shared real NeoForge scenarios.
 `runClient` and `runServer` use the same upstream dependency pins and ordinary development archives. This build
 produces no distributable umbrella mod; adding another addon does not introduce a dependency between existing addons.
+
+
+## Structured host results
+
+Current workspace tooling accepts an asynchronous binding returning a public immutable data record in the addon's
+namespace. Declare non-null `val` fields containing Int, Long, Float, Double, Boolean, Char, String or other supported
+records. Records must have no type parameters, superclass, custom body, constructor defaults or initialization logic.
+Arrays, nullable fields, record arguments and cyclic record graphs are outside this initial contract.
+
+The SDK generates a JVM mirror DTO, an ordered nominal schema and its typed response encoder. Authors return the
+mirror through `AddonCallResult`; no reflection, handwritten operation numbers or Guest constructors are involved.
+The ABI lock records the complete nested shape, so changing field order, name or type requires a reviewed ABI update.
+Record bundles use CAGB 3 / lock format 2; scalar-only contracts retain their earlier encoding. Programs returning
+records require Runtime ABI 1.13; runtime transports retain C ABI 19.
+
+Limits are 8 nesting levels, 32 record/String nodes, 64 expanded fields, 4096 aggregate UTF-16 code units and a 64 KiB
+response. The native boundary validates and copies caller-owned responses. Normal VM advancement allocates rooted
+objects and Strings in slices, then publishes the root atomically. The host does not execute Guest construction code.
+See [the Sable addon](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/addons/sable) for a complete nested record
+API and its real assembly/return GameTest.

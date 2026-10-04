@@ -50,6 +50,8 @@ internal object SablePhysicsSnapshots {
         return PhysicsSnapshot(
             body.uniqueId,
             level.gameTime,
+            level.dimension().location().toString(),
+            system.paused,
             PhysicsVector(location.x(), location.y(), location.z()),
             PhysicsRotation(rotation.x(), rotation.y(), rotation.z(), rotation.w()),
             PhysicsVector(scale.x(), scale.y(), scale.z()),
