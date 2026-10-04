@@ -598,6 +598,8 @@ supported.
   `value class boxes share canonical identity across precompiled addon functions`, and
   `addon scalar handles support typed lists and forEach`. `testKotlinValueClassBoxesVmConformance`
   executes the source and precompiled-library boxing scenarios.
+  The dev-stand GameTest `guestVectorHandleList` controls four real Creative Vector Thrusters through
+  `listOf(...).forEach` and verifies that all control leases are released when the Guest program finishes.
   Tracking: [#692](https://github.com/CertifiedBadIdeas/Compukters/issues/692)
 
 ## Nullability and exceptions

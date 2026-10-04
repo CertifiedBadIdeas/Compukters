@@ -50,6 +50,42 @@ import net.minecraft.util.Unit as MinecraftUnit
 object CreativeVectorThrusterGameTests {
     @JvmStatic
     @GameTest(batch = "propulsion_vector", template = "bastion/mobs/empty", templateNamespace = "minecraft", timeoutTicks = 100_000)
+    fun guestVectorHandleList(helper: GameTestHelper) {
+        val computer = BlockPos(2, 2, 3)
+        val engines = listOf("fl", "fr", "bl", "br").mapIndexed { index, name -> name to BlockPos(5, 2, index + 2) }
+        helper.setBlock(computer, CompuktersRegistry.COMPUTER.get())
+        val cable = CompuktersRegistry.PERIPHERAL_CABLE.get()
+        helper.setBlock(BlockPos(3, 2, 3), cable)
+        for (z in 2..5) helper.setBlock(BlockPos(4, 2, z), cable)
+        val block = BuiltInRegistries.BLOCK.get(ResourceLocation.fromNamespaceAndPath("createpropulsion", "creative_vector_thruster"))
+        engines.forEach { (_, position) -> helper.setBlock(position, block) }
+        val scenario = GuestComputerScenario(helper, computer)
+        val sequence = helper.startSequence()
+        sequence.thenExecuteAfter(5) {
+            engines.forEach { (name, position) -> nameDevice(helper, position, name) }
+        }
+        scenario.prepare(sequence, HANDLE_LIST)
+        scenario.awaitMarker(sequence, "vector-list-owned")
+        sequence.thenExecute {
+            engines.forEach { (name, position) ->
+                val thruster = helper.getBlockEntity(position) as CreativeVectorThrusterBlockEntity
+                helper.assertTrue(thruster.hasPeripheralThrustOverride(), "$name did not receive custom thrust through list iteration")
+                helper.assertTrue(thruster.throttle == 0.25f, "$name did not receive throttle through list iteration")
+            }
+        }
+        scenario.resume(sequence)
+        scenario.awaitMarker(sequence, "vector-list-finished")
+        sequence.thenExecute {
+            engines.forEach { (name, position) ->
+                val thruster = helper.getBlockEntity(position) as CreativeVectorThrusterBlockEntity
+                helper.assertTrue(!thruster.hasPeripheralThrustOverride(), "$name retained its lease after program completion")
+            }
+        }
+        sequence.thenSucceed()
+    }
+
+    @JvmStatic
+    @GameTest(batch = "propulsion_vector", template = "bastion/mobs/empty", templateNamespace = "minecraft", timeoutTicks = 100_000)
     fun guestVectorControlLifetime(helper: GameTestHelper) {
         val first = BlockPos(2, 2, 3)
         val second = BlockPos(4, 2, 5)
@@ -246,6 +282,7 @@ object CreativeVectorThrusterGameTests {
     private fun nameDevice(
         helper: GameTestHelper,
         position: BlockPos,
+        name: String = "engine",
     ) {
         val absolute = helper.absolutePos(position)
         val player = FakePlayerFactory.getMinecraft(helper.level)
@@ -256,10 +293,30 @@ object CreativeVectorThrusterGameTests {
                 player,
                 InteractionHand.MAIN_HAND,
                 PeripheralConfiguratorContext(absolute, Direction.WEST),
-                "engine",
+                name,
             )
         helper.assertTrue(result == PeripheralConfiguratorSaveResult.NAMED_DEVICE, "Could not name Creative Vector Thruster: $result")
     }
+
+    private val HANDLE_LIST =
+        """
+        import propulsion.thrusters.Thrusters
+        fun main() {
+            val fl = Thrusters.creativeVector("fl")
+            val fr = Thrusters.creativeVector("fr")
+            val bl = Thrusters.creativeVector("bl")
+            val br = Thrusters.creativeVector("br")
+            val all = listOf(fl, fr, bl, br)
+            all.forEach {
+                it.setThrustKn(100.0)
+                it.setThrottle(0.25)
+            }
+            for (engine in all) check(engine.state().thrustKn == 100.0)
+            println("vector-list-owned")
+            readln()
+            println("vector-list-finished")
+        }
+        """.trimIndent()
 
     private val OWNER =
         """
