@@ -52,6 +52,9 @@ not establish normal-world delivery latency. Repeat with ordinary pacing before 
 Sable physics is paused to hold the construction in place while block-entity and VM ticks continue, so
 these results cover transport and actuator-state response. Dynamic flight, force application, PID
 stability, and loaded-world scheduling require separate measurements.
+When comparing notified delivery, the paced harness must use the ordinary server managed idle loop,
+which processes queued server tasks without advancing the world tick. Parking without processing tasks
+or allowing notifications to shorten the 50 ms period measures a different scheduler.
 
 ## Documentation site
 
