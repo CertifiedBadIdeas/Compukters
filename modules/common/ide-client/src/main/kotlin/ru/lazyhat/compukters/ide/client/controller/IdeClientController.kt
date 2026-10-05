@@ -940,6 +940,14 @@ class IdeClientController(
                     active.document.outdent()
                 }
 
+                IdeEditorInput.ToggleLineComment -> {
+                    when {
+                        active.path.isKotlinSource -> active.document.toggleLineComments()
+                        active.path.value.endsWith(".toml") -> active.document.toggleLineComments("#")
+                        else -> EditorEditResult.NoChange
+                    }
+                }
+
                 IdeEditorInput.Cut -> {
                     active.document.cut()
                 }

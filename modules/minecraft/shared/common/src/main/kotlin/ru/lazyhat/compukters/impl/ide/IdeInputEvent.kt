@@ -31,6 +31,7 @@ value class IdeCharacterInput(
 
 object IdeKeyCode {
     const val SPACE = 32
+    const val SLASH = 47
     const val A = 65
     const val B = 66
     const val C = 67

@@ -74,6 +74,8 @@ sealed interface IdeEditorInput {
 
     data object Outdent : IdeEditorInput
 
+    data object ToggleLineComment : IdeEditorInput
+
     data object Cut : IdeEditorInput
 
     data object Undo : IdeEditorInput

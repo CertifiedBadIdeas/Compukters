@@ -389,6 +389,37 @@ class EditorDocument(
 
     fun outdent(): EditorEditResult = transformLinePrefixes(indent = false)
 
+    /** Toggle line comments as one edit, retaining selection direction and line endings. */
+    fun toggleLineComments(prefix: String = "//"): EditorEditResult {
+        require(prefix.isNotEmpty() && prefix.none { it.isWhitespace() }) { "comment prefix must be a token" }
+        if (closed) return EditorEditResult.Rejected(EditorRejection.Closed)
+        val range = selectionRange
+        val firstLine = lines.lineOfOffset(range?.startUtf16 ?: caretOffset)
+        var lastLine = lines.lineOfOffset(range?.endUtf16 ?: caretOffset)
+        if (range != null && lastLine > firstLine && range.endUtf16 == lines.line(lastLine).startUtf16) lastLine--
+        val selected =
+            (firstLine..lastLine).map { index ->
+                val line = lines.line(index)
+                line to buffer.copyRange(line.startUtf16, line.contentEndUtf16).concatToString()
+            }
+        val nonblank = selected.filter { (_, text) -> text.isNotBlank() }
+        val uncomment = nonblank.isNotEmpty() && nonblank.all { (_, text) -> text.trimStart(' ', '\t').startsWith(prefix) }
+        val edits =
+            selected.mapNotNull { (line, text) ->
+                if (text.isBlank() && nonblank.isNotEmpty()) return@mapNotNull null
+                val indent = text.takeWhile { it == ' ' || it == '\t' }.length
+                val start = line.startUtf16 + indent
+                if (uncomment) {
+                    val suffix = indent + prefix.length
+                    val removeSpace = text.getOrNull(suffix) == ' '
+                    PrefixEdit(start, start + prefix.length + if (removeSpace) 1 else 0, "")
+                } else {
+                    PrefixEdit(start, start, "$prefix ")
+                }
+            }
+        return applyLinePrefixEdits(firstLine, lastLine, edits)
+    }
+
     fun undo(): EditorEditResult {
         if (closed) return EditorEditResult.Rejected(EditorRejection.Closed)
         val entry = history.popUndo() ?: return EditorEditResult.NoChange
@@ -626,6 +657,14 @@ class EditorDocument(
                     PrefixEdit(line.startUtf16, line.startUtf16 + removed.length, "")
                 }
             }
+        return applyLinePrefixEdits(firstLine, lastLine, edits)
+    }
+
+    private fun applyLinePrefixEdits(
+        firstLine: Int,
+        lastLine: Int,
+        edits: List<PrefixEdit>,
+    ): EditorEditResult {
         if (edits.isEmpty()) return EditorEditResult.NoChange
         val transformStart = lines.line(firstLine).startUtf16
         val transformEnd = lines.line(lastLine).contentEndUtf16

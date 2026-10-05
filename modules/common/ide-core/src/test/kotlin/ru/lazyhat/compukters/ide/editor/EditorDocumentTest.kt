@@ -160,6 +160,56 @@ class EditorDocumentTest {
     }
 
     @Test
+    fun `line comments preserve indentation caret and undo`() {
+        val editor = EditorDocument("    val x = 1")
+        editor.setCaret(9)
+        assertIs<EditorEditResult.Applied>(editor.toggleLineComments())
+        assertEquals("    // val x = 1", editor.materialize())
+        assertEquals(12, editor.caretOffset)
+        assertIs<EditorEditResult.Applied>(editor.undo())
+        assertEquals("    val x = 1", editor.materialize())
+        assertEquals(9, editor.caretOffset)
+        assertIs<EditorEditResult.Applied>(editor.redo())
+        assertIs<EditorEditResult.Applied>(editor.toggleLineComments())
+        assertEquals("    val x = 1", editor.materialize())
+    }
+
+    @Test
+    fun `comment selection preserves CRLF reverse selection and excludes terminal line`() {
+        val source = "one\r\n  two\r\nthree"
+        val editor = EditorDocument(source)
+        editor.setCaret("one\r\n  two\r\n".length)
+        editor.setCaret(0, extendSelection = true)
+        assertIs<EditorEditResult.Applied>(editor.toggleLineComments())
+        assertEquals("// one\r\n  // two\r\nthree", editor.materialize())
+        assertTrue(editor.selectionState.anchorUtf16 > editor.selectionState.caretUtf16)
+        assertIs<EditorEditResult.Applied>(editor.toggleLineComments())
+        assertEquals(source, editor.materialize())
+        assertIs<EditorEditResult.Applied>(editor.undo())
+        assertEquals("// one\r\n  // two\r\nthree", editor.materialize())
+    }
+
+    @Test
+    fun `mixed comments blank lines and TOML prefixes toggle predictably`() {
+        val editor = EditorDocument("// old\n\nnew")
+        editor.selectAll()
+        editor.toggleLineComments()
+        assertEquals("// // old\n\n// new", editor.materialize())
+        editor.toggleLineComments()
+        assertEquals("// old\n\nnew", editor.materialize())
+        val toml = EditorDocument("name = \"test\"")
+        toml.toggleLineComments("#")
+        assertEquals("# name = \"test\"", toml.materialize())
+        toml.toggleLineComments("#")
+        assertEquals("name = \"test\"", toml.materialize())
+        val empty = EditorDocument("")
+        empty.toggleLineComments()
+        assertEquals("// ", empty.materialize())
+        empty.toggleLineComments()
+        assertEquals("", empty.materialize())
+    }
+
+    @Test
     fun `block indentation preserves selected text direction and is one undo step`() {
         val editor = EditorDocument("one\r\n  two\r\nthree")
         assertTrue(editor.setCaret("one\r\n  two".length))

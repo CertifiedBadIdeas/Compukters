@@ -37,6 +37,9 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
   Input levels sampled during asynchronous startup are retained until the VM is ready, including signals already
   present before a program starts.
 
+- IDE Ctrl+/ toggles line comments for the current line or selection (`//` in Kotlin, `#` in TOML),
+  preserving indentation, selection direction and line endings as one Undo/Redo action.
+
 ### Guest Kotlin
 
 - Scalar value classes based on Int, Boolean and Char can be stored in lists and generic arrays, passed as Any,
