@@ -19,6 +19,8 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
   direct face adjacency or peripheral cables: normalized Double throttle, local vector steering, absolute vector-engine
   thrust in kN, saved ordinary-engine thrust percentage, typed state snapshots and read-only vector-engine mount geometry
   for Guest control using construction-local computer-relative positions and neutral thrust direction.
+  Digital vector steering accepts fractional targets at upstream Float precision without redstone-level rounding;
+  ordinary Propulsion nozzle smoothing remains in effect.
   One program owns control; stopping,
   disconnection or computer removal clears digital throttle, steering and custom vector thrust and restores current
   redstone/link inputs without a residual program shutdown envelope or a thrust spike during handoff.

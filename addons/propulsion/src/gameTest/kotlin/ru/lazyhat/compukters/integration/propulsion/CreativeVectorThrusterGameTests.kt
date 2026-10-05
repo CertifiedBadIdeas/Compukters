@@ -225,7 +225,7 @@ object CreativeVectorThrusterGameTests {
             thruster.eastLink.setReceivedStrength(9)
             thruster.downLink.setReceivedStrength(12)
             thruster.upLink.setReceivedStrength(3)
-            helper.assertTrue(thruster.targetVectorX == 0.6f && thruster.targetVectorY == -0.4f, "Redstone overwrote owned steering")
+            helper.assertTrue(thruster.targetVectorX == 0.013f && thruster.targetVectorY == -0.007f, "Redstone overwrote owned steering")
             val saved = thruster.saveWithFullMetadata(helper.level.registryAccess())
             helper.assertTrue(saved.getBoolean("compukters_propulsion:transient_control"), "Vector save lacks transient marker")
             val copy = CreativeVectorThrusterBlockEntity(helper.absolutePos(engine), thruster.blockState)
@@ -238,13 +238,13 @@ object CreativeVectorThrusterGameTests {
             copy.setControlMode(dev.propulsionteam.propulsionsimulated.content.thruster.AbstractThrusterBlockEntity.ControlMode.PERIPHERAL)
             helper.assertTrue(copy.throttle == 0f, "NBT copy retained digital throttle")
             helper.assertTrue(
-                thruster.hasPeripheralThrustOverride() && thruster.throttle == 0.375f && thruster.targetVectorX == 0.6f,
+                thruster.hasPeripheralThrustOverride() && thruster.throttle == 0.375f && thruster.targetVectorX == 0.013f,
                 "Saving modified live control",
             )
             val packet = thruster.getUpdateTag(helper.level.registryAccess())
             helper.assertTrue(!packet.getBoolean("compukters_propulsion:transient_control"), "Client packet marked transient")
             helper.assertTrue(
-                packet.getFloat("TargetVectorX") == 0.6f && packet.getFloat("PeripheralThrustOutput") >= 0f,
+                packet.getFloat("TargetVectorX") == 0.013f && packet.getFloat("PeripheralThrustOutput") >= 0f,
                 "Client packet lost control state",
             )
         }
@@ -252,7 +252,7 @@ object CreativeVectorThrusterGameTests {
         contender.awaitMarker(sequence, "vector-busy")
         sequence.thenExecute {
             helper.assertTrue(
-                thruster.currentVectorX == 0.6f && thruster.currentVectorY == -0.4f,
+                thruster.currentVectorX == 0.013f && thruster.currentVectorY == -0.007f,
                 "Ordinary upstream ticks did not move the nozzle to its owned target",
             )
             helper.setBlock(link, Blocks.AIR)
@@ -551,13 +551,15 @@ object CreativeVectorThrusterGameTests {
             val e = Thrusters.creativeVector("engine")
             e.setThrustKn(123.0)
             e.setVector(0.1, -0.1)
-            check(e.state().targetVectorY < -0.13)
-            e.setVector(0.6, -0.4)
+            val first = e.state()
+            check(first.targetVectorX > 0.0999 && first.targetVectorX < 0.1001)
+            check(first.targetVectorY > -0.1001 && first.targetVectorY < -0.0999)
+            e.setVector(0.013, -0.007)
             e.setThrottle(0.375)
             val s = e.state()
             check(s.customThrust && s.thrustKn == 123.0 && s.throttle == 0.375)
-            check(s.targetVectorX > 0.59 && s.targetVectorX < 0.61)
-            check(s.targetVectorY < -0.39 && s.targetVectorY > -0.41)
+            check(s.targetVectorX > 0.0129 && s.targetVectorX < 0.0131)
+            check(s.targetVectorY > -0.0071 && s.targetVectorY < -0.0069)
             println("vector-owned")
             readln()
             var stale = false
