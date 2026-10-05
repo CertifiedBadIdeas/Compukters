@@ -44,6 +44,7 @@ internal class VmActorServiceRegistry<S : Any>(
     private val enqueueOnOwner: ((S, Runnable) -> Unit)? = null,
     private val maximumPumpNanosPerTick: Long = 2_000_000,
     private val nanoTime: () -> Long = System::nanoTime,
+    private val ownerWakeupsEnabled: Boolean = true,
 ) {
     private val servers = IdentityHashMap<S, Entry>()
 
@@ -100,6 +101,7 @@ internal class VmActorServiceRegistry<S : Any>(
         server: S,
         entry: Entry,
     ) {
+        if (!ownerWakeupsEnabled) return
         val enqueue = enqueueOnOwner ?: return
         if (entry.closed.get() || !entry.pumpAllowed.get() || !entry.pumpQueued.compareAndSet(false, true)) return
         try {
@@ -170,6 +172,8 @@ internal class VmActorServiceRegistry<S : Any>(
 }
 
 internal object NeoForgeVmActorServices {
+    private val ownerWakeupsEnabled = System.getProperty("compukters.vm.ownerWakeups", "true").toBooleanStrict()
+
     private val registry =
         VmActorServiceRegistry<MinecraftServer>(
             checkOwner = { server ->
@@ -185,13 +189,17 @@ internal object NeoForgeVmActorServices {
             },
             calibrator = { VmCapacityCalibrator.start(CompuktersServerConfig.schedulerConfig().workerCount) },
             enqueueOnOwner = { server, task -> server.execute(task) },
+            ownerWakeupsEnabled = ownerWakeupsEnabled,
         )
 
     fun service(server: MinecraftServer): ProgramRuntimeActorService = registry.service(server)
 
     fun metrics(server: MinecraftServer): ProgramRuntimeActorMetrics? = registry.metrics(server)
 
-    fun onServerStarting(event: ServerStartingEvent) = registry.start(event.server)
+    fun onServerStarting(event: ServerStartingEvent) {
+        LOGGER.info { "VM owner wakeups enabled: $ownerWakeupsEnabled" }
+        registry.start(event.server)
+    }
 
     fun beforeServerTick(event: ServerTickEvent.Pre) {
         registry.tick(event.server, event.server.tickCount.toLong())
