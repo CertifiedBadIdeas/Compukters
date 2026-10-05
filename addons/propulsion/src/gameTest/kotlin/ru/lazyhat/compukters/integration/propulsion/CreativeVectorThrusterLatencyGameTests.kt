@@ -37,6 +37,7 @@ import net.minecraft.gametest.framework.GameTestRunner
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.neoforged.neoforge.common.util.FakePlayerFactory
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate
@@ -107,6 +108,19 @@ object CreativeVectorThrusterLatencyGameTests {
                 )
             container.addForceLoadTicket(requireNotNull(body), SubLevelLoadingTicketType.COMMAND_FORCED, MinecraftUnit.INSTANCE)
             currentPosition = requireNotNull(body).plot.centerBlock
+            val enginePosition = currentPosition.below()
+            val original = helper.level.getBlockEntity(enginePosition) as CreativeVectorThrusterBlockEntity
+            val observed = ObservedThruster(enginePosition, original.blockState)
+            observed.loadWithComponents(original.saveWithFullMetadata(helper.level.registryAccess()), helper.level.registryAccess())
+            helper.level.setBlockEntity(observed)
+            observed.recordMutation = { entity ->
+                if (armed >= 0) {
+                    val sample = samples[armed]
+                    val tick = helper.level.gameTime
+                    if (entity.targetVectorX == 0.3f && sample.vectorAppliedTick == null) sample.vectorAppliedTick = tick
+                    if (entity.throttle == 0.4f && sample.throttleAppliedTick == null) sample.throttleAppliedTick = tick
+                }
+            }
             val player = FakePlayerFactory.getMinecraft(helper.level)
             val absolute = currentPosition.below()
             player.setPos(absolute.x + 0.5, absolute.y + 0.5, absolute.z + 0.5)
@@ -157,6 +171,8 @@ object CreativeVectorThrusterLatencyGameTests {
                         ?.toLong()
                 helper.assertTrue(source != null && read != null, "Missing latency sample timestamps: $text")
                 val sample = samples[index]
+                val vectorApplied = requireNotNull(sample.vectorAppliedTick)
+                val throttleApplied = requireNotNull(sample.throttleAppliedTick)
                 val vector = requireNotNull(sample.vectorTick)
                 val throttle = requireNotNull(sample.throttleTick)
                 val vector50 = requireNotNull(sample.vector50Tick)
@@ -166,6 +182,17 @@ object CreativeVectorThrusterLatencyGameTests {
                     "Latency stage ordering changed",
                 )
                 helper.assertTrue(vector50 >= vector && vector90 >= vector50, "Nozzle step response ordering changed")
+                helper.assertTrue(vector >= vectorApplied && throttle >= throttleApplied, "Observer preceded actual mutation")
+                helper.assertTrue(vectorApplied >= source && throttleApplied >= source, "Control mutation preceded snapshot")
+                LogUtils.getLogger().info(
+                    "Propulsion mutation mode={} sample={} sourceToVectorApply={} sourceToThrottleApply={} vectorObserverLag={} throttleObserverLag={} ticks",
+                    if (parallel) "parallel" else "sequential",
+                    index,
+                    vectorApplied - source,
+                    throttleApplied - source,
+                    vector - vectorApplied,
+                    throttle - throttleApplied,
+                )
                 LogUtils.getLogger().info(
                     "Propulsion latency mode={} sample={} sourceToVector={} sourceToThrottle={} sourceToRead={} vector50={} vector90={} throttle90={} ticks",
                     if (parallel) "parallel" else "sequential",
@@ -214,7 +241,27 @@ object CreativeVectorThrusterLatencyGameTests {
         )
     }
 
+    /** Captures the real setter path on the server; no additional polling or production hooks. */
+    private class ObservedThruster(
+        position: BlockPos,
+        state: BlockState,
+    ) : CreativeVectorThrusterBlockEntity(position, state) {
+        var recordMutation: ((ObservedThruster) -> Unit)? = null
+
+        override fun setChanged() {
+            super.setChanged()
+            recordMutation?.invoke(this)
+        }
+
+        override fun setDigitalInput(input: Float) {
+            super.setDigitalInput(input)
+            recordMutation?.invoke(this)
+        }
+    }
+
     private class Sample {
+        var vectorAppliedTick: Long? = null
+        var throttleAppliedTick: Long? = null
         var vectorTick: Long? = null
         var throttleTick: Long? = null
         var vector50Tick: Long? = null
