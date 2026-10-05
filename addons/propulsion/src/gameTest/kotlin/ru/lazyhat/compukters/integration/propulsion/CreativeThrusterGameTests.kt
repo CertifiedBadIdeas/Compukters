@@ -295,5 +295,6 @@ object PropulsionGameTestRegistration {
     fun register(event: RegisterGameTestsEvent) {
         event.register(CreativeThrusterGameTests::class.java)
         event.register(CreativeVectorThrusterGameTests::class.java)
+        event.register(CreativeVectorThrusterLatencyGameTests::class.java)
     }
 }
