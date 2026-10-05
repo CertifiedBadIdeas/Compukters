@@ -60,7 +60,7 @@ public value class CreativeVectorThruster internal constructor(private val handl
         VectorThrusterBindings.vectorSetThrottle(handle, throttle)
     }
 
-    /** Local nozzle controls, not world coordinates or degrees. Rounded to upstream steps of 1/15. */
+    /** Local nozzle controls, not world coordinates or degrees. Fractional targets retain upstream Float precision. */
     public fun setVector(x: Double, y: Double) {
         if (!(x >= -1.0 && x <= 1.0 && y >= -1.0 && y <= 1.0)) throw IllegalArgumentException("Vector coordinates must be finite and between -1 and 1")
         VectorThrusterBindings.vectorSetVector(handle, x, y)

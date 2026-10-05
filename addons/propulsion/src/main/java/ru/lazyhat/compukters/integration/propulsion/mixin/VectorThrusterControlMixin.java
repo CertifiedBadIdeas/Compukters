@@ -41,8 +41,8 @@ public abstract class VectorThrusterControlMixin implements VectorThrusterContro
 
     @Override
     public void compukters$setVector(float x, float y) {
-        compukters$vectorX = x < 0f ? -Math.round(-x * 15f) / 15f : Math.round(x * 15f) / 15f;
-        compukters$vectorY = y < 0f ? -Math.round(-y * 15f) / 15f : Math.round(y * 15f) / 15f;
+        compukters$vectorX = x;
+        compukters$vectorY = y;
         compukters$vectorOverride = true;
         updateMappedTargets();
         VectorThrusterBlockEntity entity = (VectorThrusterBlockEntity) (Object) this;
