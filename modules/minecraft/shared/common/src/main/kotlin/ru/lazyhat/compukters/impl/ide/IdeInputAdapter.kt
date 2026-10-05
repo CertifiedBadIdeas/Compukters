@@ -154,6 +154,7 @@ class IdeInputAdapter(
         val command =
             if (control) {
                 when (event.key) {
+                    IdeKeyCode.SLASH -> if (!alt && !shift) IdeCommand.Edit(IdeEditorInput.ToggleLineComment) else null
                     IdeKeyCode.S -> IdeCommand.Save
                     IdeKeyCode.L -> if (alt && !shift) IdeCommand.Format else null
                     IdeKeyCode.B -> IdeCommand.GoToDeclaration()

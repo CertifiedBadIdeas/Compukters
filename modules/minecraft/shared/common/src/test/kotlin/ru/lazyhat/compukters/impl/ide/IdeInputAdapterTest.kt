@@ -49,6 +49,15 @@ import kotlin.test.assertTrue
 
 class IdeInputAdapterTest {
     @Test
+    fun `Ctrl slash toggles line comments only in editor focus`() {
+        val fixture = fixture()
+        assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.SLASH, IdeModifier.CONTROL), IdeFocusState.Editor))
+        assertFalse(fixture.adapter.keyPressed(key(IdeKeyCode.SLASH), IdeFocusState.Editor))
+        assertFalse(fixture.adapter.keyPressed(key(IdeKeyCode.SLASH, IdeModifier.CONTROL), IdeFocusState(IdeFocusArea.Terminal)))
+        assertEquals(listOf<IdeCommand>(IdeCommand.Edit(IdeEditorInput.ToggleLineComment)), fixture.commands)
+    }
+
+    @Test
     fun `F2 navigates problems without stealing find dialog or terminal input`() {
         val fixture = fixture()
         assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.F2), IdeFocusState.Editor))

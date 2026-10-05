@@ -95,6 +95,22 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
+    fun `comment command edits Kotlin as one undoable document change`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("    val x = 1\n    val y = 2")))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.ToggleLineComment))
+        assertEquals("    // val x = 1\n    // val y = 2", fixture.textEditor().visibleLines.joinToString("\n"))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Undo))
+        assertEquals("    val x = 1\n    val y = 2", fixture.textEditor().visibleLines.joinToString("\n"))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Redo))
+        assertEquals("    // val x = 1\n    // val y = 2", fixture.textEditor().visibleLines.joinToString("\n"))
+        fixture.controller.close()
+    }
+
+    @Test
     fun `build diagnostic navigation saves dirty source before opening another file and retains history`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
         fixture.startAndTick()
