@@ -50,6 +50,7 @@ internal object PeripheralCableGameTestScenario {
         val cable = CompuktersRegistry.PERIPHERAL_CABLE.get()
 
         helper.setBlock(computer, CompuktersRegistry.COMPUTER.get())
+        verifyDirectContacts(helper, computer)
         listOf(BlockPos(3, 2, 2), junction, BlockPos(4, 2, 3), BlockPos(4, 2, 1)).forEach { position ->
             helper.setBlock(position, cable)
         }
@@ -78,6 +79,16 @@ internal object PeripheralCableGameTestScenario {
                 assertFound(helper, computer, "input", helper.absolutePos(firstDevice))
                 assertFound(helper, computer, "output", helper.absolutePos(secondDevice))
                 verifyConfiguratorSave(helper, computer, firstIdentity, secondIdentity)
+                val adjacent = computer.above()
+                helper.setBlock(adjacent, Blocks.BARREL)
+                ComputerPeripheralNames.setName(
+                    level,
+                    ComputerPeripheralIdentity(TEST_PROVIDER_ID, helper.absolutePos(adjacent), FIRST_DEVICE_KEY),
+                    "input",
+                )
+                assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.AMBIGUOUS)
+                helper.setBlock(adjacent, Blocks.AIR)
+                assertFound(helper, computer, "input", firstIdentity.anchor)
             }.thenExecute {
                 helper.setBlock(junction, Blocks.AIR)
                 assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.MISSING)
@@ -90,6 +101,71 @@ internal object PeripheralCableGameTestScenario {
                 ComputerPeripheralNames.setName(level, secondIdentity, "input")
                 assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.AMBIGUOUS)
             }.thenSucceed()
+    }
+
+    private fun verifyDirectContacts(
+        helper: GameTestHelper,
+        computer: BlockPos,
+    ) {
+        val level = helper.level
+        Direction.entries.forEach { direction ->
+            val position = computer.relative(direction)
+            helper.setBlock(position, Blocks.BARREL)
+            val identity = ComputerPeripheralIdentity(TEST_PROVIDER_ID, helper.absolutePos(position), FIRST_DEVICE_KEY)
+            val name = "adjacent_" + direction.serializedName
+            ComputerPeripheralNames.setName(level, identity, name)
+            assertFound(helper, computer, name, identity.anchor)
+            helper.assertTrue(
+                ComputerPeripheralLookup.isReachable(level, helper.absolutePos(computer), identity),
+                "direct device on $direction was not reachable",
+            )
+            helper.setBlock(position, Blocks.AIR)
+            assertStatus(helper, computer, name, ComputerPeripheralLookupStatus.MISSING)
+            helper.assertTrue(
+                !ComputerPeripheralLookup.isReachable(level, helper.absolutePos(computer), identity),
+                "removed direct device on $direction remained reachable",
+            )
+            helper.setBlock(position, Blocks.BARREL)
+            assertFound(helper, computer, name, identity.anchor)
+            helper.setBlock(position, Blocks.AIR)
+        }
+        // Direct discovery must pass the contacted device face, not the computer-facing direction.
+        listOf(Direction.DOWN, Direction.UP).forEach { direction ->
+            val position = computer.relative(direction)
+            helper.setBlock(position, Blocks.FURNACE)
+            val identity = ComputerPeripheralIdentity(TEST_PROVIDER_ID, helper.absolutePos(position), FACE_DEVICE_KEY)
+            ComputerPeripheralNames.setName(level, identity, "face_sensitive")
+            assertStatus(
+                helper,
+                computer,
+                "face_sensitive",
+                if (direction == Direction.DOWN) {
+                    ComputerPeripheralLookupStatus.FOUND
+                } else {
+                    ComputerPeripheralLookupStatus.MISSING
+                },
+            )
+            helper.setBlock(position, Blocks.AIR)
+        }
+        val diagonal = computer.offset(1, 0, 1)
+        helper.setBlock(diagonal, Blocks.BARREL)
+        val diagonalIdentity = ComputerPeripheralIdentity(TEST_PROVIDER_ID, helper.absolutePos(diagonal), FIRST_DEVICE_KEY)
+        ComputerPeripheralNames.setName(level, diagonalIdentity, "diagonal")
+        assertStatus(helper, computer, "diagonal", ComputerPeripheralLookupStatus.MISSING)
+        helper.setBlock(diagonal, Blocks.AIR)
+
+        // One logical identity touched directly and through a cable must not become ambiguous.
+        val adjacent = computer.east()
+        helper.setBlock(adjacent, Blocks.BARREL)
+        val identity = ComputerPeripheralIdentity(TEST_PROVIDER_ID, helper.absolutePos(adjacent), FIRST_DEVICE_KEY)
+        ComputerPeripheralNames.setName(level, identity, "both_paths")
+        helper.setBlock(computer.above(), CompuktersRegistry.PERIPHERAL_CABLE.get())
+        helper.setBlock(adjacent.above(), CompuktersRegistry.PERIPHERAL_CABLE.get())
+        assertFound(helper, computer, "both_paths", identity.anchor)
+        helper.setBlock(computer.above(), Blocks.AIR)
+        assertFound(helper, computer, "both_paths", identity.anchor)
+        helper.setBlock(adjacent.above(), Blocks.AIR)
+        helper.setBlock(adjacent, Blocks.AIR)
     }
 
     private fun verifyConfiguratorSave(
@@ -144,14 +220,30 @@ internal object PeripheralCableGameTestScenario {
             ComputerAddonHostFactory { _, _, _ -> null },
             registrationIdentity = PeripheralCableGameTestScenario,
             peripheralProvider =
-                ComputerPeripheralProvider { level, position, _ ->
+                ComputerPeripheralProvider { level, position, contactedFace ->
                     if (level.getBlockEntity(position) == null) {
                         null
                     } else {
                         when (level.getBlockState(position).block) {
-                            Blocks.BARREL -> ComputerPeripheralIdentity(TEST_PROVIDER_ID, position.immutable(), FIRST_DEVICE_KEY)
-                            Blocks.DROPPER -> ComputerPeripheralIdentity(TEST_PROVIDER_ID, position.immutable(), SECOND_DEVICE_KEY)
-                            else -> null
+                            Blocks.BARREL -> {
+                                ComputerPeripheralIdentity(TEST_PROVIDER_ID, position.immutable(), FIRST_DEVICE_KEY)
+                            }
+
+                            Blocks.DROPPER -> {
+                                ComputerPeripheralIdentity(TEST_PROVIDER_ID, position.immutable(), SECOND_DEVICE_KEY)
+                            }
+
+                            Blocks.FURNACE -> {
+                                if (contactedFace == Direction.UP) {
+                                    ComputerPeripheralIdentity(TEST_PROVIDER_ID, position.immutable(), FACE_DEVICE_KEY)
+                                } else {
+                                    null
+                                }
+                            }
+
+                            else -> {
+                                null
+                            }
                         }
                     }
                 },
@@ -183,4 +275,5 @@ internal object PeripheralCableGameTestScenario {
     private const val TEST_PROVIDER_ID = "compukters_gametest"
     private const val FIRST_DEVICE_KEY = "barrel"
     private const val SECOND_DEVICE_KEY = "dropper"
+    private const val FACE_DEVICE_KEY = "furnace_top"
 }

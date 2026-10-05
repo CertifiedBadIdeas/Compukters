@@ -16,14 +16,17 @@ This release expands the Kotlin available to computer programs and introduces su
 addon mods, with optional Create, Sable and Propulsion integrations for Minecraft 1.21.1.
 
 - Optional **Compukters: Propulsion** adds named Creative Thruster and Creative Vector Thruster control through
-  peripheral cables: normalized Double throttle, local vector steering, absolute vector-engine thrust in kN,
-  saved ordinary-engine thrust percentage, typed state snapshots and read-only vector-engine mount geometry
+  direct face adjacency or peripheral cables: normalized Double throttle, local vector steering, absolute vector-engine
+  thrust in kN, saved ordinary-engine thrust percentage, typed state snapshots and read-only vector-engine mount geometry
   for Guest control using construction-local computer-relative positions and neutral thrust direction.
   One program owns control; stopping,
   disconnection or computer removal clears digital throttle, steering and custom vector thrust and restores current
   redstone/link inputs without a residual program shutdown envelope or a thrust spike during handoff.
   Explicit close releases control early. Chunk saves and construction copies retain engine configuration without transferring a program's digital
   command. The independent addon joins Create/Sable and the pinned Aeronautics/Propulsion runtime in the shared dev stand.
+
+- Named peripherals can be accessed directly from any of the computer's six adjacent faces without a cable.
+  Direct and cable contacts share provider resolution, identity deduplication and ambiguous-name handling.
 
 ### Guest Kotlin
 

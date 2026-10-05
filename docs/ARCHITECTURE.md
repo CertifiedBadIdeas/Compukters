@@ -562,13 +562,14 @@ unloaded block entities retain no sound state or background work.
 The Minecraft carrier also owns a direct-touch peripheral fabric. Passive orthogonal cables form bounded components
 across loaded chunks without forcing chunk loads. Addon providers map a touched block or multiblock part to a canonical
 logical identity; a versioned world directory stores normalized names against that identity independently of computers
-and cable topology. Lookup is scoped to one cable component and addon ID, rejects duplicate reachable names, and never
+and cable topology. Lookup includes the computer's six face-adjacent provider contacts together with its cable component,
+scoped by addon ID. It deduplicates logical identities across both paths, rejects duplicate reachable names, and never
 returns a partial component after a traversal bound is exceeded. Typed addon host handles bind to the resolved device
 identity, so later rewiring or renaming cannot redirect an existing handle. The cable cache stores physical contact
 positions and faces; providers resolve current logical identities on every lookup. Multiblock activation changes
 therefore remain visible even when the engine or controller is not adjacent to a cable. Physical candidates are
-bounded by six faces per admitted cable; each level caches at most 65,536 physical contacts. The existing 1024
-logical-device limit applies after identity deduplication.
+bounded by six faces per admitted cable plus the computer's six direct contacts; each level caches at most 65,536 physical
+contacts. The existing 1024 logical-device limit applies after identity deduplication.
 
 The base text display uses the same bounded world-request path with an internal `compukters:display` capability. Its
 20x10 buffer and exclusive writer lease belong to the display block entity on the server, outside the VM terminal.
