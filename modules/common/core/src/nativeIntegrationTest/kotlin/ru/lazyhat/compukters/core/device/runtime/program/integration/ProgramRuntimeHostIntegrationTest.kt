@@ -197,6 +197,20 @@ class ProgramRuntimeHostIntegrationTest {
                                 missingOutput,
                             )
 
+                            // Native Ctrl+T must unwind an input-waiting child and leave the shell usable.
+                            submit(computer, "edit interrupted.kt")
+                            pressEnter(computer)
+                            assertTrue(terminalText(requireNotNull(computer.terminalFullState())).startsWith("Compukters edit"))
+                            press(computer, TerminalKey.T, setOf(TerminalModifier.CONTROL))
+                            val terminatedScreen = terminalText(requireNotNull(computer.terminalFullState()))
+                            assertTrue(terminatedScreen.contains("^S Save"), terminatedScreen)
+                            assertTrue(terminatedScreen.endsWith(">\n"), terminatedScreen)
+                            assertTrue(computer.sendTerminalKey(TerminalKey.T, TerminalKeyAction.REPEAT, setOf(TerminalModifier.CONTROL)))
+                            advanceUntil(computer) { it == ProgramRuntimeState.WaitingForInput }
+                            submit(computer, "echo survived")
+                            pressEnter(computer)
+                            assertTrue(terminalText(requireNotNull(computer.terminalFullState())).endsWith("survived\n>\n"))
+
                             submit(computer, "edit demo.kt")
                             pressEnter(computer)
                             val editorScreen = terminalText(requireNotNull(computer.terminalFullState()))

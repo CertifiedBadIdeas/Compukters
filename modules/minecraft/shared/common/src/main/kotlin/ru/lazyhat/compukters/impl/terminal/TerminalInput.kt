@@ -94,6 +94,7 @@ object TerminalInput {
     private val CONTROL_KEY_MAP =
         mapOf(
             GLFW.GLFW_KEY_S to TerminalKey.S,
+            GLFW.GLFW_KEY_T to TerminalKey.T,
             GLFW.GLFW_KEY_X to TerminalKey.X,
         )
 }

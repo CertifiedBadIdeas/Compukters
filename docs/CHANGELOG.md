@@ -28,6 +28,10 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
 - Named peripherals can be accessed directly from any of the computer's six adjacent faces without a cable.
   Direct and cable contacts share provider resolution, identity deduplication and ambiguous-name handling.
 
+- Ctrl+T in the computer terminal or IDE target terminal forcibly stops the foreground command and its nested
+  processes/tasks, releases peripheral control and returns to the shell without removing the computer or deleting files.
+  Terminal output is retained with normal scrolling. Held-key repeats are ignored, and Ctrl+T leaves an idle shell running.
+
 ### Guest Kotlin
 
 - Scalar value classes based on Int, Boolean and Char can be stored in lists and generic arrays, passed as Any,

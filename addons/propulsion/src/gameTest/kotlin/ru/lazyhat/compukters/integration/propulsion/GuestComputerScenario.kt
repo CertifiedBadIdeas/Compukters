@@ -61,6 +61,13 @@ internal class GuestComputerScenario(
         marker: String,
     ) = awaitText(sequence, marker, linePrefix = true)
 
+    fun terminate(sequence: GameTestSequence) {
+        sequence.thenExecute {
+            operation = computer.submitTerminalKeyAsync(TerminalKey.T, TerminalKeyAction.PRESS, setOf(TerminalModifier.CONTROL))
+        }
+        awaitOperation(sequence)
+    }
+
     fun resume(sequence: GameTestSequence) {
         sequence.thenExecute { operation = computer.submitCanonicalLineAsync("continue".toCharArray()) }
         awaitOperation(sequence)

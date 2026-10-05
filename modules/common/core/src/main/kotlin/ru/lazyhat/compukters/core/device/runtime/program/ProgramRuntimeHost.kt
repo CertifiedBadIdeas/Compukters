@@ -447,7 +447,17 @@ class ProgramRuntimeHost internal constructor(
         key: TerminalKey,
         action: TerminalKeyAction,
         modifiers: Set<TerminalModifier> = emptySet(),
-    ): Boolean = terminalInput { sendTerminalKey(key, action, modifiers) }
+    ): Boolean {
+        val accepted = terminalInput { sendTerminalKey(key, action, modifiers) }
+        if (accepted && key == TerminalKey.T && action == TerminalKeyAction.PRESS &&
+            TerminalModifier.CONTROL in modifiers && programScopes.size > 1
+        ) {
+            pendingCompilation?.let { compilerRouter?.cancel(it) }
+            pendingCompilation = null
+            state = ProgramRuntimeState.Running
+        }
+        return accepted
+    }
 
     fun sendTerminalText(value: String): Boolean = terminalInput { sendTerminalText(value) }
 
