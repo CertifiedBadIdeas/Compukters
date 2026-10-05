@@ -131,6 +131,45 @@ class IdeCompletionPlannerTest {
         assertEquals(null, planned.addonRequirement)
     }
 
+    @Test
+    fun `repeated completion uses current manifest and discards origins after detach or target replacement`() {
+        val catalog = catalog()
+        val (module, payload) = addon(catalog)
+        val target = TargetCompileProfile(toolchain(catalog), listOf(module), WorkerLimits(), listOf(payload))
+        val proposal =
+            CompletionItem(
+                "Telemetry",
+                "Telemetry",
+                CompletionKind.Object,
+                origin = DeclarationOrigin.Platform(AnalysisModuleIdentity(module.id.value, module.contentHash)),
+            )
+        val planner = IdeCompletionPlanner(catalog)
+        val disabled = ProjectManifest.of("sample", emptySet())
+        repeat(3) {
+            assertEquals(
+                AddonId("fixture"),
+                planner
+                    .plan(List(200) { proposal }, disabled, target)
+                    .first()
+                    .addonRequirement
+                    ?.id,
+            )
+        }
+        val enabled = ProjectManifest.of("sample", setOf(AddonId("fixture")))
+        assertEquals(null, planner.plan(listOf(proposal), enabled, target).single().addonRequirement)
+        assertEquals(null, planner.plan(listOf(proposal), disabled, null).single().addonRequirement)
+        val replacement = TargetCompileProfile(toolchain(catalog), emptyList(), WorkerLimits())
+        assertEquals(null, planner.plan(listOf(proposal), disabled, replacement).single().addonRequirement)
+        assertEquals(
+            AddonId("fixture"),
+            planner
+                .plan(listOf(proposal), disabled, target)
+                .single()
+                .addonRequirement
+                ?.id,
+        )
+    }
+
     private fun catalog(): PlatformCatalog {
         val builtins = module(PlatformModuleId("kotlin", "builtins"), "1.0.0")
         val redstone = module(PlatformModuleId("compukter", "redstone"), "2.0.0")
