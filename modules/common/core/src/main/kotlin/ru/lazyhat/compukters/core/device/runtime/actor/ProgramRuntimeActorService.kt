@@ -46,6 +46,9 @@ class ProgramRuntimeActorService(
     private val perComputerEntitlement: Int = 131_072,
     private val safeInstructionCapacity: Long? = null,
     private val capacityGovernor: VmCapacityGovernor = VmCapacityGovernor(),
+    onResultsReady: () -> Unit = {},
+    private val capacityFramesRequired: Boolean = false,
+    private val nanoTime: () -> Long = System::nanoTime,
 ) : AutoCloseable {
     init {
         require(perComputerEntitlement > 0) { "per-computer entitlement must be positive" }
@@ -56,13 +59,17 @@ class ProgramRuntimeActorService(
 
     private val frameLock = Any()
     private var capacityFrame: CapacityFrame? = null
+    private var latestCapacityTick = -1L
+    private val frameCredits = mutableMapOf<VmActorEndpoint, FrameCredit>()
+    private val awaitingCapacity = mutableListOf<PendingTurn>()
+    private val closed = AtomicBoolean()
     internal var lastCapacityAllocation = PerComputerCapacityAllocation(emptyList(), 0, 0)
         private set
     internal val redstoneInputCapacity = config.mailboxCapacity
     private val scheduler =
-        VmActorScheduler<ProgramRuntimeActorMessage, ProgramRuntimeTickPermit, ProgramRuntimeActorReply>(config)
+        VmActorScheduler<ProgramRuntimeActorMessage, ProgramRuntimeTickPermit, ProgramRuntimeActorReply>(config, onResultsReady)
     private val pending = ConcurrentHashMap<RequestAddress, PendingRequest>()
-    private val reservations = ConcurrentHashMap<RequestAddress, Long>()
+    private val reservations = ConcurrentHashMap<RequestAddress, ReservedTurn>()
     private val knownRunnable = ConcurrentHashMap<VmActorEndpoint, Boolean>()
     private val deferredWorldRequests = ConcurrentHashMap.newKeySet<VmActorEndpoint>()
     private val nextRequestId = AtomicLong()
@@ -193,12 +200,13 @@ class ProgramRuntimeActorService(
         val submission =
             synchronized(frameLock) {
                 val frame = capacityFrame
-                if (frame == null) {
+                if (frame == null && !capacityFramesRequired && latestCapacityTick < 0) {
                     scheduler.submitWithPermit(endpoint, effects, permit)
                 } else {
                     scheduler.submitWithDeferredPermit(endpoint, effects, permit).also { accepted ->
                         if (accepted == VmActorSubmission.ACCEPTED) {
-                            frame.turns += PendingTurn(endpoint, permit, address, pendingRequest, effects.isNotEmpty())
+                            val turn = PendingTurn(endpoint, permit, address, pendingRequest, effects.isNotEmpty())
+                            if (frame == null) awaitingCapacity += turn else frame.turns += turn
                         }
                     }
                 }
@@ -215,12 +223,72 @@ class ProgramRuntimeActorService(
         return future
     }
 
+    /** Reuses a matching frame grant; null leaves the caller's exact completion available for a later tick. */
+    fun continueTurn(
+        endpoint: VmActorEndpoint,
+        worldTick: Long,
+        effects: List<ProgramRuntimeActorEffect>,
+    ): CompletableFuture<ProgramRuntimeActorReply>? =
+        synchronized(frameLock) {
+            val credit = frameCredits[endpoint] ?: return@synchronized null
+            if (closed.get() || credit.worldTick != worldTick || credit.inFlight || credit.remaining <= 0 ||
+                credit.continuations >= MAXIMUM_CONTINUATIONS_PER_FRAME ||
+                (credit.deadlineNanos != Long.MAX_VALUE && nanoTime() - credit.deadlineNanos >= 0) ||
+                effects.none(::completesWorldRequest)
+            ) {
+                return@synchronized null
+            }
+            val requestId = ProgramRuntimeRequestId(nextRequestId.updateAndGet(::incrementRequestId))
+            val address = RequestAddress(endpoint, requestId)
+            val future = CompletableFuture<ProgramRuntimeActorReply>()
+            val request = PendingRequest(future, completesWorldRequest = true)
+            check(pending.putIfAbsent(address, request) == null) { "runtime request id collision" }
+            val allowance = credit.remaining.toInt()
+            credit.inFlight = true
+            reservations[address] = ReservedTurn(allowance.toLong(), credit)
+            val submission =
+                scheduler.submitWithPermit(
+                    endpoint,
+                    effects,
+                    ProgramRuntimeTickPermit(requestId, worldTick, allowance, credit.deadlineNanos),
+                )
+            if (submission != VmActorSubmission.ACCEPTED) {
+                reservations.remove(address)
+                credit.inFlight = false
+                pending.remove(address, request)
+                return@synchronized null
+            }
+            credit.continuations++
+            future.whenComplete { _, _ -> if (future.isCancelled) pending.remove(address, request) }
+            future
+        }
+
+    private fun completesWorldRequest(effect: ProgramRuntimeActorEffect): Boolean =
+        when (effect) {
+            is ProgramRuntimeActorEffect.CompleteAddons -> effect.completions.isNotEmpty()
+            is ProgramRuntimeActorEffect.CompleteRedstoneOutput, is ProgramRuntimeActorEffect.CompleteSound -> true
+            else -> false
+        }
+
     /** Starts collection for the server tick; carrier turns retain their mailbox fences until flush. */
     fun beginCapacityFrame(worldTick: Long) {
         require(worldTick >= 0) { "world tick must not be negative" }
         synchronized(frameLock) {
             check(capacityFrame == null) { "previous capacity frame has not been flushed" }
-            capacityFrame = CapacityFrame(worldTick)
+            require(worldTick > latestCapacityTick) { "capacity frame must advance the world tick" }
+            frameCredits.values.forEach { credit ->
+                if (!credit.inFlight) addSaturating(totalUnusedReservations, credit.remaining)
+            }
+            frameCredits.clear()
+            latestCapacityTick = worldTick
+            capacityFrame =
+                CapacityFrame(
+                    worldTick,
+                    awaitingCapacity.mapTo(ArrayList()) {
+                        it.copy(permit = it.permit.copy(worldTick = worldTick))
+                    },
+                )
+            awaitingCapacity.clear()
         }
     }
 
@@ -245,13 +313,18 @@ class ProgramRuntimeActorService(
             val deadlineNanos = capacityDeadlineNanos()
             frame.turns.forEach { turn ->
                 val allowance = grants[turn.endpoint]?.retiredInstructionLimit?.toInt() ?: 0
-                if (allowance > 0) reservations[turn.address] = allowance.toLong()
+                val credit = FrameCredit(frame.worldTick, allowance.toLong(), deadlineNanos, inFlight = allowance > 0)
+                if (allowance > 0) {
+                    check(frameCredits.put(turn.endpoint, credit) == null) { "computer received duplicate frame grants" }
+                    reservations[turn.address] = ReservedTurn(allowance.toLong(), credit)
+                }
                 if (!scheduler.releaseDeferredPermit(
                         turn.endpoint,
                         turn.permit.copy(retirementAllowance = allowance, deadlineNanos = deadlineNanos),
                     )
                 ) {
-                    reservations.remove(turn.address)?.let { addSaturating(totalUnusedReservations, it) }
+                    reservations.remove(turn.address)?.let { addSaturating(totalUnusedReservations, it.allowance) }
+                    frameCredits.remove(turn.endpoint)
                     pending.remove(turn.address, turn.request)
                     turn.request.future.completeExceptionally(ProgramRuntimeActorRequestException(VmActorSubmission.STALE_ENDPOINT))
                 }
@@ -273,8 +346,15 @@ class ProgramRuntimeActorService(
         knownRunnable.remove(endpoint)
         val deferred =
             synchronized(frameLock) {
-                capacityFrame?.turns?.firstOrNull { it.endpoint == endpoint }?.also { turn ->
+                frameCredits.remove(endpoint)?.let { credit ->
+                    if (!credit.inFlight) addSaturating(totalUnusedReservations, credit.remaining)
+                }
+                (
+                    capacityFrame?.turns?.firstOrNull { it.endpoint == endpoint }
+                        ?: awaitingCapacity.firstOrNull { it.endpoint == endpoint }
+                )?.also { turn ->
                     capacityFrame?.turns?.remove(turn)
+                    awaitingCapacity.remove(turn)
                 }
             }
         if (deferred != null) {
@@ -301,9 +381,17 @@ class ProgramRuntimeActorService(
                     val address = RequestAddress(event.endpoint, reply.requestId)
                     val reserved = reservations.remove(address)
                     if (reserved != null) {
-                        check(reply.retiredInstructions in 0..reserved) { "actor exceeded its instruction reservation" }
+                        check(reply.retiredInstructions in 0..reserved.allowance) { "actor exceeded its instruction reservation" }
                         addSaturating(totalRetiredInstructions, reply.retiredInstructions)
-                        addSaturating(totalUnusedReservations, (reserved - reply.retiredInstructions).coerceAtLeast(0))
+                        synchronized(frameLock) {
+                            val credit = reserved.credit
+                            credit.inFlight = false
+                            credit.remaining -= reply.retiredInstructions
+                            if (frameCredits[event.endpoint] !== credit) {
+                                addSaturating(totalUnusedReservations, credit.remaining)
+                                credit.remaining = 0
+                            }
+                        }
                     }
                     val request = pending.remove(address) ?: return@forEach
                     if (request.completesWorldRequest) deferredWorldRequests.remove(event.endpoint)
@@ -326,7 +414,11 @@ class ProgramRuntimeActorService(
                     knownRunnable.remove(event.endpoint)
                     reservations.entries.removeIf { (address, reserved) ->
                         if (address.endpoint != event.endpoint) return@removeIf false
-                        addSaturating(totalUnusedReservations, reserved)
+                        synchronized(frameLock) {
+                            addSaturating(totalUnusedReservations, reserved.credit.remaining)
+                            reserved.credit.remaining = 0
+                            frameCredits.remove(event.endpoint)
+                        }
                         true
                     }
                     pending.entries.removeIf { (address, request) ->
@@ -398,11 +490,15 @@ class ProgramRuntimeActorService(
         )
 
     override fun close() {
+        if (!closed.compareAndSet(false, true)) return
         synchronized(frameLock) {
-            capacityFrame?.turns?.forEach { turn ->
+            (capacityFrame?.turns.orEmpty() + awaitingCapacity).forEach { turn ->
                 scheduler.releaseDeferredPermit(turn.endpoint, turn.permit.copy(retirementAllowance = 0))
             }
             capacityFrame = null
+            awaitingCapacity.clear()
+            frameCredits.values.filterNot { it.inFlight }.forEach { addSaturating(totalUnusedReservations, it.remaining) }
+            frameCredits.clear()
         }
         scheduler.close()
         val failure = ProgramRuntimeActorServiceClosedException()
@@ -412,6 +508,19 @@ class ProgramRuntimeActorService(
         deferredWorldRequests.clear()
         knownRunnable.clear()
     }
+
+    private data class FrameCredit(
+        val worldTick: Long,
+        var remaining: Long,
+        val deadlineNanos: Long,
+        var inFlight: Boolean,
+        var continuations: Int = 0,
+    )
+
+    private data class ReservedTurn(
+        val allowance: Long,
+        val credit: FrameCredit,
+    )
 
     private data class RequestAddress(
         val endpoint: VmActorEndpoint,
@@ -453,10 +562,12 @@ class ProgramRuntimeActorService(
 
     private fun capacityDeadlineNanos(): Long {
         if (safeInstructionCapacity != null) return Long.MAX_VALUE
-        return System.nanoTime() + capacityGovernor.hostTimeBudgetNanos
+        return nanoTime() + capacityGovernor.hostTimeBudgetNanos
     }
 
     private companion object {
+        const val MAXIMUM_CONTINUATIONS_PER_FRAME = 16
+
         fun incrementRequestId(previous: Long): Long = if (previous == Long.MAX_VALUE) 1 else previous + 1
 
         fun ProgramRuntimeActorCommand.isInput(): Boolean =

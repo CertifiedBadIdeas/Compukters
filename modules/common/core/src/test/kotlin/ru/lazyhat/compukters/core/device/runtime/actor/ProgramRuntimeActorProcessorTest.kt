@@ -56,6 +56,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
+import ru.lazyhat.compukters.lang.runtime.vm.VmAdvanceResult
 import ru.lazyhat.compukters.lang.runtime.vm.VmCanonicalLineException
 import ru.lazyhat.compukters.lang.runtime.vm.VmCanonicalLineFailure
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
@@ -73,9 +74,172 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ProgramRuntimeActorProcessorTest {
+    @Test
+    fun `closed frame calls cannot bypass capacity and rejected continuation keeps credit`() {
+        val session = RecordingSession().apply { fallbackOutcome = VmOutcome.WaitingForHostQuota }
+        val port = ActorAddonRequestPort()
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray) = session
+
+                    override fun boot() = session
+                },
+                addonCapabilitySchemas = listOf(TEST_ADDON_SCHEMA),
+                addonRequestPort = port,
+            )
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(101, 102), 1)
+        val request = VmHostRequest(1, TEST_ADDON_CAPABILITY, 0, listOf(VmValue.I32(7)))
+        val effects =
+            listOf<ProgramRuntimeActorEffect>(
+                ProgramRuntimeActorEffect.CompleteAddons(
+                    listOf(ProgramAddonCompletion(request.identity, HostResponse.FloatSuccess(1f))),
+                ),
+            )
+        ProgramRuntimeActorService(
+            schedulerConfig(),
+            perComputerEntitlement = 4,
+            safeInstructionCapacity = 4,
+            capacityFramesRequired = true,
+        ).use { service ->
+            requireNotNull(service.attach(endpoint, host, addonPort = port))
+            service.request(endpoint, ProgramRuntimeActorCommand::StartBoot)
+            awaitQueuedResult(service)
+            service.pump(1)
+            session.nextOutcome = VmOutcome.HostRequestBatch(listOf(request))
+            val first = service.turn(endpoint, 5)
+            assertFalse(first.isDone)
+            assertTrue(session.retirementLimits.isEmpty())
+            service.beginCapacityFrame(5)
+            service.flushCapacityFrame()
+            awaitQueuedResult(service)
+            service.pump(1)
+            val outside = service.turn(endpoint, 5)
+            assertFalse(outside.isDone)
+            assertNull(service.continueTurn(endpoint, 5, effects)) // Pending deferred permit rejects admission.
+            assertTrue(session.responses.isEmpty())
+            service.beginCapacityFrame(6)
+            service.flushCapacityFrame()
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertTrue(outside.isDone)
+            val continued = requireNotNull(service.continueTurn(endpoint, 6, effects))
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertTrue(continued.isDone)
+            assertEquals(listOf<HostResponse>(HostResponse.FloatSuccess(1f)), session.responses)
+        }
+    }
+
+    @Test
+    fun `continuation does not renew an expired frame deadline`() {
+        val session = RecordingSession().apply { fallbackOutcome = VmOutcome.WaitingForHostQuota }
+        val port = ActorAddonRequestPort()
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray) = session
+
+                    override fun boot() = session
+                },
+                addonCapabilitySchemas = listOf(TEST_ADDON_SCHEMA),
+                addonRequestPort = port,
+            )
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(103, 104), 1)
+        val request = VmHostRequest(1, TEST_ADDON_CAPABILITY, 0, listOf(VmValue.I32(7)))
+        val effects =
+            listOf<ProgramRuntimeActorEffect>(
+                ProgramRuntimeActorEffect.CompleteAddons(
+                    listOf(ProgramAddonCompletion(request.identity, HostResponse.FloatSuccess(1f))),
+                ),
+            )
+        var now = Long.MAX_VALUE / 2
+        ProgramRuntimeActorService(schedulerConfig(), perComputerEntitlement = 4, nanoTime = { now }).use { service ->
+            requireNotNull(service.attach(endpoint, host, addonPort = port))
+            service.request(endpoint, ProgramRuntimeActorCommand::StartBoot)
+            awaitQueuedResult(service)
+            service.pump(1)
+            service.beginCapacityFrame(5)
+            session.nextOutcome = VmOutcome.HostRequestBatch(listOf(request))
+            service.turn(endpoint, 5)
+            service.flushCapacityFrame()
+            awaitQueuedResult(service)
+            service.pump(1)
+            now += TimeUnit.SECONDS.toNanos(1)
+            assertNull(service.continueTurn(endpoint, 5, effects))
+            assertTrue(session.responses.isEmpty())
+        }
+    }
+
+    @Test
+    fun `continuations reuse remaining frame credit and keep exhausted completion pending`() {
+        val session =
+            RecordingSession().apply {
+                fallbackOutcome = VmOutcome.WaitingForHostQuota
+                retiredPerAdvance = 1
+            }
+        val port = ActorAddonRequestPort()
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray) = session
+
+                    override fun boot() = session
+                },
+                addonCapabilitySchemas = listOf(TEST_ADDON_SCHEMA),
+                addonRequestPort = port,
+            )
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(99, 100), 1)
+
+        fun request(id: Long) = VmHostRequest(id, TEST_ADDON_CAPABILITY, 0, listOf(VmValue.I32(7)))
+
+        fun completion(id: Long) =
+            listOf<ProgramRuntimeActorEffect>(
+                ProgramRuntimeActorEffect.CompleteAddons(
+                    listOf(ProgramAddonCompletion(request(id).identity, HostResponse.FloatSuccess(1f))),
+                ),
+            )
+        ProgramRuntimeActorService(schedulerConfig(), perComputerEntitlement = 6, safeInstructionCapacity = 6).use { service ->
+            requireNotNull(service.attach(endpoint, host, addonPort = port))
+            service.request(endpoint, ProgramRuntimeActorCommand::StartBoot)
+            awaitQueuedResult(service)
+            service.pump(1)
+            service.beginCapacityFrame(0)
+            session.nextOutcome = VmOutcome.HostRequestBatch(listOf(request(1)))
+            val first = service.turn(endpoint, 0)
+            service.flushCapacityFrame()
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertEquals(2L, first.join().retiredInstructions)
+            session.nextOutcome = VmOutcome.HostRequestBatch(listOf(request(2)))
+            val second = requireNotNull(service.continueTurn(endpoint, 0, completion(1)))
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertEquals(2L, second.join().retiredInstructions)
+            session.nextOutcome = VmOutcome.HostRequestBatch(listOf(request(3)))
+            val third = requireNotNull(service.continueTurn(endpoint, 0, completion(2)))
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertEquals(2L, third.join().retiredInstructions)
+            assertEquals(listOf(6, 5, 4, 3, 2, 1), session.retirementLimits)
+            assertEquals(6L, service.runtimeMetrics().retiredInstructionsTotal)
+            assertNull(service.continueTurn(endpoint, 0, completion(3)))
+            assertEquals(2, session.responses.size)
+            service.beginCapacityFrame(1)
+            assertNull(service.continueTurn(endpoint, 0, completion(3)))
+            service.turn(endpoint, 1, completion(3))
+            service.flushCapacityFrame()
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertEquals(3, session.responses.size)
+            assertEquals(7L, service.runtimeMetrics().retiredInstructionsTotal)
+        }
+    }
+
     @Test
     fun `expired queued turn without retired work is not a host deadline overrun`() {
         val processor = ProgramRuntimeActorProcessor(ProgramRuntimeHost())
@@ -889,6 +1053,9 @@ class ProgramRuntimeActorProcessorTest {
         var canonicalLine: String? = null
         var closeCalls = 0
         var nextOutcome: VmOutcome = VmOutcome.SliceExhausted
+        var fallbackOutcome: VmOutcome = VmOutcome.SliceExhausted
+        var retiredPerAdvance = 0L
+        val retirementLimits = mutableListOf<Int>()
         var rejectVerification = false
         var rejectCanonicalLine = false
         var terminalStateBarrier: Pair<CountDownLatch, CountDownLatch>? = null
@@ -899,8 +1066,21 @@ class ProgramRuntimeActorProcessorTest {
             hostRequestBudget: Int,
         ): VmOutcome =
             record("advance") {
-                nextOutcome.also { nextOutcome = VmOutcome.SliceExhausted }
+                nextOutcome.also { nextOutcome = fallbackOutcome }
             }
+
+        override fun advanceWithRetirementLimit(
+            guestBudget: Int,
+            maintenanceBudget: Int,
+            hostRequestBudget: Int,
+            retirementLimit: Int,
+        ): VmAdvanceResult {
+            retirementLimits += retirementLimit
+            return VmAdvanceResult(
+                advance(guestBudget, maintenanceBudget, hostRequestBudget),
+                minOf(retiredPerAdvance, retirementLimit.toLong()),
+            )
+        }
 
         override fun resume(
             identity: VmHostRequestIdentity,

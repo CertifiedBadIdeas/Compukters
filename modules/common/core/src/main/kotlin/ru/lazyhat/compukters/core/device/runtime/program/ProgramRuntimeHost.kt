@@ -107,6 +107,9 @@ class ProgramRuntimeHost internal constructor(
     private var lastRedstoneInput = 0
     private val grantedBudgets = GrantedResourceBudgets()
     private var lastObservedTick = -1L
+    private var remainingAdvances = 0
+    private var remainingHostRequests = 0
+    private val chargedHostRequests = mutableSetOf<HostCharge>()
     var retiredInstructionsLastTick: Long = 0
         private set
     var state: ProgramRuntimeState = ProgramRuntimeState.Idle
@@ -164,6 +167,11 @@ class ProgramRuntimeHost internal constructor(
         require(worldTick >= lastObservedTick) { "world tick must not move backwards" }
         require(retirementAllowance >= 0) { "retirement allowance must not be negative" }
         retiredInstructionsLastTick = 0
+        if (worldTick > lastObservedTick) {
+            remainingAdvances = tickBudget.maximumAdvancesPerTick
+            remainingHostRequests = tickBudget.hostRequestsPerTick
+            chargedHostRequests.clear()
+        }
         lastObservedTick = worldTick
         if (state != ProgramRuntimeState.Running && state != ProgramRuntimeState.WaitingForCompiler) return state
         val activeSession = requireNotNull(session)
@@ -190,8 +198,7 @@ class ProgramRuntimeHost internal constructor(
         retirementAllowance: Int,
         deadlineNanos: Long,
     ) {
-        var remainingHostRequests = tickBudget.hostRequestsPerTick
-        repeat(tickBudget.maximumAdvancesPerTick) {
+        while (remainingAdvances > 0) {
             if (
                 retirementAllowance > retiredInstructionsLastTick &&
                 deadlineNanos != Long.MAX_VALUE &&
@@ -199,6 +206,13 @@ class ProgramRuntimeHost internal constructor(
             ) {
                 return
             }
+            val retiredBeforeAdvance = retiredInstructionsLastTick
+            val programId = programScopes.last()
+            val outstanding =
+                pendingAddonRequests.values.count { it.session === activeSession && it.programId == programId } +
+                    pendingTimerRequests.values.count { it.session === activeSession && it.programId == programId }
+            val requestAllowance = remainingHostRequests + outstanding
+            remainingAdvances--
             val outcome =
                 try {
                     grantedBudgets.grant(tickBudget.guestBudgetPerAdvance, tickBudget.maintenanceBudgetPerAdvance)
@@ -206,7 +220,7 @@ class ProgramRuntimeHost internal constructor(
                         activeSession.advance(
                             tickBudget.guestBudgetPerAdvance,
                             tickBudget.maintenanceBudgetPerAdvance,
-                            remainingHostRequests,
+                            requestAllowance,
                         )
                     } else {
                         val remaining = (retirementAllowance.toLong() - retiredInstructionsLastTick).coerceAtLeast(0)
@@ -214,7 +228,7 @@ class ProgramRuntimeHost internal constructor(
                             activeSession.advanceWithRetirementLimit(
                                 tickBudget.guestBudgetPerAdvance,
                                 tickBudget.maintenanceBudgetPerAdvance,
-                                remainingHostRequests,
+                                requestAllowance,
                                 remaining.toInt(),
                             )
                         check(result.retiredInstructions in 0..remaining) {
@@ -257,7 +271,7 @@ class ProgramRuntimeHost internal constructor(
 
                 VmOutcome.SliceExhausted -> {
                     if (retirementAllowance != Int.MAX_VALUE && retiredInstructionsLastTick >= retirementAllowance) return
-                    return@repeat
+                    continue
                 }
 
                 VmOutcome.WaitingForTerminalEvent -> {
@@ -314,10 +328,19 @@ class ProgramRuntimeHost internal constructor(
                 }
 
                 is VmOutcome.HostRequestBatch -> {
-                    check(outcome.requests.size <= remainingHostRequests) {
-                        "native VM exceeded supplied host request budget"
-                    }
-                    remainingHostRequests -= outcome.requests.size
+                    check(outcome.requests.size <= requestAllowance) { "native VM exceeded supplied host request batch allowance" }
+                    val charges = outcome.requests.map { HostCharge(activeVmEpoch, programId, it.identity) }.toSet()
+                    val fresh =
+                        charges.count {
+                            it !in chargedHostRequests &&
+                                (
+                                    pendingAddonRequests[it.identity]?.programId != programId &&
+                                        pendingTimerRequests[it.identity]?.programId != programId
+                                )
+                        }
+                    check(fresh <= remainingHostRequests) { "native VM exceeded supplied new host request budget" }
+                    remainingHostRequests -= fresh
+                    chargedHostRequests.addAll(charges)
                     val redstone = outcome.requests.filter(::isRedstoneOutputRequest)
                     val sound = outcome.requests.filter(::isSoundRequest)
                     val timers = outcome.requests.filter(::isTimerRequest)
@@ -353,7 +376,7 @@ class ProgramRuntimeHost internal constructor(
                                 return
                             }
                         }
-                        return@repeat
+                        continue
                     }
                     if (redstone.isNotEmpty()) {
                         commitRedstoneBatch(activeSession, redstone)
@@ -363,6 +386,8 @@ class ProgramRuntimeHost internal constructor(
                         commitSoundBatch(activeSession, sound)
                         return
                     }
+                    // Re-reporting a parked request with no retired work cannot make progress until its owner replies.
+                    if (fresh == 0 && retirementAllowance != Int.MAX_VALUE && retiredInstructionsLastTick == retiredBeforeAdvance) return
                 }
 
                 is VmOutcome.CompilationRequested -> {
@@ -886,6 +911,12 @@ class ProgramRuntimeHost internal constructor(
     private data class PendingSoundCommit(
         val session: ProgramVmSession,
         val requests: List<VmHostRequest>,
+    )
+
+    private data class HostCharge(
+        val epoch: Long,
+        val programId: Long,
+        val identity: ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity,
     )
 
     private data class PendingAddonRequest(
