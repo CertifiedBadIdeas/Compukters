@@ -41,11 +41,17 @@ The log records `Propulsion latency mode=...` rows with server-tick distances fr
 observed target-vector and throttle changes, the subsequent state read, and 50%/90% nozzle response.
 `throttle90` records 90% effective throttle after startup; `-1` means it was not observed in the sample window.
 
-Observation runs on the server without additional Guest polling calls. Sampling resolution is one tick;
-command-change timestamps may be observed one tick after the mutation. Millisecond equivalents assume
-20 TPS; the GameTest server itself runs unthrottled. Sable physics is paused to hold the construction in
-place while block-entity and VM ticks continue, so these results cover transport and actuator-state response.
-Dynamic flight, force application, PID stability, and loaded-world scheduling require separate measurements.
+Observation runs on the server without additional Guest polling calls. A test-only subclass of the real
+block entity also captures vector target updates through `setChanged` and throttle updates through
+`setDigitalInput`. The `Propulsion mutation mode=...` rows report direct mutation ticks and the separate
+poller's lag. This distinguishes actual delivery from observation one tick later.
+
+The normal GameTest server runs unthrottled. Asynchronous worker results can miss a pre-tick pump in this
+mode even when ordinary 20 TPS pacing would leave enough time; multiplying its tick counts by 50 ms does
+not establish normal-world delivery latency. Repeat with ordinary pacing before making that claim.
+Sable physics is paused to hold the construction in place while block-entity and VM ticks continue, so
+these results cover transport and actuator-state response. Dynamic flight, force application, PID
+stability, and loaded-world scheduling require separate measurements.
 
 ## Documentation site
 
