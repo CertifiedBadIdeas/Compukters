@@ -25,6 +25,7 @@ import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
 import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityCalibration
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,6 +36,110 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class VmActorServiceRegistryTest {
+    @Test
+    fun `owner wakeup stops at the shared time allowance between replies`() {
+        val queued = ConcurrentLinkedQueue<Runnable>()
+        var now = 0L
+        val registry =
+            VmActorServiceRegistry<Any>(
+                checkOwner = {},
+                opener = { ready ->
+                    ProgramRuntimeActorService(
+                        VmActorSchedulerConfig(workerCount = 1, resultCapacityPerWorker = 4),
+                        onResultsReady = ready,
+                        nanoTime = { now },
+                    )
+                },
+                maximumEventsPerTick = 4,
+                maximumPumpNanosPerTick = 1_000,
+                nanoTime = { now },
+                enqueueOnOwner = { _, task -> queued.add(task) },
+            )
+        val server = Any()
+        registry.start(server)
+        registry.tick(server, 0)
+        val runtime = registry.service(server)
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(11, 12), 1)
+        assertTrue(runtime.registerStandalone(endpoint))
+        val first = runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
+        first.thenRun { now += 1_000 }
+        val second = runtime.request(endpoint, ProgramRuntimeActorCommand::ResourceSnapshot)
+        awaitResults(runtime, 2)
+        queued.remove().run()
+        assertTrue(first.isDone)
+        assertFalse(second.isDone)
+        registry.afterTick(server)
+        registry.tick(server, 1)
+        assertTrue(second.isDone)
+        registry.afterTick(server)
+        registry.stop(server)
+    }
+
+    @Test
+    fun `worker wakeups coalesce and owner pump shares the tick event budget`() {
+        val owner = Thread.currentThread()
+        val queued = ConcurrentLinkedQueue<Runnable>()
+        val registry =
+            VmActorServiceRegistry<Any>(
+                checkOwner = { check(Thread.currentThread() === owner) },
+                opener = ::service,
+                maximumEventsPerTick = 1,
+                maximumPumpNanosPerTick = TimeUnit.SECONDS.toNanos(5),
+                enqueueOnOwner = { _, task -> queued.add(task) },
+            )
+        val server = Any()
+        registry.start(server)
+        registry.tick(server, 0)
+        val runtime = registry.service(server)
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(7, 8), 1)
+        assertTrue(runtime.registerStandalone(endpoint))
+        val first = runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
+        val second = runtime.request(endpoint, ProgramRuntimeActorCommand::ResourceSnapshot)
+        awaitResults(runtime, 2)
+        assertEquals(1, queued.size)
+        queued.remove().run()
+        assertTrue(first.isDone)
+        assertFalse(second.isDone)
+        assertEquals(1, runtime.metrics().queuedResults)
+        registry.afterTick(server)
+        registry.tick(server, 1)
+        assertTrue(second.isDone)
+        registry.afterTick(server)
+        registry.stop(server)
+    }
+
+    @Test
+    fun `queued wakeup cannot reopen a stopped or replacement service`() {
+        val queued = ConcurrentLinkedQueue<Runnable>()
+        var opened = 0
+        val registry =
+            VmActorServiceRegistry<Any>(
+                checkOwner = {},
+                opener = { ready ->
+                    opened++
+                    service(ready)
+                },
+                enqueueOnOwner = { _, task -> queued.add(task) },
+                maximumPumpNanosPerTick = TimeUnit.SECONDS.toNanos(5),
+            )
+        val server = Any()
+        registry.start(server)
+        registry.tick(server, 0)
+        val runtime = registry.service(server)
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(9, 10), 1)
+        assertTrue(runtime.registerStandalone(endpoint))
+        runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
+        awaitResults(runtime, 1)
+        assertEquals(1, queued.size)
+        registry.afterTick(server)
+        registry.stop(server)
+        registry.start(server)
+        queued.remove().run()
+        assertEquals(1, opened)
+        assertNull(registry.metrics(server))
+        registry.stop(server)
+    }
+
     @Test
     fun `completed startup calibration replaces fallback and failure keeps it bounded`() {
         val successful =
@@ -74,7 +179,7 @@ class VmActorServiceRegistryTest {
         val registry =
             VmActorServiceRegistry<Any>({}, {
                 opened++
-                service()
+                service(it)
             })
         val server = Any()
         registry.start(server)
@@ -146,9 +251,10 @@ class VmActorServiceRegistryTest {
         assertEquals(0, runtime.metrics().registeredActors)
     }
 
-    private fun service() =
+    private fun service(ready: () -> Unit = {}) =
         ProgramRuntimeActorService(
             VmActorSchedulerConfig(workerCount = 1, resultCapacityPerWorker = 4),
+            onResultsReady = ready,
         )
 
     private fun awaitResults(

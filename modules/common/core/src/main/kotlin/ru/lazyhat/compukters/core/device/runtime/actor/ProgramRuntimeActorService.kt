@@ -369,10 +369,16 @@ class ProgramRuntimeActorService(
         return scheduler.unregister(endpoint).whenComplete { _, _ -> deferredWorldRequests.remove(endpoint) }
     }
 
-    fun pump(maximumEvents: Int): Int {
-        val startedAt = System.nanoTime()
-        val events = scheduler.drainEvents(maximumEvents)
-        events.forEach { event ->
+    fun pump(
+        maximumEvents: Int,
+        deadlineNanos: Long = Long.MAX_VALUE,
+    ): Int {
+        require(maximumEvents >= 0) { "result delivery allowance must not be negative" }
+        val startedAt = nanoTime()
+        var count = 0
+        while (count < maximumEvents && (deadlineNanos == Long.MAX_VALUE || nanoTime() - deadlineNanos < 0)) {
+            val event = scheduler.drainEvents(1).singleOrNull() ?: break
+            count++
             when (event) {
                 is VmActorEvent.Result -> {
                     val reply = event.value
@@ -393,7 +399,7 @@ class ProgramRuntimeActorService(
                             }
                         }
                     }
-                    val request = pending.remove(address) ?: return@forEach
+                    val request = pending.remove(address) ?: continue
                     if (request.completesWorldRequest) deferredWorldRequests.remove(event.endpoint)
                     if (
                         (
@@ -429,9 +435,9 @@ class ProgramRuntimeActorService(
                 }
             }
         }
-        lastPumpEvents.set(events.size)
-        lastPumpNanos.set((System.nanoTime() - startedAt).coerceAtLeast(0))
-        return events.size
+        lastPumpEvents.set(count)
+        lastPumpNanos.set((nanoTime() - startedAt).coerceAtLeast(0))
+        return count
     }
 
     fun metrics(): VmActorSchedulerMetrics = scheduler.metrics()
