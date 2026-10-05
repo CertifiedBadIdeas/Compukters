@@ -37,6 +37,7 @@ import net.minecraft.resources.ResourceLocation
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.state.properties.AttachFace
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.neoforged.neoforge.common.util.FakePlayerFactory
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate
@@ -65,6 +66,70 @@ object CreativeVectorThrusterGameTests {
     @GameTest(batch = "propulsion_vector", template = "bastion/mobs/empty", templateNamespace = "minecraft", timeoutTicks = 100_000)
     fun guestVectorTerminateClearsThrust(helper: GameTestHelper) {
         vectorHandleList(helper, removeComputer = false, terminateProgram = true)
+    }
+
+    @JvmStatic
+    @GameTest(
+        batch = "propulsion_vector_redstone",
+        template = "bastion/mobs/empty",
+        templateNamespace = "minecraft",
+        timeoutTicks = 100_000,
+    )
+    fun topLeverInputDoesNotPowerAdjacentEngine(helper: GameTestHelper) {
+        val computer = BlockPos(2, 2, 2)
+        val engine = computer.below()
+        val block = BuiltInRegistries.BLOCK.get(ResourceLocation.fromNamespaceAndPath("createpropulsion", "creative_vector_thruster"))
+        helper.setBlock(computer, CompuktersRegistry.COMPUTER.get())
+        helper.setBlock(engine, block.defaultBlockState().setValue(BlockStateProperties.FACING, Direction.UP))
+        helper.setBlock(
+            computer.above(),
+            Blocks.LEVER
+                .defaultBlockState()
+                .setValue(BlockStateProperties.ATTACH_FACE, AttachFace.FLOOR)
+                .setValue(BlockStateProperties.POWERED, true),
+        )
+        val scenario = GuestComputerScenario(helper, computer)
+        val sequence = helper.startSequence()
+
+        fun assertStopped() {
+            val thruster = helper.getBlockEntity(engine) as CreativeVectorThrusterBlockEntity
+            helper.assertTrue(thruster.throttle == 0f, "top lever powered the engine through the computer")
+            helper.assertTrue(thruster.currentThrust == 0f, "top lever caused physical thrust through the computer")
+        }
+        sequence.thenExecuteAfter(10) {
+            nameDevice(helper, engine, "t1")
+            assertStopped()
+        }
+        scenario.prepare(
+            sequence,
+            """
+            import compukter.redstone.Redstone
+            import propulsion.thrusters.Thrusters
+            fun main() {
+                val engine = Thrusters.creativeVector("t1")
+                engine.setThrustKn(5.0)
+                engine.setThrottle(0.0)
+                println("top-level=" + Redstone.top.get())
+                readln()
+            }
+            """.trimIndent(),
+        )
+        sequence.thenExecute {
+            helper.assertTrue(
+                helper.level.getSignal(helper.absolutePos(computer.above()), Direction.UP) == 15,
+                "top lever stopped providing input during program preparation",
+            )
+        }
+        scenario.awaitMarker(sequence, "top-level=15")
+        sequence.thenExecute { assertStopped() }
+        scenario.terminate(sequence)
+        sequence.thenWaitUntil {
+            val thruster = helper.getBlockEntity(engine) as CreativeVectorThrusterBlockEntity
+            helper.assertTrue(!thruster.hasPeripheralThrustOverride(), "terminated program retained engine control")
+            assertStopped()
+        }
+        sequence.thenExecuteAfter(10) { assertStopped() }
+        sequence.thenSucceed()
     }
 
     private fun vectorHandleList(
