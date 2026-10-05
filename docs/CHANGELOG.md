@@ -27,6 +27,11 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
   Explicit close releases control early. Chunk saves and construction copies retain engine configuration without transferring a program's digital
   command. The independent addon joins Create/Sable and the pinned Aeronautics/Propulsion runtime in the shared dev stand.
 
+- Ready VM results notify a coalesced server-thread handler, allowing completed world/addon calls to resume
+  within the same tick when instruction credit and the original deadline remain. Continued execution shares
+  per-tick host/advance limits and does not receive a fresh CPU allocation. Regular tick delivery remains the
+  fallback under load; stale notifications are ignored after shutdown.
+
 - Named peripherals can be accessed directly from any of the computer's six adjacent faces without a cable.
   Direct and cable contacts share provider resolution, identity deduplication and ambiguous-name handling.
 

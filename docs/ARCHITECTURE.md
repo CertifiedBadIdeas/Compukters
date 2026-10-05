@@ -283,10 +283,11 @@ I/O run outside the server tick thread.
 ## Runtime ownership
 
 The asynchronous actor migration (#603) has a server-scoped service registered with NeoForge. Server startup records
-its lifetime; workers are allocated on first use. Each pre-tick drains at most 1024 actor results and runs reply
-callbacks on the server thread before world and block-entity ticking. Work submitted during one tick therefore has the
-full inter-tick interval before the next deterministic delivery boundary. Stopping removes the service before closing
-it, so late callbacks cannot reopen it.
+its lifetime; workers are allocated on first use. Publishing a worker result sends a lightweight notification;
+one coalesced server task can deliver ready replies between ordinary tick boundaries. This task and the pre-tick
+fallback share a limit of 1024 delivered results and a 2 ms owner-pump allowance per tick. The time limit is checked
+between callbacks; one world callback is not preempted. Workers never execute world actions. Stopping invalidates
+queued notifications and removes the service before closing it, so late callbacks cannot reopen it.
 Production computers attach one actor identified by `ComputerId` and a machine epoch. A full scheduler rejects a new
 attachment without blocking or failing the server tick; the block remains powered off and retries on a later tick.
 Minecraft runtime epochs come from one process-wide monotonic allocator, so replacing a block entity cannot reuse
@@ -310,10 +311,15 @@ than an equal-CPU or delivery-latency contract.
 observation from actor replies, and terminal, filesystem, deployment, and input requests return futures. The scheduler
 admits at most one pending or executing tick permit per actor, while completed replies may remain queued for the next
 server-thread pump without blocking admission of a later tick. The carrier suppresses obsolete lifecycle replies and
-performs redstone and sound world actions on its owning server thread. On a later server tick it submits one typed
-continuation containing the immutable world-action result. The actor validates and applies that completion before using
-the same command to perform the next bounded advance; its single reply both completes the old deferred request and may
-publish the next one. A full actor mailbox retains the exact continuation for retry without repeating the world mutation.
+performs redstone and sound world actions on its owning server thread. A completed world action may submit a typed
+continuation in the same world tick using the remaining instruction credit from that computer's original frame grant.
+The original deadline is retained, continuations are capped, and host-request and advance quotas are cumulative for
+the world tick. Re-reporting an already parked request does not consume new-call credit; a zero-progress repeat
+yields to its owner instead of exhausting the frame through polling. Credit that is still in flight cannot be borrowed; expired credits cannot refill a newer frame.
+Ordinary turns outside a collecting frame wait for a new frame instead of receiving an unbounded allowance.
+The actor validates and applies each completion before the next bounded advance; its single reply both completes
+the old deferred request and may publish the next one. When credit, deadline, or admission is exhausted, the carrier
+retains the exact continuation for a later tick without repeating the world mutation.
 Its close future reports the final filesystem generation after accepted work drains and native resources close; this
 barrier does not depend on server result pumping and may complete on a worker thread.
 
@@ -323,7 +329,8 @@ versioned Kotlin platform module, its exact external-call bindings, the matching
 sources; it contains no executable addon JVM classes. Registration rejects duplicate addon/module identities, and a
 created host must expose the exact registered capability schema. The actor transfers immutable typed requests to
 the server thread, where the host may complete immediately or retain a bounded wait; completions resume the exact VM
-task on a later turn. The Minecraft 1.21.1 Create adapter and its Guest Kotlin declarations live in the standalone
+task on the next admitted turn, including eligible same-tick continuations. Delayed addon waits retain their
+server-tick polling fallback. The Minecraft 1.21.1 Create adapter and its Guest Kotlin declarations live in the standalone
 `addons/create` Gradle root. It declares the public plugin, tooling, platform bundle, common host API, target adapter,
 and development mod through their external coordinates. For local co-development its composite build substitutes the
 adjacent Compukters projects, selecting the self-contained `namedElements` development mod instead of a republished

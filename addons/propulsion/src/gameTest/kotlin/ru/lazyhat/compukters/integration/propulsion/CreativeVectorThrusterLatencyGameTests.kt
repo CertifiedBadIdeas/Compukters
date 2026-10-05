@@ -178,7 +178,7 @@ object CreativeVectorThrusterLatencyGameTests {
                 val vector50 = requireNotNull(sample.vector50Tick)
                 val vector90 = requireNotNull(sample.vector90Tick)
                 helper.assertTrue(
-                    vector >= source!! && throttle >= source && read!! >= throttle && read >= vector,
+                    vectorApplied >= source!! && throttleApplied >= source && read!! >= throttleApplied && read >= vectorApplied,
                     "Latency stage ordering changed",
                 )
                 helper.assertTrue(vector50 >= vector && vector90 >= vector50, "Nozzle step response ordering changed")
