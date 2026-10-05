@@ -26,6 +26,7 @@ dokka {
         },
     )
     dokkaSourceSets.create("guest") {
+        displayName.set("Compukters")
         sourceRoots.from(guestSources)
         classpath.setFrom(files())
         enableKotlinStdLibDocumentationLink.set(false)

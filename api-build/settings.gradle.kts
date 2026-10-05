@@ -23,6 +23,6 @@ pluginManagement {
     }
 }
 
-rootProject.name = "Compukters-Guest-API"
+rootProject.name = "Compukters"
 
-include(":guest", ":create")
+include(":guest", ":create", ":sable", ":propulsion")

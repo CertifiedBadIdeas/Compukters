@@ -21,6 +21,7 @@ val addonVersion = providers.fileContents(rootProject.layout.projectDirectory.fi
 dokka {
     modulePath.set("create")
     dokkaSourceSets.create("create") {
+        displayName.set("Compukters")
         sourceRoots.from(createSources)
         classpath.setFrom(files())
         enableKotlinStdLibDocumentationLink.set(false)

@@ -46,6 +46,9 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
 - Server compiler packages and target metadata are prepared during world startup, before computers and terminal/IDE
   requests can use them, moving first-use package extraction out of ordinary server ticks.
 
+- The Compukters Dokka API reference includes Guest Kotlin and the Create, Sable and Propulsion addons,
+  with a shared `Compukters` target name and source links for each module.
+
 ### Guest Kotlin
 
 - Scalar value classes based on Int, Boolean and Char can be stored in lists and generic arrays, passed as Any,

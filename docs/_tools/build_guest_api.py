@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage Dokka's Guest Kotlin and Create addon API reference for Jekyll."""
+"""Stage Dokka's Compukters Guest Kotlin and addon API reference for Jekyll."""
 
 from __future__ import annotations
 
@@ -31,6 +31,12 @@ def main() -> None:
         "create/create.boiler/index.html",
         "create/create.kinetics/index.html",
         "create/create.logistics/index.html",
+        "sable/index.html",
+        "sable/sable.physics/index.html",
+        "sable/sable.physics/-physics-snapshot/index.html",
+        "propulsion/index.html",
+        "propulsion/propulsion.thrusters/index.html",
+        "propulsion/propulsion.thrusters/-creative-vector-thruster/index.html",
     )
     missing_pages = [page for page in required_pages if Path(page) not in source_files]
     if missing_pages:

@@ -40,7 +40,7 @@ dokka {
         customStyleSheets.from(layout.projectDirectory.file("logo-styles.css"))
     }
     dokkaPublications.html {
-        moduleName.set("Compukters Guest API")
+        moduleName.set("Compukters")
         moduleVersion.set(modVersion)
     }
 }
@@ -48,4 +48,6 @@ dokka {
 dependencies {
     dokka(project(":guest"))
     dokka(project(":create"))
+    dokka(project(":sable"))
+    dokka(project(":propulsion"))
 }
