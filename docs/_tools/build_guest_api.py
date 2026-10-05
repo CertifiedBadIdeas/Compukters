@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage Dokka's Compukters Guest Kotlin and addon API reference for Jekyll."""
+"""Stage Dokka's Compukters core and addon API reference for Jekyll."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def main() -> None:
         ]
         extra = staged_files.keys() - source_files.keys()
         if changed or extra:
-            raise SystemExit(f"Guest API files are stale: changed={changed[:10]}, extra={sorted(extra)[:10]}")
+            raise SystemExit(f"Compukters API files are stale: changed={changed[:10]}, extra={sorted(extra)[:10]}")
         print(f"Verified {len(source_files)} Dokka files")
         return
 

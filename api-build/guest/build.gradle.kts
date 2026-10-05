@@ -38,7 +38,7 @@ dokka {
         }
     }
     dokkaPublications.html {
-        moduleName.set("Guest Kotlin")
+        moduleName.set("Compukters Core")
         moduleVersion.set(modVersion)
     }
 }

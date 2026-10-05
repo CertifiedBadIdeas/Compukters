@@ -40,9 +40,9 @@ jobs:
       - name: Configure Pages
         id: pages
         uses: actions/configure-pages@v5
-      - name: Generate Guest API reference
+      - name: Generate Compukters API reference
         run: ./gradlew -p api-build dokkaGeneratePublicationHtml --no-daemon
-      - name: Stage Guest API reference
+      - name: Stage Compukters API reference
         run: python3 docs/_tools/build_guest_api.py
       - name: Build with Jekyll
         uses: actions/jekyll-build-pages@v1
