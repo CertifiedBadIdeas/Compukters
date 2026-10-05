@@ -24,6 +24,8 @@ internal class TerminalInputTest {
     fun `control keys require control while navigation keys do not`() {
         assertEquals(TerminalKey.S, TerminalInput.key(GLFW.GLFW_KEY_S, GLFW.GLFW_MOD_CONTROL))
         assertEquals(TerminalKey.X, TerminalInput.key(GLFW.GLFW_KEY_X, GLFW.GLFW_MOD_CONTROL))
+        assertEquals(TerminalKey.T, TerminalInput.key(GLFW.GLFW_KEY_T, GLFW.GLFW_MOD_CONTROL))
+        assertNull(TerminalInput.key(GLFW.GLFW_KEY_T, 0))
         assertNull(TerminalInput.key(GLFW.GLFW_KEY_S, 0))
         assertEquals(TerminalKey.LEFT, TerminalInput.key(GLFW.GLFW_KEY_LEFT, 0))
     }

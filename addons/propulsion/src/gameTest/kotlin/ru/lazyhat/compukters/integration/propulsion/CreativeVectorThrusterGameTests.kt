@@ -61,9 +61,16 @@ object CreativeVectorThrusterGameTests {
         vectorHandleList(helper, removeComputer = true)
     }
 
+    @JvmStatic
+    @GameTest(batch = "propulsion_vector", template = "bastion/mobs/empty", templateNamespace = "minecraft", timeoutTicks = 100_000)
+    fun guestVectorTerminateClearsThrust(helper: GameTestHelper) {
+        vectorHandleList(helper, removeComputer = false, terminateProgram = true)
+    }
+
     private fun vectorHandleList(
         helper: GameTestHelper,
         removeComputer: Boolean,
+        terminateProgram: Boolean = false,
     ) {
         val computer = BlockPos(2, 2, 3)
         val engines = listOf("fl", "fr", "bl", "br").mapIndexed { index, name -> name to BlockPos(5, 2, index + 2) }
@@ -90,6 +97,8 @@ object CreativeVectorThrusterGameTests {
         }
         if (removeComputer) {
             sequence.thenExecute { helper.setBlock(computer, Blocks.AIR) }
+        } else if (terminateProgram) {
+            scenario.terminate(sequence)
         } else {
             scenario.resume(sequence)
             scenario.awaitMarker(sequence, "vector-list-finished")

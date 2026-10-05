@@ -582,6 +582,42 @@ class ProgramRuntimeHostTest {
     }
 
     @Test
+    fun `terminate wakes compilation wait cancels compiler and releases child scope`() {
+        val session =
+            ScriptedSession(
+                outcomes =
+                    listOf(
+                        VmOutcome.ProcessEntered(1),
+                        compilationRequest(7),
+                        VmOutcome.ProcessExited(1),
+                        VmOutcome.WaitingForTerminalEvent,
+                    ),
+            )
+        val compiler = FakeComputerCompiler()
+        val actions = mutableListOf<ProgramAddonAction>()
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { session },
+                tickBudget = ProgramTickBudget(guestBudgetPerAdvance = 8, maintenanceBudgetPerAdvance = 4, maximumAdvancesPerTick = 4),
+                computerId = ComputerId.fromLongs(10, 20),
+                compilerRouter = CompilerCompletionRouter(compiler, maximumCompletionsPerDrain = 2),
+                addonLifecyclePort =
+                    ProgramAddonLifecyclePort {
+                        actions += it
+                        true
+                    },
+            )
+        host.start(byteArrayOf(1))
+        assertEquals(ProgramRuntimeState.WaitingForCompiler, host.serverTick())
+        assertTrue(host.sendTerminalKey(TerminalKey.T, TerminalKeyAction.PRESS, setOf(TerminalModifier.CONTROL)))
+        assertEquals(listOf(compiler.submissions.single().address), compiler.cancellations)
+        assertEquals(ProgramRuntimeState.WaitingForInput, host.serverTick())
+        assertTrue(ProgramAddonAction.Stopped(1) in actions)
+        assertTrue(session.compilationArtifacts.isEmpty())
+        host.close()
+    }
+
+    @Test
     fun `compilation waits without advancing and applies completion on a tick before resuming`() {
         val sourceBytes = "fun main() {}".encodeToByteArray()
         val session =

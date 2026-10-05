@@ -89,6 +89,7 @@ enum class TerminalKey(
     TAB(9),
     ENTER(13),
     S(83),
+    T(84),
     X(88),
     INSERT(256),
     DELETE(257),

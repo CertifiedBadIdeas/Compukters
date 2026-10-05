@@ -577,6 +577,18 @@ The block tick checks its writer and cable reachability even while Guest code is
 writer clears the screen, and no display text is saved in world NBT. Clients receive at most one full-grid block-entity
 update per changed server tick and render text on the oriented front face.
 
+Ctrl+T is reserved in computer terminal input (key code 84, CONTROL modifier), including the IDE target terminal.
+The native computer consumes it independently of Guest input polling and queue capacity. A press marks the foreground
+child below the nearest `/rom/shell` frame, or the first child of a standalone parent, for termination. An idle shell
+and a root without a parent are preserved. Successive native advances unwind its descendants with status 130 and
+ordinary `ProcessExited` lifecycle events, allowing the existing host scope cleanup to release peripheral leases and
+reject stale completions. The host cancels pending compilation and wakes an input/compiler wait; native termination
+discards the corresponding compiler transaction. Queued input for the terminated command is discarded at the press. After unwinding, line-oriented output resumes
+below visible content without clearing the terminal; normal scrolling applies when the screen is full. Held-key repeats are consumed
+without scheduling another stop.
+Terminal key 84 extends the admitted key set compatibly: existing key values, payload layouts, artifact ABI and C ABI
+remain unchanged; both native transports use their existing terminal-key function.
+
 The client renders the fixed 51x19 grid in a centered compact panel while the world remains visible through a
 translucent dim layer. A separate footer presents rolling `CPU` utilization, current Guest heap and virtual-disk
 usage, and concise lifecycle activity. Here `CPU` is the virtual computer's consumed/granted semantic Guest-unit
