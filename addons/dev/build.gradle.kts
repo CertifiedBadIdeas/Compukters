@@ -108,6 +108,9 @@ dependencies {
 loom {
     mods { maybeCreate("compukters_addons_dev").sourceSet("main") }
     runs {
+        configureEach {
+            property("compukters.vm.ownerWakeups", providers.gradleProperty("compuktersVmOwnerWakeups").orElse("true").get())
+        }
         named("client") { runDir("run/client"); ideConfigGenerated(true); programArgs("--username", "DevA") }
         named("server") { runDir("run/server"); ideConfigGenerated(true) }
         register("gameTestServer") {
