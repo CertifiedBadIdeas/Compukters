@@ -31,18 +31,25 @@ import ru.lazyhat.compukters.impl.benchmark.VmCapacityCalibrator
 import ru.lazyhat.compukters.impl.config.CompuktersServerConfig
 import java.util.IdentityHashMap
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Server-thread-owned lifecycle; a started server allocates workers only on first use. */
 internal class VmActorServiceRegistry<S : Any>(
     private val checkOwner: (S) -> Unit,
-    private val opener: () -> ProgramRuntimeActorService = ::ProgramRuntimeActorService,
+    private val opener: (() -> Unit) -> ProgramRuntimeActorService = { ready ->
+        ProgramRuntimeActorService(onResultsReady = ready, capacityFramesRequired = true)
+    },
     private val calibrator: (ProgramRuntimeActorService) -> CompletableFuture<VmCapacityCalibration>? = { null },
     private val maximumEventsPerTick: Int = 1_024,
+    private val enqueueOnOwner: ((S, Runnable) -> Unit)? = null,
+    private val maximumPumpNanosPerTick: Long = 2_000_000,
+    private val nanoTime: () -> Long = System::nanoTime,
 ) {
     private val servers = IdentityHashMap<S, Entry>()
 
     init {
         require(maximumEventsPerTick > 0) { "VM result budget must be positive" }
+        require(maximumPumpNanosPerTick > 0) { "VM owner pump time budget must be positive" }
     }
 
     fun start(server: S) {
@@ -54,7 +61,7 @@ internal class VmActorServiceRegistry<S : Any>(
     fun service(server: S): ProgramRuntimeActorService {
         checkOwner(server)
         val entry = checkNotNull(servers[server]) { "VM service requires a running server" }
-        return entry.service ?: opener().also { service ->
+        return entry.service ?: opener { resultsReady(server, entry) }.also { service ->
             entry.frameTick?.let(service::beginCapacityFrame)
             entry.service = service
             entry.calibration = calibrator(service)
@@ -76,13 +83,57 @@ internal class VmActorServiceRegistry<S : Any>(
                 service.rejectCapacityCalibration(failure.cause?.message ?: failure.message ?: "calibration failed")
             }
         }
-        val pumped = entry.service?.pump(maximumEventsPerTick) ?: 0
+        entry.remainingEvents = maximumEventsPerTick
+        entry.spentPumpNanos = 0
+        entry.pumpAllowed.set(true)
         if (worldTick != null) {
-            entry.service?.observePreviousCapacityFrame()
             entry.frameTick = worldTick
             entry.service?.beginCapacityFrame(worldTick)
         }
+        val pumped = pumpEntry(server, entry)
+        if (worldTick != null) entry.service?.observePreviousCapacityFrame()
         return pumped
+    }
+
+    /** Workers only enqueue a notification; every reply and world action is handled on the owner. */
+    private fun resultsReady(
+        server: S,
+        entry: Entry,
+    ) {
+        val enqueue = enqueueOnOwner ?: return
+        if (entry.closed.get() || !entry.pumpAllowed.get() || !entry.pumpQueued.compareAndSet(false, true)) return
+        try {
+            enqueue(
+                server,
+                Runnable {
+                    checkOwner(server)
+                    entry.pumpQueued.set(false)
+                    if (!entry.closed.get()) pumpEntry(server, entry)
+                },
+            )
+        } catch (failure: Exception) {
+            entry.pumpQueued.set(false)
+            if (!entry.closed.get()) LOGGER.warn(failure) { "Could not enqueue VM result delivery; pre-tick delivery remains available" }
+        }
+    }
+
+    private fun pumpEntry(
+        server: S,
+        entry: Entry,
+    ): Int {
+        checkOwner(server)
+        val service = entry.service ?: return 0
+        val remainingNanos = maximumPumpNanosPerTick - entry.spentPumpNanos
+        if (entry.remainingEvents <= 0 || remainingNanos <= 0) {
+            entry.pumpAllowed.set(false)
+            return 0
+        }
+        val started = nanoTime()
+        val events = service.pump(entry.remainingEvents, started + remainingNanos)
+        entry.remainingEvents -= events
+        entry.spentPumpNanos += (nanoTime() - started).coerceAtLeast(0)
+        if (entry.remainingEvents <= 0 || entry.spentPumpNanos >= maximumPumpNanosPerTick) entry.pumpAllowed.set(false)
+        return events
     }
 
     fun afterTick(server: S) {
@@ -99,12 +150,21 @@ internal class VmActorServiceRegistry<S : Any>(
 
     fun stop(server: S) {
         checkOwner(server)
-        servers.remove(server)?.service?.close()
+        servers.remove(server)?.let { entry ->
+            entry.closed.set(true)
+            entry.pumpAllowed.set(false)
+            entry.service?.close()
+        }
     }
 
     private class Entry {
         var service: ProgramRuntimeActorService? = null
         var frameTick: Long? = null
+        val closed = AtomicBoolean()
+        val pumpQueued = AtomicBoolean()
+        val pumpAllowed = AtomicBoolean()
+        var remainingEvents = 0
+        var spentPumpNanos = 0L
         var calibration: CompletableFuture<VmCapacityCalibration>? = null
     }
 }
@@ -115,13 +175,16 @@ internal object NeoForgeVmActorServices {
             checkOwner = { server ->
                 check(server.isSameThread) { "VM service lifecycle must run on the server thread" }
             },
-            opener = {
+            opener = { ready ->
                 ProgramRuntimeActorService(
                     CompuktersServerConfig.schedulerConfig(),
                     capacityGovernor = VmCapacityGovernor(CompuktersServerConfig.capacityGovernorConfig()),
+                    onResultsReady = ready,
+                    capacityFramesRequired = true,
                 )
             },
             calibrator = { VmCapacityCalibrator.start(CompuktersServerConfig.schedulerConfig().workerCount) },
+            enqueueOnOwner = { server, task -> server.execute(task) },
         )
 
     fun service(server: MinecraftServer): ProgramRuntimeActorService = registry.service(server)

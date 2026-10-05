@@ -135,6 +135,14 @@ class ActorProgramComputer(
         ) {
             return
         }
+        submitTurn(worldTick, continuation = false)
+    }
+
+    private fun submitTurn(
+        worldTick: Long,
+        continuation: Boolean,
+    ) {
+        if (closeResult != null) return
         val output = pendingOutput
         val requestedSound = pendingSound
         val addonCompletions = pendingAddonCompletions.toList()
@@ -157,9 +165,15 @@ class ActorProgramComputer(
                 if (addonCompletions.isNotEmpty()) add(ProgramRuntimeActorEffect.CompleteAddons(addonCompletions))
                 input?.let { add(ProgramRuntimeActorEffect.RedstoneInput(it)) }
             }
-        lastAdvanceTick = worldTick
+        val submitted =
+            if (continuation) {
+                service.continueTurn(lease.endpoint, worldTick, effects) ?: return
+            } else {
+                lastAdvanceTick = worldTick
+                service.turn(lease.endpoint, worldTick, effects)
+            }
         val currentLifecycle = lifecycle
-        val future = observe(service.turn(lease.endpoint, worldTick, effects), lifecycle)
+        val future = observe(submitted, lifecycle)
         if (!future.isCompletedExceptionally) {
             pendingOutput = null
             pendingSound = null
@@ -179,6 +193,9 @@ class ActorProgramComputer(
                 return@whenComplete
             }
             acceptAdvanceReply(reply, currentLifecycle)
+            if (pendingOutput != null || pendingSound != null || pendingAddonCompletions.isNotEmpty()) {
+                submitTurn(worldTick, continuation = true)
+            }
         }
     }
 
