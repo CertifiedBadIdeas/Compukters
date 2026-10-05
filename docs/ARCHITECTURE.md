@@ -559,6 +559,10 @@ VM task receives its Boolean admission result. Each loaded computer has a four-t
 counter admits at most 64 computer sounds per tick. Rejected sounds return `false` immediately and are never queued;
 unloaded block entities retain no sound state or background work.
 
+Computer GPIO sides are independent inputs and outputs. The chassis is not a passive redstone conductor: a strong
+input (such as a lever attached above it) cannot power a device on another face through the computer. Input sampling
+still reads the neighboring source, while explicit weak/direct program outputs retain their directional behavior.
+
 The Minecraft carrier also owns a direct-touch peripheral fabric. Passive orthogonal cables form bounded components
 across loaded chunks without forcing chunk loads. Addon providers map a touched block or multiblock part to a canonical
 logical identity; a versioned world directory stores normalized names against that identity independently of computers
