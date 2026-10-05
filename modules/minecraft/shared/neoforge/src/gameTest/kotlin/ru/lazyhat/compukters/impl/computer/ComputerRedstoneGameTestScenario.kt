@@ -22,6 +22,8 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.state.properties.AttachFace
+import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
@@ -39,6 +41,22 @@ internal object ComputerRedstoneGameTestScenario {
             computerPosition,
             block.defaultBlockState().setValue(ComputerBlock.FACING, Direction.NORTH),
         )
+        // A strong input must remain readable without being passively forwarded to another face.
+        val top = computerPosition.above()
+        helper.setBlock(
+            top,
+            Blocks.LEVER
+                .defaultBlockState()
+                .setValue(BlockStateProperties.ATTACH_FACE, AttachFace.FLOOR)
+                .setValue(BlockStateProperties.POWERED, true),
+        )
+        helper.assertTrue(
+            helper.level.getSignal(helper.absolutePos(top), Direction.UP) == 15,
+            "top lever did not provide the computer input",
+        )
+        val leaked = helper.level.getSignal(helper.absolutePos(computerPosition), Direction.UP)
+        helper.assertTrue(leaked == 0, "computer passively forwarded top lever input to its bottom: $leaked")
+        helper.setBlock(top, Blocks.AIR)
         val entity = helper.compuktersComputerBlockEntity(computerPosition)
         entity.prepareTerminalAsync()
         var setup: CompletableFuture<Void>? = null

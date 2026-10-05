@@ -32,6 +32,9 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
   processes/tasks, releases peripheral control and returns to the shell without removing the computer or deleting files.
   Terminal output is retained with normal scrolling. Held-key repeats are ignored, and Ctrl+T leaves an idle shell running.
 
+- Computer redstone inputs are isolated from passive conduction through the block: a powered lever on one face
+  no longer energizes a neighboring device on another face. Explicit weak and direct program outputs remain available.
+
 ### Guest Kotlin
 
 - Scalar value classes based on Int, Boolean and Char can be stored in lists and generic arrays, passed as Any,

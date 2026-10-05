@@ -41,12 +41,13 @@ import net.minecraft.world.phys.BlockHitResult
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
 import java.util.function.Supplier
 
+// Input and output sides are independent GPIO, not a passive redstone conductor.
 class ComputerBlock(
     properties: BlockBehaviour.Properties,
     private val factory: (BlockPos, BlockState) -> ComputerBlockEntity,
     private val blockEntityType: Supplier<out BlockEntityType<out ComputerBlockEntity>>,
     private val terminalOpener: (ServerPlayer, ComputerBlockEntity) -> Unit,
-) : Block(properties),
+) : Block(properties.isRedstoneConductor { _, _, _ -> false }),
     EntityBlock {
     init {
         registerDefaultState(stateDefinition.any().setValue(FACING, COMPUTER_DEFAULT_FACING))
