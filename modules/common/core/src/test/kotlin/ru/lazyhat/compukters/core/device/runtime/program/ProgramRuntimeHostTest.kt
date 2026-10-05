@@ -74,6 +74,98 @@ import kotlin.test.assertTrue
 
 class ProgramRuntimeHostTest {
     @Test
+    fun `repeated parked addon batch is charged once and yields without burning advance slots`() {
+        val request = VmHostRequest(1, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(3)))
+        val session =
+            ScriptedSession(
+                outcomes =
+                    listOf(
+                        VmOutcome.HostRequestBatch(listOf(request)),
+                        VmOutcome.HostRequestBatch(listOf(request)),
+                        VmOutcome.WaitingForHostQuota,
+                    ),
+                retiredCounts = listOf(1L, 0L, 0L),
+            )
+        var dispatched = 0
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { session },
+                tickBudget = ProgramTickBudget(maximumAdvancesPerTick = 4, hostRequestsPerTick = 2),
+                addonCapabilitySchemas = listOf(TEST_ADDON_SCHEMA),
+                addonRequestPort = {
+                    dispatched++
+                    true
+                },
+            )
+        host.start(byteArrayOf(1))
+        host.serverTick(10, retirementAllowance = 8)
+        assertEquals(2, session.advances.size)
+        assertEquals(1, dispatched)
+        assertTrue(host.completeAddon(ProgramAddonCompletion(request.identity, HostResponse.IntSuccess(3))))
+        host.serverTick(10, retirementAllowance = 7)
+        assertEquals(1, session.advances.last().hostRequests)
+        assertEquals(1, session.responses.size)
+    }
+
+    @Test
+    fun `same tick continuations share advance and host quotas`() {
+        val request = VmHostRequest(1, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(3)))
+        val session =
+            ScriptedSession(
+                outcomes =
+                    listOf(
+                        VmOutcome.HostRequestBatch(listOf(request)),
+                        VmOutcome.WaitingForHostQuota,
+                        VmOutcome.WaitingForHostQuota,
+                    ),
+            )
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { session },
+                tickBudget = ProgramTickBudget(maximumAdvancesPerTick = 2, hostRequestsPerTick = 1),
+                addonCapabilitySchemas = listOf(TEST_ADDON_SCHEMA),
+                addonRequestPort = { true },
+            )
+        host.start(byteArrayOf(1))
+        host.serverTick(10)
+        assertEquals(listOf(1, 1), session.advances.map { it.hostRequests })
+        host.serverTick(10)
+        assertEquals(2, session.advances.size)
+        host.serverTick(11)
+        assertEquals(3, session.advances.size)
+        assertEquals(2, session.advances.last().hostRequests)
+    }
+
+    @Test
+    fun `same tick host quota remains exhausted before advance quota`() {
+        val request = VmHostRequest(1, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(3)))
+        val session =
+            ScriptedSession(
+                outcomes =
+                    listOf(
+                        VmOutcome.HostRequestBatch(listOf(request)),
+                        VmOutcome.WaitingForHostQuota,
+                        VmOutcome.WaitingForHostQuota,
+                        VmOutcome.WaitingForHostQuota,
+                    ),
+            )
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { session },
+                tickBudget = ProgramTickBudget(maximumAdvancesPerTick = 4, hostRequestsPerTick = 1),
+                addonCapabilitySchemas = listOf(TEST_ADDON_SCHEMA),
+                addonRequestPort = { true },
+            )
+        host.start(byteArrayOf(1))
+        host.serverTick(10)
+        assertTrue(host.completeAddon(ProgramAddonCompletion(request.identity, HostResponse.IntSuccess(3))))
+        host.serverTick(10)
+        assertEquals(listOf(1, 1, 0), session.advances.map { it.hostRequests })
+        host.serverTick(11)
+        assertEquals(1, session.advances.last().hostRequests)
+    }
+
+    @Test
     fun `expired host deadline skips guest execution without consuming the tick allowance`() {
         val session = ScriptedSession(outcomes = listOf(VmOutcome.SliceExhausted), retiredCounts = listOf(2L))
         val host = host(session, ProgramTickBudget(maximumAdvancesPerTick = 4))

@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.CompletableFuture
@@ -36,6 +37,7 @@ import java.util.concurrent.atomic.AtomicLong
  */
 class VmActorScheduler<C : Any, P : Any, R : Any>(
     private val config: VmActorSchedulerConfig = VmActorSchedulerConfig(),
+    private val onResultsReady: () -> Unit = {},
 ) : AutoCloseable {
     private val registryLock = Any()
     private val actors = ConcurrentHashMap<ComputerId, ActorCell<C, P, R>>()
@@ -514,7 +516,14 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
     ) {
         val queued = QueuedEvent(event, System.nanoTime())
         while (accepting.get()) {
-            if (resultLanes[workerIndex].offer(queued, config.idlePollMillis, TimeUnit.MILLISECONDS)) return
+            if (resultLanes[workerIndex].offer(queued, config.idlePollMillis, TimeUnit.MILLISECONDS)) {
+                try {
+                    onResultsReady()
+                } catch (failure: Exception) {
+                    LOGGER.warn(failure) { "VM result notification failed; periodic owner delivery remains available" }
+                }
+                return
+            }
         }
     }
 

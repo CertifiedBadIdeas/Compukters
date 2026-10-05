@@ -23,6 +23,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -30,6 +31,41 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class VmActorSchedulerTest {
+    @Test
+    fun `result readiness is notified by worker only after enqueue`() {
+        val owner = Thread.currentThread()
+        val ready = CountDownLatch(1)
+        val callbackThread = AtomicReference<Thread>()
+        val queued = AtomicBoolean()
+        lateinit var runtime: VmActorScheduler<Int, Int, Int>
+        runtime =
+            VmActorScheduler(VmActorSchedulerConfig(workerCount = 1), onResultsReady = {
+                callbackThread.set(Thread.currentThread())
+                queued.set(runtime.metrics().queuedResults > 0)
+                ready.countDown()
+            })
+        runtime.use {
+            val endpoint = endpoint(900)
+            assertTrue(
+                runtime.register(
+                    endpoint,
+                    object : VmActorProcessor<Int, Int, Int> {
+                        override fun process(command: Int) = command
+
+                        override fun advance(permit: Int) = permit
+
+                        override fun close() = Unit
+                    },
+                ),
+            )
+            assertEquals(VmActorSubmission.ACCEPTED, runtime.submit(endpoint, 7))
+            assertTrue(ready.await(5, TimeUnit.SECONDS))
+            assertFalse(callbackThread.get() === owner)
+            assertTrue(queued.get())
+            assertEquals(7, assertIs<VmActorEvent.Result<Int>>(runtime.drainEvents(1).single()).value)
+        }
+    }
+
     @Test
     fun `deferred permit holds later commands without occupying a worker`() {
         val endpoint = endpoint(901)
