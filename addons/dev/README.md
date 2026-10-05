@@ -30,6 +30,13 @@ subdirectory. The pinned mods above are already on the classpath and do not need
 worlds use separate `run/server` and `run/gameTestServer` directories. Gradle rebuilds the main mod and all addon
 archives before launching, so editing them does not require a Maven Local publication.
 
+Temporary flight diagnostics currently keep a 3x3 area of chunks ticking around each loaded computer.
+For Sable constructions the area follows the transformed world position of the computer, rather than its virtual
+storage coordinates. Tickets refresh every ten ticks, expire after forty ticks, and are released when the computer
+disappears, the server stops, or `/compuktersdev forcechunks off` is run. `/compuktersdev forcechunks on` enables them
+again; these commands require operator permission. No vanilla force-load flags are saved to the world. This aid
+belongs only to the development stand and starts disabled in GameTest runs.
+
 Run these verification/development commands from this directory with Gradle on JDK 25 and a Java 21 toolchain available:
 
 ```sh

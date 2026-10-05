@@ -73,7 +73,7 @@ val addonGameTestMods = mapOf(
 }
 val gameTest by sourceSets.creating
 // Select complete test archives instead of loading duplicate copies of each addon.
-gameTest.compileClasspath += sourceSets.main.get().compileClasspath
+gameTest.compileClasspath += sourceSets.main.get().compileClasspath + sourceSets.main.get().output
 val normalAddonPaths = addonMods.values.map { it.singleFile.absolutePath }.toSet()
 gameTest.runtimeClasspath = sourceSets.main.get().runtimeClasspath.filter { it.absolutePath !in normalAddonPaths } +
     files(addonGameTestMods.values) + gameTest.output
@@ -91,8 +91,8 @@ dependencies {
     physicsMods("maven.modrinth:create-propulsion-simulated:H13U56dc")
     modRuntimeOnly(files(physicsMods))
     modRuntimeOnly(aeronauticsLibraries)
-    modRuntimeOnly("maven.modrinth:sable:U678xqle")
-    modRuntimeOnly(sableLibraries)
+    modImplementation("maven.modrinth:sable:U678xqle")
+    modImplementation(sableLibraries)
     forgeRuntimeLibrary(veilLibraries)
     modRuntimeOnly("com.simibubi.create:create-1.21.1:6.0.10-280:slim") { isTransitive = false }
     modRuntimeOnly("net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1")
@@ -104,7 +104,11 @@ dependencies {
         "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.11.0",
         "org.tukaani:xz:1.12",
     ).forEach { forgeRuntimeLibrary(it) { isTransitive = false } }
+    testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.3")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:6.1.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.3")
 }
+tasks.test { useJUnitPlatform() }
 loom {
     mods { maybeCreate("compukters_addons_dev").sourceSet("main") }
     runs {
@@ -118,7 +122,10 @@ loom {
             runDir("run/gameTestServer")
             property("neoforge.enabledGameTestNamespaces", "minecraft")
             ideConfigGenerated(true)
-            mods { maybeCreate("compukters_addons_dev").sourceSet("main") }
+            mods {
+                maybeCreate("compukters_addons_dev").sourceSet("main")
+                maybeCreate("compukters_addons_dev").sourceSet(gameTest)
+            }
         }
     }
 }
