@@ -12,8 +12,9 @@ mixin resources and separation from upstream, base-mod and GameTest implementati
 
 ## Guest API
 
-Select `addons = ["propulsion"]` in `compukter.toml` (format 3). Connect the computer and engine with peripheral cables
-and name the engine with the Peripheral Configurator. Ordinary Creative Thruster multiblock contacts resolve to their controller.
+Select `addons = ["propulsion"]` in `compukter.toml` (format 3). Place the engine against any face of the computer or
+connect them with peripheral cables, and name the engine with the Peripheral Configurator. Ordinary Creative Thruster
+multiblock contacts resolve to their controller.
 
 For **Creative Vector Thruster** (`createpropulsion:creative_vector_thruster`):
 

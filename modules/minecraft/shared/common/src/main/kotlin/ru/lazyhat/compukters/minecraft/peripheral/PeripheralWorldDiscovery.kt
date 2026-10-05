@@ -228,12 +228,18 @@ internal object PeripheralWorldDiscovery {
         computerPosition: BlockPos,
     ): PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity> {
         check(level.server.isSameThread) { "peripheral cables must be discovered on the server thread" }
-        return resolveContacts(
-            level,
+        val cables =
             PeripheralCableTopologyCache.getOrCompute(level, computerPosition) {
                 discoverUncached(level, adjacentCables(level, computerPosition))
-            },
-        )
+            }
+        // Direct contacts use the same face-aware provider resolution and logical-device limit as cables.
+        // Resolve them afresh so placement, removal and provider activation remain visible without rewiring.
+        val combined =
+            when (cables) {
+                is PeripheralCableTraversal.Complete -> cables.copy(contacts = cables.contacts + contacts(level, computerPosition))
+                is PeripheralCableTraversal.LimitExceeded -> cables
+            }
+        return resolveContacts(level, combined)
     }
 
     fun discoverFromDevice(
