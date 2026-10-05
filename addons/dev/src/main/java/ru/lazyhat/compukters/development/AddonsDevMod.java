@@ -19,6 +19,25 @@
 package ru.lazyhat.compukters.development;
 
 import net.neoforged.fml.common.Mod;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.RegisterGameTestsEvent;
 
 @Mod("compukters_addons_dev")
-public final class AddonsDevMod {}
+public final class AddonsDevMod {
+    public AddonsDevMod(IEventBus modBus) {
+        new DebugComputerChunkLoader().register(NeoForge.EVENT_BUS);
+        modBus.addListener(this::registerGameTests);
+    }
+
+    private void registerGameTests(RegisterGameTestsEvent event) {
+        try {
+            event.register(Class.forName("ru.lazyhat.compukters.development.gametest.DebugChunkLoadingGameTests"));
+        } catch (ClassNotFoundException ignored) {
+            if (System.getProperty("neoforge.enabledGameTestNamespaces") != null) {
+                throw new IllegalStateException("Development chunk-loading GameTest sources are missing", ignored);
+            }
+            // Test sources are absent from ordinary development runs.
+        }
+    }
+}
