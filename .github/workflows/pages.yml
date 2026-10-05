@@ -10,6 +10,10 @@ on:
       - "modules/common/guest-platform/src/platform/**"
       - "addons/create/src/compuktersAddon/kotlin/**"
       - "addons/create/gradle.properties"
+      - "addons/sable/src/compuktersAddon/kotlin/**"
+      - "addons/sable/gradle.properties"
+      - "addons/propulsion/src/compuktersAddon/kotlin/**"
+      - "addons/propulsion/gradle.properties"
       - "gradle.properties"
   workflow_dispatch:
 
