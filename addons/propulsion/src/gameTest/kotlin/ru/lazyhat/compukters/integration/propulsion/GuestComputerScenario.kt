@@ -44,10 +44,12 @@ internal class GuestComputerScenario(
     fun prepare(
         sequence: GameTestSequence,
         source: String,
+        addons: List<String> = listOf("propulsion"),
     ) {
         sequence.thenExecute { computer.prepareTerminalAsync() }
         awaitText(sequence, ">\n")
-        writeFile(sequence, "compukter.toml", "format = 3\nname = \"propulsion-gametest\"\naddons = [\"propulsion\"]\n")
+        val addonNames = addons.joinToString(", ") { "\"$it\"" }
+        writeFile(sequence, "compukter.toml", "format = 3\nname = \"propulsion-gametest\"\naddons = [$addonNames]\n")
         writeFile(sequence, "main.kt", source)
         sequence.thenExecute { operation = command("kotlinc main.kt -o scenario") }
         awaitOperation(sequence)
@@ -60,6 +62,19 @@ internal class GuestComputerScenario(
         sequence: GameTestSequence,
         marker: String,
     ) = awaitText(sequence, marker, linePrefix = true)
+
+    fun inspectTerminal(
+        sequence: GameTestSequence,
+        inspect: (String) -> Unit,
+    ) {
+        sequence.thenExecute { snapshot = computer.terminalFullStateAsync() }
+        sequence.thenWaitUntil {
+            helper.assertTrue(snapshot?.isDone == true, "terminal inspection is pending")
+            val text = terminalText(snapshot!!.join())
+            inspect(text)
+            snapshot = null
+        }
+    }
 
     fun terminate(sequence: GameTestSequence) {
         sequence.thenExecute {
