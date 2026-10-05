@@ -43,6 +43,9 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
 - IDE completion reuses a decoded addon-origin index for the attached target instead of decoding addon bundles
   for every suggestion. Enabled-addon changes and target switches still update completion actions.
 
+- Server compiler packages and target metadata are prepared during world startup, before computers and terminal/IDE
+  requests can use them, moving first-use package extraction out of ordinary server ticks.
+
 ### Guest Kotlin
 
 - Scalar value classes based on Int, Boolean and Char can be stored in lists and generic arrays, passed as Any,
