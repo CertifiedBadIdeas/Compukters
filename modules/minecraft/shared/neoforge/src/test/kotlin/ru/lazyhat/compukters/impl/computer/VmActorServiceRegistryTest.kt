@@ -37,38 +37,6 @@ import kotlin.test.assertTrue
 
 class VmActorServiceRegistryTest {
     @Test
-    fun `disabled owner wakeups retain pre tick result delivery`() {
-        val queued = ConcurrentLinkedQueue<Runnable>()
-        val registry =
-            VmActorServiceRegistry<Any>(
-                checkOwner = {},
-                opener = ::service,
-                enqueueOnOwner = { _, task -> queued.add(task) },
-                ownerWakeupsEnabled = false,
-                maximumPumpNanosPerTick = TimeUnit.SECONDS.toNanos(5),
-            )
-        val server = Any()
-        registry.start(server)
-        try {
-            registry.tick(server, 0)
-            val runtime = registry.service(server)
-            val endpoint = VmActorEndpoint(ComputerId.fromLongs(13, 14), 1)
-            assertTrue(runtime.registerStandalone(endpoint))
-            val reply = runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
-            awaitResults(runtime, 1)
-            assertTrue(queued.isEmpty())
-            assertFalse(reply.isDone)
-            registry.afterTick(server)
-            assertEquals(1, registry.tick(server, 1))
-            assertTrue(reply.isDone)
-            assertTrue(queued.isEmpty())
-            registry.afterTick(server)
-        } finally {
-            registry.stop(server)
-        }
-    }
-
-    @Test
     fun `owner wakeup stops at the shared time allowance between replies`() {
         val queued = ConcurrentLinkedQueue<Runnable>()
         var now = 0L

@@ -30,14 +30,6 @@ subdirectory. The pinned mods above are already on the classpath and do not need
 worlds use separate `run/server` and `run/gameTestServer` directories. Gradle rebuilds the main mod and all addon
 archives before launching, so editing them does not require a Maven Local publication.
 
-For a controlled comparison of VM result delivery, launch from the repository root with
-`./gradlew-sandbox-dev-parallel -p addons/dev runClient -PcompuktersVmOwnerWakeups=false`.
-This disables queued owner wakeups and delivers results through the existing server pre-tick pump.
-Omit the property or set it to `true` for ordinary delivery. Keep the same Guest program, controller settings,
-initial pose and redstone signal in both runs. This switch only changes result delivery; frame credits,
-instruction quotas, Guest timers and physics stepping remain enabled. It takes effect on the next JVM launch;
-for an IDE-generated run configuration, use the JVM option `-Dcompukters.vm.ownerWakeups=false` directly.
-
 Run these verification/development commands from this directory with Gradle on JDK 25 and a Java 21 toolchain available:
 
 ```sh
