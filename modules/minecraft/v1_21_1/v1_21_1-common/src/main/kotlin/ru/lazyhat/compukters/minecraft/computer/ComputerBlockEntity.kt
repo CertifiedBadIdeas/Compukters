@@ -75,6 +75,7 @@ open class ComputerBlockEntity internal constructor(
     private var committedRedstoneOutput = 0
     private var sampledRedstoneInputs = IntArray(RedstoneWire.SIDE_COUNT)
     private var dirtyRedstoneInputs = RedstoneWire.ALL_SIDES_MASK
+    private var pendingInitialRedstoneInput: Int? = null
     private var carrierRetryTicks = 0
     private val soundCooldown = SoundCooldown(SOUND_COOLDOWN_TICKS)
     private val redstoneHostPort = RedstoneHostPort(::commitRedstoneOutput)
@@ -187,9 +188,19 @@ open class ComputerBlockEntity internal constructor(
                 sampleRedstoneInputs { direction -> serverLevel.getSignal(blockPos.relative(direction), direction) }
             }
         if (runtimeState.isPoweredOn()) {
-            runtimeState = current.serverTick(serverLevel?.server?.tickCount?.toLong() ?: 0L, redstoneInput)
+            // A sampled startup signal may predate the asynchronous actor's boot completion.
+            // Replay its latest complete snapshot once, then resume ordinary changed-side packets.
+            val initialInput = pendingInitialRedstoneInput
+            val input =
+                if (initialInput != null) {
+                    RedstoneWire.withAllInputSidesChanged(redstoneInput ?: initialInput)
+                } else {
+                    redstoneInput
+                }
+            pendingInitialRedstoneInput = null
+            runtimeState = current.serverTick(serverLevel?.server?.tickCount?.toLong() ?: 0L, input)
         } else if (redstoneInput != null) {
-            markRedstoneInputDirty()
+            pendingInitialRedstoneInput = redstoneInput
         }
     }
 
@@ -219,6 +230,7 @@ open class ComputerBlockEntity internal constructor(
                 ?.let { packed -> runCatching { RedstoneWire.requireOutputRegister(packed) }.getOrDefault(0) }
                 ?: 0
         sampledRedstoneInputs = IntArray(RedstoneWire.SIDE_COUNT)
+        pendingInitialRedstoneInput = null
         dirtyRedstoneInputs = RedstoneWire.ALL_SIDES_MASK
         runtimeState = neverStarted()
     }

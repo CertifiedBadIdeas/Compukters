@@ -34,6 +34,8 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
 
 - Computer redstone inputs are isolated from passive conduction through the block: a powered lever on one face
   no longer energizes a neighboring device on another face. Explicit weak and direct program outputs remain available.
+  Input levels sampled during asynchronous startup are retained until the VM is ready, including signals already
+  present before a program starts.
 
 ### Guest Kotlin
 

@@ -562,6 +562,8 @@ unloaded block entities retain no sound state or background work.
 Computer GPIO sides are independent inputs and outputs. The chassis is not a passive redstone conductor: a strong
 input (such as a lever attached above it) cannot power a device on another face through the computer. Input sampling
 still reads the neighboring source, while explicit weak/direct program outputs retain their directional behavior.
+Samples collected before asynchronous boot completes are retained and replayed once as a complete input snapshot;
+normal changed-side packets resume afterward, so a steady input present at startup is not lost.
 
 The Minecraft carrier also owns a direct-touch peripheral fabric. Passive orthogonal cables form bounded components
 across loaded chunks without forcing chunk loads. Addon providers map a touched block or multiblock part to a canonical
