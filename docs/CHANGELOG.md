@@ -40,6 +40,9 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
 - IDE Ctrl+/ toggles line comments for the current line or selection (`//` in Kotlin, `#` in TOML),
   preserving indentation, selection direction and line endings as one Undo/Redo action.
 
+- IDE completion reuses a decoded addon-origin index for the attached target instead of decoding addon bundles
+  for every suggestion. Enabled-addon changes and target switches still update completion actions.
+
 ### Guest Kotlin
 
 - Scalar value classes based on Int, Boolean and Char can be stored in lists and generic arrays, passed as Any,

@@ -28,6 +28,7 @@ import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.AddonId
 import ru.lazyhat.compukters.ide.project.ProjectManifest
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
+import java.util.concurrent.atomic.AtomicReference
 
 data class IdeCompletionEntry(
     val proposal: CompletionItem,
@@ -51,23 +52,44 @@ class IdeCompletionPlanner(
             ),
         )
 
+    // A target profile is immutable. Retain one decoded index, not one decode per proposal.
+    private val addonIndex = AtomicReference<AddonIndex>()
+
+    private class AddonIndex(
+        val target: TargetCompileProfile?,
+        val ids: Map<AnalysisModuleIdentity, AddonId?>,
+    )
+
+    private fun addonIds(target: TargetCompileProfile?): Map<AnalysisModuleIdentity, AddonId?> {
+        addonIndex.get()?.takeIf { it.target === target }?.let { return it.ids }
+        val ids = linkedMapOf<AnalysisModuleIdentity, AddonId?>()
+        target?.addonBundles?.forEach { payload ->
+            val bundle = AddonGuestApiBundleCodec.decode(payload.content.toByteArray())
+            val identity = AnalysisModuleIdentity(bundle.moduleDescriptor.id.toString(), payload.identity.hash)
+            // Preserve the previous singleOrNull behavior for ambiguous advertised origins.
+            ids[identity] = if (identity in ids) null else AddonId(bundle.identity.id)
+        }
+        val index = AddonIndex(target, ids.toMap())
+        addonIndex.set(index)
+        return index.ids
+    }
+
     fun plan(
         proposals: List<CompletionItem>,
         manifest: ProjectManifest,
         target: TargetCompileProfile?,
-    ): List<IdeCompletionEntry> =
-        proposals.mapNotNull { proposal ->
+    ): List<IdeCompletionEntry> {
+        val needsAddonOrigins =
+            proposals.any { proposal ->
+                val origin = proposal.origin
+                origin is DeclarationOrigin.Platform && origin.identity != builtinsIdentity
+            }
+        val ids = if (needsAddonOrigins) addonIds(target) else emptyMap()
+        return proposals.map { proposal ->
             val origin = proposal.origin
             val requirement =
                 if (origin is DeclarationOrigin.Platform && origin.identity != builtinsIdentity) {
-                    val addon =
-                        target
-                            ?.addonBundles
-                            ?.singleOrNull { payload ->
-                                val bundle = AddonGuestApiBundleCodec.decode(payload.content.toByteArray())
-                                bundle.moduleDescriptor.id.toString() == origin.identity.name &&
-                                    payload.identity.hash == origin.identity.hash
-                            }?.let { payload -> AddonId(AddonGuestApiBundleCodec.decode(payload.content.toByteArray()).identity.id) }
+                    val addon = ids[origin.identity]
                     if (addon == null || addon in manifest.addons) null else IdeCompletionAddonRequirement(addon)
                 } else {
                     null
@@ -79,4 +101,5 @@ class IdeCompletionPlanner(
                 }
             IdeCompletionEntry(proposal, actions.takeIf(List<String>::isNotEmpty)?.joinToString(" · "), requirement)
         }
+    }
 }
