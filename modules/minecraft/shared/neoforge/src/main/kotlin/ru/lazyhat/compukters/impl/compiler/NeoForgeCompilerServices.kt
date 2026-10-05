@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.impl.compiler
 
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.storage.LevelResource
+import net.neoforged.neoforge.event.server.ServerStartingEvent
 import net.neoforged.neoforge.event.server.ServerStoppingEvent
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
@@ -66,6 +67,10 @@ internal class CompilerServiceRegistry<S : AutoCloseable>(
         val root = worldRoot.toRealPath()
         return services.getOrPut(root) { opener(root) }
     }
+
+    @Synchronized
+    fun preparedService(worldRoot: Path): S =
+        checkNotNull(services[worldRoot.toRealPath()]) { "server compiler services must be prepared during server startup" }
 
     @Synchronized
     fun stop(worldRoot: Path) {
@@ -190,9 +195,14 @@ internal class NeoForgeCompilerService private constructor(
 object NeoForgeCompilerServices {
     private val registry = CompilerServiceRegistry(NeoForgeCompilerService::open)
 
-    fun router(server: MinecraftServer): CompilerCompletionRouter = registry.service(worldRoot(server)).router
+    fun router(server: MinecraftServer): CompilerCompletionRouter = registry.preparedService(worldRoot(server)).router
 
-    fun targetProfile(server: MinecraftServer): TargetCompileProfile = registry.service(worldRoot(server)).targetProfile
+    fun targetProfile(server: MinecraftServer): TargetCompileProfile = registry.preparedService(worldRoot(server)).targetProfile
+
+    fun onServerStarting(event: ServerStartingEvent) {
+        // Publish and validate the worker package before gameplay, not from the first computer tick or terminal open.
+        registry.service(worldRoot(event.server))
+    }
 
     fun onServerStopping(event: ServerStoppingEvent) {
         registry.stop(worldRoot(event.server))

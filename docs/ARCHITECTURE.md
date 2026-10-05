@@ -156,6 +156,11 @@ work without waiting on the worker or cache. On completion Rust re-verifies the 
 installs it only if the source and output preconditions still match. Native buffers remain caller-owned and no Rust
 pointer enters Kotlin.
 
+Compiler service initialization runs in `ServerStartingEvent`, after the world filesystem store is opened.
+Ordinary computer creation and target-profile requests require an already prepared service and cannot lazily unpack
+worker resources on the server tick. Worker compilation remains asynchronous; this changes the preparation phase,
+not the compilation scheduler or wire formats.
+
 The packaged tooling payload is validated and published beneath `<world>/compukters/compiler-worker`; temporary
 worker state is kept separately beneath `<world>/compukters/compiler-temp`. Successful server artifacts are stored
 beneath `<world>/compukters/compiler-cache/v1`, shared by every computer and dimension in that server world, and reused

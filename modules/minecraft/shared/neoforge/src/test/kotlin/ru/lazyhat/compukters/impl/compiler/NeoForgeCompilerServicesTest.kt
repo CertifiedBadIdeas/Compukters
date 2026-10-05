@@ -148,7 +148,10 @@ class NeoForgeCompilerServicesTest {
         val opened = mutableListOf<Path>()
         val registry = CompilerServiceRegistry { path -> FakeService(path).also { opened.add(path) } }
         try {
+            kotlin.test.assertFailsWith<IllegalStateException> { registry.preparedService(root) }
+            assertEquals(emptyList<Path>(), opened)
             val first = registry.service(root)
+            assertSame(first, registry.preparedService(root))
             assertSame(first, registry.service(root.resolve(".")))
             val second = registry.service(secondRoot)
             assertNotSame(first, second)
@@ -156,6 +159,7 @@ class NeoForgeCompilerServicesTest {
 
             registry.stop(root)
             registry.stop(root)
+            kotlin.test.assertFailsWith<IllegalStateException> { registry.preparedService(root) }
             assertEquals(1, first.closes)
             val reopened = registry.service(root)
             assertNotSame(first, reopened)
