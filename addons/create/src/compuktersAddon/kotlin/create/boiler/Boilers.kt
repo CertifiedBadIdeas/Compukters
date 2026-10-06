@@ -19,16 +19,10 @@ public value class BoilerSide internal constructor(internal val index: Int) {
 }
 
 /** A handle to one active Create boiler and its current Fluid Tank controller. */
-public class Boiler internal constructor(private val handle: Int) : Peripheral {
+public value class Boiler internal constructor(private val handle: Int) : Peripheral {
     public companion object : TypedPeripheralProvider<Boiler>("create:boiler") {
         override fun wrap(handle: Int): Boiler = Boiler(handle)
     }
-
-    override fun equals(other: Any?): Boolean = other is Boiler && handle == other.handle
-
-    override fun hashCode(): Int = handle
-
-    override fun toString(): String = "Boiler(handle=$handle)"
 
     /** Create's sampled water input rate, in millibuckets per tick. */
     public fun waterSupply(): Float = BoilerBindings.waterSupply(handle)

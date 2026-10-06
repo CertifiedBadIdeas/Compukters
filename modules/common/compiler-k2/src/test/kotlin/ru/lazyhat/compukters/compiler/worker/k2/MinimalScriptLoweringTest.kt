@@ -1678,6 +1678,10 @@ class MinimalScriptLoweringTest {
 
                 fun main() {
                     val screen = TextDisplay.first()
+                    val peripheral: compukter.peripheral.Peripheral = screen
+                    require(peripheral == screen)
+                    require(peripheral is TextDisplay)
+                    require((peripheral as TextDisplay) == screen)
                     require(screen == TextDisplay.named("panel"))
                     require(screen == Display.open("panel"))
                     require(TextDisplay.all().size == 1)

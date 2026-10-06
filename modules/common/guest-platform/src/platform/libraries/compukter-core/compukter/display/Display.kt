@@ -19,14 +19,11 @@ public value class DisplaySide internal constructor(internal val index: Int) {
 }
 
 /** A handle to one exact display block. Coordinates are zero-based. */
-public class TextDisplay internal constructor(private val handle: Int) : Peripheral {
+public value class TextDisplay internal constructor(private val handle: Int) : Peripheral {
     public companion object : TypedPeripheralProvider<TextDisplay>("compukter:text_display") {
         override fun wrap(handle: Int): TextDisplay = TextDisplay(handle)
     }
 
-    public override fun equals(other: Any?): Boolean = other is TextDisplay && other.handle == handle
-    public override fun hashCode(): Int = handle
-    public override fun toString(): String = "TextDisplay(handle=$handle)"
     /** Writes within one row of the display's 20 by 10 character grid. */
     public fun writeAt(x: Int, y: Int, text: String) {
         DisplayBindings.writeAt(handle, x, y, text)

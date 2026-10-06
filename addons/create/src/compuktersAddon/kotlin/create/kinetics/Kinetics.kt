@@ -21,32 +21,20 @@ public value class KineticSide internal constructor(internal val index: Int) {
     public fun rotationController(): RotationController = RotationController(KineticsBindings.acquireRotationController(index))
 }
 
-public class Speedometer internal constructor(private val handle: Int) : Peripheral {
+public value class Speedometer internal constructor(private val handle: Int) : Peripheral {
     public companion object : TypedPeripheralProvider<Speedometer>("create:speedometer") {
         override fun wrap(handle: Int): Speedometer = Speedometer(handle)
     }
-
-    override fun equals(other: Any?): Boolean = other is Speedometer && handle == other.handle
-
-    override fun hashCode(): Int = handle
-
-    override fun toString(): String = "Speedometer(handle=$handle)"
 
     public fun speed(): Float = KineticsBindings.speed(handle)
 
     public fun awaitSpeedChange(): Float = KineticsBindings.awaitSpeedChange(handle)
 }
 
-public class Stressometer internal constructor(private val handle: Int) : Peripheral {
+public value class Stressometer internal constructor(private val handle: Int) : Peripheral {
     public companion object : TypedPeripheralProvider<Stressometer>("create:stressometer") {
         override fun wrap(handle: Int): Stressometer = Stressometer(handle)
     }
-
-    override fun equals(other: Any?): Boolean = other is Stressometer && handle == other.handle
-
-    override fun hashCode(): Int = handle
-
-    override fun toString(): String = "Stressometer(handle=$handle)"
 
     public fun stress(): Float = KineticsBindings.stress(handle)
 
@@ -57,16 +45,10 @@ public class Stressometer internal constructor(private val handle: Int) : Periph
     }
 }
 
-public class RotationController internal constructor(private val handle: Int) : Peripheral {
+public value class RotationController internal constructor(private val handle: Int) : Peripheral {
     public companion object : TypedPeripheralProvider<RotationController>("create:rotation_controller") {
         override fun wrap(handle: Int): RotationController = RotationController(handle)
     }
-
-    override fun equals(other: Any?): Boolean = other is RotationController && handle == other.handle
-
-    override fun hashCode(): Int = handle
-
-    override fun toString(): String = "RotationController(handle=$handle)"
 
     public fun targetSpeed(): Int = KineticsBindings.targetSpeed(handle)
 

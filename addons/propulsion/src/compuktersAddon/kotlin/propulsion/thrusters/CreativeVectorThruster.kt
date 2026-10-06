@@ -51,16 +51,10 @@ public data class CreativeVectorThrusterMount(
     public val forceZ: Int,
 )
 
-public class CreativeVectorThruster internal constructor(private val handle: Int) : Peripheral {
+public value class CreativeVectorThruster internal constructor(private val handle: Int) : Peripheral {
     public companion object : TypedPeripheralProvider<CreativeVectorThruster>("propulsion:creative_vector_thruster") {
         override fun wrap(handle: Int): CreativeVectorThruster = CreativeVectorThruster(handle)
     }
-
-    override fun equals(other: Any?): Boolean = other is CreativeVectorThruster && handle == other.handle
-
-    override fun hashCode(): Int = handle
-
-    override fun toString(): String = "CreativeVectorThruster(handle=$handle)"
 
     /** Read-only; rejects a mount on a different construction from the computer. */
     public fun mount(): CreativeVectorThrusterMount = VectorThrusterBindings.vectorMount(handle)

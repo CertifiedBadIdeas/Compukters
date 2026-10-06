@@ -198,6 +198,10 @@ object CreativeThrusterGameTests {
         import propulsion.thrusters.CreativeThruster
         fun main() {
             val engine = CreativeThruster.named("engine")
+            val peripheral: compukter.peripheral.Peripheral = engine
+            check(peripheral == engine)
+            check(peripheral is CreativeThruster)
+            check((peripheral as CreativeThruster).state().width == 2)
             check(engine == Thrusters.creative("engine"))
             check(CreativeThruster.first() == engine)
             check(CreativeThruster.all().size == 1)
