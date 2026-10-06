@@ -226,6 +226,9 @@ val verifyProductionJar =
             }
             val metadata = ZipFile(archive).use { it.getInputStream(it.getEntry("META-INF/neoforge.mods.toml")).reader().readText() }
             check("${'$'}{" !in metadata) { "unexpanded metadata placeholder in ${archive.name}" }
+            check("version=\"${rootProject.effectiveBuildVersion()}\"" in metadata) {
+                "wrong Compukters product version in ${archive.name}"
+            }
             listOf("minecraft_version_range", "neoforge_mod_version_range").forEach { property ->
                 check("versionRange=\"${expectedMetadata.getValue(property)}\"" in metadata) {
                     "wrong $property in ${archive.name}"

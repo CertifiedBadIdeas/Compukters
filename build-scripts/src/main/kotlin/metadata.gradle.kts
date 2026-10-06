@@ -20,10 +20,8 @@ plugins {
     id("kotlin-convention")
 }
 
-// project.version is already set by the loader-specific convention plugin
-// (e.g. neoforge-convention -> computeModArchiveVersion). Reuse it here so the
-// mod_version placeholder in mods.toml / fabric.mod.json matches the jar version.
-val modVersion = project.version.toString()
+// Loader project versions include Minecraft/loader archive coordinates. Dependencies compare the product version.
+val modVersion = rootProject.effectiveBuildVersion()
 
 val modProperties =
     readVersionedModProperties()
@@ -58,6 +56,7 @@ val generateModMetadata =
             mapOf(
                 "modLoader" to "mod_loader",
                 "loaderVersion" to "loader_version_range",
+                "version" to "mod_version",
             ).forEach { (metadataKey, propertyKey) ->
                 check("$metadataKey=\"${replaceProperties.getValue(propertyKey)}\"" in metadata) {
                     "wrong $metadataKey in generated neoforge.mods.toml"

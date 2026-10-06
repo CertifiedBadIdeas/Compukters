@@ -134,6 +134,12 @@ val verifyPackagedCompukterFfi =
             check(entries.count { it == "META-INF/neoforge.mods.toml" } == 1) {
                 "expected exactly one META-INF/neoforge.mods.toml in ${archive.name}"
             }
+            val metadata = ZipFile(archive).use { zip ->
+                zip.getInputStream(zip.getEntry("META-INF/neoforge.mods.toml")).bufferedReader().use { it.readText() }
+            }
+            check("version=\"${rootProject.effectiveBuildVersion()}\"" in metadata) {
+                "wrong Compukters product version in ${archive.name}"
+            }
             listOf(
                 "ru/lazyhat/compukters/api/addon/ProgramAddonHost.class",
                 "ru/lazyhat/compukters/api/addon/minecraft/CompuktersAddonRegistry.class",
