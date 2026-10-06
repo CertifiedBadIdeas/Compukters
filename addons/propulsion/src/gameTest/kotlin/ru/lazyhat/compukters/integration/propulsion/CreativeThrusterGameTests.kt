@@ -195,8 +195,13 @@ object CreativeThrusterGameTests {
     private val ASSEMBLY =
         """
         import propulsion.thrusters.Thrusters
+        import propulsion.thrusters.CreativeThruster
         fun main() {
-            val engine = Thrusters.creative("engine")
+            val engine = CreativeThruster.named("engine")
+            check(engine == Thrusters.creative("engine"))
+            check(CreativeThruster.first() == engine)
+            check(CreativeThruster.all().size == 1)
+            check(CreativeThruster.firstOrNull { it.state().width < 0 } == null)
             check(engine.state().width == 2)
             engine.setThrustPercent(60)
             engine.setThrottle(0.5)
@@ -204,7 +209,7 @@ object CreativeThrusterGameTests {
             println("assembly-owned")
             readln()
             var stale = false
-            try { engine.state() } catch (failure: IllegalStateException) { stale = true }
+            try { engine.state() } catch (failure: compukter.io.IOException) { stale = true }
             check(stale)
             println("assembly-stale")
         }
@@ -231,8 +236,13 @@ object CreativeThrusterGameTests {
     private val OWNER =
         """
         import propulsion.thrusters.Thrusters
+        import propulsion.thrusters.CreativeThruster
         fun main() {
-            val engine = Thrusters.creative("engine")
+            val engine = CreativeThruster.named("engine")
+            check(engine == Thrusters.creative("engine"))
+            check(CreativeThruster.first() == engine)
+            check(CreativeThruster.all().size == 1)
+            check(CreativeThruster.firstOrNull { it.state().width < 0 } == null)
             var rejected = false
             try { engine.setThrottle(0.0 / 0.0) } catch (failure: IllegalArgumentException) { rejected = true }
             check(rejected)
@@ -249,7 +259,7 @@ object CreativeThrusterGameTests {
             println("owner-acquired")
             readln()
             rejected = false
-            try { engine.state() } catch (failure: IllegalStateException) { rejected = true }
+            try { engine.state() } catch (failure: compukter.io.IOException) { rejected = true }
             check(rejected)
             check(snapshot.throttle == 0.375)
             println("owner-stale")
@@ -259,7 +269,7 @@ object CreativeThrusterGameTests {
             next.setThrottle(0.00005)
             next.close()
             rejected = false
-            try { next.state() } catch (failure: IllegalStateException) { rejected = true }
+            try { next.state() } catch (failure: compukter.io.IOException) { rejected = true }
             check(rejected)
             val last = Thrusters.creative("engine")
             last.setThrottle(0.625)
@@ -271,8 +281,13 @@ object CreativeThrusterGameTests {
     private val CONTENDER =
         """
         import propulsion.thrusters.Thrusters
+        import propulsion.thrusters.CreativeThruster
         fun main() {
-            val engine = Thrusters.creative("engine")
+            val engine = CreativeThruster.named("engine")
+            check(engine == Thrusters.creative("engine"))
+            check(CreativeThruster.first() == engine)
+            check(CreativeThruster.all().size == 1)
+            check(CreativeThruster.firstOrNull { it.state().width < 0 } == null)
             check(engine.state().throttle == 0.375)
             var busy = false
             try { engine.setThrottle(0.25) } catch (failure: IllegalStateException) { busy = true }

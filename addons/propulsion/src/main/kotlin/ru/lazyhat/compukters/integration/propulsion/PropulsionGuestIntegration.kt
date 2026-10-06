@@ -37,13 +37,23 @@ import ru.lazyhat.compukters.api.addon.addonFailed
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersAddonHostFactory
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersAddonRegistry
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersComputerContext
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralAccessException
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralContract
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralDevice
-import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralLookupStatus
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralEndpoint
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralProvider
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 
 internal object PropulsionGuestIntegration {
     private const val DEVICE_KEY = "creative_thruster"
+    private val contract =
+        CompuktersPeripheralContract("propulsion:creative_thruster", DEVICE_KEY) { location ->
+            controller(location.level, location.position)?.let { entity ->
+                ThrusterHost.BoundThruster(entity) {
+                    controller(location.level, location.position) === entity && location.isReachable()
+                }
+            }
+        }
     private val leases = ThrusterControlLeases<CreativeThrusterBlockEntity>()
     private val vectorLeases = ThrusterControlLeases<CreativeVectorThrusterBlockEntity>()
 
@@ -65,6 +75,7 @@ internal object PropulsionGuestIntegration {
                         CompuktersPeripheralDevice(it.blockPos, VectorThrusterHost.DEVICE_KEY)
                     }
             },
+            listOf(contract, VectorThrusterHost.contract),
         )
         NeoForge.EVENT_BUS.addListener<ServerTickEvent.Post> {
             leases.reap()
@@ -95,13 +106,15 @@ internal object PropulsionGuestIntegration {
         private val computer: CompuktersComputerContext,
         private val leases: ThrusterControlLeases<CreativeThrusterBlockEntity>,
     ) : PropulsionCapabilityHandler {
-        private class BoundThruster(
+        internal class BoundThruster(
             val entity: CreativeThrusterBlockEntity,
             private val reachable: () -> Boolean,
-        ) {
+        ) : CompuktersPeripheralEndpoint {
+            override val identity: Any get() = entity
+
             private var stale = false
 
-            fun valid(): Boolean {
+            override fun valid(): Boolean {
                 if (!stale && !reachable()) stale = true
                 return !stale
             }
@@ -136,27 +149,15 @@ internal object PropulsionGuestIntegration {
         override fun vectorClose(handle: Int): AddonCallResult<Unit> = vectorHost.close(handle)
 
         private val handles = mutableMapOf<Int, BoundThruster>()
-        private var nextHandle = 1
 
         override fun acquire(name: String): AddonCallResult<Int> {
             checkThread()
-            val lookup = computer.findPeripheral(name)
-            if (lookup.status != CompuktersPeripheralLookupStatus.FOUND) {
-                return addonFailed(HostFailureKind.UNAVAILABLE, "Creative Thruster name is missing, ambiguous or unavailable")
+            return try {
+                val handle = computer.peripheralNamed(contract, name)
+                if (handle == 0) unavailable() else addonCompleted(handle)
+            } catch (failure: CompuktersPeripheralAccessException) {
+                addonFailed(failure.kind, failure.message)
             }
-            val device = requireNotNull(lookup.device)
-            if (device.deviceKey != DEVICE_KEY) return unavailable()
-            val entity = controller(computer.level, device.anchor) ?: return unavailable()
-            handles.entries.firstOrNull { it.value.entity === entity && it.value.valid() }?.let { return addonCompleted(it.key) }
-            if (handles.size >= 256 || nextHandle == Int.MAX_VALUE) {
-                return addonFailed(HostFailureKind.OTHER, "Creative Thruster handle limit exceeded")
-            }
-            val handle = nextHandle++
-            handles[handle] =
-                BoundThruster(entity) {
-                    controller(computer.level, device.anchor) === entity && computer.isPeripheralReachable(device)
-                }
-            return addonCompleted(handle)
         }
 
         override fun state(handle: Int): AddonCallResult<CreativeThrusterState> =
@@ -199,12 +200,13 @@ internal object PropulsionGuestIntegration {
             return mutate(handle) { it.setThrustConfig(percent - 1) }
         }
 
-        override fun close(handle: Int): AddonCallResult<Unit> {
-            checkThread()
-            val bound = handles.remove(handle) ?: return unavailable()
-            leases.release(bound.entity, this)
-            return addonCompleted(Unit)
-        }
+        override fun close(handle: Int): AddonCallResult<Unit> =
+            withHandle(handle) { bound ->
+                computer.closePeripheral(contract, handle)
+                handles.remove(handle)
+                leases.release(bound.entity, this)
+                addonCompleted(Unit)
+            }
 
         override fun reset() {
             checkThread()
@@ -233,7 +235,14 @@ internal object PropulsionGuestIntegration {
             action: (BoundThruster) -> AddonCallResult<T>,
         ): AddonCallResult<T> {
             checkThread()
-            val bound = handles[handle] ?: return unavailable()
+            val bound =
+                try {
+                    computer.peripheral(contract, handle)
+                } catch (failure: CompuktersPeripheralAccessException) {
+                    handles.remove(handle)?.let { leases.release(it.entity, this) }
+                    return addonFailed(failure.kind, failure.message)
+                }
+            handles[handle] = bound
             if (!bound.valid()) {
                 leases.release(bound.entity, this)
                 handles.remove(handle)
