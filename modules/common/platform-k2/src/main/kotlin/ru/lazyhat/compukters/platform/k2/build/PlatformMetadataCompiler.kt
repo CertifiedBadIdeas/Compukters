@@ -502,6 +502,7 @@ class PlatformMetadataCompiler {
             }
         val symbol = (listOf(packageName).filter(String::isNotEmpty) + owners + name).joinToString(".")
         val external = declaration.hasModifier(KtTokens.EXTERNAL_KEYWORD)
+        val managedObject = declaration is KtObjectDeclaration && declaration.superTypeListEntries.isNotEmpty()
         val requiresSource =
             !external && (
                 inheritedSource ||
@@ -549,7 +550,7 @@ class PlatformMetadataCompiler {
                     packageName,
                     owners + name,
                     private,
-                    declaration is KtClass,
+                    declaration is KtClass || managedObject,
                     requiresSource,
                     child,
                 )
@@ -569,6 +570,7 @@ class PlatformMetadataCompiler {
                     is KtParameter -> PlatformLibraryDeclarationKind.FIELD.takeIf { declaration.hasValOrVar() }
                     is KtProperty -> PlatformLibraryDeclarationKind.PROPERTY
                     is KtClass -> PlatformLibraryDeclarationKind.TYPE.takeUnless { declaration.hasModifier(KtTokens.VALUE_KEYWORD) }
+                    is KtObjectDeclaration -> PlatformLibraryDeclarationKind.TYPE.takeIf { managedObject }
                     else -> null
                 },
                 requiresSource,
@@ -588,7 +590,19 @@ class PlatformMetadataCompiler {
                         requiresSource = requiresSource,
                     )
                 }
-        return listOf(parsed) + listOfNotNull(getter) + nested
+        val singleton =
+            if (managedObject) {
+                ParsedDeclaration(
+                    platformDeclaration.copy(symbol = "$symbol.<instance>", signature = "singleton-instance"),
+                    private,
+                    hasBody = false,
+                    libraryKind = PlatformLibraryDeclarationKind.FIELD,
+                    requiresSource = requiresSource,
+                )
+            } else {
+                null
+            }
+        return listOf(parsed) + listOfNotNull(getter, singleton) + nested
     }
 
     private fun defaultArguments(

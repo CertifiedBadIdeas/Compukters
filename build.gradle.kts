@@ -660,6 +660,19 @@ registerKotlinVmConformance(
     conformanceScenario = "provider-defaults",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinSingletonProvidersVmConformance",
+    taskDescription = "Executes managed singleton identity and companion provider dispatch on the pinned VM.",
+    artifactTask = ":compiler-k2:generateSingletonProvidersConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-singleton-providers.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-singleton-providers-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_SINGLETON_PROVIDERS_ARTIFACT",
+    conformanceScenario = "singleton-providers",
+    additionalArtifacts = mapOf(
+        "COMPUKTER_KOTLIN_ADDON_PROVIDERS_ARTIFACT" to
+            project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-addon-providers.cpkt"),
+    ),
+)
+registerKotlinVmConformance(
     taskName = "testKotlinListVmConformance",
     taskDescription = "Executes typed read-only Guest lists with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateListConformanceArtifact",

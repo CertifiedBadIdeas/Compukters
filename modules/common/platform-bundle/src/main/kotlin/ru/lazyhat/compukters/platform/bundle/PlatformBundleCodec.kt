@@ -116,6 +116,17 @@ object PlatformBundleCodec {
     fun encodeModule(module: PlatformModule): ByteArray {
         val canonical = canonicalize(module)
         validateSourceDeclarations(canonical)
+        return encodeModuleEnvelope(canonical)
+    }
+
+    /** Metadata carrier for an envelope that stores this module's sources separately. */
+    fun encodeModuleMetadata(module: PlatformModule): ByteArray {
+        val canonical = canonicalize(module)
+        validateSourceDeclarations(canonical)
+        return encodeModuleEnvelope(canonical.copy(sources = emptyList()))
+    }
+
+    private fun encodeModuleEnvelope(canonical: PlatformModule): ByteArray {
         val semantic = Sink().apply { module(canonical) }.result()
         val hash = moduleContentHash(canonical)
         return Sink()
@@ -129,6 +140,24 @@ object PlatformBundleCodec {
     }
 
     fun decodeModule(bytes: ByteArray): PlatformModule {
+        val module = decodeModuleEnvelope(bytes)
+        validateSourceDeclarations(module)
+        return module
+    }
+
+    /** Reattaches carrier-owned sources before validating source-template declarations. */
+    fun decodeModuleMetadata(
+        bytes: ByteArray,
+        sources: List<PlatformSource>,
+    ): PlatformModule {
+        val metadata = decodeModuleEnvelope(bytes)
+        require(metadata.sources.isEmpty()) { "platform metadata module must not embed sources" }
+        val module = canonicalize(metadata.copy(sources = sources))
+        validateSourceDeclarations(module)
+        return module
+    }
+
+    private fun decodeModuleEnvelope(bytes: ByteArray): PlatformModule {
         require(bytes.size <= MAX_BUNDLE_BYTES) { "platform module exceeds byte limit" }
         val source = Source(bytes)
         require(source.raw(MODULE_MAGIC.size).contentEquals(MODULE_MAGIC)) { "invalid platform module magic" }
@@ -139,7 +168,6 @@ object PlatformBundleCodec {
         val canonical = canonicalize(module)
         require(canonical == module) { "platform module is not canonical" }
         require(moduleContentHash(canonical) == storedHash) { "platform module content hash mismatch" }
-        validateSourceDeclarations(canonical)
         return canonical
     }
 
@@ -169,6 +197,11 @@ object PlatformBundleCodec {
                 ).mapTo(mutableSetOf(), PlatformDeclaration::identity)
         require(module.sourceDeclarations.all { it in sourceEligible }) { "source declaration is missing or external" }
         require(module.sourceDeclarations.isEmpty() || module.sources.isNotEmpty()) { "source declarations have no sources" }
+        val sourcePaths = module.sources.mapTo(mutableSetOf(), PlatformSource::path)
+        val declarations = module.declarations.associateBy(PlatformDeclaration::identity)
+        require(module.sourceDeclarations.all { declarations.getValue(it).sourcePath in sourcePaths }) {
+            "source declaration has no matching source file"
+        }
     }
 
     private fun canonicalize(module: PlatformModule): PlatformModule =

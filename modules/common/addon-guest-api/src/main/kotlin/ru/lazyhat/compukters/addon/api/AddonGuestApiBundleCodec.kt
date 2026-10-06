@@ -53,8 +53,8 @@ object AddonGuestApiBundleCodec {
         bindings: List<AddonGuestApiBinding>,
         includeSources: Boolean = true,
     ): AddonGuestApiBundle {
-        val metadataModule = module.copy(sources = emptyList())
-        val metadataJar = metadataJar(metadataModule)
+        require(includeSources || module.sourceDeclarations.isEmpty()) { "addon source templates require their source carrier" }
+        val metadataJar = metadataJar(module)
         val sourcesJar = if (includeSources) sourcesJar(module.sources) else null
         return assembleEncoded(addon, platformAbi, metadataJar, sourcesJar, capabilitySchemas, bindings)
     }
@@ -159,12 +159,6 @@ object AddonGuestApiBundleCodec {
         require(metadataJar.contentEquals(archive(metadataEntries, AddonGuestApiLimits.MAXIMUM_METADATA_BYTES))) {
             "addon metadata JAR is not canonical"
         }
-        val metadataModule = PlatformBundleCodec.decodeModule(metadataEntries.getValue(METADATA_ENTRY))
-        require(metadataModule.sources.isEmpty()) { "addon metadata module must not embed sources" }
-        require(metadataModule.id.namespace == addon && metadataModule.id.name == "api") {
-            "addon bundle must contain its canonical internal API module"
-        }
-        require(VERSION.matches(metadataModule.version)) { "invalid addon module version: ${metadataModule.version}" }
         val sources =
             sourcesJar
                 ?.let { sourceBytes ->
@@ -175,7 +169,15 @@ object AddonGuestApiBundleCodec {
                     }
                 }.orEmpty()
         require(sources.size <= AddonGuestApiLimits.MAXIMUM_SOURCE_FILES) { "addon source file count exceeds limit" }
-        val module = metadataModule.copy(sources = sources.map { (path, content) -> PlatformSource(path, ImmutableBytes.of(content)) })
+        val module =
+            PlatformBundleCodec.decodeModuleMetadata(
+                metadataEntries.getValue(METADATA_ENTRY),
+                sources.map { (path, content) -> PlatformSource(path, ImmutableBytes.of(content)) },
+            )
+        require(module.id.namespace == addon && module.id.name == "api") {
+            "addon bundle must contain its canonical internal API module"
+        }
+        require(VERSION.matches(module.version)) { "invalid addon module version: ${module.version}" }
         val orderedSchemas =
             capabilitySchemas.sortedWith(
                 compareBy({
@@ -372,7 +374,7 @@ object AddonGuestApiBundleCodec {
     }
 
     private fun metadataJar(module: PlatformModule): ByteArray =
-        archive(mapOf(METADATA_ENTRY to PlatformBundleCodec.encodeModule(module)), AddonGuestApiLimits.MAXIMUM_METADATA_BYTES)
+        archive(mapOf(METADATA_ENTRY to PlatformBundleCodec.encodeModuleMetadata(module)), AddonGuestApiLimits.MAXIMUM_METADATA_BYTES)
 
     private fun sourcesJar(sources: List<PlatformSource>): ByteArray? =
         sources.takeIf(List<PlatformSource>::isNotEmpty)?.associate { it.path to it.content.toByteArray() }?.let {

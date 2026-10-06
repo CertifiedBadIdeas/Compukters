@@ -17,7 +17,8 @@ This release expands the Kotlin available to computer programs and introduces su
 addon mods, with optional Create, Sable and Propulsion integrations for Minecraft 1.21.1.
 
 - Guest Kotlin supports inherited generic interface selection methods with typed predicates through concrete
-  implementations and parent interfaces, preserving short-circuiting and nullable results.
+  implementations and parent interfaces, preserving short-circuiting and nullable results. Named objects and
+  companions retain one managed instance and can implement typed provider interfaces, including across addon bundles.
 
 - The documentation Wiki groups guides for players, developers and contributors, with expanding header navigation,
   contextual sidebars and a shared addon catalog. Detailed project, Sable, Propulsion and dev-stand guides live on the

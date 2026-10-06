@@ -6605,6 +6605,76 @@ class MinimalScriptLoweringTest {
             }
         }
 
+    @Test
+    fun `singleton companions retain identity state and generic provider dispatch`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                interface Provider<T> {
+                    fun next(): T
+                    fun firstOrNull(predicate: (T) -> Boolean): T? {
+                        val item = next()
+                        return if (predicate(item)) item else null
+                    }
+                }
+                class Meter(val value: Int) {
+                    companion object : Provider<Meter> {
+                        var calls: Int = 0
+                        override fun next(): Meter { calls += 1; return Meter(calls) }
+                    }
+                }
+                object Other : Provider<Meter> {
+                    override fun next(): Meter = Meter(99)
+                }
+                fun main() {
+                    val provider: Provider<Meter> = Meter
+                    require(Meter === Meter.Companion)
+                    require(Meter.calls == 0)
+                    require(Meter.next().value == 1)
+                    require(provider.firstOrNull { it.value > 1 }?.value == 2)
+                    require(Meter.calls == 2)
+                    require(provider.firstOrNull { false } == null)
+                    require(Meter.calls == 3)
+                    require(Other.next().value == 99)
+                    require(Other === Other)
+                    val alias: Any = Other
+                    require(alias is Other)
+                    println("singleton providers ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.singletonProvidersArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `addon companion provider imports one singleton and inherited generic methods`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import fixture.kinetics.FixtureProvider
+                import fixture.kinetics.ProbeDevice
+                fun main() {
+                    val unrelated: (Int) -> Int = { it + 1 }
+                    require(unrelated(1) == 2)
+                    val provider: FixtureProvider<ProbeDevice> = ProbeDevice
+                    require(ProbeDevice === ProbeDevice.Companion)
+                    require(ProbeDevice.next().value == 7)
+                    require(ProbeDevice.firstOrNull { it.value == 7 }?.value == 7)
+                    require(provider.firstOrNull { it.value > 7 } == null)
+                    println("addon providers ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source, includeAddonFixture = true))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.addonProvidersArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
     private fun withAdapter(block: (K2CompilerAdapter) -> Unit) {
         val root = createTempDirectory("compukters-minimal-lowering-test-")
         try {
