@@ -3,6 +3,7 @@ layout: default
 title: Getting started
 description: Install Compukters and run your first Kotlin program from the terminal or the in-game IDE.
 section: players
+permalink: /GETTING-STARTED/
 ---
 
 # Getting started

@@ -2,6 +2,7 @@
 layout: default
 title: Guest Kotlin support
 section: developers
+permalink: /KOTLIN-SUPPORT/
 ---
 
 # Guest Kotlin support
