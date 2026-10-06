@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.ide.analysis.k2.query
 import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
 import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.components.resolveSymbol
+import org.jetbrains.kotlin.analysis.api.components.resolveToSymbols
 import org.jetbrains.kotlin.analysis.api.components.smartCastInfo
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassKind
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
@@ -32,6 +33,8 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaTypeParameterSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaVariableSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.symbol
+import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtEnumEntry
@@ -64,7 +67,12 @@ internal object SemanticTokenQuery {
             object : KtTreeVisitorVoid() {
                 override fun visitNamedDeclaration(declaration: KtNamedDeclaration) {
                     declaration.nameIdentifier?.let { identifier ->
-                        declaration.category()?.let { category ->
+                        val providerObject =
+                            declaration is KtObjectDeclaration &&
+                                with(session) {
+                                    (declaration.symbol as? KaClassSymbol)?.hasPeripheralProviderValue() == true
+                                }
+                        (if (providerObject) SemanticCategory.PeripheralProvider else declaration.category())?.let { category ->
                             result.addBounded(
                                 path,
                                 identifier.textRange.startOffset,
@@ -93,8 +101,8 @@ internal object SemanticTokenQuery {
 
                 override fun visitSimpleNameExpression(expression: KtSimpleNameExpression) {
                     if (expression is KtNameReferenceExpression) {
-                        with(session) { expression.resolveSymbol() }
-                            ?.semanticClassification()
+                        with(session) { expression.resolveSymbol() ?: expression.mainReference.resolveToSymbols().singleOrNull() }
+                            ?.semanticClassification(isPeripheralValuePosition(expression))
                             ?.let { classification ->
                                 result.addBounded(
                                     path,
@@ -130,7 +138,7 @@ private data class SemanticClassification(
     val isMutable: Boolean,
 )
 
-private fun KaSymbol.semanticClassification(): SemanticClassification? {
+private fun KaSymbol.semanticClassification(valuePosition: Boolean): SemanticClassification? {
     val category =
         when (this) {
             is KaEnumEntrySymbol -> {
@@ -138,6 +146,7 @@ private fun KaSymbol.semanticClassification(): SemanticClassification? {
             }
 
             is KaClassSymbol -> {
+                if (valuePosition && hasPeripheralProviderValue()) return SemanticClassification(SemanticCategory.PeripheralProvider, false)
                 when (classKind) {
                     KaClassKind.INTERFACE -> SemanticCategory.Interface
 

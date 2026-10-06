@@ -188,11 +188,12 @@ class IdeRendererStateTest {
                 CompletionItem("value", "value", CompletionKind.Property),
                 CompletionItem("Box", "Box", CompletionKind.Class),
                 CompletionItem("Reader", "Reader", CompletionKind.Interface),
+                CompletionItem("TextDisplay", "TextDisplay", CompletionKind.PeripheralProvider),
             )
         val editor = completionEditor(source, proposals, EditorRange(4, 6))
         val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry())
         val badges = model.text.filter { it.kind == IdeTextKind.CompletionBadge }
-        assertEquals(listOf("M", "F", "F", "V", "C", "I"), badges.map { it.value })
+        assertEquals(listOf("M", "F", "F", "V", "C", "I", "P"), badges.map { it.value })
         assertEquals(
             listOf(
                 IdeColors.COMPLETION_CALLABLE,
@@ -201,6 +202,7 @@ class IdeRendererStateTest {
                 IdeColors.COMPLETION_VARIABLE,
                 IdeColors.COMPLETION_CLASS,
                 IdeColors.COMPLETION_INTERFACE,
+                IdeColors.COMPLETION_PROVIDER,
             ),
             badges.map { it.color },
         )

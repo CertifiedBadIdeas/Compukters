@@ -1232,6 +1232,10 @@ object IdeRenderer {
                     "C" to IdeColors.COMPLETION_CLASS
                 }
 
+                CompletionKind.PeripheralProvider -> {
+                    "P" to IdeColors.COMPLETION_PROVIDER
+                }
+
                 CompletionKind.Interface -> {
                     "I" to IdeColors.COMPLETION_INTERFACE
                 }
@@ -1705,6 +1709,8 @@ object IdeRenderer {
             SemanticCategory.Interface,
             SemanticCategory.Object,
             -> IdeColors.TYPE
+
+            SemanticCategory.PeripheralProvider -> IdeColors.PERIPHERAL_PROVIDER
 
             SemanticCategory.TypeParameter -> IdeColors.TYPE_PARAMETER
 

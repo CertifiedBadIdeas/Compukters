@@ -36,6 +36,7 @@ enum class CompletionKind {
     Keyword,
     TypeAlias,
     MemberFunction,
+    PeripheralProvider,
 }
 
 data class CompletionTextEdit(
