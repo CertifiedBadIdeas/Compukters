@@ -15,6 +15,7 @@ on:
       - "addons/propulsion/src/compuktersAddon/kotlin/**"
       - "addons/propulsion/gradle.properties"
       - "gradle.properties"
+      - "modules/minecraft/shared/common/src/main/kotlin/ru/lazyhat/compukters/impl/ide/IdeColors.kt"
   workflow_dispatch:
 
 permissions:
@@ -44,6 +45,8 @@ jobs:
         run: ./gradlew -p api-build dokkaGeneratePublicationHtml --no-daemon
       - name: Stage Compukters API reference
         run: python3 docs/_tools/build_guest_api.py
+      - name: Stage IDE syntax palette
+        run: python3 docs/_tools/build_ide_palette.py
       - name: Build with Jekyll
         uses: actions/jekyll-build-pages@v1
         with:
