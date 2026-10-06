@@ -2,6 +2,7 @@
 layout: default
 title: Getting started
 description: Install Compukters and run your first Kotlin program from the terminal or the in-game IDE.
+section: players
 ---
 
 # Getting started
@@ -22,6 +23,8 @@ terminal workflow. Both produce the same verified Compukter executable format.
 The independently distributed [Create addon]({{ '/CREATE/' | relative_url }}) is optional on Minecraft 1.21.1. To use
 it, install both the addon and Create 6.0.10 through 6.0.x on client and server. It supports kinetic devices, Stock
 Ticker logistics, and steam boiler monitoring.
+
+Additional [Sable and Propulsion integrations]({{ '/ADDONS/' | relative_url }}) are available on Minecraft 1.21.1.
 
 The mod is required on both the client and server. macOS and ARM builds are not part of the current published
 artifacts.
@@ -114,8 +117,9 @@ block as a portable disk.
 
 ## Current boundaries
 
-Compukters intentionally supports a focused Kotlin subset. Do not assume that arbitrary Kotlin/JVM libraries, Java
-interop, reflection, threads, ordinary coroutines, collections, or exceptions are available.
+Compukters intentionally supports a focused Kotlin subset. Do not assume arbitrary Kotlin/JVM libraries, Java
+interop, reflection, host threads or ordinary coroutine libraries are available. Collections and exceptions have defined
+supported subsets; check the matrices below for their exact boundaries.
 The [Guest Kotlin support matrix]({{ '/KOTLIN-SUPPORT/' | relative_url }}) describes language features, Guest APIs, and
 IDE behavior. The [stdlib support matrix]({{ '/STDLIB-SUPPORT/' | relative_url }}) lists callable Kotlin APIs.
 The [Guest API reference]({{ '/guest-api/' | relative_url }}) lets you search declarations by name or package and

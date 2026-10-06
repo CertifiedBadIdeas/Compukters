@@ -1,0 +1,23 @@
+{% assign audience = site.data.navigation | where: 'id', include.audience | first %}
+<div class="guide-groups">
+  {% for group in audience.groups %}
+  <section>
+    <h2>{{ group.title | escape }}</h2>
+    <ul class="guide-links">
+      {% for item in group.items %}
+      <li>
+        <a href="{{ item.url | relative_url }}">{{ item.title | escape }}</a>
+        <span>{{ item.description | escape }}</span>
+        {% if item.children %}
+        <ul>
+          {% for child in item.children %}
+          <li><a href="{{ child.url | relative_url }}">{{ child.title | escape }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+</div>

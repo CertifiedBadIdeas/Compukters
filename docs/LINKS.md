@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Reference links
+section: contributors
 ---
 
 ### Textures

@@ -3,6 +3,7 @@ layout: default
 title: Guest standard library support
 description: The Kotlin standard-library APIs available to Compukters programs.
 permalink: /STDLIB-SUPPORT/
+section: developers
 ---
 
 # Guest standard library support
@@ -37,7 +38,9 @@ links to their source files.
   nothing for non-positive counts. Direct lambdas are inline and support non-local returns.
   Evidence: `testKotlinScopeVmConformance` and `MinimalScriptLoweringTest`, test
   `stdlib scope functions execute with inline receiver and nullable semantics`.
-- [x] **`require(Boolean)`** — true returns `Unit`; false raises a Guest argument failure. Evidence:
+- [x] **Preconditions** — `require(Boolean)` throws a catchable `IllegalArgumentException` on failure;
+  `check(Boolean)` and `error(String)` throw `IllegalStateException`. Lazy `require`/`check` messages are evaluated
+  only on failure. See [exception semantics]({{ '/KOTLIN-SUPPORT/' | relative_url }}#nullability-and-exceptions). Evidence:
   [`Assertions.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/Assertions.kt)
   and the assertions executed by `testKotlinReferenceArrayVmConformance`.
 - [ ] **`String` basics — Partial** — `length`, indexed UTF-16 access, concatenation, equality, and `substring` execute.
@@ -57,11 +60,11 @@ links to their source files.
   heap quota failures), and
   [`text_tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/text_tests.rs).
   Tracking: #676
-- [ ] **Numbers and characters — Partial** — the supported `Int`, `Long`, `Float`, `Boolean`, and `Char` operations use
+- [ ] **Numbers and characters — Partial** — the supported `Int`, `Long`, `Float`, `Double`, `Boolean`, and `Char` operations use
   Guest scalar values. `String.toIntOrNull()` parses optional-sign decimal ASCII digits into an `Int?`, returning null
-  for empty input, invalid characters, or overflow. `Byte`, `Short`, `Double`, other parsing helpers, and the Kotlin
+  for empty input, invalid characters, or overflow. `Byte`, `Short`, other parsing helpers, and the Kotlin
   math package are unavailable. Evidence: `testKotlinSubsetVmConformance`, `testKotlinLongVmConformance`, and
-  `testKotlinFloatVmConformance`. Tracking: not scheduled
+  `testKotlinFloatVmConformance` and `testKotlinDoubleVmConformance`. Tracking: not scheduled
 
 ## Arrays and ranges
 
@@ -86,8 +89,11 @@ links to their source files.
   Evidence: `testKotlinSubsetVmConformance` and
   [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
   test `k2_char_array_program_executes_exact_utf16_materialization`.
+- [x] **`DoubleArray`** — construction, indexed access, iteration and copying use unboxed F64 storage. See the
+  [language matrix]({{ '/KOTLIN-SUPPORT/' | relative_url }}#types-and-numeric-semantics) for the exact surface.
+  Evidence: `testKotlinDoubleArrayVmConformance`.
 - [ ] **Other primitive arrays — Unsupported** — `BooleanArray`, `ByteArray`, `ShortArray`, `LongArray`, `FloatArray`,
-  `DoubleArray`, and unsigned arrays have no executable Guest API. Tracking: not scheduled
+  and unsigned arrays have no executable Guest API. Tracking: not scheduled
 - [ ] **`IntRange` and `IntProgression` — Partial** — direct `for` loops over `..`, `until`, `..<`, `downTo`, and one
   positive `step` compile to unboxed scalar loops. Stored range objects and general iteration do not execute. Evidence:
   `testKotlinIntLoopsVmConformance` and
@@ -105,8 +111,9 @@ links to their source files.
   and supported references in one array; indexed reads and iteration preserve element identity. `contains` / `in` and
   `indexOf` search with supported value equality and return the first index or `-1` when absent. Non-null `Any` supports
   boxed `Int` value equality, string content equality, explicit Guest `equals` overrides, and data-class equality for
-  supported constructor properties. Other classes use default identity equality. Hashing and text dispatch remain
-  unavailable. Nullable elements, including `Int?`, preserve null in storage, iteration, and searches. Nullable and non-null
+  supported constructor properties. Other classes use default identity equality. Universal value hashing and text dispatch
+  follow the [object-model semantics]({{ '/KOTLIN-SUPPORT/' | relative_url }}#classes-and-object-model).
+  Nullable elements, including `Int?`, preserve null in storage, iteration, and searches. Nullable and non-null
   lists widen to `List<Any?>` without copying. Spread arguments are unsupported. Evidence:
   `testKotlinNullableCollectionsVmConformance`, `testKotlinListVmConformance`, `testKotlinListAnyVmConformance`, `testKotlinListAnyQuotaVmConformance`,
   `testKotlinListBoundsVmConformance`, `testKotlinListQuotaVmConformance`, and
@@ -169,8 +176,11 @@ links to their source files.
   the terminal capability. Formatting and other overloads are absent. Evidence: `testKotlinSubsetVmConformance` and
   [`computer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/computer.rs),
   test `stdio_read_line_echoes_then_writes_stdout_and_stderr_in_order`. Tracking: not scheduled
-- [ ] **Exceptions, reflection, coroutines — Unsupported** — general Kotlin exception handling, reflection, and
-  coroutine libraries are not available to Guest programs. Tracking: not scheduled
+- [ ] **Exceptions — Partial** — supported `throw`, `try`/`catch`/`finally`, exception types, messages and causes follow
+  the [exception matrix]({{ '/KOTLIN-SUPPORT/' | relative_url }}#nullability-and-exceptions). Resource exhaustion and
+  cancellation remain terminal. Evidence: `testKotlinExceptionsVmConformance`.
+- [ ] **Reflection and coroutine libraries — Unsupported** — reflection and ordinary Kotlin coroutine libraries are
+  unavailable. Use the platform's bounded cooperative tasks and channels instead. Tracking: not scheduled
 
 ## Maintenance
 

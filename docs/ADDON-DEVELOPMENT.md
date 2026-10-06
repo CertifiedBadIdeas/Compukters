@@ -3,6 +3,7 @@ layout: default
 title: Addon development
 description: Expose a typed Guest Kotlin API from an independent NeoForge mod.
 permalink: /ADDON-DEVELOPMENT/
+section: developers
 ---
 
 # Addon development

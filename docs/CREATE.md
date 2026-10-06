@@ -3,6 +3,7 @@ layout: default
 title: Create addon
 description: Connect Compukters programs to Create kinetics, Stock Tickers, and steam boilers.
 permalink: /CREATE/
+section: players
 ---
 
 # Create addon

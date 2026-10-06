@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Verification
+section: contributors
 ---
 
 # Verification
