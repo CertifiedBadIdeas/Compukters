@@ -46,6 +46,9 @@ fn main() {
         "generic-functions" => k2_generic_functions_preserve_primitive_and_reference_values(),
         "generic-cell" => k2_generic_cell_preserves_typed_fields_and_aliases(),
         "generic-interface" => k2_generic_interface_dispatches_concrete_types(),
+        "provider-defaults" => k2_expected_prints_with_budget(
+            "COMPUKTER_KOTLIN_PROVIDER_DEFAULTS_ARTIFACT", ["provider defaults ok\n"], 64,
+        ),
         "list" => k2_lists_retain_typed_elements(),
         "list-any" => k2_int_list_covariance_boxes_universal_reads(),
         "mutable-list" => k2_mutable_list_preserves_growth_mutation_and_views(),

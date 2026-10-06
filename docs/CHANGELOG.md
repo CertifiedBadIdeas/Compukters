@@ -16,6 +16,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 This release expands the Kotlin available to computer programs and introduces support for independently installed
 addon mods, with optional Create, Sable and Propulsion integrations for Minecraft 1.21.1.
 
+- Guest Kotlin supports inherited generic interface selection methods with typed predicates through concrete
+  implementations and parent interfaces, preserving short-circuiting and nullable results.
+
 - The documentation Wiki groups guides for players, developers and contributors, with expanding header navigation,
   contextual sidebars and a shared addon catalog. Detailed project, Sable, Propulsion and dev-stand guides live on the
   site; repository READMEs link to their canonical pages. Kotlin and other code examples use a syntax palette generated

@@ -90,6 +90,7 @@ import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.util.isNullable
 import org.jetbrains.kotlin.ir.util.parentAsClass
+import org.jetbrains.kotlin.ir.util.resolveFakeOverrideMaybeAbstract
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
@@ -5821,7 +5822,7 @@ private class FunctionCompiler(
                 interfaceSuperBody(call.symbol.owner)
                     ?: throw UnsupportedKotlinIr(call, "interface super call requires one concrete default body")
             } else {
-                call.symbol.owner
+                call.symbol.owner.resolveFakeOverrideMaybeAbstract() ?: call.symbol.owner
             }
         val targetName = target.fqNameWhenAvailable?.asString()
         if (targetName == "kotlin.internal.ir.EQEQEQ") {
