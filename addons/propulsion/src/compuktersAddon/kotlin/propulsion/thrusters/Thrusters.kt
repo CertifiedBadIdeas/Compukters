@@ -37,16 +37,10 @@ public data class CreativeThrusterState(
     public val unobstructedBlocks: Int,
 )
 
-public class CreativeThruster internal constructor(private val handle: Int) : Peripheral {
+public value class CreativeThruster internal constructor(private val handle: Int) : Peripheral {
     public companion object : TypedPeripheralProvider<CreativeThruster>("propulsion:creative_thruster") {
         override fun wrap(handle: Int): CreativeThruster = CreativeThruster(handle)
     }
-
-    override fun equals(other: Any?): Boolean = other is CreativeThruster && handle == other.handle
-
-    override fun hashCode(): Int = handle
-
-    override fun toString(): String = "CreativeThruster(handle=$handle)"
 
     public fun state(): CreativeThrusterState = ThrusterBindings.state(handle)
 

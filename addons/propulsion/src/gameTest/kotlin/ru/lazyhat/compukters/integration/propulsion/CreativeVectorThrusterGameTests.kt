@@ -553,6 +553,10 @@ object CreativeVectorThrusterGameTests {
         import propulsion.thrusters.CreativeVectorThruster
         fun main() {
             val e = CreativeVectorThruster.named("engine")
+            val peripheral: compukter.peripheral.Peripheral = e
+            check(peripheral == e)
+            check(peripheral is CreativeVectorThruster)
+            check((peripheral as CreativeVectorThruster) == e)
             check(e == Thrusters.creativeVector("engine"))
             check(CreativeVectorThruster.first() == e)
             check(CreativeVectorThruster.filter { it.state().throttle >= 0.0 }.size == 1)
