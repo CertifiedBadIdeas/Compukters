@@ -1,0 +1,28 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cycles:u'
+# Event count (approx.): 16348873573
+#
+# Overhead  Symbol                                                                     IPC   [IPC Coverage]
+# ........  .........................................................................  ....................
+#
+    44.56%  [.] <guest_benchmark::execution::machine::Machine>::run_slice_inner        -      -
+     8.10%  [.] <guest_benchmark::execution::machine::Machine>::read_register          -      -
+     8.10%  [.] <guest_benchmark::execution::image::ExecutionImage>::dispatch_target   -      -
+     7.16%  [.] guest_benchmark::execution::machine::execute_scalar                    -      -
+     4.68%  [.] <guest_benchmark::execution::machine::Machine>::trace_block_entry      -      -
+     4.42%  [.] sha2::sha256::x86::digest_blocks                                       -      -
+     3.41%  [.] <guest_benchmark::execution::heap::Heap>::read_payload                 -      -
+     3.35%  [.] <guest_benchmark::execution::image::ExecutionImage>::is_assignable     -      -
+     2.69%  [.] guest_benchmark::execution::machine::trace_register                    -      -
+     2.68%  [.] <guest_benchmark::execution::heap::Heap>::managed_type                 -      -
+     1.48%  [.] <guest_benchmark::execution::machine::Machine>::write_register         -      -
+     1.29%  [.] guest_benchmark::execution::machine::trace_field                       -      -
+
+
+#
+# (Tip: To add Node.js USDT(User-Level Statically Defined Tracing): perf buildid-cache --add `which node`)
+#

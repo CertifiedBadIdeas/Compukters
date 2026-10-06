@@ -1,0 +1,4 @@
+id	representation	workload	count	fields	rounds	checksum	artifact_bytes	types	functions
+map-not-null-1024-100-fresh	fresh	map-not-null	1024	2	100	160459776	120876	112	85
+map-not-null-1024-100-reuse-list	reuse-list	map-not-null	1024	2	100	160459776	120460	112	85
+map-not-null-1024-100-reuse-objects	reuse-objects	map-not-null	1024	2	100	160459776	125580	112	85

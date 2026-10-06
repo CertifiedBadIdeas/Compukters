@@ -1,0 +1,985 @@
+{
+  "root_commit": "d0229d56cf523fbbc722fdba7a335068315efc11",
+  "vm_commit": "8416b99a35947fbb5950ceaa1dafda0e807b4564",
+  "started_utc": "2026-10-04T12:17:43.256495+00:00",
+  "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  32\nOn-line CPU(s) list:                     0-31\nVendor ID:                               AuthenticAMD\nModel name:                              AMD Ryzen 9 9950X3D 16-Core Processor\nCPU family:                              26\nModel:                                   68\nThread(s) per core:                      2\nCore(s) per socket:                      16\nSocket(s):                               1\nStepping:                                0\nMicrocode version:                       0xb404035\nFrequency boost:                         enabled\nCPU(s) scaling MHz:                      85%\nCPU max MHz:                             5756.4521\nCPU min MHz:                             624.1940\nBogoMIPS:                                8599.98\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx_vnni avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid bus_lock_detect movdiri movdir64b overflow_recov succor smca fsrm avx512_vp2intersect flush_l1d amd_lbr_pmc_freeze\nVirtualization:                          AMD-V\nL1d cache:                               768 KiB (16 instances)\nL1i cache:                               512 KiB (16 instances)\nL2 cache:                                16 MiB (16 instances)\nL3 cache:                                128 MiB (2 instances)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-31\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Mitigation; IBPB on VMEXIT only\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; STIBP always-on; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB on VMEXIT",
+  "kernel": "Linux 7.2.8-zen1-2-zen",
+  "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+  "java": "openjdk version \"25.0.4.1\" 2026-08-18\nOpenJDK Runtime Environment (build 25.0.4.1)\nOpenJDK 64-Bit Server VM (build 25.0.4.1, mixed mode, sharing)",
+  "governor": "powersave",
+  "memory": "total        used        free      shared  buff/cache   available\nMem:     33161965568 14762946560  9926160384   205524992  9144143872 18399019008\nSwap:    34359734272  5629566976 28730167296",
+  "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31
+  ],
+  "notes": "No fixed CPU affinity/frequency. Other agent and desktop may run concurrently. Compilation finished before timing. Native VM release uses thin LTO and one codegen unit; standalone collection harness uses its own Cargo default release profile. Collections use traced Session::admit.",
+  "commands": [
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "tier0_computer_machine_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-tier0_computer_machine_performance_baseline-1.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "tier0_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-tier0_performance_baseline-1.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "host_session_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-host_session_performance_baseline-1.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "managed_heap_performance",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-managed_heap_performance-1.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "managed_heap_performance",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-managed_heap_performance-2.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "host_session_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-host_session_performance_baseline-2.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "tier0_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-tier0_performance_baseline-2.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "tier0_computer_machine_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-tier0_computer_machine_performance_baseline-2.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "tier0_computer_machine_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-tier0_computer_machine_performance_baseline-3.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "tier0_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-tier0_performance_baseline-3.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "host_session_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-host_session_performance_baseline-3.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "managed_heap_performance",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-managed_heap_performance-3.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "managed_heap_performance",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-managed_heap_performance-4.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "host_session_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-host_session_performance_baseline-4.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "tier0_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-tier0_performance_baseline-4.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "tier0_computer_machine_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-tier0_computer_machine_performance_baseline-4.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "tier0_computer_machine_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-tier0_computer_machine_performance_baseline-5.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "tier0_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-tier0_performance_baseline-5.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "host_session_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-host_session_performance_baseline-5.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "managed_heap_performance",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-managed_heap_performance-5.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "managed_heap_performance",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-managed_heap_performance-6.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "host_session_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-host_session_performance_baseline-6.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "tier0_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-tier0_performance_baseline-6.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "tier0_computer_machine_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-tier0_computer_machine_performance_baseline-6.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "tier0_computer_machine_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-tier0_computer_machine_performance_baseline-7.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "tier0_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-tier0_performance_baseline-7.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "host_session_performance_baseline",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-host_session_performance_baseline-7.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "host/compukter-vm/Cargo.toml",
+        "--lib",
+        "managed_heap_performance",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/native-benchmark",
+      "log": "native-managed_heap_performance-7.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "modules/common/compiler-artifact/src/test/rust/executable-conformance/Cargo.toml",
+        "--test",
+        "collections_bench",
+        "--",
+        "/home/lzwork/CompuktersMod/Compukters-vm-optimization/modules/common/compiler-k2/build/generated/benchmarks/collections",
+        "/home/lzwork/CompuktersMod/Compukters-vm-optimization/build/reports/benchmarks/ryzen-9950x3d-2026-10-04/collections",
+        "7"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/collection-benchmark",
+      "log": "collections.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "modules/common/compiler-artifact/src/test/rust/executable-conformance/Cargo.toml",
+        "--test",
+        "object_arrays_bench",
+        "--",
+        "/home/lzwork/CompuktersMod/Compukters-vm-optimization/modules/common/compiler-k2/build/generated/benchmarks/transient-allocations",
+        "/home/lzwork/CompuktersMod/Compukters-vm-optimization/build/reports/benchmarks/ryzen-9950x3d-2026-10-04/transient-allocations",
+        "7",
+        "8",
+        "fixed-heap=16384"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/collection-benchmark",
+      "log": "transient-allocations.log"
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "modules/common/compiler-artifact/src/test/rust/executable-conformance/Cargo.toml",
+        "--test",
+        "object_arrays_bench",
+        "--",
+        "/home/lzwork/CompuktersMod/Compukters-vm-optimization/modules/common/compiler-k2/build/generated/benchmarks/collection-reuse",
+        "/home/lzwork/CompuktersMod/Compukters-vm-optimization/build/reports/benchmarks/ryzen-9950x3d-2026-10-04/collection-reuse",
+        "7",
+        "3",
+        "fixed-heap"
+      ],
+      "cargo_target_dir": ".toolchain/build/cargo/collection-benchmark",
+      "log": "collection-reuse.log"
+    }
+  ],
+  "stages": [
+    {
+      "log": "native-tier0_computer_machine_performance_baseline-1.log",
+      "started_utc": "2026-10-04T12:17:43.273519+00:00",
+      "load": [
+        4.50146484375,
+        3.62109375,
+        3.21533203125
+      ],
+      "finished_utc": "2026-10-04T12:17:43.445873+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-tier0_performance_baseline-1.log",
+      "started_utc": "2026-10-04T12:17:43.445993+00:00",
+      "load": [
+        4.50146484375,
+        3.62109375,
+        3.21533203125
+      ],
+      "finished_utc": "2026-10-04T12:17:44.094815+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-host_session_performance_baseline-1.log",
+      "started_utc": "2026-10-04T12:17:44.094934+00:00",
+      "load": [
+        4.50146484375,
+        3.62109375,
+        3.21533203125
+      ],
+      "finished_utc": "2026-10-04T12:17:44.129324+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-managed_heap_performance-1.log",
+      "started_utc": "2026-10-04T12:17:44.129398+00:00",
+      "load": [
+        4.50146484375,
+        3.62109375,
+        3.21533203125
+      ],
+      "finished_utc": "2026-10-04T12:17:44.519384+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-managed_heap_performance-2.log",
+      "started_utc": "2026-10-04T12:17:44.519526+00:00",
+      "load": [
+        4.50146484375,
+        3.62109375,
+        3.21533203125
+      ],
+      "finished_utc": "2026-10-04T12:17:44.905836+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-host_session_performance_baseline-2.log",
+      "started_utc": "2026-10-04T12:17:44.905966+00:00",
+      "load": [
+        4.50146484375,
+        3.62109375,
+        3.21533203125
+      ],
+      "finished_utc": "2026-10-04T12:17:44.939572+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-tier0_performance_baseline-2.log",
+      "started_utc": "2026-10-04T12:17:44.939649+00:00",
+      "load": [
+        4.50146484375,
+        3.62109375,
+        3.21533203125
+      ],
+      "finished_utc": "2026-10-04T12:17:45.578945+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-tier0_computer_machine_performance_baseline-2.log",
+      "started_utc": "2026-10-04T12:17:45.579070+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:45.707487+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-tier0_computer_machine_performance_baseline-3.log",
+      "started_utc": "2026-10-04T12:17:45.707591+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:45.832944+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-tier0_performance_baseline-3.log",
+      "started_utc": "2026-10-04T12:17:45.833038+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:46.476771+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-host_session_performance_baseline-3.log",
+      "started_utc": "2026-10-04T12:17:46.476884+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:46.512898+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-managed_heap_performance-3.log",
+      "started_utc": "2026-10-04T12:17:46.513048+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:46.922734+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-managed_heap_performance-4.log",
+      "started_utc": "2026-10-04T12:17:46.922874+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:47.320774+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-host_session_performance_baseline-4.log",
+      "started_utc": "2026-10-04T12:17:47.320964+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:47.354675+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-tier0_performance_baseline-4.log",
+      "started_utc": "2026-10-04T12:17:47.354785+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:48.010987+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-tier0_computer_machine_performance_baseline-4.log",
+      "started_utc": "2026-10-04T12:17:48.011113+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:48.136873+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-tier0_computer_machine_performance_baseline-5.log",
+      "started_utc": "2026-10-04T12:17:48.137018+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:48.262242+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-tier0_performance_baseline-5.log",
+      "started_utc": "2026-10-04T12:17:48.262380+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:48.908705+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-host_session_performance_baseline-5.log",
+      "started_utc": "2026-10-04T12:17:48.908827+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:48.942777+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-managed_heap_performance-5.log",
+      "started_utc": "2026-10-04T12:17:48.942871+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:49.331006+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-managed_heap_performance-6.log",
+      "started_utc": "2026-10-04T12:17:49.331164+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:49.715377+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-host_session_performance_baseline-6.log",
+      "started_utc": "2026-10-04T12:17:49.715510+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:49.749626+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-tier0_performance_baseline-6.log",
+      "started_utc": "2026-10-04T12:17:49.749728+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:50.394254+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-tier0_computer_machine_performance_baseline-6.log",
+      "started_utc": "2026-10-04T12:17:50.394378+00:00",
+      "load": [
+        4.30078125,
+        3.59375,
+        3.20849609375
+      ],
+      "finished_utc": "2026-10-04T12:17:50.520833+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-tier0_computer_machine_performance_baseline-7.log",
+      "started_utc": "2026-10-04T12:17:50.520975+00:00",
+      "load": [
+        4.59716796875,
+        3.6669921875,
+        3.234375
+      ],
+      "finished_utc": "2026-10-04T12:17:50.647140+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-tier0_performance_baseline-7.log",
+      "started_utc": "2026-10-04T12:17:50.647263+00:00",
+      "load": [
+        4.59716796875,
+        3.6669921875,
+        3.234375
+      ],
+      "finished_utc": "2026-10-04T12:17:51.292794+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-host_session_performance_baseline-7.log",
+      "started_utc": "2026-10-04T12:17:51.292918+00:00",
+      "load": [
+        4.59716796875,
+        3.6669921875,
+        3.234375
+      ],
+      "finished_utc": "2026-10-04T12:17:51.327032+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "native-managed_heap_performance-7.log",
+      "started_utc": "2026-10-04T12:17:51.327132+00:00",
+      "load": [
+        4.59716796875,
+        3.6669921875,
+        3.234375
+      ],
+      "finished_utc": "2026-10-04T12:17:51.710116+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "collections.log",
+      "started_utc": "2026-10-04T12:17:51.710768+00:00",
+      "load": [
+        4.59716796875,
+        3.6669921875,
+        3.234375
+      ],
+      "finished_utc": "2026-10-04T12:19:43.152523+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "transient-allocations.log",
+      "started_utc": "2026-10-04T12:19:43.152641+00:00",
+      "load": [
+        3.27197265625,
+        3.43603515625,
+        3.1962890625
+      ],
+      "finished_utc": "2026-10-04T12:20:20.825808+00:00",
+      "exit_code": 0
+    },
+    {
+      "log": "collection-reuse.log",
+      "started_utc": "2026-10-04T12:20:20.825937+00:00",
+      "load": [
+        2.712890625,
+        3.2451171875,
+        3.1396484375
+      ],
+      "finished_utc": "2026-10-04T12:21:27.111153+00:00",
+      "exit_code": 0
+    }
+  ],
+  "finished_utc": "2026-10-04T12:21:27.111272+00:00"
+}

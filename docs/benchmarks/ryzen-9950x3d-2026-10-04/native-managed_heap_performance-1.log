@@ -1,0 +1,30 @@
+    Finished `release` profile [optimized] target(s) in 0.00s
+     Running unittests src/lib.rs (.toolchain/build/cargo/native-benchmark/release/deps/compukter_vm-e65eeae897765ef7)
+
+running 4 tests
+test execution::gc_tests::managed_heap_performance_gc_units ... workload	cycles	elapsed_ns	units	units_per_s	root	dequeue	edge	leaf	sweep	transition
+gc_graph	10000	1938808	220000	113471783	20000	40000	80000	0	50000	30000
+gc_pause_units	minimum=22	maximum=22	configured_slice=1
+gc_leaf	10000	420369	10000	23788624
+ok
+test execution::heap_tests::managed_heap_performance_allocator_and_fragmentation ... workload	iterations	elapsed_ns	operations_per_s	total_free	largest_free
+allocate_free_32	100000	3450166	28984113	4096	4096
+allocate_free_64	100000	3443276	29042110	4096	4096
+allocate_free_256	100000	3459637	28904767	4096	4096
+fragment_coalesce	100000	15242512	6560598	128	128
+ok
+test execution::tests::managed_heap_performance_operations_and_idle_instances ... workload	iterations	elapsed_ns	operations_per_s
+inherited_field_roundtrip	10000	68565583	145846
+reference_array_roundtrip	10000	68589623	145795
+compact_string_concat_equals	10000	68895803	145147
+idle_instance_admission	10000	7890631	1267326
+idle_zero_work	instances=10000	maintenance_units=0	heap_arena=32	heap_allocator=1024	frame_arena=8	frame_records=128	statics=0	type_initialization=2	external_roots=0	pending_state=2173	machine_fixed=1363	instance_reserved_bytes=5314	total_reserved_bytes=53140000	shared_image=excluded	native_allocator_bookkeeping=excluded
+maximum_depth_storage	depth=64	frame_arena=512	frame_records=8192	heap_arena=32	instance_reserved_bytes=13881
+ok
+test execution::text_tests::managed_heap_performance_text_encodings ... workload	iterations	elapsed_ns	operations_per_s
+latin1_concat	10000	67563084	148010
+utf16_concat	10000	63700779	156984
+ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 433 filtered out; finished in 0.38s
+

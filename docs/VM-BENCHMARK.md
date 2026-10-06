@@ -270,3 +270,12 @@ Include the following when attaching measurements to
 For the opt-in native comparison of scalar Int lists, boxed storage, and universal read bridges, see
 [Collection representation measurements](COLLECTION-BENCHMARK.md). It measures collection execution and heap pressure
 without Minecraft or actor-scheduler overhead.
+
+For fresh Ryzen 9 9950X3D native and compiled Guest workload results, see
+[the 2026-10-04 local VM measurements](VM-PERFORMANCE-2026-10-04.md). Those measurements do not include a new Minecraft server profile.
+
+For untraced Guest measurements, CPU profiles and a paired interpreter optimization, see
+[the production-path VM optimization report](VM-OPTIMIZATION-2026-10-04.md).
+
+For the subsequent virtual/interface dispatch optimization and paired evidence, see
+[the VM dispatch report](VM-DISPATCH-2026-10-04.md).
