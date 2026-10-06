@@ -233,6 +233,16 @@ class K2CompilerAdapter(
                                     }
                             },
                             sourcePaths = sourcePaths,
+                            // These names belong to separately compiled admitted library modules. Project file
+                            // names are checked against them above; arbitrary Guest paths never receive trust.
+                            trustedPlatformSourceModules =
+                                sourceLibraries
+                                    .flatMap { library ->
+                                        library.sources.flatMap { source ->
+                                            val name = source.path.substringAfterLast('/')
+                                            listOf(name to library.id, "/$name" to library.id)
+                                        }
+                                    }.toMap(),
                             canonicalIntrinsicRegistry = intrinsicRegistry(selection.addonBundles),
                             capabilityShapes = capabilityShapes(selection.addonBundles),
                             selectedPlatformModules = selected.mapTo(mutableSetOf(), PlatformModule::id),

@@ -6606,6 +6606,50 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `canonical peripheral companion specializes shared typed queries`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.peripheral.*
+                class Meter(private val handle: Int) : Peripheral {
+                    fun value(): Int = handle
+                    companion object : TypedPeripheralProvider<Meter>("test:meter") {
+                        override fun wrap(handle: Int): Meter = Meter(handle)
+                    }
+                }
+                fun main() {
+                    val provider: PeripheralProvider<Meter> = Meter
+                    require(Meter === Meter.Companion)
+                    require(provider.first().value() == 3)
+                    val device: Peripheral = provider.first()
+                    require(device is Meter)
+                    require(provider.first { it.value() > 3 }.value() == 7)
+                    require(provider.firstOrNull { it.value() > 9 } == null)
+                    require(provider.filter { it.value() > 3 }.size == 1)
+                    require(provider.all().size == 2)
+                    require(provider.at(Side.front).value() == 3)
+                    require(provider.atOrNull(Side.back) == null)
+                    require(provider.named("front").value() == 3)
+                    require(provider.namedOrNull("missing") == null)
+                    var visits = 0
+                    provider.first { visits += 1; true }
+                    require(visits == 1)
+                    try { provider.first { it.value() > 9 }; error("no missing failure") }
+                    catch (failure: NoSuchElementException) { require(failure.message == "No peripheral matches the predicate") }
+                    try { provider.first { error("predicate failed") }; error("unreachable") }
+                    catch (failure: IllegalStateException) { require(failure.message == "predicate failed") }
+                    require(provider.all().size == 2)
+                    println("peripheral queries ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.peripheralQueriesArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `collection first preserves nullable values and throws only on absence`() =
         withAdapter { adapter ->
             val source =

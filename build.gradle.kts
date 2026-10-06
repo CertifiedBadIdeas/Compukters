@@ -661,6 +661,15 @@ registerKotlinVmConformance(
     additionalArtifacts = mapOf("COMPUKTER_KOTLIN_STRICT_FIRST_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-strict-first.cpkt")),
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinPeripheralQueriesVmConformance",
+    taskDescription = "Executes canonical peripheral selection and snapshot cleanup on the pinned VM.",
+    artifactTask = ":compiler-k2:generatePeripheralQueriesConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-peripheral-queries.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-peripheral-queries-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_PERIPHERAL_QUERIES_ARTIFACT",
+    conformanceScenario = "peripheral-queries",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinSingletonProvidersVmConformance",
     taskDescription = "Executes managed singleton identity and companion provider dispatch on the pinned VM.",
     artifactTask = ":compiler-k2:generateSingletonProvidersConformanceArtifact",

@@ -960,3 +960,30 @@ The actor carries ordered lifecycle actions alongside addon requests and ordinar
 creates addon hosts lazily per program, closes only the exiting program's hosts, and rejects its queued completions.
 Suspended parents retain their resources. Computer shutdown resets every scope. This makes peripheral ownership
 follow the program lifetime without inferring it from terminal output or changing world/physics cadence.
+
+
+### Typed peripheral discovery
+
+The canonical `compukter:core` 1.2.0 library defines `compukter.peripheral.Peripheral`,
+`PeripheralProvider<T>`, relative `Side` values and `TypedPeripheralProvider<T>`. Companions supply a registered
+contract id and the typed device wrapper. Selection runs in Guest; snapshots close in `finally`, including
+predicate failure and early selection. Predicates are ordinary typed callbacks with local returns.
+
+The base `compukters:peripheral` capability is ABI 1.0 with six asynchronous operations, in order:
+`openSnapshot(String):Int`, `snapshotSize(Int):Int`, `snapshotGet(Int,Int):Int`, `closeSnapshot(Int):Unit`,
+`at(String,Int):Int`, and `named(String,String):Int`. Optional direct lookup returns handle zero only for absence.
+Malformed requests, unavailable contracts, ambiguity, wrong device types and limits remain host failures.
+This adds a capability while preserving the artifact, Runtime instruction and native transport ABI.
+
+`core` owns `PeripheralSession` and `PeripheralProgramHost`, independently of Minecraft. A typed contract identifies
+its provider and logical device kind and resolves exact endpoint instances. A program has at most four snapshots,
+1024 discovered entries per snapshot and 1024 retained handles. Snapshot opening captures physical identities
+without retaining handles for unread entries; handles are allocated only on selection. Typed operations verify
+contract object identity before exposing a retained endpoint. Invalidity latches, stale tokens cannot acquire
+replacement instances, and reset discards state without reusing tokens. World discovery order and face/name lookup
+belong to the Minecraft adapter. Addons retain ownership of device operations and capability schemas.
+
+Evidence: `PeripheralSessionTest`, `PeripheralProgramHostTest`, and
+`canonical peripheral companion specializes shared typed queries` through `testKotlinPeripheralQueriesVmConformance`,
+including predicate short-circuiting, imported Peripheral upcasts, nullable absence, strict exceptions and snapshot
+cleanup after predicate failure.

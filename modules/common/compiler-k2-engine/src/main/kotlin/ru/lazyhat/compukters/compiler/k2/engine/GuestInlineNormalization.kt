@@ -63,7 +63,10 @@ internal object GuestInlineNormalization {
         val files =
             module.files.filter {
                 session.virtualSourcePath(it.fileEntry.name) != null &&
-                    session.trustedPlatformModule(it.fileEntry.name) == null
+                    (
+                        session.trustedPlatformModule(it.fileEntry.name) == null ||
+                            session.virtualSourcePath(it.fileEntry.name) in session.sourcePlatformPaths
+                    )
             }
         var needed = false
         files.forEach { file ->

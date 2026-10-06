@@ -924,6 +924,23 @@ tasks.register<Test>("generateProviderDefaultsConformanceArtifact") {
     }
 }
 
+val peripheralQueriesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-peripheral-queries.cpkt")
+tasks.register<Test>("generatePeripheralQueriesConformanceArtifact") {
+    description = "Compiles canonical peripheral companion queries for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*canonical peripheral companion specializes shared typed queries*")
+    inputs.file(workerJar)
+    outputs.file(peripheralQueriesConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.peripheralQueriesArtifact", peripheralQueriesConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
 tasks.register<Test>("generateSingletonProvidersConformanceArtifact") {
     description = "Compiles managed singleton companion providers for pinned VM conformance."
     group = "verification"

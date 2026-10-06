@@ -50,6 +50,7 @@ fn main() {
             k2_expected_prints_with_budget("COMPUKTER_KOTLIN_PROVIDER_DEFAULTS_ARTIFACT", ["provider defaults ok\n"], 64);
             k2_expected_prints_with_budget("COMPUKTER_KOTLIN_STRICT_FIRST_ARTIFACT", ["strict first ok\n"], 64);
         },
+        "peripheral-queries" => k2_peripheral_queries(),
         "singleton-providers" => {
             k2_expected_prints_with_budget(
                 "COMPUKTER_KOTLIN_SINGLETON_PROVIDERS_ARTIFACT", ["singleton providers ok\n"], 128,
@@ -2570,4 +2571,99 @@ fn k2_inline_blocks_preserve_returns_results_and_effects() {
         }
     }
     panic!("inline-blocks failed to finish within bounded slices");
+}
+
+
+fn k2_peripheral_queries() {
+    let path = std::env::var("COMPUKTER_KOTLIN_PERIPHERAL_QUERIES_ARTIFACT").unwrap();
+    let verified = verify_artifact(Arc::from(fs::read(path).unwrap()), ArtifactLimits::default()).unwrap();
+    let peripheral_operations = [
+        OperationSchema::asynchronous(&[HostValueType::String], HostValueType::I32),
+        OperationSchema::asynchronous(&[HostValueType::I32], HostValueType::I32),
+        OperationSchema::asynchronous(&[HostValueType::I32, HostValueType::I32], HostValueType::I32),
+        OperationSchema::asynchronous(&[HostValueType::I32], HostValueType::Unit),
+        OperationSchema::asynchronous(&[HostValueType::String, HostValueType::I32], HostValueType::I32),
+        OperationSchema::asynchronous(&[HostValueType::String, HostValueType::String], HostValueType::I32),
+    ];
+    let stdio_operations = [
+        OperationSchema::asynchronous(&[], HostValueType::String),
+        OperationSchema::synchronous(&[HostValueType::String], HostValueType::Unit),
+        OperationSchema::synchronous(&[HostValueType::String], HostValueType::Unit),
+    ];
+    let bindings = [
+        CapabilityBinding::new("compukters", "peripheral", 1, 0, &peripheral_operations),
+        CapabilityBinding::new("compukter", "stdio", 1, 0, &stdio_operations),
+    ];
+    let profile = ExecutionProfile {
+        heap_bytes: 1024 * 1024, frame_storage_bytes: 1024 * 1024,
+        maximum_call_depth: 64, maximum_coroutines: 1,
+        maximum_channels: 0, maximum_channel_values: 0,
+        maximum_host_requests: 64, maximum_events: 0, maximum_slice_budget: u32::MAX,
+        compiler_abi: [0; 32], platform_abi: [0; 32], maximum_host_arguments: 16,
+        maximum_outbound_utf16_code_units: 4096, maximum_inbound_utf16_code_units: 4096,
+        maximum_accepted_responses: 64, entry_argument_limits: entry_argument_limits(),
+    };
+    let mut session = Session::admit(verified, profile, &bindings).unwrap();
+    session.start(&[]).unwrap();
+    let mut snapshot = None;
+    let mut next_snapshot = 1;
+    let mut opens = 0;
+    let mut printed = false;
+    loop {
+        match session.advance(256, 64).unwrap() {
+            AdvanceOutcome::SliceExhausted => {},
+            AdvanceOutcome::HostRequestBatch(batch) => {
+                assert_eq!(batch.len(), 1);
+                let request = batch.get(0).unwrap();
+                let args = request.arguments();
+                let response = if request.name() == "stdio" {
+                    assert_eq!(request.operation(), 1);
+                    assert_eq!(args.get(0), Some(HostValueView::String(&utf16("peripheral queries ok\n"))));
+                    assert!(!printed);
+                    printed = true;
+                    HostValueInput::Unit
+                } else {
+                    assert_eq!(request.name(), "peripheral");
+                    match request.operation() {
+                        0 => {
+                            assert_eq!(args.get(0), Some(HostValueView::String(&utf16("test:meter"))));
+                            assert!(snapshot.is_none(), "previous snapshot must close even after predicate failure");
+                            snapshot = Some(next_snapshot);
+                            next_snapshot += 1;
+                            opens += 1;
+                            HostValueInput::I32(snapshot.unwrap())
+                        },
+                        1 | 2 | 3 => {
+                            assert_eq!(args.get(0), Some(HostValueView::I32(snapshot.expect("snapshot must be live"))));
+                            match request.operation() {
+                                1 => HostValueInput::I32(2),
+                                2 => HostValueInput::I32(match args.get(1) {
+                                    Some(HostValueView::I32(0)) => 3,
+                                    Some(HostValueView::I32(1)) => 7,
+                                    other => panic!("invalid snapshot index: {other:?}"),
+                                }),
+                                _ => { snapshot = None; HostValueInput::Unit },
+                            }
+                        },
+                        4 => {
+                            assert_eq!(args.get(0), Some(HostValueView::String(&utf16("test:meter"))));
+                            HostValueInput::I32(if args.get(1) == Some(HostValueView::I32(0)) {3} else {0})
+                        },
+                        5 => {
+                            assert_eq!(args.get(0), Some(HostValueView::String(&utf16("test:meter"))));
+                            HostValueInput::I32(if args.get(1) == Some(HostValueView::String(&utf16("front"))) {3} else {0})
+                        },
+                        other => panic!("unexpected peripheral operation {other}"),
+                    }
+                };
+                let id = request.id();
+                session.resume(id, HostResponse::Success(response)).unwrap();
+            },
+            AdvanceOutcome::Halted(None) => break,
+            other => panic!("unexpected peripheral query outcome {other:?}"),
+        }
+    }
+    assert!(printed);
+    assert!(opens >= 9);
+    assert!(snapshot.is_none());
 }
