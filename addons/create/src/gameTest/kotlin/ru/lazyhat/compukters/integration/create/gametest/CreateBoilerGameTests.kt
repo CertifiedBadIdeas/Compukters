@@ -109,8 +109,12 @@ object CreateBoilerGameTests {
         """
         import compukter.terminal.Terminal
         import create.boiler.Boilers
+        import create.boiler.Boiler
         fun main() {
-            val boiler = Boilers.boiler("boiler")
+            val boiler = Boiler.first()
+            check(boiler == Boilers.boiler("boiler"))
+            check(Boiler.named("boiler") == boiler)
+            check(Boiler.all().size == 1)
             check(boiler.waterSupply() == 20f)
             check(boiler.waterLevel() == 2)
             check(boiler.heatLevel() == 1)
@@ -142,7 +146,7 @@ object CreateBoilerGameTests {
             Terminal.write("boiler-cut\n")
             readln()
             var removed = false
-            try { replaced.level() } catch (e: IllegalStateException) { removed = true }
+            try { replaced.level() } catch (e: compukter.io.IOException) { removed = true }
             check(removed)
             check(Boilers.boiler("boiler").isPassive())
             Terminal.write("boiler-done\n")

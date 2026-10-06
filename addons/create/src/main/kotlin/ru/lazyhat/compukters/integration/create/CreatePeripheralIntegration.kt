@@ -44,13 +44,23 @@ import ru.lazyhat.compukters.api.addon.addonPollFailed
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersAddonHostFactory
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersAddonRegistry
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersComputerContext
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralAccessException
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralContact
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralContract
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralDevice
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralEndpoint
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralLookupStatus
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralProvider
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 
 object CreatePeripheralIntegration {
+    private val contracts =
+        PeripheralKind.entries.associateWith { kind ->
+            CompuktersPeripheralContract("create:${kind.deviceKey}", kind.deviceKey) { location ->
+                resolveEndpoint(location.level, location.position, kind) { location.isReachable() }
+            }
+        }
+
     fun register() {
         CompuktersAddonRegistry.register(
             CreateAddonContract.guestApi(CreatePeripheralIntegration::class.java),
@@ -59,10 +69,14 @@ object CreatePeripheralIntegration {
                     CreateHostState(
                         resolveSide = { side, kind -> resolveEndpoint(computer, side, kind) },
                         resolveName = { name, kind -> resolveNamedEndpoint(computer, name, kind) },
+                        acquireSide = { side, kind -> computer.peripheralAt(contracts.getValue(kind), side) },
+                        acquireName = { name, kind -> computer.peripheralNamed(contracts.getValue(kind), name) },
+                        resolveHandle = { handle, kind -> computer.peripheral(contracts.getValue(kind), handle) },
                     ),
                 )
             },
             CompuktersPeripheralProvider(::resolvePeripheral),
+            contracts.values.toList(),
         )
     }
 
@@ -215,6 +229,9 @@ object CreatePeripheralIntegration {
 internal class CreateHostState(
     private val resolveSide: (Int, PeripheralKind) -> CreateDeviceEndpoint?,
     private val resolveName: (String, PeripheralKind) -> CreateNamedResolution,
+    private val acquireSide: ((Int, PeripheralKind) -> Int)? = null,
+    private val acquireName: ((String, PeripheralKind) -> Int)? = null,
+    private val resolveHandle: ((Int, PeripheralKind) -> CreateDeviceEndpoint)? = null,
 ) : CreateCapabilityHandler {
     constructor(resolveSide: (Int, PeripheralKind) -> CreateDeviceEndpoint?) : this(
         resolveSide,
@@ -224,6 +241,7 @@ internal class CreateHostState(
     private val handles = linkedMapOf<Int, CreateDeviceEndpoint>()
     private val handlesByEndpoint = mutableMapOf<Any, Int>()
     private val snapshots = linkedMapOf<Int, RetainedStockSnapshot>()
+    private var accessFailure: CompuktersPeripheralAccessException? = null
     private var nextHandle = 1
     private var nextSnapshotHandle = 1
 
@@ -236,7 +254,7 @@ internal class CreateHostState(
         if (!endpoint.valid()) return staleEndpoint(endpoint)
         val speedBits = endpoint.speed().toBits()
         return addonPending {
-            if (!endpoint.valid()) {
+            if (endpoint<SpeedometerAccess>(argument0) !== endpoint || !endpoint.valid()) {
                 removeEndpoint(endpoint)
                 addonPollFailed(HostFailureKind.INPUT_OUTPUT, STALE_PERIPHERAL_DETAIL)
             } else {
@@ -257,7 +275,7 @@ internal class CreateHostState(
         val stressBits = endpoint.stress().toBits()
         val capacityBits = endpoint.capacity().toBits()
         return addonPending {
-            if (!endpoint.valid()) {
+            if (endpoint<StressometerAccess>(argument0) !== endpoint || !endpoint.valid()) {
                 removeEndpoint(endpoint)
                 addonPollFailed(HostFailureKind.INPUT_OUTPUT, STALE_PERIPHERAL_DETAIL)
             } else if (endpoint.stress().toBits() != stressBits || endpoint.capacity().toBits() != capacityBits) {
@@ -391,6 +409,7 @@ internal class CreateHostState(
         side: Int,
         kind: PeripheralKind,
     ): AddonCallResult<Int> {
+        acquireSide?.let { acquire -> return acquireShared { acquire(side, kind) } }
         if (side !in 0..5) return addonFailed(HostFailureKind.OTHER, "Invalid Create kinetic side")
         val endpoint =
             resolveSide(side, kind)
@@ -408,10 +427,20 @@ internal class CreateHostState(
     private fun acquireNamed(
         name: String,
         kind: PeripheralKind,
-    ): AddonCallResult<Int> =
-        when (val resolution = resolveName(name, kind)) {
+    ): AddonCallResult<Int> {
+        acquireName?.let { acquire -> return acquireShared { acquire(name, kind) } }
+        return when (val resolution = resolveName(name, kind)) {
             is CreateNamedResolution.Failed -> addonFailed(resolution.kind, resolution.detail)
             is CreateNamedResolution.Found -> retain(resolution.endpoint)
+        }
+    }
+
+    private inline fun acquireShared(acquire: () -> Int): AddonCallResult<Int> =
+        try {
+            val handle = acquire()
+            if (handle == 0) endpointFailure() else addonCompleted(handle)
+        } catch (failure: CompuktersPeripheralAccessException) {
+            addonFailed(failure.kind, failure.message)
         }
 
     private fun retain(endpoint: CreateDeviceEndpoint): AddonCallResult<Int> {
@@ -438,7 +467,25 @@ internal class CreateHostState(
         return if (endpoint.valid()) addonCompleted(operation(endpoint)) else staleEndpoint(endpoint)
     }
 
-    private inline fun <reified T : CreateDeviceEndpoint> endpoint(handle: Int): T? = handles[handle] as? T
+    private inline fun <reified T : CreateDeviceEndpoint> endpoint(handle: Int): T? {
+        accessFailure = null
+        val resolve = resolveHandle ?: return handles[handle] as? T
+        val kind =
+            when (T::class) {
+                SpeedometerAccess::class -> PeripheralKind.SPEEDOMETER
+                StressometerAccess::class -> PeripheralKind.STRESSOMETER
+                RotationControllerAccess::class -> PeripheralKind.ROTATION_CONTROLLER
+                StockTickerAccess::class -> PeripheralKind.STOCK_TICKER
+                BoilerAccess::class -> PeripheralKind.BOILER
+                else -> error("Unknown Create endpoint contract")
+            }
+        return try {
+            resolve(handle, kind) as? T
+        } catch (failure: CompuktersPeripheralAccessException) {
+            accessFailure = failure
+            null
+        }
+    }
 
     private inline fun <R> withSnapshot(
         handle: Int,
@@ -461,8 +508,15 @@ internal class CreateHostState(
             operation(entry)
         }
 
-    private fun endpointFailure(): AddonCallResult<Nothing> =
-        addonFailed(HostFailureKind.UNAVAILABLE, "Create kinetic device handle is unavailable")
+    private fun endpointFailure(): AddonCallResult<Nothing> {
+        val failure = accessFailure
+        accessFailure = null
+        return if (failure == null) {
+            addonFailed(HostFailureKind.UNAVAILABLE, "Create kinetic device handle is unavailable")
+        } else {
+            addonFailed(failure.kind, failure.message)
+        }
+    }
 
     private fun staleEndpoint(endpoint: CreateDeviceEndpoint): AddonCallResult<Nothing> {
         removeEndpoint(endpoint)
@@ -544,11 +598,7 @@ internal sealed interface CreateNamedResolution {
     ) : CreateNamedResolution
 }
 
-internal interface CreateDeviceEndpoint {
-    val identity: Any
-
-    fun valid(): Boolean
-}
+internal interface CreateDeviceEndpoint : CompuktersPeripheralEndpoint
 
 internal interface SpeedometerAccess : CreateDeviceEndpoint {
     fun speed(): Float

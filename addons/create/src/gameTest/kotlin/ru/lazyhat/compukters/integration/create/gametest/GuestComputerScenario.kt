@@ -11,6 +11,8 @@ import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.gametest.framework.GameTestSequence
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileChunk
+import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
@@ -35,7 +37,23 @@ internal class GuestComputerScenario(
         sequence.thenExecute { computer.prepareTerminalAsync() }
         awaitText(sequence, ">\n")
         writeFile(sequence, "compukter.toml", "format = 3\nname = \"create-gametest\"\naddons = [\"create\"]\n")
-        writeFile(sequence, "main.kt", source)
+        val preparedSource = source.lineSequence().joinToString("\n") { it.trimStart() }
+        writeFile(sequence, "main.kt", preparedSource)
+        sequence.thenExecute {
+            val path = VmVirtualPath.of("/home/main.kt")
+            operation =
+                computer.fileStatAsync(path).thenCompose { stat ->
+                    computer.fileReadAsync(path, 0, preparedSource.encodeToByteArray().size + 1, checkNotNull(stat).metadata.generation)
+                }
+        }
+        awaitOperation(sequence)
+        sequence.thenExecute {
+            val actual = (operation!!.join() as VmFileChunk).bytes.decodeToString()
+            helper.assertTrue(
+                actual == preparedSource,
+                "Guest editor changed the source: expected=${preparedSource.length}, actual=${actual.length}; actual=$actual",
+            )
+        }
         sequence.thenExecute { operation = command("kotlinc main.kt -o scenario") }
         awaitOperation(sequence)
         awaitText(sequence, "compiled: /home/scenario")
@@ -61,8 +79,13 @@ internal class GuestComputerScenario(
         sequence.thenExecute { operation = command("edit $path") }
         awaitOperation(sequence)
         awaitText(sequence, "Compukters edit")
-        sequence.thenExecute { operation = computer.submitTerminalTextAsync(text) }
-        awaitOperation(sequence)
+        // The Guest editor copies indentation after Enter; pasted source must not add it again.
+        val input = text.lineSequence().joinToString("\n") { it.trimStart() }
+        // Keep each editor input event within the ordinary child-execution quota.
+        input.chunked(256).forEach { chunk ->
+            sequence.thenExecute { operation = computer.submitTerminalTextAsync(chunk) }
+            awaitOperation(sequence)
+        }
         sequence.thenExecute {
             operation =
                 computer.submitTerminalKeyAsync(
