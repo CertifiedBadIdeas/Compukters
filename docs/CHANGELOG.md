@@ -18,7 +18,8 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
 
 - The documentation Wiki groups guides for players, developers and contributors, with expanding header navigation,
   contextual sidebars and a shared addon catalog. Detailed project, Sable, Propulsion and dev-stand guides live on the
-  site; repository READMEs link to their canonical pages.
+  site; repository READMEs link to their canonical pages. Kotlin and other code examples use a syntax palette generated
+  from the in-game IDE colors.
 
 - First-party addons use independent two-part `x.y` versions: `x` identifies their API compatibility line and `y`
   identifies compatible updates. Production JAR names also include the target Compukters major/minor line, and loader

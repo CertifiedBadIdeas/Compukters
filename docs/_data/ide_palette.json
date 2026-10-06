@@ -1,0 +1,16 @@
+{
+  "_source": "modules/minecraft/shared/common/src/main/kotlin/ru/lazyhat/compukters/impl/ide/IdeColors.kt",
+  "background": "#1e1f22",
+  "text": "#bcbec4",
+  "keyword": "#cf8e6d",
+  "string": "#6aab73",
+  "escape": "#cf8e6d",
+  "number": "#2aacb8",
+  "comment": "#7a7e85",
+  "type": "#bcbec4",
+  "type_parameter": "#16baac",
+  "annotation": "#b3ae60",
+  "function": "#56a8f5",
+  "property": "#c77dbb",
+  "error": "#f57e84"
+}

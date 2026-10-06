@@ -16,6 +16,19 @@
   --maximum-width: 68rem;
   --wiki-width: 84rem;
   --header-height: 5rem;
+  --syntax-background: {{ site.data.ide_palette.background }};
+  --syntax-text: {{ site.data.ide_palette.text }};
+  --syntax-keyword: {{ site.data.ide_palette.keyword }};
+  --syntax-string: {{ site.data.ide_palette.string }};
+  --syntax-escape: {{ site.data.ide_palette.escape }};
+  --syntax-number: {{ site.data.ide_palette.number }};
+  --syntax-comment: {{ site.data.ide_palette.comment }};
+  --syntax-type: {{ site.data.ide_palette.type }};
+  --syntax-type-parameter: {{ site.data.ide_palette.type_parameter }};
+  --syntax-annotation: {{ site.data.ide_palette.annotation }};
+  --syntax-function: {{ site.data.ide_palette.function }};
+  --syntax-property: {{ site.data.ide_palette.property }};
+  --syntax-error: {{ site.data.ide_palette.error }};
 }
 
 * {
@@ -439,7 +452,7 @@ pre {
   border: 1px solid var(--border);
   border-radius: 0.7rem;
   padding: 1rem 1.1rem;
-  background: var(--code);
+  background: var(--syntax-background);
   box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.16);
 }
 
@@ -447,7 +460,56 @@ pre code {
   border: 0;
   padding: 0;
   background: transparent;
+  color: var(--syntax-text);
 }
+
+/* Rouge token classes, using the palette generated from the in-game IdeColors.kt. */
+.highlight .k,
+.highlight .kd,
+.highlight .kn,
+.highlight .kp,
+.highlight .kr,
+.highlight .ow {
+  color: var(--syntax-keyword);
+}
+
+.highlight .kt,
+.highlight .nc,
+.highlight .nt { color: var(--syntax-type); }
+.highlight .nf,
+.highlight .nb { color: var(--syntax-function); }
+.highlight .nd { color: var(--syntax-annotation); }
+.highlight .na,
+.highlight .py { color: var(--syntax-property); }
+.highlight .nn { color: var(--syntax-text); }
+
+.highlight .s,
+.highlight .s1,
+.highlight .s2,
+.highlight .sb,
+.highlight .sc,
+.highlight .sd,
+.highlight .sh,
+.highlight .sr,
+.highlight .sx { color: var(--syntax-string); }
+.highlight .se,
+.highlight .si { color: var(--syntax-escape); }
+
+.highlight .m,
+.highlight .mf,
+.highlight .mh,
+.highlight .mi,
+.highlight .mo,
+.highlight .il { color: var(--syntax-number); }
+
+.highlight .c,
+.highlight .c1,
+.highlight .cm,
+.highlight .cp,
+.highlight .cs { color: var(--syntax-comment); }
+.highlight .gd { color: var(--syntax-error); }
+.highlight .gi { color: var(--syntax-string); }
+.highlight .err { color: var(--syntax-error); background: rgba(255, 100, 100, 0.1); }
 
 table {
   display: block;

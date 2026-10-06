@@ -68,9 +68,14 @@ The [Compukters API reference]({{ '/guest-api/' | relative_url }}) is generated 
 `Compukters`. Addon signatures link to types from the core mod;
 each module links to its own source files. For local preview, run
 `./gradlew-sandbox-dev-parallel-summary -p api-build dokkaGeneratePublicationHtml`, then
-`python3 docs/_tools/build_guest_api.py`, then `jekyll build --source docs --destination /tmp/compukters-site`.
+`python3 docs/_tools/build_guest_api.py`, `python3 docs/_tools/build_ide_palette.py`, then
+`jekyll build --source docs --destination /tmp/compukters-site`.
 The generated `docs/guest-api/` directory is ignored
 by Git; `python3 docs/_tools/build_guest_api.py --check` verifies its files against the Dokka output.
+The Wiki's syntax palette is generated from the in-game `IdeColors.kt` and committed as
+`docs/_data/ide_palette.json`; `python3 docs/_tools/build_ide_palette.py --check` detects a stale projection.
+Documentation CI regenerates it and also runs when the IDE color source changes. The browser uses ordinary CSS;
+Rouge supplies lexical token classes during the Jekyll build.
 
 ## Verification levels
 
