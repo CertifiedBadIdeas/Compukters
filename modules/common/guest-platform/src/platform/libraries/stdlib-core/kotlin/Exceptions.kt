@@ -25,3 +25,6 @@ public class NegativeArraySizeException(message: String?, cause: Throwable? = nu
 public class NullPointerException(message: String?, cause: Throwable? = null) : RuntimeException(message, cause)
 
 public class ClassCastException(message: String?, cause: Throwable? = null) : RuntimeException(message, cause)
+
+/** No element satisfies a required collection or peripheral selection. */
+public class NoSuchElementException(message: String?, cause: Throwable? = null) : RuntimeException(message, cause)

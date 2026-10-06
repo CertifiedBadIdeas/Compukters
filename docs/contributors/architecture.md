@@ -525,7 +525,8 @@ absence and dispatches present values. Generated data-class hashes combine prima
 wrapping Int multiplication by 31; body properties are excluded. Supported array properties use a charged Guest
 loop over element hashes with initial value one and null zero, while ordinary arrays keep identity hashing.
 The linker infers ABI 1.11 from retained `value_hash` instructions. Container format and C ABI 18 stay unchanged;
-Runtime revision is 0.18.2 and `stdlib:core` version is 1.7.0.
+Runtime revision is 0.18.2. `stdlib:core` 1.8.0 adds strict `Iterable.first` selection and the ordinary
+managed `NoSuchElementException` class; these use existing instructions and exception representation.
 
 Runtime ABI 1.7 adds an explicit optional superclass to nominal array records. Array header flag bit 0 indicates
 a non-null TypeRef appended after the element ValueType; flag-zero records remain unchanged. The parent must resolve

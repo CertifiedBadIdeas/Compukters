@@ -6606,6 +6606,38 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `collection first preserves nullable values and throws only on absence`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+                fun nonLocal(): Int {
+                    listOf(3, 7).first { if (it == 7) return it; false }
+                    return 0
+                }
+                fun main() {
+                    require(listOf<Int?>(null, 7).first() == null)
+                    require(listOf<Int?>(null, 7).first { it == null } == null)
+                    require(listOf(3, 7).find { it > 3 } == 7)
+                    require(nonLocal() == 7)
+                    var visits = 0
+                    require(listOf(3, 7).first { visits += 1; true } == 3)
+                    require(visits == 1)
+                    try { emptyList<Int>().first(); error("missing empty failure") }
+                    catch (failure: NoSuchElementException) { require(failure is RuntimeException); require(failure.message == "Collection is empty") }
+                    try { listOf(3, 7).first { it > 9 }; error("missing predicate failure") }
+                    catch (failure: NoSuchElementException) { require(failure.message == "No element matches the predicate") }
+                    println("strict first ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.strictFirstArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `singleton companions retain identity state and generic provider dispatch`() =
         withAdapter { adapter ->
             val source =

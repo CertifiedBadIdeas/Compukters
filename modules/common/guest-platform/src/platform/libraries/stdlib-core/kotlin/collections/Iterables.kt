@@ -76,6 +76,24 @@ public inline fun <T> Iterable<T>.none(predicate: (T) -> Boolean): Boolean {
     return true
 }
 
+/** Returns the first element, throwing [NoSuchElementException] when empty. */
+public fun <T> Iterable<T>.first(): T {
+    val iterator = iterator()
+    if (!iterator.hasNext()) throw NoSuchElementException("Collection is empty")
+    return iterator.next()
+}
+
+/** Returns the first matching element, throwing [NoSuchElementException] when no element matches. */
+public inline fun <T> Iterable<T>.first(predicate: (T) -> Boolean): T {
+    for (element in this) {
+        if (predicate(element)) return element
+    }
+    throw NoSuchElementException("No element matches the predicate")
+}
+
+/** Returns the first matching element, or null when no element matches [predicate]. */
+public inline fun <T> Iterable<T>.find(predicate: (T) -> Boolean): T? = firstOrNull(predicate)
+
 /** Returns the first element, or null when this iterable is empty. */
 public fun <T> Iterable<T>.firstOrNull(): T? {
     val iterator = iterator()

@@ -46,9 +46,10 @@ fn main() {
         "generic-functions" => k2_generic_functions_preserve_primitive_and_reference_values(),
         "generic-cell" => k2_generic_cell_preserves_typed_fields_and_aliases(),
         "generic-interface" => k2_generic_interface_dispatches_concrete_types(),
-        "provider-defaults" => k2_expected_prints_with_budget(
-            "COMPUKTER_KOTLIN_PROVIDER_DEFAULTS_ARTIFACT", ["provider defaults ok\n"], 64,
-        ),
+        "provider-defaults" => {
+            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_PROVIDER_DEFAULTS_ARTIFACT", ["provider defaults ok\n"], 64);
+            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_STRICT_FIRST_ARTIFACT", ["strict first ok\n"], 64);
+        },
         "singleton-providers" => {
             k2_expected_prints_with_budget(
                 "COMPUKTER_KOTLIN_SINGLETON_PROVIDERS_ARTIFACT", ["singleton providers ok\n"], 128,
