@@ -3,6 +3,7 @@ layout: default
 title: Collection representation measurements
 description: Compare unboxed Int lists, boxed storage, and universal read bridges in the native VM.
 section: contributors
+permalink: /COLLECTION-BENCHMARK/
 ---
 
 # Collection representation measurements

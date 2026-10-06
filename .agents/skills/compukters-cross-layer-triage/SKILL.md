@@ -23,8 +23,8 @@ Classify the earliest failing boundary:
 - VM quota, managed allocation, capability suspension/resume, filesystem, or terminal behavior;
 - loader-independent Minecraft carrier behavior versus NeoForge registration, lifecycle, payload, or GameTest behavior.
 
-Use `docs/ARCHITECTURE.md` to identify the owner. For Guest Kotlin claims, also inspect the evidence recorded in
-`docs/KOTLIN-SUPPORT.md`.
+Use `docs/contributors/architecture.md` to identify the owner. For Guest Kotlin claims, also inspect the evidence recorded in
+`docs/developers/kotlin-support.md`.
 
 ## Narrow the Boundary
 
@@ -48,5 +48,5 @@ applicable workflow:
 
 The owning workflow implements and verifies the fix. Re-run the original reproduction and broaden verification
 according to the number of affected layers.
-After localization, use the owning boundary row in `docs/VERIFICATION.md`; do not substitute a broad green aggregate
+After localization, use the owning boundary row in `docs/contributors/verification.md`; do not substitute a broad green aggregate
 for evidence that the original failure path executed.

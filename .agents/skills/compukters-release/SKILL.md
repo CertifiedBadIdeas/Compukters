@@ -5,7 +5,7 @@ description: Use when building, reviewing, or claiming readiness of a distributa
 
 # Compukters Release
 
-Distinguish the artifact being produced from the readiness claim being made. Read `docs/VERIFICATION.md` before
+Distinguish the artifact being produced from the readiness claim being made. Read `docs/contributors/verification.md` before
 selecting commands.
 
 ## Select the artifact contract

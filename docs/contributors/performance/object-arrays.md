@@ -2,6 +2,7 @@
 layout: default
 title: Object-array heap measurements
 section: contributors
+permalink: /OBJECT-ARRAY-BENCHMARK/
 ---
 
 # Object-array heap measurements

@@ -3,6 +3,7 @@ layout: default
 title: In-world VM benchmark
 description: Load real Compukter VMs in Minecraft and profile their server-tick cost.
 section: contributors
+permalink: /VM-BENCHMARK/
 ---
 
 # In-world VM benchmark

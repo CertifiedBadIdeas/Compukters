@@ -2,6 +2,7 @@
 layout: default
 title: Repeated collection reuse measurements
 section: contributors
+permalink: /COLLECTION-REUSE-BENCHMARK/
 ---
 
 # Repeated collection reuse measurements

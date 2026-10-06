@@ -2,6 +2,7 @@
 layout: default
 title: Redstone GPIO
 section: players
+permalink: /REDSTONE/
 ---
 
 # Redstone GPIO

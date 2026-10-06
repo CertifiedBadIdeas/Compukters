@@ -2,6 +2,7 @@
 layout: default
 title: Production-path VM optimization (2026-10-04)
 section: contributors
+permalink: /VM-OPTIMIZATION-2026-10-04/
 ---
 
 # Production-path VM optimization

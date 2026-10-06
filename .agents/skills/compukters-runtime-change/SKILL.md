@@ -9,7 +9,7 @@ Preserve deterministic bounded execution and single ownership across the Rust VM
 
 ## Locate Ownership
 
-Read the runtime ownership section of `docs/ARCHITECTURE.md` and the relevant VM documentation. Identify the owning
+Read the runtime ownership section of `docs/contributors/architecture.md` and the relevant VM documentation. Identify the owning
 layer before editing:
 
 - `host/compukter-vm` owns decoding and verification internals, execution, managed memory, quotas, capabilities,
@@ -41,6 +41,6 @@ on wall-clock anecdotes.
 
 When `host/compukter-vm` changes, verify and commit that submodule repository first, then update the parent gitlink in
 a separate parent commit. Verify each affected VM and parent boundary with focused tests and integrations.
-Use the runtime or FFM row in `docs/VERIFICATION.md` to select this evidence. Crossing repositories or runtime layers
+Use the runtime or FFM row in `docs/contributors/verification.md` to select this evidence. Crossing repositories or runtime layers
 does not automatically require `verifyLocalFull`; reserve it for release preparation or an explicit user request,
 following `AGENTS.md`.

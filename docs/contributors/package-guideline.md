@@ -2,6 +2,7 @@
 layout: default
 title: Package guideline
 section: contributors
+permalink: /PACKAGE-GUIDELINE/
 ---
 
 # Package Guideline

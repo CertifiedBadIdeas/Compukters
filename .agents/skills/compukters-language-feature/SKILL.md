@@ -9,7 +9,7 @@ Keep the accepted Guest Kotlin surface, emitted artifact, VM behavior, IDE model
 
 ## Establish the Contract
 
-Read the relevant entry in `docs/KOTLIN-SUPPORT.md` and the compilation boundary in `docs/ARCHITECTURE.md`. Distinguish
+Read the relevant entry in `docs/developers/kotlin-support.md` and the compilation boundary in `docs/contributors/architecture.md`. Distinguish
 among these claims before changing code:
 
 - K2 accepts the source;
@@ -46,8 +46,8 @@ artifact/conformance coverage for the Kotlin-to-Rust boundary, VM tests for exec
 for tooling-only behavior. Exercise rejection paths when unsupported shapes must produce diagnostics rather than
 invalid artifacts or runtime faults.
 
-When Guest Kotlin support changes, update the affected `docs/KOTLIN-SUPPORT.md` entry and its exact evidence in the
+When Guest Kotlin support changes, update the affected `docs/developers/kotlin-support.md` entry and its exact evidence in the
 same commit. Keep checked entries tied to stable repository paths and named test behavior.
-Use the Guest Kotlin row in `docs/VERIFICATION.md` to select affected tests, conformance scenarios, and lint.
+Use the Guest Kotlin row in `docs/contributors/verification.md` to select affected tests, conformance scenarios, and lint.
 Do not automatically run `verifyLocalFull` after a language or library iteration or completed feature; reserve it
 for release preparation or an explicit user request, following `AGENTS.md`.

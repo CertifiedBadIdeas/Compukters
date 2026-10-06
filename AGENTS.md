@@ -20,8 +20,9 @@ and NeoForge sources compiled by both version families, while `v1_21_1` and `v26
 compatibility and packaging leaves. Set
 `compuktersActiveMinecraftVersion` in `gradle.properties` and reload Gradle to select which target owns the canonical
 shared roots in IntelliJ; inactive targets compile generated mirrors. Host-side Rust
-VM code lives in `host/compukter-vm`. Documentation is in
-`docs/`, mod metadata is in `config/`, and visual/model assets are in
+VM code lives in `host/compukter-vm`. Wiki guides are grouped under
+`docs/players`, `docs/developers`, and `docs/contributors`; site entry pages and the continuous changelog remain in
+`docs/`. Mod metadata is in `config/`, and visual/model assets are in
 `models/` and top-level logo files.
 
 ## Build, Test, and Development Commands
@@ -123,7 +124,7 @@ concrete remaining risk or an explicit user request. Run `verifyLocalFull` on th
 release preparation is declared complete, then apply the separate tagged release gate when applicable.
 This repository policy overrides shared workflow skills that otherwise require full verification at the end of
 an implementation plan. Report the scope actually verified; focused checks do not establish full-checkout or release
-readiness. See `docs/VERIFICATION.md` for boundary-specific evidence.
+readiness. See `docs/contributors/verification.md` for boundary-specific evidence.
 
 Respect user changes in the worktree. Prefer focused edits, run the narrowest useful verification, and update docs or
 active machine ABI references when behavior changes.

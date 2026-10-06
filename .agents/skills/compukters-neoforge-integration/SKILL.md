@@ -9,7 +9,7 @@ Keep loader-specific code at the edge and validate behavior at the lowest layer 
 
 ## Place Ownership Correctly
 
-Read the relevant ownership and runtime sections in `docs/ARCHITECTURE.md`. Put loader-independent Minecraft behavior
+Read the relevant ownership and runtime sections in `docs/contributors/architecture.md`. Put loader-independent Minecraft behavior
 in `v26_1-common`, NeoForge registration and adapters in `v26_1-neoforge`, and behavior that does not need
 `net.minecraft.*` in `core` or its owning lower module. `core` must not import Minecraft classes.
 
@@ -41,4 +41,4 @@ in the loader layer.
 
 When an API detail depends on the pinned Minecraft or NeoForge version, verify it against sources or official
 documentation for the versions in `gradle.properties`; do not assume behavior from an older mapping or loader release.
-Use the Minecraft, client, or packaging row in `docs/VERIFICATION.md` to select focused evidence and the final gate.
+Use the Minecraft, client, or packaging row in `docs/contributors/verification.md` to select focused evidence and the final gate.

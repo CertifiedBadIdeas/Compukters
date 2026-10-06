@@ -2,6 +2,7 @@
 layout: default
 title: Architecture
 section: contributors
+permalink: /ARCHITECTURE/
 ---
 
 # Compukters Architecture

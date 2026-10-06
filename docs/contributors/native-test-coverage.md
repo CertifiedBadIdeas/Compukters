@@ -2,6 +2,7 @@
 layout: default
 title: Native runtime test coverage
 section: contributors
+permalink: /NATIVE-TEST-COVERAGE/
 ---
 
 # Native Runtime Test Coverage

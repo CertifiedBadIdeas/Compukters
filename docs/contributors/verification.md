@@ -2,6 +2,7 @@
 layout: default
 title: Verification
 section: contributors
+permalink: /VERIFICATION/
 ---
 
 # Verification

@@ -2,6 +2,7 @@
 layout: default
 title: VM virtual dispatch optimization (2026-10-04)
 section: contributors
+permalink: /VM-DISPATCH-2026-10-04/
 ---
 
 # VM virtual dispatch optimization

@@ -10,7 +10,7 @@ boundaries.
 
 ## Identify the Boundary
 
-Read `docs/ARCHITECTURE.md`, then locate the current source of truth and every reader before editing. Classify the
+Read `docs/contributors/architecture.md`, then locate the current source of truth and every reader before editing. Classify the
 change as one or more of:
 
 - canonical platform bundle encoding, module metadata, graph, identity, or compatibility rules;
@@ -55,5 +55,5 @@ wrong-version tests for platform bundles or worker protocols. Run focused JVM an
 cross-language conformance task when the boundary reaches the VM. Crossing repositories or runtime layers does not
 automatically require `verifyLocalFull`; reserve it for release preparation or an explicit user request, following
 `AGENTS.md`. Update active ABI or architecture documentation in the same stage.
-Use the matching versioned-boundary row in `docs/VERIFICATION.md` so every claim has focused producer-consumer evidence
+Use the matching versioned-boundary row in `docs/contributors/verification.md` so every claim has focused producer-consumer evidence
 and the appropriate release gate.

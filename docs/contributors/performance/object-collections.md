@@ -2,6 +2,7 @@
 layout: default
 title: Object-collection heap measurements
 section: contributors
+permalink: /OBJECT-COLLECTION-BENCHMARK/
 ---
 
 # Object-collection heap measurements

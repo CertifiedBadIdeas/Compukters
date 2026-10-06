@@ -2,6 +2,7 @@
 layout: default
 title: Ryzen 9 9950X3D VM measurements (2026-10-04)
 section: contributors
+permalink: /VM-PERFORMANCE-2026-10-04/
 ---
 
 # Ryzen 9 9950X3D VM measurements

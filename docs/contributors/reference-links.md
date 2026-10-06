@@ -2,6 +2,7 @@
 layout: default
 title: Reference links
 section: contributors
+permalink: /LINKS/
 ---
 
 # Reference links
