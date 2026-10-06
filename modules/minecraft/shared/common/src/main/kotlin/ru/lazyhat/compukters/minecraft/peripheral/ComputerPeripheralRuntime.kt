@@ -54,6 +54,36 @@ class ComputerPeripheralRuntime internal constructor(
         return session.endpoint(bound, handle)
     }
 
+    fun at(
+        contract: ComputerPeripheralContract<*>,
+        side: Int,
+    ): Int {
+        requireRegistered(contract)
+        return session.at(contract.id, side)
+    }
+
+    fun named(
+        contract: ComputerPeripheralContract<*>,
+        name: String,
+    ): Int {
+        requireRegistered(contract)
+        return session.named(contract.id, name)
+    }
+
+    fun <T : Any> close(
+        contract: ComputerPeripheralContract<T>,
+        handle: Int,
+    ) {
+        requireRegistered(contract)
+        @Suppress("UNCHECKED_CAST")
+        session.close(contracts.getValue(contract) as PeripheralContract<BlockPos, T>, handle)
+    }
+
+    private fun requireRegistered(contract: ComputerPeripheralContract<*>) {
+        requireServerThread()
+        if (contract !in contracts) throw PeripheralFailure(HostFailureKind.OTHER, "Peripheral contract is not registered")
+    }
+
     private fun <T : Any> bind(descriptor: ComputerPeripheralContract<T>): PeripheralContract<BlockPos, T> =
         PeripheralContract(descriptor.id, descriptor.providerId, descriptor.deviceKey) { identity ->
             requireServerThread()

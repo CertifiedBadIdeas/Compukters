@@ -54,6 +54,20 @@ class PeripheralSessionTest {
     }
 
     @Test
+    fun `closing a handle invalidates aliases and allows a fresh acquisition`() {
+        val world = World()
+        val session = world.session()
+        val old = session.at(world.speed.id, 0)
+        assertFailsWith<PeripheralFailure> { session.close(world.shared, old) }
+        assertSame(world.devices[3], session.endpoint(world.speed, old))
+        session.close(world.speed, old)
+        assertFailsWith<PeripheralFailure> { session.endpoint(world.speed, old) }
+        val fresh = session.named(world.speed.id, "front")
+        assertNotEquals(old, fresh)
+        assertSame(world.devices[3], session.endpoint(world.speed, fresh))
+    }
+
+    @Test
     fun `snapshots preserve order and acquire only read device handles`() {
         val world = World()
         val session = world.session(handles = 1)
