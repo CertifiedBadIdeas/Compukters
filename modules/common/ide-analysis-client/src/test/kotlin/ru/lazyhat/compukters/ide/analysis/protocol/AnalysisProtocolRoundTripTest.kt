@@ -240,6 +240,7 @@ class AnalysisProtocolRoundTripTest {
                                 CompletionSymbol("sample.answer", "sample.answer"),
                                 listOf(CompletionTextEdit(EditorRange(0, 0), "import sample.answer\n\n")),
                             ),
+                            CompletionItem("TextDisplay", "TextDisplay", CompletionKind.PeripheralProvider),
                             CompletionItem(
                                 "run",
                                 "run",
@@ -344,7 +345,11 @@ class AnalysisProtocolRoundTripTest {
                 identity,
                 sourceLengths(),
                 diagnostics = listOf(EditorDiagnostic(EditorDiagnosticSeverity.Warning, "warning", path(), EditorRange(0, 3))),
-                semanticTokens = listOf(SemanticToken(path(), EditorRange(4, 10), SemanticCategory.Property, isMutable = true)),
+                semanticTokens =
+                    listOf(
+                        SemanticToken(path(), EditorRange(4, 10), SemanticCategory.Property, isMutable = true),
+                        SemanticToken(path(), EditorRange(0, 3), SemanticCategory.PeripheralProvider),
+                    ),
                 locations = listOf(SourceLocation(path(), EditorRange(4, 10))),
                 limits = EditorPresentationLimits(),
             )
@@ -361,7 +366,10 @@ class AnalysisProtocolRoundTripTest {
 
         assertEquals(listOf(EditorDiagnostic(EditorDiagnosticSeverity.Warning, "warning", path(), EditorRange(0, 3))), active.diagnostics)
         assertEquals(
-            listOf(SemanticToken(path(), EditorRange(4, 10), SemanticCategory.Property, isMutable = true)),
+            listOf(
+                SemanticToken(path(), EditorRange(4, 10), SemanticCategory.Property, isMutable = true),
+                SemanticToken(path(), EditorRange(0, 3), SemanticCategory.PeripheralProvider),
+            ),
             active.semanticTokens,
         )
         assertEquals(listOf(SourceLocation(path(), EditorRange(4, 10))), active.locations)

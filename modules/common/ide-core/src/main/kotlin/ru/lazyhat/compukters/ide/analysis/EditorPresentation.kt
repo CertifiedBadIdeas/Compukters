@@ -76,6 +76,7 @@ enum class SemanticCategory {
     EnumEntry,
     InferredExpression,
     SmartCastExpression,
+    PeripheralProvider,
 }
 
 data class SemanticToken(

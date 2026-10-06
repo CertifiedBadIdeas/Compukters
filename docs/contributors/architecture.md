@@ -95,7 +95,9 @@ workspace and answers diagnostics, completion, symbol, reference, expression, an
 and analysis use the same resolved platform bundle and source-snapshot identities, but have separate worker sessions
 and result contracts.
 
-Analysis protocol v14 also carries explicit Kotlin format, rename-admission, and parameter-information requests.
+Analysis protocol v15 adds a peripheral-provider role to semantic tokens and completion kinds. The worker identifies providers through inheritance of `PeripheralProvider`, including companion values; type references retain their ordinary class role. The editor renders provider values in the dedicated palette color with a `P` completion badge.
+
+The protocol also carries explicit Kotlin format, rename-admission, and parameter-information requests.
 Completion records carry immutable ordered UTF-16 label-relative name-match ranges, derived by the same worker-owned
 contiguous word-fragment matcher used for filtering and ranking. The client renders these ranges without repeating
 the matching algorithm. Expression information carries optional bounded plain-text KDoc from the resolved project

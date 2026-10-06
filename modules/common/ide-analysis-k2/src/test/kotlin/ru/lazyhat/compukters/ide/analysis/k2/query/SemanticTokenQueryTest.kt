@@ -29,6 +29,63 @@ import kotlin.test.assertTrue
 
 class SemanticTokenQueryTest {
     @Test
+    fun `peripheral provider expressions retain a distinct role from device type references`() {
+        val source =
+            """
+            import compukter.display.TextDisplay
+            import fixture.kinetics.AddonPeripheral
+            import compukter.peripheral.*
+            class Meter : Peripheral {
+                companion object : TypedPeripheralProvider<Meter>("test:meter") {
+                    override fun wrap(handle: Int): Meter = Meter()
+                }
+            }
+            object Standalone : TypedPeripheralProvider<Meter>("test:meter") {
+                override fun wrap(handle: Int): Meter = Meter()
+            }
+            object FakeProvider
+            fun use(device: TextDisplay, meter: Meter, addon: AddonPeripheral) {
+                TextDisplay.firstOrNull()
+                AddonPeripheral.firstOrNull()
+                Meter.firstOrNull()
+                Standalone.firstOrNull()
+                FakeProvider.toString()
+            }
+            """.trimIndent()
+        for (attached in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attached, "main.kt" to source).use { fixture ->
+                val presentation = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = presentation.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+
+                fun roleAt(
+                    fragment: String,
+                    offset: Int = 0,
+                ): SemanticCategory? =
+                    active.semanticTokens
+                        .singleOrNull {
+                            it.range.startUtf16 == source.indexOf(fragment) + offset &&
+                                it.category !in setOf(SemanticCategory.InferredExpression, SemanticCategory.SmartCastExpression)
+                        }?.category
+                assertEquals(SemanticCategory.PeripheralProvider, roleAt("TextDisplay.first"))
+                assertEquals(SemanticCategory.PeripheralProvider, roleAt("Meter.first"))
+                assertEquals(SemanticCategory.PeripheralProvider, roleAt("AddonPeripheral.first"))
+                assertEquals(SemanticCategory.Class, roleAt("addon: AddonPeripheral", "addon: ".length))
+                assertEquals(SemanticCategory.PeripheralProvider, roleAt("Standalone.first"))
+                assertEquals(SemanticCategory.PeripheralProvider, roleAt("object Standalone", "object ".length))
+                assertEquals(
+                    SemanticCategory.Class,
+                    roleAt("device: TextDisplay", "device: ".length),
+                    active.semanticTokens.joinToString {
+                        "${source.substring(it.range.startUtf16, it.range.endUtf16)}@${it.range.startUtf16}:${it.category}"
+                    },
+                )
+                assertEquals(SemanticCategory.Class, roleAt("meter: Meter", "meter: ".length))
+                assertEquals(SemanticCategory.Object, roleAt("FakeProvider.toString"))
+            }
+        }
+    }
+
+    @Test
     fun `method usage counts distinguish overloads members and local functions across project files`() {
         val declarations =
             """

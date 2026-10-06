@@ -48,6 +48,8 @@ object IdeColors {
     const val NUMBER = 0xFF2AACB8.toInt()
     const val COMMENT = 0xFF7A7E85.toInt()
     const val TYPE = 0xFFBCBEC4.toInt()
+    const val PERIPHERAL_PROVIDER = 0xFF85C9CC.toInt()
+    const val COMPLETION_PROVIDER = PERIPHERAL_PROVIDER
     const val TYPE_PARAMETER = 0xFF16BAAC.toInt()
     const val ANNOTATION = 0xFFB3AE60.toInt()
     const val FUNCTION = 0xFF56A8F5.toInt()

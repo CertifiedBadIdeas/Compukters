@@ -22,6 +22,7 @@ ROLES = {
     "number": "NUMBER",
     "comment": "COMMENT",
     "type": "TYPE",
+    "peripheral_provider": "PERIPHERAL_PROVIDER",
     "type_parameter": "TYPE_PARAMETER",
     "annotation": "ANNOTATION",
     "function": "FUNCTION",

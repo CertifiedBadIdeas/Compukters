@@ -45,6 +45,7 @@ import org.jetbrains.kotlin.analysis.api.signatures.KaFunctionSignature
 import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassKind
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassLikeSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaDeclarationSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaFunctionSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaLocalVariableSymbol
@@ -52,12 +53,14 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaNamedClassSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaPropertySymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaTypeParameterSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.findClass
 import org.jetbrains.kotlin.analysis.api.symbols.findTopLevelCallables
 import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.symbol
 import org.jetbrains.kotlin.analysis.api.types.KaFunctionType
 import org.jetbrains.kotlin.analysis.api.types.KaType
 import org.jetbrains.kotlin.analysis.api.types.KaTypeNullability
+import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry
@@ -207,7 +210,13 @@ internal object CompletionQuery {
                 CompletionItem(
                     signature?.let { completionLabel(it, name) } ?: name,
                     name,
-                    symbol.completionKind(),
+                    if (symbol is KaClassSymbol && isPeripheralValuePosition(context.position) &&
+                        symbol.hasPeripheralProviderValue()
+                    ) {
+                        CompletionKind.PeripheralProvider
+                    } else {
+                        symbol.completionKind()
+                    },
                     detail,
                     origin,
                     fqName?.let { CompletionSymbol(it, null) },
@@ -255,11 +264,15 @@ internal object CompletionQuery {
                     )
                 val function = indexedFunction(declaration, snapshot)
                 val signature = function?.let(::functionSignature)
+                val provider =
+                    declaration.kind in setOf(CompletionKind.Class, CompletionKind.Object) &&
+                        isPeripheralValuePosition(context.position) &&
+                        findClass(ClassId.topLevel(FqName(declaration.fqName)))?.hasPeripheralProviderValue() == true
                 val item =
                     CompletionItem(
                         signature?.let { completionLabel(it, declaration.shortName) } ?: declaration.shortName,
                         importPlan.insertText,
-                        declaration.kind,
+                        if (provider) CompletionKind.PeripheralProvider else declaration.kind,
                         declaration.signature,
                         declaration.origin,
                         importPlan.symbol,

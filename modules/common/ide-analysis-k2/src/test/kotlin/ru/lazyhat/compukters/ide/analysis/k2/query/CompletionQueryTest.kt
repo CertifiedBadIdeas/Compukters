@@ -41,6 +41,27 @@ import kotlin.test.assertTrue
 
 class CompletionQueryTest {
     @Test
+    fun `completion distinguishes provider values from imported and unimported device types`() {
+        for ((qualified, name) in listOf(
+            "compukter.display.TextDisplay" to "TextDisplay",
+            "fixture.kinetics.AddonPeripheral" to "AddonPeripheral",
+        )) {
+            for (imported in listOf(false, true)) {
+                for (typePosition in listOf(false, true)) {
+                    val prefix = name.dropLast(2)
+                    val source =
+                        (if (imported) "import $qualified\n" else "") +
+                            if (typePosition) "fun use(device: $prefix) {}" else "fun main() { $prefix }"
+                    K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+                        val item = fixture.complete("main.kt", source.lastIndexOf(prefix) + prefix.length).items.single { it.label == name }
+                        assertEquals(if (typePosition) CompletionKind.Class else CompletionKind.PeripheralProvider, item.kind, source)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `array copying completes with specialized return types`() {
         for (attachedSources in listOf(false, true)) {
             for ((initializer, expected) in listOf(

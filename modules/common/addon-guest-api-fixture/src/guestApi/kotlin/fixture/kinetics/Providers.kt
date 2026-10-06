@@ -20,3 +20,10 @@ public class ProbeDevice(public val value: Int) {
         override fun next(): ProbeDevice = ProbeDevice(7)
     }
 }
+
+/** Proves semantic provider roles across independently packaged addon metadata. */
+public class AddonPeripheral(private val handle: Int) : compukter.peripheral.Peripheral {
+    public companion object : compukter.peripheral.TypedPeripheralProvider<AddonPeripheral>("fixture:device") {
+        override fun wrap(handle: Int): AddonPeripheral = AddonPeripheral(handle)
+    }
+}
