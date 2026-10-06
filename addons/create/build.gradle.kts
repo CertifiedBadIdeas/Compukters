@@ -30,7 +30,7 @@ plugins {
 }
 
 group = "ru.lazyhat.compukters"
-val addonSdkVersion = "0.4.0"
+val addonSdkVersion = "0.5.0"
 
 base {
     archivesName.set("compukters-create-1.21.1-neoforge")

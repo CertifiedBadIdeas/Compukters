@@ -17,15 +17,34 @@ the Peripheral Configurator to give it a unique name in that cable network. Side
 relative to the computer's front face.
 
 ```kotlin
-import compukter.display.Display
+import compukter.display.TextDisplay
 
 fun main() {
-    val screen = Display.open("panel")
+    val screen = TextDisplay.named("panel")
     screen.clear()
     screen.writeAt(0, 0, "Warehouse")
     screen.writeAt(0, 2, "Iron: 128")
 }
 ```
+
+`TextDisplay` also acts as a typed provider:
+
+```kotlin
+import compukter.display.TextDisplay
+import compukter.peripheral.Side
+
+val adjacent = TextDisplay.atOrNull(Side.front)
+val first = TextDisplay.firstOrNull()
+val screens = TextDisplay.filter { it != adjacent }
+```
+
+`firstOrNull` selects the first reachable display, or returns null. A typed predicate may inspect each device;
+selection stops at the first match. `first`, `at`, and `named` throw `NoSuchElementException` when absent; their
+`OrNull` forms return null. Invalid or ambiguous names and discovery limits remain errors. `all()` and `filter`
+return a snapshot of matching displays. Discovery uses stable coordinate order within the loaded cable component.
+Sides address an adjacent device directly. Merely discovering a display does not claim its output lease.
+
+The existing `Display.open("panel")` and side helpers remain available and share handles with `TextDisplay` queries.
 
 For an adjacent display, use `Display.front.open()`, `Display.back.open()`, or another side accessor. Opening a display
 returns a handle bound to that exact block. Removing, replacing, unloading, or disconnecting it invalidates the handle;

@@ -1028,10 +1028,10 @@ private fun mapGuestValueType(
                 } else if (external != null) {
                     ValueType.Ref(nullable = type.isNullable(), type = external)
                 } else {
-                    throw UnsupportedKotlinIr(element, "unsupported value type")
+                    throw UnsupportedKotlinIr(element, "unsupported value type: ${type.specializationTypeIdentity()}")
                 }
             } else {
-                throw UnsupportedKotlinIr(element, "unsupported value type")
+                throw UnsupportedKotlinIr(element, "unsupported value type: ${type.specializationTypeIdentity()}")
             }
         }
     }
@@ -1464,7 +1464,12 @@ internal object KotlinProjectLowering {
                 ?.let(::discoverValueClass)
         }
         val referenceArrayUsage =
-            ReferenceArrayUsageCollector(guestTypes, userClasses.associateBy { it.symbol }, classInstances.toSet())
+            ReferenceArrayUsageCollector(
+                guestTypes,
+                userClasses.associateBy { it.symbol },
+                classInstances.toSet(),
+                linkedSymbols.types.keys,
+            )
         functionInstances.forEach { instance ->
             referenceArrayUsage.consider(instance.declaration.returnType, instance::substitute)
             loweredParameters(instance.declaration, session).forEach {
@@ -3193,6 +3198,10 @@ internal object KotlinProjectLowering {
 
                                                 is ReferenceArrayElement.Runtime -> {
                                                     TypeRef.Imported(ImportId.of(element.runtimeType))
+                                                }
+
+                                                is ReferenceArrayElement.PlatformClass -> {
+                                                    requireNotNull(externalClassTypes[element.symbol])
                                                 }
 
                                                 is ReferenceArrayElement.GuestClass -> {
@@ -9145,6 +9154,11 @@ private sealed interface ReferenceArrayElement {
         override val nullable: Boolean,
     ) : ReferenceArrayElement
 
+    data class PlatformClass(
+        val symbol: IrClassSymbol,
+        override val nullable: Boolean,
+    ) : ReferenceArrayElement
+
     data class GuestClass(
         val instance: GuestClassInstance,
         override val nullable: Boolean,
@@ -9155,6 +9169,7 @@ private class ReferenceArrayUsageCollector(
     private val guestTypes: GuestTypeRegistry,
     private val classes: Map<IrClassSymbol, IrClass>,
     private val instances: Set<GuestClassInstance>,
+    private val importedClasses: Set<IrClassSymbol>,
 ) {
     val arrays = linkedMapOf<String, ReferenceArrayElement>()
 
@@ -9181,6 +9196,12 @@ private class ReferenceArrayUsageCollector(
             }
         if (runtimeType != null) {
             arrays[resolved.specializationTypeIdentity()] = ReferenceArrayElement.Runtime(runtimeType, element.isNullable())
+            return
+        }
+        val symbol = (element as? IrSimpleType)?.classifier as? IrClassSymbol
+        if (symbol in importedClasses && symbol?.owner?.typeParameters.isNullOrEmpty()) {
+            arrays[resolved.specializationTypeIdentity()] =
+                ReferenceArrayElement.PlatformClass(requireNotNull(symbol), element.isNullable())
             return
         }
         val instance = element.classInstance(classes) ?: return

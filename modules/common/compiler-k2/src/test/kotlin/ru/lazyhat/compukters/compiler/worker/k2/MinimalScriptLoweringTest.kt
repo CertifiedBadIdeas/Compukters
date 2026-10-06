@@ -1673,9 +1673,23 @@ class MinimalScriptLoweringTest {
                 """
                 import compukter.concurrent.Tasks
                 import compukter.display.Display
+                import compukter.display.TextDisplay
+                import compukter.peripheral.Side
 
                 fun main() {
-                    val screen = Display.open("panel")
+                    val screen = TextDisplay.first()
+                    require(screen == TextDisplay.named("panel"))
+                    require(screen == Display.open("panel"))
+                    require(TextDisplay.all().size == 1)
+                    require(TextDisplay.filter { it == screen }.size == 1)
+                    require(TextDisplay.firstOrNull { it == screen } == screen)
+                    require(TextDisplay.namedOrNull("missing") == null)
+                    require(TextDisplay.atOrNull(Side.back) == null)
+                    try { TextDisplay.named("missing"); error("missing strict failure") }
+                    catch (failure: NoSuchElementException) { require(failure.message == "No peripheral has that name") }
+                    try { TextDisplay.first { error("predicate failed") }; error("unreachable") }
+                    catch (failure: IllegalStateException) { require(failure.message == "predicate failed") }
+                    require(TextDisplay.all().size == 1)
                     screen.writeAt(0, 0, "Ready")
                     while (true) {
                         Tasks.sleepTicks(20)

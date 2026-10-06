@@ -987,3 +987,17 @@ Evidence: `PeripheralSessionTest`, `PeripheralProgramHostTest`, and
 `canonical peripheral companion specializes shared typed queries` through `testKotlinPeripheralQueriesVmConformance`,
 including predicate short-circuiting, imported Peripheral upcasts, nullable absence, strict exceptions and snapshot
 cleanup after predicate failure.
+
+
+The Minecraft adapter binds registered `ComputerPeripheralContract<T>` descriptors once per program, through
+`ComputerPeripheralRuntime`. Loaded cable/direct contacts sort by x/y/z, provider and device key; side lookup
+resolves the contacted face directly. SDK 0.5.0 adds typed `CompuktersPeripheralContract<T>` registration and
+`CompuktersComputerContext.peripheral` access, retaining the earlier overloads. SDK JARs depend on core only at
+compile time and retain their explicit thin-archive class inventory. Both Minecraft version families compile the
+canonical shared adapter sources.
+
+TextDisplay is a nominal Peripheral wrapper with handle equality and a companion provider. Its new queries and
+legacy Display acquisitions share the program's base handle table. Display operations still own output leases;
+discovery creates no lease, and reset releases buffers touched by the program. The real text-display GameTest
+fixture covers typed selection, legacy acquisition, predicates, optional/strict absence and cleanup after a thrown
+predicate before exercising a world write and cable disconnection.

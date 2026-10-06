@@ -28,12 +28,15 @@ import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.addon.api.AddonGuestApiCatalog
 import ru.lazyhat.compukters.addon.api.AddonRecordSchema
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
+import ru.lazyhat.compukters.core.device.runtime.peripheral.PeripheralProgramHost
 import ru.lazyhat.compukters.core.device.runtime.program.programAddonHostOf
 import ru.lazyhat.compukters.core.device.runtime.program.programScopedAddonHostOf
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostRecordField
 import ru.lazyhat.compukters.lang.runtime.capability.HostRecordSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
+import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralContract
+import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralRuntime
 import java.util.concurrent.CopyOnWriteArrayList
 
 fun interface ComputerAddonHostFactory {
@@ -41,6 +44,15 @@ fun interface ComputerAddonHostFactory {
         level: ServerLevel,
         position: BlockPos,
         state: BlockState,
+    ): ProgramAddonHost?
+}
+
+fun interface ComputerPeripheralHostFactory {
+    fun create(
+        level: ServerLevel,
+        position: BlockPos,
+        state: BlockState,
+        peripherals: ComputerPeripheralRuntime,
     ): ProgramAddonHost?
 }
 
@@ -73,7 +85,30 @@ object ComputerAddonHosts {
             "computer addon host factory is already registered"
         }
         val updatedCatalog = AddonGuestApiCatalog.of(guestApiCatalog.bundles + guestApiBundles)
-        registrations += Registration(factory, guestApiBundles, registrationIdentity, peripheralProvider)
+        registrations +=
+            Registration(
+                ComputerPeripheralHostFactory { level, position, state, _ -> factory.create(level, position, state) },
+                guestApiBundles,
+                registrationIdentity,
+                peripheralProvider,
+                emptyList(),
+            )
+        guestApiCatalog = updatedCatalog
+    }
+
+    @Synchronized
+    fun registerPeripheral(
+        factory: ComputerPeripheralHostFactory,
+        guestApiBundles: List<AddonGuestApiBundle> = emptyList(),
+        registrationIdentity: Any = factory,
+        peripheralProvider: ComputerPeripheralProvider,
+        contracts: List<ComputerPeripheralContract<*>>,
+    ) {
+        require(registrations.none { it.identity == registrationIdentity }) { "computer addon host factory is already registered" }
+        val ids = registrations.flatMap { it.contracts }.map { it.id } + contracts.map { it.id }
+        require(ids.distinct().size == ids.size) { "peripheral contract id is already registered" }
+        val updatedCatalog = AddonGuestApiCatalog.of(guestApiCatalog.bundles + guestApiBundles)
+        registrations += Registration(factory, guestApiBundles, registrationIdentity, peripheralProvider, contracts.toList())
         guestApiCatalog = updatedCatalog
     }
 
@@ -103,12 +138,13 @@ object ComputerAddonHosts {
     ): ProgramAddonHost {
         // Capture registrations for this computer; each program owns fresh host state for the same context.
         val factories = registrations.toList()
-        if (factories.isEmpty()) return programAddonHostOf(emptyList())
         return programScopedAddonHostOf {
-            val hosts = mutableListOf<ProgramAddonHost>()
+            val peripherals =
+                ComputerPeripheralRuntime(level, position, state.getValue(ComputerBlock.FACING), factories.flatMap { it.contracts })
+            val hosts = mutableListOf<ProgramAddonHost>(PeripheralProgramHost(peripherals.session))
             try {
                 factories.forEach { registration ->
-                    registration.factory.create(level, position, state)?.let { host ->
+                    registration.factory.create(level, position, state, peripherals)?.let { host ->
                         hosts += host
                         requireAddonCapabilitySchemas(registration.guestApiBundles, host.capabilitySchemas)
                     }
@@ -122,10 +158,11 @@ object ComputerAddonHosts {
     }
 
     private data class Registration(
-        val factory: ComputerAddonHostFactory,
+        val factory: ComputerPeripheralHostFactory,
         val guestApiBundles: List<AddonGuestApiBundle>,
         val identity: Any,
         val peripheralProvider: ComputerPeripheralProvider?,
+        val contracts: List<ComputerPeripheralContract<*>>,
     )
 }
 
