@@ -9,6 +9,7 @@ package ru.lazyhat.compukters.minecraft.display
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
+import ru.lazyhat.compukters.core.device.runtime.peripheral.PeripheralFailure
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
@@ -16,6 +17,7 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
+import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralRuntime
 
 internal interface DisplayEndpoint {
     val identity: Any
@@ -38,12 +40,14 @@ internal sealed interface DisplayResolution {
 internal class DisplayHostState(
     private val resolveSide: (Int) -> DisplayEndpoint?,
     private val resolveName: (String) -> DisplayResolution,
+    private val peripherals: ComputerPeripheralRuntime? = null,
 ) : ProgramAddonHost {
     override val capabilitySchemas: List<HostCapabilitySchema> = listOf(SCHEMA)
 
     private val owner = Any()
     private val handles = linkedMapOf<Int, DisplayEndpoint>()
     private var nextHandle = 1
+    private val accessed = linkedMapOf<Any, DisplayEndpoint>()
 
     override fun dispatch(request: ProgramAddonRequest): ProgramAddonDispatch {
         val response =
@@ -84,24 +88,46 @@ internal class DisplayHostState(
     }
 
     override fun reset() {
-        handles.values
+        (handles.values + accessed.values)
             .map(DisplayEndpoint::buffer)
             .distinct()
             .forEach { it.release(owner) }
         handles.clear()
+        accessed.clear()
         nextHandle = 1
     }
 
     private fun acquireSide(side: Int): HostResponse {
         if (side !in 0..5) return failure(HostFailureKind.OTHER, "Invalid display side")
+        peripherals?.let { runtime ->
+            return discover { runtime.session.at(DisplayPeripheralIntegration.contract.id, side) }
+        }
         return resolveSide(side)?.let(::retain)
             ?: failure(HostFailureKind.UNAVAILABLE, "No display at that side")
     }
 
-    private fun acquireNamed(name: String): HostResponse =
-        when (val result = resolveName(name)) {
+    private fun acquireNamed(name: String): HostResponse {
+        peripherals?.let { runtime ->
+            return discover { runtime.session.named(DisplayPeripheralIntegration.contract.id, name) }
+        }
+        return when (val result = resolveName(name)) {
             is DisplayResolution.Found -> retain(result.endpoint)
             is DisplayResolution.Failed -> failure(result.kind, result.detail)
+        }
+    }
+
+    private fun discover(query: () -> Int): HostResponse =
+        try {
+            val handle = query()
+            if (handle ==
+                0
+            ) {
+                failure(HostFailureKind.UNAVAILABLE, "No reachable display satisfies the query")
+            } else {
+                HostResponse.IntSuccess(handle)
+            }
+        } catch (failure: PeripheralFailure) {
+            failure(failure.kind, failure.message)
         }
 
     private fun retain(endpoint: DisplayEndpoint): HostResponse {
@@ -137,6 +163,18 @@ internal class DisplayHostState(
         handle: Int,
         action: (DisplayEndpoint) -> HostResponse,
     ): HostResponse {
+        peripherals?.let { runtime ->
+            return try {
+                val endpoint = runtime.endpoint(DisplayPeripheralIntegration.contract, handle)
+                accessed[endpoint.identity] = endpoint
+                action(endpoint)
+            } catch (failure: PeripheralFailure) {
+                accessed.entries.removeIf { (_, endpoint) ->
+                    (!endpoint.valid()).also { stale -> if (stale) endpoint.buffer.release(owner) }
+                }
+                failure(failure.kind, failure.message)
+            }
+        }
         val endpoint = handles[handle] ?: return failure(HostFailureKind.INPUT_OUTPUT, "Unknown display handle")
         if (!endpoint.valid()) {
             handles.remove(handle)

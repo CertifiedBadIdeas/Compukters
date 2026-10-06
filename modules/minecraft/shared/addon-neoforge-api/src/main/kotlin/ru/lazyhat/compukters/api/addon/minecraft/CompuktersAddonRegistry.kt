@@ -23,20 +23,44 @@ import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
+import ru.lazyhat.compukters.core.device.runtime.peripheral.PeripheralFailure
 import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHostFactory
 import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
+import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralHostFactory
 import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralIdentity
 import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralProvider
+import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralContract
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookup
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookupStatus
+import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralRuntime
 
 class CompuktersComputerContext internal constructor(
     val level: ServerLevel,
     val position: BlockPos,
     private val facing: Direction,
     private val providerId: String,
+    private val peripherals: ComputerPeripheralRuntime? = null,
+    private val contracts: Map<CompuktersPeripheralContract<*>, ComputerPeripheralContract<*>> = emptyMap(),
 ) {
+    fun <T : CompuktersPeripheralEndpoint> peripheral(
+        contract: CompuktersPeripheralContract<T>,
+        handle: Int,
+    ): T {
+        @Suppress("UNCHECKED_CAST")
+        val bound =
+            contracts[contract] as? ComputerPeripheralContract<T>
+                ?: throw CompuktersPeripheralAccessException(
+                    ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind.OTHER,
+                    "Peripheral contract is not registered",
+                )
+        try {
+            return checkNotNull(peripherals).endpoint(bound, handle)
+        } catch (failure: PeripheralFailure) {
+            throw CompuktersPeripheralAccessException(failure.kind, failure.message)
+        }
+    }
+
     fun adjacentDirection(side: Int): Direction? =
         when (side) {
             0 -> facing
@@ -116,6 +140,33 @@ object CompuktersAddonRegistry {
         factory: CompuktersAddonHostFactory,
         peripheralProvider: CompuktersPeripheralProvider,
     ) = registerInternal(guestApi, factory, peripheralProvider)
+
+    @JvmStatic
+    fun register(
+        guestApi: AddonGuestApiBundle,
+        factory: CompuktersAddonHostFactory,
+        peripheralProvider: CompuktersPeripheralProvider,
+        contracts: List<CompuktersPeripheralContract<*>>,
+    ) {
+        val providerId = guestApi.identity.id
+        val bound = contracts.associateWith { it.bind(providerId) }
+        require(bound.size == contracts.size) { "duplicate peripheral contract descriptor" }
+        ComputerAddonHosts.registerPeripheral(
+            ComputerPeripheralHostFactory { level, position, state, peripherals ->
+                factory.create(
+                    CompuktersComputerContext(level, position, state.getValue(ComputerBlock.FACING), providerId, peripherals, bound),
+                )
+            },
+            listOf(guestApi),
+            factory,
+            ComputerPeripheralProvider { level, position, face ->
+                peripheralProvider.resolve(CompuktersPeripheralContact(level, position, face))?.let { device ->
+                    ComputerPeripheralIdentity(providerId, device.anchor.immutable(), device.deviceKey)
+                }
+            },
+            bound.values.toList(),
+        )
+    }
 
     private fun registerInternal(
         guestApi: AddonGuestApiBundle,

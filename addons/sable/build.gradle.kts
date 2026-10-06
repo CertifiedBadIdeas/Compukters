@@ -82,8 +82,8 @@ dependencies {
     // Loom dev runs do not discover Sable's Jar-in-Jar runtime dependencies automatically.
     modRuntimeOnly(sableLibraries)
     forgeRuntimeLibrary(veilLibraries)
-    compileOnly("ru.lazyhat.compukters:compukters-addon-api:0.4.0")
-    compileOnly("ru.lazyhat.compukters:compukters-addon-neoforge-1.21.1:0.4.0")
+    compileOnly("ru.lazyhat.compukters:compukters-addon-api:0.5.0")
+    compileOnly("ru.lazyhat.compukters:compukters-addon-neoforge-1.21.1:0.5.0")
     runtimeOnly(developmentMod)
     add(gameTest.implementationConfigurationName, developmentMod)
     listOf(

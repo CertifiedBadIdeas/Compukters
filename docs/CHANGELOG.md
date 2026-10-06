@@ -22,6 +22,11 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
   while preserving selected null elements; `find` aliases `firstOrNull`. Ordinary classes and companions
   can inherit a concrete specialization of an abstract generic class with interface parents.
 
+- Text displays expose `TextDisplay.first`, `firstOrNull`, `filter`, `all`, relative `at`/`atOrNull`, and
+  `named`/`namedOrNull` through a shared typed peripheral provider. Existing Display helpers share its handles.
+  The base owns bounded discovery snapshots and handle lifetime; SDK 0.5.0 lets addons register typed contracts
+  while keeping device operations in their own capabilities.
+
 - The documentation Wiki groups guides for players, developers and contributors, with expanding header navigation,
   contextual sidebars and a shared addon catalog. Detailed project, Sable, Propulsion and dev-stand guides live on the
   site; repository READMEs link to their canonical pages. Kotlin and other code examples use a syntax palette generated

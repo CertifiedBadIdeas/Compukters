@@ -12,7 +12,7 @@ A Compukters addon is an ordinary, independently installed NeoForge mod. It owns
 Kotlin declarations and generated `.cagb` bundle. Compukters reads that data bundle when the addon registers it, but
 the base mod never links to or packages the addon implementation.
 
-The public addon SDK uses version 0.4.0 independently of Compukters 0.5.0. The SDK has its own
+The public addon SDK uses version 0.5.0 independently of Compukters 0.5.0. The SDK has its own
 compatibility version: Compukters releases do not require addon authors to update unless the public addon boundary
 changes. All artifacts belonging to one SDK release share that SDK version:
 
@@ -100,7 +100,7 @@ dependencyResolutionManagement {
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.10"
-    id("ru.lazyhat.compukters.addon") version "0.4.0"
+    id("ru.lazyhat.compukters.addon") version "0.5.0"
     // Apply and configure Loom/NeoForge as usual for the target mod.
 }
 
@@ -181,11 +181,29 @@ dimension, and lifecycle checks around that identity; the provider key should di
 anchor and must contain at most 128 printable ASCII characters. Existing addons may keep the two-argument
 registration call and side-based discovery unchanged.
 
-SDK 0.4.0 uses platform ABI 3 and standalone module format 3. Rebuild addon bundles against its base platform;
+SDK 0.5.0 uses platform ABI 3 and standalone module format 3. Rebuild addon bundles against its base platform;
 older encoded bundles are rejected. The SDK retains `CompuktersComputerContext.isPeripheralReachable(device)` for validating retained handles against the
 computer's current loaded cable component. The check uses the canonical provider identity rather than the device name,
 so renaming the same reachable device does not redirect or invalidate its handle. Addons should latch the first
 `false` result when a handle must never revive after disconnection.
+
+SDK 0.5.0 adds a fourth registration argument, `List<CompuktersPeripheralContract<*>>`, for typed providers.
+Each contract has a unique namespaced id, a logical device key, and a resolver returning a
+`CompuktersPeripheralEndpoint`. Its `identity` must be the pinned physical instance; `valid()` must reject
+removal, replacement and unloading. The resolver receives a `CompuktersPeripheralLocation` with the canonical
+anchor and a latching `isReachable()` check. One logical device may expose several contracts.
+
+Guest wrappers implement `compukter.peripheral.Peripheral`; their companions inherit
+`TypedPeripheralProvider<Wrapper>("addon:contract")` and implement the protected `wrap(handle)` method.
+The base implements typed `first`, `firstOrNull`, `filter`, `all`, `at`, `atOrNull`, `named`, and `namedOrNull`.
+It owns bounded snapshots and exact-instance handles, with cleanup after early return or predicate failure.
+Addon capabilities continue to own device operations; they accept the base handle as an `Int`.
+
+In a host handler, use `computer.peripheral(contract, handle)` with the same descriptor object used at registration.
+Forward `CompuktersPeripheralAccessException.kind` and `.message` through `addonFailed` rather than converting
+stale or wrong-type handles into optional absence. Pending operations must revalidate access while polling.
+The base checks descriptor identity, expected contract and latched reachability before exposing a typed endpoint.
+Legacy registration overloads remain available for addons using their existing discovery helpers.
 
 Handlers execute through the bounded server-side addon boundary. Return `addonCompleted(value)` for an immediate
 result, `addonFailed(kind, detail)` for a descriptive Guest failure, or `addonPending { ... }` when the world operation

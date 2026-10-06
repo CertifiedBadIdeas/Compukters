@@ -28,6 +28,7 @@ val addonSdkVersion = libs.versions.addon.sdk.get()
 
 dependencies {
     compileOnly(projects.addonApi)
+    compileOnly(projects.core)
     compileOnly(projects.v261Common)
 }
 
@@ -69,6 +70,10 @@ val verifyAddonNeoForgeApiJar =
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralLookup.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralLookupStatus.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralProvider.class",
+                    "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralEndpoint.class",
+                    "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralLocation.class",
+                    "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralContract.class",
+                    "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralAccessException.class",
                 )
             check(productClasses == expected) { "unexpected classes in ${archive.name}: ${productClasses - expected}" }
         }

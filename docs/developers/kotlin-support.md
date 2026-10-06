@@ -842,6 +842,9 @@ supported.
   `testKotlinReferenceArrayVmConformance` and
   [`gc_tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/gc_tests.rs),
   test `collector_scans_reference_arrays`. Tracking: [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656)
+  Imported non-generic nominal classes also work as reference-array elements, including nullable storage backing
+  typed device lists. Evidence: `text display program lowers deterministically for GameTest`, executed by the
+  real text-display scenario in `:v26_1-neoforge:runGameTestServer` with `TextDisplay.all` and typed filtering.
 
 - [x] **Specialized `IntArray` storage** — `IntArray(size)`, `intArrayOf(...)`,
   empty arrays, `size`, indexed get/set, mutation, and direct `for` iteration lower to dense unboxed

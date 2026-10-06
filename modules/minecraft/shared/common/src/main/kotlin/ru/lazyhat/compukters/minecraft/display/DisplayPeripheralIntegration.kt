@@ -10,13 +10,15 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
+import ru.lazyhat.compukters.core.device.runtime.peripheral.PeripheralEndpoint
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
-import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHostFactory
 import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity
+import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralHostFactory
 import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralIdentity
 import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralProvider
+import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralContract
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookup
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookupStatus
 
@@ -24,14 +26,27 @@ object DisplayPeripheralIntegration {
     private const val PROVIDER_ID = "compukters-display"
     private const val DEVICE_KEY = "text"
 
+    internal val contract =
+        ComputerPeripheralContract<DisplayEndpoint>(
+            "compukter:text_display",
+            PROVIDER_ID,
+            DEVICE_KEY,
+        ) { level, computerPosition, identity ->
+            val computer = level.getBlockEntity(computerPosition) as? ComputerBlockEntity
+            computer?.let { resolve(level, it, identity.anchor, null) }?.let { endpoint ->
+                PeripheralEndpoint(endpoint, endpoint.identity, endpoint::valid)
+            }
+        }
+
     fun register() {
-        ComputerAddonHosts.register(
+        ComputerAddonHosts.registerPeripheral(
             factory =
-                ComputerAddonHostFactory { level, position, _ ->
+                ComputerPeripheralHostFactory { level, position, _, peripherals ->
                     val computer =
                         level.getBlockEntity(position) as? ComputerBlockEntity
-                            ?: return@ComputerAddonHostFactory null
+                            ?: return@ComputerPeripheralHostFactory null
                     DisplayHostState(
+                        peripherals = peripherals,
                         resolveSide = { side ->
                             val direction = directionFor(computer.blockState.getValue(ComputerBlock.FACING), side)
                             direction?.let { resolve(level, computer, position.relative(it), side) }
@@ -70,6 +85,7 @@ object DisplayPeripheralIntegration {
                     )
                 },
             registrationIdentity = this,
+            contracts = listOf(contract),
             peripheralProvider =
                 ComputerPeripheralProvider { level, position, _ ->
                     if (!level.hasChunkAt(position) || level.getBlockEntity(position) !is DisplayBlockEntity) {

@@ -98,8 +98,8 @@ dependencies {
     modRuntimeOnly("maven.modrinth:create-aeronautics:Vzp221Un") { isTransitive = false }
     modRuntimeOnly(aeronauticsLibraries)
     forgeRuntimeLibrary(veilLibraries)
-    compileOnly("ru.lazyhat.compukters:compukters-addon-api:0.4.0")
-    compileOnly("ru.lazyhat.compukters:compukters-addon-neoforge-1.21.1:0.4.0")
+    compileOnly("ru.lazyhat.compukters:compukters-addon-api:0.5.0")
+    compileOnly("ru.lazyhat.compukters:compukters-addon-neoforge-1.21.1:0.5.0")
     runtimeOnly(developmentMod)
     add(gameTest.implementationConfigurationName, developmentMod)
     listOf(
