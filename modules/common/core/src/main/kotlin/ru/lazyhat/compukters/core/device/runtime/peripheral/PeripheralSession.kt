@@ -137,6 +137,14 @@ class PeripheralSession<I : Any>(
         return retained.endpoint.value as T
     }
 
+    fun <T : Any> close(
+        contract: PeripheralContract<I, T>,
+        handle: Int,
+    ) {
+        endpoint(contract, handle)
+        handles.remove(handle)
+    }
+
     fun reset() {
         snapshots.clear()
         handles.clear()

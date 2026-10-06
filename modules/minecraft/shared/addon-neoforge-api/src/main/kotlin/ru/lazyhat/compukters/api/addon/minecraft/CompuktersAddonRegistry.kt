@@ -46,20 +46,41 @@ class CompuktersComputerContext internal constructor(
     fun <T : CompuktersPeripheralEndpoint> peripheral(
         contract: CompuktersPeripheralContract<T>,
         handle: Int,
-    ): T {
+    ): T = peripheralAccess { checkNotNull(peripherals).endpoint(bound(contract), handle) }
+
+    /** Legacy addon acquisition can share tokens with Guest provider discovery. Zero means absence. */
+    fun peripheralAt(
+        contract: CompuktersPeripheralContract<*>,
+        side: Int,
+    ): Int = peripheralAccess { checkNotNull(peripherals).at(bound(contract), side) }
+
+    fun peripheralNamed(
+        contract: CompuktersPeripheralContract<*>,
+        name: String,
+    ): Int = peripheralAccess { checkNotNull(peripherals).named(bound(contract), name) }
+
+    fun <T : CompuktersPeripheralEndpoint> closePeripheral(
+        contract: CompuktersPeripheralContract<T>,
+        handle: Int,
+    ) {
+        peripheralAccess { checkNotNull(peripherals).close(bound(contract), handle) }
+    }
+
+    private fun <T : CompuktersPeripheralEndpoint> bound(contract: CompuktersPeripheralContract<T>): ComputerPeripheralContract<T> {
         @Suppress("UNCHECKED_CAST")
-        val bound =
-            contracts[contract] as? ComputerPeripheralContract<T>
-                ?: throw CompuktersPeripheralAccessException(
-                    ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind.OTHER,
-                    "Peripheral contract is not registered",
-                )
+        return contracts[contract] as? ComputerPeripheralContract<T>
+            ?: throw CompuktersPeripheralAccessException(
+                ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind.OTHER,
+                "Peripheral contract is not registered",
+            )
+    }
+
+    private inline fun <T> peripheralAccess(operation: () -> T): T =
         try {
-            return checkNotNull(peripherals).endpoint(bound, handle)
+            operation()
         } catch (failure: PeripheralFailure) {
             throw CompuktersPeripheralAccessException(failure.kind, failure.message)
         }
-    }
 
     fun adjacentDirection(side: Int): Direction? =
         when (side) {
