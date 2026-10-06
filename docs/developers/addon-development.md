@@ -181,7 +181,7 @@ dimension, and lifecycle checks around that identity; the provider key should di
 anchor and must contain at most 128 printable ASCII characters. Existing addons may keep the two-argument
 registration call and side-based discovery unchanged.
 
-SDK 0.5.0 uses platform ABI 3 and standalone module format 3. Rebuild addon bundles against its base platform;
+SDK 0.5.0 uses platform ABI 3 and standalone module format 5. Rebuild addon bundles against its base platform;
 older encoded bundles are rejected. The SDK retains `CompuktersComputerContext.isPeripheralReachable(device)` for validating retained handles against the
 computer's current loaded cable component. The check uses the canonical provider identity rather than the device name,
 so renaming the same reachable device does not redirect or invalidate its handle. Addons should latch the first
@@ -203,6 +203,14 @@ In a host handler, use `computer.peripheral(contract, handle)` with the same des
 Forward `CompuktersPeripheralAccessException.kind` and `.message` through `addonFailed` rather than converting
 stale or wrong-type handles into optional absence. Pending operations must revalidate access while polling.
 The base checks descriptor identity, expected contract and latched reachability before exposing a typed endpoint.
+Use `computer.peripheralAt(contract, side)` and `peripheralNamed(contract, name)` when adapting legacy
+acquisition operations: they issue the same tokens as provider discovery and return zero only for absence.
+`closePeripheral(contract, handle)` invalidates every alias of that token; a later acquisition receives a fresh token.
+Release any addon-owned control lease when closing or resetting your host.
+Provider roles are inferred from the interface in both source and admitted addon metadata, so no annotation is needed.
+Changing a device from a scalar value class to a nominal `Peripheral` class changes its binary API; increment the
+addon's `x` compatibility line and rebuild dependents. Create and Propulsion use `2.0` for this transition.
+
 Legacy registration overloads remain available for addons using their existing discovery helpers.
 
 Handlers execute through the bounded server-side addon boundary. Return `addonCompleted(value)` for an immediate

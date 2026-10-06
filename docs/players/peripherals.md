@@ -14,7 +14,7 @@ corresponding addons.
 
 ## Connect a device
 
-For a directly adjacent device, use the API's side accessor when it offers one. Sides are relative to the computer's
+For a directly adjacent device, use `Device.at(Side.front)` or the API's existing side helper. Sides are relative to the computer's
 front face: `front`, `back`, `left`, `right`, `top` and `bottom`.
 
 For a named connection, connect the device to the computer with Peripheral Cables and use the Peripheral Configurator
@@ -24,10 +24,10 @@ discovery stays within loaded chunks and does not force-load the world.
 For example, open a named display:
 
 ```kotlin
-import compukter.display.Display
+import compukter.display.TextDisplay
 
 fun main() {
-    val screen = Display.open("panel")
+    val screen = TextDisplay.named("panel")
     screen.writeAt(0, 0, "Connected")
     readln() // Keep the program alive while it owns the output.
 }
@@ -36,11 +36,52 @@ fun main() {
 An adjacent display can instead be opened with `Display.front.open()`. Follow the
 [display guide]({{ '/DISPLAY/' | relative_url }}) for bounds and output ownership.
 
+## Typed discovery
+
+Device classes also act as providers. For example, `TextDisplay`, Create's `Speedometer`, `Stressometer`,
+`RotationController`, `StockTicker` and `Boiler`, and Propulsion's `CreativeThruster` and
+`CreativeVectorThruster` share these methods:
+
+| Method | Result |
+| --- | --- |
+| `first()` / `first { predicate }` | First matching device; throws `NoSuchElementException` if absent |
+| `firstOrNull()` / `firstOrNull { predicate }` | First matching device, or null |
+| `all()` / `filter { predicate }` | List of reachable devices, optionally filtered |
+| `at(Side.front)` / `atOrNull(Side.front)` | One device on that relative computer face |
+| `named("name")` / `namedOrNull("name")` | One uniquely named reachable device |
+
+```kotlin
+import create.kinetics.Speedometer
+import compukter.peripheral.Side
+
+fun main() {
+    val moving = Speedometer.firstOrNull { it.speed() != 0f }
+    println(moving?.speed())
+    for (gauge in Speedometer.filter { it.speed() > 64f }) {
+        println(gauge.speed())
+    }
+    println(Speedometer.atOrNull(Side.top)?.speed())
+}
+```
+
+Discovery follows a deterministic order by device anchor coordinates, addon id and logical device key.
+`first` and `firstOrNull` stop as soon as the predicate matches. A predicate receives the typed device and may call
+its operations. Snapshot resources are released after a normal return, an early match or a thrown predicate.
+Optional methods return null for absence; invalid names, ambiguous names, wrong device types and resource limits
+remain errors. Missing strict side/name selections throw `NoSuchElementException`.
+
+The computer retains at most 1,024 typed handles across all integrations, with at most four open discovery snapshots
+and 1,024 entries per snapshot. Discovery stays in loaded chunks. In the IDE, provider values have a dedicated color
+and a **P** completion badge; the same name used as a device type keeps ordinary class presentation.
+Existing `Display`, `Kinetics`, `Boilers`, `Logistics` and `Thrusters` acquisition helpers remain available and share
+handles with the new providers. Create and Propulsion addon API lines are now `2.0`: device wrappers are ordinary
+classes implementing `Peripheral`, so rebuild dependent addon bundles even when their source calls remain unchanged.
+
 ## Device handles have a lifetime
 
 A handle refers to the device you acquired, not whichever block later occupies its position. Removing, replacing,
 unloading or disconnecting a device can invalidate it. Reconnect and acquire a new handle instead of assuming an old
-one will retarget. Error details and control-release behavior depend on the device API.
+one will retarget. An expired typed handle fails with `compukter.io.IOException`; it never revives after reconnection. Control-release behavior depends on the device API.
 
 | Device | Guide |
 | --- | --- |

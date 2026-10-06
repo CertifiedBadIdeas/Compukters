@@ -22,8 +22,11 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
   while preserving selected null elements; `find` aliases `firstOrNull`. Ordinary classes and companions
   can inherit a concrete specialization of an abstract generic class with interface parents.
 
-- Text displays expose `TextDisplay.first`, `firstOrNull`, `filter`, `all`, relative `at`/`atOrNull`, and
-  `named`/`namedOrNull` through a shared typed peripheral provider. Existing Display helpers share its handles.
+- Text displays, all Create devices and both Propulsion creative engine types expose `first`, `firstOrNull`,
+  `filter`, `all`, relative `at`/`atOrNull`, and `named`/`namedOrNull` through typed companion providers.
+  Existing acquisition helpers share their exact-instance handles. Provider values have a distinct IDE color
+  and a `P` completion badge; type references keep ordinary class presentation. Create and Propulsion move to
+  addon API line `2.0` because their device wrappers now implement the common `Peripheral` interface.
   The base owns bounded discovery snapshots and handle lifetime; SDK 0.5.0 lets addons register typed contracts
   while keeping device operations in their own capabilities.
 
