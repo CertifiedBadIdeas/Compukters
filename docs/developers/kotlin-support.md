@@ -452,6 +452,18 @@ supported.
 
 ## Classes and object model
 
+- [x] **Named singleton objects and companions** — project `object` and `companion object` declarations lower to
+  managed classes with one lazily initialized static instance. Supported field initialization, methods, identity and
+  interface dispatch share that instance. A companion can implement a concrete generic interface, including inherited
+  methods with typed predicates. Addon objects implementing interfaces export their instance and nominal type; selected
+  addon source templates specialize through the same boundary as base library templates. Existing platform namespace
+  objects without supertypes retain their static facade representation. Evidence:
+  `singleton companions retain identity state and generic provider dispatch` and
+  `addon companion provider imports one singleton and inherited generic methods`, executed by
+  `testKotlinSingletonProvidersVmConformance`. The addon test includes an unrelated callback shape to verify that
+  callback identities depend on their signatures rather than discovery order. Anonymous object expressions remain
+  outside this support claim.
+
 - [ ] **Instance methods and dynamic dispatch — Partial** — supported Guest
   classes may declare ordinary non-suspending methods, override class methods,
   and implement abstract interface methods. Calls through class and interface
@@ -552,11 +564,6 @@ supported.
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `guest object subset rejects generic secondary uninitialized stateful and explicit cast shapes`.
   Tracking: not scheduled
-
-- [ ] **User `object` declarations — Unsupported** — the source class layout
-  admits classes, interfaces, and enums, but not singleton object declarations.
-  Trusted Guest API objects are compiler-provided facades, not evidence for
-  user-defined objects. Tracking: not scheduled
 
 - [ ] **Type tests and casts — Partial** — `is` checks and compiler-generated
   smart casts over admitted references lower to VM type checks and checked

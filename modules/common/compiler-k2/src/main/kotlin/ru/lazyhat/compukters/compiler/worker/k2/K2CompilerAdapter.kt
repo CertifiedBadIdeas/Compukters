@@ -135,7 +135,6 @@ class K2CompilerAdapter(
             val sourceLibraries =
                 selected.filter { module ->
                     module.id != platform.builtins.id &&
-                        platform.modules.any { packaged -> packaged.id == module.id } &&
                         module.sourceDeclarations.isNotEmpty()
                 }
             val librarySourceNames =

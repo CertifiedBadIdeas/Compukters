@@ -186,6 +186,13 @@ implementations and their dependencies; final application linking removes unreac
 dependency module indexes into symbolic identities before linking so a shared library retains one owner across
 fragment containers. The final executable restores concrete indexes. Generic binary templates are not part of the
 platform bundle or VM artifact contract. Bundle format 9 and standalone module format 5 reject older representations.
+Selected addon modules can provide source templates through the same verified source-library path. Their metadata
+carrier retains template declaration identities while the separate source carrier supplies the matching files;
+sources are reattached before template validation. Standalone module decoding still rejects detached templates.
+Managed object/companion instances use existing class initializers and static fields, including exported singleton
+fields for independent libraries. Typed callback interfaces use names derived from their complete signatures and
+participate in trusted specialization ownership, so producer/consumer discovery order cannot change their identity.
+These changes reuse the existing bundle and artifact representations and do not change the native ABI.
 Default-argument metadata includes an explicit array-receiver size expression, evaluated from the already computed
 receiver rather than re-evaluating its source expression, and an explicit null value distinct from an absent default.
 Private Kotlin metadata format 6 carries the same defaults, including primary-constructor defaults without a receiver slot.

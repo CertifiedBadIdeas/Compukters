@@ -320,6 +320,8 @@ val genericFunctionsConformanceArtifact = layout.buildDirectory.file("generated/
 val genericCellConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-cell.cpkt")
 val genericInterfaceConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-interface.cpkt")
 val providerDefaultsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-provider-defaults.cpkt")
+val singletonProvidersConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-singleton-providers.cpkt")
+val addonProvidersConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-addon-providers.cpkt")
 val listConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list.cpkt")
 val listAnyConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-any.cpkt")
 val mutableListConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-mutable-list.cpkt")
@@ -915,6 +917,27 @@ tasks.register<Test>("generateProviderDefaultsConformanceArtifact") {
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.providerDefaultsArtifact", providerDefaultsConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+tasks.register<Test>("generateSingletonProvidersConformanceArtifact") {
+    description = "Compiles managed singleton companion providers for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*singleton companions retain identity state and generic provider dispatch*")
+    filter.includeTestsMatching("*addon companion provider imports one singleton and inherited generic methods*")
+    inputs.files(addonGuestApiFixtureBundle)
+    inputs.file(workerJar)
+    outputs.file(singletonProvidersConformanceArtifact)
+    outputs.file(addonProvidersConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
+        systemProperty("compukter.vm.singletonProvidersArtifact", singletonProvidersConformanceArtifact.get().asFile.absolutePath)
+        systemProperty("compukter.vm.addonProvidersArtifact", addonProvidersConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

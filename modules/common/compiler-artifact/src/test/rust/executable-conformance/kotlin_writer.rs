@@ -49,6 +49,14 @@ fn main() {
         "provider-defaults" => k2_expected_prints_with_budget(
             "COMPUKTER_KOTLIN_PROVIDER_DEFAULTS_ARTIFACT", ["provider defaults ok\n"], 64,
         ),
+        "singleton-providers" => {
+            k2_expected_prints_with_budget(
+                "COMPUKTER_KOTLIN_SINGLETON_PROVIDERS_ARTIFACT", ["singleton providers ok\n"], 128,
+            );
+            k2_expected_prints_with_budget(
+                "COMPUKTER_KOTLIN_ADDON_PROVIDERS_ARTIFACT", ["addon providers ok\n"], 128,
+            );
+        },
         "list" => k2_lists_retain_typed_elements(),
         "list-any" => k2_int_list_covariance_boxes_universal_reads(),
         "mutable-list" => k2_mutable_list_preserves_growth_mutation_and_views(),

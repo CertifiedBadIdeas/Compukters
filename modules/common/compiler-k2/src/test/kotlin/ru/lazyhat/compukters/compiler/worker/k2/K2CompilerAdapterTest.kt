@@ -487,10 +487,20 @@ class K2CompilerAdapterTest {
                 },
             )
 
-            val spoof =
+            // A same-named ordinary guest implementation is valid, but cannot acquire host authority.
+            val ordinary =
                 adapter.compile(
                     request(
                         "package fixture.kinetics\nprivate object KineticsBindings { fun speed(handle: Int): Float = handle.toFloat() }\nfun main() { val speed = KineticsBindings.speed(1) }",
+                    ),
+                )
+            val ordinaryArtifact = ArtifactReader.read(assertNotNull(ordinary.artifact, ordinary.diagnostics.joinToString()).toByteArray())
+            assertTrue(ordinaryArtifact.capabilities.isEmpty())
+
+            val spoof =
+                adapter.compile(
+                    request(
+                        "package fixture.kinetics\nprivate object KineticsBindings { external fun speed(handle: Int): Float }\nfun main() { val speed = KineticsBindings.speed(1) }",
                     ),
                 )
             assertNull(spoof.artifact)

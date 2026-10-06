@@ -59,6 +59,54 @@ class AddonGuestApiBundleCodecTest {
     }
 
     @Test
+    fun `source templates survive separated metadata and source carriers`() {
+        val baseline = bundle()
+        val template =
+            baseline.moduleDescriptor.declarations.single().copy(
+                symbol = "fixture.meters.identity",
+                signature = "fun(T):T",
+                trustedExternal = false,
+            )
+        val module =
+            baseline.moduleDescriptor.copy(
+                declarations = baseline.moduleDescriptor.declarations + template,
+                sourceDeclarations = listOf(template.identity),
+            )
+        val withTemplates =
+            AddonGuestApiBundleCodec.assemble(
+                baseline.identity.id,
+                baseline.identity.platformAbi,
+                module,
+                baseline.capabilitySchemas,
+                baseline.bindings,
+            )
+        val decoded = AddonGuestApiBundleCodec.decode(AddonGuestApiBundleCodec.encode(withTemplates))
+        assertEquals(listOf(template.identity), decoded.moduleDescriptor.sourceDeclarations)
+        assertEquals(module.sources, decoded.moduleDescriptor.sources)
+        assertEquals(withTemplates, decoded)
+
+        val metadata = PlatformBundleCodec.encodeModuleMetadata(module)
+        assertFailsWith<IllegalArgumentException> { PlatformBundleCodec.decodeModule(metadata) }
+        assertFailsWith<IllegalArgumentException> { PlatformBundleCodec.decodeModuleMetadata(metadata, emptyList()) }
+        assertFailsWith<IllegalArgumentException> {
+            PlatformBundleCodec.decodeModuleMetadata(metadata, module.sources.map { it.copy(path = "fixture/Other.kt") })
+        }
+        assertFailsWith<IllegalArgumentException> {
+            PlatformBundleCodec.decodeModuleMetadata(PlatformBundleCodec.encodeModule(module), module.sources)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AddonGuestApiBundleCodec.assemble(
+                baseline.identity.id,
+                baseline.identity.platformAbi,
+                module,
+                baseline.capabilitySchemas,
+                baseline.bindings,
+                includeSources = false,
+            )
+        }
+    }
+
+    @Test
     fun `bundle hash changes with schemas bindings and sources`() {
         val baseline = bundle()
         val changedSource = bundle(source = SOURCE.replace("package ", "package  "))

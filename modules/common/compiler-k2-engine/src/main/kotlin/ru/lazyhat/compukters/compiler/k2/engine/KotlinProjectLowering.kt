@@ -203,9 +203,16 @@ private data class GuestClassLayout(
     val firstField: UInt,
     val fields: List<GuestFieldLayout>,
     val enumEntries: List<GuestEnumEntryLayout>,
+    val singletonFieldId: FieldId? = null,
 ) {
     val declaration: IrClass get() = instance.declaration
 }
+
+private fun IrClass.isManagedPlatformObject(): Boolean =
+    kind == ClassKind.OBJECT &&
+        superTypes.any { type ->
+            ((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() != "kotlin.Any"
+        }
 
 private data class GuestClassInstance(
     val declaration: IrClass,
@@ -260,7 +267,17 @@ private fun collectGuestClassInstances(
         substitution: (IrType) -> IrType = { it },
     ) {
         val resolved = substitution(type)
-        resolved.classInstance(bySymbol)?.let(::add)
+        val local = resolved.classInstance(bySymbol)
+        if (local != null) {
+            add(local)
+        } else {
+            val simple = resolved as? IrSimpleType ?: return
+            val declaration = (simple.classifier as? IrClassSymbol)?.owner ?: return
+            val arguments = simple.arguments.map { (it as? IrTypeProjection)?.type ?: return }
+            if (arguments.size != declaration.typeParameters.size) return
+            val imported = GuestClassInstance(declaration, arguments)
+            declaration.superTypes.forEach { parent -> consider(imported.substitute(parent)) }
+        }
     }
 
     classes.filter { it.typeParameters.isEmpty() }.forEach { add(GuestClassInstance(it, emptyList())) }
@@ -591,6 +608,7 @@ private class InlineValueClassRegistry private constructor(
                 classes.filter { declaration ->
                     declaration.kind == ClassKind.OBJECT &&
                         declaration.name.asString() == "Companion" &&
+                        !declaration.isManagedPlatformObject() &&
                         layoutsByClass.containsKey((declaration.parent as? IrClass)?.symbol)
                 }
             val constants =
@@ -910,7 +928,7 @@ private fun mapGuestValueType(
         val guestClass = (type as? IrSimpleType)?.classifier as? IrClassSymbol
         val guestInstance = type.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
         if (guestTypes.valueClassBox(type) == null && !type.isKotlinAny() && guestClass != stringClass &&
-            guestClass !in classTypeIds && guestInstance !in classInstanceTypeIds
+            guestClass !in classTypeIds && guestClass !in externalClassTypes && guestInstance !in classInstanceTypeIds
         ) {
             throw UnsupportedKotlinIr(element, "nullable type is outside the supported reference subset")
         }
@@ -1107,7 +1125,7 @@ internal object KotlinProjectLowering {
             (classes + collectionInterfaceClasses)
                 .distinctBy { it.symbol }
                 .filterNot { it.runtimeExceptionType() != null }
-                .filterNot { includeTrustedPlatformBodies && it.kind == ClassKind.OBJECT }
+                .filterNot { includeTrustedPlatformBodies && it.kind == ClassKind.OBJECT && !it.isManagedPlatformObject() }
                 .filterNot { declaration ->
                     !includeTrustedPlatformBodies && !usesListFactory &&
                         declaration !in collectionInterfaceClasses &&
@@ -1243,7 +1261,7 @@ internal object KotlinProjectLowering {
             }
         val constructorClasses =
             userClasses.filter { declaration ->
-                declaration.kind == ClassKind.CLASS &&
+                declaration.kind in setOf(ClassKind.CLASS, ClassKind.OBJECT) &&
                     declaration.constructors.any { it.isPrimary }
             }
         var functionInstances = collectGuestFunctionInstances(userFunctions, constructorClasses)
@@ -1298,10 +1316,12 @@ internal object KotlinProjectLowering {
                 }
             }
         val unitBlockShape = GuestFunctionShape(emptyList(), pluginContext.irBuiltIns.unitType)
+        session.recordPlatformSpecializations(functionShapes.filter { it != unitBlockShape }.map { functionShapeName(it, unitBlockShape) })
         val usesFunction0Unit = unitBlockShape in functionShapes
         val constructorInstances =
             classInstances.filter { instance ->
-                instance.declaration.kind == ClassKind.CLASS && instance.declaration.constructors.any { it.isPrimary }
+                instance.declaration.kind in setOf(ClassKind.CLASS, ClassKind.OBJECT) &&
+                    instance.declaration.constructors.any { it.isPrimary }
             } +
                 classes.distinctBy { it.symbol }.mapNotNull { declaration ->
                     val name = declaration.fqNameWhenAvailable?.asString()
@@ -1311,7 +1331,8 @@ internal object KotlinProjectLowering {
                 }
         val initializerClasses =
             userClasses.filter { declaration ->
-                declaration.kind == ClassKind.ENUM_CLASS && declaration.declarations.any { it is IrEnumEntry }
+                declaration.kind == ClassKind.OBJECT ||
+                    (declaration.kind == ClassKind.ENUM_CLASS && declaration.declarations.any { it is IrEnumEntry })
             }
         val constructorDeclarations = constructorInstances.map { it.declaration }
         val externalFunctions = linkedPlatformFunctions(userFunctions + constructorDeclarations, session)
@@ -1493,10 +1514,11 @@ internal object KotlinProjectLowering {
                     linkedSymbols.types.values.map(ExternalTypeTarget::exportName) +
                     linkedSymbols.fieldsByGetter.values.map(ExternalFieldTarget::exportName) +
                     linkedSymbols.enumEntries.values.map(ExternalFieldTarget::exportName) +
+                    linkedSymbols.singletons.values.map(ExternalFieldTarget::exportName) +
                     linkedSymbols.defaultEnumEntries.values.map(ExternalFieldTarget::exportName) +
                     functionInstances.map { requireNotNull(functionArtifactNames[it]) } +
                     platformFunctionExports.values +
-                    functionShapes.indices.map { index -> functionShapeName(index, functionShapes[index], unitBlockShape) } +
+                    functionShapes.indices.map { index -> functionShapeName(functionShapes[index], unitBlockShape) } +
                     listOfNotNull("invoke".takeIf { functionShapes.isNotEmpty() }) +
                     listOfNotNull("<task-launch>".takeIf { usesFunction0Unit }) +
                     closureSources.flatMap { closure ->
@@ -1511,7 +1533,8 @@ internal object KotlinProjectLowering {
                         val owner = declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
                         val fieldNames =
                             declaration.declarations.filterIsInstance<IrProperty>().map { it.name.asString() } +
-                                declaration.declarations.filterIsInstance<IrEnumEntry>().map { it.name.asString() }
+                                declaration.declarations.filterIsInstance<IrEnumEntry>().map { it.name.asString() } +
+                                listOfNotNull("<instance>".takeIf { declaration.kind == ClassKind.OBJECT })
                         fieldNames +
                             if (includeTrustedPlatformBodies) {
                                 fieldNames.map { field -> "$owner.$field" }
@@ -1755,7 +1778,8 @@ internal object KotlinProjectLowering {
             }
         val externalFieldImports =
             (
-                linkedSymbols.fieldsByGetter.values + linkedSymbols.enumEntries.values + linkedSymbols.defaultEnumEntries.values +
+                linkedSymbols.fieldsByGetter.values + linkedSymbols.enumEntries.values + linkedSymbols.singletons.values +
+                    linkedSymbols.defaultEnumEntries.values +
                     externalBoxFields
             ).distinctBy(ExternalFieldTarget::sortKey)
                 .sortedBy(ExternalFieldTarget::sortKey)
@@ -1767,6 +1791,8 @@ internal object KotlinProjectLowering {
             linkedSymbols.fieldsByGetter.mapValues { (_, target) -> requireNotNull(externalFieldsBySortKey[target.sortKey]) }
         val externalEnumFieldImports =
             linkedSymbols.enumEntries.mapValues { (_, target) -> requireNotNull(externalFieldsBySortKey[target.sortKey]) }
+        val externalSingletonFieldImports =
+            linkedSymbols.singletons.mapValues { (_, target) -> requireNotNull(externalFieldsBySortKey[target.sortKey]) }
         val externalDefaultEnumFieldImports =
             linkedSymbols.defaultEnumEntries.mapValues { (_, target) -> requireNotNull(externalFieldsBySortKey[target.sortKey]) }
         val externalFieldImportCount = externalFieldImports.size
@@ -1929,7 +1955,8 @@ internal object KotlinProjectLowering {
                         }
                     }
                 }.toMap()
-        var nextClosureField = classLayouts.sumOf { layout -> layout.fields.size + layout.enumEntries.size }
+        var nextClosureField =
+            classLayouts.sumOf { layout -> layout.fields.size + layout.enumEntries.size + if (layout.singletonFieldId == null) 0 else 1 }
         val captureCellLayouts =
             captureCellDeclarations.mapIndexed { ordinal, declaration ->
                 GuestCaptureCellLayout(
@@ -2136,6 +2163,8 @@ internal object KotlinProjectLowering {
                                 classLayouts.flatMap { layout -> layout.enumEntries }.associateBy { it.declaration.symbol },
                             externalFieldsByGetter = externalGetterFieldImports,
                             externalEnumEntries = externalEnumFieldImports,
+                            singletonLayouts = classLayouts.filter { it.singletonFieldId != null }.associateBy { it.declaration.symbol },
+                            externalSingletons = externalSingletonFieldImports,
                             externalDefaultEnumEntries = externalDefaultEnumFieldImports,
                             externalFunctions = externalFunctionImports,
                             functionTypes = shapeInterfaceTypes,
@@ -2392,6 +2421,8 @@ internal object KotlinProjectLowering {
                         enumEntries = classLayouts.flatMap { it.enumEntries }.associateBy { it.declaration.symbol },
                         externalFieldsByGetter = externalGetterFieldImports,
                         externalEnumEntries = externalEnumFieldImports,
+                        singletonLayouts = classLayouts.filter { it.singletonFieldId != null }.associateBy { it.declaration.symbol },
+                        externalSingletons = externalSingletonFieldImports,
                         externalDefaultEnumEntries = externalDefaultEnumFieldImports,
                         externalFunctions = externalFunctionImports,
                         functionTypes = shapeInterfaceTypes,
@@ -2535,6 +2566,8 @@ internal object KotlinProjectLowering {
                     enumEntries = classLayouts.flatMap { it.enumEntries }.associateBy { it.declaration.symbol },
                     externalFieldsByGetter = externalGetterFieldImports,
                     externalEnumEntries = externalEnumFieldImports,
+                    singletonLayouts = classLayouts.filter { it.singletonFieldId != null }.associateBy { it.declaration.symbol },
+                    externalSingletons = externalSingletonFieldImports,
                     externalDefaultEnumEntries = externalDefaultEnumFieldImports,
                     externalFunctions = externalFunctionImports,
                     functionTypes = shapeInterfaceTypes,
@@ -2568,6 +2601,34 @@ internal object KotlinProjectLowering {
             val layout = requireNotNull(classLayoutsBySymbol[declaration.symbol])
             val functionId = requireNotNull(initializerFunctionIds[declaration.symbol])
             val firstBlock = blocks.size
+            if (layout.singletonFieldId != null) {
+                val constructor = requireNotNull(constructorFunctionIds[layout.instance])
+                blocks +=
+                    Block(
+                        functionId,
+                        false,
+                        listOf(
+                            Instruction.NewObject(RegisterId.of(0u), TypeRef.Local(layout.typeId)),
+                            Instruction.Call(Destination.Unit, FunctionRef.Local(constructor), listOf(RegisterId.of(0u))),
+                            Instruction.StaticSet(FieldRef.Local(layout.singletonFieldId), RegisterId.of(0u)),
+                            Instruction.Return(Destination.Unit),
+                        ),
+                    )
+                loweredFunctions +=
+                    Function(
+                        owner = TypeRef.Local(layout.typeId),
+                        name = requireNotNull(metadataIds["<clinit>"]),
+                        signature = TypeRef.Local(requireNotNull(initializerTypeIds[declaration.symbol])),
+                        flags = setOf(FunctionFlag.STATIC),
+                        values = listOf(FunctionValue.scalar(ValueType.Ref(false, TypeRef.Local(layout.typeId)))),
+                        parameterCount = 0u,
+                        firstBlock = BlockId.of(firstBlock.toUInt()),
+                        blockCount = 1u,
+                        firstException = 0u,
+                        exceptionCount = 0u,
+                    )
+                return@forEach
+            }
             layout.enumEntries.forEachIndexed { index, enumEntry ->
                 val nextBlock = firstBlock + index + 1
                 blocks +=
@@ -2883,7 +2944,17 @@ internal object KotlinProjectLowering {
                         superType = superType ?: TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)),
                         interfaces = interfaces,
                         fieldStart = layout.firstField,
-                        fieldCount = (layout.fields.size + layout.enumEntries.size).toUInt(),
+                        fieldCount =
+                            (
+                                layout.fields.size + layout.enumEntries.size +
+                                    if (layout.singletonFieldId ==
+                                        null
+                                    ) {
+                                        0
+                                    } else {
+                                        1
+                                    }
+                            ).toUInt(),
                         methodStart =
                             genericMethods.firstOrNull()?.let { requireNotNull(instanceFunctionIds[it]).value }
                                 ?: methods.firstOrNull()?.let { requireNotNull(functionIds[it.symbol]).value }
@@ -2894,9 +2965,9 @@ internal object KotlinProjectLowering {
                 }
             }
         val closureClassTypes =
-            functionShapes.mapIndexed { index, shape ->
+            functionShapes.map { shape ->
                 NominalType.Interface(
-                    name = requireNotNull(metadataIds[functionShapeName(index, shape, unitBlockShape)]),
+                    name = requireNotNull(metadataIds[functionShapeName(shape, unitBlockShape)]),
                     methodStart = requireNotNull(shapeInvokeFunctionIds[shape]).value,
                     methodCount = 1u,
                 )
@@ -2958,7 +3029,18 @@ internal object KotlinProjectLowering {
                             mutable = true,
                             static = true,
                         )
-                    }
+                    } +
+                    listOfNotNull(
+                        layout.singletonFieldId?.let {
+                            Field(
+                                owner,
+                                requireNotNull(metadataIds["<instance>"]),
+                                ValueType.Ref(false, owner),
+                                mutable = true,
+                                static = true,
+                            )
+                        },
+                    )
             } +
                 captureCellLayouts.map { cell ->
                     Field(
@@ -3543,6 +3625,7 @@ internal object KotlinProjectLowering {
                 return guestTypes.valueClassBox(type) != null || type.isNullableScalar() || type.isKotlinAny() ||
                     (type as? IrSimpleType)?.classifier == stringClass ||
                     classTypeIds.containsKey((type as? IrSimpleType)?.classifier) ||
+                    externalClassTypes.containsKey((type as? IrSimpleType)?.classifier) ||
                     type.classInstance(
                         classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration },
                     ) in classInstanceTypeIds
@@ -3622,7 +3705,7 @@ internal object KotlinProjectLowering {
         var nextField = 0u
         return classes.map { instance ->
             val declaration = instance.declaration
-            if (declaration.kind !in setOf(ClassKind.CLASS, ClassKind.INTERFACE, ClassKind.ENUM_CLASS) ||
+            if (declaration.kind !in setOf(ClassKind.CLASS, ClassKind.INTERFACE, ClassKind.ENUM_CLASS, ClassKind.OBJECT) ||
                 (
                     declaration.typeParameters.isNotEmpty() &&
                         (
@@ -3698,7 +3781,8 @@ internal object KotlinProjectLowering {
                 declaration.declarations.filterIsInstance<IrEnumEntry>().map { enumEntry ->
                     GuestEnumEntryLayout(enumEntry, FieldId.of(nextField++), owner)
                 }
-            GuestClassLayout(instance, typeId, firstField, fields, entries)
+            val singletonFieldId = if (declaration.kind == ClassKind.OBJECT) FieldId.of(nextField++) else null
+            GuestClassLayout(instance, typeId, firstField, fields, entries, singletonFieldId)
         }
     }
 
@@ -4336,6 +4420,7 @@ private data class LinkedPlatformSymbols(
     val types: Map<IrClassSymbol, ExternalTypeTarget>,
     val fieldsByGetter: Map<IrSimpleFunctionSymbol, ExternalFieldTarget>,
     val enumEntries: Map<IrEnumEntrySymbol, ExternalFieldTarget>,
+    val singletons: Map<IrClassSymbol, ExternalFieldTarget>,
     val defaultEnumEntries: Map<String, ExternalFieldTarget>,
     val defaultIntValues: Set<Int>,
 )
@@ -4350,6 +4435,7 @@ private fun linkedPlatformSymbols(
     val types = linkedMapOf<IrClassSymbol, ExternalTypeTarget>()
     val fieldsByGetter = linkedMapOf<IrSimpleFunctionSymbol, ExternalFieldTarget>()
     val enumEntries = linkedMapOf<IrEnumEntrySymbol, ExternalFieldTarget>()
+    val singletons = linkedMapOf<IrClassSymbol, ExternalFieldTarget>()
     val classSymbols = linkedMapOf<String, IrClassSymbol>()
     val neededDefaultArguments = mutableListOf<PlatformDefaultArgument>()
 
@@ -4429,6 +4515,17 @@ private fun linkedPlatformSymbols(
                 super.visitGetEnumValue(expression)
             }
 
+            override fun visitGetObjectValue(expression: IrGetObjectValue) {
+                val owner = expression.symbol.owner
+                owner.fqNameWhenAvailable?.asString()?.let { name ->
+                    fieldTarget("$name.<instance>", expression.symbol)?.let { field ->
+                        if (!field.static) throw UnsupportedKotlinIr(expression, "platform singleton resolves to an instance field")
+                        singletons[expression.symbol] = field
+                    }
+                }
+                super.visitGetObjectValue(expression)
+            }
+
             override fun visitTypeOperator(expression: IrTypeOperatorCall) {
                 considerType(expression.typeOperand)
                 considerType(expression.type)
@@ -4459,7 +4556,7 @@ private fun linkedPlatformSymbols(
         neededDefaultArguments
             .filterIsInstance<PlatformDefaultArgument.IntValue>()
             .mapTo(linkedSetOf(), PlatformDefaultArgument.IntValue::value)
-    return LinkedPlatformSymbols(types, fieldsByGetter, enumEntries, defaultEnumEntries, defaultIntValues)
+    return LinkedPlatformSymbols(types, fieldsByGetter, enumEntries, singletons, defaultEnumEntries, defaultIntValues)
 }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -4558,6 +4655,8 @@ private class FunctionCompiler(
     private val topLevelFieldsByBacking: Map<IrFieldSymbol, TopLevelFieldLayout>,
     private val topLevelFieldsByGetter: Map<IrSimpleFunctionSymbol, TopLevelFieldLayout>,
     private val enumEntries: Map<IrEnumEntrySymbol, GuestEnumEntryLayout>,
+    private val singletonLayouts: Map<IrClassSymbol, GuestClassLayout>,
+    private val externalSingletons: Map<IrClassSymbol, ExternalFieldTarget>,
     private val externalFieldsByGetter: Map<IrSimpleFunctionSymbol, ExternalFieldTarget>,
     private val externalEnumEntries: Map<IrEnumEntrySymbol, ExternalFieldTarget>,
     private val externalDefaultEnumEntries: Map<String, ExternalFieldTarget>,
@@ -5089,6 +5188,22 @@ private class FunctionCompiler(
                     }
                 } else {
                     val external = externalEnumEntries[expression.symbol] ?: throw UnsupportedKotlinIr(expression, "unknown enum entry")
+                    allocate(valueType(expression.type, expression)).also { destination ->
+                        emit(Instruction.StaticGet(destination, FieldRef.Imported(external.importId)))
+                    }
+                }
+            }
+
+            is IrGetObjectValue -> {
+                val singleton = singletonLayouts[expression.symbol]
+                if (singleton != null) {
+                    allocate(ValueType.Ref(false, TypeRef.Local(singleton.typeId))).also { destination ->
+                        emit(Instruction.StaticGet(destination, FieldRef.Local(requireNotNull(singleton.singletonFieldId))))
+                    }
+                } else {
+                    val external =
+                        externalSingletons[expression.symbol]
+                            ?: throw UnsupportedKotlinIr(expression, "object value has no managed singleton instance")
                     allocate(valueType(expression.type, expression)).also { destination ->
                         emit(Instruction.StaticGet(destination, FieldRef.Imported(external.importId)))
                     }
@@ -8045,14 +8160,19 @@ private class FunctionCompiler(
             currentClassInstance?.substitute(currentInstance?.substitute(type) ?: type)
                 ?: currentInstance?.substitute(type)
                 ?: type
-        return resolved.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
+        return resolved.classInstance(
+            classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration } +
+                externalClassTypes.keys.associateWith { it.owner },
+        )
     }
 
     private fun resolveMemberOwner(
         receiver: GuestClassInstance,
         owner: IrClass,
     ): GuestClassInstance? {
-        val classes = classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration }
+        val classes =
+            classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration } +
+                externalClassTypes.keys.associateWith { it.owner }
         val visited = mutableSetOf<GuestClassInstance>()
 
         fun find(instance: GuestClassInstance): GuestClassInstance? {
@@ -8563,10 +8683,16 @@ private fun IrType.guestFunctionShape(): GuestFunctionShape? {
 private fun Map<GuestFunctionShape, TypeRef.Local>.forType(type: IrType): TypeRef.Local? = type.guestFunctionShape()?.let(::get)
 
 private fun functionShapeName(
-    index: Int,
     shape: GuestFunctionShape,
     unitBlockShape: GuestFunctionShape,
-): String = if (shape == unitBlockShape) "kotlin.Function0<Unit>" else "app.<function-shape-$index>"
+): String =
+    if (shape == unitBlockShape) {
+        "kotlin.Function0<Unit>"
+    } else {
+        "kotlin.Function${shape.parameters.size}<${(shape.parameters + shape.result).joinToString(
+            ",",
+        ) { it.specializationTypeIdentity() }}>"
+    }
 
 private fun IrExpression.boundReferenceReceiver(target: IrSimpleFunction): IrExpression? =
     when (this) {
@@ -8851,13 +8977,13 @@ private fun loweredParameters(
         link.symbol == function.fqNameWhenAvailable?.asString() && link.signature == function.canonicalPlatformSignature()
     }
 ) {
-    if ((function.parent as? IrClass)?.kind == ClassKind.OBJECT) {
+    if ((function.parent as? IrClass)?.let { it.kind == ClassKind.OBJECT && !it.isManagedPlatformObject() } == true) {
         function.parameters.filter { it.kind != IrParameterKind.DispatchReceiver }
     } else {
         function.parameters
     }
 } else if (
-    (function.parent as? IrClass)?.kind == ClassKind.OBJECT &&
+    (function.parent as? IrClass)?.let { it.kind == ClassKind.OBJECT && !it.isManagedPlatformObject() } == true &&
     session.trustedPlatformModule(function.file.fileEntry.name) != null
 ) {
     function.parameters.filter { it.kind != IrParameterKind.DispatchReceiver }
