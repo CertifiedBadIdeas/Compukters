@@ -16,8 +16,6 @@ Addon releases use `x.y`: an API compatibility line and a compatible update numb
 `compukters-create-1.21.1-neoforge-0.5-1.0.jar` targets the Compukters 0.5 line and is addon version 1.0. The loader
 metadata enforces the exact minimum base-mod version. See [addon versioning]({{ '/ADDON-DEVELOPMENT/' | relative_url }}#first-party-addon-versions).
 
-{% include create-nav.html %}
-
 The [Create API reference]({{ '/guest-api/create/' | relative_url }}) lists the addon declarations and their source
 files. Its Kotlin types link to the [Compukters Core API reference]({{ '/guest-api/guest/' | relative_url }}).
 

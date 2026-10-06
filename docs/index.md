@@ -12,7 +12,7 @@ use semantic editing and analysis, then deploy verified programs into a determin
 
 <div class="actions">
   <a class="button primary" href="{{ '/GETTING-STARTED/' | relative_url }}">Get started</a>
-  <a class="button" href="https://github.com/CertifiedBadIdeas/Compukters">View source</a>
+  <a class="button" href="{{ '/WIKI/' | relative_url }}">Explore the Wiki</a>
 </div>
 
 <span class="version-chip">Minecraft 1.21.1 / 26.1.2</span>
@@ -35,22 +35,26 @@ use semantic editing and analysis, then deploy verified programs into a determin
   </section>
   <section class="feature-card">
     <h3>Real automation</h3>
-    <p>Automate redstone, write to in-world displays, and connect named Create devices through passive cables on Minecraft 1.21.1.</p>
+    <p>Automate redstone, write displays, and connect Create, Sable and Propulsion APIs through optional Minecraft 1.21.1 addons.</p>
   </section>
 </div>
 
-## Choose a path
+## Find your guide
 
-- **New player:** follow [Getting started](https://certifiedbadideas.github.io/Compukters/GETTING-STARTED/) from installation to your first running program.
-- **Guest Kotlin author:** check the [Kotlin support matrix]({{ '/KOTLIN-SUPPORT/' | relative_url }}) for language features and
-  the [stdlib support matrix]({{ '/STDLIB-SUPPORT/' | relative_url }}) for callable APIs. Explore signatures in the
-  [Guest API reference]({{ '/guest-api/' | relative_url }}).
-- **Automation builder:** learn the local-side model in [Redstone GPIO](https://certifiedbadideas.github.io/Compukters/REDSTONE/).
-- **Dashboard builder:** write to an independent in-world [Text display](https://certifiedbadideas.github.io/Compukters/DISPLAY/) beside the computer or over peripheral cables.
-- **Create engineer:** start with the [Create addon guide]({{ '/CREATE/' | relative_url }}) for kinetic devices, Stock Tickers, steam boilers, and peripheral cables.
-- **Addon developer:** expose a typed Guest Kotlin module from an independent mod with the [Addon SDK](https://certifiedbadideas.github.io/Compukters/ADDON-DEVELOPMENT/).
-- **Following development:** see the continuous [Changelog](https://certifiedbadideas.github.io/Compukters/CHANGELOG/).
-- **Contributor:** start with [Architecture](https://certifiedbadideas.github.io/Compukters/ARCHITECTURE/) and [Verification](https://certifiedbadideas.github.io/Compukters/VERIFICATION/).
+<div class="feature-grid audience-cards">
+  {% for audience in site.data.navigation %}
+  <a class="feature-card" href="{{ audience.url | relative_url }}">
+    <h2>{{ audience.title | escape }}</h2>
+    <p>{{ audience.description | escape }}</p>
+    <span class="card-action">Explore guides →</span>
+  </a>
+  {% endfor %}
+</div>
 
-Compukters is under active development. The support matrix describes shipped behavior; roadmap ideas are not part of the
-current compatibility contract.
+The [Wiki]({{ '/WIKI/' | relative_url }}) organizes installation, programming, addons and contribution guides by what
+you want to do. The [addon overview]({{ '/ADDONS/' | relative_url }}) explains which integration to install, while the
+[API reference]({{ '/API/' | relative_url }}) collects signatures for core and every addon.
+
+Compukters is under active development. These docs describe the current checkout; the
+[changelog]({{ '/CHANGELOG/' | relative_url }}) records published releases. Roadmap ideas are not part of the current
+compatibility contract.

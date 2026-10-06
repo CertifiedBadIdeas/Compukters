@@ -12,8 +12,6 @@ The optional Create addon exposes speedometers, stressometers, and Rotation Spee
 See the [Create overview]({{ '/CREATE/' | relative_url }}) for installation, project setup, peripheral cables, and
 device naming.
 
-{% include create-nav.html %}
-
 ## Named devices
 
 Give a kinetic device a unique name with the Peripheral Configurator, then acquire it over a connected cable:

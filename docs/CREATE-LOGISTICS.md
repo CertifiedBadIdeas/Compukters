@@ -12,8 +12,6 @@ The optional Create addon exposes Stock Tickers on Minecraft 1.21.1. See the
 [Create overview]({{ '/CREATE/' | relative_url }}) for installation, project setup, peripheral cables, and device
 naming. Accepting a `Logistics` completion in the attached IDE can enable the addon for a project.
 
-{% include create-nav.html %}
-
 A computer can acquire a Stock Ticker on an adjacent side or by its persistent Peripheral Configurator name across
 loaded Peripheral Cables. The sides are relative to the computer's front. A handle belongs to the exact block entity
 that was acquired. Removal, replacement, unloading, or observed cable disconnection invalidates it; reconnecting does

@@ -83,6 +83,9 @@
         - title: All-addon dev stand
           url: /DEV-STAND/
           description: Run Create, Sable, Propulsion, and Aeronautics together.
+        - title: Maintain addons
+          url: /ADDON-CONTRIBUTING/
+          description: Standalone builds, integration boundaries, and lifecycle tests.
         - title: Verification
           url: /VERIFICATION/
           description: Choose focused checks and understand release gates.
