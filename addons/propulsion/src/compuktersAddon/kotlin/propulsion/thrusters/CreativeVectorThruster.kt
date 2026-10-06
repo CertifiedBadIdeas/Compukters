@@ -18,6 +18,9 @@
 
 package propulsion.thrusters
 
+import compukter.peripheral.Peripheral
+import compukter.peripheral.TypedPeripheralProvider
+
 /** Server observation. Thrust is in kN; vector coordinates are local normalized nozzle controls. */
 public data class CreativeVectorThrusterState(
     public val gameTick: Long,
@@ -48,7 +51,17 @@ public data class CreativeVectorThrusterMount(
     public val forceZ: Int,
 )
 
-public value class CreativeVectorThruster internal constructor(private val handle: Int) {
+public class CreativeVectorThruster internal constructor(private val handle: Int) : Peripheral {
+    public companion object : TypedPeripheralProvider<CreativeVectorThruster>("propulsion:creative_vector_thruster") {
+        override fun wrap(handle: Int): CreativeVectorThruster = CreativeVectorThruster(handle)
+    }
+
+    override fun equals(other: Any?): Boolean = other is CreativeVectorThruster && handle == other.handle
+
+    override fun hashCode(): Int = handle
+
+    override fun toString(): String = "CreativeVectorThruster(handle=$handle)"
+
     /** Read-only; rejects a mount on a different construction from the computer. */
     public fun mount(): CreativeVectorThrusterMount = VectorThrusterBindings.vectorMount(handle)
 

@@ -18,6 +18,9 @@
 
 package propulsion.thrusters
 
+import compukter.peripheral.Peripheral
+import compukter.peripheral.TypedPeripheralProvider
+
 /** Immutable state observed on the server; thrust is expressed in kilonewtons. */
 public data class CreativeThrusterState(
     public val gameTick: Long,
@@ -34,7 +37,17 @@ public data class CreativeThrusterState(
     public val unobstructedBlocks: Int,
 )
 
-public value class CreativeThruster internal constructor(private val handle: Int) {
+public class CreativeThruster internal constructor(private val handle: Int) : Peripheral {
+    public companion object : TypedPeripheralProvider<CreativeThruster>("propulsion:creative_thruster") {
+        override fun wrap(handle: Int): CreativeThruster = CreativeThruster(handle)
+    }
+
+    override fun equals(other: Any?): Boolean = other is CreativeThruster && handle == other.handle
+
+    override fun hashCode(): Int = handle
+
+    override fun toString(): String = "CreativeThruster(handle=$handle)"
+
     public fun state(): CreativeThrusterState = ThrusterBindings.state(handle)
 
     /** Claims exclusive program control. Propulsion applies its ordinary startup and obstruction rules. */

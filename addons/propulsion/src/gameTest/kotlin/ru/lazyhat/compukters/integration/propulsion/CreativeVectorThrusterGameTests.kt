@@ -103,15 +103,16 @@ object CreativeVectorThrusterGameTests {
         scenario.prepare(
             sequence,
             """
-            import compukter.redstone.Redstone
-            import propulsion.thrusters.Thrusters
-            fun main() {
-                val engine = Thrusters.creativeVector("t1")
-                engine.setThrustKn(5.0)
-                engine.setThrottle(0.0)
-                println("top-level=" + Redstone.top.get())
-                readln()
-            }
+                import compukter.redstone.Redstone
+                import propulsion.thrusters.Thrusters
+            import propulsion.thrusters.CreativeVectorThruster
+                fun main() {
+                    val engine = Thrusters.creativeVector("t1")
+                    engine.setThrustKn(5.0)
+                    engine.setThrottle(0.0)
+                    println("top-level=" + Redstone.top.get())
+                    readln()
+                }
             """.trimIndent(),
         )
         sequence.thenExecute {
@@ -502,6 +503,7 @@ object CreativeVectorThrusterGameTests {
     private val MOUNT =
         """
         import propulsion.thrusters.Thrusters
+        import propulsion.thrusters.CreativeVectorThruster
         fun main() {
             val names = listOf("fl", "fr", "bl", "br")
             var construction = ""
@@ -522,6 +524,7 @@ object CreativeVectorThrusterGameTests {
     private val HANDLE_LIST =
         """
         import propulsion.thrusters.Thrusters
+        import propulsion.thrusters.CreativeVectorThruster
         fun main() {
             val fl = Thrusters.creativeVector("fl")
             val fr = Thrusters.creativeVector("fr")
@@ -547,8 +550,12 @@ object CreativeVectorThrusterGameTests {
     private val OWNER =
         """
         import propulsion.thrusters.Thrusters
+        import propulsion.thrusters.CreativeVectorThruster
         fun main() {
-            val e = Thrusters.creativeVector("engine")
+            val e = CreativeVectorThruster.named("engine")
+            check(e == Thrusters.creativeVector("engine"))
+            check(CreativeVectorThruster.first() == e)
+            check(CreativeVectorThruster.filter { it.state().throttle >= 0.0 }.size == 1)
             e.setThrustKn(123.0)
             e.setVector(0.1, -0.1)
             val first = e.state()
@@ -563,7 +570,7 @@ object CreativeVectorThrusterGameTests {
             println("vector-owned")
             readln()
             var stale = false
-            try { e.setVector(0.0, 0.0) } catch (failure: IllegalStateException) { stale = true }
+            try { e.setVector(0.0, 0.0) } catch (failure: compukter.io.IOException) { stale = true }
             check(stale)
             println("vector-stale")
             readln()
@@ -589,6 +596,7 @@ object CreativeVectorThrusterGameTests {
     private val CONTENDER =
         """
         import propulsion.thrusters.Thrusters
+        import propulsion.thrusters.CreativeVectorThruster
         fun main() {
             val engine = Thrusters.creativeVector("engine")
             var bad = false
@@ -621,6 +629,7 @@ object CreativeVectorThrusterGameTests {
     private val ASSEMBLY =
         """
         import propulsion.thrusters.Thrusters
+        import propulsion.thrusters.CreativeVectorThruster
         fun main() {
             val engine = Thrusters.creativeVector("engine")
             engine.setThrottle(0.5)
@@ -629,7 +638,7 @@ object CreativeVectorThrusterGameTests {
             println("vector-assembly-owned")
             readln()
             var stale = false
-            try { engine.state() } catch (e: IllegalStateException) { stale = true }
+            try { engine.state() } catch (e: compukter.io.IOException) { stale = true }
             check(stale)
             println("vector-assembly-stale")
         }
