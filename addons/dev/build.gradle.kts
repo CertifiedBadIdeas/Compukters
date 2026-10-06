@@ -86,6 +86,7 @@ dependencies {
     })
     neoForge("net.neoforged:neoforge:21.1.252")
     runtimeOnly(baseMod)
+    add(gameTest.implementationConfigurationName, baseMod)
     addonMods.values.forEach { runtimeOnly(it) }
     physicsMods("maven.modrinth:create-aeronautics:Vzp221Un")
     physicsMods("maven.modrinth:create-propulsion-simulated:H13U56dc")
@@ -94,10 +95,10 @@ dependencies {
     modImplementation("maven.modrinth:sable:U678xqle")
     modImplementation(sableLibraries)
     forgeRuntimeLibrary(veilLibraries)
-    modRuntimeOnly("com.simibubi.create:create-1.21.1:6.0.10-280:slim") { isTransitive = false }
+    modImplementation("com.simibubi.create:create-1.21.1:6.0.10-280:slim") { isTransitive = false }
     modRuntimeOnly("net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1")
     modRuntimeOnly("dev.engine-room.flywheel:flywheel-neoforge-1.21.1:1.0.6")
-    modRuntimeOnly("com.tterrag.registrate:Registrate:MC1.21-1.3.0+67")
+    modImplementation("com.tterrag.registrate:Registrate:MC1.21-1.3.0+67")
     listOf(
         "org.jetbrains.kotlin:kotlin-stdlib:2.4.10",
         "io.github.oshai:kotlin-logging-jvm:8.0.4",
@@ -171,7 +172,7 @@ val verifyPhysicsMods = tasks.register("verifyPhysicsMods") {
         logger.lifecycle("Development physics mods: ${ids.sorted().joinToString()}")
     }
 }
-tasks.named("check") { dependsOn(verifyDevelopmentMods, verifyPhysicsMods) }
+tasks.named("check") { dependsOn(verifyDevelopmentMods, verifyPhysicsMods, gameTest.classesTaskName) }
 tasks.register("verifyAddons") {
     group = "verification"
     dependsOn(verifyDevelopmentMods, verifyPhysicsMods)

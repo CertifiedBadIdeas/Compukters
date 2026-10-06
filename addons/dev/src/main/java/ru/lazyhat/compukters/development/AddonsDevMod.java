@@ -33,6 +33,7 @@ public final class AddonsDevMod {
     private void registerGameTests(RegisterGameTestsEvent event) {
         try {
             event.register(Class.forName("ru.lazyhat.compukters.development.gametest.DebugChunkLoadingGameTests"));
+            event.register(Class.forName("ru.lazyhat.compukters.development.gametest.HibernationLifecycleGameTests"));
         } catch (ClassNotFoundException ignored) {
             if (System.getProperty("neoforge.enabledGameTestNamespaces") != null) {
                 throw new IllegalStateException("Development chunk-loading GameTest sources are missing", ignored);

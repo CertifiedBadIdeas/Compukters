@@ -69,3 +69,24 @@ Verification on 2026-10-04: `verifyAddons` and the common GameTest server passed
 Interactive construction/flight behavior still needs manual testing. Propulsion 1.1.5 emits
 missing-model warnings (including oxidizer states and lodestone tracker overlay) from its upstream resources; these
 do not prevent startup.
+
+The stand also registers three hibernation lifecycle characterization tests (issue
+[#697](https://github.com/CertifiedBadIdeas/Compukters/issues/697)). They run with the actual pinned Create/Sable/physics
+mods and the development chunk loader disabled:
+
+- An ordinary computer's remote chunk unloads while two computers 64 blocks apart on a force-loaded Sable construction
+  retain their runtime epochs and execute shell commands. Sable's internal plot chunks are distinct from the external
+  world chunks; construction force-load tickets can keep external chunks available without vanilla force-load flags.
+- Controlled construction serialization/reload exposes a valid physics body before either computer has an actor.
+  Real physics substeps are counted before actor attachment and shell readiness. The test then removes the construction
+  ticket and observes natural Sable unload/reload through its holding-chunk manager. A fixed joint holds the test body
+  in place during asynchronous startup; the physics system is not globally paused. This joint is a fixture restraint,
+  not a proposed restoration barrier.
+- A Create bearing captures computer NBT but has no computer movement actor. A separate railway fixture advances five
+  blocks through the real global railway manager with no loaded carriage entity and with Sable installed. It constructs
+  a straight graph and serialized carriage directly; it does not prove station assembly, schedules, portals or trains
+  running on tracks inside a moving Sable plot.
+
+These tests characterize current behavior. They do not implement execution snapshots or prove that programs survive
+unload/restart. Computers currently cold-boot on construction reload, and a per-construction physics readiness barrier
+remains required for transparent restoration. `check` compiles the stand's GameTests; `runGameTestServer` executes them.
