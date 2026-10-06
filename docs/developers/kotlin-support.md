@@ -314,11 +314,11 @@ supported.
   are rejected. Tracking: not scheduled
 
 - [ ] **Generic functions, classes, and interfaces — Partial** — top-level `fun <T>` calls
-  with inferred or explicit concrete arguments and final invariant `class Cell<T>`
+  with inferred or explicit concrete arguments and invariant `class Cell<T>`
   style declarations are specialized at compile time. Primary-constructor
   fields and direct methods use concrete scalar or reference types; a non-null
   `Int` remains unboxed in both calls and fields. Platform library
-  bodies containing generic functions or final generic classes are specialized
+  bodies containing generic functions or generic classes are specialized
   in a consumer; generic class methods and constructor fields retain concrete
   `Int` and reference layouts. Generic member bodies can call top-level generic helpers that introduce further
   generic class instances; class and function dependencies are collected until specialization is complete.
@@ -337,6 +337,11 @@ supported.
   `firstOrNull`, strict selection and filtering without default callback expressions. Evidence:
   `generic interface selection defaults preserve inherited typed callbacks`, executed by
   `testKotlinProviderDefaultsVmConformance` (short-circuiting, absence, typed filtering and strict failure).
+  Open and abstract generic classes with `Any` or interface parents can be specialized as concrete superclasses
+  of ordinary classes and companions; constructor delegation and inherited virtual methods retain the specialization.
+  Imported interfaces remain in the nominal parent list, so upcasts and type tests retain their contract.
+  Generic classes extending a class other than `Any` remain rejected. Evidence:
+  `canonical peripheral companion specializes shared typed queries`, executed by `testKotlinPeripheralQueriesVmConformance`.
   Contravariance, reified parameters, generic
   value classes, generic methods declaring their own type parameters, nullable
   primitive arguments other than the supported nullable Int forms, and automatic primitive-list `Any` boxing bridges

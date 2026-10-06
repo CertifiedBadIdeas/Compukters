@@ -1133,6 +1133,7 @@ internal object KotlinProjectLowering {
                 }.filterNot {
                     !includeTrustedPlatformBodies &&
                         it.fqNameWhenAvailable?.asString() !in specializedCollectionInterfaces &&
+                        it.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols &&
                         session.trustedPlatformModule(it.file.fileEntry.name) != null
                 }.filterNot { declaration ->
                     !includeTrustedPlatformBodies && session.platformTypes.any { it.symbol == declaration.fqNameWhenAvailable?.asString() }
@@ -1207,6 +1208,11 @@ internal object KotlinProjectLowering {
                 }.filterNot { function ->
                     !includeTrustedPlatformBodies &&
                         (function.parent as? IrClass)?.fqNameWhenAvailable?.asString() !in specializedCollectionInterfaces &&
+                        function.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols &&
+                        function.correspondingPropertySymbol
+                            ?.owner
+                            ?.fqNameWhenAvailable
+                            ?.asString() !in session.sourcePlatformSymbols &&
                         session.trustedPlatformModule(function.file.fileEntry.name) != null
                 }.filterNot { function ->
                     !includeTrustedPlatformBodies &&
@@ -1770,7 +1776,7 @@ internal object KotlinProjectLowering {
                 }.toMap()
         val externalClassTypes = externalTypeImports.mapValues { (_, target) -> TypeRef.Imported(target.importId) }
         val externalBoxFields =
-            linkedSymbols.types.keys.mapNotNull { symbol ->
+            guestTypes.valueClassBoxes.values.map { it.symbol }.distinct().filter { it in externalClassTypes }.mapNotNull { symbol ->
                 val name = symbol.owner.fqNameWhenAvailable?.asString() ?: return@mapNotNull null
                 if (session.platformScalarTypes.none { it.symbol == name }) return@mapNotNull null
                 val link = session.platformFields.singleOrNull { it.symbol == "$name.<boxed-value>" } ?: return@mapNotNull null
@@ -2891,6 +2897,8 @@ internal object KotlinProjectLowering {
                             )
                         parentInstance?.let { parent ->
                             classInstanceTypeIds[parent]?.let { parent.declaration.symbol to TypeRef.Local(it) }
+                        } ?: ((resolved as? IrSimpleType)?.classifier as? IrClassSymbol)?.let { symbol ->
+                            externalClassTypes[symbol]?.let { symbol to it }
                         }
                     }
                 val bridgeInterfaces =
@@ -2908,7 +2916,14 @@ internal object KotlinProjectLowering {
                         sourceParents.filter { (symbol, _) -> symbol.owner.kind == ClassKind.INTERFACE }.map { it.second } +
                             bridgeInterfaces
                     ).distinct()
-                        .sortedBy { (it as TypeRef.Local).id.value }
+                        .sortedWith(
+                            compareBy<TypeRef>({ if (it is TypeRef.Local) 0 else 1 }, {
+                                when (it) {
+                                    is TypeRef.Local -> it.id.value
+                                    is TypeRef.Imported -> it.id.value
+                                }
+                            }),
+                        )
                 val superType =
                     sourceParents.firstOrNull { (symbol, _) -> symbol.owner.kind != ClassKind.INTERFACE }?.second
                         ?: declaration.superTypes.firstNotNullOfOrNull { type ->
@@ -3284,7 +3299,10 @@ internal object KotlinProjectLowering {
                                 kind = SymbolKind.FIELD,
                                 targetModule = ModuleId.of((2 + externalTypeImports.size + index).toUInt()),
                                 targetName = requireNotNull(metadataIds[target.exportName]),
-                                expectedSignature = requireNotNull(externalClassTypes[target.ownerSymbol]),
+                                expectedSignature =
+                                    requireNotNull(externalClassTypes[target.ownerSymbol]) {
+                                        "platform field ${target.exportName} has no imported owner ${target.ownerSymbol.owner.fqNameWhenAvailable}"
+                                    },
                                 targetModuleHash = target.moduleHash,
                             )
                         } +
@@ -3711,7 +3729,6 @@ internal object KotlinProjectLowering {
                         (
                             declaration.kind !in setOf(ClassKind.CLASS, ClassKind.INTERFACE) ||
                                 declaration.isData ||
-                                (declaration.kind == ClassKind.CLASS && declaration.modality != Modality.FINAL) ||
                                 (
                                     declaration.kind == ClassKind.CLASS &&
                                         declaration.superTypes.any { superType ->
@@ -5032,6 +5049,11 @@ private class FunctionCompiler(
         }
         val targetConstructor =
             constructorLayouts[call.symbol]
+                ?: constructorDeclaration.superTypes
+                    .firstOrNull { (it as? IrSimpleType)?.classifier == target.parentAsClass.symbol }
+                    ?.let { constructorOwner?.instance?.substitute(it) ?: it }
+                    ?.let(::resolveClassInstance)
+                    ?.let(genericConstructorLayouts::get)
                 ?: throw UnsupportedKotlinIr(call, "super constructor is outside the Guest class subset")
         val compiled = compileConstructorArguments(target, call.arguments, targetConstructor.instance, call)
         emit(
@@ -9308,6 +9330,7 @@ private fun capabilityShape(
                 "compukter" to "filesystem" -> 7u
                 "compukter" to "compiler" -> 2u
                 "compukter" to "redstone" -> 8u
+                "compukters" to "peripheral" -> 6u
                 "compukter" to "sound" -> 1u
                 "compukters" to "display" -> 4u
                 "compukter" to "timer" -> 1u
