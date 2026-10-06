@@ -658,6 +658,7 @@ registerKotlinVmConformance(
     cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-provider-defaults-conformance",
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_PROVIDER_DEFAULTS_ARTIFACT",
     conformanceScenario = "provider-defaults",
+    additionalArtifacts = mapOf("COMPUKTER_KOTLIN_STRICT_FIRST_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-strict-first.cpkt")),
 )
 registerKotlinVmConformance(
     taskName = "testKotlinSingletonProvidersVmConformance",

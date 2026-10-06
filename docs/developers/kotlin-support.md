@@ -869,6 +869,14 @@ supported.
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `list Int covariance to Any preserves the list and boxes reads`, executed by `testKotlinListAnyVmConformance`.
 
+- [x] **Strict first-element selection** — `Iterable<T>.first`, with or without a typed predicate, returns
+  the first selected element, including null for nullable element types. Empty or unmatched selection throws
+  `NoSuchElementException`, a normal Guest subclass of `RuntimeException`. Predicates stop at the first match;
+  inline predicates support non-local returns. `find(predicate)` aliases `firstOrNull(predicate)`.
+  Available in `stdlib:core` 1.8.0 without a Runtime ABI change. Evidence:
+  `collection first preserves nullable values and throws only on absence`, executed by
+  `testKotlinProviderDefaultsVmConformance`.
+
 - [x] **Nullable element selection** — `Iterable<T>.firstOrNull` and `lastOrNull`, with or without a predicate,
   return the selected element or null when empty or unmatched. `firstOrNull(predicate)` stops at the first match;
   `Iterable.lastOrNull(predicate)` traverses forward to the end. List overloads read first/last elements by index;

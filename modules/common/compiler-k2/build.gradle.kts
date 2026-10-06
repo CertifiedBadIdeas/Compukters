@@ -320,6 +320,7 @@ val genericFunctionsConformanceArtifact = layout.buildDirectory.file("generated/
 val genericCellConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-cell.cpkt")
 val genericInterfaceConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-interface.cpkt")
 val providerDefaultsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-provider-defaults.cpkt")
+val strictFirstConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-strict-first.cpkt")
 val singletonProvidersConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-singleton-providers.cpkt")
 val addonProvidersConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-addon-providers.cpkt")
 val listConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list.cpkt")
@@ -912,11 +913,14 @@ tasks.register<Test>("generateProviderDefaultsConformanceArtifact") {
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("*generic interface selection defaults preserve inherited typed callbacks*")
+    filter.includeTestsMatching("*collection first preserves nullable values and throws only on absence*")
     inputs.file(workerJar)
     outputs.file(providerDefaultsConformanceArtifact)
+    outputs.file(strictFirstConformanceArtifact)
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.providerDefaultsArtifact", providerDefaultsConformanceArtifact.get().asFile.absolutePath)
+        systemProperty("compukter.vm.strictFirstArtifact", strictFirstConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

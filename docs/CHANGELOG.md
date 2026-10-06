@@ -18,7 +18,8 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
 
 - Guest Kotlin supports inherited generic interface selection methods with typed predicates through concrete
   implementations and parent interfaces, preserving short-circuiting and nullable results. Named objects and
-  companions retain one managed instance and can implement typed provider interfaces, including across addon bundles.
+  companions retain one managed instance and can implement typed provider interfaces, including across addon bundles. Collection `first` throws `NoSuchElementException` on absent selection
+  while preserving selected null elements; `find` aliases `firstOrNull`.
 
 - The documentation Wiki groups guides for players, developers and contributors, with expanding header navigation,
   contextual sidebars and a shared addon catalog. Detailed project, Sable, Propulsion and dev-stand guides live on the
