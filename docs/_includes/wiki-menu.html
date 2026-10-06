@@ -1,0 +1,60 @@
+<div class="nav-backdrop" data-nav-backdrop hidden></div>
+<dialog id="wiki-menu" class="wiki-menu" aria-labelledby="wiki-menu-title" aria-describedby="wiki-menu-description">
+  <div class="menu-shell">
+    <div class="menu-heading">
+      <div>
+        <span class="eyebrow">Compukters Wiki</span>
+        <h2 id="wiki-menu-title">Explore the documentation</h2>
+        <p id="wiki-menu-description">Choose a guide for what you want to do.</p>
+      </div>
+      <button type="button" class="menu-close" data-nav-close aria-label="Close navigation">×</button>
+    </div>
+    <div class="menu-browser">
+      <div class="menu-tabs" role="tablist" aria-label="Documentation audiences" aria-orientation="vertical">
+        {% for audience in site.data.navigation %}
+        <button type="button" role="tab" id="menu-tab-{{ audience.id }}" aria-controls="menu-panel-{{ audience.id }}"
+          aria-selected="false" tabindex="-1" data-menu-tab="{{ audience.id }}"
+          data-title="{{ audience.title | escape }}" data-description="{{ audience.description | escape }}">
+          {{ audience.title | escape }}<span aria-hidden="true">→</span>
+        </button>
+        {% endfor %}
+      </div>
+      {% for audience in site.data.navigation %}
+      <section class="menu-panel" id="menu-panel-{{ audience.id }}" role="tabpanel" aria-labelledby="menu-tab-{{ audience.id }}"
+        data-menu-panel="{{ audience.id }}" hidden>
+        <a class="menu-overview" href="{{ audience.url | relative_url }}">View all guides <span aria-hidden="true">↗</span></a>
+        <div class="menu-columns">
+          {% for group in audience.groups %}
+          <section class="menu-group">
+            <h3>{{ group.title | escape }}</h3>
+            <ul class="menu-links">
+              {% for item in group.items %}
+              <li>
+                <a href="{{ item.url | relative_url }}">
+                  <span class="menu-link-title">{{ item.title | escape }}</span>
+                  <span class="menu-link-description">{{ item.description | escape }}</span>
+                </a>
+                {% if item.children %}
+                <ul class="menu-subtopics">
+                  {% for child in item.children %}
+                  <li><a href="{{ child.url | relative_url }}">{{ child.title | escape }}</a></li>
+                  {% endfor %}
+                </ul>
+                {% endif %}
+              </li>
+              {% endfor %}
+            </ul>
+          </section>
+          {% endfor %}
+        </div>
+      </section>
+      {% endfor %}
+    </div>
+    <div class="menu-footer">
+      <a href="{{ '/WIKI/' | relative_url }}">Wiki home</a>
+      <a href="{{ '/ADDONS/' | relative_url }}">All addons</a>
+      <a href="{{ '/CHANGELOG/' | relative_url }}">Changelog</a>
+      <a href="https://github.com/{{ site.repository }}">GitHub</a>
+    </div>
+  </div>
+</dialog>

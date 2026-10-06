@@ -1,0 +1,27 @@
+<aside class="wiki-sidebar">
+  <details data-sidebar open>
+    <summary class="sidebar-toggle">Browse the Wiki<span aria-hidden="true">⌄</span></summary>
+    <nav class="sidebar-navigation" aria-label="Wiki sections">
+      <a class="sidebar-home" href="{{ '/WIKI/' | relative_url }}"{% if page.url == '/WIKI/' %} aria-current="page"{% endif %}>Compukters Wiki</a>
+      {% for section in site.data.navigation %}
+      <details class="sidebar-section"{% if page.section == section.id %} open{% endif %}>
+        <summary>{{ section.title | escape }}</summary>
+        <a class="sidebar-link" href="{{ section.url | relative_url }}"{% if page.url == section.url %} aria-current="page"{% endif %}>Overview</a>
+        {% for group in section.groups %}
+        <h3>{{ group.title | escape }}</h3>
+        {% for item in group.items %}
+        <a class="sidebar-link" href="{{ item.url | relative_url }}"{% if page.url == item.url %} aria-current="page"{% endif %}>{{ item.title | escape }}</a>
+        {% if item.children %}
+        <div class="sidebar-children">
+          {% for child in item.children %}
+          <a class="sidebar-link" href="{{ child.url | relative_url }}"{% if page.url == child.url %} aria-current="page"{% endif %}>{{ child.title | escape }}</a>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% endfor %}
+        {% endfor %}
+      </details>
+      {% endfor %}
+    </nav>
+  </details>
+</aside>

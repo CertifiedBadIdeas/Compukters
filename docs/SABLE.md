@@ -6,16 +6,28 @@ section: players
 permalink: /SABLE/
 ---
 
-# Compukters: Sable
+# Sable addon
 
-Independent observation addon for Minecraft 1.21.1, NeoForge 21.1.252 and Sable 2.0.5 (Modrinth U678xqle).
-Install it alongside Compukters and Sable. Main Compukters has no Sable dependency; the Create addon remains independent.
+Read a construction's position, orientation and velocity from a Kotlin program running on that construction.
+The returned snapshot is immutable, so your program can keep it while the construction continues moving.
+
+## Install
+
+Install Compukters: Sable alongside the base mod and upstream Sable on client and server:
+
+| Component | Target |
+| --- | --- |
+| Minecraft | 1.21.1 |
+| NeoForge | 21.1.252 or newer |
+| Sable | 2.0.5 (Modrinth U678xqle) |
+
+The base mod works without Sable. This addon does not require Compukters: Create.
 
 Addon releases use `x.y` (API compatibility line and compatible update), separately from the Compukters target line.
 For example, `compukters-sable-1.21.1-neoforge-0.5-1.0.jar` targets Compukters 0.5 and is addon version 1.0. Exact minimum
 versions are enforced by loader metadata. See [addon versioning]({{ '/ADDON-DEVELOPMENT/' | relative_url }}#first-party-addon-versions).
 
-## Guest API
+## Read your first snapshot
 
 Add `"sable"` to the project's addon list in `compukter.toml`, then compile against the server's installed API:
 
@@ -60,25 +72,5 @@ radians per second. These values use Sable's physics handle, rather than the pos
 server-thread request, without advancing physics. Paused physics can retain earlier values. The VM keeps its existing
 world-tick cadence and budget; snapshot requests add neither substep VM turns nor synchronous physics waits.
 
-No subscriptions, background sampler, cached feed or body registry are installed. Without a request, the addon does
-no snapshot work. The SDK validates record shapes and the VM materializes the copied reply in budgeted slices,
-without invoking Guest constructors during resume. This requires Runtime ABI 1.13 and native C ABI 20; rebuild addon
-bundles and Guest programs with the current workspace tooling.
-
-## Development
-
-Run from `addons/sable`, with Gradle on JDK 25 and a Java 21 toolchain available:
-
-```sh
-./gradlew-sandbox-dev-parallel-summary check
-./gradlew-sandbox-dev-parallel runGameTestServer
-./gradlew-sandbox-dev-parallel runClient
-```
-
-For joint Create/Sable runs, use the [all-addon development stand]({{ '/DEV-STAND/' | relative_url }}). It is a development stand and produces no umbrella mod.
-The lifecycle GameTest compiles and runs a real Guest program before assembly, on the construction and after return
-into the world. It checks typed fields, unavailable-operation exceptions, ComputerId retention, runtime replacement
-and persisted file contents. Full disassembly, split and merge scenarios need separate coverage.
-
-The pinned Sable JAR embeds Companion, Rapier and Veil; Veil embeds additional libraries. The build extracts those
-exact versions for the development classpath. These extracted files are not copied into this addon archive.
+For the API's exact signatures, see the [Sable reference]({{ '/guest-api/sable/' | relative_url }}). Build commands,
+integration ownership and test coverage live in [Maintain first-party addons]({{ '/ADDON-CONTRIBUTING/' | relative_url }}#sable).

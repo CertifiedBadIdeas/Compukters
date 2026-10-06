@@ -8,35 +8,53 @@
     <title>{% if page.title %}{{ page.title | escape }} · {% endif %}{{ site.title | escape }}</title>
     <link rel="icon" type="image/svg+xml" href="{{ '/assets/images/compukters-icon.svg' | relative_url }}">
     <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+    <script src="{{ '/assets/js/navigation.js' | relative_url }}" defer></script>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
     <header class="site-header">
+      <div class="header-inner">
       <a class="brand" href="{{ '/' | relative_url }}" aria-label="Compukters documentation home">
         <span class="brand-mark" aria-hidden="true">
           <img class="brand-icon" src="{{ '/assets/images/compukters-icon.svg' | relative_url }}" alt="">
         </span>
         <span>Compukters</span>
       </a>
-      <nav class="site-nav" aria-label="Primary navigation">
-        <a href="{{ '/GETTING-STARTED/' | relative_url }}">Getting started</a>
-        <a href="{{ '/KOTLIN-SUPPORT/' | relative_url }}">Kotlin support</a>
-        <a href="{{ '/STDLIB-SUPPORT/' | relative_url }}">Stdlib</a>
-        <a href="{{ '/guest-api/' | relative_url }}">Guest API</a>
-        <a href="{{ '/REDSTONE/' | relative_url }}">Redstone</a>
-        <a href="{{ '/CREATE/' | relative_url }}">Create</a>
-        <a href="{{ '/ADDON-DEVELOPMENT/' | relative_url }}">Addons</a>
-        <a href="{{ '/CHANGELOG/' | relative_url }}">Changelog</a>
-        <a href="https://github.com/{{ site.repository }}">GitHub</a>
+      <nav class="site-nav" aria-label="Documentation navigation">
+        {% for audience in site.data.navigation %}
+        <a data-nav-fallback href="{{ audience.url | relative_url }}">{{ audience.title | escape }}</a>
+        <button class="nav-trigger" type="button" data-nav-open="{{ audience.id }}" data-current="{% if page.section == audience.id %}true{% else %}false{% endif %}"
+          aria-controls="wiki-menu" aria-haspopup="dialog" aria-expanded="false" hidden>
+          {{ audience.title | escape }}<span class="nav-chevron" aria-hidden="true"></span>
+        </button>
+        {% endfor %}
       </nav>
+      <a class="repository-link" href="https://github.com/{{ site.repository }}">GitHub <span aria-hidden="true">↗</span></a>
+      </div>
     </header>
-    <main class="page-shell">
-      <article class="content">
+    {% include wiki-menu.html %}
+    {% assign audience = nil %}
+    {% if page.section %}{% assign audience = site.data.navigation | where: 'id', page.section | first %}{% endif %}
+    <main id="main-content" class="page-shell{% if audience or page.url == '/WIKI/' %} has-sidebar{% endif %}" tabindex="-1">
+      {% if audience or page.url == '/WIKI/' %}{% include wiki-sidebar.html %}{% endif %}
+      <article class="content{% if page.url == '/' %} home-content{% endif %}">
+        {% unless page.url == '/' %}
+        <nav class="breadcrumbs" aria-label="Breadcrumb">
+          <a href="{{ '/WIKI/' | relative_url }}">Wiki</a>
+          {% if audience and page.url != audience.url %}<a href="{{ audience.url | relative_url }}">{{ audience.title | escape }}</a>{% endif %}
+          {% unless page.url == '/WIKI/' %}<span aria-current="page">{{ page.title | escape }}</span>{% endunless %}
+        </nav>
+        {% endunless %}
         {{ content }}
       </article>
     </main>
     <footer class="site-footer">
       <span>Compukters is open-source software licensed under Apache-2.0.</span>
-      <a href="https://github.com/{{ site.repository }}">Source and releases</a>
+      <nav aria-label="Project links">
+        <a href="{{ '/WIKI/' | relative_url }}">Wiki</a>
+        <a href="{{ '/CHANGELOG/' | relative_url }}">Changelog</a>
+        <a href="https://github.com/{{ site.repository }}">Source and releases</a>
+      </nav>
     </footer>
   </body>
 </html>

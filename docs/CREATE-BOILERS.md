@@ -12,8 +12,6 @@ The optional Create addon monitors steam boilers on Minecraft 1.21.1. See the
 [Create overview]({{ '/CREATE/' | relative_url }}) for installation, project setup, peripheral cables, and device
 naming.
 
-{% include create-nav.html %}
-
 A Fluid Tank structure becomes a boiler when a Steam Engine or Steam Whistle is attached. Connect a Peripheral Cable
 to any loaded tank block, then give that block a unique name with the Peripheral Configurator. An adjacent tank block
 can also be addressed by side. The reading comes from the structure's controller, so every segment of the same boiler

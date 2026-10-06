@@ -11,6 +11,7 @@ theme: null
 
 exclude:
   - guest-source
+  - _tools
 
 plugins:
   - jekyll-relative-links
