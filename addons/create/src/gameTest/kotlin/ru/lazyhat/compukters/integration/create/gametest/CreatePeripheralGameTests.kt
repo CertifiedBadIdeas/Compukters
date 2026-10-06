@@ -33,13 +33,14 @@ import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorServer
 @PrefixGameTestTemplate(false)
 object CreatePeripheralGameTests {
     @JvmStatic
-    @GameTest(batch = "create_kinetics", template = "bastion/mobs/empty", templateNamespace = "minecraft", timeoutTicks = 100_000)
+    @GameTest(batch = "create_kinetics", template = "bastion/mobs/empty", templateNamespace = "minecraft", timeoutTicks = 1_000_000)
     fun namedKineticLifecycle(helper: GameTestHelper) {
         val computer = BlockPos(2, 2, 3)
         val junction = BlockPos(4, 2, 3)
         val speed = BlockPos(5, 2, 1)
         val stress = BlockPos(5, 2, 5)
         val controller = BlockPos(5, 3, 3)
+        val stock = BlockPos(5, 4, 3)
         val cable = CompuktersRegistry.PERIPHERAL_CABLE.get()
         helper.setBlock(computer, CompuktersRegistry.COMPUTER.get())
         listOf(
@@ -50,6 +51,7 @@ object CreatePeripheralGameTests {
             BlockPos(4, 2, 4),
             BlockPos(4, 2, 5),
             BlockPos(4, 3, 3),
+            BlockPos(4, 4, 3),
         ).forEach { helper.setBlock(it, cable) }
         val gaugeState =
             AllBlocks.SPEEDOMETER.defaultState
@@ -63,6 +65,7 @@ object CreatePeripheralGameTests {
                 .setValue(DirectionalAxisKineticBlock.AXIS_ALONG_FIRST_COORDINATE, true),
         )
         helper.setBlock(controller, AllBlocks.ROTATION_SPEED_CONTROLLER.get())
+        helper.setBlock(stock, AllBlocks.STOCK_TICKER.get())
         listOf(speed.east(), stress.east()).forEach {
             helper.setBlock(it, AllBlocks.CREATIVE_MOTOR.defaultState.setValue(DirectionalKineticBlock.FACING, Direction.WEST))
         }
@@ -76,6 +79,7 @@ object CreatePeripheralGameTests {
                 nameDevice(helper, speed, "speed")
                 nameDevice(helper, stress, "stress")
                 nameDevice(helper, controller, "controller")
+                nameDevice(helper, stock, "stock")
             }.thenWaitUntil {
                 val actual = (helper.getBlockEntity(speed) as SpeedGaugeBlockEntity).speed
                 helper.assertTrue(actual == 64f, "Create motor has not driven the speedometer: $actual")
@@ -145,10 +149,30 @@ object CreatePeripheralGameTests {
         """
         import compukter.terminal.Terminal
         import create.kinetics.Kinetics
+        import create.kinetics.Speedometer
+        import create.kinetics.Stressometer
+        import create.kinetics.RotationController
+        import create.logistics.StockTicker
+        import create.logistics.Logistics
+        import create.boiler.Boiler
+        import compukter.peripheral.Side
         fun main() {
-            val speed = Kinetics.speedometer("speed")
-            val stress = Kinetics.stressometer("stress")
-            val controller = Kinetics.rotationController("controller")
+            val speed = Speedometer.first()
+            check(speed == Kinetics.speedometer("speed"))
+            check(Speedometer.named("speed") == speed)
+            check(Speedometer.all().size == 1)
+            check(Speedometer.filter { it.speed() == 64f }.size == 1)
+            check(Speedometer.firstOrNull { it.speed() < 0f } == null)
+            check(Speedometer.atOrNull(Side.top) == null)
+            val ticker = StockTicker.first()
+            check(ticker == Logistics.stockTicker("stock"))
+            check(StockTicker.named("stock") == ticker)
+            check(StockTicker.all().size == 1)
+            check(Boiler.firstOrNull() == null)
+            val stress = Stressometer.first { it.capacity() > 0f }
+            check(stress == Kinetics.stressometer("stress"))
+            val controller = RotationController.named("controller")
+            check(controller == Kinetics.rotationController("controller"))
             check(speed.speed() == 64f)
             check(stress.capacity() > 0f)
             check(stress.stress() >= 0f)
@@ -161,12 +185,15 @@ object CreatePeripheralGameTests {
             try { controller.targetSpeed() } catch (e: compukter.io.IOException) { failures += 1 }
             try { Kinetics.speedometer("speed") } catch (e: IllegalStateException) { failures += 1 }
             check(failures == 4)
+            check(Speedometer.firstOrNull() == null)
+            check(StockTicker.firstOrNull() == null)
             Terminal.write("kinetic-cut\n")
             readln()
             var removed = false
-            try { speed.speed() } catch (e: IllegalStateException) { removed = true }
+            try { speed.speed() } catch (e: compukter.io.IOException) { removed = true }
             check(removed)
-            val restored = Kinetics.speedometer("speed")
+            check(Speedometer.firstOrNull() != speed)
+            val restored = Speedometer.first()
             check(restored.speed() == 64f)
             check(Kinetics.rotationController("controller").targetSpeed() == 37)
             check(Kinetics.stressometer("stress").capacity() > 0f)

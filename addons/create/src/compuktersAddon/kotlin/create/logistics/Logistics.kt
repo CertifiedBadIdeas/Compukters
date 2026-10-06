@@ -6,6 +6,9 @@
 
 package create.logistics
 
+import compukter.peripheral.Peripheral
+import compukter.peripheral.TypedPeripheralProvider
+
 public value class LogisticsSide internal constructor(internal val index: Int) {
     init {
         require(index in 0..5)
@@ -14,7 +17,17 @@ public value class LogisticsSide internal constructor(internal val index: Int) {
     public fun stockTicker(): StockTicker = StockTicker(LogisticsBindings.acquireStockTicker(index))
 }
 
-public value class StockTicker internal constructor(private val handle: Int) {
+public class StockTicker internal constructor(private val handle: Int) : Peripheral {
+    public companion object : TypedPeripheralProvider<StockTicker>("create:stock_ticker") {
+        override fun wrap(handle: Int): StockTicker = StockTicker(handle)
+    }
+
+    override fun equals(other: Any?): Boolean = other is StockTicker && handle == other.handle
+
+    override fun hashCode(): Int = handle
+
+    override fun toString(): String = "StockTicker(handle=$handle)"
+
     public fun snapshot(): StockSnapshot = StockSnapshot(LogisticsBindings.snapshot(handle))
 }
 
