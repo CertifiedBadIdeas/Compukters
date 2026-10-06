@@ -1064,7 +1064,7 @@ single addon and both addons for local and attached-target compilation.
   `ProgramRuntimeActorProcessorTest` and native `computer.rs` process lifetime/request routing tests.
 
 - [x] **Creative Thruster control** — the independent Minecraft 1.21.1 Propulsion addon exposes
-  `propulsion.thrusters.Thrusters.creative(name)`, normalized Double throttle, saved thrust percentage,
+  `propulsion.thrusters.CreativeThruster.named(name)`, normalized Double throttle, saved thrust percentage,
   `close()` and immutable `CreativeThrusterState` snapshots in kN. One program owns writes; reading does not claim
   control. Completion, cable loss, removal and Sable assembly release digital input. Upstream Propulsion retains
   Float precision and its ordinary startup, atmosphere and obstruction behavior. Evidence:
@@ -1072,7 +1072,7 @@ single addon and both addons for local and attached-target compilation.
   `guestControlLifetime` and `multiblockAssemblyClearsControl` compile and run real Guest programs through JNI.
   See the [addon README](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/addons/propulsion/README.md).
 
-- [x] **Creative Vector Thruster control** — `Thrusters.creativeVector(name)` exposes a separate typed handle and
+- [x] **Creative Vector Thruster control** — `CreativeVectorThruster.named(name)` exposes a separate typed handle and
   `CreativeVectorThrusterState`, normalized throttle, local X/Y steering and absolute creative thrust in kN.
   Commands claim one program owner; close/completion/disconnection/removal return throttle, steering and thrust
   to ordinary redstone and saved configuration. Steering retains Float precision, 1/15 steps and ordinary tick
@@ -1256,7 +1256,7 @@ links to their source files.
   [`computer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/computer.rs), sound request tests, and
   [`ComputerSoundGameTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/minecraft/v26_1/v26_1-neoforge/src/gameTest/kotlin/ru/lazyhat/compukters/impl/computer/ComputerSoundGameTest.kt).
 
-- [x] **In-world text display** — `Display.open(name)` or `Display.<side>.open()` acquires an exact display block.
+- [x] **In-world text display** — `TextDisplay.named(name)` or `TextDisplay.at(Side.front)` acquires an exact display block.
   Programs write and clear its independent 20x10 grid. One computer holds the active output lease; the screen clears
   when that computer stops or disconnects. Bounds and text are validated on the server. Evidence:
   `MinimalScriptLoweringTest`, `DisplayBufferTest`, `DisplayHostStateTest`, and the real `TextDisplayGameTestScenario`.

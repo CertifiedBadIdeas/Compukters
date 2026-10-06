@@ -14,19 +14,21 @@ device naming.
 
 The device classes also support shared typed discovery: `first`, `firstOrNull`, `filter`, `all`,
 `at`/`atOrNull`, and `named`/`namedOrNull`. See [typed peripheral discovery]({{ '/PERIPHERALS/' | relative_url }}).
-Existing helpers below remain available and share handles with those providers.
+Use these typed providers for every device lookup.
 
 ## Named devices
 
 Give a kinetic device a unique name with the Peripheral Configurator, then acquire it over a connected cable:
 
 ```kotlin
-import create.kinetics.Kinetics
+import create.kinetics.RotationController
+import create.kinetics.Speedometer
+import create.kinetics.Stressometer
 
 fun main() {
-    val input = Kinetics.speedometer("input")
-    val load = Kinetics.stressometer("main_load")
-    val controller = Kinetics.rotationController("governor")
+    val input = Speedometer.named("input")
+    val load = Stressometer.named("main_load")
+    val controller = RotationController.named("governor")
 
     println(input.speed())
     println(load.capacity())
@@ -43,12 +45,15 @@ device that later receives the same name.
 Sides are relative to the front of the computer, just like the redstone API:
 
 ```kotlin
-import create.kinetics.Kinetics
+import create.kinetics.RotationController
+import create.kinetics.Speedometer
+import create.kinetics.Stressometer
+import compukter.peripheral.Side
 
 fun main() {
-    val input = Kinetics.left.speedometer()
-    val load = Kinetics.bottom.stressometer()
-    val controller = Kinetics.top.rotationController()
+    val input = Speedometer.at(Side.left)
+    val load = Stressometer.at(Side.bottom)
+    val controller = RotationController.at(Side.top)
 
     println(input.speed())
     println(load.stress())

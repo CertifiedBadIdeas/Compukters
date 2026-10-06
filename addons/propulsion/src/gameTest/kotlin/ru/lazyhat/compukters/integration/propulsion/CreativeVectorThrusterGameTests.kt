@@ -104,10 +104,9 @@ object CreativeVectorThrusterGameTests {
             sequence,
             """
                 import compukter.redstone.Redstone
-                import propulsion.thrusters.Thrusters
-            import propulsion.thrusters.CreativeVectorThruster
+                import propulsion.thrusters.CreativeVectorThruster
                 fun main() {
-                    val engine = Thrusters.creativeVector("t1")
+                    val engine = CreativeVectorThruster.named("t1")
                     engine.setThrustKn(5.0)
                     engine.setThrottle(0.0)
                     println("top-level=" + Redstone.top.get())
@@ -502,13 +501,12 @@ object CreativeVectorThrusterGameTests {
 
     private val MOUNT =
         """
-        import propulsion.thrusters.Thrusters
         import propulsion.thrusters.CreativeVectorThruster
         fun main() {
             val names = listOf("fl", "fr", "bl", "br")
             var construction = ""
             repeat(4) { index ->
-                val mount = Thrusters.creativeVector(names[index]).mount()
+                val mount = CreativeVectorThruster.named(names[index]).mount()
                 check(mount.constructionId != "")
                 if (index == 0) construction = mount.constructionId
                 check(mount.constructionId == construction)
@@ -523,13 +521,12 @@ object CreativeVectorThrusterGameTests {
 
     private val HANDLE_LIST =
         """
-        import propulsion.thrusters.Thrusters
         import propulsion.thrusters.CreativeVectorThruster
         fun main() {
-            val fl = Thrusters.creativeVector("fl")
-            val fr = Thrusters.creativeVector("fr")
-            val bl = Thrusters.creativeVector("bl")
-            val br = Thrusters.creativeVector("br")
+            val fl = CreativeVectorThruster.named("fl")
+            val fr = CreativeVectorThruster.named("fr")
+            val bl = CreativeVectorThruster.named("bl")
+            val br = CreativeVectorThruster.named("br")
             val all = listOf(fl, fr, bl, br)
             repeat(4) { index ->
                 val mount = all[index].mount()
@@ -549,7 +546,6 @@ object CreativeVectorThrusterGameTests {
 
     private val OWNER =
         """
-        import propulsion.thrusters.Thrusters
         import propulsion.thrusters.CreativeVectorThruster
         fun main() {
             val e = CreativeVectorThruster.named("engine")
@@ -557,7 +553,7 @@ object CreativeVectorThrusterGameTests {
             check(peripheral == e)
             check(peripheral is CreativeVectorThruster)
             check((peripheral as CreativeVectorThruster) == e)
-            check(e == Thrusters.creativeVector("engine"))
+            check(e == CreativeVectorThruster.named("engine"))
             check(CreativeVectorThruster.first() == e)
             check(CreativeVectorThruster.filter { it.state().throttle >= 0.0 }.size == 1)
             e.setThrustKn(123.0)
@@ -578,7 +574,7 @@ object CreativeVectorThrusterGameTests {
             check(stale)
             println("vector-stale")
             readln()
-            val a = Thrusters.creativeVector("engine")
+            val a = CreativeVectorThruster.named("engine")
             a.setThrottle(0.5)
             a.setVector(1.0, 1.0)
             a.setThrustKn(100.0)
@@ -588,7 +584,7 @@ object CreativeVectorThrusterGameTests {
             a.close()
             println("vector-close")
             readln()
-            val last = Thrusters.creativeVector("engine")
+            val last = CreativeVectorThruster.named("engine")
             last.setThrottle(0.00001)
             last.setVector(-1.0, -1.0)
             last.setThrustKn(50.0)
@@ -599,10 +595,9 @@ object CreativeVectorThrusterGameTests {
 
     private val CONTENDER =
         """
-        import propulsion.thrusters.Thrusters
         import propulsion.thrusters.CreativeVectorThruster
         fun main() {
-            val engine = Thrusters.creativeVector("engine")
+            val engine = CreativeVectorThruster.named("engine")
             var bad = false
             try { engine.setThrottle(1.1) } catch (failure: IllegalArgumentException) { bad = true }
             check(bad)
@@ -632,10 +627,9 @@ object CreativeVectorThrusterGameTests {
 
     private val ASSEMBLY =
         """
-        import propulsion.thrusters.Thrusters
         import propulsion.thrusters.CreativeVectorThruster
         fun main() {
-            val engine = Thrusters.creativeVector("engine")
+            val engine = CreativeVectorThruster.named("engine")
             engine.setThrottle(0.5)
             engine.setVector(0.6, -0.4)
             engine.setThrustKn(120.0)

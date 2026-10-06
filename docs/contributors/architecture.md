@@ -969,7 +969,7 @@ follow the program lifetime without inferring it from terminal output or changin
 
 ### Typed peripheral discovery
 
-The canonical `compukter:core` 1.2.0 library defines `compukter.peripheral.Peripheral`,
+The canonical `compukter:core` 2.0.0 library defines `compukter.peripheral.Peripheral`,
 `PeripheralProvider<T>`, relative `Side` values and `TypedPeripheralProvider<T>`. Companions supply a registered
 contract id and the typed device wrapper. Selection runs in Guest; snapshots close in `finally`, including
 predicate failure and early selection. Predicates are ordinary typed callbacks with local returns.
@@ -1001,8 +1001,9 @@ resolves the contacted face directly. SDK 0.5.0 adds typed `CompuktersPeripheral
 compile time and retain their explicit thin-archive class inventory. Both Minecraft version families compile the
 canonical shared adapter sources.
 
-TextDisplay is a nominal Peripheral wrapper with handle equality and a companion provider. Its new queries and
-legacy Display acquisitions share the program's base handle table. Display operations still own output leases;
+TextDisplay is a scalar value class implementing Peripheral, with a canonical box and a managed companion provider.
+All public acquisition uses typed providers and the common Side; the earlier Display/Create/Propulsion helpers
+and separate side types are removed. Display operations still own output leases;
 discovery creates no lease, and reset releases buffers touched by the program. The real text-display GameTest
-fixture covers typed selection, legacy acquisition, predicates, optional/strict absence and cleanup after a thrown
+fixture covers typed selection, interface casts, predicates, optional/strict absence and cleanup after a thrown
 predicate before exercising a world write and cable disconnection.

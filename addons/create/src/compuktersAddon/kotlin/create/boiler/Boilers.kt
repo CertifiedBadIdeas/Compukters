@@ -10,13 +10,6 @@ import compukter.peripheral.Peripheral
 import compukter.peripheral.TypedPeripheralProvider
 
 /** A side of the computer, relative to its front face. */
-public value class BoilerSide internal constructor(internal val index: Int) {
-    init {
-        require(index in 0..5)
-    }
-
-    public fun boiler(): Boiler = Boiler(BoilerBindings.acquire(index))
-}
 
 /** A handle to one active Create boiler and its current Fluid Tank controller. */
 public value class Boiler internal constructor(private val handle: Int) : Peripheral {
@@ -38,17 +31,6 @@ public value class Boiler internal constructor(private val handle: Int) : Periph
 
     /** Whether Create currently treats the boiler as passively heated. */
     public fun isPassive(): Boolean = BoilerBindings.isPassive(handle)
-}
-
-public object Boilers {
-    public fun boiler(name: String): Boiler = Boiler(BoilerBindings.acquireByName(name))
-
-    public val front: BoilerSide get() = BoilerSide(0)
-    public val back: BoilerSide get() = BoilerSide(1)
-    public val left: BoilerSide get() = BoilerSide(2)
-    public val right: BoilerSide get() = BoilerSide(3)
-    public val top: BoilerSide get() = BoilerSide(4)
-    public val bottom: BoilerSide get() = BoilerSide(5)
 }
 
 private object BoilerBindings {

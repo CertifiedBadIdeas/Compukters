@@ -60,14 +60,6 @@ public value class CreativeThruster internal constructor(private val handle: Int
     public fun close() { ThrusterBindings.close(handle) }
 }
 
-public object Thrusters {
-    /** Resolves a named Creative Vector Thruster without claiming control. */
-    public fun creativeVector(name: String): CreativeVectorThruster = CreativeVectorThruster(VectorThrusterBindings.vectorAcquire(name))
-
-    /** Resolves a named Creative Thruster without claiming control. */
-    public fun creative(name: String): CreativeThruster = CreativeThruster(ThrusterBindings.acquire(name))
-}
-
 private object ThrusterBindings {
     external fun acquire(name: String): Int
     external fun state(handle: Int): CreativeThrusterState

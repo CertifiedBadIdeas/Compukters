@@ -21,20 +21,20 @@ Enable the addon with `addons = ["create"]` in `compukter.toml`, or accept a `Bo
 
 The device classes also support shared typed discovery: `first`, `firstOrNull`, `filter`, `all`,
 `at`/`atOrNull`, and `named`/`namedOrNull`. See [typed peripheral discovery]({{ '/PERIPHERALS/' | relative_url }}).
-Existing helpers below remain available and share handles with those providers.
+Use these typed providers for every device lookup.
 
 ```kotlin
-import create.boiler.Boilers
+import create.boiler.Boiler
 
 fun main() {
-    val boiler = Boilers.boiler("main_boiler")
+    val boiler = Boiler.named("main_boiler")
     println("Water: ${boiler.waterSupply()} mB/t, level ${boiler.waterLevel()}")
     println("Heat: ${boiler.heatLevel()}, boiler level ${boiler.level()}")
     println("Passive heating: ${boiler.isPassive()}")
 }
 ```
 
-`Boilers.front.boiler()` and the other five side accessors work on the adjacent block. Only an active boiler can be
+`Boiler.at(Side.front)` and the other five side accessors work on the adjacent block. Only an active boiler can be
 acquired; an ordinary Fluid Tank is unavailable. A handle is tied to the exact selected tank block and its current
 controller. Removing or replacing either block, changing the controller or tank size, unloading it, or breaking the
 named cable path invalidates the handle. Reconnecting requires acquiring a new handle.

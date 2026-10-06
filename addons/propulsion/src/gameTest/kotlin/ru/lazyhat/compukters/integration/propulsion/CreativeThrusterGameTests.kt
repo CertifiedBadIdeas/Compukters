@@ -194,7 +194,6 @@ object CreativeThrusterGameTests {
 
     private val ASSEMBLY =
         """
-        import propulsion.thrusters.Thrusters
         import propulsion.thrusters.CreativeThruster
         fun main() {
             val engine = CreativeThruster.named("engine")
@@ -202,7 +201,7 @@ object CreativeThrusterGameTests {
             check(peripheral == engine)
             check(peripheral is CreativeThruster)
             check((peripheral as CreativeThruster).state().width == 2)
-            check(engine == Thrusters.creative("engine"))
+            check(engine == CreativeThruster.named("engine"))
             check(CreativeThruster.first() == engine)
             check(CreativeThruster.all().size == 1)
             check(CreativeThruster.firstOrNull { it.state().width < 0 } == null)
@@ -239,11 +238,10 @@ object CreativeThrusterGameTests {
 
     private val OWNER =
         """
-        import propulsion.thrusters.Thrusters
         import propulsion.thrusters.CreativeThruster
         fun main() {
             val engine = CreativeThruster.named("engine")
-            check(engine == Thrusters.creative("engine"))
+            check(engine == CreativeThruster.named("engine"))
             check(CreativeThruster.first() == engine)
             check(CreativeThruster.all().size == 1)
             check(CreativeThruster.firstOrNull { it.state().width < 0 } == null)
@@ -268,14 +266,14 @@ object CreativeThrusterGameTests {
             check(snapshot.throttle == 0.375)
             println("owner-stale")
             readln()
-            val next = Thrusters.creative("engine")
+            val next = CreativeThruster.named("engine")
             next.setThrottle(0.5)
             next.setThrottle(0.00005)
             next.close()
             rejected = false
             try { next.state() } catch (failure: compukter.io.IOException) { rejected = true }
             check(rejected)
-            val last = Thrusters.creative("engine")
+            val last = CreativeThruster.named("engine")
             last.setThrottle(0.625)
             println("owner-reacquired")
             readln()
@@ -284,11 +282,10 @@ object CreativeThrusterGameTests {
 
     private val CONTENDER =
         """
-        import propulsion.thrusters.Thrusters
         import propulsion.thrusters.CreativeThruster
         fun main() {
             val engine = CreativeThruster.named("engine")
-            check(engine == Thrusters.creative("engine"))
+            check(engine == CreativeThruster.named("engine"))
             check(CreativeThruster.first() == engine)
             check(CreativeThruster.all().size == 1)
             check(CreativeThruster.firstOrNull { it.state().width < 0 } == null)

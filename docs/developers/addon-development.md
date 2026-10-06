@@ -54,10 +54,10 @@ Compukters target line does not reset the addon version or require an API-line b
 The production archive also names the Compukters target line:
 
 ```text
-compukters-create-1.21.1-neoforge-0.5-1.0.jar
+compukters-create-1.21.1-neoforge-0.5-2.0.jar
 ```
 
-Here `0.5` is the target Compukters major/minor line and `1.0` is the Create addon's own API/update version. The
+Here `0.5` is the target Compukters major/minor line and `2.0` is the Create addon's own API/update version. The
 `addonVersion` property in each first-party addon's `gradle.properties` owns its `x.y` value. The shared
 `addons/gradle/addon-versioning.gradle.kts` derives the target line from the adjacent Compukters checkout and expands
 the required base-mod dependency. The lower bound is the workspace version used to build the addon; the upper bound
@@ -193,7 +193,7 @@ Each contract has a unique namespaced id, a logical device key, and a resolver r
 removal, replacement and unloading. The resolver receives a `CompuktersPeripheralLocation` with the canonical
 anchor and a latching `isReachable()` check. One logical device may expose several contracts.
 
-Guest wrappers implement `compukter.peripheral.Peripheral`; their companions inherit
+Guest wrappers can be scalar value classes implementing `compukter.peripheral.Peripheral`; their companions inherit
 `TypedPeripheralProvider<Wrapper>("addon:contract")` and implement the protected `wrap(handle)` method.
 The base implements typed `first`, `firstOrNull`, `filter`, `all`, `at`, `atOrNull`, `named`, and `namedOrNull`.
 It owns bounded snapshots and exact-instance handles, with cleanup after early return or predicate failure.
@@ -208,8 +208,12 @@ acquisition operations: they issue the same tokens as provider discovery and ret
 `closePeripheral(contract, handle)` invalidates every alias of that token; a later acquisition receives a fresh token.
 Release any addon-owned control lease when closing or resetting your host.
 Provider roles are inferred from the interface in both source and admitted addon metadata, so no annotation is needed.
-Changing a device from a scalar value class to a nominal `Peripheral` class changes its binary API; increment the
-addon's `x` compatibility line and rebuild dependents. Create and Propulsion use `2.0` for this transition.
+Value classes retain scalar direct-call signatures and use canonical managed wrappers in interface, nullable and
+collection contexts. Implementing `Peripheral` does not require converting a device to an ordinary class.
+Create and Propulsion use `2.0` because their earlier acquisition helpers and separate side types are removed.
+Acquire devices through typed companion providers and `compukter.peripheral.Side`.
+Changing a published wrapper's scalar/reference representation is a binary API change: increment the addon's `x`
+compatibility line and rebuild dependents. Exact Guest bundle hashes still require re-resolution after an update.
 
 Legacy registration overloads remain available for addons using their existing discovery helpers.
 

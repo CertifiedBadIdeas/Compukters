@@ -1644,17 +1644,30 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `removed display acquisition wrappers are unavailable`() =
+        withAdapter { adapter ->
+            for (source in listOf(
+                "import compukter.display.Display; fun main() { Display.open(\"panel\") }",
+                "import compukter.display.DisplaySide; fun main() { val side: DisplaySide? = null }",
+            )) {
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact)
+                assertTrue(result.diagnostics.any { it.code == "UNRESOLVED_REFERENCE" }, result.diagnostics.joinToString())
+            }
+        }
+
+    @Test
     fun `text display API lowers named and adjacent writes to blocking capability operations`() =
         withAdapter { adapter ->
             val source =
                 """
-                import compukter.display.Display
-
+                import compukter.display.TextDisplay
+                import compukter.peripheral.Side
                 fun main() {
-                    val named = Display.open("warehouse")
+                    val named = TextDisplay.named("warehouse")
                     named.writeAt(0, 0, "Iron: 128")
                     named.clear()
-                    Display.left.open().writeAt(1, 2, "Ready")
+                    TextDisplay.at(Side.left).writeAt(1, 2, "Ready")
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))
@@ -1672,7 +1685,6 @@ class MinimalScriptLoweringTest {
             val source =
                 """
                 import compukter.concurrent.Tasks
-                import compukter.display.Display
                 import compukter.display.TextDisplay
                 import compukter.peripheral.Side
 
@@ -1683,7 +1695,6 @@ class MinimalScriptLoweringTest {
                     require(peripheral is TextDisplay)
                     require((peripheral as TextDisplay) == screen)
                     require(screen == TextDisplay.named("panel"))
-                    require(screen == Display.open("panel"))
                     require(TextDisplay.all().size == 1)
                     require(TextDisplay.filter { it == screen }.size == 1)
                     require(TextDisplay.firstOrNull { it == screen } == screen)

@@ -14,7 +14,7 @@ needs construction pose and velocity.
 
 The device classes also support shared typed discovery: `first`, `firstOrNull`, `filter`, `all`,
 `at`/`atOrNull`, and `named`/`namedOrNull`. See [typed peripheral discovery]({{ '/PERIPHERALS/' | relative_url }}).
-Existing helpers below remain available and share handles with those providers.
+Use these typed providers for every device lookup.
 
 ## Install
 
@@ -32,8 +32,8 @@ Install Compukters: Propulsion, the base mod and its upstream runtime on client 
 The Compukters addon does not require Compukters: Create or Compukters: Sable. Its upstream mods still require the
 runtime above, including Simulated even though upstream Propulsion metadata omits that dependency.
 
-Addon releases use independent `x.y` versions. For example, `compukters-propulsion-1.21.1-neoforge-0.5-1.0.jar` is
-addon 1.0 for the Compukters 0.5 line. Loader metadata enforces the exact minimum; see the
+Addon releases use independent `x.y` versions. For example, `compukters-propulsion-1.21.1-neoforge-0.5-2.0.jar` is
+addon 2.0 for the Compukters 0.5 line. Loader metadata enforces the exact minimum; see the
 [addon overview]({{ '/ADDONS/' | relative_url }}) for compatibility and project selection.
 
 ## Guest API
@@ -45,10 +45,10 @@ multiblock contacts resolve to their controller.
 For **Creative Vector Thruster** (`createpropulsion:creative_vector_thruster`):
 
 ```kotlin
-import propulsion.thrusters.Thrusters
+import propulsion.thrusters.CreativeVectorThruster
 
 fun main() {
-    val engine = Thrusters.creativeVector("main-engine")
+    val engine = CreativeVectorThruster.named("main-engine")
     engine.setThrustKn(120.0)
     engine.setVector(0.6, -0.4)
     engine.setThrottle(0.75)
@@ -83,10 +83,10 @@ checks apply on both sides; exceeding the server-configured thrust limit throws 
 For the ordinary **Creative Thruster** (`createpropulsion:creative_thruster`):
 
 ```kotlin
-import propulsion.thrusters.Thrusters
+import propulsion.thrusters.CreativeThruster
 
 fun main() {
-    val engine = Thrusters.creative("main-engine")
+    val engine = CreativeThruster.named("main-engine")
     engine.setThrustPercent(50)
     engine.setThrottle(0.75)
     val state = engine.state()

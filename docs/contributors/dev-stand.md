@@ -67,7 +67,7 @@ archives to the maps in `build.gradle.kts`, and declare its upstream runtime dep
 own standalone checks, test registration and metadata. The shared stand owns only launch and verification composition.
 
 Compukters exposes the Create Guest API, request-only `sable.physics.Physics.snapshot()` and the independent
-`propulsion.thrusters.Thrusters.creative(name)` and `creativeVector(name)` control APIs. Select the required addon IDs
+`propulsion.thrusters.CreativeThruster.named(name)` and `creativeVector(name)` control APIs. Select the required addon IDs
 in each Guest project's
 `compukter.toml`. See the [Sable guide]({{ '/SABLE/' | relative_url }}) and [Propulsion guide]({{ '/PROPULSION/' | relative_url }}) for examples,
 units and control lifetime.

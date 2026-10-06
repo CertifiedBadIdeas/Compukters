@@ -33,7 +33,7 @@ fun main() {
 }
 ```
 
-An adjacent display can instead be opened with `Display.front.open()`. Follow the
+An adjacent display can instead be opened with `TextDisplay.at(Side.front)`. Follow the
 [display guide]({{ '/DISPLAY/' | relative_url }}) for bounds and output ownership.
 
 ## Typed discovery
@@ -73,9 +73,12 @@ remain errors. Missing strict side/name selections throw `NoSuchElementException
 The computer retains at most 1,024 typed handles across all integrations, with at most four open discovery snapshots
 and 1,024 entries per snapshot. Discovery stays in loaded chunks. In the IDE, provider values have a dedicated color
 and a **P** completion badge; the same name used as a device type keeps ordinary class presentation.
-Existing `Display`, `Kinetics`, `Boilers`, `Logistics` and `Thrusters` acquisition helpers remain available and share
-handles with the new providers. Create and Propulsion addon API lines are now `2.0`: device wrappers are ordinary
-classes implementing `Peripheral`, so rebuild dependent addon bundles even when their source calls remain unchanged.
+Device wrappers are value classes implementing `Peripheral`: direct device calls
+use scalar handles, while nullable values, interface references and collections use typed managed wrappers.
+The old `Display`, `Kinetics`, `Boilers`, `Logistics`, `Thrusters` helpers and their separate side types are removed.
+Use typed providers and the common `Side` instead. Create and Propulsion use addon API line `2.0`.
+Rebuild dependent Guest bundles and programs against the updated
+platform; exact bundle versions and hashes still govern compiled artifacts.
 
 ## Device handles have a lifetime
 
