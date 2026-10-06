@@ -19,13 +19,13 @@ not rebind the old handle.
 
 The device classes also support shared typed discovery: `first`, `firstOrNull`, `filter`, `all`,
 `at`/`atOrNull`, and `named`/`namedOrNull`. See [typed peripheral discovery]({{ '/PERIPHERALS/' | relative_url }}).
-Existing helpers below remain available and share handles with those providers.
+Use these typed providers for every device lookup.
 
 ```kotlin
-import create.logistics.Logistics
+import create.logistics.StockTicker
 
 fun main() {
-    val ticker = Logistics.stockTicker("warehouse")
+    val ticker = StockTicker.named("warehouse")
     val stock = ticker.snapshot()
     val index = stock.findItem("minecraft:iron_ingot")
     if (index >= 0) {
@@ -36,7 +36,7 @@ fun main() {
 }
 ```
 
-`Logistics.front.stockTicker()` and the other five side accessors use an adjacent block instead of a cable name.
+`StockTicker.at(Side.front)` and the other five side accessors use an adjacent block instead of a cable name.
 `snapshot()` captures an immutable list of at most 256 entries. Each entry has a registry item ID, a display name, and
 an available count. Its index identifies the **exact ItemStack variant**, including components: two entries may have
 the same item ID and different names or components. The list does not change after capture. `findItem(itemId)` searches

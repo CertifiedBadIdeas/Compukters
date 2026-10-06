@@ -108,12 +108,13 @@ object CreateBoilerGameTests {
     private val BOILER_SOURCE =
         """
         import compukter.terminal.Terminal
-        import create.boiler.Boilers
         import create.boiler.Boiler
         fun main() {
             val boiler = Boiler.first()
-            check(boiler == Boilers.boiler("boiler"))
             check(Boiler.named("boiler") == boiler)
+            val peripheral: compukter.peripheral.Peripheral = boiler
+            check(peripheral is Boiler)
+            check((peripheral as Boiler).waterSupply() == 20f)
             check(Boiler.all().size == 1)
             check(boiler.waterSupply() == 20f)
             check(boiler.waterLevel() == 2)
@@ -124,11 +125,11 @@ object CreateBoilerGameTests {
             readln()
             var failures = 0
             try { boiler.level() } catch (e: compukter.io.IOException) { failures += 1 }
-            try { Boilers.boiler("boiler") } catch (e: IllegalStateException) { failures += 1 }
+            try { Boiler.named("boiler") } catch (e: NoSuchElementException) { failures += 1 }
             check(failures == 2)
             Terminal.write("boiler-inactive\n")
             readln()
-            val restored = Boilers.boiler("boiler")
+            val restored = Boiler.named("boiler")
             check(restored.waterSupply() == 20f)
             check(restored.isPassive())
             Terminal.write("boiler-restored\n")
@@ -136,7 +137,7 @@ object CreateBoilerGameTests {
             var stale = false
             try { restored.level() } catch (e: compukter.io.IOException) { stale = true }
             check(stale)
-            val replaced = Boilers.boiler("boiler")
+            val replaced = Boiler.named("boiler")
             check(replaced.waterSupply() == 20f)
             Terminal.write("boiler-replaced\n")
             readln()
@@ -148,7 +149,7 @@ object CreateBoilerGameTests {
             var removed = false
             try { replaced.level() } catch (e: compukter.io.IOException) { removed = true }
             check(removed)
-            check(Boilers.boiler("boiler").isPassive())
+            check(Boiler.named("boiler").isPassive())
             Terminal.write("boiler-done\n")
         }
         """.trimIndent()

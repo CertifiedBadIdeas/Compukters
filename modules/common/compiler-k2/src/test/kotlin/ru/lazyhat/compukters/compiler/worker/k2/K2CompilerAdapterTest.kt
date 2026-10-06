@@ -166,7 +166,7 @@ class K2CompilerAdapterTest {
                         "compukter.process.Process",
                         "compukter.redstone.Redstone",
                         "compukter.sound.Sound",
-                        "compukter.display.Display",
+                        "compukter.display.TextDisplay",
                         "compukter.terminal.Terminal",
                         "compukter.filesystem.FileSystem",
                         "compukter.concurrent.Task",

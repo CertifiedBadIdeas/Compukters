@@ -272,10 +272,10 @@ object CreativeVectorThrusterLatencyGameTests {
     private val SOURCE =
         """
         import compukter.concurrent.Tasks
-        import propulsion.thrusters.Thrusters
+        import propulsion.thrusters.CreativeVectorThruster
         import sable.physics.Physics
         fun main() {
-            val engine = Thrusters.creativeVector("engine")
+            val engine = CreativeVectorThruster.named("engine")
             repeat(5) { index ->
                 engine.setThrottle(0.0)
                 engine.setVector(0.0, 0.0)

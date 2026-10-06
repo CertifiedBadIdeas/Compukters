@@ -24,9 +24,11 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
 
 - Text displays, all Create devices and both Propulsion creative engine types expose `first`, `firstOrNull`,
   `filter`, `all`, relative `at`/`atOrNull`, and `named`/`namedOrNull` through typed companion providers.
-  Existing acquisition helpers share their exact-instance handles. Provider values have a distinct IDE color
-  and a `P` completion badge; type references keep ordinary class presentation. Create and Propulsion move to
-  addon API line `2.0` because their device wrappers now implement the common `Peripheral` interface.
+  Provider values have a distinct IDE color
+  and a `P` completion badge; type references keep ordinary class presentation. Device wrappers remain scalar
+  value classes implementing `Peripheral`. The old acquisition helpers and separate side types are removed;
+  use typed providers and `compukter.peripheral.Side`. Create and Propulsion use addon API line `2.0`,
+  and the canonical `compukter:core` library moves to `2.0.0`.
   The base owns bounded discovery snapshots and handle lifetime; SDK 0.5.0 lets addons register typed contracts
   while keeping device operations in their own capabilities.
 

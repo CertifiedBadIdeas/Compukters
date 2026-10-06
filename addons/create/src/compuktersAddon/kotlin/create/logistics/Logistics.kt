@@ -9,14 +9,6 @@ package create.logistics
 import compukter.peripheral.Peripheral
 import compukter.peripheral.TypedPeripheralProvider
 
-public value class LogisticsSide internal constructor(internal val index: Int) {
-    init {
-        require(index in 0..5)
-    }
-
-    public fun stockTicker(): StockTicker = StockTicker(LogisticsBindings.acquireStockTicker(index))
-}
-
 public value class StockTicker internal constructor(private val handle: Int) : Peripheral {
     public companion object : TypedPeripheralProvider<StockTicker>("create:stock_ticker") {
         override fun wrap(handle: Int): StockTicker = StockTicker(handle)
@@ -43,28 +35,6 @@ public value class StockSnapshot internal constructor(private val handle: Int) {
     public fun close() {
         LogisticsBindings.closeSnapshot(handle)
     }
-}
-
-public object Logistics {
-    public fun stockTicker(name: String): StockTicker = StockTicker(LogisticsBindings.acquireStockTickerByName(name))
-
-    public val front: LogisticsSide
-        get() = LogisticsSide(0)
-
-    public val back: LogisticsSide
-        get() = LogisticsSide(1)
-
-    public val left: LogisticsSide
-        get() = LogisticsSide(2)
-
-    public val right: LogisticsSide
-        get() = LogisticsSide(3)
-
-    public val top: LogisticsSide
-        get() = LogisticsSide(4)
-
-    public val bottom: LogisticsSide
-        get() = LogisticsSide(5)
 }
 
 private object LogisticsBindings {

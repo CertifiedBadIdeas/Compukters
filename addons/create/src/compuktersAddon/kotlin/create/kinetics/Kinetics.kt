@@ -9,18 +9,6 @@ package create.kinetics
 import compukter.peripheral.Peripheral
 import compukter.peripheral.TypedPeripheralProvider
 
-public value class KineticSide internal constructor(internal val index: Int) {
-    init {
-        require(index in 0..5)
-    }
-
-    public fun speedometer(): Speedometer = Speedometer(KineticsBindings.acquireSpeedometer(index))
-
-    public fun stressometer(): Stressometer = Stressometer(KineticsBindings.acquireStressometer(index))
-
-    public fun rotationController(): RotationController = RotationController(KineticsBindings.acquireRotationController(index))
-}
-
 public value class Speedometer internal constructor(private val handle: Int) : Peripheral {
     public companion object : TypedPeripheralProvider<Speedometer>("create:speedometer") {
         override fun wrap(handle: Int): Speedometer = Speedometer(handle)
@@ -53,33 +41,6 @@ public value class RotationController internal constructor(private val handle: I
     public fun targetSpeed(): Int = KineticsBindings.targetSpeed(handle)
 
     public fun setTargetSpeed(speed: Int): Int = KineticsBindings.setTargetSpeed(handle, speed)
-}
-
-public object Kinetics {
-    public fun speedometer(name: String): Speedometer = Speedometer(KineticsBindings.acquireSpeedometerByName(name))
-
-    public fun stressometer(name: String): Stressometer = Stressometer(KineticsBindings.acquireStressometerByName(name))
-
-    public fun rotationController(name: String): RotationController =
-        RotationController(KineticsBindings.acquireRotationControllerByName(name))
-
-    public val front: KineticSide
-        get() = KineticSide(0)
-
-    public val back: KineticSide
-        get() = KineticSide(1)
-
-    public val left: KineticSide
-        get() = KineticSide(2)
-
-    public val right: KineticSide
-        get() = KineticSide(3)
-
-    public val top: KineticSide
-        get() = KineticSide(4)
-
-    public val bottom: KineticSide
-        get() = KineticSide(5)
 }
 
 private object KineticsBindings {

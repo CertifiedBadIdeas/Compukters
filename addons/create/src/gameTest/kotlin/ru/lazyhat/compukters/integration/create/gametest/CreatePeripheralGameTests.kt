@@ -148,31 +148,27 @@ object CreatePeripheralGameTests {
     private val KINETIC_SOURCE =
         """
         import compukter.terminal.Terminal
-        import create.kinetics.Kinetics
         import create.kinetics.Speedometer
         import create.kinetics.Stressometer
         import create.kinetics.RotationController
         import create.logistics.StockTicker
-        import create.logistics.Logistics
         import create.boiler.Boiler
         import compukter.peripheral.Side
         fun main() {
             val speed = Speedometer.first()
-            check(speed == Kinetics.speedometer("speed"))
             check(Speedometer.named("speed") == speed)
             check(Speedometer.all().size == 1)
             check(Speedometer.filter { it.speed() == 64f }.size == 1)
             check(Speedometer.firstOrNull { it.speed() < 0f } == null)
             check(Speedometer.atOrNull(Side.top) == null)
             val ticker = StockTicker.first()
-            check(ticker == Logistics.stockTicker("stock"))
             check(StockTicker.named("stock") == ticker)
             check(StockTicker.all().size == 1)
             check(Boiler.firstOrNull() == null)
             val stress = Stressometer.first { it.capacity() > 0f }
-            check(stress == Kinetics.stressometer("stress"))
+            check(stress == Stressometer.named("stress"))
             val controller = RotationController.named("controller")
-            check(controller == Kinetics.rotationController("controller"))
+            check(controller == RotationController.first())
             val devices: List<compukter.peripheral.Peripheral> = listOf(speed, ticker, stress, controller)
             check(devices[0] == speed)
             check(devices[0] is Speedometer)
@@ -190,7 +186,7 @@ object CreatePeripheralGameTests {
             try { speed.speed() } catch (e: compukter.io.IOException) { failures += 1 }
             try { stress.capacity() } catch (e: compukter.io.IOException) { failures += 1 }
             try { controller.targetSpeed() } catch (e: compukter.io.IOException) { failures += 1 }
-            try { Kinetics.speedometer("speed") } catch (e: IllegalStateException) { failures += 1 }
+            try { Speedometer.named("speed") } catch (e: NoSuchElementException) { failures += 1 }
             check(failures == 4)
             check(Speedometer.firstOrNull() == null)
             check(StockTicker.firstOrNull() == null)
@@ -202,17 +198,17 @@ object CreatePeripheralGameTests {
             check(Speedometer.firstOrNull() != speed)
             val restored = Speedometer.first()
             check(restored.speed() == 64f)
-            check(Kinetics.rotationController("controller").targetSpeed() == 37)
-            check(Kinetics.stressometer("stress").capacity() > 0f)
+            check(RotationController.named("controller").targetSpeed() == 37)
+            check(Stressometer.named("stress").capacity() > 0f)
             Terminal.write("kinetic-restored\n")
             readln()
             var stale = false
             try { restored.speed() } catch (e: compukter.io.IOException) { stale = true }
             check(stale)
-            check(Kinetics.speedometer("speed").speed() == 64f)
+            check(Speedometer.named("speed").speed() == 64f)
             Terminal.write("kinetic-replaced\n")
             readln()
-            check(Kinetics.stressometer("stress").capacity() > 0f)
+            check(Stressometer.named("stress").capacity() > 0f)
             Terminal.write("kinetic-done\n")
         }
         """.trimIndent()

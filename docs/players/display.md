@@ -44,9 +44,7 @@ selection stops at the first match. `first`, `at`, and `named` throw `NoSuchElem
 return a snapshot of matching displays. Discovery uses stable coordinate order within the loaded cable component.
 Sides address an adjacent device directly. Merely discovering a display does not claim its output lease.
 
-The existing `Display.open("panel")` and side helpers remain available and share handles with `TextDisplay` queries.
-
-For an adjacent display, use `Display.front.open()`, `Display.back.open()`, or another side accessor. Opening a display
+For an adjacent display, use `TextDisplay.at(Side.front)`, `TextDisplay.at(Side.back)`, or another side accessor. Opening a display
 returns a handle bound to that exact block. Removing, replacing, unloading, or disconnecting it invalidates the handle;
 reconnecting does not retarget an old handle.
 

@@ -9,15 +9,6 @@ package compukter.display
 import compukter.peripheral.Peripheral
 import compukter.peripheral.TypedPeripheralProvider
 
-/** A side of the computer, relative to its front face. */
-public value class DisplaySide internal constructor(internal val index: Int) {
-    init {
-        require(index in 0..5)
-    }
-
-    public fun open(): TextDisplay = TextDisplay(DisplayBindings.acquireSide(index))
-}
-
 /** A handle to one exact display block. Coordinates are zero-based. */
 public value class TextDisplay internal constructor(private val handle: Int) : Peripheral {
     public companion object : TypedPeripheralProvider<TextDisplay>("compukter:text_display") {
@@ -32,28 +23,6 @@ public value class TextDisplay internal constructor(private val handle: Int) : P
     public fun clear() {
         DisplayBindings.clear(handle)
     }
-}
-
-public object Display {
-    public fun open(name: String): TextDisplay = TextDisplay(DisplayBindings.acquireNamed(name))
-
-    public val front: DisplaySide
-        get() = DisplaySide(0)
-
-    public val back: DisplaySide
-        get() = DisplaySide(1)
-
-    public val left: DisplaySide
-        get() = DisplaySide(2)
-
-    public val right: DisplaySide
-        get() = DisplaySide(3)
-
-    public val top: DisplaySide
-        get() = DisplaySide(4)
-
-    public val bottom: DisplaySide
-        get() = DisplaySide(5)
 }
 
 private object DisplayBindings {
