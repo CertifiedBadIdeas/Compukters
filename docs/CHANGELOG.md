@@ -341,6 +341,9 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
 
 ### Computer runtime
 
+- Managed object type lookup and virtual/interface method lookup use precomputed VM image tables,
+  reducing interpreter overhead in measured collection and loop workloads while preserving Guest execution budgets.
+
 - Runtime attachment epochs remain unique when a computer block entity is replaced while preserving its
   ComputerId, preventing an old actor address from matching the new runtime.
 
