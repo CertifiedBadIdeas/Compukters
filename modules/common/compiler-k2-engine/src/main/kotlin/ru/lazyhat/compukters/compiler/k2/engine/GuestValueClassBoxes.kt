@@ -18,7 +18,14 @@
 
 package ru.lazyhat.compukters.compiler.k2.engine
 
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
+import org.jetbrains.kotlin.ir.declarations.IrParameterKind
+import org.jetbrains.kotlin.ir.declarations.IrProperty
+import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
+import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
+import org.jetbrains.kotlin.ir.types.IrSimpleType
+import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.ConstantId
@@ -41,6 +48,45 @@ import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+internal fun valueClassInterfaceMethods(symbol: IrClassSymbol): List<IrSimpleFunction> =
+    symbol.owner.declarations
+        .flatMap { declaration ->
+            when (declaration) {
+                is IrSimpleFunction -> listOf(declaration)
+                is IrProperty -> listOfNotNull(declaration.getter, declaration.setter)
+                else -> emptyList()
+            }
+        }.filter { it.overriddenSymbols.isNotEmpty() && it.origin != IrDeclarationOrigin.FAKE_OVERRIDE }
+        .filterNot { method ->
+            val parameters = method.parameters.filter { it.kind != IrParameterKind.DispatchReceiver }
+            when (method.name.asString()) {
+                "hashCode", "toString" -> {
+                    parameters.isEmpty()
+                }
+
+                "equals" -> {
+                    parameters.size == 1 &&
+                        ((parameters.single().type as? IrSimpleType)?.classifier as? IrClassSymbol)
+                            ?.owner
+                            ?.fqNameWhenAvailable
+                            ?.asString() == "kotlin.Any"
+                }
+
+                else -> {
+                    false
+                }
+            }
+        }
+
+internal data class GuestValueClassBridge(
+    val name: String,
+    val target: FunctionRef?,
+    val parameters: List<ValueType>,
+    val result: ValueType,
+    val suspending: Boolean,
+)
+
 /** A nominal managed wrapper; the underlying scalar remains the direct-call representation. */
 internal class GuestValueClassBox(
     val name: String,
@@ -52,6 +98,8 @@ internal class GuestValueClassBox(
     lateinit var type: TypeRef
     lateinit var field: FieldRef
     var toStringTarget: FunctionRef? = null
+    var interfaces: List<TypeRef> = emptyList()
+    var bridges: List<GuestValueClassBridge> = emptyList()
     val stringPrefix: String get() = "$displayName($propertyName="
 }
 
@@ -87,10 +135,11 @@ internal fun lowerValueClassBoxes(
                 name = requireNotNull(strings[box.name]),
                 final = true,
                 superType = any,
+                interfaces = box.interfaces,
                 fieldStart = field.id.value,
                 fieldCount = 1u,
                 methodStart = firstFunction,
-                methodCount = 3u,
+                methodCount = (3 + box.bridges.size).toUInt(),
             )
         fields += Field(box.type, requireNotNull(strings["<boxed-value>"]), box.scalar, mutable = true, static = false)
         for ((methodIndex, name) in listOf("equals", "hashCode", "toString").withIndex()) {
@@ -208,6 +257,49 @@ internal fun lowerValueClassBoxes(
                     parameters.size.toUInt(),
                     BlockId.of(start),
                     blockBase + blocks.size.toUInt() - start,
+                    0u,
+                    0u,
+                )
+        }
+        box.bridges.forEachIndexed { index, bridge ->
+            val parameters = listOf(receiver) + bridge.parameters
+            val signature = TypeRef.Local(TypeId.of(owner.id.value + 4u + index.toUInt()))
+            types += NominalType.Function(requireNotNull(strings[bridge.name]), bridge.suspending, bridge.result, parameters)
+            val id = FunctionId.of(functionBase + functions.size.toUInt())
+            val start = blockBase + blocks.size.toUInt()
+            val scalarReceiver = register(parameters.size.toUInt())
+            val resultRegister = register(parameters.size.toUInt() + 1u)
+            val destination = if (bridge.result == ValueType.Unit) Destination.Unit else Destination.Register(resultRegister)
+            val instructions = mutableListOf<Instruction>(Instruction.FieldGet(scalarReceiver, register(0u), box.field))
+            if (bridge.target == null) {
+                instructions += Instruction.Return(Destination.Register(scalarReceiver))
+            } else {
+                instructions +=
+                    Instruction.Call(
+                        destination,
+                        bridge.target,
+                        listOf(scalarReceiver) + bridge.parameters.indices.map { register(it.toUInt() + 1u) },
+                    )
+                instructions += Instruction.Return(destination)
+            }
+            blocks += Block(id, false, instructions)
+            functions +=
+                Function(
+                    box.type,
+                    requireNotNull(strings[bridge.name]),
+                    signature,
+                    setOf(FunctionFlag.VIRTUAL) + if (bridge.suspending) setOf(FunctionFlag.SUSPENDING) else emptySet(),
+                    (
+                        parameters + box.scalar +
+                            listOfNotNull(
+                                bridge.result.takeUnless {
+                                    it == ValueType.Unit || bridge.target == null
+                                },
+                            )
+                    ).map(FunctionValue::scalar),
+                    parameters.size.toUInt(),
+                    BlockId.of(start),
+                    1u,
                     0u,
                     0u,
                 )

@@ -729,9 +729,9 @@ private class InlineValueClassRegistry private constructor(
             val unsupportedParent =
                 declaration.superTypes
                     .mapNotNull { (it as? IrSimpleType)?.classifier as? IrClassSymbol }
-                    .firstOrNull { it.owner.fqNameWhenAvailable?.asString() != "kotlin.Any" }
+                    .firstOrNull { it.owner.fqNameWhenAvailable?.asString() != "kotlin.Any" && it.owner.kind != ClassKind.INTERFACE }
             if (unsupportedParent != null) {
-                throw UnsupportedKotlinIr(declaration, "value class interfaces and custom supertypes are not supported")
+                throw UnsupportedKotlinIr(declaration, "value class custom class supertypes are not supported")
             }
             return InlineValueClassLayout(
                 declaration = declaration,
@@ -1189,6 +1189,7 @@ internal object KotlinProjectLowering {
                         }
                     }
             ).distinctBy { it.symbol }
+                .filterNot { inlineValueClasses.getter(it.symbol) != null }
                 .filter { function ->
                     val owner = function.parent as? IrClass
                     includeTrustedPlatformBodies ||
@@ -1342,7 +1343,11 @@ internal object KotlinProjectLowering {
             }
         val constructorDeclarations = constructorInstances.map { it.declaration }
         val externalFunctions = linkedPlatformFunctions(userFunctions + constructorDeclarations, session)
-        val linkedSymbols = linkedPlatformSymbols(userFunctions + constructorDeclarations, session)
+        val linkedSymbols =
+            linkedPlatformSymbols(
+                userFunctions + constructorDeclarations + sourceClasses.filter { inlineValueClasses.contains(it.symbol) },
+                session,
+            )
 
         val intrinsicCollector =
             IntrinsicCollector { function ->
@@ -1520,6 +1525,11 @@ internal object KotlinProjectLowering {
                     referenceArrays.keys +
                     guestTypes.valueClassBoxes.keys + guestTypes.valueClassBoxes.keys.map { "$it.<boxed-value>" } +
                     listOf("<boxed-value>", "toString", "hashCode", "equals") +
+                    guestTypes.valueClassBoxes.values.flatMap { box ->
+                        valueClassInterfaceMethods(box.symbol).map { method ->
+                            artifactFunctionName(method.overriddenSymbols.first().owner, pluginContext, inlineValueClasses, session)
+                        }
+                    } +
                     capabilityIdentities.flatMap { listOf(it.namespace, it.name) } +
                     externalFunctions.values.map(ExternalFunctionTarget::exportName) +
                     linkedSymbols.types.values.map(ExternalTypeTarget::exportName) +
@@ -1840,12 +1850,13 @@ internal object KotlinProjectLowering {
                         type = TypeRef.Local(TypeId.of((referenceArrayTypeBase + index).toUInt())),
                     )
             }
-        var localBoxIndex = 0
+        var localBoxTypeCount = 0
         guestTypes.valueClassBoxes.toSortedMap().values.forEach { box ->
             val imported = externalClassTypes[box.symbol]
             if (imported == null) {
                 box.type =
-                    TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size + 3 + localBoxIndex++ * 4).toUInt()))
+                    TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size + 3 + localBoxTypeCount).toUInt()))
+                localBoxTypeCount += 4 + valueClassInterfaceMethods(box.symbol).size
             } else {
                 box.type = imported
                 val target = externalBoxFields.single { it.ownerSymbol == box.symbol }
@@ -1854,8 +1865,10 @@ internal object KotlinProjectLowering {
             box.toStringTarget =
                 box.symbol.owner.declarations
                     .filterIsInstance<IrSimpleFunction>()
-                    .singleOrNull { it.name.asString() == "toString" && it.origin == IrDeclarationOrigin.DEFINED }
-                    ?.let { functionIds[it.symbol] }
+                    .singleOrNull {
+                        it.name.asString() == "toString" && it.origin == IrDeclarationOrigin.DEFINED &&
+                            it.parameters.none { parameter -> parameter.kind != IrParameterKind.DispatchReceiver }
+                    }?.let { functionIds[it.symbol] }
                     ?.let(FunctionRef::Local)
         }
         guestTypes.registerReferenceArrays(referenceArrayTypes)
@@ -3098,6 +3111,57 @@ internal object KotlinProjectLowering {
                         static = true,
                     )
                 }
+        localValueClassBoxes.forEach { box ->
+            box.interfaces =
+                box.symbol.owner.superTypes
+                    .mapNotNull { parent ->
+                        val symbol = (parent as? IrSimpleType)?.classifier as? IrClassSymbol ?: return@mapNotNull null
+                        if (symbol.owner.kind != ClassKind.INTERFACE) return@mapNotNull null
+                        val instance = parent.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
+                        instance?.let(classInstanceTypeIds::get)?.let(TypeRef::Local) ?: externalClassTypes[symbol]
+                            ?: throw UnsupportedKotlinIr(box.symbol.owner, "value class interface parent is outside the supported subset")
+                    }.distinct()
+                    .sortedWith(
+                        compareBy<TypeRef>({ if (it is TypeRef.Local) 0 else 1 }, {
+                            when (it) {
+                                is TypeRef.Local -> it.id.value
+                                is TypeRef.Imported -> it.id.value
+                            }
+                        }),
+                    )
+            box.bridges =
+                valueClassInterfaceMethods(box.symbol).map { method ->
+                    fun mapped(type: IrType) =
+                        valueType(
+                            type,
+                            pluginContext,
+                            guestTypes,
+                            stringType,
+                            charArrayType,
+                            stringArrayType,
+                            classTypeIds,
+                            externalClassTypes,
+                            inlineValueClasses,
+                            platformScalars,
+                            method,
+                            shapeInterfaceTypes,
+                            classInstanceTypeIds = classInstanceTypeIds,
+                        )
+                    val target =
+                        functionIds[method.symbol]?.let(FunctionRef::Local)
+                            ?: externalFunctionImports[method.symbol]?.let { FunctionRef.Imported(it.importId) }
+                    if (target == null && inlineValueClasses.getter(method.symbol) == null) {
+                        throw UnsupportedKotlinIr(method, "value class interface implementation is not available")
+                    }
+                    GuestValueClassBridge(
+                        artifactFunctionName(method.overriddenSymbols.first().owner, pluginContext, inlineValueClasses, session),
+                        target,
+                        method.parameters.filter { it.kind != IrParameterKind.DispatchReceiver }.map { mapped(it.type) },
+                        mapped(method.returnType),
+                        method.isSuspend,
+                    )
+                }
+        }
         val valueClassBoxArtifacts =
             lowerValueClassBoxes(
                 localValueClassBoxes,
@@ -3541,6 +3605,13 @@ internal object KotlinProjectLowering {
         inlineValueClasses: InlineValueClassRegistry,
         session: CompilationSession,
     ): String {
+        // Managed overrides must keep the declaration's dispatch name even when a generic result
+        // specializes to a value class. Static scalar implementations still need nominal mangling.
+        if (!inlineValueClasses.contains((function.parent as? IrClass)?.symbol)) {
+            function.overriddenSymbols.firstOrNull()?.owner?.let { overridden ->
+                return artifactFunctionName(overridden, pluginContext, inlineValueClasses, session)
+            }
+        }
         val signatureTypes = loweredParameters(function, session).map { it.type } + function.returnType
         if (signatureTypes.none { type ->
                 inlineValueClasses.contains((type as? IrSimpleType)?.classifier as? IrClassSymbol)
@@ -5119,6 +5190,9 @@ private class FunctionCompiler(
             guestTypes.valueClassBox(resolvedType(targetType))?.let { return unboxValueClass(source, it) }
             if (scalarBoxes.any { it.valueType == target }) return unboxScalar(source, target)
         }
+        if (actual !is ValueType.Ref && target is ValueType.Ref && guestTypes.valueClassBox(resolvedType(expression.type)) != null) {
+            return boxValue(source, expression.type, target)
+        }
         if (expectedType != null && actual is ValueType.Ref) {
             val target = valueType(expectedType, expression)
             if (target is ValueType.Ref && actual != target) {
@@ -5519,6 +5593,10 @@ private class FunctionCompiler(
                     expression.operator == IrTypeOperator.CAST &&
                         (
                             expression.typeOperand.isNullableScalar() || expression.typeOperand.isKotlinAny() ||
+                                (
+                                    valueType(expression.typeOperand, expression) is ValueType.Ref &&
+                                        guestTypes.valueClassBox(resolvedType(expression.argument.type)) != null
+                                ) ||
                                 (
                                     resolvedType(expression.typeOperand).isNullable() &&
                                         guestTypes.valueClassBox(resolvedType(expression.typeOperand)) != null
@@ -6296,6 +6374,7 @@ private class FunctionCompiler(
                     argumentExpressions.any {
                         resolvedType(it.type).isKotlinAny() || resolvedType(it.type).isNullableScalar() ||
                             resolvedType(it.type).isNullableString() ||
+                            ((resolvedType(it.type) as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.kind == ClassKind.INTERFACE ||
                             (resolvedType(it.type).isNullable() && guestTypes.valueClassBox(resolvedType(it.type)) != null)
                     }
             val arrayStoreElementType =

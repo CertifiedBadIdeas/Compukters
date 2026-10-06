@@ -87,7 +87,9 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
 
 - Scalar value classes based on Int, Boolean and Char can be stored in lists and generic arrays, passed as Any,
   and used as nullable values. Managed wrappers retain the nominal type between Guest code and precompiled addon
-  libraries; equality, hashCode, checked casts and toString preserve value-class semantics. Direct typed calls
+  libraries; equality, hashCode, checked casts and toString preserve value-class semantics. They can implement
+  interfaces with methods, properties and inherited defaults, including concrete generic interface specializations.
+  Interface calls retain the same nominal wrapper across addon boundaries. Direct typed calls
   remain unboxed. Creative Vector Thruster handles can be grouped with listOf and controlled through forEach.
   Rebuild platform/addon bundles and Guest programs; the artifact format and native ABI are unchanged.
 

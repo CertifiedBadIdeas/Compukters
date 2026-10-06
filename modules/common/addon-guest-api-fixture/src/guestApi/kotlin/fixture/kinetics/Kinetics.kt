@@ -6,7 +6,14 @@
 
 package fixture.kinetics
 
-public value class KineticSide internal constructor(internal val index: Int) {
+public interface SideReading {
+    public fun sideIndex(): Int
+    public fun nextIndex(): Int = sideIndex() + 1
+}
+
+public value class KineticSide internal constructor(internal val index: Int) : SideReading {
+    override fun sideIndex(): Int = index
+
     public fun speedometer(): Speedometer = Speedometer(KineticsBindings.acquireSpeedometer(index))
 
     public fun stressometer(): Stressometer = Stressometer(KineticsBindings.acquireStressometer(index))
@@ -37,6 +44,8 @@ public value class RotationController internal constructor(private val handle: I
 }
 
 public object Kinetics {
+    public fun sideReading(side: KineticSide): SideReading = side
+
     public fun boxSide(side: KineticSide): Any = side
 
     public fun optionalSide(value: Any): KineticSide? = value as KineticSide
