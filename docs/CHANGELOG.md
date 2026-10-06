@@ -15,6 +15,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 This release expands the Kotlin available to computer programs and introduces support for independently installed
 addon mods, with optional Create, Sable and Propulsion integrations for Minecraft 1.21.1.
 
+- First-party addons use independent two-part `x.y` versions: `x` identifies their API compatibility line and `y`
+  identifies compatible updates. Production JAR names also include the target Compukters major/minor line, and loader
+  metadata restricts the base mod to the build's minimum version within that line.
+
 - The base mod reports its product version to NeoForge so dependency ranges compare it independently of the
   Minecraft/loader prefixes in archive names; development builds retain the snapshot suffix.
 

@@ -31,11 +31,11 @@ plugins {
 
 group = "ru.lazyhat.compukters"
 val addonSdkVersion = "0.4.0"
-version = providers.gradleProperty("addonVersion").get()
 
 base {
     archivesName.set("compukters-create-1.21.1-neoforge")
 }
+apply(from = "../gradle/addon-versioning.gradle.kts")
 
 kotlin {
     jvmToolchain(21)
@@ -149,13 +149,6 @@ loom {
                 }
             }
         }
-    }
-}
-
-tasks.processResources {
-    inputs.property("addonVersion", project.version)
-    filesMatching("META-INF/neoforge.mods.toml") {
-        expand("addon_version" to project.version)
     }
 }
 

@@ -41,8 +41,38 @@ runtime uses the adjacent checkout's self-contained development JAR and carries 
 Gradle rebuilds it before `runClient` without publishing it to Maven Local or passing it through Loom's mod remap cache.
 After publishing the Gradle plugin and tooling SDK, run `check`,
 `buildProductionJar`, or `runClient` from `addons/create`. The Compukters root remains unaware of the addon and does not
-own or invoke its tasks. The Create addon also has its own release version, independent of both the SDK and the base
-mod.
+own or invoke its tasks. First-party addons use the two-part release policy below, independently of the SDK version.
+
+## First-party addon versions
+
+Create, Sable and Propulsion use `x.y` versions. `x` identifies the addon's public API compatibility line; increment it
+and reset `y` to zero for an incompatible public API change. Increment `y` for backward-compatible updates, including
+fixes and additions. The number is independent of the Compukters version and is not three-part SemVer. Moving to a new
+Compukters target line does not reset the addon version or require an API-line bump by itself.
+
+The production archive also names the Compukters target line:
+
+```text
+compukters-create-1.21.1-neoforge-0.5-1.0.jar
+```
+
+Here `0.5` is the target Compukters major/minor line and `1.0` is the Create addon's own API/update version. The
+`addonVersion` property in each first-party addon's `gradle.properties` owns its `x.y` value. The shared
+`addons/gradle/addon-versioning.gradle.kts` derives the target line from the adjacent Compukters checkout and expands
+the required base-mod dependency. The lower bound is the workspace version used to build the addon; the upper bound
+is the next minor line. A build against Compukters `0.5.0` therefore requires `[0.5.0,0.6.0)`. A build against `0.5.3`
+requires `[0.5.3,0.6.0)` even though its filename still contains `0.5`; use the declared dependency for the exact minimum.
+
+An addon depending on another addon's API line 1 can declare a NeoForge dependency range `[1.0,2.0)`, or `[1.2,2.0)` if
+it needs functionality introduced in update 1.2. This accepts later compatible updates while rejecting API line 2.
+Keep capability ABI versions and ABI locks explicit; changing a release number does not automatically migrate them.
+Guest build locks still identify exact addon bundle versions and content hashes and may require re-resolution/rebuild
+when an addon is updated. A loader dependency range does not make previously compiled Guest artifacts interchangeable.
+
+This policy covers the three first-party addons. Independent SDK users can retain their own mod versioning policy.
+Stable development and GameTest archive names are retained for the workspace's included-build composition. Each addon
+`check` verifies its production filename, packaged version and Compukters dependency range through
+`verifyAddonVersioning`.
 
 ## Apply the plugin
 

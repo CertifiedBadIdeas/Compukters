@@ -3,6 +3,10 @@
 Independent observation addon for Minecraft 1.21.1, NeoForge 21.1.252 and Sable 2.0.5 (Modrinth U678xqle).
 Install it alongside Compukters and Sable. Main Compukters has no Sable dependency; the Create addon remains independent.
 
+Addon releases use `x.y` (API compatibility line and compatible update), separately from the Compukters target line.
+For example, `compukters-sable-1.21.1-neoforge-0.5-1.0.jar` targets Compukters 0.5 and is addon version 1.0. Exact minimum
+versions are enforced by loader metadata. See [addon versioning](../../docs/ADDON-DEVELOPMENT.md#first-party-addon-versions).
+
 ## Guest API
 
 Add `"sable"` to the project's addon list in `compukter.toml`, then compile against the server's installed API:

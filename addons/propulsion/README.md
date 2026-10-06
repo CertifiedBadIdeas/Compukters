@@ -4,6 +4,10 @@ Independent Creative Thruster and Creative Vector Thruster addon for Minecraft 1
 Propulsion: Simulated 1.1.5 (Modrinth H13U56dc). Install alongside Compukters and the upstream mods. It has no dependency
 on Compukters: Create or Compukters: Sable; the main mod has no Propulsion dependency.
 
+Addon releases use `x.y` (API compatibility line and compatible update), separately from the Compukters target line.
+For example, `compukters-propulsion-1.21.1-neoforge-0.5-1.0.jar` targets Compukters 0.5 and is addon version 1.0. Exact
+minimum versions are enforced by loader metadata. See [addon versioning](../../docs/ADDON-DEVELOPMENT.md#first-party-addon-versions).
+
 Pinned Propulsion also needs Simulated 1.3.1 at runtime, although its metadata omits that requirement.
 The standalone and shared dev builds supply it from the Aeronautics 1.3.1 bundle.
 

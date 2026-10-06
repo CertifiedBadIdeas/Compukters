@@ -26,7 +26,7 @@ side="BOTH"
 [[dependencies.compukters_sable]]
 modId="compukters"
 type="required"
-versionRange="[0.5.0,)"
+versionRange="${compukters_version_range}"
 ordering="AFTER"
 side="BOTH"
 
