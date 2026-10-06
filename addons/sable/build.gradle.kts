@@ -28,8 +28,8 @@ plugins {
 }
 
 group = "ru.lazyhat.compukters"
-version = providers.gradleProperty("addonVersion").get()
 base { archivesName.set("compukters-sable-1.21.1-neoforge") }
+apply(from = "../gradle/addon-versioning.gradle.kts")
 
 kotlin {
     jvmToolchain(21)
@@ -115,10 +115,6 @@ loom {
             }
         }
     }
-}
-tasks.processResources {
-    inputs.property("addonVersion", project.version)
-    filesMatching("META-INF/neoforge.mods.toml") { expand("addon_version" to project.version) }
 }
 tasks.test { useJUnitPlatform() }
 tasks.withType<ConfigurableKtLintTask>().configureEach { exclude { it.file.path.contains("build/generated") } }
