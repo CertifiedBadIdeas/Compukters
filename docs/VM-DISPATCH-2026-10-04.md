@@ -1,11 +1,12 @@
 ---
 layout: default
 title: VM virtual dispatch optimization (2026-10-04)
+section: contributors
 ---
 
 # VM virtual dispatch optimization
 
-This follows the [managed type lookup optimization](VM-OPTIMIZATION-2026-10-04.md) in the same isolated worktree. The baseline already includes that optimization; the gains below are additional, not comparisons with the original VM.
+This follows the [managed type lookup optimization]({{ '/VM-OPTIMIZATION-2026-10-04/' | relative_url }}) in the same isolated worktree. The baseline already includes that optimization; the gains below are additional, not comparisons with the original VM.
 
 At admission, the VM builds an offset table identifying the contiguous virtual/interface method entries for each global receiver type. A call searches only that receiver’s entries by declaration ID instead of searching the entire table by a type/declaration pair. Resolution still uses the original admitted implementations, including inherited overrides and interface defaults. No artifact, public API or native ABI changes.
 
@@ -33,15 +34,15 @@ All eleven cases improve in every paired round. Aggregate medians show 5.80–7.
 
 The additional immutable payload is `(type_count + 1) * size_of::<usize>()`: eight bytes per declared type plus one sentinel on this 64-bit host, one boxed-slice field and allocator metadata. It is shared with the execution image, with no per-session cache or new hot-path allocations. Guest heap and deterministic work quotas are unchanged. Admission performs an additional bounded linear pass and fallible allocation; admission latency was not measured separately.
 
-[Comparison](benchmarks/dispatch-2026-10-04/comparison.tsv), [environment, commands, revisions and binary hashes](benchmarks/dispatch-2026-10-04/environment.json), [loop samples](benchmarks/dispatch-2026-10-04/transient-allocations-samples.tsv), [transformation samples](benchmarks/dispatch-2026-10-04/collection-reuse-samples.tsv).
+[Comparison]({{ '/benchmarks/dispatch-2026-10-04/comparison.tsv' | relative_url }}), [environment, commands, revisions and binary hashes]({{ '/benchmarks/dispatch-2026-10-04/environment.json' | relative_url }}), [loop samples]({{ '/benchmarks/dispatch-2026-10-04/transient-allocations-samples.tsv' | relative_url }}), [transformation samples]({{ '/benchmarks/dispatch-2026-10-04/collection-reuse-samples.tsv' | relative_url }}).
 
 ## Profiles and verification
 
 Before and after profiles separately run the fold case for 31 samples with `perf record -e cycles:u -F 499 --call-graph dwarf`. Dispatch lookup accounts for 8.10% of sampled cycles before and 4.15% after. These are whole-process sampling percentages with about 1,400 samples each, including setup, warmup and traced controls; they support the hotspot diagnosis rather than an exact hot-phase cost claim. Timed comparisons exclude profiled runs.
 
-[Before profile](benchmarks/dispatch-2026-10-04/perf-before.txt), [after profile](benchmarks/dispatch-2026-10-04/perf-after.txt). Frozen binaries and perf.data remain under ignored `build/reports/benchmarks/dispatch-2026-10-04/`.
+[Before profile]({{ '/benchmarks/dispatch-2026-10-04/perf-before.txt' | relative_url }}), [after profile]({{ '/benchmarks/dispatch-2026-10-04/perf-after.txt' | relative_url }}). Frozen binaries and perf.data remain under ignored `build/reports/benchmarks/dispatch-2026-10-04/`.
 
-521 native crate tests passed (432 unit tests plus integrations/doc tests), with clippy warnings denied and formatting checked. Six Kotlin-to-VM conformance scenarios executed successfully: function values, generic interfaces, mapNotNull, mutable lists, tasks and exceptions. New tests compare every admitted dispatch target with its source entry and cover missing declarations/types, empty receiver ranges and table boundaries. [Verification evidence](benchmarks/dispatch-2026-10-04/verification.txt).
+521 native crate tests passed (432 unit tests plus integrations/doc tests), with clippy warnings denied and formatting checked. Six Kotlin-to-VM conformance scenarios executed successfully: function values, generic interfaces, mapNotNull, mutable lists, tasks and exceptions. New tests compare every admitted dispatch target with its source entry and cover missing declarations/types, empty receiver ranges and table boundaries. [Verification evidence]({{ '/benchmarks/dispatch-2026-10-04/verification.txt' | relative_url }}).
 
 ## Reproduction and limits
 
@@ -54,4 +55,4 @@ after ARTIFACT_DIR REPORT_DIR 7 HEAP_BYTES untraced
 
 Use the exact twelve invocations and alternating orders in environment.json. Baseline VM: `7fea2f27691bc21ffae3eadac787e039d00abdbc`; optimized VM: `973ec05743d1cc79649431030595a7b28cfe1a16`.
 
-These are local native interpreter measurements, excluding Minecraft tick scheduling and JVM/native transport. No fresh Minecraft profile, full-checkout verification or release gate was run. Both optimizations were integrated locally on 2026-10-06; see the [integration verification](VM-OPTIMIZATION-2026-10-04.md#reproduction-and-verification). The timings above remain evidence for the recorded revisions, rather than a new measurement of the integrated runtime.
+These are local native interpreter measurements, excluding Minecraft tick scheduling and JVM/native transport. No fresh Minecraft profile, full-checkout verification or release gate was run. Both optimizations were integrated locally on 2026-10-06; see the [integration verification]({{ '/VM-OPTIMIZATION-2026-10-04/' | relative_url }}#reproduction-and-verification). The timings above remain evidence for the recorded revisions, rather than a new measurement of the integrated runtime.

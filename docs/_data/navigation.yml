@@ -1,0 +1,107 @@
+- id: players
+  title: Players
+  url: /PLAYERS/
+  description: Install the mod, program a computer, and connect it to your world.
+  groups:
+    - title: Start here
+      items:
+        - title: About Compukters
+          url: /ABOUT/
+          description: What the mod does and which Minecraft versions it supports.
+        - title: Getting started
+          url: /GETTING-STARTED/
+          description: Installation, your first computer, and your first program.
+        - title: Changelog
+          url: /CHANGELOG/
+          description: Released features and the current development version.
+    - title: Connect your world
+      items:
+        - title: Peripherals and cables
+          url: /PERIPHERALS/
+          description: Local sides, named devices, connections, and handles.
+        - title: Redstone
+          url: /REDSTONE/
+          description: Read signals, wait for changes, and control outputs.
+        - title: Text displays
+          url: /DISPLAY/
+          description: Put program output on a screen in the world.
+    - title: Optional addons
+      items:
+        - title: Addon overview
+          url: /ADDONS/
+          description: Choose an integration and understand compatibility.
+        - title: Create
+          url: /CREATE/
+          description: Kinetics, warehouse logistics, and steam boilers.
+          children:
+            - title: Kinetics
+              url: /CREATE-KINETICS/
+            - title: Logistics
+              url: /CREATE-LOGISTICS/
+            - title: Boilers
+              url: /CREATE-BOILERS/
+        - title: Sable
+          url: /SABLE/
+          description: Read a construction's pose and velocity.
+        - title: Propulsion
+          url: /PROPULSION/
+          description: Control creative engines and vector thrust.
+- id: developers
+  title: Developers
+  url: /DEVELOPERS/
+  description: Write Guest Kotlin programs or expose your own addon API.
+  groups:
+    - title: Write programs
+      items:
+        - title: Programming guide
+          url: /PROGRAMMING/
+          description: Projects, compilation, execution, waits, and debugging.
+        - title: Kotlin support
+          url: /KOTLIN-SUPPORT/
+          description: Supported language features and their exact boundaries.
+        - title: Standard library
+          url: /STDLIB-SUPPORT/
+          description: Available Kotlin library functions and collections.
+    - title: APIs and extensions
+      items:
+        - title: API reference
+          url: /API/
+          description: Browse generated signatures for core and every addon.
+        - title: Build an addon
+          url: /ADDON-DEVELOPMENT/
+          description: Publish typed Guest Kotlin from an independent NeoForge mod.
+- id: contributors
+  title: Contributors
+  url: /CONTRIBUTORS/
+  description: Build the checkout, understand its boundaries, and verify changes.
+  groups:
+    - title: Work on the project
+      items:
+        - title: Build and run
+          url: /DEVELOPMENT/
+          description: Toolchains, Minecraft targets, and the standalone playground.
+        - title: All-addon dev stand
+          url: /DEV-STAND/
+          description: Run Create, Sable, Propulsion, and Aeronautics together.
+        - title: Verification
+          url: /VERIFICATION/
+          description: Choose focused checks and understand release gates.
+    - title: Understand the internals
+      items:
+        - title: Architecture
+          url: /ARCHITECTURE/
+          description: Compiler, native runtime, actor host, and ownership.
+        - title: Module and package guide
+          url: /PACKAGE-GUIDELINE/
+          description: Put changes in the layer that owns their behavior.
+        - title: Native test coverage
+          url: /NATIVE-TEST-COVERAGE/
+          description: Find evidence at Rust, FFI, JVM, and game boundaries.
+    - title: Measure performance
+      items:
+        - title: In-world VM benchmarks
+          url: /VM-BENCHMARK/
+          description: Profile the server cost of real and headless computers.
+        - title: Performance reports
+          url: /PERFORMANCE/
+          description: Recorded workloads, measurements, and optimization evidence.

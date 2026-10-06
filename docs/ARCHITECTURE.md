@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Architecture
+section: contributors
 ---
 
 # Compukters Architecture
@@ -655,7 +656,7 @@ the payload address itself to be eight-byte aligned. During roots/mark, the pred
 holds the intrusive gray link while Guest execution and allocation are paused. The bounded forward sweep restores
 predecessor sizes before coalescing. No per-object side table or extra heap scan is required.
 Arena backing and admitted heap budgets retain their existing 16-byte granularity. See the
-[object-array heap measurements](OBJECT-ARRAY-BENCHMARK.md) for construction and transformation budgets.
+[object-array heap measurements]({{ '/OBJECT-ARRAY-BENCHMARK/' | relative_url }}) for construction and transformation budgets.
 Allocation checks the head of the request's partial size-class bucket before the rounded-up bitmap search.
 A constant-space free-block hint covers fitting blocks hidden behind smaller list heads. Removing its block
 invalidates the hint; insertions retain the larger candidate. The existing budgeted sweep observes surviving

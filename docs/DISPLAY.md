@@ -3,6 +3,7 @@ layout: default
 title: Text display
 description: Show program-written text on a display block in the world.
 permalink: /DISPLAY/
+section: players
 ---
 
 # Text display

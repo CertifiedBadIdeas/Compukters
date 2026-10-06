@@ -3,6 +3,7 @@ layout: default
 title: Create logistics
 description: Read Stock Ticker inventory and request packages from Guest Kotlin.
 permalink: /CREATE-LOGISTICS/
+section: players
 ---
 
 # Create logistics

@@ -3,6 +3,7 @@ layout: default
 title: Create kinetics
 description: Read and control adjacent or cable-connected Create kinetic devices from Guest Kotlin.
 permalink: /CREATE-KINETICS/
+section: players
 ---
 
 # Create kinetics

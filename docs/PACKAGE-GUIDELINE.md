@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Package guideline
+section: contributors
 ---
 
 # Package Guideline

@@ -1,3 +1,11 @@
+---
+layout: default
+title: Transient allocation benchmark
+description: Reproduce Guest loop and transient allocation measurements.
+section: contributors
+permalink: /TRANSIENT-ALLOCATION-BENCHMARK/
+---
+
 # Guest loop and closure allocation benchmark
 
 Run `./gradlew-sandbox-dev-parallel-summary benchmarkTransientAllocations`.
@@ -14,8 +22,8 @@ Fixed-budget runs leave minimum-heap columns empty. `timing_heap_bytes` and `pre
 fallback from the requested pressure budget. No fallback was needed in the recorded baseline.
 
 Baseline captured on 2026-09-27, before changing capture-cell selection:
-[measurements](benchmarks/transient-allocations-2026-09-27-before.tsv),
-[raw samples](benchmarks/transient-allocations-2026-09-27-before-samples.tsv).
+[measurements]({{ '/benchmarks/transient-allocations-2026-09-27-before.tsv' | relative_url }}),
+[raw samples]({{ '/benchmarks/transient-allocations-2026-09-27-before-samples.tsv' | relative_url }}).
 All eight checksums passed. `fold-read-var` alone incurred GC work (737 maintenance units); its otherwise identical
 `fold-val` control incurred none. The compiler allocated a separate typed cell for the read-only captured `var`.
 The mutable control reassigns its captured variable after constructing the lambda and checks that the lambda sees
@@ -33,8 +41,8 @@ relevant IR roots, including nested closures. This is conservative: even a dead 
 its cell. No escape analysis, closure lifetime assumption, or change to Guest APIs is required.
 
 After the change:
-[measurements](benchmarks/transient-allocations-2026-09-27-after.tsv),
-[raw samples](benchmarks/transient-allocations-2026-09-27-after-samples.tsv).
+[measurements]({{ '/benchmarks/transient-allocations-2026-09-27-after.tsv' | relative_url }}),
+[raw samples]({{ '/benchmarks/transient-allocations-2026-09-27-after-samples.tsv' | relative_url }}).
 All eight programs and all 24 timed samples passed at the requested 16 KiB heap with no fallback.
 
 | `fold-read-var`, 300 rounds | Before | After |

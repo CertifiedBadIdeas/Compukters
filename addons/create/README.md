@@ -1,9 +1,9 @@
-# Compukters: Sable
+# Compukters: Create
 
-Independent construction pose and velocity observation for Minecraft 1.21.1.
+Independent kinetics, Stock Ticker logistics and boiler integration for Minecraft 1.21.1.
 
 Installation, upstream versions, Guest Kotlin examples, device lifetime and development commands are maintained in the
-[canonical Wiki guide](https://certifiedbadideas.github.io/Compukters/SABLE/).
+[canonical Wiki guide](https://certifiedbadideas.github.io/Compukters/CREATE/).
 
 See [addon versioning](https://certifiedbadideas.github.io/Compukters/ADDON-DEVELOPMENT/#first-party-addon-versions)
 for the independent `x.y` API/update version and Compukters target line in production JAR names. For combined

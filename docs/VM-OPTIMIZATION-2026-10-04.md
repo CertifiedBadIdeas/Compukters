@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Production-path VM optimization (2026-10-04)
+section: contributors
 ---
 
 # Production-path VM optimization
@@ -11,7 +12,7 @@ The VM now resolves each global managed type ID to its module/type key at admiss
 
 ## Measurement path
 
-The opt-in `guest-benchmark` binary compiles the existing interpreter and verifier source modules without `cfg(test)` register-initialization instrumentation and invokes the existing crate-private untraced Session path. It changes no public API, artifact encoding or exported native ABI. Its manifest inputs are the same generated Guest artifacts used in the earlier [Ryzen measurements](VM-PERFORMANCE-2026-10-04.md). It checks ready/checksum output, normal termination, and all eight construction/hot work counters; a traced control must agree with the untraced path.
+The opt-in `guest-benchmark` binary compiles the existing interpreter and verifier source modules without `cfg(test)` register-initialization instrumentation and invokes the existing crate-private untraced Session path. It changes no public API, artifact encoding or exported native ABI. Its manifest inputs are the same generated Guest artifacts used in the earlier [Ryzen measurements]({{ '/VM-PERFORMANCE-2026-10-04/' | relative_url }}). It checks ready/checksum output, normal termination, and all eight construction/hot work counters; a traced control must agree with the untraced path.
 
 The measurements below compare the same binary harness and artifacts before/after the type-key optimization, rather than comparing diagnostic traced timing against untraced execution. This is standalone interpreter evidence; it excludes Minecraft lifecycle/scheduling and JVM/native transport costs.
 
@@ -39,7 +40,7 @@ All 11 cases improve in each paired round. Aggregate median elapsed time decreas
 
 Loops use a 16 KiB Guest heap for 256 elements × 300 summation rounds; transformations use 256 KiB for 1024 two-Int records × 100 rounds. No fallback heap was used. The optimized image adds eight bytes of immutable mapping payload per declared type, plus one boxed-slice field and native allocation metadata per image. Mutable per-session arenas and Guest heap budgets are unchanged. Admission pays for construction of this additional table; admission elapsed time was not isolated in this experiment.
 
-[Comparison TSV](benchmarks/issue-689-2026-10-04/comparison.tsv), [environment, commands and binary hashes](benchmarks/issue-689-2026-10-04/environment.json), [loop samples](benchmarks/issue-689-2026-10-04/transient-allocations-samples.tsv), [transformation samples](benchmarks/issue-689-2026-10-04/collection-reuse-samples.tsv).
+[Comparison TSV]({{ '/benchmarks/issue-689-2026-10-04/comparison.tsv' | relative_url }}), [environment, commands and binary hashes]({{ '/benchmarks/issue-689-2026-10-04/environment.json' | relative_url }}), [loop samples]({{ '/benchmarks/issue-689-2026-10-04/transient-allocations-samples.tsv' | relative_url }}), [transformation samples]({{ '/benchmarks/issue-689-2026-10-04/collection-reuse-samples.tsv' | relative_url }}).
 
 ## CPU profiles
 
@@ -47,7 +48,7 @@ Separate profiles used `perf record -e cycles:u -F 499 --call-graph dwarf` and 9
 
 Before optimization, `ExecutionImage::type_key` accounts for 4.48–6.12% of sampled cycles in iterator/fold/object-transform profiles. The fold profile reports 6.12%. Afterward this function is absent from the standalone-symbol report at the 1% threshold: lookup work is inlined as an indexed read, not eliminated entirely. Other measured costs, including register access and virtual dispatch, remain candidates for separate work.
 
-[Indexed loop](benchmarks/issue-689-2026-10-04/perf-while-indexed.txt), [iterator loop](benchmarks/issue-689-2026-10-04/perf-for-list.txt), [fold before](benchmarks/issue-689-2026-10-04/perf-fold-256.txt), [transformation](benchmarks/issue-689-2026-10-04/perf-map-not-null-1024-100-fresh.txt), [fold after](benchmarks/issue-689-2026-10-04/perf-after-fold.txt). Raw perf.data and frozen benchmark binaries remain under ignored `build/reports/benchmarks/issue-689/`. A register-helper inlining trial gave mixed screening results and was not retained.
+[Indexed loop]({{ '/benchmarks/issue-689-2026-10-04/perf-while-indexed.txt' | relative_url }}), [iterator loop]({{ '/benchmarks/issue-689-2026-10-04/perf-for-list.txt' | relative_url }}), [fold before]({{ '/benchmarks/issue-689-2026-10-04/perf-fold-256.txt' | relative_url }}), [transformation]({{ '/benchmarks/issue-689-2026-10-04/perf-map-not-null-1024-100-fresh.txt' | relative_url }}), [fold after]({{ '/benchmarks/issue-689-2026-10-04/perf-after-fold.txt' | relative_url }}). Raw perf.data and frozen benchmark binaries remain under ignored `build/reports/benchmarks/issue-689/`. A register-helper inlining trial gave mixed screening results and was not retained.
 
 ## Reproduction and verification
 
@@ -67,6 +68,6 @@ CARGO_TARGET_DIR=.toolchain/build/cargo/guest-benchmark CARGO_PROFILE_RELEASE_DE
 
 Invoke the retained binary with `ARTIFACT_DIR REPORT_DIR 7 HEAP_BYTES untraced`. Use `16384` for `transient-allocations` or `262144` for `collection-reuse`; an optional final ID prefix selects a profile case. Match the three round orders and exact arguments in environment.json. Baseline core is VM `8416b99`; the benchmark-only VM commit is `7cd0e87`; optimized VM is `7fea2f27691bc21ffae3eadac787e039d00abdbc`.
 
-Verification passed 519 native crate tests (430 unit tests plus integrations/doc tests), clippy with warnings denied, formatting, build-script tests and the Gradle benchmark entrypoint. Six freshly executed Kotlin-to-VM scenarios passed: function values, generic interfaces, mapNotNull, mutable lists, tasks and exceptions. New native tests cover empty-module type-ID mapping, admitted ID round trips and unknown-ID rejection. [Verification summary](benchmarks/issue-689-2026-10-04/verification.txt).
+Verification passed 519 native crate tests (430 unit tests plus integrations/doc tests), clippy with warnings denied, formatting, build-script tests and the Gradle benchmark entrypoint. Six freshly executed Kotlin-to-VM scenarios passed: function values, generic interfaces, mapNotNull, mutable lists, tasks and exceptions. New native tests cover empty-module type-ID mapping, admitted ID round trips and unknown-ID rejection. [Verification summary]({{ '/benchmarks/issue-689-2026-10-04/verification.txt' | relative_url }}).
 
 This is focused development verification. No full-checkout/release gate or fresh Minecraft server profile was run. The change was integrated into `dev` on 2026-10-06 together with the current Runtime ABI 1.13 implementation. Integration passed 613 Rust workspace tests, formatting, Clippy with warnings denied, six Kotlin-to-VM scenarios, runtime-host integration, and FFM/JNI verification. The benchmark executable also passed a traced/untraced correctness smoke check. These integration checks do not replace the dated timing measurements above.

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Repeated collection reuse measurements
+section: contributors
 ---
 
 # Repeated collection reuse measurements
@@ -99,8 +100,8 @@ and list-reuse variants, excluding arrays, closures and iterators. Pooling const
 and none during the rounds. Traffic over many rounds is distinct from simultaneously live memory; all variants fit
 the fixed budget because temporary allocations can be reclaimed. Minimum heap and peak live payload were not measured.
 
-- [Measurements](benchmarks/collection-reuse-2026-09-27.tsv)
-- [Timing samples](benchmarks/collection-reuse-2026-09-27-samples.tsv)
+- [Measurements]({{ '/benchmarks/collection-reuse-2026-09-27.tsv' | relative_url }})
+- [Timing samples]({{ '/benchmarks/collection-reuse-2026-09-27-samples.tsv' | relative_url }})
 
 ## Stress results at 4096 records
 
@@ -131,8 +132,8 @@ Fresh and list-reuse variants each construct 204,800 result records across the t
 during the rounds. The experiment confirms that this allocation traffic can be reclaimed within 256 KiB;
 it does not measure the minimum required heap or peak live payload. Pooling is unnecessary for completion here.
 
-- [4096-record measurements](benchmarks/collection-reuse-4096-2026-09-27.tsv)
-- [4096-record timing samples](benchmarks/collection-reuse-4096-2026-09-27-samples.tsv)
+- [4096-record measurements]({{ '/benchmarks/collection-reuse-4096-2026-09-27.tsv' | relative_url }})
+- [4096-record timing samples]({{ '/benchmarks/collection-reuse-4096-2026-09-27-samples.tsv' | relative_url }})
 
 The stress run passed `benchmarkCollectionReuse :compiler-k2:lintKotlin -PcompukterCollectionReuseCount=4096`.
 Manifest dimensions, equal checksums, all pressure outcomes, all sample heaps and the nine samples were checked.
@@ -153,4 +154,4 @@ completion threshold is retained. Fixed mode was checked against the known growi
 it reports operation exhaustion and marks fallback samples as 16 MiB, leaving minimum-heap columns blank. Rust harness
 formatting and TSV row/sample consistency checks passed. This is focused development evidence, not release verification.
 
-For the earlier single-operation measurements, see [object-collection measurements](OBJECT-COLLECTION-BENCHMARK.md).
+For the earlier single-operation measurements, see [object-collection measurements]({{ '/OBJECT-COLLECTION-BENCHMARK/' | relative_url }}).

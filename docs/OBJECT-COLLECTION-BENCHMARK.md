@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Object-collection heap measurements
+section: contributors
 ---
 
 # Object-collection heap measurements
@@ -10,7 +11,7 @@ while its original input remains live. The budget includes temporary allocations
 not an exact live-payload or host RSS measurement.
 
 For 100 repeated transformations with reusable lists and objects at 256 KiB, see
-[collection reuse measurements](COLLECTION-REUSE-BENCHMARK.md).
+[collection reuse measurements]({{ '/COLLECTION-REUSE-BENCHMARK/' | relative_url }}).
 
 ## Workloads and method
 
@@ -93,14 +94,14 @@ cover this compiler/runtime boundary; they do not establish full-checkout or rel
 
 Raw evidence:
 
-- [Before measurements](benchmarks/object-collections-2026-09-28-frame-reuse-before.tsv) and
-  [samples](benchmarks/object-collections-2026-09-28-frame-reuse-before-samples.tsv).
-- [After measurements](benchmarks/object-collections-2026-09-28-frame-reuse-after.tsv) and
-  [samples](benchmarks/object-collections-2026-09-28-frame-reuse-after-samples.tsv).
-- [Before static frames](benchmarks/object-collections-2026-09-28-frame-reuse-before-frames.tsv) and
-  [after static frames](benchmarks/object-collections-2026-09-28-frame-reuse-after-frames.tsv).
-- [Before active frames](benchmarks/object-collections-2026-09-28-frame-reuse-before-active-frames.tsv) and
-  [after active frames](benchmarks/object-collections-2026-09-28-frame-reuse-after-active-frames.tsv).
+- [Before measurements]({{ '/benchmarks/object-collections-2026-09-28-frame-reuse-before.tsv' | relative_url }}) and
+  [samples]({{ '/benchmarks/object-collections-2026-09-28-frame-reuse-before-samples.tsv' | relative_url }}).
+- [After measurements]({{ '/benchmarks/object-collections-2026-09-28-frame-reuse-after.tsv' | relative_url }}) and
+  [samples]({{ '/benchmarks/object-collections-2026-09-28-frame-reuse-after-samples.tsv' | relative_url }}).
+- [Before static frames]({{ '/benchmarks/object-collections-2026-09-28-frame-reuse-before-frames.tsv' | relative_url }}) and
+  [after static frames]({{ '/benchmarks/object-collections-2026-09-28-frame-reuse-after-frames.tsv' | relative_url }}).
+- [Before active frames]({{ '/benchmarks/object-collections-2026-09-28-frame-reuse-before-active-frames.tsv' | relative_url }}) and
+  [after active frames]({{ '/benchmarks/object-collections-2026-09-28-frame-reuse-after-active-frames.tsv' | relative_url }}).
 
 ## Collection callback inlining
 
@@ -143,12 +144,12 @@ speedup. Metered VM work and empirical heap thresholds are the deterministic com
 
 Raw evidence:
 
-- [Before measurements](benchmarks/object-collections-2026-09-28-inline-before.tsv) and
-  [samples](benchmarks/object-collections-2026-09-28-inline-before-samples.tsv).
-- [After measurements](benchmarks/object-collections-2026-09-28-inline-after.tsv) and
-  [samples](benchmarks/object-collections-2026-09-28-inline-after-samples.tsv).
-- [Before compact frames](benchmarks/object-collections-2026-09-28-inline-before-frames.tsv) and
-  [after compact frames](benchmarks/object-collections-2026-09-28-inline-after-frames.tsv).
+- [Before measurements]({{ '/benchmarks/object-collections-2026-09-28-inline-before.tsv' | relative_url }}) and
+  [samples]({{ '/benchmarks/object-collections-2026-09-28-inline-before-samples.tsv' | relative_url }}).
+- [After measurements]({{ '/benchmarks/object-collections-2026-09-28-inline-after.tsv' | relative_url }}) and
+  [samples]({{ '/benchmarks/object-collections-2026-09-28-inline-after-samples.tsv' | relative_url }}).
+- [Before compact frames]({{ '/benchmarks/object-collections-2026-09-28-inline-before-frames.tsv' | relative_url }}) and
+  [after compact frames]({{ '/benchmarks/object-collections-2026-09-28-inline-after-frames.tsv' | relative_url }}).
 
 ## Collection map capacity
 
@@ -180,12 +181,12 @@ the growing-input pipeline exceeds 256 KiB even after this optimization.
 
 The archived TSVs retain thresholds, pressure-run outcomes, checksums, timings and metered work:
 
-- [Before measurements](benchmarks/object-collections-2026-09-27-before.tsv)
-- [Before samples](benchmarks/object-collections-2026-09-27-before-samples.tsv)
-- [After measurements](benchmarks/object-collections-2026-09-27-after.tsv)
-- [After samples](benchmarks/object-collections-2026-09-27-after-samples.tsv)
+- [Before measurements]({{ '/benchmarks/object-collections-2026-09-27-before.tsv' | relative_url }})
+- [Before samples]({{ '/benchmarks/object-collections-2026-09-27-before-samples.tsv' | relative_url }})
+- [After measurements]({{ '/benchmarks/object-collections-2026-09-27-after.tsv' | relative_url }})
+- [After samples]({{ '/benchmarks/object-collections-2026-09-27-after-samples.tsv' | relative_url }})
 
-For array storage and packed primitive controls, see [object-array measurements](OBJECT-ARRAY-BENCHMARK.md).
+For array storage and packed primitive controls, see [object-array measurements]({{ '/OBJECT-ARRAY-BENCHMARK/' | relative_url }}).
 
 ## Explicit non-null transformation
 
@@ -225,8 +226,8 @@ selective construction; dynamic work falls from 6,859 to 5,831 and 3,783. Timing
 than portable CPU claims. The ten original control cases retain identical heap thresholds, checksums, pressure
 outcomes and fixed/dynamic work compared with the capacity-optimization after archive.
 
-- [Non-null transformation measurements](benchmarks/object-collections-2026-09-27-map-not-null.tsv)
-- [Non-null transformation samples](benchmarks/object-collections-2026-09-27-map-not-null-samples.tsv)
+- [Non-null transformation measurements]({{ '/benchmarks/object-collections-2026-09-27-map-not-null.tsv' | relative_url }})
+- [Non-null transformation samples]({{ '/benchmarks/object-collections-2026-09-27-map-not-null-samples.tsv' | relative_url }})
 
 ## Verification
 

@@ -3,6 +3,7 @@ layout: default
 title: Changelog
 description: User-visible changes in every Compukters release.
 permalink: /CHANGELOG/
+section: players
 ---
 
 # Changelog

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Ryzen 9 9950X3D VM measurements (2026-10-04)
+section: contributors
 ---
 
 # Ryzen 9 9950X3D VM measurements
@@ -16,7 +17,7 @@ Fresh local measurements taken on 2026-10-04 in a separate worktree. These use t
 - CPU governor `powersave`; boost enabled. No fixed affinity or clock. Benchmarks execute one case at a time.
 - The desktop, IDE and another coding agent were active. All compilation launched for this measurement finished before timing, but unrelated CPU activity was not controlled. This is an exploratory local baseline, not an isolated hardware limit.
 
-[Environment, exact command arguments, stage times and sampled host load](benchmarks/ryzen-9950x3d-2026-10-04/environment.json).
+[Environment, exact command arguments, stage times and sampled host load]({{ '/benchmarks/ryzen-9950x3d-2026-10-04/environment.json' | relative_url }}).
 
 ## Native interpreter
 
@@ -31,7 +32,7 @@ Seven independent invocations per benchmark, with native benchmark order reverse
 | `nested_direct_calls` | 74.01 | 71.78–74.99 | 18.45 |
 | `empty_quota_loop` | 265.64 | 253.88–267.69 | 36.71 |
 
-These native rates come from Rust unit fixtures and include `cfg(test)` register-initialization instrumentation. For the later standalone interpreter measurements without that instrumentation, see [the production-path optimization report](VM-OPTIMIZATION-2026-10-04.md).
+These native rates come from Rust unit fixtures and include `cfg(test)` register-initialization instrumentation. For the later standalone interpreter measurements without that instrumentation, see [the production-path optimization report]({{ '/VM-OPTIMIZATION-2026-10-04/' | relative_url }}).
 
 ### Host exchange and managed storage
 
@@ -52,7 +53,7 @@ These also use seven native invocations. Request/resume is a traced Rust Session
 
 The minimal idle fixture reserves 5314 mutable bytes per instance, including a 32-byte Guest heap arena. Its depth-64 fixture reserves 13,881 bytes. Shared execution-image storage and native allocator metadata are excluded; neither number describes a complete in-world computer. The GC graph fixture takes exactly 22 maintenance actions per cycle and uses one action per slice; these counters do not measure milliseconds of worst-case pause for arbitrary heaps.
 
-[Native summary](benchmarks/ryzen-9950x3d-2026-10-04/native-summary.tsv), [all native timing samples](benchmarks/ryzen-9950x3d-2026-10-04/native-samples.tsv), [managed-storage sample log](benchmarks/ryzen-9950x3d-2026-10-04/native-managed_heap_performance-1.log).
+[Native summary]({{ '/benchmarks/ryzen-9950x3d-2026-10-04/native-summary.tsv' | relative_url }}), [all native timing samples]({{ '/benchmarks/ryzen-9950x3d-2026-10-04/native-samples.tsv' | relative_url }}), [managed-storage sample log]({{ '/benchmarks/ryzen-9950x3d-2026-10-04/native-managed_heap_performance-1.log' | relative_url }}).
 
 ## Compiled Guest Kotlin workloads
 
@@ -76,7 +77,7 @@ Each operation performs eight passes over 4096 elements, starting at 1000. Scala
 
 Minimum construction heap at 4096 elements is 16,464 bytes for Scalar/Bridge and 82,000 bytes for Boxed (4.98×). All 30 pressure executions finish at 256 KiB, including the boxed 4096-element pipeline. This differs from the September archive; compiler/library/runtime revisions also differ, so it is not evidence of a CPU-only speedup.
 
-[Measurements](benchmarks/ryzen-9950x3d-2026-10-04/collections/measurements.tsv), [210 timing samples](benchmarks/ryzen-9950x3d-2026-10-04/collections/samples.tsv).
+[Measurements]({{ '/benchmarks/ryzen-9950x3d-2026-10-04/collections/measurements.tsv' | relative_url }}), [210 timing samples]({{ '/benchmarks/ryzen-9950x3d-2026-10-04/collections/samples.tsv' | relative_url }}).
 
 ### Loops and captured variables
 
@@ -95,7 +96,7 @@ Each program sums the same 256-element list for 300 rounds and checks checksum 8
 
 All eight cases and all 56 timed samples finish at the requested 16 KiB budget without timing fallback. Read-only captured var and captured val retain identical deterministic hot work; their elapsed-time difference is sample noise evidence, not a difference in emitted work.
 
-[Measurements](benchmarks/ryzen-9950x3d-2026-10-04/transient-allocations/measurements.tsv), [56 timing samples](benchmarks/ryzen-9950x3d-2026-10-04/transient-allocations/samples.tsv).
+[Measurements]({{ '/benchmarks/ryzen-9950x3d-2026-10-04/transient-allocations/measurements.tsv' | relative_url }}), [56 timing samples]({{ '/benchmarks/ryzen-9950x3d-2026-10-04/transient-allocations/samples.tsv' | relative_url }}).
 
 ### Repeated collection reuse
 
@@ -109,7 +110,7 @@ Each case transforms the same 1024 two-Int input records for 100 rounds, retaini
 
 All three pressure executions and all 21 timed samples finish at 256 KiB without fallback. Pooling reduces allocation/maintenance work but must be judged alongside instruction counts and operation time, not assumed to improve CPU throughput.
 
-[Measurements](benchmarks/ryzen-9950x3d-2026-10-04/collection-reuse/measurements.tsv), [21 timing samples](benchmarks/ryzen-9950x3d-2026-10-04/collection-reuse/samples.tsv).
+[Measurements]({{ '/benchmarks/ryzen-9950x3d-2026-10-04/collection-reuse/measurements.tsv' | relative_url }}), [21 timing samples]({{ '/benchmarks/ryzen-9950x3d-2026-10-04/collection-reuse/samples.tsv' | relative_url }}).
 
 ## Reproduction and verification scope
 

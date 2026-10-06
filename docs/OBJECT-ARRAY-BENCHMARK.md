@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Object-array heap measurements
+section: contributors
 ---
 
 # Object-array heap measurements
@@ -159,10 +160,10 @@ coverage continues to check payloads, types, and restoration of coalescing metad
 uses a smaller heap because its two live concat results now fit the old budget. Vertical conformance retains the
 same metered work totals; its layout-sensitive diagnostic digest changes. This is focused runtime evidence.
 
-Checked-in type-only-header measurements: [before](benchmarks/object-arrays-2026-09-27-type-header-before.tsv),
-[before samples](benchmarks/object-arrays-2026-09-27-type-header-before-samples.tsv),
-[after](benchmarks/object-arrays-2026-09-27-type-header-after.tsv), and
-[after samples](benchmarks/object-arrays-2026-09-27-type-header-after-samples.tsv).
+Checked-in type-only-header measurements: [before]({{ '/benchmarks/object-arrays-2026-09-27-type-header-before.tsv' | relative_url }}),
+[before samples]({{ '/benchmarks/object-arrays-2026-09-27-type-header-before-samples.tsv' | relative_url }}),
+[after]({{ '/benchmarks/object-arrays-2026-09-27-type-header-after.tsv' | relative_url }}), and
+[after samples]({{ '/benchmarks/object-arrays-2026-09-27-type-header-after-samples.tsv' | relative_url }}).
 
 ## Sixteen-byte minimum block
 
@@ -214,10 +215,10 @@ records and aliases, repeated mixed-size gray queue/sweep/coalescing, initializa
 The retry/failure fixtures use one Long field to keep a 32-byte heap under pressure now that two empty objects fit;
 the vertical test's added dynamic units and changed digest reflect that fixture change. This is focused evidence.
 
-Checked-in minimum-block measurements: [before](benchmarks/object-arrays-2026-09-27-min-block-before.tsv),
-[before samples](benchmarks/object-arrays-2026-09-27-min-block-before-samples.tsv),
-[after](benchmarks/object-arrays-2026-09-27-min-block-after.tsv), and
-[after samples](benchmarks/object-arrays-2026-09-27-min-block-after-samples.tsv).
+Checked-in minimum-block measurements: [before]({{ '/benchmarks/object-arrays-2026-09-27-min-block-before.tsv' | relative_url }}),
+[before samples]({{ '/benchmarks/object-arrays-2026-09-27-min-block-before-samples.tsv' | relative_url }}),
+[after]({{ '/benchmarks/object-arrays-2026-09-27-min-block-after.tsv' | relative_url }}), and
+[after samples]({{ '/benchmarks/object-arrays-2026-09-27-min-block-after-samples.tsv' | relative_url }}).
 
 ### Timing at 256 KiB
 
@@ -239,10 +240,10 @@ The p10/p90 ranges overlap for every matched case, and the unchanged two-field c
 This local experiment shows no material pressure-timing regression, including the pipeline with more maintenance
 work; it does not establish a CPU speedup or lower GC work for every workload.
 
-Pressure timing archives: [before](benchmarks/object-arrays-2026-09-27-min-block-pressure-before.tsv),
-[before samples](benchmarks/object-arrays-2026-09-27-min-block-pressure-before-samples.tsv),
-[after](benchmarks/object-arrays-2026-09-27-min-block-pressure-after.tsv), and
-[after samples](benchmarks/object-arrays-2026-09-27-min-block-pressure-after-samples.tsv).
+Pressure timing archives: [before]({{ '/benchmarks/object-arrays-2026-09-27-min-block-pressure-before.tsv' | relative_url }}),
+[before samples]({{ '/benchmarks/object-arrays-2026-09-27-min-block-pressure-before-samples.tsv' | relative_url }}),
+[after]({{ '/benchmarks/object-arrays-2026-09-27-min-block-pressure-after.tsv' | relative_url }}), and
+[after samples]({{ '/benchmarks/object-arrays-2026-09-27-min-block-pressure-after-samples.tsv' | relative_url }}).
 
 ## Unified 64-bit block header
 
@@ -278,10 +279,10 @@ dynamic units can move by one as string padding changes. At 256 KiB, two-Int dee
 collection schedule, so less heap use does not imply less GC work for every operation. The 256 KiB pressure timing
 is a single observation per case and is not used for a latency claim.
 
-Checked-in matched measurements: [before](benchmarks/object-arrays-2026-09-28-header-before.tsv),
-[before samples](benchmarks/object-arrays-2026-09-28-header-before-samples.tsv),
-[after](benchmarks/object-arrays-2026-09-28-header-after.tsv), and
-[after samples](benchmarks/object-arrays-2026-09-28-header-after-samples.tsv).
+Checked-in matched measurements: [before]({{ '/benchmarks/object-arrays-2026-09-28-header-before.tsv' | relative_url }}),
+[before samples]({{ '/benchmarks/object-arrays-2026-09-28-header-before-samples.tsv' | relative_url }}),
+[after]({{ '/benchmarks/object-arrays-2026-09-28-header-after.tsv' | relative_url }}), and
+[after samples]({{ '/benchmarks/object-arrays-2026-09-28-header-after-samples.tsv' | relative_url }}).
 
 ## Reproduce
 
@@ -293,7 +294,7 @@ Generated Guest sources, artifacts, and the manifest are under
 `modules/common/compiler-k2/build/generated/benchmarks/object-arrays/`; current-run TSV reports are under
 `build/reports/benchmarks/object-arrays/`. The task always reruns measurements.
 
-Checked-in baseline: [summary](benchmarks/object-arrays-2026-09-27-before.tsv) and
-[timing samples](benchmarks/object-arrays-2026-09-27-before-samples.tsv). Compact-header results:
-[summary](benchmarks/object-arrays-2026-09-27-after.tsv) and
-[timing samples](benchmarks/object-arrays-2026-09-27-after-samples.tsv). Time columns use nanoseconds.
+Checked-in baseline: [summary]({{ '/benchmarks/object-arrays-2026-09-27-before.tsv' | relative_url }}) and
+[timing samples]({{ '/benchmarks/object-arrays-2026-09-27-before-samples.tsv' | relative_url }}). Compact-header results:
+[summary]({{ '/benchmarks/object-arrays-2026-09-27-after.tsv' | relative_url }}) and
+[timing samples]({{ '/benchmarks/object-arrays-2026-09-27-after-samples.tsv' | relative_url }}). Time columns use nanoseconds.

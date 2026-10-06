@@ -3,6 +3,7 @@ layout: default
 title: Create boilers
 description: Monitor Create steam boiler water, heat, and level from Guest Kotlin.
 permalink: /CREATE-BOILERS/
+section: players
 ---
 
 # Create boilers

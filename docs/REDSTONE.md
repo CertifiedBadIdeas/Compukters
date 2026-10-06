@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Redstone GPIO
+section: players
 ---
 
 # Redstone GPIO

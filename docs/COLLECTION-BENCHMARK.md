@@ -2,6 +2,7 @@
 layout: default
 title: Collection representation measurements
 description: Compare unboxed Int lists, boxed storage, and universal read bridges in the native VM.
+section: contributors
 ---
 
 # Collection representation measurements
@@ -127,8 +128,8 @@ compiled Guest stdlib and VM as conformance tests. Generated source programs, ar
 `modules/common/compiler-k2/build/generated/benchmarks/collections/`; current-run reports are under
 `build/reports/benchmarks/collections/`.
 
-Checked-in results: [summary TSV](benchmarks/collections-2026-09-27.tsv) and
-[all elapsed-time samples](benchmarks/collections-2026-09-27-samples.tsv). Summary time columns use nanoseconds.
+Checked-in results: [summary TSV]({{ '/benchmarks/collections-2026-09-27.tsv' | relative_url }}) and
+[all elapsed-time samples]({{ '/benchmarks/collections-2026-09-27-samples.tsv' | relative_url }}). Summary time columns use nanoseconds.
 
 Source: `CollectionBenchmarkCase.kt` defines the workloads; the opt-in test in `MinimalScriptLoweringTest.kt` compiles
 them; `collections_bench.rs` verifies and runs the native measurement matrix.
