@@ -1779,15 +1779,67 @@ class MinimalScriptLoweringTest {
                 """
                 import kotlin.collections.listOf
                 import kotlin.collections.forEach
-                value class Engine(val id: Int)
+                interface Marker
+                interface Reading : Marker {
+                    val id: Int
+                    fun read(): Int
+                    val sample: Int
+                    fun add(amount: Int): Int
+                    fun verify(expected: Int)
+                    fun toString(prefix: String): String
+                    fun combine(other: Engine): Int
+                    fun next(): Engine
+                    fun doubled(): Int = read() * 2
+                }
+                interface Source<T> { fun get(): T }
+                value class Engine(override val id: Int) : Reading {
+                    override fun read(): Int = id
+                    override val sample: Int get() = id + 1
+                    override fun add(amount: Int): Int = id + amount
+                    override fun verify(expected: Int) { check(id == expected) }
+                    override fun toString(prefix: String): String = prefix + id
+                    override fun combine(other: Engine): Int = id + other.id
+                    override fun next(): Engine = Engine(id + 1)
+                }
+                value class Counter(val id: Int) : Source<Int> {
+                    override fun get(): Int = id
+                }
                 value class Sensor(val id: Int)
-                value class Enabled(val flag: Boolean)
-                value class Letter(val character: Char)
+                interface Switch { fun enabled(): Boolean }
+                value class Enabled(val flag: Boolean) : Switch { override fun enabled(): Boolean = flag }
+                interface Character { fun character(): Char }
+                value class Letter(val character: Char) : Character { override fun character(): Char = character }
                 value class Custom(val code: Int) {
                     override fun toString(): String = "custom:" + code
                 }
                 class Cell<T>(val value: T)
                 fun main() {
+                    val explicit: Reading = Engine(5) as Reading
+                    check(explicit.read() == 5)
+                    val switch: Switch = Enabled(true)
+                    check(switch.enabled())
+                    val character: Character = Letter('q')
+                    check(character.character() == 'q')
+                    val reading: Reading = Engine(7)
+                    check(reading.id == 7)
+                    check(reading.read() == 7)
+                    check(reading.sample == 8)
+                    check(reading.add(5) == 12)
+                    reading.verify(7)
+                    check(reading.toString("reading:") == "reading:7")
+                    check(reading.combine(Engine(3)) == 10)
+                    check(reading.next().id == 8)
+                    check(reading.doubled() == 14)
+                    check(Engine(3).doubled() == 6)
+                    check(reading is Marker)
+                    check((reading as Engine).id == 7)
+                    val optionalReading: Reading? = Engine(9)
+                    check(optionalReading?.read() == 9)
+                    check(reading == Engine(7))
+                    check(Engine(7) == reading)
+                    check(listOf<Reading>(Engine(2), Engine(4))[1].doubled() == 8)
+                    val counter: Source<Int> = Counter(11)
+                    check(counter.get() == 11)
                     val engines = listOf(Engine(7), Engine(9))
                     var sum = 0
                     engines.forEach { sum += it.id }
@@ -1897,6 +1949,11 @@ class MinimalScriptLoweringTest {
                         import kotlin.collections.listOf
                         fun main() {
                             val front = Kinetics.front
+                            val side = Kinetics.sideReading(front)
+                            check(side.sideIndex() == 0)
+                            check(side.nextIndex() == 1)
+                            check(side is KineticSide)
+                            check((side as KineticSide) == front)
                             val boxed: Any = front
                             val libraryBox = Kinetics.boxSide(front)
                             check(libraryBox is KineticSide)
@@ -6625,7 +6682,7 @@ class MinimalScriptLoweringTest {
             val source =
                 """
                 import compukter.peripheral.*
-                class Meter(private val handle: Int) : Peripheral {
+                value class Meter(private val handle: Int) : Peripheral {
                     fun value(): Int = handle
                     companion object : TypedPeripheralProvider<Meter>("test:meter") {
                         override fun wrap(handle: Int): Meter = Meter(handle)

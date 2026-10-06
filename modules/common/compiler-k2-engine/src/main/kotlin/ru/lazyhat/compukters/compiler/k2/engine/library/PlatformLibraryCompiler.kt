@@ -19,10 +19,12 @@
 package ru.lazyhat.compukters.compiler.k2.engine.library
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
+import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.builders.declarations.buildFun
 import org.jetbrains.kotlin.ir.declarations.IrClass
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
@@ -115,12 +117,13 @@ class PlatformLibraryCompiler {
             collected.functions.filter { function ->
                 function.fqNameWhenAvailable?.asString() in ordinarySymbols && function.typeParameters.isEmpty() && !function.isInline
             }
+        // The entry sorts first in lowering. A managed member there would split its owner's method range.
         val entry =
             ordinaryFunctions
-                .filter { it.body != null }
+                .filter { it.body != null && ((it.parent as? IrClass)?.isValue != false) }
                 .sortedWith(compareBy({ it.file.fileEntry.name }, IrSimpleFunction::startOffset, { it.name.asString() }))
                 .firstOrNull()
-                ?: if (valueClasses.isEmpty()) {
+                ?: if (valueClasses.isEmpty() && ordinaryFunctions.none { it.body != null }) {
                     return null
                 } else {
                     pluginContext.irFactory
@@ -157,7 +160,14 @@ class PlatformLibraryCompiler {
         val artifact =
             try {
                 KotlinProjectLowering.lower(
-                    (listOf(entry) + ordinaryFunctions + templateFunctions + dependencyTemplateFunctions).distinctBy { it.symbol },
+                    (
+                        listOf(entry) + ordinaryFunctions + templateFunctions + dependencyTemplateFunctions +
+                            collected.functions.filter { function ->
+                                (function.parent as? IrClass)?.kind == ClassKind.INTERFACE &&
+                                    function.body == null &&
+                                    function.origin != IrDeclarationOrigin.FAKE_OVERRIDE
+                            }
+                    ).distinctBy { it.symbol },
                     emptyList(),
                     (collected.classes + dependencyTemplateClasses).distinctBy { it.symbol },
                     entry,

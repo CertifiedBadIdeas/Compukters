@@ -607,6 +607,11 @@ supported.
   store these wrappers, including null; indexed reads and iteration recover the typed scalar for methods
   and addon calls. Precompiled platform/addon libraries export one canonical wrapper type and payload
   field so boxing in a library and in its consumer shares identity. Direct scalar calls remain unboxed.
+  These value classes can implement marker and method-bearing interfaces, including concrete generic
+  interface specializations. Interface receivers use the canonical wrapper, with bridges to scalar
+  implementations of methods and properties; inherited default methods dispatch through that wrapper.
+  Interface assignments, casts, nullable receivers and collections preserve nominal type and payload,
+  including when the value class and its interface come from a precompiled addon.
   Generic declarations, reference-backed and multi-property forms remain rejected. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `typed redstone side API lowers deterministically to scalar capability operations`,
@@ -619,7 +624,8 @@ supported.
   executes the source and precompiled-library boxing scenarios.
   The dev-stand GameTest `guestVectorHandleList` controls four real Creative Vector Thrusters through
   `listOf(...).forEach` and verifies that all control leases are released when the Guest program finishes.
-  Tracking: [#692](https://github.com/CertifiedBadIdeas/Compukters/issues/692)
+  Tracking: [#692](https://github.com/CertifiedBadIdeas/Compukters/issues/692),
+  [#699](https://github.com/CertifiedBadIdeas/Compukters/issues/699).
 
 ## Nullability and exceptions
 
