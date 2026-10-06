@@ -332,6 +332,11 @@ supported.
   generic functions use the specialized element type, as exercised by the
   `Iterable<T>` predicate helpers.
   Concrete generic interfaces and covariant result interfaces support the read-only `List<T>` contract.
+  Inherited interface selection methods retain their concrete owner and callback types when called through a
+  concrete implementation or a parent interface, including an intermediate generic interface. Overloads can share
+  `firstOrNull`, strict selection and filtering without default callback expressions. Evidence:
+  `generic interface selection defaults preserve inherited typed callbacks`, executed by
+  `testKotlinProviderDefaultsVmConformance` (short-circuiting, absence, typed filtering and strict failure).
   Contravariance, reified parameters, generic
   value classes, generic methods declaring their own type parameters, nullable
   primitive arguments other than the supported nullable Int forms, and automatic primitive-list `Any` boxing bridges

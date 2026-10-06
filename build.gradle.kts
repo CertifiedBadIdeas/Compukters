@@ -651,6 +651,15 @@ registerKotlinVmConformance(
     conformanceScenario = "generic-interface",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinProviderDefaultsVmConformance",
+    taskDescription = "Executes inherited generic provider selection with typed predicates on the pinned VM.",
+    artifactTask = ":compiler-k2:generateProviderDefaultsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-provider-defaults.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-provider-defaults-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_PROVIDER_DEFAULTS_ARTIFACT",
+    conformanceScenario = "provider-defaults",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinListVmConformance",
     taskDescription = "Executes typed read-only Guest lists with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateListConformanceArtifact",

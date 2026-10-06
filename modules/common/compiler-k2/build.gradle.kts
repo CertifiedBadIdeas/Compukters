@@ -319,6 +319,7 @@ val longConformanceArtifact = layout.buildDirectory.file("generated/conformance/
 val genericFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-functions.cpkt")
 val genericCellConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-cell.cpkt")
 val genericInterfaceConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-interface.cpkt")
+val providerDefaultsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-provider-defaults.cpkt")
 val listConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list.cpkt")
 val listAnyConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-list-any.cpkt")
 val mutableListConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-mutable-list.cpkt")
@@ -898,6 +899,22 @@ val generateGenericInterfaceConformanceArtifact = tasks.register<Test>("generate
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.genericInterfaceArtifact", genericInterfaceConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+tasks.register<Test>("generateProviderDefaultsConformanceArtifact") {
+    description = "Compiles inherited generic provider selection methods for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*generic interface selection defaults preserve inherited typed callbacks*")
+    inputs.file(workerJar)
+    outputs.file(providerDefaultsConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.providerDefaultsArtifact", providerDefaultsConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

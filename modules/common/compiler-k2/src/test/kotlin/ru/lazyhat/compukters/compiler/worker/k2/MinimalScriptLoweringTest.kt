@@ -5426,7 +5426,8 @@ class MinimalScriptLoweringTest {
                     .filterIsInstance<Instruction.StringValueOf>()
 
             assertEquals(
-                listOf(StringValueType.I32, StringValueType.I32, StringValueType.BOOL, StringValueType.CHAR, StringValueType.I32),
+                // RedstoneSide uses its nominal managed wrapper's toString rather than scalar conversion.
+                listOf(StringValueType.I32, StringValueType.I32, StringValueType.BOOL, StringValueType.CHAR),
                 conversions.map(Instruction.StringValueOf::type),
             )
             assertTrue(ArtifactReader.read(artifactBytes).modules.any { Utf16Literal.fromString("kotlin.Unit") in it.utf16Literals })
@@ -6551,6 +6552,57 @@ class MinimalScriptLoweringTest {
             assertEquals(DiagnosticCategory.INTERNAL, diagnostic.category)
             assertTrue(diagnostic.code?.startsWith("ARTIFACT_WRITE_") == true)
             assertTrue(diagnostic.message.encodeToByteArray().size <= 32)
+        }
+
+    @Test
+    fun `generic interface selection defaults preserve inherited typed callbacks`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+                interface Sensor { fun value(): Int }
+                class Speedometer(val amount: Int) : Sensor { override fun value(): Int = amount }
+                class Stressometer(val amount: Int) : Sensor { override fun value(): Int = amount }
+                interface Provider<T> {
+                    fun all(): List<T>
+                    fun firstOrNull(): T? = all().firstOrNull()
+                    fun firstOrNull(predicate: (T) -> Boolean): T? = all().firstOrNull(predicate)
+                    fun first(): T = firstOrNull() ?: throw IllegalStateException("missing")
+                    fun first(predicate: (T) -> Boolean): T = firstOrNull(predicate) ?: throw IllegalStateException("missing")
+                    fun filter(predicate: (T) -> Boolean): List<T> = all().filter(predicate)
+                }
+                interface Child<T> : Provider<T>
+                class Sensors : Child<Sensor> {
+                    override fun all(): List<Sensor> = listOf(Speedometer(7), Stressometer(9))
+                }
+                fun main() {
+                    val devices = Sensors()
+                    require(devices.first().value() == 7)
+                    var visits = 0
+                    val selected = devices.firstOrNull { visits += 1; it.value() > 7 }
+                    require(selected?.value() == 9 && visits == 2)
+                    require(devices.firstOrNull { it.value() > 99 } == null)
+                    require(devices.filter { it.value() > 7 }.size == 1)
+                    val provider: Provider<Sensor> = devices
+                    require(provider.first { it.value() == 7 }.value() == 7)
+                    var stopped = 0
+                    provider.first { stopped += 1; true }
+                    require(stopped == 1)
+                    try {
+                        devices.first { it.value() > 99 }
+                        throw IllegalArgumentException("missing failure")
+                    } catch (error: IllegalStateException) {
+                        require(error.message == "missing")
+                    }
+                    println("provider defaults ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.providerDefaultsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
         }
 
     private fun withAdapter(block: (K2CompilerAdapter) -> Unit) {
