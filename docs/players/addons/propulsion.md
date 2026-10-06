@@ -12,6 +12,10 @@ Control Creative Thrusters and Creative Vector Thrusters from Kotlin. Use normal
 and read typed engine state. Install [Compukters: Sable]({{ '/SABLE/' | relative_url }}) separately if your program also
 needs construction pose and velocity.
 
+The device classes also support shared typed discovery: `first`, `firstOrNull`, `filter`, `all`,
+`at`/`atOrNull`, and `named`/`namedOrNull`. See [typed peripheral discovery]({{ '/PERIPHERALS/' | relative_url }}).
+Existing helpers below remain available and share handles with those providers.
+
 ## Install
 
 Install Compukters: Propulsion, the base mod and its upstream runtime on client and server:
@@ -112,7 +116,7 @@ Powered redstone may immediately request thrust. `close()` releases control earl
 Stale/disconnected/replaced/unloaded handles throw IllegalStateException; reacquire by name after reconnecting.
 Aliases acquired by the same program for the same engine share one handle, so closing one closes all its aliases.
 NaN, infinities, values outside 0..1, and percentages outside 1..100 throw IllegalArgumentException before a command.
-Each host admits at most 256 live handles; handle IDs are not reused within that host lifetime.
+The computer admits at most 1,024 live typed peripheral handles across all integrations; handle IDs are not reused.
 
 ## State and units
 

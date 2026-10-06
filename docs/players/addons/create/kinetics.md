@@ -12,6 +12,10 @@ The optional Create addon exposes speedometers, stressometers, and Rotation Spee
 See the [Create overview]({{ '/CREATE/' | relative_url }}) for installation, project setup, peripheral cables, and
 device naming.
 
+The device classes also support shared typed discovery: `first`, `firstOrNull`, `filter`, `all`,
+`at`/`atOrNull`, and `named`/`namedOrNull`. See [typed peripheral discovery]({{ '/PERIPHERALS/' | relative_url }}).
+Existing helpers below remain available and share handles with those providers.
+
 ## Named devices
 
 Give a kinetic device a unique name with the Peripheral Configurator, then acquire it over a connected cable:
@@ -78,6 +82,6 @@ handle; it never silently reconnects to the replacement. Missing, mismatched, un
 the Guest operation deterministically, and the terminal process diagnostic identifies which condition prevented the
 operation.
 
-Each running computer may retain at most 64 Create device handles and 64 pending Create waits. Host requests and
+Each running computer may retain the shared limit of 1,024 typed peripheral handles and at most 64 pending Create waits. Host requests and
 completions cross the same bounded asynchronous actor path as other world-facing computer operations and execute on the
 server thread where Minecraft and Create state may safely be accessed.

@@ -17,6 +17,10 @@ loaded Peripheral Cables. The sides are relative to the computer's front. A hand
 that was acquired. Removal, replacement, unloading, or observed cable disconnection invalidates it; reconnecting does
 not rebind the old handle.
 
+The device classes also support shared typed discovery: `first`, `firstOrNull`, `filter`, `all`,
+`at`/`atOrNull`, and `named`/`namedOrNull`. See [typed peripheral discovery]({{ '/PERIPHERALS/' | relative_url }}).
+Existing helpers below remain available and share handles with those providers.
+
 ```kotlin
 import create.logistics.Logistics
 
@@ -58,7 +62,7 @@ control characters, and fit within 64 UTF-8 bytes. The return value is Create's 
 `true` does **not** confirm that a package reached its destination. An out-of-stock, invalid, or stale request fails
 with a Guest diagnostic; Create declining a valid request returns `false`.
 
-One running computer can retain four stock snapshots and 64 Create device handles. Call `close()` after processing a
+One running computer can retain four stock snapshots and the shared limit of 1,024 typed peripheral handles. Call `close()` after processing a
 snapshot so long-running programs can refresh stock indefinitely. Closing a snapshot makes its later operations fail.
 The captured display name is limited to 128 characters; use the item ID and snapshot index for machine decisions.
 All calls use the bounded addon host path and never force chunks to load.

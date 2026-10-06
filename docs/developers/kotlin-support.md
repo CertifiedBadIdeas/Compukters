@@ -1192,6 +1192,17 @@ links to their source files.
 
 ## Compukters Guest APIs
 
+- [x] **Typed peripheral providers** — `Peripheral` identifies device wrappers; companion values inheriting
+  `TypedPeripheralProvider<T>` share strict and optional first selection, typed predicates, filtering, all devices,
+  relative side and named acquisition. The base owns bounded snapshots and exact-instance handles while addons
+  retain device operations. Core displays, all five Create devices and both Propulsion creative engine types use
+  this contract. Evidence: `PeripheralSessionTest`, `PeripheralProgramHostTest`,
+  `testKotlinPeripheralQueriesVmConformance`, `TextDisplayGameTestScenario`, and the addon lifecycle GameTests.
+  Source and external addon metadata both supply the IDE provider role; expression completion has a `P` badge and
+  separate color while type references remain ordinary classes. Evidence: `SemanticTokenQueryTest`,
+  `CompletionQueryTest`, `AnalysisProtocolRoundTripTest` and `IdeRendererStateTest`.
+
+
 - [x] **Create kinetics on Minecraft 1.21.1** — when Create 6.0.10 through 6.0.x is loaded, the optional
   `create` addon exposes computer-local sides and persistent names reachable over passive peripheral cables through
   `Kinetics`. Programs can read exact `Float` speed, stress, and capacity values; wait for speed or load changes; and

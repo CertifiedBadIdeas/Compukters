@@ -19,6 +19,10 @@ reports the same values.
 
 Enable the addon with `addons = ["create"]` in `compukter.toml`, or accept a `Boilers` completion in the attached IDE.
 
+The device classes also support shared typed discovery: `first`, `firstOrNull`, `filter`, `all`,
+`at`/`atOrNull`, and `named`/`namedOrNull`. See [typed peripheral discovery]({{ '/PERIPHERALS/' | relative_url }}).
+Existing helpers below remain available and share handles with those providers.
+
 ```kotlin
 import create.boiler.Boilers
 
