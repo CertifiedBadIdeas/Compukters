@@ -97,6 +97,8 @@ data class IdePointerContext(
     val gitDraft: IdeGitDraftView? = null,
     val gitPreviewScrollMaximum: Int = 0,
     val gitPreviewBounds: IdeRect? = null,
+    val bottomTab: ru.lazyhat.compukters.ide.client.state.IdeBottomTab? = null,
+    val bottomScrollMaximum: Int = 0,
     val gitFieldFocusScroll: Map<IdeGitField, Int> = emptyMap(),
 )
 
@@ -627,6 +629,7 @@ class IdeInputAdapter(
 
             IdeHitAction.OpenExisting,
             IdeHitAction.CloneProject,
+            IdeHitAction.ProjectTool,
             IdeHitAction.GitToggle,
             IdeHitAction.GitRemote,
             IdeHitAction.GitBranch,
@@ -696,6 +699,12 @@ class IdeInputAdapter(
         vertical: Double,
         context: IdePointerContext,
     ): Boolean {
+        if (context.bottomTab == ru.lazyhat.compukters.ide.client.state.IdeBottomTab.GitLog &&
+            context.geometry.diagnostics?.contains(x, y) == true
+        ) {
+            sink.dispatch(IdeCommand.ScrollBottom((-vertical * SCROLL_ROWS).toInt(), context.bottomScrollMaximum))
+            return true
+        }
         if (context.gitVisible && context.geometry.editor.contains(x, y)) {
             val preview = context.gitPreviewBounds?.contains(x, y) == true
             sink.dispatch(

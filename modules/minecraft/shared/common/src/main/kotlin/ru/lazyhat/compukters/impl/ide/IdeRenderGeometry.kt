@@ -192,11 +192,11 @@ class IdeRenderGeometry private constructor(
             findVisible: Boolean,
         ): IdeRenderGeometry {
             val panel = viewport
-            val toolStripe = IdeRect(panel.right - TOOL_STRIPE_WIDTH, panel.top, panel.right, panel.bottom)
-            val header = IdeRect(panel.left, panel.top, toolStripe.left, panel.top + HEADER_HEIGHT)
-            val toolbar = IdeRect(panel.left, header.bottom, toolStripe.left, header.bottom + TOOLBAR_HEIGHT)
-            val status = IdeRect(panel.left, panel.bottom - STATUS_HEIGHT, toolStripe.left, panel.bottom)
-            val content = IdeRect(panel.left, toolbar.bottom, toolStripe.left, status.top)
+            val toolStripe = IdeRect(panel.left, panel.top, panel.left + TOOL_STRIPE_WIDTH, panel.bottom)
+            val header = IdeRect(toolStripe.right, panel.top, panel.right, panel.top + HEADER_HEIGHT)
+            val toolbar = IdeRect(toolStripe.right, header.bottom, panel.right, header.bottom + TOOLBAR_HEIGHT)
+            val status = IdeRect(toolStripe.right, panel.bottom - STATUS_HEIGHT, panel.right, panel.bottom)
+            val content = IdeRect(toolStripe.right, toolbar.bottom, panel.right, status.top)
             val treeWidth =
                 if (candidate.tree) {
                     requestedTreeWidth.coerceIn(

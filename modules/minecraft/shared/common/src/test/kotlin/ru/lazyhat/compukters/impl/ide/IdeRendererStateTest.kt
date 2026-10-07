@@ -52,6 +52,7 @@ import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.search.IdeFindView
 import ru.lazyhat.compukters.ide.client.state.IdeBusyOperation
+import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeDiagnosticRow
 import ru.lazyhat.compukters.ide.client.state.IdeDiagnostics
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
@@ -92,6 +93,54 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
+    @Test
+    fun `left tool stripe anchors Git Log at bottom and history leaves source visible`() {
+        val editor = semanticEditor("val value = 1") { _, _ -> IdeSemanticInteraction.None }
+        val base = workspaceState(editor, IdeBuildState.Idle)
+        val page = base.page as IdePageState.Workspace
+        val history =
+            (0 until 20).map {
+                ru.lazyhat.compukters.ide.git
+                    .GitCommit("commit$it", "Message $it", "Author", 0)
+            }
+        val state =
+            base.copy(
+                page =
+                    IdePageState.Workspace(
+                        page.value.copy(
+                            bottom =
+                                ru.lazyhat.compukters.ide.client.state.IdeBottomPanelView(
+                                    ru.lazyhat.compukters.ide.client.state.IdeBottomTab.GitLog,
+                                    2,
+                                ),
+                            git = page.value.git.copy(history = history),
+                        ),
+                    ),
+            )
+        val geometry = geometry()
+        val model = IdeRenderer.extract(state, geometry)
+        val log = model.hitTargets.single { it.tooltip == "Git Log" && geometry.toolStripe.contains(it.bounds) }
+        assertTrue(log.selected)
+        assertEquals(geometry.status.top - 2, log.bounds.bottom)
+        assertTrue(model.hitTargets.filter { geometry.toolStripe.contains(it.bounds) }.all { it.bounds.bottom <= log.bounds.bottom })
+        assertTrue(model.text.any { it.kind == IdeTextKind.Source && it.value.contains("value") })
+        assertTrue(model.text.any { it.kind == IdeTextKind.Diagnostic && it.value.contains("Message 2") })
+        assertTrue(
+            model.text.filter { it.kind == IdeTextKind.Diagnostic }.all {
+                it.clip == null ||
+                    geometry.diagnostics!!.contains(it.clip!!)
+            },
+        )
+        assertTrue(model.bottomScrollMaximum > 0)
+        assertTrue(model.text.all { it.codeFont === IdeCodeFontProfile.DEFAULT })
+        assertTrue(
+            model.hitTargets.any {
+                it.gitCommand ==
+                    IdeCommand.BottomTab(ru.lazyhat.compukters.ide.client.state.IdeBottomTab.Problems)
+            },
+        )
+    }
+
     @Test
     fun `Git panel exposes checkbox commits preview and bounded menus without underlying editor source`() {
         val initial = workspaceState(semanticEditor("hidden source") { _, _ -> IdeSemanticInteraction.None }, IdeBuildState.Idle)
@@ -163,7 +212,7 @@ class IdeRendererStateTest {
                     initial.copy(page = IdePageState.Workspace(page.value.copy(git = git.copy(scroll = scroll)))),
                     tinyGeometry,
                 )
-            val targets = scrolled.hitTargets.filter { it.gitCommand != null }
+            val targets = scrolled.hitTargets.filter { it.gitCommand != null && it.gitCommand !is IdeCommand.BottomTab }
             assertTrue(targets.all { tinyGeometry.editor.contains(it.bounds) })
             targets.forEach { target ->
                 (target.gitCommand as? ru.lazyhat.compukters.ide.client.state.IdeCommand.GitFocusField)?.field?.let(reached::add)
@@ -671,7 +720,7 @@ class IdeRendererStateTest {
     }
 
     @Test
-    fun `start page exposes one stable rotated terminal tool action`() {
+    fun `start page exposes one stable icon terminal tool action`() {
         val local = IdeViewState.startPage(emptyList())
         val capable = IdeViewState.startPage(emptyList()).copy(target = IdeTargetState.Attached(target(terminal = true)))
         val unsupported = IdeViewState.startPage(emptyList()).copy(target = IdeTargetState.Attached(target(terminal = false)))
@@ -685,12 +734,11 @@ class IdeRendererStateTest {
         val terminal = capableModel.hitTargets.single { it.action == IdeHitAction.Terminal }
         assertTrue(terminal.enabled)
         assertTrue(terminal.selected)
-        assertEquals(IdeRect(940, 46, 960, 118), terminal.bounds)
+        assertEquals(IdeRect(0, 94, 20, 116), terminal.bounds)
         assertEquals(geometry().toolStripe, capableModel.panels.single { it.kind == IdePanelKind.ToolStripe }.bounds)
         assertTrue(capableModel.text.none { it.kind == IdeTextKind.Toolbar && it.value == "Terminal" })
-        val label = capableModel.text.single { it.kind == IdeTextKind.ToolStripe }
-        assertEquals("Terminal", label.value)
-        assertEquals(IdeTextRotation.Clockwise90, label.rotation)
+        assertTrue(capableModel.text.none { it.kind == IdeTextKind.ToolStripe })
+        assertTrue(capableModel.fills.any { terminal.bounds.contains(it.bounds) && it.color == IdeColors.TEXT })
 
         val unsupportedModel = IdeRenderer.extract(unsupported, geometry())
         val unsupportedTerminal = unsupportedModel.hitTargets.single { it.action == IdeHitAction.Terminal }
@@ -1547,7 +1595,7 @@ class IdeRendererStateTest {
         assertEquals(source, runs.joinToString("") { it.value })
         assertTrue(runs.all { it.codeFont === IdeCodeFontProfile.DEFAULT })
         assertTrue(model.text.filter { it.kind == IdeTextKind.LineNumber }.all { it.codeFont === IdeCodeFontProfile.DEFAULT })
-        assertTrue(model.text.filter { it.kind == IdeTextKind.Header }.all { it.codeFont == null })
+        assertTrue(model.text.all { it.codeFont === IdeCodeFontProfile.DEFAULT })
     }
 
     private fun workspaceState(

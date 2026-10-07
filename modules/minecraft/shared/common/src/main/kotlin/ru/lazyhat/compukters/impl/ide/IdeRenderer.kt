@@ -35,6 +35,7 @@ import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.git.IdeGitField
 import ru.lazyhat.compukters.ide.client.git.IdeGitFieldView
 import ru.lazyhat.compukters.ide.client.search.IdeFindView
+import ru.lazyhat.compukters.ide.client.state.IdeBottomTab
 import ru.lazyhat.compukters.ide.client.state.IdeBusyOperation
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeDiagnostics
@@ -120,6 +121,7 @@ object IdeRenderer {
         private var gitPreviewScrollMaximum: Int? = null
         private var gitPreviewBounds: IdeRect? = null
         private val gitFieldFocusScroll = mutableMapOf<IdeGitField, Int>()
+        private var bottomScrollMaximum = 0
 
         fun base() {
             fills += IdeFillDraw(IdeFillKind.Background, geometry.viewport, IdeColors.DIM, Z_BACKGROUND)
@@ -207,15 +209,7 @@ object IdeRenderer {
                 geometry.header.top + 7,
             )
             toolbar(workspace, targetState, toolingState, busy, workspace.activeFile != null || selectedTreePath != null)
-            val gitTool =
-                IdeRect(
-                    geometry.toolStripe.left,
-                    geometry.toolbar.bottom + TERMINAL_TOOL_HEIGHT,
-                    geometry.toolStripe.right,
-                    geometry.toolbar.bottom + TERMINAL_TOOL_HEIGHT + 36,
-                )
-            target(IdeHitAction.GitToggle, gitTool, true, "Git repositories", selected = workspace.git.visible)
-            ui(IdeTextKind.ToolStripe, "Git", gitTool.right - 5, gitTool.top + 6, rotation = IdeTextRotation.Clockwise90)
+            toolWindows(workspace)
             tree(workspace)
             if (workspace.git.visible) {
                 gitPanel(workspace, busy)
@@ -337,7 +331,6 @@ object IdeRenderer {
             }
             button("Changes", command = IdeCommand.GitTab(IdeGitTab.Changes), selected = view.tab == IdeGitTab.Changes)
             if (!wide) button("Diff", command = IdeCommand.GitTab(IdeGitTab.Diff), selected = view.tab == IdeGitTab.Diff)
-            button("Log", command = IdeCommand.GitTab(IdeGitTab.Log), selected = view.tab == IdeGitTab.Log)
             button("Editor", action = IdeHitAction.GitClose, enabled = true)
             x = bounds.left + 6
             y += 24
@@ -382,55 +375,26 @@ object IdeRenderer {
                 y = bodyTop + 24
                 button("Create Git repository", operation = GitOperation.Init)
                 line("Open Repository for HTTPS account settings", y + 28, color = IdeColors.MUTED)
-            } else if (view.tab == IdeGitTab.Log || view.tab == IdeGitTab.Diff) {
+            } else if (view.tab == IdeGitTab.Diff) {
                 val rows =
-                    if (view.tab == IdeGitTab.Log) {
-                        view.result
-                            ?.history
-                            .orEmpty()
-                            .map { "${it.id.take(8)}  ${it.message}  ·  ${it.author}" }
-                    } else {
-                        view.result
-                            ?.diff
-                            ?.lineSequence()
-                            ?.toList()
-                            .orEmpty()
-                    }
-                val heading =
-                    if (view.tab ==
-                        IdeGitTab.Log
-                    ) {
-                        "Commit log"
-                    } else {
-                        "HEAD → Working tree · ${view.previewPath?.value ?: "Select a file in Changes"}"
-                    }
-                line(heading, bodyTop, right = bounds.right - 6, color = IdeColors.MUTED)
+                    view.result
+                        ?.diff
+                        ?.lineSequence()
+                        ?.toList()
+                        .orEmpty()
+                line(
+                    "HEAD → Working tree · ${view.previewPath?.value ?: "Select a file in Changes"}",
+                    bodyTop,
+                    right = bounds.right - 6,
+                    color = IdeColors.MUTED,
+                )
                 val offset = if (compact) 0 else view.scroll
                 rows.drop(offset).forEachIndexed { index, text ->
-                    line(
-                        text,
-                        bodyTop + 24 + index * 20,
-                        right = bounds.right - 6,
-                        color =
-                            if (view.tab ==
-                                IdeGitTab.Diff
-                            ) {
-                                gitDiffColor(text)
-                            } else {
-                                IdeColors.TEXT
-                            },
-                        monospace = view.tab == IdeGitTab.Diff,
-                    )
+                    line(text, bodyTop + 24 + index * 20, right = bounds.right - 6, color = gitDiffColor(text), monospace = true)
                 }
                 if (rows.isEmpty()) {
                     line(
-                        if (view.tab ==
-                            IdeGitTab.Log
-                        ) {
-                            "No commits yet"
-                        } else {
-                            "Choose a changed file to preview"
-                        },
+                        "Choose a changed file to preview",
                         bodyTop + 24,
                         right = bounds.right - 6,
                         color = IdeColors.MUTED,
@@ -1011,22 +975,117 @@ object IdeRenderer {
                     !enabled -> TERMINAL_UNAVAILABLE
                     else -> terminalTooltip()
                 }
-            val bounds =
-                IdeRect(
-                    geometry.toolStripe.left,
-                    geometry.toolbar.bottom,
-                    geometry.toolStripe.right,
-                    geometry.toolbar.bottom + TERMINAL_TOOL_HEIGHT,
-                )
+            val bounds = stripeButton(2)
             target(IdeHitAction.Terminal, bounds, enabled, tooltip, selected = terminalVisible)
-            ui(
-                IdeTextKind.ToolStripe,
-                "Terminal",
-                bounds.right - TERMINAL_TOOL_TEXT_RIGHT_INSET,
-                bounds.top + TERMINAL_TOOL_TEXT_TOP_INSET,
-                if (enabled) IdeColors.TEXT else IdeColors.DISABLED,
-                rotation = IdeTextRotation.Clockwise90,
+            toolIcon(bounds, ToolIcon.Terminal, if (enabled) IdeColors.TEXT else IdeColors.DISABLED)
+        }
+
+        private enum class ToolIcon { Project, Commit, Terminal, Problems, GitLog }
+
+        private fun stripeButton(index: Int): IdeRect =
+            IdeRect(
+                geometry.toolStripe.left,
+                geometry.content.top + index * 24,
+                geometry.toolStripe.right,
+                geometry.content.top + index * 24 + 22,
             )
+
+        private fun toolWindows(workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView) {
+            val project = stripeButton(0)
+            target(IdeHitAction.ProjectTool, project, true, "Project", selected = geometry.treeVisible)
+            toolIcon(project, ToolIcon.Project)
+            val commit = stripeButton(1)
+            target(IdeHitAction.GitToggle, commit, true, "Commit", selected = workspace.git.visible)
+            toolIcon(commit, ToolIcon.Commit)
+            val problems = stripeButton(3)
+            if (geometry.toolStripe.contains(problems)) {
+                target(
+                    IdeHitAction.GitOperation,
+                    problems,
+                    true,
+                    "Problems",
+                    selected = workspace.bottom.tab == IdeBottomTab.Problems,
+                    gitCommand = IdeCommand.BottomTab(if (workspace.bottom.tab == IdeBottomTab.Problems) null else IdeBottomTab.Problems),
+                )
+                toolIcon(problems, ToolIcon.Problems)
+            }
+            val log = IdeRect(geometry.toolStripe.left, geometry.status.top - 24, geometry.toolStripe.right, geometry.status.top - 2)
+            target(
+                IdeHitAction.GitOperation,
+                log,
+                true,
+                "Git Log",
+                selected = workspace.bottom.tab == IdeBottomTab.GitLog,
+                gitCommand = IdeCommand.BottomTab(if (workspace.bottom.tab == IdeBottomTab.GitLog) null else IdeBottomTab.GitLog),
+            )
+            toolIcon(log, ToolIcon.GitLog)
+        }
+
+        /** Small vector icons stay crisp at the same UI scale as the existing controls. */
+        private fun toolIcon(
+            bounds: IdeRect,
+            kind: ToolIcon,
+            color: Int = IdeColors.TEXT,
+        ) {
+            val x = bounds.left + (bounds.width - 14) / 2
+            val y = bounds.top + (bounds.height - 14) / 2
+
+            fun line(
+                left: Int,
+                top: Int,
+                right: Int,
+                bottom: Int,
+            ) {
+                fills += IdeFillDraw(IdeFillKind.Border, IdeRect(x + left, y + top, x + right, y + bottom), color, Z_TEXT)
+            }
+
+            fun box(
+                left: Int,
+                top: Int,
+                right: Int,
+                bottom: Int,
+            ) {
+                line(left, top, right, top + 1)
+                line(left, bottom - 1, right, bottom)
+                line(left, top, left + 1, bottom)
+                line(right - 1, top, right, bottom)
+            }
+            when (kind) {
+                ToolIcon.Project -> {
+                    box(1, 4, 13, 12)
+                    line(1, 2, 6, 3)
+                    line(1, 2, 2, 5)
+                }
+
+                ToolIcon.Commit -> {
+                    box(1, 1, 13, 13)
+                    line(4, 4, 10, 5)
+                    line(4, 7, 10, 8)
+                    line(4, 10, 8, 11)
+                }
+
+                ToolIcon.Terminal -> {
+                    box(0, 1, 14, 13)
+                    line(3, 4, 4, 5)
+                    line(4, 5, 5, 6)
+                    line(3, 6, 4, 7)
+                    line(7, 8, 11, 9)
+                }
+
+                ToolIcon.Problems -> {
+                    box(1, 1, 13, 13)
+                    line(6, 3, 8, 8)
+                    line(6, 10, 8, 12)
+                }
+
+                ToolIcon.GitLog -> {
+                    line(3, 2, 4, 12)
+                    box(1, 1, 6, 5)
+                    box(1, 9, 6, 13)
+                    line(8, 3, 13, 4)
+                    line(8, 10, 13, 11)
+                }
+            }
         }
 
         private fun editor(
@@ -1778,8 +1837,74 @@ object IdeRenderer {
             }
 
         private fun diagnostics(workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView) {
-            val bounds = geometry.diagnostics ?: return
+            val panelBounds = geometry.diagnostics ?: return
+            val header = IdeRect(panelBounds.left, panelBounds.top, panelBounds.right, panelBounds.top + 22)
+
+            fun tab(
+                label: String,
+                left: Int,
+                right: Int,
+                value: IdeBottomTab,
+            ) {
+                val rect = IdeRect(left, header.top, right, header.bottom)
+                target(
+                    IdeHitAction.GitOperation,
+                    rect,
+                    true,
+                    label,
+                    selected = workspace.bottom.tab == value,
+                    gitCommand = IdeCommand.BottomTab(value),
+                )
+                ui(IdeTextKind.ToolWindow, label, left + 6, header.top + 4, clip = rect)
+            }
+            tab("Problems", header.left, header.left + 74, IdeBottomTab.Problems)
+            tab("Git Log", header.left + 74, header.left + 140, IdeBottomTab.GitLog)
+            val close = IdeRect(header.right - 22, header.top, header.right, header.bottom)
+            target(IdeHitAction.GitOperation, close, true, "Hide tool window", gitCommand = IdeCommand.BottomTab(null))
+            ui(IdeTextKind.ToolWindow, "×", close.left + 6, close.top + 4)
+            val bounds = IdeRect(panelBounds.left, header.bottom, panelBounds.right, panelBounds.bottom)
             scissors += IdeScissorDraw(IdeScissorKind.Diagnostics, bounds, Z_CLIP)
+            if (workspace.bottom.tab == IdeBottomTab.GitLog) {
+                val refresh = IdeRect(header.left + 146, header.top, header.left + 210, header.bottom)
+                target(IdeHitAction.GitOperation, refresh, true, "Refresh Git Log", gitCommand = IdeCommand.BottomTab(IdeBottomTab.GitLog))
+                ui(IdeTextKind.ToolWindow, "Refresh", refresh.left + 4, refresh.top + 4, clip = refresh)
+                val commits = workspace.git.history
+                val count = ((bounds.height - UI_LINE_HEIGHT) / UI_LINE_HEIGHT).coerceAtLeast(0)
+                bottomScrollMaximum = (commits.size - count).coerceAtLeast(0)
+                val authorX = bounds.right - minOf(140, bounds.width / 3)
+                ui(IdeTextKind.Diagnostic, "Hash      Commit", bounds.left + 6, bounds.top + 2, IdeColors.MUTED, bounds)
+                ui(IdeTextKind.Diagnostic, "Author", authorX, bounds.top + 2, IdeColors.MUTED, bounds)
+                commits.drop(workspace.bottom.scroll.coerceAtMost(bottomScrollMaximum)).take(count).forEachIndexed { index, commit ->
+                    val top = bounds.top + (index + 1) * UI_LINE_HEIGHT
+                    val messageBounds = IdeRect(bounds.left, top, authorX - 4, top + UI_LINE_HEIGHT)
+                    ui(
+                        IdeTextKind.Diagnostic,
+                        "${commit.id.take(8)}  ${commit.message.lineSequence().firstOrNull().orEmpty()}",
+                        bounds.left + 6,
+                        top + 2,
+                        clip = messageBounds,
+                    )
+                    ui(
+                        IdeTextKind.Diagnostic,
+                        commit.author,
+                        authorX,
+                        top + 2,
+                        IdeColors.MUTED,
+                        IdeRect(authorX, top, bounds.right, top + UI_LINE_HEIGHT),
+                    )
+                }
+                if (commits.isEmpty()) {
+                    ui(
+                        IdeTextKind.Diagnostic,
+                        "No commits to show",
+                        bounds.left + 6,
+                        bounds.top + UI_LINE_HEIGHT + 2,
+                        IdeColors.MUTED,
+                        bounds,
+                    )
+                }
+                return
+            }
             workspace.usages?.let { usages ->
                 ui(
                     IdeTextKind.Diagnostic,
@@ -2023,7 +2148,7 @@ object IdeRenderer {
             z: Int = Z_TEXT,
             rotation: IdeTextRotation = IdeTextRotation.None,
         ) {
-            text += IdeTextDraw(kind, value, x, y, color, IdeTextStyle.Ui, null, clip, null, z, rotation)
+            text += IdeTextDraw(kind, value, x, y + font.glyphDrawOffsetY, color, IdeTextStyle.Ui, font, clip, null, z, rotation)
         }
 
         private fun code(
@@ -2101,10 +2226,11 @@ object IdeRenderer {
                 scissors.toList(),
                 hitTargets.toList(),
                 icons.toList(),
-                gitScrollMaximum,
-                gitPreviewScrollMaximum,
-                gitPreviewBounds,
-                gitFieldFocusScroll.toMap(),
+                bottomScrollMaximum = bottomScrollMaximum,
+                gitScrollMaximum = gitScrollMaximum,
+                gitPreviewScrollMaximum = gitPreviewScrollMaximum,
+                gitPreviewBounds = gitPreviewBounds,
+                gitFieldFocusScroll = gitFieldFocusScroll.toMap(),
             )
 
         private fun projectGlyphs(source: String): String {
@@ -2322,9 +2448,6 @@ object IdeRenderer {
     private const val PARAMETER_INFO_VISIBLE_ROWS = 6
     private const val NO_TARGET = "No target attached"
     private const val TERMINAL_UNAVAILABLE = "Target terminal is unavailable"
-    private const val TERMINAL_TOOL_HEIGHT = 72
-    private const val TERMINAL_TOOL_TEXT_RIGHT_INSET = 5
-    private const val TERMINAL_TOOL_TEXT_TOP_INSET = 6
     private const val CONTROL_BACKGROUND_OFFSET = 20
     private const val Z_BACKGROUND = 0
     private const val Z_PANEL = 10
