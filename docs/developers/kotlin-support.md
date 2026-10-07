@@ -92,6 +92,13 @@ supported.
   [`tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/tests.rs), test
   `scalar_vectors_match_kotlin_jvm_semantics`.
 
+- [x] **Nullable signatures and nominal boxes for the six public scalar types** — `Int?`, `Long?`,
+  `Float?`, `Double?`, `Boolean?` and `Char?` preserve their source type when passed through `Any?`
+  and cast back. The compiler uses one primitive descriptor for register, box and array identity.
+  Evidence: [`GuestInlineIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2-engine/src/test/kotlin/ru/lazyhat/compukters/compiler/k2/engine/GuestInlineIntegrationTest.kt),
+  test `primitive nullable signatures preserve nominal boxes for every scalar register kind`.
+  Tracking: [#700](https://github.com/CertifiedBadIdeas/Compukters/issues/700).
+
 - [x] **Value equality and virtual `equals` for supported Guest values** — `==`, `!=` and explicit `equals`
   share ordinary virtual `Any.equals(Any?)` for references. Null left receivers use null equality; a literal-null
   comparison skips overrides, while explicit `equals(null)` invokes the receiver. Operands evaluate once in order.
@@ -633,8 +640,7 @@ supported.
   can be local values, top-level immutable properties, class fields, function
   parameters, and results. `null` can initialize these values or be passed and
   returned in a typed reference context. Nullable scalar value classes use nominal managed wrappers as
-  described above. Nullable arrays, function values, and primitive values other than `Int?` and `Double?`
-  remain outside this subset. Evidence:
+  described above. Nullable function values remain outside this subset; the scalar signatures described above use nominal wrappers. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt), tests
   `nullable references lower null comparisons Elvis and reference safe calls` and
   `unsupported nullable forms do not publish artifacts`,
