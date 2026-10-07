@@ -766,6 +766,19 @@ class CompletionQueryTest {
     }
 
     @Test
+    fun `qualified completion exposes narrow and unsigned primitive conversions`() {
+        for (type in listOf("Byte", "Short", "UByte", "UShort", "UInt", "ULong")) {
+            val source = "fun convert(value: $type) = value.to"
+            K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+                val items = fixture.complete("main.kt", source.length).items
+                for (name in listOf("toInt", "toLong", "toFloat", "toDouble", "toUInt", "toULong")) {
+                    assertTrue(items.any { it.label == "$name()" && it.insertText == name }, "$type: $items")
+                }
+            }
+        }
+    }
+
+    @Test
     fun `qualified completion exposes Double conversion members on a parameter`() {
         val source = "fun convert(speed: Double): Int = speed.to"
         K2QueryFixture.source("main.kt" to source).use { fixture ->

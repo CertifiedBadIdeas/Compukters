@@ -92,11 +92,12 @@ supported.
   [`tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/tests.rs), test
   `scalar_vectors_match_kotlin_jvm_semantics`.
 
-- [x] **Nullable signatures and nominal boxes for the six public scalar types** — `Int?`, `Long?`,
-  `Float?`, `Double?`, `Boolean?` and `Char?` preserve their source type when passed through `Any?`
+- [x] **Nullable signatures and nominal boxes for all twelve primitive types** — signed and unsigned
+  numeric primitives, `Boolean?` and `Char?` preserve their source type when passed through `Any?`
   and cast back. The compiler uses one primitive descriptor for register, box and array identity.
   Evidence: [`GuestInlineIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2-engine/src/test/kotlin/ru/lazyhat/compukters/compiler/k2/engine/GuestInlineIntegrationTest.kt),
-  test `primitive nullable signatures preserve nominal boxes for every scalar register kind`.
+  tests `primitive nullable signatures preserve nominal boxes for every scalar register kind` and
+  `all primitive scalar types and nullable signatures compile through the canonical platform` in `MinimalScriptLoweringTest`.
   Tracking: [#700](https://github.com/CertifiedBadIdeas/Compukters/issues/700).
 
 - [x] **Value equality and virtual `equals` for supported Guest values** — `==`, `!=` and explicit `equals`
@@ -125,9 +126,15 @@ supported.
   and `typed process v2 facade lowers without public capability masks or suspend calls`.
   Tracking: not scheduled
 
-- [ ] **`Byte` and `Short` — Unsupported** — these numeric types have no admitted
-  Guest source representation. Evidence: `unsupported unsigned Byte and Short source produces a stable diagnostic and no artifact`.
-  Tracking: not scheduled
+- [x] **`Byte` and `Short` scalar values** — literals, signed widening arithmetic and comparisons,
+  conversions, unary plus/minus and increment/decrement use normalized 8-bit and 16-bit values.
+  Overflow wraps to the source width. Nominal boxes retain the distinction from `Int` through
+  nullable signatures, generic functions and `Any` casts. Evidence:
+  `all primitive operators preserve narrow signed unsigned and nominal semantics` in
+  [`GuestInlineIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2-engine/src/test/kotlin/ru/lazyhat/compukters/compiler/k2/engine/GuestInlineIntegrationTest.kt),
+  executed by `testKotlinPrimitivesVmConformance`, and
+  `all primitive scalar types and nullable signatures compile through the canonical platform` in `MinimalScriptLoweringTest`.
+  Tracking: [#700](https://github.com/CertifiedBadIdeas/Compukters/issues/700).
 
 - [x] **`Double` scalar values** — unboxed F64 literals, top-level scalar constants,
   arithmetic (`+`, `-`, `*`, `/`, `%`, unary minus), IEEE equality and ordering,
@@ -139,8 +146,7 @@ supported.
   generated data-class equality treat NaN as equal and distinguish zero signs without
   confusing hash collisions with equality. Data-class Double comparison stays unboxed.
   Text conversion uses bounded shortest-round-trip decimal notation, including signed
-  zero, NaN, Infinity and three-digit exponents. This support does not admit
-  Byte/Short or previously unsupported nullable operators such as `!!`.
+  zero, NaN, Infinity and three-digit exponents. Previously unsupported nullable operators such as `!!` remain outside this subset.
   Evidence: `Double arithmetic conversions comparisons boxing and text lower for vm conformance`
   executed by `testKotlinDoubleVmConformance`, artifact test
   `Double string and hash forms require ABI 1 12 and F64 operands`, native
@@ -148,7 +154,7 @@ supported.
   `Guest Double arithmetic conversions and console API resolve without errors` and
   `qualified completion exposes Double conversion members on a parameter`.
   F64 text and hashing require Runtime ABI 1.12; numeric-only F64 reuses ABI 1.0.
-  Canonical `kotlin:builtins` is 1.7.0 and `compukter:core` is 1.1.0.
+  Canonical `kotlin:builtins` is 1.8.0 and `compukter:core` is 2.0.0.
   Tracking: [#688](https://github.com/CertifiedBadIdeas/Compukters/issues/688)
 
 - [x] **`DoubleArray`** — unboxed F64 storage supports `DoubleArray(size)`,
@@ -162,19 +168,25 @@ supported.
   and `testKotlinDoubleArrayVmConformance`, plus the Guest Double IDE diagnostic test.
   Tracking: [#688](https://github.com/CertifiedBadIdeas/Compukters/issues/688)
 
-- [ ] **Unsigned types — Unsupported** — `UByte`, `UShort`, `UInt`, and
-  `ULong` have no Guest representation or standard operations; a `UInt`
-  program is rejected as unsupported IR. Evidence:
-  [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `unsupported collection and unsigned source produces a stable diagnostic and no artifact`.
-  Tracking: not scheduled
+- [x] **Unsigned scalar types** — `UByte`, `UShort`, `UInt` and `ULong` support literals,
+  widening arithmetic, unsigned comparisons/division/remainder, applicable bit operations,
+  increment/decrement, conversions and unsigned decimal text. Narrow values normalize to
+  8 or 16 bits; `UInt`/`ULong` retain all 32/64 bits. Unsigned values have distinct nominal boxes.
+  Unsigned operation forms and signedness-aware conversion require Runtime ABI 1.14.
+  Evidence: `all primitive operators preserve narrow signed unsigned and nominal semantics`,
+  executed by `testKotlinPrimitivesVmConformance`; canonical-platform scalar signature and
+  IDE test `qualified completion exposes narrow and unsigned primitive conversions`.
+  Native evidence: `unsigned_arithmetic_ordering_and_conversion_preserve_full_bit_ranges` and
+  `unsigned_division_by_zero_raises_the_managed_arithmetic_exception` in
+  [`tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/tests.rs).
+  Tracking: [#700](https://github.com/CertifiedBadIdeas/Compukters/issues/700).
 
 - [ ] **Integer arithmetic — Partial** — `Int` and `Long` support `+`, `-`, `*`,
   `/`, `%`, unary minus, `and`, `or`, `xor`, `inv`, `shl`, `shr`, and `ushr`
   with VM wrapping and masked-shift semantics. Arithmetic and comparisons mix
   `Int` and `Long` using Kotlin widening rules. Direct `compareTo` calls between
   `Int` and `Long` return `-1`, `0`, or `1` without subtracting the operands.
-  Other integer widths are not lowered from source.
+  The narrow and unsigned families described above use the same canonical primitive model.
   Evidence:
   [`KotlinProjectLowering`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2-engine/src/main/kotlin/ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLowering.kt)
   and [`numeric.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/numeric.rs), tests
@@ -350,8 +362,7 @@ supported.
   Generic classes extending a class other than `Any` remain rejected. Evidence:
   `canonical peripheral companion specializes shared typed queries`, executed by `testKotlinPeripheralQueriesVmConformance`.
   Contravariance, reified parameters, generic
-  value classes, generic methods declaring their own type parameters, nullable
-  primitive arguments other than the supported nullable Int forms, and automatic primitive-list `Any` boxing bridges
+  value classes, generic methods declaring their own type parameters, and automatic primitive-list `Any` boxing bridges
   beyond `List<Int>` remain outside the subset. Direct `Any` values use the supported scalar boxes described above. Expansion is
   bounded to 256 function and 256 class variants per compilation. Binary
   generic library templates and runtime instantiation are absent. Evidence:
@@ -657,7 +668,7 @@ supported.
   with `null`, selected with `?:`, and accessed with `?.` when the result is a
   supported reference type. Both operators evaluate the left side once and
   skip the unused branch. Safe calls with an Int result, such as `text?.length`, produce a boxed `Int?`.
-  Other nullable primitive results and non-null assertions (`!!`) remain unsupported. Int-result safe-call evidence:
+  Nullable primitive results use the nominal scalar wrappers described above; non-null assertions (`!!`) remain unsupported. Int-result safe-call evidence:
   `testKotlinNullableCollectionsVmConformance`. Reference-result evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt), tests
   `nullable references lower null comparisons Elvis and reference safe calls`

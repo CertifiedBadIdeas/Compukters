@@ -108,3 +108,22 @@ tasks.register<Test>("generateInlineBlocksConformanceArtifact") {
         systemProperty("compukter.vm.inlineBlocksArtifact", inlineBlocksArtifact.get().asFile.absolutePath)
     }
 }
+
+val primitivesArtifact = layout.buildDirectory.file("generated/conformance/kotlin-primitives.cpkt")
+tasks.register<Test>("generatePrimitivesConformanceArtifact") {
+    description = "Compiles all Guest primitive families and operator boundary cases for VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*all primitive operators preserve narrow signed unsigned and nominal semantics*")
+    val guestBuiltins = rootProject.file("modules/common/guest-platform/src/platform/builtins")
+    inputs.dir(guestBuiltins)
+    inputs.file(tasks.jar.flatMap { it.archiveFile })
+    outputs.file(primitivesArtifact)
+    doFirst {
+        systemProperty("compukters.guest.builtins", guestBuiltins.absolutePath)
+        systemProperty("compukter.vm.primitivesArtifact", primitivesArtifact.get().asFile.absolutePath)
+    }
+}

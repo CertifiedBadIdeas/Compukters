@@ -498,6 +498,15 @@ registerKotlinVmConformance(
     conformanceScenario = "adapted-constructors",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinPrimitivesVmConformance",
+    taskDescription = "Executes all Guest primitive families and operator boundary cases in the pinned VM.",
+    artifactTask = ":compiler-k2-engine:generatePrimitivesConformanceArtifact",
+    artifact = project(":compiler-k2-engine").layout.buildDirectory.file("generated/conformance/kotlin-primitives.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-primitives-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_PRIMITIVES_ARTIFACT",
+    conformanceScenario = "primitives",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinInlineBlocksVmConformance",
     taskDescription = "Executes test-normalized Guest inline blocks and target-aware returns in the pinned VM.",
     artifactTask = ":compiler-k2-engine:generateInlineBlocksConformanceArtifact",
