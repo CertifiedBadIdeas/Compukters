@@ -307,6 +307,9 @@ and value class keys`, with and without attached platform sources.
 Factory/default evidence: `hash collection factories preserve arguments pairs and defaults` and
 `hash collections support all twelve primitive families`, executed by `testKotlinHashCollectionsVmConformance`.
 The IDE diagnostic test above also covers factories, Pair and getOrPut with and without attached sources.
+The checked-in [inventory report example](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/examples/inventory-report)
+combines batch aggregation, uniqueness tracking and stock thresholds. `hash collection inventory example
+compiles and executes` compiles its actual source; the same VM task checks its report across bounded slices.
 
 **Related work:** [#705](https://github.com/CertifiedBadIdeas/Compukters/issues/705),
 [#707](https://github.com/CertifiedBadIdeas/Compukters/issues/707).

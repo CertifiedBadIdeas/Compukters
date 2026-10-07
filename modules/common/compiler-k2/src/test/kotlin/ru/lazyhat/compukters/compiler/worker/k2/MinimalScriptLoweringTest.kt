@@ -39,6 +39,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.Utf16Literal
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
+import ru.lazyhat.compukters.compiler.project.ProjectSnapshotLoader
 import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
@@ -3513,6 +3514,18 @@ class MinimalScriptLoweringTest {
             val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
             System.getProperty("compukter.vm.hashCollectionsArtifact")?.let { output ->
                 Path.of("$output.factory-values.cpkt").writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `hash collection inventory example compiles and executes`() =
+        withAdapter { adapter ->
+            val sources = ProjectSnapshotLoader.loadSourceSet(repositoryFile("examples/inventory-report"), WorkerLimits())
+            val input = sources.sources.map { it.path.value to it.content.toByteArray().decodeToString() }
+            val result = adapter.compile(request(input, WorkerLimits()))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.hashCollectionsArtifact")?.let { output ->
+                Path.of("$output.inventory.cpkt").writeBytes(bytes)
             }
         }
 

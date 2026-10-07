@@ -69,6 +69,9 @@ fn main() {
         "list-any" => k2_int_list_covariance_boxes_universal_reads(),
         "mutable-list" => k2_mutable_list_preserves_growth_mutation_and_views(),
         "hash-collections" => {
+            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_INVENTORY_ARTIFACT", [
+                "iron: 14 / 12 (ready)\n", "copper: 3 / 8 (low)\n", "gold: 2 / 0 (ready)\n", "Distinct items: 3\n",
+            ], 256);
             k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_PAIR_ARTIFACT", ["pair ok\n"], 256);
             k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_FACTORY_VALUES_ARTIFACT", ["hash factory values ok\n"], 256);
             k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_FACTORIES_ARTIFACT", ["hash factories ok\n"], 256);
