@@ -193,6 +193,9 @@ class IdeClientController(
     private val gitDraft =
         ru.lazyhat.compukters.ide.client.git
             .IdeGitDraftSession()
+    private var bottomPanel =
+        ru.lazyhat.compukters.ide.client.state
+            .IdeBottomPanelView()
     private var pushAfterCommit = false
     private var pendingGit: GitOperation? = null
     private var latestGitOperation = 0L
@@ -240,6 +243,10 @@ class IdeClientController(
         started = true
         val remembered = runCatching(preferences::load).getOrNull()
         if (remembered != null) preferencesSnapshot = remembered
+        bottomPanel =
+            bottomPanel.copy(
+                tab = if (preferencesSnapshot.diagnosticsExpanded) ru.lazyhat.compukters.ide.client.state.IdeBottomTab.Problems else null,
+            )
         state = state.copy(busy = setOf(IdeBusyOperation.Catalog))
         val requestGeneration = generation
         workspace.projects().whenComplete { projects, failure ->
@@ -256,7 +263,8 @@ class IdeClientController(
         check(started && !closed) { "IDE controller is not active" }
         if (creatingProject && command !is IdeCommand.CancelGit && command !is IdeCommand.OpenProject) return
         if (IdeBusyOperation.Git in state.busy && command !is IdeCommand.CancelGit &&
-            command !is IdeCommand.GitVisible && command !is IdeCommand.ScrollGit && command !is IdeCommand.OpenProject
+            command !is IdeCommand.GitVisible && command !is IdeCommand.ScrollGit && command !is IdeCommand.OpenProject &&
+            command !is IdeCommand.BottomTab && command !is IdeCommand.ScrollBottom
         ) {
             return
         }
@@ -284,10 +292,6 @@ class IdeClientController(
                 gitView = gitView.copy(tab = command.tab, scroll = 0, menu = null)
                 publishWorkspace()
                 when (command.tab) {
-                    ru.lazyhat.compukters.ide.client.state.IdeGitTab.Log -> {
-                        requestGit(GitOperation.History)
-                    }
-
                     ru.lazyhat.compukters.ide.client.state.IdeGitTab.Changes -> {
                         requestGit(GitOperation.Status)
                     }
@@ -300,6 +304,29 @@ class IdeClientController(
                         }
                     }
                 }
+            }
+
+            is IdeCommand.BottomTab -> {
+                gitDraft.focus(null)
+                bottomPanel = bottomPanel.copy(tab = command.tab, scroll = 0)
+                if (command.tab == ru.lazyhat.compukters.ide.client.state.IdeBottomTab.GitLog) {
+                    gitView = gitView.copy(visible = false, menu = null)
+                }
+                publishWorkspace()
+                if (command.tab == ru.lazyhat.compukters.ide.client.state.IdeBottomTab.GitLog && state.busy.isEmpty()) {
+                    requestGit(GitOperation.History)
+                }
+            }
+
+            is IdeCommand.ScrollBottom -> {
+                bottomPanel =
+                    bottomPanel.copy(
+                        scroll =
+                            (bottomPanel.scroll.toLong() + command.lines)
+                                .coerceIn(0, command.maximum.coerceIn(0, 1_000_000).toLong())
+                                .toInt(),
+                    )
+                publishWorkspace()
             }
 
             is IdeCommand.GitMenu -> {
@@ -1582,7 +1609,12 @@ class IdeClientController(
         if (event.operationId != latestGitOperation) return
         gitCancellation = null
         state = state.copy(busy = state.busy - IdeBusyOperation.Git)
-        gitView = gitView.copy(result = event.result ?: gitView.result, scroll = 0, previewScroll = 0)
+        if (event.operation == GitOperation.History && event.result != null) {
+            gitView = gitView.copy(history = java.util.Collections.unmodifiableList(event.result.history.toList()))
+            bottomPanel = bottomPanel.copy(scroll = 0)
+        } else {
+            gitView = gitView.copy(result = event.result ?: gitView.result, scroll = 0, previewScroll = 0)
+        }
         event.result?.status?.let { status ->
             val available = status.changes.mapTo(mutableSetOf()) { it.path }
             gitView =
@@ -1792,8 +1824,14 @@ class IdeClientController(
             is IdeEvent.UsagesResolved -> {
                 if (event.operationId != latestUsagesOperation) return
                 when (val result = event.outcome) {
-                    is IdeUsagesOutcome.Found -> usages = result.value
-                    is IdeUsagesOutcome.Failed -> publishStatus(result.detail, IdeProblemSeverity.Warning)
+                    is IdeUsagesOutcome.Found -> {
+                        usages = result.value
+                        bottomPanel = bottomPanel.copy(tab = ru.lazyhat.compukters.ide.client.state.IdeBottomTab.Problems, scroll = 0)
+                    }
+
+                    is IdeUsagesOutcome.Failed -> {
+                        publishStatus(result.detail, IdeProblemSeverity.Warning)
+                    }
                 }
                 publishWorkspace()
             }
@@ -1984,6 +2022,10 @@ class IdeClientController(
             creatingProject = false
         }
         gitView = IdeGitView(authenticated = gitCredentials != null)
+        bottomPanel =
+            ru.lazyhat.compukters.ide.client.state.IdeBottomPanelView(
+                tab = if (preferencesSnapshot.diagnosticsExpanded) ru.lazyhat.compukters.ide.client.state.IdeBottomTab.Problems else null,
+            )
         gitDraft.clearMessage()
         pushAfterCommit = false
         gitCancellation = null
@@ -2603,6 +2645,7 @@ class IdeClientController(
                             usages,
                             currentDiagnostics(),
                             gitView.copy(draft = gitDraft.view()),
+                            bottomPanel,
                         ),
                     ),
             )

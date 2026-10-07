@@ -98,6 +98,72 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
+    fun `bottom history preserves commit preview and draft and resets on project change`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"), additionalProject = true)
+        fixture.startAndTick()
+        val main = ProjectPath.file("src/main.kt")
+        val status =
+            GitStatus(
+                true,
+                branch = "main",
+                changes =
+                    listOf(
+                        ru.lazyhat.compukters.ide.git
+                            .GitChange(main, null, "modified"),
+                    ),
+            )
+        fixture.controller.dispatch(IdeCommand.GitVisible(true))
+        fixture.workspace.completeGit(GitResult(status, diff = "preview"))
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.GitCheck(main))
+        fixture.controller.dispatch(IdeCommand.GitFocusField(ru.lazyhat.compukters.ide.client.git.IdeGitField.Message))
+        fixture.controller.dispatch(IdeCommand.EditGitDraft(IdeEditorInput.Type("Keep message")))
+        fixture.controller.dispatch(IdeCommand.BottomTab(ru.lazyhat.compukters.ide.client.state.IdeBottomTab.GitLog))
+        assertEquals(
+            GitOperation.History,
+            fixture.workspace.gitRequests
+                .last()
+                .second,
+        )
+        val commits =
+            listOf(
+                ru.lazyhat.compukters.ide.git
+                    .GitCommit("12345678", "First", "Tester", 0),
+            )
+        fixture.workspace.completeGit(GitResult(status, history = commits))
+        fixture.controller.tick()
+        assertEquals(
+            "preview",
+            fixture
+                .workspaceView()
+                .git.result
+                ?.diff,
+        )
+        assertEquals(commits, fixture.workspaceView().git.history)
+        assertEquals(setOf(main), fixture.workspaceView().git.checkedPaths)
+        assertEquals(
+            "Keep message",
+            fixture
+                .workspaceView()
+                .git.draft.message.text,
+        )
+        fixture.controller.dispatch(IdeCommand.ScrollBottom(50, 3))
+        assertEquals(3, fixture.workspaceView().bottom.scroll)
+        fixture.controller.dispatch(IdeCommand.BottomTab(ru.lazyhat.compukters.ide.client.state.IdeBottomTab.Problems))
+        assertEquals(0, fixture.workspaceView().bottom.scroll)
+        assertEquals(commits, fixture.workspaceView().git.history)
+        fixture.controller.dispatch(IdeCommand.OpenProject("other"))
+        fixture.controller.tick()
+        assertTrue(
+            fixture
+                .workspaceView()
+                .git.history
+                .isEmpty(),
+        )
+        fixture.controller.close()
+    }
+
+    @Test
     fun `checkbox commit preserves draft on failure and pushes only after successful selected commit`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"), additionalProject = true)
         fixture.startAndTick()
@@ -672,9 +738,11 @@ class IdeClientControllerTest {
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type(source)))
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(5, false)))
+        fixture.controller.dispatch(IdeCommand.BottomTab(null))
         fixture.controller.dispatch(IdeCommand.FindUsages)
         requests.completeOccurrences(listOf(EditorRange(4, 10), EditorRange(source.lastIndexOf("answer"), source.length)))
         fixture.controller.tick()
+        assertEquals(ru.lazyhat.compukters.ide.client.state.IdeBottomTab.Problems, fixture.workspaceView().bottom.tab)
         assertEquals(1, fixture.workspaceView().usages?.total)
         assertEquals(
             "fun main() = answer",

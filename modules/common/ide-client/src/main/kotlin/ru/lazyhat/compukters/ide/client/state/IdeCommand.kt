@@ -49,6 +49,15 @@ sealed interface IdeCommand {
         val tab: IdeGitTab,
     ) : IdeCommand
 
+    data class BottomTab(
+        val tab: IdeBottomTab?,
+    ) : IdeCommand
+
+    data class ScrollBottom(
+        val lines: Int,
+        val maximum: Int,
+    ) : IdeCommand
+
     data class GitMenu(
         val menu: IdeGitMenu?,
     ) : IdeCommand

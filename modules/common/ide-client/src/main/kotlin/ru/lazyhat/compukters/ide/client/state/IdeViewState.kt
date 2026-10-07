@@ -75,6 +75,7 @@ data class IdeWorkspaceView(
     val usages: ru.lazyhat.compukters.ide.client.analysis.IdeUsages? = null,
     val diagnostics: IdeDiagnostics = IdeDiagnostics.unlocated(editor, build),
     val git: IdeGitView = IdeGitView(),
+    val bottom: IdeBottomPanelView = IdeBottomPanelView(),
 )
 
 sealed interface IdePageState {
@@ -120,7 +121,14 @@ sealed interface IdeDialogState {
     ) : IdeDialogState
 }
 
-enum class IdeGitTab { Changes, Diff, Log }
+enum class IdeGitTab { Changes, Diff }
+
+enum class IdeBottomTab { Problems, GitLog }
+
+data class IdeBottomPanelView(
+    val tab: IdeBottomTab? = IdeBottomTab.Problems,
+    val scroll: Int = 0,
+)
 
 enum class IdeGitMenu { Branches, Repository }
 
@@ -137,6 +145,7 @@ data class IdeGitView(
     val previewPath: ProjectPath? = null,
     val menu: IdeGitMenu? = null,
     val draft: IdeGitDraftView = IdeGitDraftView(),
+    val history: List<ru.lazyhat.compukters.ide.git.GitCommit> = emptyList(),
 )
 
 sealed interface IdeProjectRequest {
