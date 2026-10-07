@@ -199,7 +199,7 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 - Rebuild Guest programs and compiled platform/addon libraries for the updated platform. MFVC inline layouts
   require Runtime ABI 1.15; unsigned operations and compact primitive storage require 1.14, and structured host
-  results require 1.13. Native transports expect C ABI 20. Base bundles/modules use formats 9/5 and platform ABI 3.
+  results require 1.13. Native Runtime 0.20.0 supplies C ABI 20 for both transports. Base bundles/modules use formats 9/5 and platform ABI 3.
 - The built-in libraries are `kotlin:builtins` 1.8.0, `stdlib:core` 1.9.0 and `compukter:core` 2.0.0.
   Addons depending on removed split-module IDs must rebuild against the consolidated owners.
 - Legacy display/Create/Propulsion acquisition helpers and separate side types are removed. Use typed device
