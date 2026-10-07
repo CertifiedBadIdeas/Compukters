@@ -82,18 +82,8 @@ private fun encodeArtifact(
 ): ArtifactWriteResult.Success {
     val encodedModules = artifact.modules.map { encodeModuleSections(it, limits) }
     val debugBytes =
-        encodedModules.sumOf {
-            (
-                it.debug
-                    ?.payload
-                    ?.size
-                    ?.toLong() ?: 0L
-            ) + (
-                it.debugPositions
-                    ?.payload
-                    ?.size
-                    ?.toLong() ?: 0L
-            )
+        encodedModules.sumOf { module ->
+            listOfNotNull(module.debug, module.debugPaths, module.debugPositions).sumOf { it.payload.size.toLong() }
         }
     if (debugBytes > limits.debugBytes) {
         throw ArtifactEncodingException(ArtifactWriteErrorCode.LIMIT_EXCEEDED, "debug metadata exceeds ${limits.debugBytes} bytes")
@@ -113,6 +103,7 @@ private fun encodeArtifact(
         val scope = moduleIndex.toUInt() + 1u
         module.semantic.forEach { sections += PhysicalSection(it.kind, CORE_FLAGS, scope, it.payload, it.count) }
         module.debug?.let { sections += PhysicalSection(it.kind, 0, scope, it.payload, it.count) }
+        module.debugPaths?.let { sections += PhysicalSection(it.kind, 1, scope, it.payload, it.count) }
         module.debugPositions?.let { sections += PhysicalSection(it.kind, 0, scope, it.payload, it.count) }
     }
     sections.sortWith(compareBy(PhysicalSection::scope, PhysicalSection::kind))

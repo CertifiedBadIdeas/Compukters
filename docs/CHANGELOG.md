@@ -159,6 +159,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### Computer runtime
 
+- Compiled programs share repeated debug source paths to reduce executable size while retaining source locations
+  and inline diagnostics. Compact artifacts require the updated native Runtime reader; old artifacts remain readable.
 - `Ctrl+T` in a computer or IDE target terminal stops the foreground command and its nested processes/tasks,
   releases peripheral control and returns to the shell while retaining output and files. Repeats are ignored;
   an idle shell remains running.

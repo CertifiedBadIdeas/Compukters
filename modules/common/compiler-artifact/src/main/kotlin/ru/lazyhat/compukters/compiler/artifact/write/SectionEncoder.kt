@@ -45,6 +45,7 @@ internal const val EXCEPTIONS = 0x0109
 internal const val UTF16_LITERALS = 0x010a
 internal const val SAFEPOINT_ROOTS = 0x010b
 internal const val DEBUG = 0x0110
+internal const val DEBUG_PATHS = 0x0111
 internal const val DEBUG_SOURCE_POSITIONS = 0x8001
 
 internal data class EncodedSection(
@@ -56,6 +57,7 @@ internal data class EncodedSection(
 internal class EncodedModuleSections(
     val semantic: List<EncodedSection>,
     val debug: EncodedSection?,
+    val debugPaths: EncodedSection?,
     val debugPositions: EncodedSection?,
     semanticHash: ByteArray,
 ) {
@@ -158,10 +160,43 @@ internal fun encodeModuleSections(
                 module.functions.sumOf { it.safepointRoots.size }.toUInt(),
             ),
         )
-    val debug =
-        module.debug.takeIf(List<DebugEntry>::isNotEmpty)?.let { records ->
-            EncodedSection(DEBUG, encodeIndexed(records.map { encodeDebug(it, maximum) }, maximum), records.size.toUInt())
+    var debug: EncodedSection? = null
+    var debugPaths: EncodedSection? = null
+    if (module.debug.isNotEmpty()) {
+        val paths = module.debug.map(DebugEntry::sourcePath).distinct()
+        val pathIds = paths.withIndex().associate { it.value to it.index.toUInt() }
+        val pathBytes = paths.associateWith { it.toByteArray() }
+        val pool = EncodedSection(DEBUG_PATHS, encodeIndexed(paths.map(pathBytes::getValue), maximum), paths.size.toUInt())
+        val compact =
+            EncodedSection(
+                DEBUG,
+                encodeIndexed(module.debug.map { encodeDebug(it, maximum, pathIds.getValue(it.sourcePath)) }, maximum),
+                module.debug.size.toUInt(),
+            )
+        // Compare physical costs before building legacy records, which may exceed
+        // the artifact limit even when compact output fits it.
+        val legacyPrefix = (16L + 4L * (module.debug.size + 1L) + 7L) and -8L
+        val legacyBytes = legacyPrefix + module.debug.sumOf { 28L + pathBytes.getValue(it.sourcePath).size }
+        val legacyAlignedBytes = (legacyBytes + 7L) and -8L
+        if (checkedAlign8(compact.payload.size).toLong() + checkedAlign8(pool.payload.size) + 32 < legacyAlignedBytes) {
+            require(
+                paths.all { path ->
+                    val text = path.toString()
+                    text.isNotEmpty() && !text.startsWith('/') && !text.contains('\\') &&
+                        text.split('/').all { it.isNotEmpty() && it != "." && it != ".." }
+                },
+            ) { "debug source path is not canonical" }
+            debug = compact
+            debugPaths = pool
+        } else {
+            debug =
+                EncodedSection(
+                    DEBUG,
+                    encodeIndexed(module.debug.map { encodeDebug(it, maximum) }, maximum),
+                    module.debug.size.toUInt(),
+                )
         }
+    }
     val positions =
         module.debug.mapIndexedNotNull { index, entry ->
             require((entry.sourceLine == null) == (entry.sourceColumn == null)) { "source line and column must be paired" }
@@ -179,7 +214,7 @@ internal fun encodeModuleSections(
         positions.takeIf { it.isNotEmpty() }?.let {
             EncodedSection(DEBUG_SOURCE_POSITIONS, encodeIndexed(it, maximum), it.size.toUInt())
         }
-    return EncodedModuleSections(semantic, debug, debugPositions, semanticHash(semantic))
+    return EncodedModuleSections(semantic, debug, debugPaths, debugPositions, semanticHash(semantic))
 }
 
 private fun encodeType(
@@ -398,6 +433,7 @@ private fun encodeSafepointRoots(
 private fun encodeDebug(
     value: DebugEntry,
     maximum: Int,
+    pathId: UInt? = null,
 ): ByteArray =
     BinarySink(maximum)
         .apply {
@@ -407,9 +443,13 @@ private fun encodeDebug(
             writeU32(value.startUtf16)
             writeU32(value.endUtf16)
             writeU32(value.inlineParent?.value ?: UInt.MAX_VALUE)
-            val path = value.sourcePath.toByteArray()
-            writeU32(path.size.toUInt())
-            writeBytes(path)
+            if (pathId != null) {
+                writeU32(pathId)
+            } else {
+                val path = value.sourcePath.toByteArray()
+                writeU32(path.size.toUInt())
+                writeBytes(path)
+            }
         }.toByteArray()
 
 private fun semanticHash(sections: List<EncodedSection>): ByteArray {
