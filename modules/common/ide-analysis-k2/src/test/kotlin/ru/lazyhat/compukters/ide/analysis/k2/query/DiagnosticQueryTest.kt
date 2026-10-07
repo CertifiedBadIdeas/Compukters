@@ -31,6 +31,33 @@ import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
     @Test
+    fun `hash collection analysis admits typed and value class keys`() {
+        val source =
+            """
+            import kotlin.collections.*
+            value class DeviceId(val value: Int)
+            value class Position(val x: Int, val name: String)
+            fun main() {
+                val map: MutableMap<DeviceId, Position?> = HashMap<DeviceId, Position?>()
+                map[DeviceId(7)] = Position(2, "a")
+                check(map.containsKey(DeviceId(7)))
+                val read: Map<DeviceId, Position?> = map
+                for (entry in read.entries) { println(entry.key.value) }
+                val set: MutableSet<Position> = HashSet<Position>()
+                set.add(Position(2, "a"))
+                set.iterator().remove()
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `native MFVC analysis preserves source and addon nominal types and members`() {
         for (attachedSources in listOf(false, true)) {
             val source =

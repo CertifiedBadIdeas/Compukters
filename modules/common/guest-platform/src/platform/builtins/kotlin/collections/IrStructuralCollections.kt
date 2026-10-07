@@ -34,10 +34,22 @@ public interface List<out T> : Collection<T> {
     public fun lastIndexOf(element: @UnsafeVariance T): Int
 }
 
-internal interface Set<out T> : Collection<T>
+public interface Set<out T> : Collection<T>
 
-internal interface Map<K, out V> {
-    interface Entry<out K, out V>
+public interface Map<K, out V> {
+    public val size: Int
+    public fun isEmpty(): Boolean
+    public fun containsKey(key: K): Boolean
+    public fun containsValue(value: @UnsafeVariance V): Boolean
+    public operator fun get(key: K): V?
+    public val keys: Set<K>
+    public val values: Collection<V>
+    public val entries: Set<Entry<K, V>>
+
+    public interface Entry<out K, out V> {
+        public val key: K
+        public val value: V
+    }
 }
 
 internal interface ListIterator<out T> : Iterator<T>
@@ -66,10 +78,16 @@ public interface MutableList<T> : List<T>, MutableCollection<T> {
     public fun removeAt(index: Int): T
 }
 
-internal interface MutableSet<T> : Set<T>, MutableCollection<T>
+public interface MutableSet<T> : Set<T>, MutableCollection<T>
 
-internal interface MutableMap<K, V> : Map<K, V> {
-    interface MutableEntry<K, V> : Map.Entry<K, V>
+public interface MutableMap<K, V> : Map<K, V> {
+    public fun put(key: K, value: V): V?
+    public fun remove(key: K): V?
+    public fun clear(): Unit
+
+    public interface MutableEntry<K, V> : Map.Entry<K, V> {
+        public fun setValue(newValue: V): V
+    }
 }
 
 internal interface MutableListIterator<T> : ListIterator<T>, MutableIterator<T>

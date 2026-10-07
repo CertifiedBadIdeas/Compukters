@@ -96,7 +96,8 @@ value equality. Non-null lists also widen to `List<Any?>`.
 
 **Evidence:** `testKotlinNullableCollectionsVmConformance`, test `nullable Int and collection elements
 preserve values and nulls`. Extension functions are Guest `kotlin.collections` declarations and require
-imports. Spread arguments, `Set`, `Map`, sequences, and collection APIs not listed here remain unavailable.
+imports. Spread arguments, sequences, and collection APIs not listed here remain unavailable. Hash maps and
+sets have the separate supported subset below.
 Generic list implementations are distributed as source bodies in the hybrid `stdlib:core` module, alongside
 ordinary precompiled library implementations.
 
@@ -233,11 +234,65 @@ destination operations, enclosing generic class parameters and receiver evaluati
 `DiagnosticQueryTest`; transparent host waits through collection callbacks execute in
 `testKotlinTransparentCallVmConformance`.
 
+## Hash maps and sets
+
+**Status:** Partial.
+
+`HashMap<K, V>(initialCapacity = 16)` implements `Map<K, V>` and `MutableMap<K, V>` with `size`, `isEmpty`,
+`containsKey`, `containsValue`, indexed lookup, `put`, indexed assignment, `remove` and `clear`. `get`, `put`
+and `remove` return nullable values; use `containsKey` to distinguish an absent key from a stored null.
+`key in map` tests key membership; `isNotEmpty()` and `for ((key, value) in map)` are also supported.
+`keys`, `values` and `entries` are live read-only views, including views
+obtained before a map mutation. `Map.Entry` exposes `key` and `value`; a hash-map entry can be cast to the
+matching `MutableMap.MutableEntry<K, V>` to use `setValue`, which returns the previous value.
+
+`HashSet<T>(initialCapacity = 16)` implements `Set<T>` and `MutableSet<T>` with `size`, `isEmpty`, membership,
+`add`, `remove`, `clear` and a removable iterator. Adding an equal element returns false; removing an absent
+element returns false. `emptyMap<K, V>()` and `emptySet<T>()` create fresh empty collections with read-only
+views. Read-only views are aliases rather than immutable snapshots. Map views do not expose collection
+mutation operations.
+
+All twelve primitive families and supported reference types can be keys, values and elements. Null keys
+and elements hash to zero. Equality and hashing use the existing generic Kotlin semantics: floating NaNs
+coalesce, while positive and negative zero remain distinct. User `equals` and `hashCode` overrides retain
+their effects and exceptions. Equal keys replace values; colliding unequal keys remain separate. Growth
+reuses cached hashes. Keys must retain stable equality and hash codes while stored.
+
+Value-class keys retain nominal value equality and hashing, including multi-field layouts. Equal instances
+coalesce, while an `Int` and an Int-backed value class remain different keys through `Any?`. Nullable and
+universal boundaries use the established nominal managed boxes. Value-class fields retain their existing
+Guest representation; hash collections introduce no new boxing or unboxed-storage contract.
+
+The table, entries, views and iterators are ordinary Guest objects charged to VM heap and instruction
+budgets. Collision traversal, growth and iteration resume across quota slices. Removal and clear release
+the table's references to removed entries. The existing 256 generic class/function specialization limits
+remain in force. Iteration uses unspecified bucket order, deterministic for the same execution. Structural
+insertion, removal or non-empty clear invalidates an existing iterator; replacing a value does not. Iterator
+removal requires one preceding `next` and preserves that iterator's traversal. Invalid iterator state throws
+`IllegalStateException`; exhaustion throws `NoSuchElementException`. Negative capacities or capacities above
+1,073,741,824 throw `IllegalArgumentException`; actual allocation remains subject to the much smaller VM heap.
+
+The first subset does not implement populated `mapOf`/`setOf` factories, `Pair`/`to` syntax, bulk operations,
+mutable key/value/entry views, structural collection or entry equality/hashing/text, linked/sorted collections,
+or collection type-argument widening. Retain exact key/value/element types in read-only views; for example,
+`HashSet<Int>` to `Set<Int>` works, while `Set<Int>` to `Set<Any>` and `Map<String, Int>` to `Map<String, Any>`
+produce a target diagnostic. Mutable contracts remain invariant.
+
+**Evidence:** `MinimalScriptLoweringTest`, tests `hash maps and sets preserve collisions nulls mutation and
+live views`, `hash collections support all twelve primitive families`, `hash collections preserve primitive
+and nullable storage`, `hash collections preserve nominal value class keys`, and `hash collections retain
+ordinary heap quota failures`, executed by `testKotlinHashCollectionsVmConformance`. Rejection coverage is
+`mutable hash collections remain invariant` and `hash collection unsupported widening reports a target
+diagnostic`. IDE analysis is covered by `DiagnosticQueryTest`, test `hash collection analysis admits typed
+and value class keys`, with and without attached platform sources.
+
+**Related work:** [#705](https://github.com/CertifiedBadIdeas/Compukters/issues/705).
+
 ### Other standard collections and functional helpers
 
 **Status:** Unsupported.
 
-Sets, maps, sequences and collection conversion helpers have no Guest implementation.
+Sequences and collection conversion helpers have no Guest implementation.
 
 **Related work:** not scheduled
 

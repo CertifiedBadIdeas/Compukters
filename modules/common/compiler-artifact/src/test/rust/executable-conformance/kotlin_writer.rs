@@ -68,6 +68,15 @@ fn main() {
         "list" => k2_lists_retain_typed_elements(),
         "list-any" => k2_int_list_covariance_boxes_universal_reads(),
         "mutable-list" => k2_mutable_list_preserves_growth_mutation_and_views(),
+        "hash-collections" => {
+            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_COLLECTIONS_ARTIFACT", ["hash collections ok\n"], 128);
+            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_VALUES_ARTIFACT", ["hash value classes ok\n"], 64);
+            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_PRIMITIVES_ARTIFACT", ["hash primitive storage ok\n"], 64);
+            k2_hash_collections_enforce_heap_and_capacity_limits();
+            for batch in 0..6 {
+                execute_primitive_program(std::env::var(format!("COMPUKTER_KOTLIN_HASH_SCALARS_{batch}")).expect("hash primitive artifact must be set"));
+            }
+        },
         "filter-not-null" => k2_filter_not_null_narrows_values(),
         "filter" => k2_filter_preserves_order_nulls_and_identity(),
         "map" => k2_map_preserves_order_types_and_identity(),
@@ -1175,6 +1184,33 @@ fn k2_int_list_covariance_boxes_universal_reads() {
         ],
         256,
     );
+}
+
+fn k2_hash_collections_enforce_heap_and_capacity_limits() {
+    let path = std::env::var("COMPUKTER_KOTLIN_HASH_FAILURE_ARTIFACT").expect("hash failure artifact must be set");
+    let bytes = fs::read(path).expect("hash failure artifact must exist");
+    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default()).expect("hash failure artifact must verify");
+    for mode in ["negative-map", "negative-set", "overflow-capacity", "quota"] {
+        let mut profile = list_no_io_profile();
+        profile.heap_bytes = 64 * 1024;
+        let mut session = Session::admit(verified.clone(), profile, &[]).expect("hash failure must admit");
+        let arguments = [utf16(mode).into_boxed_slice()];
+        session.start(&[EntryValue::StringArray(&arguments)]).expect("hash failure must start");
+        let mut slices = 0;
+        loop {
+            match session.advance(64, 64).expect("hash failure must execute") {
+                AdvanceOutcome::SliceExhausted => { slices += 1; assert!(slices < 100000, "hash workload must make progress"); },
+                AdvanceOutcome::AllocationExhausted(_) => { assert_eq!(mode, "quota"); assert!(slices > 0); break; },
+                AdvanceOutcome::UncaughtException => {
+                    assert_ne!(mode, "quota");
+                    let diagnostic = session.uncaught_exception_diagnostic(&verified).expect("capacity failure must have a diagnostic");
+                    assert!(diagnostic.contains("IllegalArgumentException"), "{diagnostic}");
+                    break;
+                },
+                outcome => panic!("unexpected hash collection outcome for {mode}: {outcome:?}"),
+            }
+        }
+    }
 }
 
 fn k2_mutable_list_preserves_growth_mutation_and_views() {
