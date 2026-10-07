@@ -278,7 +278,7 @@ class IdeClientController(
             is IdeCommand.GitVisible -> {
                 gitView = gitView.copy(visible = command.visible)
                 publishWorkspace()
-                if (command.visible) requestGit(GitOperation.Status)
+                if (command.visible && IdeBusyOperation.Git !in state.busy) requestGit(GitOperation.Status)
             }
 
             is IdeCommand.ScrollGit -> {
@@ -291,6 +291,16 @@ class IdeClientController(
                 gitCredentials = command.credentials
                 gitView = gitView.copy(authenticated = command.credentials != null)
                 publishWorkspace()
+                publishStatus(
+                    if (command.credentials ==
+                        null
+                    ) {
+                        "HTTPS credentials forgotten"
+                    } else {
+                        "HTTPS credentials set for this IDE session"
+                    },
+                    IdeProblemSeverity.Info,
+                )
             }
 
             IdeCommand.CancelGit -> {
@@ -759,7 +769,17 @@ class IdeClientController(
         latestProjectOperation = operationId
         restoreEditorState = null
         pendingFile = ProjectPath.file("src/main.kt")
-        state = state.copy(generation = generation, busy = setOf(IdeBusyOperation.Project), dialog = null)
+        state =
+            state.copy(
+                generation = generation,
+                busy =
+                    if (request is IdeProjectRequest.Clone) {
+                        setOf(IdeBusyOperation.Project, IdeBusyOperation.Clone)
+                    } else {
+                        setOf(IdeBusyOperation.Project)
+                    },
+                dialog = null,
+            )
         val requestGeneration = generation
         pendingGit = null
         gitCancellation?.cancel()
@@ -1439,6 +1459,10 @@ class IdeClientController(
         val cancellation =
             GitCancellation()
         gitCancellation = cancellation
+        if (operation == GitOperation.Pull || operation is GitOperation.SwitchBranch || operation is GitOperation.CreateBranch) {
+            invalidateUsages()
+            closeAnalysisFile()
+        }
         state = state.copy(busy = state.busy + IdeBusyOperation.Git)
         publishWorkspace()
         workspace.git(selected.handle, operation, gitCredentials, cancellation).whenComplete { result, failure ->
@@ -1472,7 +1496,7 @@ class IdeClientController(
     }
 
     private fun requestPoll() {
-        if (IdeBusyOperation.Git in state.busy) return
+        if (creatingProject || IdeBusyOperation.Git in state.busy) return
         val selected = project ?: return
         val requestGeneration = generation
         workspace.tree(selected.handle).whenComplete { loadedTree, failure ->
@@ -1835,6 +1859,7 @@ class IdeClientController(
         }
         gitView = IdeGitView(authenticated = gitCredentials != null)
         gitCancellation = null
+        refreshAnalysisAfterGit = false
         project = event.project
         catalog =
             if (catalog.any { it.directoryName == event.project.directoryName }) {
@@ -1843,7 +1868,7 @@ class IdeClientController(
                 catalog + event.project
             }
         tree = event.tree
-        state = state.copy(busy = state.busy - IdeBusyOperation.Project)
+        state = state.copy(busy = state.busy - IdeBusyOperation.Project - IdeBusyOperation.Clone)
         publishWorkspace()
         val restore = restoreEditorState?.file ?: pendingFile
         pendingFile = null
@@ -2031,6 +2056,7 @@ class IdeClientController(
     }
 
     private fun acceptPoll(event: IdeEvent.PollCompleted) {
+        if (creatingProject || IdeBusyOperation.Git in state.busy) return
         val previousSources = tree?.flatten()?.filter { it.path.isKotlinSource }?.map { it.path to it.revision }
         val nextSources =
             event.tree
@@ -2072,7 +2098,7 @@ class IdeClientController(
             IdeBusyOperation.Project !in state.busy
         ) {
             invalidateUsages()
-            analysisCoordinator?.reload(sourceOverlays())
+            if (refreshAnalysisAfterGit) editor?.let(::openAnalysis) else analysisCoordinator?.reload(sourceOverlays())
             refreshAnalysisAfterGit = false
         }
         publishWorkspace()
@@ -2240,6 +2266,7 @@ class IdeClientController(
 
     private fun acceptFailure(event: IdeEvent.Failed) {
         if (event.operation == IdeBusyOperation.Save) {
+            pendingGit = null
             documents.values.filter { it.saveInFlight != null }.forEach {
                 it.saveInFlight = null
                 it.lastEditMillis = clock.nowMillis()
@@ -2247,6 +2274,7 @@ class IdeClientController(
         }
         if (event.operation == IdeBusyOperation.Project && creatingProject) {
             creatingProject = false
+            state = state.copy(busy = state.busy - IdeBusyOperation.Clone)
             gitCancellation = null
             pendingFile = null
             pendingProjectCreation = null

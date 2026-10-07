@@ -24,4 +24,7 @@ dependencies {
     api(projects.ideCore)
     implementation(libs.jgit)
     testImplementation(kotlin("test"))
+    testImplementation(projects.ideClient)
+    testImplementation(projects.compilerClient)
+    testImplementation(projects.workerClient)
 }
