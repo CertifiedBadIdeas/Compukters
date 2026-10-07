@@ -13,418 +13,198 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.5.0 — In development
 
-This release expands the Kotlin available to computer programs and introduces support for independently installed
-addon mods, with optional Create, Sable and Propulsion integrations for Minecraft 1.21.1.
-
-- Guest Kotlin value classes can carry multiple primitive, reference and nested fields, with concrete
-  generic fields, member methods and interface bridges. Precompiled addons share these layouts with their
-  consumers; the IDE resolves their types and members. Method and constructor references preserve payloads
-  and execute constructor initializers. Direct locals and calls keep the payload in compact frames; `Any`, nullable
-  values, interfaces, collections, ordinary fields and lambda/task captures preserve nominal managed
-  identity. Structural equality, hashing and text preserve Kotlin floating semantics. These layouts require
-  Runtime ABI 1.15; existing scalar peripheral handles retain their direct ABI.
-
-- Guest Kotlin supports all twelve primitive scalar types, including `Byte`, `Short`, `UByte`, `UShort`,
-  `UInt` and `ULong`, with arithmetic, comparisons, conversions, increment/decrement and applicable bit operations.
-  Nullable signatures and nominal wrappers preserve source type through `Any?` casts. Unsigned division, comparisons
-  and decimal text preserve the full bit range. `Boolean.and/or/xor` and Char arithmetic are available.
-  All twelve primitive arrays support size and initializer constructors, factories, indexed access, direct iteration,
-  resizing and overlapping copies, with compact byte/short storage. `List`, `MutableList` and `ArrayList` specialize
-  all primitive element types with unboxed storage and nominal boxing for nullable and `Any` views. Generic and
-  collection floating equality preserve NaN and signed-zero behavior. Primitive integral ranges/progressions support
-  stored bounds, steps, iterators and safe termination at numeric limits; floating ranges use IEEE membership.
-  Signed narrow bit operations are available through `kotlin.experimental`. Platform classes with generic supertypes
-  share their canonical identity across source and compiled library code. The canonical `stdlib:core` moves to `1.9.0`.
-  The canonical `kotlin:builtins` library moves to `1.8.0`; the new unsigned forms require Runtime ABI 1.14.
-
-- Guest Kotlin supports inherited generic interface selection methods with typed predicates through concrete
-  implementations and parent interfaces, preserving short-circuiting and nullable results. Named objects and
-  companions retain one managed instance and can implement typed provider interfaces, including across addon bundles. Collection `first` throws `NoSuchElementException` on absent selection
-  while preserving selected null elements; `find` aliases `firstOrNull`. Ordinary classes and companions
-  can inherit a concrete specialization of an abstract generic class with interface parents.
-
-- Text displays, all Create devices and both Propulsion creative engine types expose `first`, `firstOrNull`,
-  `filter`, `all`, relative `at`/`atOrNull`, and `named`/`namedOrNull` through typed companion providers.
-  Provider values have a distinct IDE color
-  and a `P` completion badge; type references keep ordinary class presentation. Device wrappers remain scalar
-  value classes implementing `Peripheral`. The old acquisition helpers and separate side types are removed;
-  use typed providers and `compukter.peripheral.Side`. Create and Propulsion use addon API line `2.0`,
-  and the canonical `compukter:core` library moves to `2.0.0`.
-  The base owns bounded discovery snapshots and handle lifetime; SDK 0.5.0 lets addons register typed contracts
-  while keeping device operations in their own capabilities.
-
-- The documentation Wiki groups guides for players, developers and contributors, with expanding header navigation,
-  contextual sidebars and a shared addon catalog. Detailed project, Sable, Propulsion and dev-stand guides live on the
-  site; repository READMEs link to their canonical pages. Kotlin and other code examples use a syntax palette generated
-  from the in-game IDE colors.
-
-- First-party addons use independent two-part `x.y` versions: `x` identifies their API compatibility line and `y`
-  identifies compatible updates. Production JAR names also include the target Compukters major/minor line, and loader
-  metadata restricts the base mod to the build's minimum version within that line.
-
-- The base mod reports its product version to NeoForge so dependency ranges compare it independently of the
-  Minecraft/loader prefixes in archive names; development builds retain the snapshot suffix.
-
-- Optional **Compukters: Propulsion** adds named Creative Thruster and Creative Vector Thruster control through
-  direct face adjacency or peripheral cables: normalized Double throttle, local vector steering, absolute vector-engine
-  thrust in kN, saved ordinary-engine thrust percentage, typed state snapshots and read-only vector-engine mount geometry
-  for Guest control using construction-local computer-relative positions and neutral thrust direction.
-  Digital vector steering accepts fractional targets at upstream Float precision without redstone-level rounding;
-  ordinary Propulsion nozzle smoothing remains in effect.
-  One program owns control; stopping,
-  disconnection or computer removal clears digital throttle, steering and custom vector thrust and restores current
-  redstone/link inputs without a residual program shutdown envelope or a thrust spike during handoff.
-  Explicit close releases control early. Chunk saves and construction copies retain engine configuration without transferring a program's digital
-  command. The independent addon joins Create/Sable and the pinned Aeronautics/Propulsion runtime in the shared dev stand.
-
-- Ready VM results notify a coalesced server-thread handler, allowing completed world/addon calls to resume
-  within the same tick when instruction credit and the original deadline remain. Continued execution shares
-  per-tick host/advance limits and does not receive a fresh CPU allocation. Regular tick delivery remains the
-  fallback under load; stale notifications are ignored after shutdown.
-
-- Named peripherals can be accessed directly from any of the computer's six adjacent faces without a cable.
-  Direct and cable contacts share provider resolution, identity deduplication and ambiguous-name handling.
-
-- Ctrl+T in the computer terminal or IDE target terminal forcibly stops the foreground command and its nested
-  processes/tasks, releases peripheral control and returns to the shell without removing the computer or deleting files.
-  Terminal output is retained with normal scrolling. Held-key repeats are ignored, and Ctrl+T leaves an idle shell running.
-
-- Computer redstone inputs are isolated from passive conduction through the block: a powered lever on one face
-  no longer energizes a neighboring device on another face. Explicit weak and direct program outputs remain available.
-  Input levels sampled during asynchronous startup are retained until the VM is ready, including signals already
-  present before a program starts.
-
-- IDE Ctrl+/ toggles line comments for the current line or selection (`//` in Kotlin, `#` in TOML),
-  preserving indentation, selection direction and line endings as one Undo/Redo action.
-
-- IDE completion reuses a decoded addon-origin index for the attached target instead of decoding addon bundles
-  for every suggestion. Enabled-addon changes and target switches still update completion actions.
-
-- Server compiler packages and target metadata are prepared during world startup, before computers and terminal/IDE
-  requests can use them, moving first-use package extraction out of ordinary server ticks.
-
-- The Compukters Dokka API reference includes Compukters Core and the Create, Sable and Propulsion addons,
-  with a shared `Compukters` target name and source links for each module.
+This release expands Guest Kotlin, adds independently installed Create, Sable and Propulsion integrations for
+Minecraft 1.21.1, and improves the in-game IDE and computer runtime. Exact language and library boundaries are
+listed in [Kotlin support](developers/kotlin-support.md) and [standard library support](developers/stdlib-support.md).
 
 ### Guest Kotlin
 
-- Scalar value classes based on Int, Boolean and Char can be stored in lists and generic arrays, passed as Any,
-  and used as nullable values. Managed wrappers retain the nominal type between Guest code and precompiled addon
-  libraries; equality, hashCode, checked casts and toString preserve value-class semantics. They can implement
-  interfaces with methods, properties and inherited defaults, including concrete generic interface specializations.
-  Interface calls retain the same nominal wrapper across addon boundaries. Direct typed calls
-  remain unboxed. Creative Vector Thruster handles can be grouped with listOf and controlled through forEach.
-  Rebuild platform/addon bundles and Guest programs; the artifact format and native ABI are unchanged.
+- All twelve primitive types are supported: `Boolean`, `Char`, `Byte`, `Short`, `Int`, `Long`, `Float`, `Double`,
+  `UByte`, `UShort`, `UInt` and `ULong`. Applicable arithmetic, comparisons, conversions, increment/decrement,
+  bit operations, constants, text and console output retain their source semantics. Signed narrow bit operations
+  use `kotlin.experimental`; unsigned operations preserve the full numeric range. Nullable primitives retain
+  distinct nominal boxes through `Any?` and checked casts.
+- All twelve primitive array families support size and initializer constructors, factories, indexed access,
+  direct `for` iteration, resizing and overlapping `copyInto`. Byte/short arrays use compact storage. Supported
+  reference arrays provide factories, indexed access, nullable slots and bulk copies; aliases and array-to-`Any`
+  conversions preserve identity. Character arrays and strings preserve exact UTF-16 code units.
+- Integral and Char ranges/progressions support stored bounds, membership, iterators, `until`, `..<`, `downTo`
+  and positive steps, with safe termination at numeric limits. Direct Int loops retain allocation-free lowering.
+  Floating ranges use IEEE membership; Boolean ranges use comparable ordering.
+- Value classes support one or multiple immutable primitive, reference or nested fields and concrete generic
+  substitutions. Methods, interface bridges, destructuring, typed callbacks and method/constructor references
+  preserve their layouts. Constructor references execute initializers and checks. Direct locals and calls use
+  compact frames; nullable values, `Any`, interfaces, fields, collections and closure/task captures use nominal
+  managed boxes. Equality, hashing and text preserve structural value semantics, including NaN and signed zero.
+  Precompiled addon libraries and the IDE share the same nominal types and members.
+- Supported classes and interfaces provide instance methods, overrides, virtual/interface dispatch, mutable
+  properties, computed accessors, abstract properties and interface defaults, including `super<Interface>` calls.
+  Primary constructors evaluate explicit arguments and defaults in order, then class properties and `init` blocks.
+  Sealed interfaces, supported data classes and stateless enums participate in type branches and smart casts;
+  exhaustive `when` can return references without an explicit `else`.
+- Generic functions and supported generic classes/interfaces specialize concrete uses without erasing scalar
+  fields or calls. Named objects and companions retain a shared managed instance and can inherit specialized
+  abstract provider classes or generic interface defaults with typed predicates.
+- Supported function values can be passed, returned, stored and invoked without a JVM arity cutoff. Lambdas retain
+  immutable captures and share mutable capture cells across nested closures; captured variables that are never
+  reassigned avoid the extra cell. Top-level, bound/unbound method and constructor references retain dispatch and
+  supported constructor defaults. Top-level and extension `inline` functions support concrete generic callbacks
+  and non-local returns within bounded compiler expansion limits.
+- Supported nullable references and values provide null comparisons, Elvis and safe calls. Nullable value-class
+  assertions and safe casts recover their concrete layouts. Operations waiting for the world, a task or a channel
+  suspend ordinary functions transparently; Guest source does not use Kotlin `suspend`. `Tasks.sleepTicks(n)`
+  waits for server ticks while other runnable tasks continue without spending the sleeping task's instruction budget.
+- `throw`, `try`, typed `catch`, rethrow and `finally` preserve exception identity across calls and task suspension.
+  User subclasses retain nullable messages and causes. Preconditions use catchable exceptions with lazy messages;
+  arithmetic, bounds, null/cast and host I/O failures are catchable. Cancellation, quotas and VM faults remain terminal.
+- `equals`, `==`, `!=`, `hashCode`, `toString`, interpolation and concatenation honor supported value semantics
+  and virtual overrides across compiled libraries. Data-class constructor properties participate in generated
+  equality/hashing; array equality remains identity-based. Reference identity comparisons preserve aliases,
+  and default object text/hash use stable live VM identity.
 
-- Addon resources now belong to individual Guest programs: completion releases their devices while suspended
-  parent programs retain theirs. Native transports require bundled C ABI 20.
+### Standard library
 
-- Guest compilation with addons selects the canonical owner of collection specializations even when an addon bundle
-  contains a pruned dependency copy. Conflicting standalone owners remain rejected.
+- `List`, `MutableList` and `ArrayList` support all twelve primitive element types, nullable elements, references
+  and value classes. Non-null primitive storage remains unboxed; nullable and universal views use nominal boxes
+  without copying the list. Floating collection equality equates NaNs and distinguishes signed zeros.
+- Lists support factories, indexed reads, growth, insertion, replacement, removal, clearing and mutable iterators.
+  Read-only views share the underlying object. Structural mutations invalidate iterators; indexed replacement does not.
+  Searches, membership and `any`/`all`/`none` work on supported iterables, including user-defined implementations.
+- Selection includes `first`, `firstOrNull`, `lastOrNull`, `find` and `getOrNull`, with the documented predicate
+  overloads. Strict `first` throws `NoSuchElementException` only when selection is absent, preserving a selected
+  null element. `fold` specializes element and accumulator types independently.
+- `map`, `filter`, `mapNotNull` and `filterNotNull` preserve traversal order and supported values. `map` on a
+  statically typed collection reserves its known size; `mapNotNull` avoids an intermediate list. `mapTo`,
+  `filterTo` and `mapNotNullTo` append to reusable destinations and return the same collection.
+- Scope functions `let`, `run`, `with`, `apply`, `also`, `takeIf` and `takeUnless`, iterable `forEach` /
+  `forEachIndexed`, and indexed `repeat` support inline callbacks and non-local returns from direct lambdas.
+- Strings provide UTF-16 ordering, search, Char/backward search, blank checks, Unicode-whitespace trimming,
+  delimiter extraction with fallback, prefix/suffix removal, limited Char/String splitting, CRLF/LF/CR line splitting,
+  and case-sensitive replacement. Splitting retains empty parts; replacement checks output-length overflow.
+  `String.toIntOrNull()` parses optional-sign decimal input and returns null for invalid or overflowing values.
+- Guest libraries combine precompiled ordinary implementations with generic/inline source bodies while preserving
+  visibility. Programs and dependent libraries reuse canonical concrete specializations, including those appearing
+  in addon dependency fragments; conflicting owners are rejected. Helpers, ranges and collections belong to
+  `stdlib:core`; computer environment APIs belong to `compukter:core`, with Kotlin packages and imports retained.
 
-- Generated addon handlers can return Long, Double, Char and bounded immutable nested data records. The SDK
-  generates typed host DTOs and validates the record shape; the VM copies and materializes responses under its
-  existing budgets. Double IEEE bits and UTF-16 code units are preserved. Structured responses require
-  Runtime ABI 1.13 and the bundled native C ABI 20; rebuild addon bundles and Guest programs.
+<a id="addons-create-and-sable"></a>
 
-- Programs can use Double with F64 arithmetic, mixed numeric operations, conversions, constants,
-  nullable and generic values, console/text output, equality and hashCode. DoubleArray stores F64 elements
-  without boxing and supports indexed access, iteration and copying. Double text and hashing require
-  Runtime ABI 1.12; rebuild platform bundles, programs and compiled libraries.
+### Addons and peripherals
 
-- Programs can throw and catch exceptions through nested calls, match user-defined exception subclasses,
-  rethrow the original object, and read nullable `message` and `cause`. `finally` runs on normal and exceptional
-  exits, returns and supported loop/inline exits. Uncaught exceptions report their class,
-  message and bounded source stack.
-  `require`, `check` and `error` use catchable exceptions, with stdlib-compatible lazy `() -> Any` messages for the preconditions.
-  Integer division/remainder, array and string bounds, negative array sizes, null references and checked casts
-  throw typed catchable exceptions. Invalid channel arguments are catchable; resource exhaustion remains terminal.
-  Ordinary host EOF/I/O and unavailable-operation failures are catchable as IOException and IllegalStateException,
-  including across task suspension and filesystem reads; cancellation and VM resource failures remain terminal.
-  Standard exception descendants and `compukter.io.IOException` use ordinary library constructors,
-  preserving nullable causes through superclass calls. Platform bundles and standalone modules need rebuilding
-  for bundle format 9 / module format 5.
-  Exhaustive `when` can return references without an explicit `else`.
-
-- `toString()`, string templates and string concatenation support scalar, String, Unit, nullable and `Any`
-  values, with virtual user-defined and inherited overrides across compiled libraries. Default object and array
-  text includes the qualified runtime type and stable VM identity. Supported scalars can pass through `Any`
-  with value equality and checked casts. Lazy assertion messages run and convert only on failure;
-  exceptions from their bodies or `toString` remain catchable.
-- `hashCode()` supports scalars, UTF-16 strings, nullable and `Any` values, with virtual user-defined and inherited
-  overrides across compiled libraries. Default object and array hashes retain their identity across GC;
-  supported data-class properties receive generated value hashing. Null hashes to zero, and boxed Float hashing
-  agrees with value equality for NaN and signed zero. Rebuild programs and libraries for Runtime ABI 1.11.
-
-- `equals`, `==` and `!=` use virtual value equality across compiled libraries, including custom/inherited and
-  superclass implementations. Data classes compare nullable, object, Float and Double constructor properties;
-  array properties retain reference equality. Receiver/argument effects run once and exceptions remain catchable.
-  The shared equality/hashCode contract reuses Runtime ABI 1.11; compiled libraries need rebuilding.
-
-- Reference identity comparisons (`===`/`!==`) compare supported arrays and nullable references directly,
-  preserving aliases and distinguishing fresh copies without artificial casts to `Any`.
-  Supported arrays can also pass through `Any` and `Any?` without copying or boxing, preserving their runtime
-  type for type tests and reverse casts. Previously compiled libraries containing arrays need rebuilding for
-  these conversions.
-
-- Programs can copy supported arrays with public `copyOf` and `copyInto`, including resizing, null/zero padding,
-  and overlapping ranges. Native bulk copying respects execution budgets without temporary buffers; `ArrayList`
-  growth uses the same APIs. Platform bundle/module formats now preserve receiver-dependent default arguments;
-  independently packaged Guest platform modules need rebuilding.
-
-- OOM, Guest traps and VM faults include bounded call stacks with source files, lines and columns in normal builds,
-  preserving library frames and nested user callers. Older programs fall back to UTF-16 or bytecode positions; a
-  foreground child failure returns control to the shell.
-
-- Guest libraries can combine precompiled ordinary implementations with generic and inline source bodies in one
-  module, preserving private and internal visibility and avoiding duplicate ordinary implementations. Core helpers,
-  scope functions, `repeat`, ranges and collections share one `stdlib:core` module without making its ordinary
-  implementations source-only.
-- Concrete generic types materialized by ordinary library implementations can be reused by programs and dependent
-  libraries, sharing their constructors, fields and methods without duplicating nominal types. New concrete variants
-  continue to specialize from source templates.
-- Runtime and environment APIs share one `compukter:core` module: compiler, processes, terminal, filesystem,
-  cooperative tasks/channels, redstone, sound and displays. Kotlin packages and imports remain unchanged; addons
-  depending on the removed split-module IDs need to rebuild against the consolidated owners.
-- Programs can use the standard `let`, `run`, `with`, `apply`, `also`, `takeIf`, and `takeUnless` scope functions
-  with inline lambdas, including supported nullable receivers and non-local returns.
-- Programs can traverse Guest iterables with `forEach` and `forEachIndexed`, or run an indexed action with `repeat`,
-  using inline callbacks and non-local returns.
-
-- Newly compiled programs reuse memory for temporary values with nonoverlapping lifetimes, reducing execution frame
-  requirements while preserving types, GC roots and suspended calls.
-- Managed allocations can reuse fitting contiguous free blocks even within partial allocator size classes;
-  post-GC retries retain bounded execution without rejecting a block solely because of size-class rounding.
-
-- Programs can declare supported top-level and extension `inline` functions, including concrete generic callbacks
-  and non-local returns. Direct callbacks can avoid closure allocation; stored or escaping callbacks retain managed
-  ownership. Callback-taking collection extensions also inline direct lambdas and support non-local returns.
-  Expansion has compiler safety limits.
-
-- Captured local `var` values that are never reassigned use direct closure fields, avoiding an extra heap cell
-  while preserving shared state for mutable captures.
-
-- Programs can reuse mutable collection buffers through `mapTo`, `filterTo` and `mapNotNullTo`, which append
-  to the supplied destination and return it.
-
-- Programs can use `mapNotNull` to transform and retain non-null results in one pass without an intermediate list.
-
-- `map` on supported lists and statically typed collections reserves the input size for its result, reducing
-  temporary backing arrays and peak heap use while preserving iteration order and element identity.
-- Programs can search strings by UTF-16 code unit with `startsWith`, `endsWith`, `contains`, and `indexOf`, including
-  an optional starting index for `indexOf`, and parse decimal input with `String.toIntOrNull()`.
-- String helpers include Unicode-whitespace blank checks and trimming, Char search and backward `lastIndexOf`,
-  delimiter-based substring extraction with optional fallback, prefix/suffix removal, Char/String splitting with
-  limits, CRLF/LF/CR line splitting, and case-sensitive Char/String replacement. Splitting retains empty parts;
-  replacement checks output-length overflow and avoids repeated string concatenation. Completion and hover resolve
-  the concrete overload signatures and their documentation.
-- Programs can use nullable strings and supported class references, compare them with `null`, and use `?:` or
-  reference-result `?.` without evaluating the unused branch. Nullable `Int` values use managed boxes, support equality
-  and Elvis, and allow Int-result safe calls such as `text?.length`. Other nullable primitives remain unsupported.
-- Programs can use direct generic functions and final generic classes with typed constructor fields and direct methods.
-  The compiler specializes each concrete use, retaining unboxed non-null scalar fields and calls. Source-only generic
-  library modules, including classes with methods, can be specialized in a consuming program.
-- Programs can create `Array<T>` values for supported non-null Guest classes with `arrayOf` and `emptyArray`, then read
-  or replace elements by index. Concrete uses inside specialized generic functions retain their element types. Mixed
-  `Array<Any>` values can hold `Int`, strings, and supported objects; `Int` values are boxed when stored.
-- Programs can create read-only `List<T>` views of fresh `ArrayList<T>` instances with `listOf` and `emptyList`, read
-  `size` and indexed elements, and iterate with `for`. Read-only views can be cast to `MutableList<T>` or `ArrayList<T>`
-  to modify the same object; factory lists use the same index validation and iterator mutation checks as other
-  `ArrayList` values. Supported elements include `Int`, `String`, Guest class references, and their nullable forms; `List<Int>`
-  keeps unboxed storage and typed reads, while `List<Int?>` stores boxes or null. Lists can widen to `List<Any?>`
-  while preserving null, element references, and value searches. A `List<Int>` can also be used as `List<Any>` without copying the list; reads
-  through that view produce boxed `Int` values that can be checked with `is Int` and cast back with `as Int`. Supported
-  reference lists also widen to `List<Any>` while retaining their element references. Programs can construct a mixed
-  `List<Any>` directly from `Int`, strings, and supported objects; its `Int` elements are boxed when the list is built.
-  Values held as `Any` can be compared with `==` or `equals`: boxed `Int` compares by value, strings by content,
-  supported data classes compare their constructor properties, and Guest classes honor explicit `equals` overrides.
-  Other classes use default identity equality. Read-only collections expose `size`, `isEmpty`, `isNotEmpty`, and
-  `contains` / `in`; lists provide `indexOf` and `lastIndexOf` as indexed methods. General `Iterable<T>` values
-  support `contains`, `indexOf`, `lastIndexOf`, and `any`, `all`, `none` with predicates, including user-defined iterables.
-  `firstOrNull` and `lastOrNull` select elements with optional predicates; `List.getOrNull` returns null for invalid
-  indexes. These operations support nullable elements and `Int?` results. `Iterable.fold` accumulates in iteration
-  order with independent element and accumulator types, including nullable values and Guest class accumulators.
-  `Iterable.map` transforms elements into a new list in iteration order, supporting independent input/output types,
-  nullable values, and Guest classes. `Iterable.filter` selects matching elements into a new list while preserving
-  order, duplicates, nullable types, and stored references. `Iterable.filterNotNull` removes nulls and returns a list
-  with non-null elements, including unboxed `Int` results from `Int?` inputs. Library lists also support read-only
-  nullable element views without copying their storage.
-- Guest programs can create `ArrayList<T>` and use it through `MutableList<T>` to add, insert, replace, remove, and
-  clear elements, including removal through mutable iterators. Lists grow within VM memory quotas, use unboxed `Int`
-  storage, support nullable elements, and share changes with read-only list views. `arrayOfNulls<T>(size)` creates
-  null-filled arrays for supported element types.
-- Computer programs can use unboxed `Long` and `Float` values, including mixed numeric arithmetic and comparisons,
-  direct `compareTo` calls between `Int` and `Long`, explicit conversions, `Long` bitwise and shift operations,
-  constants, string interpolation, and console output.
-- `Float` values retain their binary32 representation through arithmetic, equality, host responses, and conversion to
-  text, including signed zero, infinities, NaN, and subnormal values. Direct `compareTo` calls with `Float`, `Int`, or
-  `Long` use Kotlin's total order for NaN and signed zero.
-- Strings support direct `compareTo` calls and `<`, `<=`, `>`, `>=` operators using UTF-16 lexicographic order.
-- `Char.compareTo` returns the UTF-16 code-unit difference; `Boolean.compareTo` and Boolean ordering operators use
-  `false < true`.
-- Operations that wait for the world, another task, or a channel now block transparently inside ordinary functions;
-  source-level `suspend` declarations are not part of the supported Guest Kotlin subset.
-- `Tasks.sleepTicks(n)` lets a program pace world interactions by server ticks while other Guest tasks continue and
-  without spending its instruction budget during the wait.
-- Guest classes and interfaces support ordinary non-suspending instance methods, overrides, and runtime class or
-  interface dispatch. Primary-constructor `var` properties can be assigned through object references and instance
-  methods; aliases observe the updated field. Class-body properties and `init` blocks run in source order after the
-  superclass initializer on the same object, including construction through a constructor reference. Primary
-  constructors can use Guest expressions for default arguments in ordinary calls, including values derived from
-  earlier parameters; explicit arguments run before omitted defaults. Computed class
-  properties and custom getters/setters can read or update backing fields and dispatch through base-class references.
-  Abstract class and interface `val`/`var` properties dispatch to concrete implementations without storing fields in
-  their abstract declarations. Interfaces can also provide default method bodies and computed property accessors;
-  classes inherit them unless they override the member. An override can call a chosen interface implementation with
-  `super<Interface>`, including methods inherited by that interface.
-- Guest programs can use sealed interfaces, data class values, and stateless enums for type branches, property reads,
-  and enum identity comparisons.
-- `Int` `for` loops support `downTo` and positive `step`, including dynamic steps and integer boundary values.
-- `IntArray` values can be traversed directly with `for`, including empty arrays and in-loop element updates.
-- Non-null function values with Guest-supported parameter and result types can be passed, returned, stored locally,
-  and invoked without a fixed two-argument or JVM 22/23 cut-off. Function-value aliases preserve referential identity
-  comparisons. Lambdas use ordinary managed closure objects, preserve reference aliasing for immutable captures, and share mutations through unboxed
-  typed cells when local `var` values are captured, including across nested lambdas. `Tasks.launch` accepts
-  `() -> Unit` values as bounded cooperative tasks. Unbound references to Guest top-level functions can be passed,
-  returned, stored, and invoked as typed function values. Bound Guest instance-method references retain their receiver
-  and preserve virtual and interface dispatch. Unbound `Type::method` references accept the receiver as their first
-  argument and use the same dispatch. References to supported Guest class constructors can also be passed, returned,
-  stored, and invoked as typed function values, including references adapted to omit supported trailing constructor
-  defaults.
-
-### Addons, Create and Sable
-
-- Independently installed addon mods can provide typed Guest Kotlin APIs without becoming dependencies of Compukters.
-  An independently versioned Gradle SDK generates their stable ABI lock, typed host contract, capability schema,
-  bindings and packaged Guest API bundle from Kotlin declarations; addon authors do not maintain numeric operation IDs
-  or wire decoding. Its Minecraft-independent host API and thin version-specific NeoForge adapter remain compile-only,
-  so ordinary Compukters releases do not force an SDK version update or expose implementation classes. The compiler
-  and IDE expose only the addons available on the attached server.
-- Addon projects register one atomic Guest API by addon ID; its version defaults to the addon's Gradle project version,
-  while platform dependencies and capability wiring remain internal. Compukters projects list only addon IDs in
-  `compukter.toml`, with exact versions and hashes retained in `compukter.lock`.
-  The computer's `kotlinc` command uses the same full module identities advertised by the server for addon compilation.
-  IDE compilation includes only the project's selected addon modules and their matching API bundles when several
-  addons are installed together.
-- The separately installed Create addon supports Create 6.0.x on Minecraft 1.21.1 while the base Compukters mod remains
-  usable without Create.
-- The independent Sable addon exposes `sable.physics.Physics.snapshot()` for computers on constructions. One request
-  returns a typed copy of identity, dimension, world tick, paused state, logical pose and solver velocities using
-  Double values. Unavailable constructions throw a catchable IllegalStateException. Observation runs only on request
-  and retains the existing VM cadence and budget.
-- Added passive peripheral cables for orthogonal, branching and looping connections between computers and supported
-  addon devices. Their thin model follows the actual connections in all six directions. Cables discover loaded chunks
-  only and do not require adapters or a controller block.
-- Added a one-block text display to the base mod. Guest programs can address it beside the computer or by name over
-  peripheral cables, write to an independent 20x10 grid, and clear it. One computer controls a display at a time; the
-  screen clears when its writer stops or disconnects.
-- Added a Peripheral Configurator editor that opens on supported devices and inspects their bounded cable network. It
-  reports available and duplicate names before assignment, while using it on a cable opens a read-only list of every
-  connected device and its name when assigned. The server rejects stale or conflicting changes; Shift-use clears a
-  name. The configurator item remains unnamed, while device names persist with the world independently of computers
-  and cable topology.
-- The `create` addon reads exact `Float` speed, stress, and capacity values from adjacent or named cable-connected
-  speedometers and stressometers, waits for value changes without Guest-side polling, and controls rotation speed
-  controllers.
-- The `create` addon also exposes adjacent or named Stock Tickers. Computer programs can search bounded stock snapshots
-  by item ID, distinguish exact item variants, and request packaging to an address; acceptance is reported without
-  implying delivery.
-- The `create` addon monitors active steam boilers through any Fluid Tank segment, reporting sampled water supply in
-  mB/t, the water gauge level, active heat, effective boiler level, and passive heating.
-  Named discovery follows boiler activation changes even when a changed steam engine does not touch the cable.
-- Device handles remain bound to the exact acquired block, and named handles expire when their cable path disconnects.
-  Missing, disconnected, unloaded, removed, or replaced devices fail deterministically and produce a descriptive
-  terminal diagnostic.
-- Addon SDK 0.4.0 uses platform ABI 3; addon bundles must be rebuilt against the new base platform. It lets
-  independent addons map a cable touching any supported block or multiblock part to one canonical
-  logical device, validate retained handles against current reachability, and preserve the existing adjacent-side
-  registration API.
+- Independent addon mods expose typed Guest APIs through a Gradle SDK that generates ABI locks, host contracts,
+  capability schemas, bindings and Guest bundles. The host API and thin NeoForge adapters are compile-only;
+  workers consume admitted metadata/source data without loading addon implementation code. Projects select addon
+  IDs in `compukter.toml`; `compukter.lock` retains exact versions and hashes. IDE compilation activates only the
+  selected addons and their matching bundles.
+- First-party addons use independent `x.y` versions: `x` identifies the API compatibility line and `y` a compatible
+  update. Production JAR names also carry the target Compukters major/minor line; loader metadata restricts the
+  base mod to the build's minimum version within that line. NeoForge sees the base product version independently
+  of Minecraft/loader archive prefixes, with snapshot suffixes retained in development builds.
+- Passive peripheral cables support orthogonal, branching and looping connections across loaded chunks without
+  loading additional chunks. Direct contacts on all six computer faces and cable contacts share logical identity,
+  deduplication and ambiguous-name handling. The Peripheral Configurator edits persistent world-owned device names,
+  reports duplicates, inspects cable networks and rejects stale changes; Shift-use clears a name.
+- Text displays, Create devices and Propulsion creative engines use typed companion providers with `first`,
+  `firstOrNull`, `filter`, `all`, `at`/`atOrNull` and `named`/`namedOrNull`. Handles remain bound to exact devices;
+  replacement or loss of reachability cannot silently redirect them. Addons register typed discovery contracts
+  while retaining ownership of their device operations.
+- The base text display provides an independent 20x10 grid with an exclusive writer. Programs acquire it by side,
+  typed discovery or name, write text and clear it; the screen clears when its writer stops or disconnects.
+- The optional Create addon supports Create 6.0.x on Minecraft 1.21.1. Speedometers and stressometers report exact
+  Float values and wait for changes; rotation controllers set speed. Stock Tickers expose bounded stock snapshots,
+  exact item variants and packaging requests whose acceptance does not imply delivery. Active steam boilers are
+  discoverable through tank segments and report water supply, gauge level, heat, effective level and passive heating.
+- The optional Sable addon provides `sable.physics.Physics.snapshot()` for construction-mounted computers,
+  returning typed identity, dimension, world tick, paused state, logical pose and solver velocities as one bounded
+  observation. Unavailable constructions throw `IllegalStateException`; observations retain ordinary VM cadence.
+- The optional Propulsion addon controls Creative Thrusters and Creative Vector Thrusters: normalized Double
+  throttle, local steering, absolute vector thrust in kN, ordinary-engine thrust percentage, typed snapshots and
+  computer-relative construction-local mount geometry. Fractional steering retains upstream Float precision
+  and normal nozzle smoothing. One program owns writes; close, completion, disconnection or removal releases control
+  and restores current redstone/link inputs. Saves and construction copies retain engine configuration without
+  transferring program commands or leaving a residual throttle/steering envelope.
+- Addon resources belong to individual programs: an exiting child releases its hosts while suspended parents retain
+  theirs. Computer shutdown closes every scope and rejects late responses. Generated handlers support Long,
+  Double, Char and bounded immutable nested data-record results, preserving IEEE bits and UTF-16 code units;
+  the VM validates and materializes records under existing execution and allocation budgets.
 
 ### In-game IDE
 
-- The editor subtly highlights the current line beneath selections and occurrence marks, independently of caret blinking.
-- Returning to a project file preserves its caret, viewport and undo history within a bounded document cache.
-- `Alt+F7` opens semantic Find Usages with file/line context, clickable results and keyboard navigation; source edits invalidate stale results.
-- IDE problems have clickable source locations, severity markers beside line numbers, error/warning counts in the
-  status bar, and cyclic `F2` / `Shift+F2` navigation. Build locations require matching source text before navigation;
-  outdated messages remain visible without applying stale offsets.
-- Method declarations show clickable non-zero project usage counts on the same line, distinguishing overloads and
-  unrelated same-named methods. Counts remain visible during analysis of edits that leave the method name untouched.
-- `Shift+F6` safely renames project symbols across Kotlin files, including unopened files and unsaved buffers.
-  K2 checks name collisions and reference resolution before applying one undoable edit; `Ctrl+Z` and redo cover
-  every affected file. Library symbols, the `main` entry point and inheritance/convention-based declarations remain
-  read-only for this action, and projects must have no analysis errors.
-- Placing the text caret on an analyzed Kotlin identifier highlights its declaration and references in the current project file,
-  distinguishing overloads and unrelated same-named symbols, including references inside string interpolation.
-  Typing hides symbol occurrences until the cursor is explicitly placed or moved again, preventing highlights from
-  appearing or flashing during text entry.
-  Selecting text highlights its literal occurrences everywhere: from two characters inside strings and from three
-  elsewhere, also in read-only files. Symbol occurrences do not wait for hover and are independent of mouse movement.
-  Explicit Ctrl+F results take priority while search is open.
-- Ctrl+F searches the current file with literal, case-sensitive matching, highlighted results and a match counter.
-  Enter/Shift+Enter cycle through results; Escape closes search. Search also supports read-only computer and API files.
-- IDE panels use contrasting dark surfaces, wider draggable dividers and soft shadows on popups. Automatic IDE
-  scaling is one step smaller (minimum 2), leaving more space for code without changing terminal scaling.
-- The code editor, completion list, hover information, terminal windows and in-world text displays use
-  bundled JetBrains Mono without ligatures. The terminal keeps its 51x19 grid; bitmap fonts and the font
-  selector are removed, and old font preferences no longer affect rendering. Editor line spacing is 1.2;
-  terminal cells retain their dimensions. Both Minecraft targets use linear texture filtering for this font
-  without changing the standard Minecraft UI font.
-- Member completion includes the supported operations of built-in Guest Kotlin numeric types.
-- Function completion inserts call parentheses or a trailing lambda block and places the caret at the first
-  required input. Existing delimiters are reused; autoimports and caret placement undo and redo together.
-  Functions with a single lambda argument show a brace signature with the argument name and function type,
-  omitting names of parameters inside the lambda type.
-  Completion rows use colored F/M/V/C/I kind badges, show receiver and package context beside callable signatures,
-  and align receiver-specialized return types in a separate right-hand column, including scope functions
-  such as `also` and `apply` immediately after typing a receiver's dot or safe-call operator,
-  on literals and in generic call chains. Independent lambda-result types remain symbolic until known.
-  Identifier completion supports case-insensitive contiguous word-fragment and CamelCase matching, including autoimports;
-  direct prefixes rank first, without fuzzy typo correction or arbitrary letter skipping inside words.
-  Completion highlights the matching name fragments without changing aligned return types. Hover shows wrapped KDoc
-  from resolved project declarations and attached library sources beneath signatures and types, with bounded popup height.
-  Diagnostic passes pause during completion while semantic analysis continues; existing unrelated problems remain
-  visible and diagnostics resume for the current text when completion ends.
-  Enter inside an empty lambda adds an indented body line and moves its closing brace to a separate line.
-  Typing a function declaration name does not open automatic completion; explicit completion remains available.
-- Completion suggests visible variables in string interpolation immediately after `$` and while typing the name.
-- Completion, automatic imports, parameter information, and source navigation include compatible APIs supplied by
-  installed addons. Selecting `Kinetics` or `Logistics` also enables the `create` addon for the project.
+- File switches preserve caret, viewport and undo history in a bounded document cache. The editor highlights the
+  current line and uses contrasting panels, draggable dividers and popup shadows; automatic IDE scaling leaves
+  more room for code without changing terminal scaling.
+- `Alt+F7` opens semantic Find Usages with navigable context. Clickable problems, gutter markers, status counts
+  and `F2` / `Shift+F2` navigation use matching source text and reject stale locations. Method declarations show
+  non-zero project usage counts that distinguish overloads and remain stable during unrelated edits.
+- `Shift+F6` renames supported project symbols across files and unsaved buffers after K2 checks collisions and
+  bindings. The change is undoable across affected files; library symbols, `main` and unsupported convention or
+  inheritance declarations remain outside this action.
+- Caret placement highlights resolved declarations/references, including interpolation; typing hides semantic
+  occurrence marks until the caret is explicitly moved. Text selection highlights literal occurrences, while
+  `Ctrl+F` provides case-sensitive search, a counter and Enter/Shift+Enter navigation in writable or read-only files.
+- `Ctrl+/` toggles Kotlin/TOML line comments while preserving indentation, selection and line endings in one
+  undoable edit. Enter inside an empty lambda expands an indented body and moves the closing brace.
+- Completion supports built-in numeric members, receiver-specialized signatures, package context and aligned
+  return types, including safe-call and literal receivers. Call insertion reuses delimiters, chooses parentheses
+  or a trailing lambda, and places the caret at the first required input; imports and caret placement undo together.
+- Identifier matching supports case-insensitive word fragments and CamelCase with prefix ranking and highlighted
+  matches. Interpolation suggests visible variables after `$`. Hover shows bounded KDoc from project and attached
+  library declarations. Completion temporarily pauses diagnostic passes while retaining unrelated problems.
+- Peripheral provider values use a dedicated color and `P` completion badge; device type references retain class
+  presentation. Installed-addon APIs participate in completion, imports, parameter information and navigation;
+  choosing an inactive addon API enables that addon. A reused addon-origin index avoids decoding bundles for each suggestion.
+- The editor, completion, hover, terminals and text displays use bundled JetBrains Mono without ligatures.
+  Editor line spacing is 1.2; terminals retain the 51x19 grid. Both Minecraft targets use linear font filtering.
+  Bitmap-font selection is removed and old preferences no longer affect rendering.
 
 ### Computer runtime
 
-- Managed object type lookup and virtual/interface method lookup use precomputed VM image tables,
-  reducing interpreter overhead in measured collection and loop workloads while preserving Guest execution budgets.
+- `Ctrl+T` in a computer or IDE target terminal stops the foreground command and its nested processes/tasks,
+  releases peripheral control and returns to the shell while retaining output and files. Repeats are ignored;
+  an idle shell remains running.
+- Redstone inputs are isolated from passive conduction through the chassis. Explicit weak/direct outputs remain
+  available, and input sampled during asynchronous startup is retained until the VM can receive it.
+- Ready VM results notify a coalesced server-thread handler. Eligible world/addon completions can resume within
+  the same tick using remaining instruction credit, the original deadline and cumulative per-tick limits.
+  Regular tick delivery remains the fallback; shutdown invalidates stale notifications.
+- Runnable computers share calibrated server-wide instruction capacity with rotating reservations under overload.
+  Waiting computers rejoin after input or completion; `vmbench status` reports capacity and throttling counters.
+  Runtime epochs remain unique across block-entity replacement, even when `ComputerId` is retained.
+- Compiler packages and target metadata are prepared during world startup, keeping extraction out of ordinary
+  computer ticks. Precomputed type/dispatch tables, compact object headers, temporary-frame reuse and direct
+  immutable captures reduce runtime overhead and memory use. The allocator reuses fitting free blocks without
+  rejecting them solely because of size-class rounding.
+- OOM, Guest traps, VM faults and uncaught exceptions include bounded source stacks with library and user frames.
+  Heap exhaustion also reports the executable, heap limit, allocation size, usage and GC status before returning
+  control to the shell. Older artifacts fall back to available UTF-16 or bytecode positions.
 
-- Runtime attachment epochs remain unique when a computer block entity is replaced while preserving its
-  ComputerId, preventing an old actor address from matching the new runtime.
+<a id="build-tooling"></a>
 
-- Foreground programs that exhaust their Guest heap report the executable path, heap limit, allocation size,
-  memory usage and GC status before returning control to the shell. Verified debug metadata supplies the source
-  path and UTF-16 offset when available; otherwise diagnostics identify the function and bytecode location.
+### Documentation and build tooling
 
-- Small Guest Kotlin objects use less heap through a compact eight-byte VM header and eight-byte block alignment.
-  Empty, one-`Int`, and two-`Int` objects, including boxed `Int` values, occupy 16 bytes in the 256 KiB Guest heap;
-  three-`Int` objects occupy 24 bytes. Ordinary references, shared mutations, and identity are preserved. In
-  measured 4096-record workloads, deep copies and transformations retaining their input fit that heap.
-- Active computers now share a calibrated server-wide Guest instruction capacity each tick. Reservations rotate
-  fairly between computers under overload, while waiting computers leave the runnable pool until input or a world
-  completion wakes them. Server operators can inspect the capacity and throttling counters with `vmbench status`.
+- The Wiki separates players, developers and contributors, with expanding header navigation, contextual sidebars
+  and a shared addon catalog. README content and project/addon/dev-stand guides live on canonical site pages.
+  Architecture, Kotlin and stdlib references now have short indexes and focused topic pages, with shared routing
+  for contributors and agents. Syntax colors are generated from the in-game IDE palette.
+- The Dokka reference includes core, Create, Sable and Propulsion APIs, with shared target naming and source links.
+  Its independent Gradle project lives in `api-build/`.
+- `addons/dev` runs the first-party addons with Aeronautics, Simulated, Offroad and Propulsion: Simulated using
+  workspace SDK/platform inputs. The independent Create GameTest server covers kinetics, boilers, naming,
+  reconnects and stale handles without introducing Create into base-mod tests.
+- Runtime and NeoForge dependencies are updated within the existing Minecraft 1.21.1 and 26.1.2 targets.
+  Tomlj 2.1.1 carries its private ANTLR runtime; Kotlin remains pinned at 2.4.10. Main, addon and API-documentation
+  wrappers use Gradle 9.8.0; documentation CI uses JDK 27 while production toolchains remain Java 21 and 25.
 
-### Build tooling
+### Upgrade notes
 
-- Contributors can launch and test the independent Create and Sable addons together with Aeronautics, Simulated,
-  Offroad and Propulsion: Simulated from `addons/dev`. The stand uses
-  the current workspace SDK and platform bundle and produces no distributable umbrella mod.
-
-- The standalone Create addon has an independent GameTest server for real kinetic devices and boilers, exercising
-  Guest programs, peripheral naming, cable reconnection and stale handles without adding Create to base-mod tests.
-- Runtime dependencies and NeoForge are updated within the existing Minecraft 1.21.1 and 26.1.2 targets;
-  Tomlj 2.1.1 now carries its own private ANTLR runtime instead of a separate JAR. Kotlin remains pinned at 2.4.10.
-- Main, Create addon and API documentation Gradle wrappers use 9.8.0, which supports running Gradle on JDK 27.
-  Compilation toolchains and JVM targets remain unchanged at Java 21 and 25.
-- Documentation CI runs on Temurin JDK 27.
-- The independent API documentation Gradle project lives at the repository root in `api-build/`.
+- Rebuild Guest programs and compiled platform/addon libraries for the updated platform. MFVC inline layouts
+  require Runtime ABI 1.15; unsigned operations and compact primitive storage require 1.14, and structured host
+  results require 1.13. Native transports expect C ABI 20. Base bundles/modules use formats 9/5 and platform ABI 3.
+- The built-in libraries are `kotlin:builtins` 1.8.0, `stdlib:core` 1.9.0 and `compukter:core` 2.0.0.
+  Addons depending on removed split-module IDs must rebuild against the consolidated owners.
+- Legacy display/Create/Propulsion acquisition helpers and separate side types are removed. Use typed device
+  providers and `compukter.peripheral.Side`. Create and Propulsion use addon API line 2.0; the typed-contract
+  registration SDK is 0.5.0.
 
 ## 0.4.0 — 2026-09-12
 
@@ -432,12 +212,6 @@ This release makes the integrated multi-file Kotlin IDE available on both suppor
 21 / NeoForge 1.21.1 build, and moves computer execution onto the bounded asynchronous Runtime 0.12 architecture.
 
 ### Guest Kotlin
-
-- Guest compilation with addons selects the canonical owner of collection specializations even when an addon bundle
-  contains a pruned dependency copy. Conflicting standalone owners remain rejected.
-
-- Generated addon handlers can return Long, Double and Char, preserving Double IEEE bits and exact UTF-16 code units
-  through both native transports. This requires the bundled native C ABI 19.
 
 - Added bounded cooperative tasks through `Tasks.launch`, task handles, and `join`.
 - Added VM-owned bounded `IntChannel` communication between Guest tasks with suspending `send(Int)` and `receive()`.
@@ -514,12 +288,6 @@ substantially reworked managed runtime.
 - Sampled and coalesced input changes at Minecraft tick boundaries without Guest-side polling.
 
 ### Guest Kotlin
-
-- Guest compilation with addons selects the canonical owner of collection specializations even when an addon bundle
-  contains a pruned dependency copy. Conflicting standalone owners remain rejected.
-
-- Generated addon handlers can return Long, Double and Char, preserving Double IEEE bits and exact UTF-16 code units
-  through both native transports. This requires the bundled native C ABI 19.
 
 - Replaced the JVM-bootstrap Guest environment with a native Compukters K2 platform.
 - Made compiler and IDE analysis consume the same explicit platform metadata and source declarations.
