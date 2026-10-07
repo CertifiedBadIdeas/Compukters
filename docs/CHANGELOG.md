@@ -16,6 +16,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 This release expands the Kotlin available to computer programs and introduces support for independently installed
 addon mods, with optional Create, Sable and Propulsion integrations for Minecraft 1.21.1.
 
+- Nullable Guest Kotlin scalar signatures preserve `Int`, `Long`, `Float`, `Double`, `Boolean` and `Char`
+  identity through nominal wrappers and `Any?` casts.
+
 - Guest Kotlin supports inherited generic interface selection methods with typed predicates through concrete
   implementations and parent interfaces, preserving short-circuiting and nullable results. Named objects and
   companions retain one managed instance and can implement typed provider interfaces, including across addon bundles. Collection `first` throws `NoSuchElementException` on absent selection

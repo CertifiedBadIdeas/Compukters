@@ -67,6 +67,46 @@ import kotlin.test.assertTrue
 @OptIn(UnsafeDuringIrConstructionAPI::class, CompilerConfiguration.Internals::class)
 class GuestInlineIntegrationTest {
     @Test
+    fun `primitive nullable signatures preserve nominal boxes for every scalar register kind`() {
+        probe(
+            """
+            fun boxedBoolean(value: Boolean?): Any? = value
+            fun boxedLong(value: Long?): Any? = value
+            fun boxedFloat(value: Float?): Any? = value
+            fun boxedDouble(value: Double?): Any? = value
+            fun boxedChar(value: Char?): Any? = value
+            fun boxedInt(value: Int?): Any? = value
+            fun main() {
+                val boolean = boxedBoolean(true) as Boolean
+                val long = boxedLong(1L) as Long
+                val float = boxedFloat(1.0F) as Float
+                val double = boxedDouble(1.0) as Double
+                val char = boxedChar('x') as Char
+                val int = boxedInt(1) as Int
+            }
+            """.trimIndent(),
+        ) { _, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            val runtime = assertNotNull(artifact).modules.single { it.kind == ModuleKind.LIBRARY }
+            val boxNames =
+                runtime.fields
+                    .filter {
+                        !it.static &&
+                            runtime.strings[it.name.value.toInt()].toString().endsWith(".<boxed-value>")
+                    }.map { runtime.strings[it.name.value.toInt()].toString().substringBefore(".<boxed-value>") }
+                    .toSet()
+            assertEquals(GuestPrimitive.entries.map { it.qualifiedName }.toSet(), boxNames)
+            for (primitive in GuestPrimitive.entries) {
+                val array = runtime.types[primitive.arrayType.toInt()] as ru.lazyhat.compukters.compiler.artifact.model.NominalType.Array
+                assertEquals(primitive.scalar, array.element)
+                assertEquals(primitive.arrayStorage, array.storage)
+                val box = runtime.types[primitive.boxType.toInt()] as ru.lazyhat.compukters.compiler.artifact.model.NominalType.Class
+                assertEquals(primitive.boxField, box.fieldStart)
+            }
+        }
+    }
+
+    @Test
     fun `source maps distinguish user callers across project files`() {
         probe(
             source = "fun main() { outer() }\nfun outer() { Worker().allocate() }",
@@ -583,7 +623,7 @@ class GuestInlineIntegrationTest {
     fun `expanded library diagnostics retain original source ownership`() {
         probe(
             "import probe.identity\nfun main() { val result = identity(3) }",
-            librarySource = "package probe\ninline fun identity(value: Int): Int { val unsupported: Float? = null; return value }",
+            librarySource = "package probe\ninline fun identity(value: Int): Int { val unsupported: (() -> Int)? = null; return value }",
             throughSharedEntry = true,
         ) { _, _, diagnostics, artifact ->
             assertEquals(null, artifact)
