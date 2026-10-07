@@ -543,15 +543,6 @@ registerKotlinVmConformance(
     conformanceScenario = "tasks",
 )
 registerKotlinVmConformance(
-    taskName = "testKotlinChannelVmConformance",
-    taskDescription = "Executes a K2-produced VM-owned bounded channel handoff.",
-    artifactTask = ":compiler-k2:generateChannelConformanceArtifact",
-    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/channel.cpkt"),
-    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-channel-conformance",
-    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_CHANNEL_ARTIFACT",
-    conformanceScenario = "channel",
-)
-registerKotlinVmConformance(
     taskName = "testKotlinTimerVmConformance",
     taskDescription = "Executes a K2-produced server-tick Guest task delay request.",
     artifactTask = ":compiler-k2:generateTimerConformanceArtifact",

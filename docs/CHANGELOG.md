@@ -197,6 +197,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### Upgrade notes
 
+- `IntChannel` is removed from the Guest API. Rework programs that import it; a generic channel replacement
+  is deferred. Cooperative tasks and joins remain available.
 - Rebuild Guest programs and compiled platform/addon libraries for the updated platform. MFVC inline layouts
   require Runtime ABI 1.15; unsigned operations and compact primitive storage require 1.14, and structured host
   results require 1.13. Native Runtime 0.20.0 supplies C ABI 20 for both transports. Base bundles/modules use formats 9/5 and platform ABI 3.

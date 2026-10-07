@@ -24,7 +24,7 @@ classpath.
 | --- | --- |
 | `kotlin:builtins` | Core language types, arrays, function types, and structural declarations required by K2 |
 | `stdlib:core` | Core helpers such as `require`, supported array construction, inline scope functions, indexed `repeat`, ranges and collections |
-| `compukter:core` | Runtime and environment APIs: terminal and `kotlin.io`, filesystem, compiler, child processes, cooperative `Task` / `Tasks` and `IntChannel`, redstone, sound and text displays |
+| `compukter:core` | Runtime and environment APIs: terminal and `kotlin.io`, filesystem, compiler, child processes, cooperative `Task` / `Tasks`, redstone, sound and text displays |
 
 These module owners do not rename Kotlin packages or imports. Environment-dependent `kotlin.io` functions
 belong to `compukter:core`; the rest of the supported standard library belongs to `stdlib:core`. Module

@@ -74,19 +74,18 @@ deterministic server tick boundaries`.
 
 ## Bounded integer channels
 
-**Status:** Partial.
+**Status:** Unsupported.
 
-A top-level `IntChannel(capacity)` provides deterministic FIFO `send(Int)` and `receive(): Int` blocking
-handoff between cooperative tasks. Capacity must be a positive compile-time constant; channel storage and
-waiter state are admitted up front and communication stays inside the VM without a host request. Generic
-payloads, close, cancellation, selection, timeouts, and cross-process channels remain unsupported.
+`IntChannel` is removed from the Guest platform in Compukters 0.5.0. Its compiler intrinsics and specialized
+channel lowering are removed as well. Generic channels are deferred to a separate design; the current Guest
+API exposes no channel type. Cooperative `Task` / `Tasks` and their blocking/join semantics remain supported.
 
-**Evidence:**
-[`channel.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/src/execution/channel.rs),
-[`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-and the `testKotlinChannelVmConformance` task.
+**Evidence:** `MinimalScriptLoweringTest`, test `removed IntChannel is unavailable in the Guest platform`,
+and `K2CompilerAdapterTest` verify import rejection and absence from the compiled platform declarations.
+Low-level artifact/VM channel instructions retain their existing tests as internal infrastructure; those
+instructions do not establish Guest API support.
 
-**Related work:** [#614](https://github.com/CertifiedBadIdeas/Compukters/issues/614)
+**Related work:** [#702](https://github.com/CertifiedBadIdeas/Compukters/issues/702)
 
 ## Parallel Guest execution
 

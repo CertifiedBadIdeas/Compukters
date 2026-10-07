@@ -40,17 +40,3 @@ public object Tasks {
 private object TimerBindings {
     external fun sleepTicks(ticks: Int)
 }
-
-/**
- * A bounded FIFO channel carrying [Int] values between cooperative Guest tasks.
- *
- * Declare channels as top-level immutable properties. [send] suspends while the channel is full,
- * and [receive] suspends while it is empty. A positive [capacity] is reserved when the program is admitted.
- */
-public value class IntChannel public constructor(internal val capacity: Int) {
-    /** Sends [value], blocking the current task until bounded channel storage is available. */
-    public external fun send(value: Int)
-
-    /** Receives the oldest queued value, blocking the current task until one is available. */
-    public external fun receive(): Int
-}

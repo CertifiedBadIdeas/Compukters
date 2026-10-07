@@ -139,7 +139,7 @@ Kotlin metadata's short display names. User classes named `String` therefore can
 
 The complete built-in graph is `kotlin:builtins` → `stdlib:core` → `compukter:core`. Compukter core owns environment
 and VM-runtime APIs: compiler, child processes, redstone, sound, text displays, terminal, filesystem, and cooperative
-tasks/channels. This includes the environment-dependent `kotlin.io` facade without changing its package or default
+tasks. This includes the environment-dependent `kotlin.io` facade without changing its package or default
 imports. Module ownership changes the canonical platform content identity, not capability operation schemas or the
 VM executable ABI. Tooling and addons using removed split-module IDs must rebuild against the consolidated owners.
 

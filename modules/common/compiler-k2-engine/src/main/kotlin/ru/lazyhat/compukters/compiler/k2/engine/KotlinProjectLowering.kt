@@ -181,10 +181,6 @@ private sealed interface TopLevelInitializer {
     data class Scalar(
         val value: Any,
     ) : TopLevelInitializer
-
-    data class Channel(
-        val capacity: Int,
-    ) : TopLevelInitializer
 }
 
 private data class TopLevelProperty(
@@ -1056,7 +1052,6 @@ private fun mapGuestValueType(
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 internal object KotlinProjectLowering {
     private const val MAXIMUM_TASKS = 64u
-    private const val INT_CHANNEL = "compukter.concurrent.IntChannel"
     private const val APPLICATION_STATE = "app.<state>"
     private const val CHAR_ARRAY_RUNTIME_TYPE = 0u
     private const val STRING_RUNTIME_TYPE = 1u
@@ -1658,7 +1653,6 @@ internal object KotlinProjectLowering {
                         when (val initializer = property.initializer) {
                             TopLevelInitializer.Null -> null
                             is TopLevelInitializer.Scalar -> initializer.value
-                            is TopLevelInitializer.Channel -> initializer.capacity
                         }
                     } +
                     inlineValueClasses.constantValues() +
@@ -2843,28 +2837,6 @@ internal object KotlinProjectLowering {
                             instructions += Instruction.Const(register, constantId)
                             register
                         }
-
-                        is TopLevelInitializer.Channel -> {
-                            if (field.type != ValueType.I32) {
-                                throw UnsupportedKotlinIr(
-                                    field.property.declaration,
-                                    "IntChannel must use its canonical scalar representation",
-                                )
-                            }
-                            val capacity = RegisterId.of(functionValues.size.toUInt())
-                            functionValues += FunctionValue.scalar(ValueType.I32)
-                            val handle = RegisterId.of(functionValues.size.toUInt())
-                            functionValues += FunctionValue.scalar(ValueType.I32)
-                            val constantId =
-                                constantIds[Constant.I32(initializer.capacity)]
-                                    ?: throw UnsupportedKotlinIr(
-                                        field.property.declaration,
-                                        "IntChannel capacity is absent from the canonical constant pool",
-                                    )
-                            instructions += Instruction.Const(capacity, constantId)
-                            instructions += Instruction.ChannelCreate(handle, capacity)
-                            handle
-                        }
                     }
                 instructions += Instruction.StaticSet(FieldRef.Local(field.fieldId), valueRegister)
                 instructions += Instruction.Jump(BlockId.of((firstBlock + index + 1).toUInt()))
@@ -3636,12 +3608,6 @@ internal object KotlinProjectLowering {
         val modules = listOf(app, library)
         val maximumCallDepth = 16u
         val usesTasks = blocks.any { block -> block.instructions.any { it is Instruction.TaskSpawn || it is Instruction.TaskJoin } }
-        val usesChannels =
-            blocks.any { block ->
-                block.instructions.any {
-                    it is Instruction.ChannelCreate || it is Instruction.ChannelSend || it is Instruction.ChannelReceive
-                }
-            }
         val usesI64StringConversion =
             blocks.any { block ->
                 block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.I64 }
@@ -3651,13 +3617,6 @@ internal object KotlinProjectLowering {
                 block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F32 }
             }
         val usesArrayCopy = blocks.any { block -> block.instructions.any { it is Instruction.ArrayCopy } }
-        val maximumChannels = topLevelProperties.count { it.initializer is TopLevelInitializer.Channel }.toUInt()
-        val channelValueCount =
-            topLevelProperties.fold(0uL) { total, property ->
-                total + ((property.initializer as? TopLevelInitializer.Channel)?.capacity?.toULong() ?: 0uL)
-            }
-        require(channelValueCount <= UInt.MAX_VALUE.toULong()) { "total IntChannel capacity exceeds u32" }
-        val maximumChannelValues = channelValueCount.toUInt()
         val maximumCoroutines = if (usesTasks) MAXIMUM_TASKS else 1u
         val singleTaskStackBytes = ExecutionStorage.requiredStackBytes(modules, maximumCallDepth)
         require(singleTaskStackBytes <= UInt.MAX_VALUE / maximumCoroutines) {
@@ -3716,8 +3675,6 @@ internal object KotlinProjectLowering {
 
                     usesI64StringConversion -> AbiVersion(1u, 3u)
 
-                    usesChannels -> AbiVersion(1u, 2u)
-
                     usesTasks -> AbiVersion(1u, 1u)
 
                     else -> AbiVersion(1u, 0u)
@@ -3726,7 +3683,6 @@ internal object KotlinProjectLowering {
                 setOfNotNull(
                     SemanticFeature.COROUTINES.takeIf { userFunctions.any { it.isSuspend } },
                     SemanticFeature.CAPABILITIES.takeIf { capabilityIdentities.isNotEmpty() },
-                    SemanticFeature.CHANNELS.takeIf { usesChannels },
                     SemanticFeature.ARRAY_COPY.takeIf { usesArrayCopy },
                     SemanticFeature.EXCEPTIONS.takeIf {
                         exceptions.isNotEmpty() || blocks.any { block -> block.instructions.any { it is Instruction.Throw } }
@@ -3745,8 +3701,8 @@ internal object KotlinProjectLowering {
                     minimumSliceCost = 64u,
                     compilerAbi = ByteArray(32),
                     platformAbi = ByteArray(32),
-                    maximumChannels = maximumChannels,
-                    maximumChannelValues = maximumChannelValues,
+                    maximumChannels = 0u,
+                    maximumChannelValues = 0u,
                 ),
             entry =
                 EntryPoint(
@@ -3780,22 +3736,7 @@ internal object KotlinProjectLowering {
             requireNotNull(property.backingField).initializer?.expression
                 ?: throw UnsupportedKotlinIr(property, "top-level val requires a direct initializer")
         val initializer =
-            if (expression is IrConstructorCall &&
-                expression.symbol.owner.parentAsClass.fqNameWhenAvailable
-                    ?.asString() == INT_CHANNEL
-            ) {
-                val argument =
-                    expression.symbol.owner.parameters
-                        .mapIndexedNotNull { index, parameter ->
-                            expression.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.Regular }
-                        }.singleOrNull() as? IrConst
-                        ?: throw UnsupportedKotlinIr(expression, "IntChannel capacity must be a positive Int constant")
-                val capacity = argument.value as? Int
-                if (capacity == null || capacity <= 0) {
-                    throw UnsupportedKotlinIr(expression, "IntChannel capacity must be a positive Int constant")
-                }
-                TopLevelInitializer.Channel(capacity)
-            } else if (expression is IrConst && expression.value == null) {
+            if (expression is IrConst && expression.value == null) {
                 TopLevelInitializer.Null
             } else {
                 val value = (expression as? IrConst)?.primitiveLiteralValue()
@@ -3806,7 +3747,7 @@ internal object KotlinProjectLowering {
                 ) {
                     throw UnsupportedKotlinIr(
                         expression,
-                        "top-level val initializer must be a scalar literal or direct IntChannel construction",
+                        "top-level val initializer must be a scalar literal",
                     )
                 }
                 TopLevelInitializer.Scalar(requireNotNull(value))
@@ -5702,9 +5643,6 @@ private class FunctionCompiler(
     private fun compileConstructor(call: IrConstructorCall): RegisterId {
         val target = call.symbol.owner
         val arguments = call.arguments.filterNotNull()
-        if (target.parentAsClass.fqNameWhenAvailable?.asString() == "compukter.concurrent.IntChannel") {
-            throw UnsupportedKotlinIr(call, "IntChannel must be initialized directly in a top-level val")
-        }
         platformScalars.constructor(call.symbol)?.let { scalarType ->
             val argument =
                 target.parameters
@@ -6500,8 +6438,6 @@ private class FunctionCompiler(
         when (target.fqNameWhenAvailable?.asString().takeIf { target.isExternal }) {
             "compukter.concurrent.Tasks.launch" -> return compileTaskLaunch(call, target)
             "compukter.concurrent.Task.join" -> return compileTaskJoin(call, target)
-            "compukter.concurrent.IntChannel.send" -> return compileChannelSend(call, target)
-            "compukter.concurrent.IntChannel.receive" -> return compileChannelReceive(call, target)
         }
         topLevelFieldsByGetter[target.symbol]?.let { field ->
             return allocate(field.type).also { destination ->
@@ -6979,37 +6915,6 @@ private class FunctionCompiler(
         emit(Instruction.TaskJoin(Destination.Unit, task, blockId(resume)))
         currentBlock = resume
         return null
-    }
-
-    private fun compileChannelSend(
-        call: IrCall,
-        target: IrSimpleFunction,
-    ): RegisterId? {
-        val receiver = dispatchReceiver(call, target, "IntChannel.send")
-        val valueExpression =
-            target.parameters
-                .mapIndexedNotNull { index, parameter ->
-                    call.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.Regular }
-                }.singleOrNull()
-                ?: throw UnsupportedKotlinIr(call, "IntChannel.send value is missing")
-        val channel = compileExpression(receiver)
-        val value = compileExpression(valueExpression)
-        val resume = createBlock()
-        emit(Instruction.ChannelSend(channel, value, blockId(resume)))
-        currentBlock = resume
-        return null
-    }
-
-    private fun compileChannelReceive(
-        call: IrCall,
-        target: IrSimpleFunction,
-    ): RegisterId {
-        val channel = compileExpression(dispatchReceiver(call, target, "IntChannel.receive"))
-        val destination = allocate(ValueType.I32)
-        val resume = createBlock()
-        emit(Instruction.ChannelReceive(destination, channel, blockId(resume)))
-        currentBlock = resume
-        return destination
     }
 
     private fun dispatchReceiver(

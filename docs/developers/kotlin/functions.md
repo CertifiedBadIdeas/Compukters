@@ -205,8 +205,7 @@ closures and shared mutable captures), `task launch accepts direct stored and re
 `unsupported closure shapes produce stable diagnostics`, `direct top level ordinary task lowers to spawn and
 join`, `task launch rejects unsupported local and bound references`, `function value variance conversion is
 rejected before artifact publication`, `supported constructor references lower to ordinary function values`,
-`default adapted constructor references lower to managed function values`, and `unsupported constructor
-reference is rejected before artifact publication`; root tasks `testKotlinFunctionValuesVmConformance` and
+`default adapted constructor references lower to managed function values`; root tasks `testKotlinFunctionValuesVmConformance` and
 `testKotlinAdaptedConstructorsVmConformance`.
 
 **Related work:** [#627](https://github.com/CertifiedBadIdeas/Compukters/issues/627),
@@ -233,16 +232,16 @@ conformance test defines it as a supported language contract.
 **Status:** Partial.
 
 Immutable top-level properties support direct `Int`, `Long`, `Float`, `Double`, `Boolean`, `Char`, and
-`String` literals plus direct `IntChannel(capacity)` construction. They lower to lazily initialized static VM
-storage. Top-level `var`, custom or delegated accessors, initializer dependencies, and arbitrary object
+`String` literals and supported nullable reference `null` initializers. They lower to lazily initialized static
+VM storage. Top-level `var`, custom or delegated accessors, initializer dependencies, and arbitrary object
 construction remain unsupported.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-tests `top level IntChannel lowers to VM owned bounded handoff` and `IntChannel construction rejects
-unsupported ownership and capacity`.
+test `direct top level ordinary task lowers to spawn and join`, executed by
+`testKotlinTasksVmConformance`, also checks scalar top-level state without admitting channel storage.
 
-**Related work:** [#614](https://github.com/CertifiedBadIdeas/Compukters/issues/614)
+**Related work:** [#702](https://github.com/CertifiedBadIdeas/Compukters/issues/702)
 
 Value-class method and constructor references, typed callbacks and capture storage follow the [value-class
 contract]({{ '/KOTLIN-SUPPORT/objects/' | relative_url }}).

@@ -172,11 +172,11 @@ class K2CompilerAdapterTest {
                         "compukter.filesystem.FileSystem",
                         "compukter.concurrent.Task",
                         "compukter.concurrent.Tasks",
-                        "compukter.concurrent.IntChannel",
                         "kotlin.io.println",
                     ),
                 ),
             )
+            assertTrue(runtimeSymbols.none { it.startsWith("compukter.concurrent.IntChannel") })
             val workerIdentity = identity(platform)
             val selected =
                 listOf(
